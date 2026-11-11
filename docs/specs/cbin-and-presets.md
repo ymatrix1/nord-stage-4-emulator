@@ -232,3 +232,15 @@ s[n] = s[n-1] + delta * scale
 - `NpnoInstrument::cents_detune_for_note(&self, note: u8) -> i8`
 - `decode_4bit_dpcm(raw_payload: &[u8], scale: f32) -> Vec<f32>`
 - `encode_4bit_dpcm(pcm: &[f32], scale: f32) -> Vec<u8>`
+
+### 5.3 NSMP Sample Library Metadata (`.nsmp4`)
+
+The `.nsmp4`/`nsmp` assets store the `NSMP` marker at offset `0x2C`, then a 12-byte prefix at `0x30..0x3B`. The current metadata parser starts its tagged chunk stream at `0x3C`. Each chunk has a 4-byte tag, a big-endian `u32` chunk ID, a big-endian `u32` payload length, and that many payload bytes. The parser checks chunk bounds and rejects incomplete trailing headers.
+
+The parser currently recognizes:
+
+- `\0hdr`: name at payload offset 10 (up to 32 bytes); the parser also attempts to read an author string at offset 74 (up to 32 bytes), which is not yet independently confirmed.
+- `\0map`: a 128-entry table of 10-byte records starting at offset 6, followed by 16-byte zone records starting at `0x524`.
+- `\0stk`: stroke ID in the first four payload bytes; payload audio remains opaque.
+
+These offsets are an initial metadata mapping based on the locally inspected `Kalimba_KG 4.1.nsmp4` sample from the factory backup and deterministic synthetic fixtures. They are not a complete NSMP or sample-audio specification. The parser preserves no raw chunk data in its high-level result, and does not decode audio. See [`cbin::sample`](../../crates/nord-core/src/cbin/sample.rs).
