@@ -68,7 +68,7 @@ pub struct LoadedPianoStroke {
     pub loop_end: Option<usize>,
 }
 
-/// Multi-velocity and key-off release zone descriptor for SFZ/WAV multisample instruments.
+/// Multi-velocity and key-off release zone descriptor for `.npno` and SFZ/WAV multisample instruments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PianoSampleZone {
     pub key_low: u8,
@@ -78,6 +78,7 @@ pub struct PianoSampleZone {
     pub root_key: u8,
     pub tune_cents: i8,
     pub trigger_release: bool,
+    pub damper_down: bool,
     pub stroke_idx: usize,
 }
 
@@ -142,7 +143,15 @@ impl NpnoSound {
                 stroke_by_key[note as usize] = Some(0);
             }
 
-            Self::push_velocity_zones(&mut zones, note, root, tune_cents, false, &normal);
+            Self::push_velocity_zones(&mut zones, note, root, tune_cents, false, false, &normal);
+
+            let mut damper: Vec<(usize, u8)> = meta
+                .iter()
+                .filter(|(_, rk, kind, _)| *rk == root && *kind == crate::cbin::NPNO_STROKE_DAMPER)
+                .map(|&(idx, _, _, vel)| (idx, vel))
+                .collect();
+            damper.sort_by_key(|&(_, vel)| vel);
+            Self::push_velocity_zones(&mut zones, note, root, tune_cents, false, true, &damper);
 
             let mut release: Vec<(usize, u8)> = meta
                 .iter()
@@ -150,7 +159,7 @@ impl NpnoSound {
                 .map(|&(idx, _, _, vel)| (idx, vel))
                 .collect();
             release.sort_by_key(|&(_, vel)| vel);
-            Self::push_velocity_zones(&mut zones, note, root, tune_cents, true, &release);
+            Self::push_velocity_zones(&mut zones, note, root, tune_cents, true, false, &release);
         }
 
         Ok(Self {
@@ -169,6 +178,7 @@ impl NpnoSound {
         root_key: u8,
         tune_cents: i8,
         trigger_release: bool,
+        damper_down: bool,
         sorted: &[(usize, u8)],
     ) {
         for (i, &(stroke_idx, vel)) in sorted.iter().enumerate() {
@@ -186,6 +196,7 @@ impl NpnoSound {
                 root_key,
                 tune_cents,
                 trigger_release,
+                damper_down,
                 stroke_idx,
             });
         }
@@ -277,6 +288,7 @@ impl NpnoSound {
                 root_key: reg.root_key,
                 tune_cents: reg.tune_cents,
                 trigger_release: reg.trigger_release,
+                damper_down: false,
                 stroke_idx,
             });
 
@@ -329,9 +341,34 @@ impl NpnoSound {
         velocity: u8,
         trigger_release: bool,
     ) -> Option<(usize, i8)> {
+        self.select_stroke_with_damper(note, velocity, trigger_release, false)
+    }
+
+    /// Resolves the best `(stroke_idx, tune_cents)` with optional damper-pedal-down (`kind = 1`) selection.
+    #[inline]
+    pub fn select_stroke_with_damper(
+        &self,
+        note: u8,
+        velocity: u8,
+        trigger_release: bool,
+        damper_down: bool,
+    ) -> Option<(usize, i8)> {
         let vel = velocity.clamp(1, 127);
+        if !trigger_release && damper_down {
+            if let Some(zone) = self.zones.iter().find(|z| {
+                !z.trigger_release
+                    && z.damper_down
+                    && note >= z.key_low
+                    && note <= z.key_high
+                    && vel >= z.vel_low
+                    && vel <= z.vel_high
+            }) {
+                return Some((zone.stroke_idx, zone.tune_cents));
+            }
+        }
         if let Some(zone) = self.zones.iter().find(|z| {
             z.trigger_release == trigger_release
+                && !z.damper_down
                 && note >= z.key_low
                 && note <= z.key_high
                 && vel >= z.vel_low
@@ -345,6 +382,19 @@ impl NpnoSound {
             let idx = self.stroke_by_key[(note as usize).min(127)]?;
             Some((idx, self.tuning_cents[(note as usize).min(127)]))
         }
+    }
+
+    /// Returns true if `note` maps to multiple velocity-switched multisample layers.
+    #[inline]
+    pub fn has_velocity_layers(&self, note: u8) -> bool {
+        self.zones
+            .iter()
+            .filter(|z| {
+                !z.trigger_release && !z.damper_down && note >= z.key_low && note <= z.key_high
+            })
+            .take(2)
+            .count()
+            > 1
     }
 }
 
@@ -844,16 +894,6 @@ impl PianoLayer {
     }
 
     pub fn note_on_with_gain(&mut self, note: u8, velocity: u8, gain: f32) {
-        let base_amp = self.touch.map_velocity(velocity);
-        let compressed_amp = match self.dyn_comp {
-            1 => base_amp.powf(0.82),
-            2 => base_amp.powf(0.68),
-            3 => base_amp.powf(0.55),
-            _ => base_amp,
-        };
-        let una_corda_scale = if self.soft_pedal_down { 0.76 } else { 1.0 };
-        let amp = (compressed_amp * una_corda_scale).clamp(0.0, 1.0);
-
         let effective_note =
             (i32::from(note) + i32::from(self.octave_shift.clamp(-2, 2)) * 12).clamp(0, 127) as u8;
         let freq = 440.0 * 2.0f32.powf((f32::from(effective_note) - 69.0) / 12.0);
@@ -868,8 +908,11 @@ impl PianoLayer {
         };
         let detune_ratio = 2.0f64.powf(unison_cents / 1200.0);
 
-        let (stroke_idx, sample_step) = if let Some(snd) = &self.sound {
-            if let Some((idx, cents)) = snd.select_stroke(effective_note, velocity, false) {
+        let damper_down = self.damper_pedal_down;
+        let (stroke_idx, sample_step, has_multi_vel) = if let Some(snd) = &self.sound {
+            if let Some((idx, cents)) =
+                snd.select_stroke_with_damper(effective_note, velocity, false, damper_down)
+            {
                 if let Some(st) = snd.strokes.get(idx) {
                     let root = st.root_key;
                     let semitones =
@@ -877,16 +920,32 @@ impl PianoLayer {
                     let pitch_ratio = 2.0f32.powf(semitones / 12.0);
                     let step = (pitch_ratio as f64)
                         * ((st.sample_rate as f64) / (self.sample_rate as f64));
-                    (Some(idx), step)
+                    (Some(idx), step, snd.has_velocity_layers(effective_note))
                 } else {
-                    (None, 0.0)
+                    (None, 0.0, false)
                 }
             } else {
-                (None, 0.0)
+                (None, 0.0, false)
             }
         } else {
-            (None, 0.0)
+            (None, 0.0, false)
         };
+
+        let base_amp = self.touch.map_velocity(velocity);
+        let compressed_amp = match self.dyn_comp {
+            1 => base_amp.powf(0.82),
+            2 => base_amp.powf(0.68),
+            3 => base_amp.powf(0.55),
+            _ => base_amp,
+        };
+        // Multisample .npno velocity strokes already encode natural pp..ff hammer dynamics; avoid double-attenuating soft tiers.
+        let shaped_amp = if has_multi_vel {
+            0.42 + 0.58 * compressed_amp
+        } else {
+            compressed_amp
+        };
+        let una_corda_scale = if self.soft_pedal_down { 0.76 } else { 1.0 };
+        let amp = (shaped_amp * una_corda_scale).clamp(0.0, 1.0);
 
         let idx = self.allocate_voice_slot(Some(note));
         self.voices[idx] = PianoVoice {
@@ -1071,17 +1130,29 @@ impl PianoLayer {
     #[inline]
     fn sample_pcm_at(pcm: &[f32], pos: f64) -> Option<f32> {
         let len = pcm.len();
-        let idx0 = pos as usize;
-        if idx0 + 1 < len {
-            let frac = (pos - idx0 as f64) as f32;
-            let s0 = pcm[idx0];
-            let s1 = pcm[idx0 + 1];
-            Some(s0 + frac * (s1 - s0))
-        } else if idx0 < len {
-            Some(pcm[idx0])
-        } else {
-            None
+        if len == 0 || pos < 0.0 {
+            return None;
         }
+        let idx1 = pos as usize;
+        if idx1 >= len {
+            return None;
+        }
+        if idx1 + 1 >= len {
+            return Some(pcm[idx1]);
+        }
+        let frac = (pos - idx1 as f64) as f32;
+        let p0 = pcm[idx1.saturating_sub(1)];
+        let p1 = pcm[idx1];
+        let p2 = pcm[idx1 + 1];
+        let p3 = pcm[(idx1 + 2).min(len - 1)];
+        let t2 = frac * frac;
+        let t3 = t2 * frac;
+        Some(
+            0.5 * ((2.0 * p1)
+                + (-p0 + p2) * frac
+                + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+                + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3),
+        )
     }
 
     #[inline]
@@ -1210,22 +1281,19 @@ impl PianoLayer {
                 }
             };
 
-            let voice_gain = v.amp * v.env * v.gain * 0.2;
+            let sample_scale = if v.stroke_idx.is_some() { 0.55 } else { 0.2 };
+            let voice_gain = v.amp * v.env * v.gain * sample_scale;
             sum_l += sig_l * voice_gain;
             sum_r += sig_r * voice_gain;
 
-            let decay_time = if v.is_release_sample {
-                0.30
+            if v.is_release_sample {
+                v.env *= (-inv_fs / 1.15).exp();
             } else if v.releasing {
-                if v.soft_release {
-                    0.180
-                } else {
-                    0.080
-                }
-            } else {
-                1.8
-            };
-            v.env *= (-inv_fs / decay_time).exp();
+                let decay_time = if v.soft_release { 0.180 } else { 0.080 };
+                v.env *= (-inv_fs / decay_time).exp();
+            } else if v.stroke_idx.is_none() {
+                v.env *= (-inv_fs / 1.8).exp();
+            }
             if v.env < 1e-4 {
                 v.active = false;
                 v.releasing = false;
@@ -1630,6 +1698,89 @@ mod tests {
         assert!(
             l > 0.0 && r < 0.0,
             "expected opposite stereo polarity L={l} R={r}"
+        );
+    }
+
+    #[test]
+    fn test_npno_sustains_naturally_and_selects_damper_stroke() {
+        let mut raw = vec![0u8; 0x1800];
+        raw[0..4].copy_from_slice(b"CBIN");
+        raw[4..8].copy_from_slice(&1u32.to_le_bytes());
+        raw[8..12].copy_from_slice(b"npno");
+        raw[0x2C..0x30].copy_from_slice(b"CNSP");
+        raw[0x48..0x55].copy_from_slice(b"Grand Damper\0");
+        raw[0x00B8..0x0138].fill(60);
+        raw[0x064A..0x064C].copy_from_slice(&1u16.to_be_bytes());
+        raw[0x064C..0x064E].copy_from_slice(&2u16.to_be_bytes());
+        raw[0x064E + 60 * 2..0x064E + 60 * 2 + 2].copy_from_slice(&2u16.to_be_bytes());
+
+        // Stroke 0: normal (kind=0) with 256 frames (+16); Stroke 1: damper-down (kind=1) with 256 frames (+48)
+        let p0_off = 0x0900usize;
+        let p1_off = p0_off + 2044;
+        raw.resize(p1_off + 2044, 0);
+        raw[p0_off + 1] = 8;
+        for w in (0..2042).step_by(2) {
+            raw[p0_off + 2 + w..p0_off + 4 + w].copy_from_slice(&0x1010u16.to_be_bytes());
+        }
+        raw[p1_off + 1] = 8;
+        for w in (0..2042).step_by(2) {
+            raw[p1_off + 2 + w..p1_off + 4 + w].copy_from_slice(&0x3030u16.to_be_bytes());
+        }
+        for (k, (off, vel_word)) in [(p0_off, 0x0000u16), (p1_off, 0x0100u16)]
+            .into_iter()
+            .enumerate()
+        {
+            let rec_off =
+                crate::cbin::NPNO_STROKE_TABLE_OFFSET + k * crate::cbin::NPNO_STROKE_RECORD_SIZE;
+            raw[rec_off + 8..rec_off + 12].copy_from_slice(
+                &((off - crate::cbin::NPNO_CNSP_BASE_OFFSET) as u32).to_be_bytes(),
+            );
+            raw[rec_off + 12..rec_off + 14].copy_from_slice(&vel_word.to_be_bytes());
+            raw[rec_off + 14..rec_off + 18].copy_from_slice(&256u32.to_be_bytes());
+            raw[rec_off + 18..rec_off + 20].copy_from_slice(&1u16.to_be_bytes());
+        }
+
+        let npno_sound = Arc::new(NpnoSound::from_npno_bytes(&raw).expect("parse damper npno"));
+        assert_eq!(
+            npno_sound
+                .select_stroke_with_damper(60, 90, false, false)
+                .unwrap()
+                .0,
+            0
+        );
+        assert_eq!(
+            npno_sound
+                .select_stroke_with_damper(60, 90, false, true)
+                .unwrap()
+                .0,
+            1
+        );
+
+        let mut layer = PianoLayer::new(48_000.0);
+        layer.set_sound(Some(npno_sound));
+        layer.set_damper_pedal(true, 100);
+        layer.note_on(60, 90);
+        assert_eq!(layer.voices[0].stroke_idx, Some(1));
+
+        // Verify sampled voice stays full-scale (no artificial 1.8s decay) over long holds
+        let long_pcm = vec![0.5f32; 48_000 * 3];
+        let long_sound = Arc::new(NpnoSound::new_synthetic(
+            "Long Grand",
+            60,
+            &long_pcm,
+            48_000.0,
+        ));
+        let mut hold = PianoLayer::new(48_000.0);
+        hold.set_sound(Some(long_sound));
+        hold.note_on(60, 100);
+        for _ in 0..(48_000 * 2 + 10_000) {
+            hold.render_frame();
+        }
+        assert!(hold.voices[0].active);
+        assert!(
+            (hold.voices[0].env - 1.0).abs() < 1e-6,
+            "held sampled stroke env must remain 1.0, got {}",
+            hold.voices[0].env
         );
     }
 }

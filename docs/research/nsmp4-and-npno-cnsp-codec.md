@@ -72,7 +72,7 @@ For sustained instruments (`payload[0x29] == 0 && payload[0x2A] == 0`) where `w3
 - `0x002C..0x0030`: `CNSP` marker (`CNSP` base offset = **`0x002C`**).
 - `0x0048..0x0068`, `0x0068..0x0088`, `0x0088..0x00A8`: short name, long name, and variant label (ASCII, NUL-trimmed).
 - `0x00B8..0x0138`: 128-byte `key_map[note]` mapping MIDI note `0..127` to sampled `root_key` (`0xFF` = unmapped). Verified `44.5..787.5 Hz` fundamentals via autocorrelation correspond to hardware/storage sample rate **`~35,000 Hz`** (matching `.nsmp4` ~35 kHz DSP internal rate; e.g., `Clavinet D6` `key_map = 65` F4 has lag `100` samples = `35,002 Hz / 100 = 350.0 Hz`).
-- `0x01C8..0x0248`: 128-byte signed `i8` fine-tuning table (`tuning_cents`).
+- `0x01B8..0x0238`: 128-byte signed `i8` fine-tuning table (`tuning_cents`).
 - `0x0238..0x02B8`: 128-byte `velocity_tiers` table.
 - `0x064A` (`u16 BE`): channel count (`1` mono, `2` stereo).
 - `0x064C` (`u16 BE`): `nstrokes` (`38`..`2196`).

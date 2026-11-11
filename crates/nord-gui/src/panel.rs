@@ -100,7 +100,8 @@ pub struct Stage4PanelState {
     pub reverb_mix: f32,
     pub master_comp: f32,
 
-    // Keybed State
+    // Keybed & Panel Recall Options
+    pub sync_knobs_on_program_load: bool,
     pub mouse_held_note: Option<u8>,
     pub midi_active_keys: [bool; 128],
 }
@@ -187,6 +188,7 @@ impl Default for Stage4PanelState {
             reverb_mix: 0.20,
             master_comp: 0.25,
 
+            sync_knobs_on_program_load: true,
             mouse_held_note: None,
             midi_active_keys: [false; 128],
         }
@@ -241,58 +243,67 @@ impl Stage4PanelState {
         self.synth_osc_mode = prog.synth.layer_a.osc_mode;
         self.synth_waveform = prog.synth.layer_a.waveform;
         self.synth_filter_model = prog.synth.layer_a.filter_model;
-        self.synth_cutoff = prog.synth.layer_a.filter_cutoff_hz.clamp(40.0, 15000.0);
-        self.synth_resonance = prog.synth.layer_a.filter_resonance.clamp(0.0, 1.0);
-        self.synth_drive = prog.synth.layer_a.filter_drive.clamp(0.0, 1.0);
-        self.synth_attack = (prog.synth.layer_a.env_attack_ms / 1000.0).clamp(0.001, 2.0);
-        self.synth_decay = (prog.synth.layer_a.env_decay_ms / 1000.0).clamp(0.01, 4.0);
-        self.synth_release = (prog.synth.layer_a.env_release_ms / 1000.0).clamp(0.01, 4.0);
 
-        // Global / FX (focus FX panel on first active primary section)
-        let primary_fx = if self.synth_a_active {
-            &prog.synth.fx_a
+        // Global / FX focus on first active primary section
+        self.fx_focus = if self.synth_a_active {
+            2
         } else if self.piano_a_active {
-            &prog.piano.fx_a
+            1
         } else {
-            &prog.organ.fx
+            0
         };
-        self.master_comp = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
+        let primary_fx = match self.fx_focus {
+            2 => &prog.synth.fx_a,
+            1 => &prog.piano.fx_a,
+            _ => &prog.organ.fx,
+        };
         self.mod1_type = primary_fx.mod1_type();
-        self.mod1_rate = 0.1 + primary_fx.mod1_rate * 14.9;
-        self.mod1_amount = if primary_fx.mod1_enabled {
-            primary_fx.mod1_amount
-        } else {
-            0.0
-        };
         self.mod2_type = primary_fx.mod2_type();
-        self.mod2_rate = 0.1 + primary_fx.mod2_rate * 9.9;
-        self.mod2_amount = if primary_fx.mod2_enabled {
-            primary_fx.mod2_amount
-        } else {
-            0.0
-        };
-        self.eq_drive = if primary_fx.amp_enabled {
-            (primary_fx.amp_drive / 10.0).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        self.eq_bass = primary_fx.eq_bass_db;
-        self.eq_mid = primary_fx.eq_mid_db;
-        self.eq_mid_freq = primary_fx.eq_mid_freq_hz();
-        self.eq_treble = primary_fx.eq_treble_db;
         self.delay_on = primary_fx.delay_enabled;
-        self.delay_feedback = primary_fx.delay_feedback;
-        self.delay_mix = if primary_fx.delay_enabled {
-            primary_fx.delay_mix
-        } else {
-            0.0
-        };
         self.reverb_model = primary_fx.reverb_model();
-        self.reverb_mix = if primary_fx.reverb_enabled {
-            primary_fx.reverb_amount
-        } else {
-            0.0
-        };
+
+        // Physical potentiometer knobs remain fixed if sync_knobs_on_program_load is false (matching NS4 hardware).
+        if self.sync_knobs_on_program_load {
+            self.synth_cutoff = prog.synth.layer_a.filter_cutoff_hz.clamp(40.0, 15000.0);
+            self.synth_resonance = prog.synth.layer_a.filter_resonance.clamp(0.0, 1.0);
+            self.synth_drive = prog.synth.layer_a.filter_drive.clamp(0.0, 1.0);
+            self.synth_attack = (prog.synth.layer_a.env_attack_ms / 1000.0).clamp(0.001, 2.0);
+            self.synth_decay = (prog.synth.layer_a.env_decay_ms / 1000.0).clamp(0.01, 4.0);
+            self.synth_release = (prog.synth.layer_a.env_release_ms / 1000.0).clamp(0.01, 4.0);
+            self.master_comp = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
+            self.mod1_rate = 0.1 + primary_fx.mod1_rate * 14.9;
+            self.mod1_amount = if primary_fx.mod1_enabled {
+                primary_fx.mod1_amount
+            } else {
+                0.0
+            };
+            self.mod2_rate = 0.1 + primary_fx.mod2_rate * 9.9;
+            self.mod2_amount = if primary_fx.mod2_enabled {
+                primary_fx.mod2_amount
+            } else {
+                0.0
+            };
+            self.eq_drive = if primary_fx.amp_enabled {
+                (primary_fx.amp_drive / 10.0).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            self.eq_bass = primary_fx.eq_bass_db;
+            self.eq_mid = primary_fx.eq_mid_db;
+            self.eq_mid_freq = primary_fx.eq_mid_freq_hz();
+            self.eq_treble = primary_fx.eq_treble_db;
+            self.delay_feedback = primary_fx.delay_feedback;
+            self.delay_mix = if primary_fx.delay_enabled {
+                primary_fx.delay_mix
+            } else {
+                0.0
+            };
+            self.reverb_mix = if primary_fx.reverb_enabled {
+                primary_fx.reverb_amount
+            } else {
+                0.0
+            };
+        }
     }
 }
 
@@ -1858,6 +1869,26 @@ mod tests {
         assert!(state.organ_a_active);
         assert!((state.organ_a_level - 0.77).abs() < 1e-5);
         assert_eq!(state.organ_drawbars, [8, 8, 8, 8, 0, 0, 0, 0, 0]);
+        assert_eq!(state.fx_focus, 2);
+        assert!((state.synth_cutoff - 3200.0).abs() < 1e-5);
+        assert!((state.master_comp - 0.4).abs() < 1e-5);
+
+        // When sync_knobs_on_program_load is false (NS4 hardware pot behavior), OLED/LED levels update while knobs stay fixed
+        state.sync_knobs_on_program_load = false;
+        let mut piano_prog = nord_core::cbin::ProgramDecoded {
+            name: "White Grand".to_string(),
+            category_id: 0x09,
+            ..Default::default()
+        };
+        piano_prog.global.scene_1_mask = 1 << 2;
+        piano_prog.piano.layer_a.level = 0.91;
+        piano_prog.synth.layer_a.filter_cutoff_hz = 650.0;
+        piano_prog.global.master_compressor = 8.0;
+        state.apply_program(&piano_prog);
+
+        assert_eq!(state.prog_title, "White Grand");
+        assert_eq!(state.fx_focus, 1);
+        assert!((state.piano_a_level - 0.91).abs() < 1e-5);
         assert!((state.synth_cutoff - 3200.0).abs() < 1e-5);
         assert!((state.master_comp - 0.4).abs() < 1e-5);
     }

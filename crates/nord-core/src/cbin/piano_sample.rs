@@ -123,10 +123,10 @@ impl NpnoInstrument {
             key_map.copy_from_slice(&bytes[0x00B8..0x0138]);
         }
 
-        // 128-note tuning cents table at 0x01C8..0x0248 (if present)
+        // 128-note tuning cents table at 0x01B8..0x0238 (if present)
         let mut tuning_cents = [0i8; MIDI_NOTE_TABLE_SIZE];
-        if bytes.len() >= 0x0248 {
-            for (i, &b) in bytes[0x01C8..0x0248].iter().enumerate() {
+        if bytes.len() >= 0x0238 {
+            for (i, &b) in bytes[0x01B8..0x0238].iter().enumerate() {
                 tuning_cents[i] = b as i8;
             }
         }
@@ -486,12 +486,14 @@ mod tests {
             buf[0x00B8 + note] = root;
         }
 
-        // Tuning cents table at 0x01C8
-        buf[0x01C8 + 60] = 3i8 as u8; // +3 cents on Middle C
-        buf[0x01C8 + 61] = -5i8 as u8; // -5 cents on C#4
+        // Tuning cents table at 0x01B8..0x0238
+        buf[0x01B8 + 60] = 3i8 as u8; // +3 cents on Middle C
+        buf[0x01B8 + 61] = -5i8 as u8; // -5 cents on C#4
+        buf[0x01B8 + 108] = 7i8 as u8; // +7 cents on C8 (must not overlap velocity_tiers at 0x0238)
 
-        // Velocity tiers table at 0x0238
+        // Velocity tiers table at 0x0238..0x02B8
         buf[0x0238 + 60] = 64;
+        buf[0x0238 + 92] = 50; // Guard against the former +16 byte offset bug at 0x01C8+92 = 0x0224
 
         // Channel count (1) and nstrokes (1)
         buf[0x064A..0x064C].copy_from_slice(&1u16.to_be_bytes());
@@ -525,6 +527,8 @@ mod tests {
 
         assert_eq!(npno.cents_detune_for_note(60), 3);
         assert_eq!(npno.cents_detune_for_note(61), -5);
+        assert_eq!(npno.cents_detune_for_note(108), 7);
+        assert_eq!(npno.cents_detune_for_note(92 + 16), 7);
         assert_eq!(npno.velocity_tiers[60], 64);
 
         assert_eq!(npno.strokes.len(), 1);

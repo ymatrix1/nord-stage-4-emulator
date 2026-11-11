@@ -197,8 +197,12 @@ impl eframe::App for Stage4App {
                         .inner_margin(egui::Margin::symmetric(10, 4)),
                 )
                 .show(ctx, |ui| {
-                    self.library.render_top_bar(ui);
+                    self.library
+                        .render_top_bar(ui, &mut self.state.sync_knobs_on_program_load);
                 });
+
+            self.library
+                .render_drawer(ctx, &mut self.state, &self.audio_handle);
         }
 
         egui::CentralPanel::default()
@@ -210,11 +214,6 @@ impl eframe::App for Stage4App {
                         render_stage4_panel(ui, &mut self.state, &self.audio_handle);
                     });
             });
-
-        if self.screenshot_target.is_none() {
-            self.library
-                .render_drawer(ctx, &mut self.state, &self.audio_handle);
-        }
 
         // Screenshot capture support (CLI flag or F12 key)
         let f12_pressed = ctx.input(|i| i.key_pressed(egui::Key::F12));

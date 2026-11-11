@@ -16,6 +16,9 @@ const FDN_SIZE: usize = 4;
 /// Prime sample delay lengths for the 4 FDN delay lines (at 48 kHz).
 const FDN_DELAYS: [usize; FDN_SIZE] = [1087, 1283, 1531, 1789];
 
+/// Prime stereo input-diffuser allpass lengths (`[L0, L1, R0, R1]`) to eliminate metallic slapback.
+const REV_AP_DELAYS: [usize; FDN_SIZE] = [113, 257, 149, 311];
+
 /// Reads a linearly interpolated delayed sample from a circular buffer.
 #[inline]
 fn read_ring_interpolated(buf: &[f32], write_idx: usize, delay_samples: f32) -> f32 {
@@ -196,6 +199,8 @@ pub struct LayerFxChain {
     fdn_bufs: Box<[[f32; 2048]; FDN_SIZE]>,
     fdn_write_indices: [usize; FDN_SIZE],
     fdn_lp_states: [f32; FDN_SIZE],
+    rev_ap_bufs: Box<[[f32; 512]; FDN_SIZE]>,
+    rev_ap_indices: [usize; FDN_SIZE],
     reverb_chorale_phase: f32,
 }
 
@@ -260,6 +265,8 @@ impl LayerFxChain {
             fdn_bufs: Box::new([[0.0; 2048]; FDN_SIZE]),
             fdn_write_indices: [0; FDN_SIZE],
             fdn_lp_states: [0.0; FDN_SIZE],
+            rev_ap_bufs: Box::new([[0.0; 512]; FDN_SIZE]),
+            rev_ap_indices: [0; FDN_SIZE],
             reverb_chorale_phase: 0.0,
         }
     }
@@ -596,20 +603,48 @@ impl LayerFxChain {
         let s3 = tap_outs[0] - tap_outs[1] - tap_outs[2] + tap_outs[3];
         let hadamard = [0.5 * s0, 0.5 * s1, 0.5 * s2, 0.5 * s3];
 
-        let mono_in = 0.5 * (l + r);
+        // Two-stage stereo input allpass diffusion prevents transient flutter/metallic ringing
+        const AP_G: f32 = 0.52;
+        let mut dif_l = l;
+        for (stage, &ap_delay) in REV_AP_DELAYS.iter().enumerate().take(2) {
+            let w = self.rev_ap_indices[stage];
+            let r_idx = (w + 512 - ap_delay) % 512;
+            let delayed = self.rev_ap_bufs[stage][r_idx];
+            let v = dif_l + delayed * AP_G;
+            self.rev_ap_bufs[stage][w] = v;
+            self.rev_ap_indices[stage] = (w + 1) % 512;
+            dif_l = delayed - AP_G * v;
+        }
+        let mut dif_r = r;
+        for (stage, &ap_delay) in REV_AP_DELAYS.iter().enumerate().skip(2) {
+            let w = self.rev_ap_indices[stage];
+            let r_idx = (w + 512 - ap_delay) % 512;
+            let delayed = self.rev_ap_bufs[stage][r_idx];
+            let v = dif_r + delayed * AP_G;
+            self.rev_ap_bufs[stage][w] = v;
+            self.rev_ap_indices[stage] = (w + 1) % 512;
+            dif_r = delayed - AP_G * v;
+        }
+
+        let stereo_in = [
+            dif_l,
+            dif_r,
+            0.75 * dif_l + 0.25 * dif_r,
+            0.25 * dif_l + 0.75 * dif_r,
+        ];
         for (i, &had_val) in hadamard.iter().enumerate().take(FDN_SIZE) {
             let fb = had_val * decay_gain;
             self.fdn_lp_states[i] += damp * (fb - self.fdn_lp_states[i]);
-            self.fdn_bufs[i][self.fdn_write_indices[i]] = mono_in + self.fdn_lp_states[i];
+            self.fdn_bufs[i][self.fdn_write_indices[i]] = stereo_in[i] + self.fdn_lp_states[i];
             self.fdn_write_indices[i] = (self.fdn_write_indices[i] + 1) % 2048;
         }
 
-        let rev_l = 0.5 * (tap_outs[0] + tap_outs[2]);
-        let rev_r = 0.5 * (tap_outs[1] + tap_outs[3]);
+        let rev_l = 0.45 * (tap_outs[0] + 0.8 * tap_outs[2] + 0.2 * tap_outs[3]);
+        let rev_r = 0.45 * (tap_outs[1] + 0.8 * tap_outs[3] + 0.2 * tap_outs[2]);
         let mix = self.reverb_mix.clamp(0.0, 1.0);
         [
-            l * (1.0 - 0.4 * mix) + rev_l * mix,
-            r * (1.0 - 0.4 * mix) + rev_r * mix,
+            l * (1.0 - 0.25 * mix) + rev_l * mix,
+            r * (1.0 - 0.25 * mix) + rev_r * mix,
         ]
     }
 

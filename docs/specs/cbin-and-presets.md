@@ -229,7 +229,7 @@ Nord Piano files (`.npno`) store multisampled acoustic, electric, clavinet, harp
 - `0x002C..0x0030`: `CNSP` sub-header base (`CNSP` offset base = `0x2C`).
 - `0x0048..0x0068`: Short instrument name (ASCII, 32 bytes); `0x0068..0x0088`: Long instrument name (ASCII, 32 bytes).
 - `0x00B8..0x0138`: 128-byte lookup table mapping every MIDI note (`0..127`) to its sampled root key (`0xFF` = out of range).
-- `0x01C8..0x0248`: 128-byte lookup table of signed 8-bit integers (`i8`) encoding fine-tuning calibration (`tuning_cents`).
+- `0x01B8..0x0238`: 128-byte lookup table of signed 8-bit integers (`i8`) encoding fine-tuning calibration (`tuning_cents`).
 - `0x0238..0x02B8`: 128-byte lookup table of velocity tier boundaries per key.
 - `0x064A` (`u16 BE`): channel count (`1` mono, `2` stereo); `0x064C` (`u16 BE`): `nstrokes`.
 - `0x064E..0x074E`: 128 `u16 BE` stroke counts per MIDI key (`sum == nstrokes`), assigning sequential records in the stroke table to their sampled `root_key`.

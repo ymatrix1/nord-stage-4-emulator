@@ -85,18 +85,15 @@ Upon receiving MIDI `NoteOff` or Damper Pedal Release (`CC64 < 64`), the vibrati
 Implemented in [`crates/nord-core/src/piano.rs`](../../crates/nord-core/src/piano.rs) (`NpnoSound`, `LoadedPianoStroke`).
 
 When a pre-decoded `.npno` or open SFZ/WAV (`NpnoSound::from_sfz_str` / `from_sfz_path`, `parse_wav_mono` 8/16/24/32-bit mono/stereo) instrument is loaded via `PianoLayer::set_sound`:
-1. **Zone, Velocity, and Release Lookup (`NpnoSound::select_stroke`):**
-   Multi-velocity SFZ `<region>` zones (`lovel..=hivel`, `lokey..=hikey`, `trigger=release`) are deduplicated in RAM (`Arc<[f32]>`). Key-off events spawn matching `trigger=release` samples without heap allocation. For `.npno` files, `key_map[n]` and `tuning_cents[n]` resolve the stroke directly.
+1. **Zone, Velocity, Damper & Release Lookup (`NpnoSound::select_stroke_with_damper`):**
+   Multi-velocity `.npno` strokes and SFZ `<region>` zones (`lovel..=hivel`, `lokey..=hikey`, `trigger=release`) are deduplicated in RAM (`Arc<[f32]>`). When `damper_pedal_down` is active, `.npno` `kind = 1` (`NPNO_STROKE_DAMPER`) sympathetic harp strokes are selected ahead of dry `kind = 0` strokes. Held sampled voices preserve their natural recorded decay envelope (`v.env = 1.0`) until note-off or sample end, while key-off events spawn matching release (`kind = 2` / `trigger=release`) samples without heap allocation. For `.npno` files, `key_map[n]` and `tuning_cents[n]` resolve root mapping and stretch tuning directly.
 2. **Pitch Transposition Ratio:**
    The fractional playback speed increment per engine sample frame is calculated as:
    $$
    r = 2^{\frac{(n - n_{\text{root}}) + \frac{c}{100}}{12}}, \qquad \text{sample\_step} = r \cdot \frac{f_{\text{s, stroke}}}{f_{\text{s, engine}}}
    $$
-3. **Linear Fractional Sample Interpolation:**
-   To guarantee clean, anti-aliased transposition without DSP buffer clicks or heap allocations during real-time rendering:
-   $$
-   x[t] = x[k] + \mathrm{frac} \cdot (x[k+1] - x[k]), \qquad k = \lfloor \text{sample\_pos} \rfloor, \quad \mathrm{frac} = \text{sample\_pos} - k
-   $$
+3. **4-Point Cubic Catmull-Rom Sample Interpolation:**
+   All fractional sample lookups (including `35 kHz -> 48 kHz` `.npno` hardware sample-rate conversion and semitone transposition) evaluate a zero-allocation 4-point Catmull-Rom cubic spline across `[p_{k-1}, p_k, p_{k+1}, p_{k+2}]` to avoid linear-interpolation high-frequency roll-off and imaging.
 4. **Resilient Fallback:**
    If no sample is loaded, or if the note is outside the mapped multisample zones, the engine smoothly falls back to the mathematical harmonic oscillator bank.
 

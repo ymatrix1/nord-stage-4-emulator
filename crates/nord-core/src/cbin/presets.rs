@@ -211,16 +211,15 @@ pub fn nord_name_hash(stem: &str) -> u32 {
     const M: u32 = 0x5bd1_e995;
     let data = stem.as_bytes();
     let mut h: u32 = data.len() as u32;
-    let mut chunks = data.chunks_exact(4);
-    for chunk in &mut chunks {
-        let mut k = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+    let (chunks, rem) = data.as_chunks::<4>();
+    for &chunk in chunks {
+        let mut k = u32::from_be_bytes(chunk);
         k = k.wrapping_mul(M);
         k ^= k >> 24;
         k = k.wrapping_mul(M);
         h = h.wrapping_mul(M);
         h ^= k;
     }
-    let rem = chunks.remainder();
     if rem.len() == 3 {
         h ^= u32::from(rem[2]) << 16;
     }

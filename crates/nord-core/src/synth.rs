@@ -1136,13 +1136,13 @@ impl SynthLayer {
         le_c: usize,
         crossfade: usize,
     ) -> f32 {
-        let primary = Self::lerp_pcm(pcm, wrapped);
+        let primary = Self::cubic_pcm(pcm, wrapped);
         if crossfade > 0 {
             let xf = crossfade.min((le_c - ls) / 2) as f64;
             let dist_to_end = le_c as f64 - wrapped;
             if xf >= 1.0 && dist_to_end < xf && ls as f64 >= dist_to_end {
                 let fade = (xf - dist_to_end) / xf;
-                let pre_loop = Self::lerp_pcm(pcm, ls as f64 - dist_to_end);
+                let pre_loop = Self::cubic_pcm(pcm, ls as f64 - dist_to_end);
                 return primary * (1.0 - fade as f32) + pre_loop * (fade as f32);
             }
         }
@@ -1179,7 +1179,7 @@ impl SynthLayer {
                     if le_r > ls {
                         Self::sample_with_loop(r, wrapped, ls, le_r, zone.loop_crossfade)
                     } else {
-                        Self::lerp_pcm(r, wrapped)
+                        Self::cubic_pcm(r, wrapped)
                     }
                 });
                 let next_pos = wrapped + step;
@@ -1196,19 +1196,32 @@ impl SynthLayer {
             *active = false;
             return (0.0, None);
         }
-        let out_l = Self::lerp_pcm(&zone.pcm, pos);
-        let out_r = pcm_r.map(|r| Self::lerp_pcm(r, pos));
+        let out_l = Self::cubic_pcm(&zone.pcm, pos);
+        let out_r = pcm_r.map(|r| Self::cubic_pcm(r, pos));
         *sample_pos = pos + step;
         (out_l, out_r)
     }
 
     #[inline]
-    fn lerp_pcm(pcm: &[f32], pos: f64) -> f32 {
-        let max_idx = pcm.len() - 1;
-        let idx = (pos.floor() as usize).min(max_idx);
-        let next = (idx + 1).min(max_idx);
-        let frac = (pos - (idx as f64)).clamp(0.0, 1.0) as f32;
-        pcm[idx] * (1.0 - frac) + pcm[next] * frac
+    fn cubic_pcm(pcm: &[f32], pos: f64) -> f32 {
+        let len = pcm.len();
+        if len == 0 {
+            return 0.0;
+        }
+        let max_idx = len - 1;
+        let idx1 = (pos.floor() as usize).min(max_idx);
+        let idx2 = (idx1 + 1).min(max_idx);
+        let frac = (pos - (idx1 as f64)).clamp(0.0, 1.0) as f32;
+        let p0 = pcm[idx1.saturating_sub(1)];
+        let p1 = pcm[idx1];
+        let p2 = pcm[idx2];
+        let p3 = pcm[(idx2 + 1).min(max_idx)];
+        let t2 = frac * frac;
+        let t3 = t2 * frac;
+        0.5 * ((2.0 * p1)
+            + (-p0 + p2) * frac
+            + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+            + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
     }
 
     #[inline]

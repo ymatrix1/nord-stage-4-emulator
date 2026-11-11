@@ -602,7 +602,7 @@ impl BackupLibraryState {
     }
 
     /// Renders the compact top library utility strip.
-    pub fn render_top_bar(&mut self, ui: &mut egui::Ui) {
+    pub fn render_top_bar(&mut self, ui: &mut egui::Ui, sync_knobs_on_load: &mut bool) {
         ui.horizontal(|ui| {
             let toggle_label = if self.drawer_open {
                 "Close Library"
@@ -622,6 +622,12 @@ impl BackupLibraryState {
             }
 
             ui.separator();
+            ui.checkbox(sync_knobs_on_load, "Sync Knobs on Preset")
+                .on_hover_text(
+                    "Real Nord Stage 4 knobs are non-motorized (OLED & LED ladders update on load, while pots keep their physical angle). Enable to move GUI knobs on preset load.",
+                );
+
+            ui.separator();
             if self.pending_jobs > 0 {
                 ui.spinner();
             }
@@ -633,7 +639,7 @@ impl BackupLibraryState {
         });
     }
 
-    /// Renders the `.ns4b` archive browser window when `drawer_open` is true.
+    /// Renders the docked `.ns4b` archive browser side panel when `drawer_open` is true.
     pub fn render_drawer(
         &mut self,
         ctx: &egui::Context,
@@ -643,17 +649,36 @@ impl BackupLibraryState {
         if !self.drawer_open {
             return;
         }
-        let mut open = self.drawer_open;
-        egui::Window::new("Nord Stage 4 Backup & CNSP Sample Library")
-            .open(&mut open)
-            .default_width(540.0)
-            .default_height(460.0)
+        egui::SidePanel::left("ns4_library_panel")
+            .resizable(true)
+            .default_width(360.0)
+            .min_width(260.0)
+            .max_width(580.0)
+            .frame(
+                egui::Frame::side_top_panel(&ctx.style())
+                    .fill(Color32::from_rgb(36, 42, 48))
+                    .inner_margin(egui::Margin::same(10)),
+            )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
+                    ui.strong(
+                        RichText::new("Nord Stage 4 Backup & Sample Library")
+                            .color(Color32::WHITE),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("X").on_hover_text("Close Library").clicked() {
+                            self.drawer_open = false;
+                        }
+                    });
+                });
+                ui.separator();
+
+                ui.horizontal(|ui| {
                     ui.label("Backup (.ns4b):");
+                    let input_w = (ui.available_width() - 56.0).max(110.0);
                     let edit = ui.add(
                         egui::TextEdit::singleline(&mut self.path_input)
-                            .desired_width(330.0)
+                            .desired_width(input_w)
                             .hint_text("Path to .ns4b backup (or drag-and-drop file)"),
                     );
                     let enter =
@@ -676,7 +701,7 @@ impl BackupLibraryState {
                 }
 
                 ui.separator();
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.selectable_value(
                         &mut self.active_tab,
                         BackupTab::Programs,
@@ -685,20 +710,20 @@ impl BackupLibraryState {
                     ui.selectable_value(
                         &mut self.active_tab,
                         BackupTab::Pianos,
-                        format!("Pianos .npno ({})", self.pianos.len()),
+                        format!("Pianos ({})", self.pianos.len()),
                     );
                     ui.selectable_value(
                         &mut self.active_tab,
                         BackupTab::Samples,
-                        format!("Samples .nsmp4 ({})", self.samples.len()),
+                        format!("Samples ({})", self.samples.len()),
                     );
                 });
 
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("Filter:");
                     ui.add(
                         egui::TextEdit::singleline(&mut self.filter)
-                            .desired_width(210.0)
+                            .desired_width(150.0)
                             .hint_text("Search name..."),
                     );
                     if self.active_tab == BackupTab::Pianos {
@@ -755,7 +780,6 @@ impl BackupLibraryState {
                     self.request_sample_entry(&s);
                 }
             });
-        self.drawer_open = open;
     }
 }
 
