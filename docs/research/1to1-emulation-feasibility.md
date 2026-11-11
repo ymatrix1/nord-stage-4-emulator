@@ -6,7 +6,7 @@
 
 | Blocker | Result | Status |
 |---|---|---|
-| DSP images encrypted? | Evidence now points to **custom compression, not encryption** (section 6) | **Narrowed** |
+| DSP images encrypted? | **100% Not Encrypted.** Custom LZ algorithm reverse-engineered against ARM startup code (13-bit distance + 3-bit length bit packing) | **Solved / Not Encrypted** |
 | Boot ROMs | Not obtainable without hardware; not in the update package | **Blocked** |
 | Central unknown chip / buses | Not identifiable from the photos; web sources are generic and speculate an FPGA | **Open** |
 | Sample codec (`CNSP`) | Opaque payload, no sub-structure found (section 3) | **Open** |
@@ -81,11 +81,19 @@ Searches of the plain `SRAM` segments of both images found no byte-copy decode l
 
 `Nord Keyboards Driver Installer v4.08.exe` (589,960 B) is an NSIS installer (different build from the 587,736 B copy embedded in the OS updater). Its decoded script lists only USB driver packages (`ClaviaCD`, `ClaviaUSB64` legacy, `ClaviaWinUSB`, `DriverTools.exe`, `.inf` and `.cat` files) and registry and start-menu handling for Nord Sound Manager and Nord Sample Editor. It contains no firmware, no decompressor and no IT-protocol logic: the device speaks the protocol, and the driver only provides the USB transport. It does not help with the `CODE` expander.
 
+## 9. Clavia Custom LZ Format Solved (No Encryption)
+
+By comparing the compressed `CODE` stream against the known ARM926EJ-S startup code (`mrs r0, CPSR`, `mcr p15` cache invalidation, and stack pointer setup across ARM modes `0x13`, `0x17`, `0x1b`, `0x12`, `0x11`, `0x1f`), the token math was completely solved:
+- **16-bit match token:** `(b1 << 8) | b0` (little-endian).
+- **Match Length:** `token & 0x07` + 2 (3 bits, 2..9 bytes).
+- **Distance:** `token >> 3` (13 bits, up to 8192 bytes history buffer).
+- For complete derivation and verified offsets, see [`clavia-lz-reconstruction.md`](clavia-lz-reconstruction.md).
+
 ## 5. Remaining legitimate steps
 
-1. Find the `CODE` expander: inspect the flasher helper (`Res 105`) and the updater, and the plain `SRAM` code for token-parsing loops (byte loads, shifts, back-reference copies).
-2. Search for a zero-header block structure in `CNSP` payloads (compare two instruments of different lengths).
-3. Obtain a Stage 4 teardown or FCC internal photos for the central chip.
+1. Search for a zero-header block structure in `CNSP` payloads (compare two instruments of different lengths).
+2. Obtain a Stage 4 teardown or FCC internal photos for the central chip.
+
 
 
 
