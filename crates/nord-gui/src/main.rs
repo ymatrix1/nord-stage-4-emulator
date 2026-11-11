@@ -5,13 +5,64 @@
 
 use eframe::egui;
 use nord_gui::audio::start_audio_and_midi;
+use nord_gui::library::BackupLibraryState;
 use nord_gui::panel::{render_stage4_panel, Stage4PanelState};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+#[derive(Debug, Default, PartialEq, Eq)]
+struct CliArgs {
+    screenshot_target: Option<PathBuf>,
+    initial_program: Option<PathBuf>,
+    initial_backup: Option<PathBuf>,
+    initial_piano: Option<PathBuf>,
+    initial_sample: Option<PathBuf>,
+}
+
+fn parse_cli_args<I: IntoIterator<Item = String>>(args: I) -> CliArgs {
+    let mut parsed = CliArgs::default();
+    let mut iter = args.into_iter().skip(1);
+    while let Some(arg) = iter.next() {
+        if arg == "--screenshot" {
+            if let Some(path) = iter.next() {
+                parsed.screenshot_target = Some(PathBuf::from(path));
+            }
+        } else if arg == "--program" || arg == "-p" {
+            if let Some(path) = iter.next() {
+                parsed.initial_program = Some(PathBuf::from(path));
+            }
+        } else if arg == "--backup" || arg == "-b" {
+            if let Some(path) = iter.next() {
+                parsed.initial_backup = Some(PathBuf::from(path));
+            }
+        } else if arg == "--piano" {
+            if let Some(path) = iter.next() {
+                parsed.initial_piano = Some(PathBuf::from(path));
+            }
+        } else if arg == "--sample" {
+            if let Some(path) = iter.next() {
+                parsed.initial_sample = Some(PathBuf::from(path));
+            }
+        } else if !arg.starts_with('-') {
+            let lower = arg.to_ascii_lowercase();
+            if lower.ends_with(".ns4p") {
+                parsed.initial_program = Some(PathBuf::from(arg));
+            } else if lower.ends_with(".ns4b") {
+                parsed.initial_backup = Some(PathBuf::from(arg));
+            } else if lower.ends_with(".npno") {
+                parsed.initial_piano = Some(PathBuf::from(arg));
+            } else if lower.ends_with(".nsmp4") {
+                parsed.initial_sample = Some(PathBuf::from(arg));
+            }
+        }
+    }
+    parsed
+}
+
 struct Stage4App {
     state: Stage4PanelState,
+    library: BackupLibraryState,
     audio_handle: nord_gui::audio::AudioHandle,
     active_keys: Arc<[AtomicBool; 128]>,
     screenshot_target: Option<PathBuf>,
@@ -19,11 +70,7 @@ struct Stage4App {
 }
 
 impl Stage4App {
-    fn new(
-        cc: &eframe::CreationContext<'_>,
-        screenshot_target: Option<PathBuf>,
-        initial_program: Option<PathBuf>,
-    ) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, cli: CliArgs) -> Self {
         nord_gui::style::setup_nord_visuals(&cc.egui_ctx);
 
         let active_keys = Arc::new(std::array::from_fn(|_| AtomicBool::new(false)));
@@ -31,19 +78,35 @@ impl Stage4App {
 
         let mut app = Self {
             state: Stage4PanelState::default(),
+            library: BackupLibraryState::new(),
             audio_handle,
             active_keys,
-            screenshot_target,
+            screenshot_target: cli.screenshot_target,
             frame_count: 0,
         };
 
-        if let Some(path) = initial_program {
+        if let Some(path) = cli.initial_program {
             if let Ok(bytes) = std::fs::read(&path) {
                 let stem = path.file_stem().and_then(|s| s.to_str());
                 app.load_program_from_bytes(&bytes, stem);
             } else {
                 eprintln!("[GUI] Could not read program file: {}", path.display());
             }
+        }
+        if let Some(path) = cli.initial_backup {
+            match app.library.open_backup_path(&path) {
+                Ok(()) => app.library.drawer_open = true,
+                Err(e) => {
+                    eprintln!("[GUI] Could not open backup '{}': {e}", path.display());
+                    app.library.error_message = Some(e);
+                }
+            }
+        }
+        if let Some(path) = cli.initial_piano {
+            app.library.request_piano_file(path, false);
+        }
+        if let Some(path) = cli.initial_sample {
+            app.library.request_sample_file(path, 0);
         }
 
         app
@@ -81,26 +144,61 @@ impl Stage4App {
 impl eframe::App for Stage4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame_count += 1;
+        self.library
+            .poll_results(&mut self.state, &self.audio_handle);
 
-        // Handle drag and drop of .ns4p patch files
-        ctx.input(|i| {
-            for dropped in &i.raw.dropped_files {
-                if let Some(path) = &dropped.path {
-                    if path.extension().and_then(|s| s.to_str()) == Some("ns4p") {
+        // Handle drag and drop of .ns4p, .ns4b, .npno, and .nsmp4 files
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        for file in dropped {
+            if let Some(path) = &file.path {
+                let ext = path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_ascii_lowercase());
+                match ext.as_deref() {
+                    Some("ns4b") => {
+                        if let Err(err) = self.library.open_backup_path(path) {
+                            self.library.error_message = Some(err);
+                        } else {
+                            self.library.drawer_open = true;
+                        }
+                    }
+                    Some("npno") => {
+                        self.library
+                            .request_piano_file(path.clone(), self.library.piano_slot_b);
+                    }
+                    Some("nsmp4") => {
+                        self.library
+                            .request_sample_file(path.clone(), self.library.synth_layer_idx);
+                    }
+                    Some("ns4p") => {
                         if let Ok(bytes) = std::fs::read(path) {
                             let stem = path.file_stem().and_then(|s| s.to_str());
                             self.load_program_from_bytes(&bytes, stem);
                         }
                     }
-                } else if let Some(bytes) = &dropped.bytes {
-                    self.load_program_from_bytes(bytes, None);
+                    _ => {}
                 }
+            } else if let Some(bytes) = &file.bytes {
+                self.library.load_dropped_bytes(&file.name, bytes);
             }
-        });
+        }
 
         // Sync active keys from MIDI input into UI state
         for (i, pressed) in self.state.midi_active_keys.iter_mut().enumerate() {
             *pressed = self.active_keys[i].load(Ordering::Relaxed);
+        }
+
+        if self.screenshot_target.is_none() {
+            egui::TopBottomPanel::top("ns4_library_bar")
+                .frame(
+                    egui::Frame::NONE
+                        .fill(egui::Color32::from_rgb(36, 12, 14))
+                        .inner_margin(egui::Margin::symmetric(10, 4)),
+                )
+                .show(ctx, |ui| {
+                    self.library.render_top_bar(ui);
+                });
         }
 
         egui::CentralPanel::default()
@@ -112,6 +210,11 @@ impl eframe::App for Stage4App {
                         render_stage4_panel(ui, &mut self.state, &self.audio_handle);
                     });
             });
+
+        if self.screenshot_target.is_none() {
+            self.library
+                .render_drawer(ctx, &mut self.state, &self.audio_handle);
+        }
 
         // Screenshot capture support (CLI flag or F12 key)
         let f12_pressed = ctx.input(|i| i.key_pressed(egui::Key::F12));
@@ -151,26 +254,11 @@ impl eframe::App for Stage4App {
 }
 
 fn main() -> eframe::Result<()> {
-    let mut screenshot_target = None;
-    let mut initial_program = None;
-    let mut args = std::env::args().skip(1);
-    while let Some(arg) = args.next() {
-        if arg == "--screenshot" {
-            if let Some(path) = args.next() {
-                screenshot_target = Some(PathBuf::from(path));
-            }
-        } else if arg == "--program" || arg == "-p" {
-            if let Some(path) = args.next() {
-                initial_program = Some(PathBuf::from(path));
-            }
-        } else if !arg.starts_with('-') && arg.ends_with(".ns4p") {
-            initial_program = Some(PathBuf::from(arg));
-        }
-    }
+    let cli = parse_cli_args(std::env::args());
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1580.0, 440.0])
+            .with_inner_size([1580.0, 472.0])
             .with_min_inner_size([960.0, 360.0])
             .with_title("Clavia Nord Stage 4"),
         ..Default::default()
@@ -179,13 +267,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Nord Stage 4",
         native_options,
-        Box::new(move |cc| {
-            Ok(Box::new(Stage4App::new(
-                cc,
-                screenshot_target,
-                initial_program,
-            )))
-        }),
+        Box::new(move |cc| Ok(Box::new(Stage4App::new(cc, cli)))),
     )
 }
 
@@ -217,22 +299,29 @@ mod tests {
 
     #[test]
     fn test_cli_program_argument_detection() {
-        let args = vec![
+        let parsed = parse_cli_args([
             "nord-stage4".to_string(),
             "--program".to_string(),
             "bank_a/patch.ns4p".to_string(),
-        ];
-        let mut initial_program = None;
-        let mut iter = args.into_iter().skip(1);
-        while let Some(arg) = iter.next() {
-            if arg == "--program" || arg == "-p" {
-                if let Some(path) = iter.next() {
-                    initial_program = Some(PathBuf::from(path));
-                }
-            } else if !arg.starts_with('-') && arg.ends_with(".ns4p") {
-                initial_program = Some(PathBuf::from(arg));
-            }
-        }
-        assert_eq!(initial_program, Some(PathBuf::from("bank_a/patch.ns4p")));
+            "--backup".to_string(),
+            "restore.ns4b".to_string(),
+            "--piano".to_string(),
+            "grand.npno".to_string(),
+            "--sample".to_string(),
+            "strings.nsmp4".to_string(),
+        ]);
+        assert_eq!(
+            parsed.initial_program,
+            Some(PathBuf::from("bank_a/patch.ns4p"))
+        );
+        assert_eq!(parsed.initial_backup, Some(PathBuf::from("restore.ns4b")));
+        assert_eq!(parsed.initial_piano, Some(PathBuf::from("grand.npno")));
+        assert_eq!(parsed.initial_sample, Some(PathBuf::from("strings.nsmp4")));
+
+        let positional = parse_cli_args(["nord-stage4".to_string(), "factory.ns4b".to_string()]);
+        assert_eq!(
+            positional.initial_backup,
+            Some(PathBuf::from("factory.ns4b"))
+        );
     }
 }

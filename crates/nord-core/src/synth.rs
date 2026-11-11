@@ -658,6 +658,9 @@ impl SynthLayer {
     /// Loads or clears a pre-decoded multisample instrument for `SynthOscMode::Sample`.
     /// Call outside the audio thread; playback reads the shared immutable buffer without locking or allocating.
     pub fn load_sample(&mut self, sound: Option<Arc<SynthSampleSound>>) {
+        for v in &mut self.voices {
+            v.active = false;
+        }
         self.sample_sound = sound;
     }
 

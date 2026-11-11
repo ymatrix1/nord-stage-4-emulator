@@ -805,6 +805,9 @@ impl PianoLayer {
 
     /// Assigns or unloads a pre-decoded `.npno` or SFZ sound library.
     pub fn set_sound(&mut self, sound: Option<Arc<NpnoSound>>) {
+        for v in &mut self.voices {
+            v.active = false;
+        }
         self.sound = sound;
     }
 

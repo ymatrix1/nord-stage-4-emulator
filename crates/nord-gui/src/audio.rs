@@ -85,6 +85,16 @@ pub enum AudioCommand {
     SetLayerActive(usize, bool),
     /// Loads a complete ProgramDecoded into the DSP engine.
     LoadProgram(Box<nord_core::cbin::ProgramDecoded>),
+    /// Swaps the pre-decoded `.npno` or SFZ piano library on Piano A (`slot_b = false`) or B (`slot_b = true`).
+    LoadPianoSound {
+        slot_b: bool,
+        sound: Option<Arc<nord_core::piano::NpnoSound>>,
+    },
+    /// Swaps the pre-decoded `.nsmp4` multisample bank on Synth A (`0`), B (`1`), or C (`2`).
+    LoadSynthSample {
+        layer_idx: usize,
+        sound: Option<Arc<nord_core::synth::SynthSampleSound>>,
+    },
 }
 
 /// Handle to communicate with the running audio background thread.
@@ -344,6 +354,22 @@ pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_
         }
         AudioCommand::LoadProgram(prog) => {
             engine.apply_program(&prog);
+        }
+        AudioCommand::LoadPianoSound { slot_b, sound } => {
+            if slot_b {
+                engine.piano_b.set_sound(sound);
+            } else {
+                engine.piano_a.set_sound(sound);
+            }
+        }
+        AudioCommand::LoadSynthSample { layer_idx, sound } => {
+            let layer = match layer_idx {
+                0 => &mut engine.synth_a,
+                1 => &mut engine.synth_b,
+                2 => &mut engine.synth_c,
+                _ => return,
+            };
+            layer.load_sample(sound);
         }
     }
 }
@@ -693,5 +719,53 @@ mod tests {
 
         assert_eq!(engine.organ_a.drawbars, [8, 8, 8, 0, 0, 0, 0, 0, 0]);
         assert!((engine.layer_levels[0].base - 0.42).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_apply_audio_command_load_piano_and_synth_samples() {
+        let mut engine = Stage4Engine::new(48000.0);
+        let mut vol = 0.8;
+
+        let piano_sound = Arc::new(nord_core::piano::NpnoSound::new_synthetic(
+            "Test Grand",
+            60,
+            &[0.1, 0.2, 0.1, 0.0],
+            48000.0,
+        ));
+        apply_audio_command(
+            AudioCommand::LoadPianoSound {
+                slot_b: false,
+                sound: Some(Arc::clone(&piano_sound)),
+            },
+            &mut engine,
+            &mut vol,
+        );
+        engine.piano_a.note_on(60, 100);
+        let [l, r] = engine.piano_a.render_frame();
+        assert!(l.is_finite() && r.is_finite());
+
+        let synth_sound = Arc::new(nord_core::synth::SynthSampleSound {
+            name: "Test Sample".to_string(),
+            zones: vec![],
+        });
+        apply_audio_command(
+            AudioCommand::LoadSynthSample {
+                layer_idx: 0,
+                sound: Some(Arc::clone(&synth_sound)),
+            },
+            &mut engine,
+            &mut vol,
+        );
+        assert_eq!(engine.synth_a.loaded_sample_name(), Some("Test Sample"));
+
+        apply_audio_command(
+            AudioCommand::LoadSynthSample {
+                layer_idx: 0,
+                sound: None,
+            },
+            &mut engine,
+            &mut vol,
+        );
+        assert_eq!(engine.synth_a.loaded_sample_name(), None);
     }
 }

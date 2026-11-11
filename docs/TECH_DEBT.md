@@ -9,12 +9,12 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 
 | ID | Component | Severity | Description | Target Phase / Milestone | Status |
 |---|---|---|---|---|---|
-| **TD-01** | `crates/nord-gui` | Medium | Standalone GUI uses `eframe`/`egui` rather than pure `nih-plug` vector UI | Phase 6 (`crates/nord-plugin`) | Open |
+| **TD-01** | `crates/nord-gui` | Medium | Standalone GUI uses `eframe`/`egui` 0.31 rather than embedded `nih_plug_egui` vector UI inside `crates/nord-plugin` | Phase 6.1 (`crates/nord-plugin` editor) | Open |
 | **TD-02** | `crates/nord-gui` | Medium | Single default MIDI input port bound on startup; no hotplug menu | Phase 6.1 (Settings Dialog) | Open |
-| **TD-03** | `crates/nord-core::piano` | Low | In-memory synthetic multi-sample wavetable fallback pending open SFZ loader | Phase 4 (`ns4-pno4`) | Open |
+| **TD-03** | `crates/nord-core::piano` | Low | Synthetic multi-sample fallback when no user `.npno` or SFZ bank is loaded | Phase 4 (`ns4-pno4`) | Resolved (SFZ + `.npno` loader in core & `nord-gui`) |
 | **TD-04** | `crates/nord-core::organ` | Low | Simplified key-click transient model instead of physical contact bounce network | Phase 2.2 (`ns4-orgn`) | Open |
 | **TD-05** | `crates/nord-core::engine` | Low | Boxed heap allocations for delay buffers occur during `Stage4Engine::new()` | Maintenance | Accepted (Zero RT allocs) |
-| **TD-06** | `docs/research` | High | `CNSP` compressed sample codec & full LZ firmware framing remain to be decoded | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | In Progress (Planned) |
+| **TD-06** | `docs/research` | High | `CNSP` & LZO1X firmware unpacked/decoded; internal `ARM0`/`DSPO`/`DSPS`/`DSPF` SHARC symbol mapping remaining | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | In Progress |
 | **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Resolved (`crates/nord-core/src/synth.rs`) |
 
 ---
@@ -46,13 +46,12 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 - **Debt / Trade-off:** Buffer memory is allocated on the heap inside `Box::new()` during initialization (`Stage4Engine::new()`).
 - **Status:** **Accepted Architecture Invariant**. Real-time DSP rendering (`render_frame` / `process_block`) remains strictly zero-allocation and lock-free.
 
-### TD-06: Reverse-Engineered Sample Payload (`CNSP`) & Firmware LZ Framing
-- **Context:** Factory backup `.ns4b` contains 233 sample files in `.nsmp4` and `.npno` formats. Analysis shows standard 48-byte `CBIN` headers followed by high-entropy `CNSP` compressed payloads (~7.5 bits/byte). Meanwhile, the firmware `CODE` segment is proven unencrypted using a 16-bit LZ token scheme (`distance = token >> 3`, `length = (token & 7) + 2`).
-- **Debt:** Without completing the LZ literal-run state machine and reverse-engineering the `CNSP` decompressor, the emulator cannot directly load a user's local `.npno` and `.nsmp4` files from their `.ns4b` backup.
+### TD-06: Firmware Internal SHARC / ARM0 Symbol & Lookup Table Mapping
+- **Context:** Factory backup `.ns4b` `CNSP` decompression (`.npno` / `.nsmp4`) and full-stream Clavia LZO1X firmware decompression (`Image 1` `798,912 B`, `Image 0` `5,499,504 B`) are now solved and implemented cleanly in `crates/nord-core` and integrated into `nord-gui` and `ns4` CLI.
+- **Remaining Debt:** While samples and presets load directly from user `.ns4b` archives, the internal filter/envelope/FX lookup tables inside the unpacked `ARM0`, `DSPO`, `DSPS`, and `DSPF` (`ADSP-21489`) binary images are not yet mapped symbol-for-symbol to the Rust DSP models.
 - **Remediation Plan (Track B — [D12](DECISIONS.md)):**
-  1. Solve the literal-run framing in the custom LZ stream (`crates/nord-core/src/firmware.rs`) to unpack `ARM0`, `DSPO`, `DSPS`, and `DSPF`.
-  2. Perform differential analysis across all 233 `CNSP` headers (`0x30..0x80`) and disassemble the `CNSP` decompression routine from the unpacked firmware images.
-  3. Implement a clean-room `CNSP` reader in `crates/nord-core` alongside open SFZ sample support.
+  1. Map internal `ARM0` / `DSPO` / `DSPS` / `DSPF` functions and parameter calibration tables from the unpacked OS v1.66 firmware images.
+  2. Calibrate `Stage4Engine` filter, envelope, and FX response curves against Stage 4 hardware recordings.
 
 ---
 

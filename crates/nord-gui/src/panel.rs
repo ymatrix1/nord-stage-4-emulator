@@ -49,6 +49,7 @@ pub struct Stage4PanelState {
     pub string_res: bool,
     pub pedal_noise: bool,
     pub piano_octave: i8,
+    pub loaded_piano_name: Option<String>,
 
     // Program / Morph Section (Bay 4)
     pub prog_id: String,
@@ -77,6 +78,7 @@ pub struct Stage4PanelState {
     pub synth_decay: f32,
     pub synth_release: f32,
     pub synth_octave: i8,
+    pub loaded_sample_name: Option<String>,
 
     // Layer Effects Section (Bay 6)
     pub fx_focus: usize,
@@ -137,6 +139,7 @@ impl Default for Stage4PanelState {
             string_res: true,
             pedal_noise: true,
             piano_octave: 0,
+            loaded_piano_name: None,
 
             prog_id: "A:11".to_string(),
             prog_title: "Nord Stage 4".to_string(),
@@ -163,6 +166,7 @@ impl Default for Stage4PanelState {
             synth_decay: 0.35,
             synth_release: 0.25,
             synth_octave: 0,
+            loaded_sample_name: None,
 
             fx_focus: 0,
             mod1_type: Mod1Type::Off,
@@ -1006,8 +1010,18 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         vec2(196.0, 96.0),
     );
     let org_txt = format!("{:?}", state.organ_model);
-    let pno_txt = format!("{:?}", state.piano_cat);
-    let syn_txt = format!("{:?}", state.synth_waveform);
+    let pno_txt = state
+        .loaded_piano_name
+        .clone()
+        .unwrap_or_else(|| format!("{:?} XL", state.piano_cat));
+    let syn_txt = if state.synth_osc_mode == SynthOscMode::Sample {
+        state
+            .loaded_sample_name
+            .clone()
+            .unwrap_or_else(|| "Sample".to_string())
+    } else {
+        format!("{:?}", state.synth_waveform)
+    };
     oled(
         &painter,
         oled_rect,
@@ -1015,7 +1029,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         &state.prog_title,
         &[
             format!("Org: {org_txt} 888000000"),
-            format!("Pno: {pno_txt} XL"),
+            format!("Pno: {pno_txt}"),
             format!("Syn: {syn_txt}"),
         ],
     );
@@ -1152,12 +1166,24 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay5.left() + 116.0, bay5.top() + 30.0),
         vec2(120.0, 80.0),
     );
-    let wf_str = format!("{:?}", state.synth_waveform);
+    let wf_str = if state.synth_osc_mode == SynthOscMode::Sample {
+        state
+            .loaded_sample_name
+            .clone()
+            .unwrap_or_else(|| "No .nsmp4".to_string())
+    } else {
+        format!("{:?}", state.synth_waveform)
+    };
     let osc_str = format!("{:?}", state.synth_osc_mode);
+    let oled_title = if state.synth_osc_mode == SynthOscMode::Sample {
+        "SAMPLE"
+    } else {
+        "OSC WAVE"
+    };
     oled(
         &painter,
         soled_rect,
-        "OSC WAVE",
+        oled_title,
         &wf_str,
         &[
             format!("Mode: {osc_str}"),
