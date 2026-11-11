@@ -45,6 +45,18 @@ pub struct Stage4Params {
 
     #[id = "split_enabled"]
     pub split_enabled: BoolParam,
+    #[id = "split_1_note"]
+    pub split_1_note: IntParam,
+    #[id = "split_2_note"]
+    pub split_2_note: IntParam,
+    #[id = "split_3_note"]
+    pub split_3_note: IntParam,
+    #[id = "split_1_crossfade"]
+    pub split_1_crossfade: IntParam,
+    #[id = "split_2_crossfade"]
+    pub split_2_crossfade: IntParam,
+    #[id = "split_3_crossfade"]
+    pub split_3_crossfade: IntParam,
 
     // ==========================================
     // Morph Controllers
@@ -95,6 +107,26 @@ pub struct Stage4Params {
     pub drawbar_8_1_1_3: IntParam,
     #[id = "drawbar_9_1"]
     pub drawbar_9_1: IntParam,
+
+    // Drawbars for Organ B (16' to 1')
+    #[id = "drawbar_b_1_16"]
+    pub drawbar_b_1_16: IntParam,
+    #[id = "drawbar_b_2_5_1_3"]
+    pub drawbar_b_2_5_1_3: IntParam,
+    #[id = "drawbar_b_3_8"]
+    pub drawbar_b_3_8: IntParam,
+    #[id = "drawbar_b_4_4"]
+    pub drawbar_b_4_4: IntParam,
+    #[id = "drawbar_b_5_2_2_3"]
+    pub drawbar_b_5_2_2_3: IntParam,
+    #[id = "drawbar_b_6_2"]
+    pub drawbar_b_6_2: IntParam,
+    #[id = "drawbar_b_7_1_3_5"]
+    pub drawbar_b_7_1_3_5: IntParam,
+    #[id = "drawbar_b_8_1_1_3"]
+    pub drawbar_b_8_1_1_3: IntParam,
+    #[id = "drawbar_b_9_1"]
+    pub drawbar_b_9_1: IntParam,
 
     // Organ Percussion & Rotary
     #[id = "organ_perc_enable"]
@@ -222,6 +254,24 @@ impl Default for Stage4Params {
 
             layer_scene_ii: BoolParam::new("Layer Scene II", false),
             split_enabled: BoolParam::new("Split Enabled", false),
+            split_1_note: IntParam::new("Split 1 Note", 53, IntRange::Linear { min: 0, max: 127 }),
+            split_2_note: IntParam::new("Split 2 Note", 65, IntRange::Linear { min: 0, max: 127 }),
+            split_3_note: IntParam::new("Split 3 Note", 77, IntRange::Linear { min: 0, max: 127 }),
+            split_1_crossfade: IntParam::new(
+                "Split 1 Crossfade",
+                0,
+                IntRange::Linear { min: 0, max: 2 },
+            ),
+            split_2_crossfade: IntParam::new(
+                "Split 2 Crossfade",
+                0,
+                IntRange::Linear { min: 0, max: 2 },
+            ),
+            split_3_crossfade: IntParam::new(
+                "Split 3 Crossfade",
+                0,
+                IntRange::Linear { min: 0, max: 2 },
+            ),
 
             // Morph
             mod_wheel: FloatParam::new("Mod Wheel", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
@@ -279,6 +329,52 @@ impl Default for Stage4Params {
                 IntRange::Linear { min: 0, max: 8 },
             ),
             drawbar_9_1: IntParam::new("Drawbar 1'", 0, IntRange::Linear { min: 0, max: 8 }),
+
+            drawbar_b_1_16: IntParam::new(
+                "Organ B Drawbar 16'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_2_5_1_3: IntParam::new(
+                "Organ B Drawbar 5 1/3'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_3_8: IntParam::new(
+                "Organ B Drawbar 8'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_4_4: IntParam::new(
+                "Organ B Drawbar 4'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_5_2_2_3: IntParam::new(
+                "Organ B Drawbar 2 2/3'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_6_2: IntParam::new(
+                "Organ B Drawbar 2'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_7_1_3_5: IntParam::new(
+                "Organ B Drawbar 1 3/5'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_8_1_1_3: IntParam::new(
+                "Organ B Drawbar 1 1/3'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
+            drawbar_b_9_1: IntParam::new(
+                "Organ B Drawbar 1'",
+                8,
+                IntRange::Linear { min: 0, max: 8 },
+            ),
 
             organ_perc_enable: BoolParam::new("Percussion Enable", false),
             organ_perc_soft: BoolParam::new("Percussion Soft", false),
@@ -417,8 +513,30 @@ impl Stage4Params {
 
         // Split enabled
         let split_on = self.split_enabled.value();
-        for s in &mut engine.split_router.splits {
+        let split_notes = [
+            self.split_1_note.value() as u8,
+            self.split_2_note.value() as u8,
+            self.split_3_note.value() as u8,
+        ];
+        let split_crossfades = [
+            self.split_1_crossfade.value(),
+            self.split_2_crossfade.value(),
+            self.split_3_crossfade.value(),
+        ];
+        for ((s, note), crossfade) in engine
+            .split_router
+            .splits
+            .iter_mut()
+            .zip(split_notes)
+            .zip(split_crossfades)
+        {
             s.enabled = split_on;
+            s.midi_note = note;
+            s.crossfade = match crossfade {
+                1 => nord_core::morph::CrossfadeWidth::Small,
+                2 => nord_core::morph::CrossfadeWidth::Large,
+                _ => nord_core::morph::CrossfadeWidth::Off,
+            };
         }
 
         // Morph controllers
@@ -459,6 +577,18 @@ impl Stage4Params {
             self.drawbar_9_1.value() as u8,
         ];
         engine.organ_a.drawbars = drawbars;
+
+        engine.organ_b.drawbars = [
+            self.drawbar_b_1_16.value() as u8,
+            self.drawbar_b_2_5_1_3.value() as u8,
+            self.drawbar_b_3_8.value() as u8,
+            self.drawbar_b_4_4.value() as u8,
+            self.drawbar_b_5_2_2_3.value() as u8,
+            self.drawbar_b_6_2.value() as u8,
+            self.drawbar_b_7_1_3_5.value() as u8,
+            self.drawbar_b_8_1_1_3.value() as u8,
+            self.drawbar_b_9_1.value() as u8,
+        ];
 
         engine.organ_a.percussion_enabled = self.organ_perc_enable.value();
         engine.organ_a.percussion_soft = self.organ_perc_soft.value();
@@ -560,6 +690,10 @@ mod tests {
 
         assert_eq!(engine.master_clock.bpm, 120.0);
         assert_eq!(engine.organ_a.drawbars[0], 8);
+        assert_eq!(engine.organ_b.drawbars[0], 8);
+        assert_eq!(engine.split_router.splits[0].midi_note, 53);
+        assert_eq!(engine.split_router.splits[1].midi_note, 65);
+        assert_eq!(engine.split_router.splits[2].midi_note, 77);
         assert_eq!(engine.organ_a.model, OrganModel::B3);
         assert_eq!(engine.piano_a.timbre, PianoTimbre::Mid);
         assert_eq!(engine.synth_a.osc_mode, SynthOscMode::Analog);

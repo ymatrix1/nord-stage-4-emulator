@@ -1,10 +1,11 @@
 //! Plugin state serialization, restoration, and preset handling.
 //!
-//! Provides backwards-compatible JSON snapshot serialization for DAW projects and presets,
-//! plus loading of Clavia `.ns4p` programs.
+//! Provides backwards-compatible JSON snapshot serialization for DAW projects,
+//! plus loading of Clavia `.ns4p` programs into a caller-owned engine.
 
 use crate::params::{MidiRoutingMode, Stage4Params};
 use nord_core::cbin::{CbinError, CbinFile, ProgramDecoded};
+use nord_core::engine::Stage4Engine;
 use serde::{Deserialize, Serialize};
 
 /// Serializable snapshot of the plugin state.
@@ -24,6 +25,10 @@ pub struct PluginStateSnapshot {
     pub master_compressor: f32,
     pub layer_scene_ii: bool,
     pub split_enabled: bool,
+    #[serde(default = "default_split_points")]
+    pub split_points: [i32; 3],
+    #[serde(default)]
+    pub split_crossfades: [i32; 3],
 
     // Morph
     pub mod_wheel: f32,
@@ -37,6 +42,8 @@ pub struct PluginStateSnapshot {
     pub organ_a_enabled: bool,
     pub organ_b_enabled: bool,
     pub drawbars: [i32; 9],
+    #[serde(default = "default_drawbars_b")]
+    pub drawbars_b: [i32; 9],
     pub organ_perc_enable: bool,
     pub organ_perc_soft: bool,
     pub organ_perc_fast: bool,
@@ -89,6 +96,16 @@ impl PluginStateSnapshot {
             master_compressor: params.master_compressor.value(),
             layer_scene_ii: params.layer_scene_ii.value(),
             split_enabled: params.split_enabled.value(),
+            split_points: [
+                params.split_1_note.value(),
+                params.split_2_note.value(),
+                params.split_3_note.value(),
+            ],
+            split_crossfades: [
+                params.split_1_crossfade.value(),
+                params.split_2_crossfade.value(),
+                params.split_3_crossfade.value(),
+            ],
 
             mod_wheel: params.mod_wheel.value(),
             control_pedal: params.control_pedal.value(),
@@ -109,6 +126,17 @@ impl PluginStateSnapshot {
                 params.drawbar_7_1_3_5.value(),
                 params.drawbar_8_1_1_3.value(),
                 params.drawbar_9_1.value(),
+            ],
+            drawbars_b: [
+                params.drawbar_b_1_16.value(),
+                params.drawbar_b_2_5_1_3.value(),
+                params.drawbar_b_3_8.value(),
+                params.drawbar_b_4_4.value(),
+                params.drawbar_b_5_2_2_3.value(),
+                params.drawbar_b_6_2.value(),
+                params.drawbar_b_7_1_3_5.value(),
+                params.drawbar_b_8_1_1_3.value(),
+                params.drawbar_b_9_1.value(),
             ],
             organ_perc_enable: params.organ_perc_enable.value(),
             organ_perc_soft: params.organ_perc_soft.value(),
@@ -143,73 +171,6 @@ impl PluginStateSnapshot {
         }
     }
 
-    /// Restores snapshot values into the plugin parameters.
-    pub fn apply_to_params(&self, params: &Stage4Params) {
-        let midi_mode = if self.midi_mode == 1 {
-            MidiRoutingMode::MultitimbralPerLayer
-        } else {
-            MidiRoutingMode::OmniSplit
-        };
-        set_enum(&params.midi_mode, midi_mode);
-
-        set_float(&params.master_level, self.master_level);
-        set_float(&params.master_bpm, self.master_bpm);
-        set_float(&params.master_compressor, self.master_compressor);
-        set_bool(&params.layer_scene_ii, self.layer_scene_ii);
-        set_bool(&params.split_enabled, self.split_enabled);
-
-        set_float(&params.mod_wheel, self.mod_wheel);
-        set_float(&params.control_pedal, self.control_pedal);
-        set_float(&params.aftertouch, self.aftertouch);
-
-        set_int(&params.organ_model, self.organ_model);
-        set_float(&params.organ_a_level, self.organ_a_level);
-        set_float(&params.organ_b_level, self.organ_b_level);
-        set_bool(&params.organ_a_enabled, self.organ_a_enabled);
-        set_bool(&params.organ_b_enabled, self.organ_b_enabled);
-
-        set_int(&params.drawbar_1_16, self.drawbars[0]);
-        set_int(&params.drawbar_2_5_1_3, self.drawbars[1]);
-        set_int(&params.drawbar_3_8, self.drawbars[2]);
-        set_int(&params.drawbar_4_4, self.drawbars[3]);
-        set_int(&params.drawbar_5_2_2_3, self.drawbars[4]);
-        set_int(&params.drawbar_6_2, self.drawbars[5]);
-        set_int(&params.drawbar_7_1_3_5, self.drawbars[6]);
-        set_int(&params.drawbar_8_1_1_3, self.drawbars[7]);
-        set_int(&params.drawbar_9_1, self.drawbars[8]);
-
-        set_bool(&params.organ_perc_enable, self.organ_perc_enable);
-        set_bool(&params.organ_perc_soft, self.organ_perc_soft);
-        set_bool(&params.organ_perc_fast, self.organ_perc_fast);
-        set_bool(&params.organ_perc_third, self.organ_perc_third);
-        set_bool(&params.rotary_speed_fast, self.rotary_speed_fast);
-        set_float(&params.rotary_drive, self.rotary_drive);
-
-        set_float(&params.piano_a_level, self.piano_a_level);
-        set_float(&params.piano_b_level, self.piano_b_level);
-        set_bool(&params.piano_a_enabled, self.piano_a_enabled);
-        set_bool(&params.piano_b_enabled, self.piano_b_enabled);
-        set_int(&params.piano_category, self.piano_category);
-        set_int(&params.piano_timbre, self.piano_timbre);
-        set_int(&params.piano_touch, self.piano_touch);
-        set_bool(&params.piano_string_res, self.piano_string_res);
-        set_bool(&params.piano_pedal_noise, self.piano_pedal_noise);
-
-        set_float(&params.synth_a_level, self.synth_a_level);
-        set_float(&params.synth_b_level, self.synth_b_level);
-        set_float(&params.synth_c_level, self.synth_c_level);
-        set_bool(&params.synth_a_enabled, self.synth_a_enabled);
-        set_bool(&params.synth_b_enabled, self.synth_b_enabled);
-        set_bool(&params.synth_c_enabled, self.synth_c_enabled);
-        set_int(&params.synth_osc_mode, self.synth_osc_mode);
-        set_float(&params.synth_filter_cutoff, self.synth_filter_cutoff);
-        set_float(&params.synth_filter_resonance, self.synth_filter_resonance);
-        set_float(&params.synth_filter_drive, self.synth_filter_drive);
-        set_float(&params.synth_attack, self.synth_attack);
-        set_float(&params.synth_decay, self.synth_decay);
-        set_float(&params.synth_release, self.synth_release);
-    }
-
     /// Serializes snapshot to a JSON string.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
@@ -221,117 +182,25 @@ impl PluginStateSnapshot {
     }
 }
 
-// Low-level atomic value update functions
-fn set_float(param: &nih_plug::prelude::FloatParam, val: f32) {
-    let base = param as *const _ as usize;
-    unsafe {
-        *((base + 168) as *mut f32) = val;
-        *((base + 176) as *mut f32) = val;
-        *((base + 188) as *mut f32) = val;
-    }
+fn default_split_points() -> [i32; 3] {
+    [53, 65, 77]
 }
 
-fn set_int(param: &nih_plug::prelude::IntParam, val: i32) {
-    let base = param as *const _ as usize;
-    unsafe {
-        *((base + 152) as *mut i32) = val;
-        *((base + 160) as *mut i32) = val;
-        *((base + 172) as *mut i32) = val;
-    }
+fn default_drawbars_b() -> [i32; 9] {
+    [8; 9]
 }
 
-fn set_bool(param: &nih_plug::prelude::BoolParam, val: bool) {
-    let base = param as *const _ as usize;
-    unsafe {
-        *((base + 96) as *mut bool) = val;
-        *((base + 97) as *mut bool) = val;
-        *((base + 98) as *mut bool) = val;
-    }
-}
-
-fn set_enum(param: &nih_plug::prelude::EnumParam<MidiRoutingMode>, val: MidiRoutingMode) {
-    let base = param as *const _ as usize;
-    let idx = val as i32;
-    unsafe {
-        *((base + 152) as *mut i32) = idx;
-        *((base + 160) as *mut i32) = idx;
-        *((base + 172) as *mut i32) = idx;
-    }
-}
-
-/// Applies a decoded Nord Stage 4 `ProgramDecoded` program directly to the plugin parameters.
-pub fn apply_program_to_params(prog: &ProgramDecoded, params: &Stage4Params) {
-    set_float(&params.master_bpm, prog.global.tempo_bpm);
-    set_float(
-        &params.master_compressor,
-        (prog.global.master_compressor / 10.0).clamp(0.0, 1.0),
-    );
-    set_bool(&params.split_enabled, prog.global.split_enabled);
-
-    set_float(&params.organ_a_level, prog.organ.layer_a_level);
-    set_float(&params.organ_b_level, prog.organ.layer_b_level);
-    set_int(&params.organ_model, prog.organ.model as i32);
-
-    set_int(&params.drawbar_1_16, prog.organ.drawbars_a[0] as i32);
-    set_int(&params.drawbar_2_5_1_3, prog.organ.drawbars_a[1] as i32);
-    set_int(&params.drawbar_3_8, prog.organ.drawbars_a[2] as i32);
-    set_int(&params.drawbar_4_4, prog.organ.drawbars_a[3] as i32);
-    set_int(&params.drawbar_5_2_2_3, prog.organ.drawbars_a[4] as i32);
-    set_int(&params.drawbar_6_2, prog.organ.drawbars_a[5] as i32);
-    set_int(&params.drawbar_7_1_3_5, prog.organ.drawbars_a[6] as i32);
-    set_int(&params.drawbar_8_1_1_3, prog.organ.drawbars_a[7] as i32);
-    set_int(&params.drawbar_9_1, prog.organ.drawbars_a[8] as i32);
-
-    set_bool(&params.organ_perc_enable, prog.organ.percussion_on);
-    set_bool(&params.organ_perc_soft, prog.organ.percussion_soft);
-    set_bool(&params.organ_perc_fast, prog.organ.percussion_fast);
-    set_bool(&params.organ_perc_third, prog.organ.percussion_third);
-    set_bool(
-        &params.rotary_speed_fast,
-        matches!(prog.organ.rotary_speed, nord_core::organ::RotarySpeed::Fast),
-    );
-    set_float(&params.rotary_drive, prog.organ.rotary_drive);
-
-    set_float(&params.piano_a_level, prog.piano.layer_a.level);
-    set_float(&params.piano_b_level, prog.piano.layer_b.level);
-    set_int(&params.piano_category, prog.piano.layer_a.category as i32);
-    set_int(&params.piano_timbre, prog.piano.layer_a.timbre as i32);
-    set_int(&params.piano_touch, prog.piano.layer_a.touch as i32);
-    set_bool(&params.piano_string_res, prog.piano.layer_a.string_res);
-    set_bool(&params.piano_pedal_noise, prog.piano.layer_a.pedal_noise);
-
-    set_float(&params.synth_a_level, prog.synth.layer_a.level);
-    set_float(&params.synth_b_level, prog.synth.layer_b.level);
-    set_float(&params.synth_c_level, prog.synth.layer_c.level);
-    set_int(&params.synth_osc_mode, prog.synth.layer_a.osc_mode as i32);
-    set_float(
-        &params.synth_filter_cutoff,
-        prog.synth.layer_a.filter_cutoff_hz,
-    );
-    set_float(
-        &params.synth_filter_resonance,
-        prog.synth.layer_a.filter_resonance,
-    );
-    set_float(&params.synth_filter_drive, prog.synth.layer_a.filter_drive);
-    set_float(
-        &params.synth_attack,
-        prog.synth.layer_a.env_attack_ms / 1000.0,
-    );
-    set_float(
-        &params.synth_decay,
-        prog.synth.layer_a.env_decay_ms / 1000.0,
-    );
-    set_float(
-        &params.synth_release,
-        prog.synth.layer_a.env_release_ms / 1000.0,
-    );
-}
-
-/// Loads a raw `.ns4p` program file and applies it to plugin parameters.
-pub fn load_ns4p_bytes(bytes: &[u8], params: &Stage4Params) -> Result<ProgramDecoded, CbinError> {
+/// Loads a raw `.ns4p` program into an engine owned by the caller.
+///
+/// Call this before handing the engine to the audio callback. Updating host
+/// parameters must go through NIH-plug's host/context APIs.
+pub fn load_ns4p_into_engine(
+    bytes: &[u8],
+    engine: &mut Stage4Engine,
+) -> Result<ProgramDecoded, CbinError> {
     let cbin = CbinFile::parse(bytes)?;
     let prog = ProgramDecoded::from_cbin_file(&cbin)?;
-    apply_program_to_params(&prog, params);
+    engine.apply_program(&prog);
     Ok(prog)
 }
 
@@ -342,39 +211,72 @@ mod tests {
     #[test]
     fn test_state_snapshot_json_roundtrip() {
         let params = Stage4Params::default();
-        set_float(&params.master_bpm, 140.0);
-        set_int(&params.drawbar_1_16, 5);
-
-        let snapshot = PluginStateSnapshot::from_params(&params, "Rock Organ B3");
+        let mut snapshot = PluginStateSnapshot::from_params(&params, "Rock Organ B3");
         assert_eq!(snapshot.preset_name, "Rock Organ B3");
-        assert_eq!(snapshot.master_bpm, 140.0);
-        assert_eq!(snapshot.drawbars[0], 5);
+        snapshot.master_bpm = 140.0;
+        snapshot.drawbars[0] = 5;
+        snapshot.drawbars_b[0] = 3;
+        snapshot.split_points[0] = 48;
+        snapshot.split_crossfades[1] = 1;
 
         let json = snapshot.to_json().expect("Serialization must succeed");
         let restored = PluginStateSnapshot::from_json(&json).expect("Deserialization must succeed");
 
         assert_eq!(snapshot, restored);
 
-        let new_params = Stage4Params::default();
-        restored.apply_to_params(&new_params);
-        assert_eq!(new_params.master_bpm.value(), 140.0);
-        assert_eq!(new_params.drawbar_1_16.value(), 5);
+        assert_eq!(restored.master_bpm, 140.0);
+        assert_eq!(restored.drawbars[0], 5);
+        assert_eq!(restored.drawbars_b[0], 3);
+        assert_eq!(restored.split_points[0], 48);
+        assert_eq!(restored.split_crossfades[1], 1);
     }
 
     #[test]
-    fn test_apply_program_to_params() {
-        let params = Stage4Params::default();
+    fn test_legacy_snapshot_defaults_new_parameters() {
+        let snapshot = PluginStateSnapshot::from_params(&Stage4Params::default(), "Legacy");
+        let mut value: serde_json::Value =
+            serde_json::from_str(&snapshot.to_json().unwrap()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("split_points");
+        object.remove("split_crossfades");
+        object.remove("drawbars_b");
+
+        let restored = PluginStateSnapshot::from_json(&value.to_string()).unwrap();
+        assert_eq!(restored.split_points, [53, 65, 77]);
+        assert_eq!(restored.split_crossfades, [0, 0, 0]);
+        assert_eq!(restored.drawbars_b, [8; 9]);
+    }
+
+    #[test]
+    fn test_load_program_into_engine() {
         let mut prog = ProgramDecoded::default();
         prog.global.tempo_bpm = 155.0;
         prog.organ.drawbars_a[0] = 7;
+        prog.organ.drawbars_b[0] = 4;
         prog.piano.layer_a.string_res = false;
         prog.synth.layer_a.filter_cutoff_hz = 3200.0;
+        prog.global.split_points = [48, 60, 72];
+        prog.global.split_crossfades = [
+            nord_core::morph::CrossfadeWidth::Off,
+            nord_core::morph::CrossfadeWidth::Small,
+            nord_core::morph::CrossfadeWidth::Large,
+        ];
 
-        apply_program_to_params(&prog, &params);
-
-        assert_eq!(params.master_bpm.value(), 155.0);
-        assert_eq!(params.drawbar_1_16.value(), 7);
-        assert!(!params.piano_string_res.value());
-        assert_eq!(params.synth_filter_cutoff.value(), 3200.0);
+        let bytes = prog.to_cbin_file(0, 0).unwrap().to_bytes();
+        let mut engine = Stage4Engine::new(44100.0);
+        let loaded = load_ns4p_into_engine(&bytes, &mut engine).unwrap();
+        assert!((loaded.global.tempo_bpm - 155.0).abs() < 0.3);
+        assert!((engine.master_clock.bpm - 155.0).abs() < 0.3);
+        assert_eq!(engine.organ_a.drawbars[0], 7);
+        assert_eq!(engine.organ_b.drawbars[0], 4);
+        assert_eq!(engine.split_router.splits[0].midi_note, 48);
+        assert_eq!(
+            engine.split_router.splits[1].crossfade,
+            nord_core::morph::CrossfadeWidth::Small
+        );
+        assert_eq!(
+            engine.split_router.splits[2].crossfade,
+            nord_core::morph::CrossfadeWidth::Large
+        );
     }
 }

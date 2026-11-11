@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The **Nord Stage 4 DAW Plugin** (`nord-plugin`) brings the 3-engine, 7-layer Nord Stage 4 DSP architecture to modern Digital Audio Workstations. Built on `nih-plug`, the plugin is distributed in **CLAP**, **VST3**, and **Standalone** targets, with **Audio Unit (AUv2)** packaging available on Apple macOS systems.
+The **Nord Stage 4 DAW Plugin** (`nord-plugin`) brings the 3-engine, 7-layer Nord Stage 4 DSP architecture to modern Digital Audio Workstations. Built on `nih-plug`, it currently exports **CLAP** and **VST3**; source builds may also provide a standalone target. AUv2 requires a separate `clap-wrapper` packaging step and is not built or tested by this project.
 
 ---
 
@@ -21,13 +21,15 @@ The **Nord Stage 4 DAW Plugin** (`nord-plugin`) brings the 3-engine, 7-layer Nor
 
 | DAW / Host | Formats Supported | Multitimbral Routing (Channels 1–7) | Transport Tempo Sync | Automation & State Recall |
 |---|---|---|---|---|
-| **Reaper** (v6 / v7) | CLAP, VST3 | Supported (Dedicated MIDI routing per track) | Sample-accurate BPM sync | Fully verified |
-| **Bitwig Studio** (v4 / v5) | CLAP, VST3 | Supported (Native CLAP multi-channel) | Sample-accurate BPM sync | Fully verified |
-| **Ableton Live** (11 / 12) | VST3, AU | Supported (Route MIDI from external tracks) | Transport BPM sync | Fully verified |
-| **Apple Logic Pro / MainStage** | Audio Unit (AUv2) | Supported (Multi-timbral instrument mode) | Transport BPM sync | Fully verified |
-| **PreSonus Studio One** (v6) | VST3, CLAP | Supported (Track instrument routing) | Transport BPM sync | Fully verified |
-| **FL Studio** (v21 / v24) | VST3, CLAP | Supported (MIDI Out channels to plugin) | Transport BPM sync | Fully verified |
-| **Steinberg Cubase / Nuendo** | VST3 | Supported (MIDI Tracks routing to plugin slots) | Transport BPM sync | Fully verified |
+| **Reaper** | CLAP, VST3 | Intended; host routing not verified | Transport tempo is read in processing | Not host-tested |
+| **Bitwig Studio** | CLAP, VST3 | Intended; host routing not verified | Transport tempo is read in processing | Not host-tested |
+| **Ableton Live** | VST3 | Intended; host routing not verified | Transport tempo is read in processing | Not host-tested |
+| **Apple Logic Pro / MainStage** | AUv2 via external wrapper | Not verified | Not verified | Not host-tested |
+| **PreSonus Studio One** | CLAP, VST3 | Intended; host routing not verified | Transport tempo is read in processing | Not host-tested |
+| **FL Studio** | CLAP, VST3 | Intended; host routing not verified | Transport tempo is read in processing | Not host-tested |
+| **Steinberg Cubase / Nuendo** | VST3 | Intended; host routing not verified | Transport tempo is read in processing | Not host-tested |
+
+This is a target compatibility matrix, not a report of completed DAW validation. Automated tests cover the plugin code and engine integration; they do not replace loading the built plugin in each host.
 
 ---
 
@@ -57,11 +59,11 @@ The plugin provides two selectable MIDI routing strategies:
 
 All major front-panel controls are exposed as host-automatable parameters with stable string IDs:
 
-- **Master & Scene:** `master_level`, `master_bpm`, `master_compressor`, `layer_scene_ii`, `split_enabled`.
+- **Master & Scene:** `master_level`, `master_bpm`, `master_compressor`, `layer_scene_ii`, `split_enabled`, `split_1_note` .. `split_3_note`, `split_1_crossfade` .. `split_3_crossfade`.
 - **Morph Controllers:** `mod_wheel` (CC1), `control_pedal` (CC11), `aftertouch`.
-- **Organ Section:** `organ_model`, `organ_a_level`, `organ_b_level`, `drawbar_1_16` .. `drawbar_9_1`, `organ_perc_enable`, `organ_perc_soft`, `organ_perc_fast`, `organ_perc_third`, `rotary_speed_fast`, `rotary_drive`.
-- **Piano Section:** `piano_a_level`, `piano_b_level`, `piano_category`, `piano_timbre`, `piano_touch`, `piano_string_res`, `piano_pedal_noise`.
-- **Synth Section:** `synth_a_level`, `synth_b_level`, `synth_c_level`, `synth_osc_mode`, `synth_filter_cutoff`, `synth_filter_resonance`, `synth_filter_drive`, `synth_attack`, `synth_decay`, `synth_release`.
+- **Organ Section:** `organ_model`, `organ_a_level`, `organ_b_level`, drawbars `drawbar_1_16` .. `drawbar_9_1` and `drawbar_b_1_16` .. `drawbar_b_9_1`, `organ_perc_enable`, `organ_perc_soft`, `organ_perc_fast`, `organ_perc_third`, `rotary_speed_fast`, `rotary_drive`.
+- **Piano Section:** `piano_a_level`, `piano_b_level`, `piano_a_enabled`, `piano_b_enabled`, `piano_category`, `piano_timbre`, `piano_touch`, `piano_string_res`, `piano_pedal_noise`.
+- **Synth Section:** `synth_a_level`, `synth_b_level`, `synth_c_level`, `synth_a_enabled`, `synth_b_enabled`, `synth_c_enabled`, `synth_osc_mode`, `synth_filter_cutoff`, `synth_filter_resonance`, `synth_filter_drive`, `synth_attack`, `synth_decay`, `synth_release`.
 
 ---
 
