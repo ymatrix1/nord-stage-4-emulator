@@ -984,8 +984,8 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(sfader_a.center().x, sfader_a.bottom() + 10.0),
-        "SYNTH A",
-        8.5,
+        "A",
+        11.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
@@ -1011,8 +1011,8 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(sfader_b.center().x, sfader_b.bottom() + 10.0),
-        "SYNTH B",
-        8.5,
+        "B",
+        11.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
@@ -1038,8 +1038,8 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(sfader_c.center().x, sfader_c.bottom() + 10.0),
-        "SYNTH C",
-        8.5,
+        "C",
+        11.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
