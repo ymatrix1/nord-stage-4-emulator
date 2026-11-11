@@ -2,6 +2,7 @@
 
 use nord_core::cbin::{CbinFile, CbinKind, ProgramDecoded};
 use nord_core::engine::Stage4Engine;
+use nord_core::firmware::FirmwareContainer;
 use nord_core::midi::MidiEvent;
 use std::env;
 use std::fs;
@@ -19,8 +20,32 @@ fn run_cli(args: &[String]) -> Result<String, String> {
         "inspect" => {
             let path = args
                 .get(2)
-                .ok_or_else(|| "usage: ns4 inspect <file.ns4p|ns4y|ns4o|ns4n|ns4l|ns4t> [--json]".to_string())?;
+                .ok_or_else(|| "usage: ns4 inspect <file.ns4p|ns4y|ns4o|ns4n|ns4l|ns4t|firmware.bin> [--json]".to_string())?;
             let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;
+
+            // Check if file is a Clavia firmware container (starts with 0x00000020 header size)
+            if bytes.len() >= 32 && u32::from_be_bytes(bytes[0..4].try_into().unwrap_or([0; 4])) == 0x20 {
+                let fw = FirmwareContainer::parse(&bytes).map_err(|e| e.to_string())?;
+                let mut out = format!(
+                    "Firmware Container: {path}\n\
+                     Header Size: {} B\n\
+                     Image 0 Size: {} B (Segments: {})\n\
+                     Image 1 Size: {} B @ 0x{:X} (Segments: {})\n\
+                     Discovered DSP Partitions: {}\n",
+                    fw.header_size,
+                    fw.image0_size,
+                    fw.image0_segments.len(),
+                    fw.image1_size,
+                    fw.image1_offset,
+                    fw.image1_segments.len(),
+                    fw.dsp_partitions.len()
+                );
+                for p in &fw.dsp_partitions {
+                    out.push_str(&format!("  [0x{:06X}] {:<12} {:?}: {}\n", p.offset, p.tag, p.engine_type, p.description));
+                }
+                return Ok(out);
+            }
+
             let cbin = CbinFile::parse(&bytes).map_err(|e| e.to_string())?;
 
             if args.iter().any(|a| a == "--json") {
@@ -109,8 +134,63 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 .fold(0.0f32, |acc, &x| acc.max(x.abs()));
             Ok(format!("Rendered 4096 stereo frames @ 48 kHz — peak amplitude: {peak:.4}"))
         }
+        "render-patch" => {
+            let path = args
+                .get(2)
+                .ok_or_else(|| "usage: ns4 render-patch <file.ns4p> [--note N] [--frames F]".to_string())?;
+            let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;
+            let cbin = CbinFile::parse(&bytes).map_err(|e| e.to_string())?;
+            let prog = cbin.decode_program().map_err(|e| e.to_string())?;
+
+            let mut engine = Stage4Engine::new(48_000.0);
+            engine.apply_program(&prog);
+
+            let note = args
+                .iter()
+                .position(|a| a == "--note")
+                .and_then(|idx| args.get(idx + 1))
+                .and_then(|val| val.parse::<u8>().ok())
+                .unwrap_or(60);
+
+            let frames = args
+                .iter()
+                .position(|a| a == "--frames")
+                .and_then(|idx| args.get(idx + 1))
+                .and_then(|val| val.parse::<usize>().ok())
+                .unwrap_or(4096);
+
+            engine.handle_midi(MidiEvent::NoteOn {
+                channel: 0,
+                note,
+                velocity: 100,
+            });
+
+            let mut left = vec![0.0f32; frames];
+            let mut right = vec![0.0f32; frames];
+            engine.process_block(&mut left, &mut right);
+
+            let peak = left
+                .iter()
+                .chain(right.iter())
+                .fold(0.0f32, |acc, &x| acc.max(x.abs()));
+
+            let rms = (left
+                .iter()
+                .chain(right.iter())
+                .map(|&x| x * x)
+                .sum::<f32>()
+                / (frames * 2) as f32)
+                .sqrt();
+
+            Ok(format!(
+                "Applied program: {path}\n\
+                 Rendered {frames} stereo frames @ 48 kHz (Note: {note})\n\
+                 Peak amplitude: {peak:.4}\n\
+                 RMS level: {rms:.4}"
+            ))
+        }
         other => Err(format!(
-            "unknown command '{other}' (expected: info | inspect <path> [--json] | convert <path> ... | render-demo)"
+            "unknown command '{other}' (expected: info | inspect <path> [--json] | convert <path> ... | render-demo | render-patch <path>)"
         )),
     }
 }
@@ -181,5 +261,75 @@ mod tests {
         let _ = fs::remove_file(ns4p_path);
         let _ = fs::remove_file(json_path);
         let _ = fs::remove_file(roundtrip_ns4p);
+    }
+
+    #[test]
+    fn test_cli_render_patch() {
+        let prog = ProgramDecoded::default();
+        let cbin = prog.to_cbin_file(0, 1).unwrap();
+        let raw = cbin.to_bytes();
+
+        let temp_dir = env::temp_dir();
+        let ns4p_path = temp_dir.join("test_cli_render_patch.ns4p");
+        fs::write(&ns4p_path, &raw).unwrap();
+
+        let res = run_cli(&[
+            "ns4".to_string(),
+            "render-patch".to_string(),
+            ns4p_path.to_str().unwrap().to_string(),
+            "--note".to_string(),
+            "64".to_string(),
+            "--frames".to_string(),
+            "2048".to_string(),
+        ])
+        .unwrap();
+
+        assert!(res.contains("Applied program"));
+        assert!(res.contains("Rendered 2048 stereo frames"));
+        assert!(res.contains("Peak amplitude"));
+        assert!(res.contains("RMS level"));
+
+        let _ = fs::remove_file(ns4p_path);
+    }
+
+    #[test]
+    fn test_cli_inspect_firmware_container() {
+        let mut buf = vec![0u8; 512];
+        // Top header (32 bytes)
+        buf[0..4].copy_from_slice(&0x0000_0020u32.to_be_bytes());
+        buf[4..8].copy_from_slice(&0x0000_0140u32.to_be_bytes()); // image0 = 320
+        buf[8..12].copy_from_slice(&0x0000_0160u32.to_be_bytes()); // image1 = 352
+        buf[12..16].copy_from_slice(&0x0000_00A0u32.to_be_bytes());
+
+        // Image 0 subheader
+        buf[0x30..0x34].copy_from_slice(&1u32.to_be_bytes());
+        buf[0x34..0x38].copy_from_slice(b"SRAM");
+        buf[0x38..0x3C].copy_from_slice(&0x02D4u32.to_be_bytes());
+        buf[0x3C..0x40].copy_from_slice(&0x1000u32.to_be_bytes());
+        buf[0x40..0x44].copy_from_slice(&0x8000_0000u32.to_be_bytes());
+        buf[0x44..0x48].copy_from_slice(&0xFFFF_0000u32.to_be_bytes());
+
+        // DSP tags
+        buf[400..408].copy_from_slice(b"DSPFxCor");
+        buf[420..426].copy_from_slice(b"DSPOrg");
+        buf[440..446].copy_from_slice(b"DSPSyn");
+
+        let temp_dir = env::temp_dir();
+        let fw_path = temp_dir.join("test_cli_fw.bin");
+        fs::write(&fw_path, &buf).unwrap();
+
+        let out = run_cli(&[
+            "ns4".to_string(),
+            "inspect".to_string(),
+            fw_path.to_str().unwrap().to_string(),
+        ])
+        .unwrap();
+
+        assert!(out.contains("Firmware Container"));
+        assert!(out.contains("Image 0 Size: 320 B"));
+        assert!(out.contains("Discovered DSP Partitions:"));
+        assert!(out.contains("DSPOrg"));
+
+        let _ = fs::remove_file(fw_path);
     }
 }

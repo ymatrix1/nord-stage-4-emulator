@@ -17,6 +17,19 @@ A `.ns4b` archive is a standard PKZIP (`50 4B 03 04`) archive containing a root 
 <backup file_version="1" backup_format_version="1" product_id="46" product_version="166" product_build="2934" product_content_version="0" manager_version="918" manager_build="1444"/>
 ```
 
+#### 2.1 Manifest Parsing Robustness
+The manifest parser in [`crates/nord-core/src/cbin/manifest.rs`](../../crates/nord-core/src/cbin/manifest.rs) (`BackupManifest::parse_xml`):
+- Requires the root `<backup ...>` element tag, rejecting non-manifest XML documents.
+- Supports both double-quoted (`"46"`) and single-quoted (`'46'`) attribute values.
+- Permits arbitrary whitespace around assignment operators (e.g. `product_id = '46'`).
+- Validates that all integer attributes are non-negative decimal strings and that quote delimiters are strictly matched.
+
+#### 2.2 Bitstream Reader and Writer Invariants
+The bit-level streaming codecs in [`crates/nord-core/src/cbin/bitstream.rs`](../../crates/nord-core/src/cbin/bitstream.rs) (`BitReader`, `BitWriter`):
+- Use checked arithmetic (`checked_add`, `checked_mul`) for all bit-offset calculations to guarantee immunity against integer overflow on 32-bit and 64-bit architectures.
+- Validate cursor seeks (`set_bit_pos(pos)`) against the total bit length of the payload, returning `CbinError::BitstreamError` if `pos > total_bits`.
+- Guard reads (`read_bits(count)`) and writes (`write_bits(value, count)`) against buffer overruns and enforce the 32-bit word boundary limit (`count <= 32`).
+
 ### Archive Directory Structure (Factory Restore RevK v1.66)
 
 | Directory | Extension | Count | Exact Size (Bytes) | Description |
@@ -158,3 +171,89 @@ Within the `CODE` / `ARM0` data payload of Image 0 (around `0x003CF040`), the em
 - **`DSPF`** (`DSPFxCore1 L1 bl.0`): Effects & Piano Resonance DSP core.
 - **`DSPO`** (`DSPOrg`): Organ Physical Modeling & Rotary Speaker DSP core.
 - **`DSPS`** (`DSPSyn`): 3-Layer Nord Wave 2 Synth DSP core.
+
+### 5.1 Clavia 16-Bit LZ Stream Compression (`CODE` Segments)
+
+The `CODE` segments inside OS firmware images are compressed using Clavia's proprietary 16-bit LZ sliding-window scheme (`crates/nord-core/src/firmware.rs`).
+
+#### 16-Bit Match Token Bitfield Layout (Little-Endian `u16`)
+
+```text
+ 15                                      3   2        0
+┌─────────────────────────────────────────┬────────────┐
+│ Distance in History Buffer (13 bits)    │ Length - 2 │
+│ Range: 1 .. 8191 bytes                  │ 3 bits     │
+│ (distance = token >> 3)                 │ 2..9 bytes │
+└─────────────────────────────────────────┴────────────┘
+```
+
+- **Bits 2..0 (3 bits):** Match length minus 2 (`length = (token & 0x07) + 2`), encoding lengths from `2` to `9` bytes.
+- **Bits 15..3 (13 bits):** Sliding-window back-reference distance (`distance = token >> 3`), allowing lookup up to `8,191` bytes behind the current write cursor.
+
+#### Stream Framing & Flag Bytes
+Stream framing groups up to 8 operations per 1-byte header:
+- **Flag Bit = `1`:** 1 uncompressed literal byte follows.
+- **Flag Bit = `0`:** 1 16-bit match token (2 little-endian bytes) follows.
+- **Initial Extended Literal Run:** At stream start, a `0x00, L` sequence encodes an extended literal run of `17 + L` bytes (e.g. `00 1B` for the 44-byte ARM926EJ-S reset stub).
+- Overlapping runs (where `length > distance`) dynamically repeat bytes in run-length fashion.
+
+#### Checksum Algorithm
+Each segment descriptor stores a 32-bit one's-complement byte checksum:
+```text
+checksum = 0xFFFFFFFF - (sum(segment_bytes) & 0xFFFFFFFF)
+```
+For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file segment payload. For compressed segments (`CODE`), the checksum is computed over the fully decompressed memory image at runtime (`target_address = 0xC0000000`).
+
+#### Rust API (`crates/nord-core/src/firmware.rs`)
+- `calculate_checksum(bytes: &[u8]) -> u32`
+- `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
+- `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
+- `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareSegment::verify_checksum(&self, payload: &[u8]) -> bool`
+- `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
+- `FirmwareContainer::segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment>`
+- `DspEngineType` (`Organ`, `Synth`, `Effects`, `Routing`, `CoreIdentifier`)
+- `DspPartition` (full partition descriptors with engine categorization)
+
+### 5.2 Nord Piano (`.npno`) Binary Specification & 4-Bit DPCM Audio Codec
+
+Nord Piano files (`.npno`) store high-fidelity multisampled acoustic, electric, and digital pianos inside a 48-byte `CBIN` container header (`kind = "npno"`):
+
+#### Layout of `.npno` Header & Tables
+- `0x0000..0x0030`: 48-byte `CBIN` container header (`tag = "npno"`).
+- `0x002C`: `CNSP` sub-header signature.
+- `0x0048..0x0068`: Short instrument name (ASCII, 32 bytes).
+- `0x0068..0x0088`: Long instrument name (ASCII, 32 bytes).
+- `0x00B8..0x0138`: 128-byte lookup table mapping every MIDI note (`0..127`) to its multisample root key.
+- `0x01C8..0x0248`: 128-byte lookup table of signed 8-bit integers (`i8`) representing micro-cents fine-tuning calibration per key.
+- `0x0238..0x02B8`: 128-byte lookup table of velocity tier boundaries per key.
+- `0x0760..`: Multisample stroke descriptor table (`data_offset`, `data_size`, `loop_start`, `loop_end`).
+
+#### 4-Bit Differential PCM Audio Codec (`AVCSmpDecode`)
+Audio payloads encode two 4-bit signed delta samples per byte:
+```text
+byte = (sample_hi << 4) | (sample_lo & 0x0F)
+s[n] = s[n-1] + delta * scale
+```
+- `sample_hi`: High nibble (`(byte >> 4) & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
+- `sample_lo`: Low nibble (`byte & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
+- Compression ratio: 4:1 vs 16-bit PCM, 6:1 vs 24-bit PCM.
+
+#### Rust API (`crates/nord-core/src/cbin/piano_sample.rs`)
+- `NpnoInstrument::parse(bytes: &[u8]) -> Result<NpnoInstrument, String>`
+- `NpnoInstrument::root_key_for_note(&self, note: u8) -> Option<u8>`
+- `NpnoInstrument::cents_detune_for_note(&self, note: u8) -> i8`
+- `decode_4bit_dpcm(raw_payload: &[u8], scale: f32) -> Vec<f32>`
+- `encode_4bit_dpcm(pcm: &[f32], scale: f32) -> Vec<u8>`
+
+### 5.3 NSMP Sample Library Metadata (`.nsmp4`)
+
+The `.nsmp4`/`nsmp` assets store the `NSMP` marker at offset `0x2C`, then a 12-byte prefix at `0x30..0x3B`. The current metadata parser starts its tagged chunk stream at `0x3C`. Each chunk has a 4-byte tag, a big-endian `u32` chunk ID, a big-endian `u32` payload length, and that many payload bytes. The parser checks chunk bounds and rejects incomplete trailing headers.
+
+The parser currently recognizes:
+
+- `\0hdr`: name at payload offset 10 (up to 32 bytes); the parser also attempts to read an author string at offset 74 (up to 32 bytes), which is not yet independently confirmed.
+- `\0map`: a 128-entry table of 10-byte records starting at offset 6, followed by 16-byte zone records starting at `0x524`.
+- `\0stk`: stroke ID in the first four payload bytes; payload audio remains opaque.
+
+These offsets are an initial metadata mapping based on the locally inspected `Kalimba_KG 4.1.nsmp4` sample from the factory backup and deterministic synthetic fixtures. They are not a complete NSMP or sample-audio specification. The parser preserves no raw chunk data in its high-level result, and does not decode audio. See [`cbin::sample`](../../crates/nord-core/src/cbin/sample.rs).

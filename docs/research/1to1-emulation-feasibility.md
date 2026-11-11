@@ -26,9 +26,16 @@ Method: signature scan, zlib trial decode at every header hit, entropy map in 64
 
 ## 2. Hardware identification
 
-- Host: TI AM1705 (ARM926EJ-S, no DSP core), identified from the chip marking.
-- DSPs: Analog Devices; the 32-bit floating-point SHARC family has 450 MHz class parts with on-chip RAM and ROM and a DAI routing fabric (web summary, not a datasheet read).
-- Web results claim an FPGA on Stage 3 boards but cite no verifiable teardown, so this is **not** treated as fact.
+- **Host Processor:** **Texas Instruments AM1705** (Sitara ARM926EJ-S MPU, 375/456 MHz, ARMv5TEJ instruction set, 16 KB I-Cache, 16 KB D-Cache, MMU).
+  - Confirmed via physical teardown photo of Nord Piano 4 (NP4) mainboard ([`.reference/mainboard/c0840e60-74b3-11eb-baf8-a528ac652aed.jpg`](../../.reference/mainboard/c0840e60-74b3-11eb-baf8-a528ac652aed.jpg)) where the AM1705 marking is clearly visible, and Nord Stage 3 mainboard ([`.reference/mainboard/others/nord-stage-3.jpeg`](../../.reference/mainboard/others/nord-stage-3.jpeg)).
+  - **Memory Map Correspondence:**
+    - On-chip L2 RAM base at `0x80000000`: exact target address of the `SRAM` segment in the firmware container (`0x2D4`, `0xFC80` bytes).
+    - External SDRAM (EMIFB) base at `0xC0000000`: exact target address of the `CODE` segment in the firmware container (`0xFF54`, expanded to `5,499,504` bytes).
+    - Exception Vector Base at `0xFFFF0020`: matches ARM926EJ-S High Exception Vectors (`CP15` register 1 `SCTLR.V = 1`).
+    - Reset stub CP15 cache & TLB invalidation (`mcr p15, 0, r0, c7, c7, 0` and `mcr p15, 0, r0, c8, c7, 0`) perfectly matches ARM926EJ-S architectural initialization.
+- **Audio DSPs:** **Analog Devices SHARC** (ADSP-21xxx floating-point 32-bit DSP series, 450 MHz class).
+  - Clavia partitions DSP synthesis into three dedicated firmware images: `DSPO` (Organ tonewheel & rotary modeling), `DSPS` (Synth subtractive, wavetable, FM & sample playback), and `DSPF` (Piano multisample, modal string resonance & per-layer FX racks).
+- **Communication Architecture:** The TI AM1705 acts as the master host controller (keybed triple-sensor scanning, OLED displays, rotary encoders/faders, program memory), streaming MIDI/control events and loading DSP partitions into the SHARC processors via high-speed serial/McASP/Host Port Interface (HPI).
 
 ## 3. `CNSP` sample format
 

@@ -85,3 +85,86 @@ def test_decode_program_bitstream(tmp_path: Path):
     assert decoded["piano_bytes"] == 147
     assert decoded["synth_bytes"] == 493
     assert ns4_inspect.main([str(prog_cbin), "--decode"]) == 0
+
+
+def test_calculate_checksum():
+    data = bytes([0x10, 0x20, 0x30, 0x40])
+    expected = 0xFFFFFFFF - (0x10 + 0x20 + 0x30 + 0x40)
+    assert ns4_inspect.calculate_checksum(data) == expected
+
+
+def make_synthetic_firmware_container() -> bytes:
+    # 32-byte top header:
+    # header_size=0x20, image0_size=320 (0x140), image1_offset=0x160 (352), image1_size=160
+    hdr = struct.pack(">IIII", 0x20, 320, 352, 160) + (b"\x00" * 16)
+
+    # Image 0 at 0x20: subheader 20 bytes (seg_count=3 at offset 0x10)
+    img0_sub = (b"\x00" * 16) + struct.pack(">I", 3)
+    # 3 segment descriptors of 44 bytes: SRAM, CODE, ARM0
+    sram_data = b"SRAM_PAYLOAD_TEST_BYTES"
+    sram_csum = ns4_inspect.calculate_checksum(sram_data)
+    seg_sram = (
+        b"SRAM"
+        + struct.pack(">IIII", 0x2D4, len(sram_data), 0x80000000, sram_csum)
+        + (b"\x00" * 24)
+    )
+    seg_code = b"CODE" + struct.pack(">IIII", 0xFF54, 5000, 0xC0000000, 0x12345678) + (b"\x00" * 24)
+    seg_arm0 = b"ARM0" + struct.pack(">IIII", 0x300, 100, 0xFFFF0020, 0x87654321) + (b"\x00" * 24)
+
+    # Pad until Image 1 offset 352
+    base = hdr + img0_sub + seg_sram + seg_code + seg_arm0
+    pad = b"\x00" * (352 - len(base))
+
+    # Image 1 at 352: subheader 20 bytes (seg_count=1)
+    img1_sub = (b"\x00" * 16) + struct.pack(">I", 1)
+    seg_img1_code = (
+        b"CODE" + struct.pack(">IIII", 0xC42C, 1000, 0xC0000000, 0x99999999) + (b"\x00" * 24)
+    )
+
+    # Add DSP partition tags
+    tags = b"__DSPOrg__DSPFxCore1__DSPSyn__Fx to Org__PNO__"
+
+    total = base + pad + img1_sub + seg_img1_code + tags
+    return total
+
+
+def test_parse_firmware_container_synthetic(tmp_path: Path):
+    raw = make_synthetic_firmware_container()
+    info = ns4_inspect.parse_firmware_container(raw)
+
+    assert info["header_size"] == 0x20
+    assert info["image0_size"] == 320
+    assert info["image1_offset"] == 352
+    assert len(info["image0_segments"]) == 3
+    assert info["image0_segments"][0]["name"] == "SRAM"
+    assert info["image0_segments"][0]["target_address"] == "0x80000000"
+    assert len(info["image1_segments"]) == 1
+    assert info["image1_segments"][0]["name"] == "CODE"
+
+    dsp_tags = [p["tag"] for p in info["dsp_partitions"]]
+    assert "DSPOrg" in dsp_tags
+    assert "DSPFxCore1" in dsp_tags
+    assert "DSPSyn" in dsp_tags
+    assert "Fx to Org" in dsp_tags
+    assert "PNO" in dsp_tags
+
+    fw_file = tmp_path / "firmware.bin"
+    fw_file.write_bytes(raw)
+    assert ns4_inspect.main([str(fw_file)]) == 0
+    assert ns4_inspect.main([str(fw_file), "--firmware"]) == 0
+
+
+def test_extract_firmware_from_pe_synthetic(tmp_path: Path):
+    fw_raw = make_synthetic_firmware_container()
+    # Create fake PE header
+    dos_hdr = b"MZ" + (b"\x00" * 0x3A) + struct.pack("<I", 0x80)
+    dos_pad = b"\x00" * (0x80 - len(dos_hdr))
+    pe_hdr = b"PE\x00\x00" + (b"\x00" * 20)
+    pe_pad = b"\x00" * (0x1000 - len(dos_hdr + dos_pad + pe_hdr))
+
+    pe_file = tmp_path / "updater.exe"
+    pe_file.write_bytes(dos_hdr + dos_pad + pe_hdr + pe_pad + fw_raw)
+
+    extracted = ns4_inspect.extract_firmware_payload(pe_file.read_bytes())
+    assert extracted[:4] == b"\x00\x00\x00\x20"
+    assert ns4_inspect.main([str(pe_file)]) == 0

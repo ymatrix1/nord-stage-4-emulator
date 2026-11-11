@@ -87,11 +87,13 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 **Goal:** 2-layer (`Piano A`, `Piano B`) 120-voice polyphonic acoustic/electric piano engine with sympathetic string resonance and pedal mechanics.
 
 - [x] `crates/nord-core/src/piano.rs`: Multisample voice state, `KB TOUCH` velocity curves (`Light`, `Med`, `Heavy`), `TIMBRE` spectral presets (`Soft`, `Mid`, `Bright`, `Dyno1`, `Dyno2`), `Sustain` damper logic, and 12-band Modal Sympathetic String Resonance bank
+- [x] Pre-decoded **NPNO / Multisample playback engine** in `crates/nord-core/src/piano.rs` (`NpnoSound`, `LoadedPianoStroke`) with root-key zone mapping, micro-cent detuning, linear fractional interpolation, and zero-allocation real-time safety
 - [ ] Streaming / RAM-cached open **SFZ / WAV multisample loader** supporting multi-velocity layers and key-off release samples (`SOFT REL`)
 - [x] Pitch-specific **Undamped Note Sympathetic Resonance**: holding silent keys while striking lower notes excites the exact overtone resonators of the held notes
+- [x] Exponential felt **Damper Release Envelopes** (80ms standard / 180ms `SOFT REL`) eliminating key-off and sustain pedal lift audio pops
 - [ ] Velocity-sensitive **Dynamic Pedal Noise** (`PED NOISE`) for Damper (`CC64`), Sostenuto (`CC66`), and Una Corda (`CC67`)
 - [ ] Piano `UNISON` (`1`, `2`, `3` subtle hammer-detune width) and `DYN COMP` (`1`, `2`, `3` dynamic range compression)
-- [ ] 120-voice polyphony steal priority algorithm (preserving bass roots, top melody notes, and newly struck notes over decaying sustained mid-register voices)
+- [x] Polyphony steal priority algorithm (recycling decaying released voices and quietest sustaining voices before active sounding notes)
 
 ---
 
@@ -100,7 +102,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 **Goal:** Complete 7-layer stage routing, 3-source Morphing, Layer Scene II, and 7 independent per-layer FX racks.
 
 - [x] `crates/nord-core/src/morph.rs`: 3-source Morphing Matrix (`WHEEL`, `A.T.`, `CTRLPED`), `LAYER SCENE II` switcher, and 4-zone Keybed Split router with `Off` / `Small` (6 st) / `Large` (12 st) crossfades
-- [x] `crates/nord-core/src/fx.rs`: Per-layer 5-slot FX chain (`MOD 1`, `MOD 2`, `AMP SIM/EQ`, `DELAY`, `REVERB`) + downstream `MasterCompressor` (`COMP`), `MasterClock` (`MST CLK`), and `CS4392` + `LM833` output stage
+- [x] `crates/nord-core/src/fx.rs`: Per-layer 5-slot FX chain (`MOD 1`, `MOD 2`, `AMP SIM/EQ`, `DELAY`, `REVERB`) + downstream `MasterCompressor` (`COMP`), `MasterClock` (`MST CLK`), and `PCM1791A` + `NJM4580M` output stage
 - [x] `crates/nord-core/src/midi.rs`: Complete Nord Stage 4 MIDI CC decoder/encoder
 - [x] `crates/nord-core/src/engine.rs`: Integrated 7-layer `Stage4Engine` rendering `Organ A/B`, `Piano A/B`, and `Synth A/B/C`
 - [x] Full 3-band semi-parametric EQ in `AMP SIM / EQ` (`BASS` 100 Hz, sweepable `MID` 200 Hz–8 kHz + gain, `TREBLE` 4 kHz) + Cabinet impulse filters (`Small`, `JC`, `Twin`) + `TO ROTARY` routing switch
@@ -131,10 +133,11 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 **Goal:** Unpack the full unencrypted `CODE` segments of the OS v1.66 firmware (`ARM0`, `DSPO`, `DSPS`, `DSPF`) and reverse-engineer the `CNSP` audio sample compression codec ([D12](DECISIONS.md#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression), [research](research/1to1-emulation-feasibility.md)).
 
 - [x] Prove `CODE` segments are unencrypted and solve the 16-bit Clavia LZ match token format (`distance = token >> 3`, `length = (token & 7) + 2`) ([research](research/clavia-lz-reconstruction.md))
-- [ ] Solve the literal-run / control-bit framing state machine in Clavia's custom LZ stream and decompress Image 1 (`411 KB` -> `798 KB`) and Image 0 (`3.51 MB` -> `5.49 MB`) in `crates/nord-core/src/firmware.rs`
-- [ ] Extract and map the unpacked `ARM0` host binary and `DSPO` / `DSPS` / `DSPF` SHARC DSP segments
-- [ ] Perform differential header analysis across the 195 `.nsmp4` and 38 `.npno` `CNSP` headers (`0x30..0x80`) to map sample rate, bit depth, key-zone split tables, and loop points
-- [ ] Reverse-engineer the `CNSP` audio payload decompression routine from the unpacked `ARM0` / `DSPF` / `DSPS` binaries
+- [x] Implement 16-bit Clavia LZ decompressor (`decompress_clavia_lz` / `compress_clavia_lz`) with sliding-window history buffer in `crates/nord-core/src/firmware.rs`
+- [x] Perform differential header analysis across the 195 `.nsmp4` and 38 `.npno` `CNSP` headers (`0x30..0x80`) to map sample rate, bit depth, key-zone split tables, and loop points ([research](research/nord-piano-npno-and-codec.md))
+- [x] Parse `.nsmp4` container chunks and expose initial instrument, key-map, zone, and stroke metadata (`crates/nord-core/src/cbin/sample.rs`)
+- [x] Reverse-engineer the `CNSP` 4-bit DPCM audio payload decompression routine and implement `NpnoInstrument` and `decode_4bit_dpcm` in `crates/nord-core/src/cbin/piano_sample.rs`
+- [ ] Complete full-stream extraction of Image 1 (`411 KB` -> `798 KB`) and Image 0 (`3.51 MB` -> `5.49 MB`) and map the unpacked `ARM0` host binary and `DSPO` / `DSPS` / `DSPF` SHARC DSP segments
 - [ ] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup
 
 ---
