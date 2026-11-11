@@ -223,6 +223,8 @@ impl Stage4Engine {
         self.organ_b.model = prog.organ.model_b;
         self.organ_a.drawbars = prog.organ.drawbars_a;
         self.organ_b.drawbars = prog.organ.drawbars_b;
+        self.organ_a.octave_shift = prog.organ.layer_a_octave.clamp(-2, 2);
+        self.organ_b.octave_shift = prog.organ.layer_b_octave.clamp(-2, 2);
         for (organ, vib_on) in [
             (&mut self.organ_a, prog.organ.vibrato_on),
             (&mut self.organ_b, prog.organ.vibrato_on_b),

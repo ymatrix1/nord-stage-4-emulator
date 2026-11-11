@@ -60,12 +60,12 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 **Goal:** 100% mathematical physical modeling of the 2-layer Nord Stage 4 Organ section and Model 122 Vintage Rotary Speaker.
 
 - [x] `crates/nord-core/src/organ.rs`: B3 91-tonewheel frequency & phase generator, 9-drawbar (`16'` to `1'`) harmonic bus mixer with octave foldback, single-triggered 2nd/3rd harmonic percussion envelope (`Soft`/`Fast`), key-click transient, and Model 122 Rotary Speaker (800 Hz crossover + Slow/Fast ballistics + stereo Doppler)
-- [ ] Exact 196-tooth Hammond drive/driven integer gear ratio table and per-tonewheel pickup calibration curve (`B3` vs `B3 Bass` mode)
-- [ ] Tonewheel transformer crosstalk matrix and palladium contact bounce key-click bandpass filter
+- [x] Exact 196-tooth Hammond drive/driven integer gear ratio table and per-tonewheel pickup calibration curve (`B3` vs `B3 Bass` mode)
+- [x] Tonewheel transformer crosstalk matrix and palladium contact bounce key-click bandpass filter
 - [x] 18-section LC phase-shift delay-line **Scanner Vibrato / Chorus** (`V1`, `V2`, `V3`, `C1`, `C2`, `C3`)
 - [x] Authentic **Vox Continental** (`16'`, `8'`, `4'`, `II`, `III`, `IV`, Sine + Reed wave) and **Farfisa Compact** (`Bass16`..`Str4` multi-tab bandpass + brilliance boost) models
 - [x] **Pipe 1** (liturgical flute/principal with wind chiff) and **Pipe 2** (tracker organ swell/great registration) voicing models
-- [ ] Rotary Speaker `Close Mic` / `Angle` / `Stop Mode` acoustic cabinet reflection modeling
+- [x] Rotary Speaker `Close Mic` / `Angle` / `Stop Mode` acoustic cabinet reflection modeling
 
 ---
 

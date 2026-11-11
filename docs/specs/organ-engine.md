@@ -28,22 +28,24 @@ A classical Hammond B3 tonewheel generator contains a synchronous AC motor drivi
 
 Rather than ideal equal temperament ($2^{n/12}$), the 12 drive gears use integer tooth ratios approximating $2^{n/12}$ driven at 1200 RPM (20 Hz shaft reference):
 
-| Semitone (Mod 12) | Note | Drive Gear Teeth | Driven Gear Teeth | Frequency Ratio to C |
+| Semitone (Mod 12) | Note | Drive Gear Teeth | Driven Gear Teeth | Frequency Ratio |
 |---|---|---|---|---|
 | 0 | C | 85 | 104 | `0.81730769` |
 | 1 | C# | 71 | 82 | `0.86585366` |
 | 2 | D | 67 | 73 | `0.91780822` |
-| 3 | D# | 35 | 36 | `0.97222222` |
-| 4 | E | 69 | 67 | `1.02985075` |
-| 5 | F | 100 | 92 | `1.08695652` |
-| 6 | F# | 37 | 32 | `1.15625000` |
-| 7 | G | 49 | 40 | `1.22500000` |
-| 8 | G# | 48 | 37 | `1.29729730` |
-| 9 | A | 110 | 80 | `1.37500000` ($A_4 = 440.0\text{ Hz}$) |
-| 10 | A# | 73 | 50 | `1.46000000` |
-| 11 | B | 84 | 54 | `1.55555556` |
+| 3 | D# | 105 | 108 | `0.97222222` |
+| 4 | E | 103 | 100 | `1.03000000` |
+| 5 | F | 84 | 77 | `1.09090909` |
+| 6 | F# | 74 | 64 | `1.15625000` |
+| 7 | G | 98 | 80 | `1.22500000` |
+| 8 | G# | 96 | 74 | `1.29729730` |
+| 9 | A | 88 | 64 | `1.37500000` ($A_4 = 440.0\text{ Hz}$) |
+| 10 | A# | 67 | 46 | `1.45652174` |
+| 11 | B | 108 | 70 | `1.54285714` |
 
-Each octave doubles the number of teeth on the rotating wheel ($2, 4, 8, 16, 32, 64, 128, 192$). All 91 tonewheel phase accumulators advance continuously on every audio sample (`phase[i] = (phase[i] + 2*pi * f[i] / fs) mod 2*pi`), ensuring authentic phase interaction when multiple keys share a tonewheel.
+Each octave doubles the number of teeth on the rotating wheel (`2, 4, 8, 16, 32, 64, 128`, with top-octave tonewheels `tw >= 84` using physical `192`-tooth wheels paired with a $4/3$ step-up gear). All 91 tonewheel phase accumulators advance continuously on every audio sample (`phase[i] = (phase[i] + 2*pi * f[i] / fs) mod 2*pi`), ensuring authentic phase interaction when multiple keys share a tonewheel.
+
+- **Pickup Calibration (`B3` vs `B3 Bass`):** Standard `B3` tapers the bottom 12 complex wheels (`0.74..0.94`) and softens upper wheels above `tw 60` (`1.0..0.84`). `B3 Bass` boosts low wheels `0..24` (`1.32..1.05`) for prominent pedal/bass weight.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
@@ -87,7 +89,10 @@ Firmware strings confirm the dedicated `LeslieHorn` and `Rotary Mic Distance` pa
    - **Slow (Chorale):** Horn = $0.80\text{ Hz}$ ($48\text{ RPM}$), Bass Drum = $0.67\text{ Hz}$ ($40\text{ RPM}$).
    - **Fast (Tremolo):** Horn = $6.85\text{ Hz}$ ($411\text{ RPM}$), Bass Drum = $5.70\text{ Hz}$ ($342\text{ RPM}$).
    - **Acceleration / Deceleration Time Constants:** Horn ramps in $\tau_{\text{horn}} \approx 0.7\text{ s}$; heavy wooden Bass Drum ramps in $\tau_{\text{drum}} \approx 4.2\text{ s}$.
-4. **Doppler Pitch & Amplitude Modulation:** Stereo left/right virtual microphones separated by $90^\circ..180^\circ$ modulate delay lines ($\pm 0.45\text{ ms}$ excursion) and directional horn beaming.
+4. **Doppler Pitch, Mic Placement & Cabinet Reflections:**
+   - **Mic Distance (`rotary_close_mic`):** `Close` yields deeper horn Doppler excursion ($\pm 0.55\text{ ms}$) and narrower beaming with subtle baffle reflections (`0.05`); `Normal` uses $\pm 0.35\text{ ms}$ excursion and stronger stereo cabinet early reflections (`0.18` cross-taps at $3.4\text{ ms}$ / $4.6\text{ ms}$).
+   - **Mic Angle (`rotary_mic_angle_deg`):** Virtual stereo microphone angular separation ($0^\circ..180^\circ$, default $120^\circ$).
+   - **Stop Mode (`rotary_stop_mode` / `RotarySpeed::Stop`):** Smoothly brakes both horn and drum rotors to zero rotational speed and parks the horn facing the cabinet baffle.
 
 ---
 
