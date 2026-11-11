@@ -2,13 +2,14 @@
 //!
 //! Spec: `docs/specs/piano-engine.md`
 
+use serde::{Deserialize, Serialize};
 use std::f32::consts::TAU;
 
 /// Maximum simultaneous polyphonic voices per Piano layer (`16` pre-allocated in core; scalable to 120).
 pub const MAX_PIANO_VOICES: usize = 24;
 
 /// Piano instrument categories on the Nord Stage 4.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PianoCategory {
     Grand,
     Upright,
@@ -19,7 +20,7 @@ pub enum PianoCategory {
 }
 
 /// Keyboard velocity curve (`KBD TOUCH`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VelocityTouch {
     Light,
     Medium,
@@ -39,7 +40,7 @@ impl VelocityTouch {
 }
 
 /// Timbre spectral shaping presets (`PIANO TIMBRE`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PianoTimbre {
     Off,
     Soft,

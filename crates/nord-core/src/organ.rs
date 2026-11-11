@@ -2,13 +2,14 @@
 //!
 //! Spec: `docs/specs/organ-engine.md`
 
+use serde::{Deserialize, Serialize};
 use std::f32::consts::TAU;
 
 /// Number of physical tonewheels in a Hammond B3 generator (`1..=91`).
 pub const NUM_TONEWHEELS: usize = 91;
 
 /// Supported Organ models in the Nord Stage 4.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrganModel {
     B3,
     Vox,
@@ -18,8 +19,9 @@ pub enum OrganModel {
 }
 
 /// Rotary speaker speed state (`Slow` Chorale vs `Fast` Tremolo).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RotarySpeed {
+    Stop,
     Slow,
     Fast,
 }
@@ -37,6 +39,7 @@ pub struct OrganLayer {
     pub percussion_enabled: bool,
     pub percussion_third_harmonic: bool,
     pub percussion_fast_decay: bool,
+    pub percussion_soft: bool,
     pub rotary_enabled: bool,
     pub rotary_speed: RotarySpeed,
     pub rotary_drive: f32,
@@ -71,6 +74,7 @@ impl OrganLayer {
             percussion_enabled: true,
             percussion_third_harmonic: false,
             percussion_fast_decay: true,
+            percussion_soft: false,
             rotary_enabled: true,
             rotary_speed: RotarySpeed::Slow,
             rotary_drive: 0.2,
@@ -166,7 +170,8 @@ impl OrganLayer {
                     12
                 };
                 let tw = Self::foldback_tonewheel(i32::from(note) + perc_offset);
-                dry += self.percussion_env * tw_signals[tw] * 0.12;
+                let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
+                dry += self.percussion_env * tw_signals[tw] * perc_gain;
             }
         }
 
@@ -192,6 +197,7 @@ impl OrganLayer {
         let treble = driven - bass;
 
         let (target_horn, target_drum) = match self.rotary_speed {
+            RotarySpeed::Stop => (0.0, 0.0),
             RotarySpeed::Slow => (0.80, 0.67),
             RotarySpeed::Fast => (6.85, 5.70),
         };

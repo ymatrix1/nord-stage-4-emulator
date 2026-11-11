@@ -61,3 +61,27 @@ def test_inspect_synthetic_ns4b_zip(tmp_path: Path):
     assert summary.extension_counts["ns4p"] == 1
     assert summary.extension_counts["xml"] == 1
     assert ns4_inspect.main([str(ns4b_file)]) == 0
+
+
+def test_decode_organ_bitstream(tmp_path: Path):
+    organ_cbin = tmp_path / "test.ns4o"
+    raw = make_cbin_bytes("ns4o")
+    organ_cbin.write_bytes(raw)
+
+    decoded = ns4_inspect.decode_cbin_payload("ns4o", raw[48:])
+    assert "organ" in decoded
+    assert "drawbars" in decoded["organ"]["layer_a"]
+    assert len(decoded["organ"]["layer_a"]["drawbars"]) == 9
+    assert ns4_inspect.main([str(organ_cbin), "--decode"]) == 0
+
+
+def test_decode_program_bitstream(tmp_path: Path):
+    prog_cbin = tmp_path / "test.ns4p"
+    raw = make_cbin_bytes("ns4p")
+    prog_cbin.write_bytes(raw)
+
+    decoded = ns4_inspect.decode_cbin_payload("ns4p", raw[48:])
+    assert "organ" in decoded
+    assert decoded["piano_bytes"] == 147
+    assert decoded["synth_bytes"] == 493
+    assert ns4_inspect.main([str(prog_cbin), "--decode"]) == 0

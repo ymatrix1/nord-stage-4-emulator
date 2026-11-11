@@ -59,6 +59,93 @@ class BackupSummary:
     extension_counts: dict[str, int]
 
 
+class BitReader:
+    """Reads sequential bits from big-endian packed byte stream."""
+
+    def __init__(self, data: bytes):
+        self.data = data
+        self.bit_pos = 0
+
+    def read_bits(self, count: int) -> int:
+        val = 0
+        for _ in range(count):
+            byte_idx = self.bit_pos // 8
+            bit_idx = 7 - (self.bit_pos % 8)
+            bit = (self.data[byte_idx] >> bit_idx) & 1
+            val = (val << 1) | bit
+            self.bit_pos += 1
+        return val
+
+    def read_bool(self) -> bool:
+        return self.read_bits(1) != 0
+
+
+def decode_organ_payload(payload: bytes) -> dict:
+    if len(payload) < 135:
+        raise ValueError(f"organ payload too short: {len(payload)} < 135")
+    r = BitReader(payload)
+    r.bit_pos = 72
+    models = ["B3", "Vox", "Farfisa", "Pipe1", "Pipe2"]
+    model_idx = r.read_bits(3)
+    model = models[model_idx] if model_idx < len(models) else "Unknown"
+    perc_on = r.read_bool()
+    perc_soft = r.read_bool()
+    perc_fast = r.read_bool()
+    perc_third = r.read_bool()
+    vib_on = r.read_bool()
+    vib_type = r.read_bits(3)
+    rot_speeds = ["Stop", "Slow", "Fast"]
+    rot_spd_idx = r.read_bits(2)
+    rot_speed = rot_speeds[rot_spd_idx] if rot_spd_idx < len(rot_speeds) else "Unknown"
+    rot_drive = round((r.read_bits(7) / 127.0) * 10.0, 2)
+
+    la_enabled = r.read_bool()
+    la_level = round(r.read_bits(7) / 127.0, 2)
+    la_octave = r.read_bits(3) - 2
+    drawbars_a = [min(r.read_bits(4), 8) for _ in range(9)]
+
+    lb_enabled = r.read_bool()
+    lb_level = round(r.read_bits(7) / 127.0, 2)
+    lb_octave = r.read_bits(3) - 2
+    drawbars_b = [min(r.read_bits(4), 8) for _ in range(9)]
+
+    return {
+        "model": model,
+        "percussion": {
+            "enabled": perc_on,
+            "soft": perc_soft,
+            "fast": perc_fast,
+            "third": perc_third,
+        },
+        "vibrato": {"enabled": vib_on, "type": vib_type},
+        "rotary": {"speed": rot_speed, "drive": rot_drive},
+        "layer_a": {
+            "enabled": la_enabled,
+            "level": la_level,
+            "octave": la_octave,
+            "drawbars": drawbars_a,
+        },
+        "layer_b": {
+            "enabled": lb_enabled,
+            "level": lb_level,
+            "octave": lb_octave,
+            "drawbars": drawbars_b,
+        },
+    }
+
+
+def decode_cbin_payload(tag: str, payload: bytes) -> dict:
+    if tag == "ns4o":
+        return {"organ": decode_organ_payload(payload)}
+    if tag in ("ns4p", "ns4l") and len(payload) >= 820:
+        return {
+            "organ": decode_organ_payload(payload[45:180]),
+            "piano_bytes": len(payload[180:327]),
+            "synth_bytes": len(payload[327:820]),
+        }
+    return {"raw_payload_len": len(payload)}
+
+
 def parse_cbin_bytes(data: bytes) -> CbinSummary:
     """Parses and validates a 48-byte CBIN v1 preset header."""
     if len(data) < CBIN_HEADER_SIZE:
@@ -120,12 +207,17 @@ def inspect_ns4b_archive(path: Path) -> BackupSummary:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Inspect Nord Stage 4 CBIN or .ns4b files.")
     parser.add_argument("path", type=Path, help="Path to .ns4p/.ns4y/.ns4o/.ns4n/.ns4b file")
+    parser.add_argument("--decode", action="store_true", help="Decode internal bitstream fields")
     args = parser.parse_args(argv)
 
     if args.path.suffix.lower() == ".ns4b":
         summary = asdict(inspect_ns4b_archive(args.path))
     else:
-        summary = asdict(parse_cbin_bytes(args.path.read_bytes()))
+        raw = args.path.read_bytes()
+        cbin = parse_cbin_bytes(raw)
+        summary = asdict(cbin)
+        if args.decode:
+            summary["decoded"] = decode_cbin_payload(cbin.tag, raw[CBIN_HEADER_SIZE:])
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 

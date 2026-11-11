@@ -2,8 +2,10 @@
 //!
 //! Spec: `docs/specs/morph-and-zones.md`
 
+use serde::{Deserialize, Serialize};
+
 /// Physical controller sources in the Nord Stage 4 Morphing Matrix.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MorphSource {
     /// Modulation Wheel (`CC1`).
     ModWheel,
@@ -107,7 +109,7 @@ impl LayerSceneState {
 }
 
 /// Crossfade width around a keybed split point (`Off`, `Small` = ±3 st, `Large` = ±6 st).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CrossfadeWidth {
     Off,
     Small,
@@ -125,7 +127,7 @@ impl CrossfadeWidth {
 }
 
 /// Single split boundary between two adjacent keyboard zones.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SplitPoint {
     pub enabled: bool,
     pub midi_note: u8,

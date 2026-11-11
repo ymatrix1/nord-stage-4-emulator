@@ -9,7 +9,7 @@ Don't start an unapproved phase without user confirmation. Tick checkboxes (`- [
 ```text
 Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DONE]
    │
-   ├──► Phase 1: Interoperability Core (`CBIN` / `.ns4b` / `.ns4p` / Firmware) [CORE DONE, BITMAP IN PROGRESS]
+   ├──► Phase 1: Interoperability Core (`CBIN` / `.ns4b` / `.ns4p` / Firmware) [DONE]
    │
    ├──► Phase 2: Organ Engine DSP (`DSPO` — 91 Tonewheels, B3/Vox/Farf/Pipe, Rotary 122)
    │
@@ -44,11 +44,11 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] `crates/nord-core/src/firmware.rs`: OS update container header and `SRAM` / `CODE` / `ARM0` / `DSPO` / `DSPS` / `DSPF` partition table parser
 - [x] `tools/ns4_inspect.py`: Python CLI and library for inspecting `.ns4b` archives and `.ns4*` presets with JSON output
 - [x] `tools/check_tests.py`: Per-file unit-test enforcement ratchet across Rust and Python (`tools/test-baseline.txt` at 0 uncovered files)
-- [ ] Map bit offsets inside the 135-byte `.ns4o` Organ payload (Model `B3`/`Vox`/`Farf`/`Pipe1`/`Pipe2`, Layer A/B 9-drawbar nibbles, Percussion switches, Vibrato `V1..C3`, Rotary speed/drive)
-- [ ] Map bit offsets inside the 147-byte `.ns4n` Piano payload (Category, Model hash ID, Timbre `Soft`/`Mid`/`Bright`/`Dyno1`/`Dyno2`, `KB Touch`, `String Res`, `Ped Noise`, `Unison`, `Dyn Comp`)
-- [ ] Map bit offsets inside the 493-byte `.ns4y` Synth payload (`SAMPLES`/`ANALOG`/`WAVETABLE`/`FM` mode, Waveform/Table ID, Detune, Filter Type/Cutoff/Res/Drive/KB-Track, ADR Envelopes, LFO, Arpeggiator)
-- [ ] Map global 45-byte `.ns4p` header (`0x30..0x5C`: Split points, Crossfade widths, Scene I/II masks, Master Clock BPM, Morph slots)
-- [ ] `ns4 convert <file.ns4p> --to-json` / `--from-json` human-readable patch converter and `.ns4p` → `Stage4Engine` preset loader
+- [x] Map bit offsets inside the 135-byte `.ns4o` Organ payload (Model `B3`/`Vox`/`Farf`/`Pipe1`/`Pipe2`, Layer A/B 9-drawbar nibbles, Percussion switches, Vibrato `V1..C3`, Rotary speed/drive)
+- [x] Map bit offsets inside the 147-byte `.ns4n` Piano payload (Category, Model hash ID, Timbre `Soft`/`Mid`/`Bright`/`Dyno1`/`Dyno2`, `KB Touch`, `String Res`, `Ped Noise`, `Unison`, `Dyn Comp`)
+- [x] Map bit offsets inside the 493-byte `.ns4y` Synth payload (`SAMPLES`/`ANALOG`/`WAVETABLE`/`FM` mode, Waveform/Table ID, Detune, Filter Type/Cutoff/Res/Drive/KB-Track, ADR Envelopes, LFO, Arpeggiator)
+- [x] Map global 45-byte `.ns4p` header (`0x30..0x5C`: Split points, Crossfade widths, Scene I/II masks, Master Clock BPM, Morph slots)
+- [x] `ns4 convert <file.ns4p> --to-json` / `--from-json` human-readable patch converter and `.ns4p` → `Stage4Engine` preset loader
 
 ---
 

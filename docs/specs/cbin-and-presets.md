@@ -79,6 +79,58 @@ Empirical comparison between `Organ Preset/Bank 1/B3 Basic.ns4o` and `Live/Bank 
 4. **Synth Section (`0x177..0x363`, 493 bytes):**
    - Matches the 493-byte structure of `.ns4y` across Synth Layers A, B, and C (oscillator category, waveform/wavetable ID, FM/detune, ZDF filter type/cutoff/resonance/kb-track, ADR envelopes, LFOs, arpeggiator, and per-layer Synth FX).
 
+### 4.1 Bit-Field Decoding & Mapping Table
+
+Implemented in [`crates/nord-core/src/cbin.rs`](../../crates/nord-core/src/cbin.rs) (`BitReader`, `BitWriter`, `ProgramDecoded`) and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py):
+
+#### Organ Payload (`135` Bytes)
+- **Signature (`0..71` bits):** Fixed 9-byte sequence `11 27 FB FB FB FF F7 F7 F7`.
+- **Model (`72..74` bits, 3 bits):** `0 = B3`, `1 = Vox`, `2 = Farfisa`, `3 = Pipe1`, `4 = Pipe2`.
+- **Percussion (`75..78` bits, 4 bits):** `[on: 1b, soft: 1b, fast: 1b, third: 1b]`.
+- **Vibrato/Chorus (`79..82` bits, 4 bits):** `[on: 1b, type: 3b]` (`0..5` -> `V1, V2, V3, C1, C2, C3`).
+- **Rotary 122 (`83..91` bits, 9 bits):** `[speed: 2b]` (`0=Stop, 1=Slow, 2=Fast`) + `[drive: 7b]` (`0..127` -> `0.0..10.0`).
+- **Layer A (`92..138` bits, 47 bits):** `[enabled: 1b, level: 7b, octave: 3b (-2..+2), drawbars: 9 * 4b (0..8)]`.
+- **Layer B (`139..185` bits, 47 bits):** `[enabled: 1b, level: 7b, octave: 3b (-2..+2), drawbars: 9 * 4b (0..8)]`.
+
+#### Piano Payload (`147` Bytes)
+- **Signature (`0..71` bits):** Fixed 9-byte sequence `0C 27 1B FB FB FD A7 F7 F7`.
+- **Layer A & Layer B (each 37 bits):**
+  - `enabled: 1b`, `level: 7b`, `octave: 3b (-2..+2)`
+  - `category: 3b` (`Grand, Upright, Electric, Clav, Digital, Misc`)
+  - `model_id: 8b`, `timbre: 3b` (`Off, Soft, Mid, Bright, Dyno1, Dyno2`), `touch: 2b` (`Light, Med, Heavy`)
+  - `string_res: 1b`, `pedal_noise: 1b`, `soft_release: 1b`, `dyn_comp: 2b (0..3)`, `unison: 2b (0..3)`.
+
+#### Synth Payload (`493` Bytes)
+- **Signature (`0..71` bits):** Fixed 9-byte sequence `1E 08 71 BF BF BF D2 7F 7F`.
+- **Layer A, B, C (each 83 bits):**
+  - `enabled: 1b`, `level: 7b`, `octave: 3b (-2..+2)`
+  - `osc_mode: 2b` (`Analog, Wavetable, FM, Sample`), `waveform: 2b` (`Saw, Pulse, Triangle, Sine`), `wave_id: 8b`, `detune: 7b` (`0..10.0`)
+  - `filter_model: 3b` (`LP12, LP24, Ladder24, BP, HP`), `cutoff: 7b` (`20 Hz..20 kHz`), `resonance: 7b`, `drive: 7b`, `kb_track: 2b`
+  - `env_attack: 7b` (`1..5000 ms`), `env_decay: 7b` (`10..10000 ms`), `env_release: 7b` (`10..10000 ms`)
+  - `lfo_rate: 7b` (`0.1..30 Hz`), `arp_enabled: 1b`, `arp_bpm: 8b` (`30..300 BPM`).
+
+#### Global Program Header (`45` Bytes)
+- **Signature (`0..7` bits):** Fixed byte `0x2C`.
+- **Master Tempo (`8..16` bits, 9 bits):** `30..300 BPM`.
+- **Master Compressor (`17..23` bits, 7 bits):** `0.0..10.0`.
+- **Transpose (`24..27` bits, 4 bits):** `-6..+6` semitones.
+- **Split Zones (`28..55` bits, 28 bits):** `split_enabled: 1b`, 3x `[split_note: 7b, crossfade: 2b (Off/Small/Large)]`.
+- **Layer Scenes (`56..69` bits, 14 bits):** `scene_1_mask: 7b`, `scene_2_mask: 7b` (`Organ A/B, Piano A/B, Synth A/B/C`).
+
+### 4.2 CLI Patch Conversion & Inspection
+
+```bash
+# Convert a binary .ns4p program to human-readable JSON:
+ns4 convert patch.ns4p --to-json patch.json
+
+# Convert JSON back to a valid, checksummed .ns4p binary:
+ns4 convert patch.json --to-ns4p patch.ns4p
+
+# Inspect presets with decoded fields:
+ns4 inspect patch.ns4p --json
+python tools/ns4_inspect.py patch.ns4p --decode
+```
+
 ---
 
 ## 5. OS v1.66 Firmware Container Layout

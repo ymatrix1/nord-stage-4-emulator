@@ -2,10 +2,11 @@
 //!
 //! Spec: `docs/specs/synth-engine.md`
 
+use serde::{Deserialize, Serialize};
 use std::f32::consts::{PI, TAU};
 
 /// Oscillator synthesis modes in the Nord Stage 4 Synth Engine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SynthOscMode {
     Analog,
     Wavetable,
@@ -14,7 +15,7 @@ pub enum SynthOscMode {
 }
 
 /// Virtual Analog waveform shapes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VaWaveform {
     Saw,
     Pulse,
@@ -23,7 +24,7 @@ pub enum VaWaveform {
 }
 
 /// Zero-Delay Feedback filter topologies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FilterModel {
     Lp12,
     Lp24,
@@ -120,6 +121,8 @@ pub struct SynthLayer {
     pub resonance: f32,
     pub filter_drive: f32,
     pub attack_sec: f32,
+    pub decay_sec: f32,
+    pub sustain_level: f32,
     pub release_sec: f32,
     active_note: Option<u8>,
     gate: bool,
@@ -143,6 +146,8 @@ impl SynthLayer {
             resonance: 0.3,
             filter_drive: 0.2,
             attack_sec: 0.005,
+            decay_sec: 0.3,
+            sustain_level: 0.7,
             release_sec: 0.25,
             active_note: None,
             gate: false,
@@ -169,8 +174,13 @@ impl SynthLayer {
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
         if self.gate {
-            let atk = self.attack_sec.max(0.001);
-            self.amp_env += (1.0 - self.amp_env) * (inv_fs / atk).min(1.0);
+            if self.amp_env < 0.999 {
+                let atk = self.attack_sec.max(0.001);
+                self.amp_env += (1.0 - self.amp_env) * (inv_fs / atk).min(1.0);
+            } else {
+                let dec = self.decay_sec.max(0.005);
+                self.amp_env += (self.sustain_level - self.amp_env) * (inv_fs / dec).min(1.0);
+            }
         } else {
             let rel = self.release_sec.max(0.002);
             self.amp_env *= (-inv_fs / rel).exp();
