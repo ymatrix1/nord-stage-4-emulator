@@ -23,6 +23,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 | [specs/effects-and-routing.md](specs/effects-and-routing.md) | 7 independent per-layer FX pipelines (Mod 1, Mod 2, Amp/EQ, Delay, Reverb), Master Compressor, Master Clock |
 | [specs/morph-and-zones.md](specs/morph-and-zones.md) | 4-zone keybed router, Small/Large split crossfades, Layer Scene II toggle, Triple-Sensor re-trigger, 3-source Morphing Matrix |
 | [specs/midi-and-control.md](specs/midi-and-control.md) | Complete MIDI CC map, Bank Select / Program Change, NRPN/SysEx, and panel control surface mapping |
+| [specs/visual-style-and-panel.md](specs/visual-style-and-panel.md) | 1:1 Front-Panel visual layout, color tokens, physical faders + 11-LED ladders, drawbars + 8-LED ladders, dual OLED displays |
 | [specs/verification.md](specs/verification.md) | CI pipeline, unit-test coverage ratchet (`tools/check_tests.py`), deterministic offline audio verification, round-trip CBIN tests |
 
 ## Research & Reverse Engineering (`docs/research/`)

@@ -15,4 +15,5 @@ Every subsystem of the Nord Stage 4 Emulator has a dedicated specification docum
 | [effects-and-routing.md](effects-and-routing.md) | 7 independent per-layer FX pipelines (`Mod 1`, `Mod 2`, `Amp/Drive/EQ`, `Delay`, `Reverb`), Master Compressor, Master Clock | `crates/nord-core/src/fx.rs`, `crates/nord-core/src/engine.rs` |
 | [morph-and-zones.md](morph-and-zones.md) | 4-zone keybed split router, `Off`/`Small`/`Large` crossfades, Layer Scene II, Triple-Sensor velocity, 3-source Morphing Matrix | `crates/nord-core/src/morph.rs` |
 | [midi-and-control.md](midi-and-control.md) | Complete MIDI CC implementation table, Bank Select / Program Change, and panel parameter mapping | `crates/nord-core/src/midi.rs` |
+| [visual-style-and-panel.md](visual-style-and-panel.md) | 1:1 Front-Panel UI layout (`#8E1B1F` Crimson + `#323D47` Slate), drawbar/fader LED ladders, dual OLEDs, Morph arcs | `crates/nord-plugin` (Phase 6) |
 | [verification.md](verification.md) | CI pipeline, `tools/check_tests.py` coverage ratchet, deterministic offline audio verification, round-trip CBIN tests | `tools/check_tests.py`, `.github/workflows/ci.yml` |
