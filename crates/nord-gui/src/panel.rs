@@ -5,7 +5,7 @@
 use crate::audio::{apply_audio_command, AudioCommand, AudioHandle};
 use crate::style::*;
 use crate::widgets::*;
-use egui::{pos2, vec2, Align2, Color32, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Ui};
+use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke, StrokeKind, Ui};
 use nord_core::engine::Stage4Engine;
 use nord_core::fx::{Mod1Type, Mod2Type, ReverbModel};
 use nord_core::midi::MidiEvent;
@@ -101,15 +101,11 @@ pub struct Stage4PanelState {
     // Keybed State
     pub mouse_held_note: Option<u8>,
     pub midi_active_keys: [bool; 128],
-
-    // Authentic Hardware Texture
-    pub panel_texture: Option<egui::TextureHandle>,
 }
 
 impl Default for Stage4PanelState {
     fn default() -> Self {
         Self {
-            panel_texture: None,
             master_volume: 0.85,
             pitch_stick: 0.0,
             mod_wheel: 0.0,
@@ -195,10 +191,6 @@ impl Default for Stage4PanelState {
 
 /// Renders the entire hardware front panel and synchronizes edits with the DSP audio handle.
 pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
-    if state.panel_texture.is_none() {
-        state.panel_texture = Some(crate::style::load_panel_texture(ui.ctx()));
-    }
-
     let panel_size = vec2(1560.0, 420.0);
     let (panel_rect, _) = ui.allocate_exact_size(panel_size, Sense::hover());
     let painter = ui.painter().clone();
@@ -212,54 +204,23 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         StrokeKind::Inside,
     );
 
-    let has_texture = state.panel_texture.is_some();
-    if let Some(texture) = &state.panel_texture {
-        // Control panel area (top 300px above keybed)
-        let control_rect = Rect::from_min_max(
-            pos2(panel_rect.left() + 4.0, panel_rect.top() + 4.0),
-            pos2(panel_rect.right() - 4.0, panel_rect.top() + 304.0),
-        );
-        painter.image(
-            texture.id(),
-            control_rect,
-            Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-            Color32::WHITE,
-        );
-    } else {
-        // Chassis branding (top left and top right)
-        label(
-            &painter,
-            pos2(panel_rect.left() + 20.0, panel_rect.top() + 6.0),
-            "nord stage 4",
-            13.0,
-            Color32::WHITE,
-            Align2::LEFT_TOP,
-        );
-        label(
-            &painter,
-            pos2(panel_rect.right() - 20.0, panel_rect.top() + 6.0),
-            "CLAVIA DMI AB • SWEDEN",
-            10.0,
-            Color32::from_gray(210),
-            Align2::RIGHT_TOP,
-        );
-    }
-
-    let draw_label = |p: &Painter, pos: Pos2, s: &str, size: f32, col: Color32, al: Align2| {
-        if !has_texture {
-            label(p, pos, s, size, col, al);
-        }
-    };
-    let draw_section_frame = |p: &Painter, rect: Rect, title: &str| {
-        if !has_texture {
-            section_frame(p, rect, title);
-        }
-    };
-    let draw_group_frame = |p: &Painter, rect: Rect, title: &str| {
-        if !has_texture {
-            group_frame(p, rect, title);
-        }
-    };
+    // Chassis branding (top left and top right)
+    label(
+        &painter,
+        pos2(panel_rect.left() + 20.0, panel_rect.top() + 6.0),
+        "nord stage 4",
+        13.0,
+        Color32::WHITE,
+        Align2::LEFT_TOP,
+    );
+    label(
+        &painter,
+        pos2(panel_rect.right() - 20.0, panel_rect.top() + 6.0),
+        "CLAVIA DMI AB • SWEDEN",
+        10.0,
+        Color32::from_gray(210),
+        Align2::RIGHT_TOP,
+    );
 
     // =========================================================================
     // BAY 1: MASTER & ROTARY (Left red zone: x: 10..120, y: 24..300)
@@ -307,16 +268,14 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay1.left() + 4.0, bay1.top() + 128.0),
         pos2(bay1.right() - 4.0, bay1.bottom() - 6.0),
     );
-    if !has_texture {
-        painter.rect_filled(rot_rect, 4.0, Color32::from_rgb(110, 20, 24));
-        painter.rect_stroke(
-            rot_rect,
-            4.0,
-            Stroke::new(1.0_f32, GROUP_BORDER),
-            StrokeKind::Inside,
-        );
-    }
-    draw_label(
+    painter.rect_filled(rot_rect, 4.0, Color32::from_rgb(110, 20, 24));
+    painter.rect_stroke(
+        rot_rect,
+        4.0,
+        Stroke::new(1.0_f32, GROUP_BORDER),
+        StrokeKind::Inside,
+    );
+    label(
         &painter,
         pos2(rot_rect.center().x, rot_rect.top() + 8.0),
         "ROTARY SPEAKER",
@@ -344,7 +303,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     let fast_led = pos2(rot_rect.right() - 16.0, rot_rect.top() + 74.0);
     led(&painter, slow_led, !is_fast, LED_GREEN, LED_GREEN_DIM);
     led(&painter, fast_led, is_fast, LED_RED, LED_RED_DIM);
-    draw_label(
+    label(
         &painter,
         pos2(slow_led.x, slow_led.y + 8.0),
         "SLOW",
@@ -352,7 +311,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
-    draw_label(
+    label(
         &painter,
         pos2(fast_led.x, fast_led.y + 8.0),
         "FAST",
@@ -387,7 +346,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         };
         audio_handle.send_command(AudioCommand::SetRotarySpeed(spd));
     }
-    draw_label(
+    label(
         &painter,
         pos2(stop_btn.center().x, stop_btn.center().y),
         "STOP MODE",
@@ -403,7 +362,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(panel_rect.left() + 122.0, panel_rect.top() + 24.0),
         pos2(panel_rect.left() + 488.0, panel_rect.top() + 300.0),
     );
-    draw_section_frame(&painter, bay2, "ORGAN SECTION");
+    section_frame(&painter, bay2, "ORGAN SECTION");
 
     // Organ Layer A & B Strips
     let fader_a = Rect::from_min_size(
@@ -424,7 +383,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(0, state.organ_a_active));
     }
-    draw_label(
+    label(
         &painter,
         pos2(fader_a.center().x, fader_a.bottom() + 10.0),
         "ORGAN A",
@@ -451,7 +410,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(1, state.organ_b_active));
     }
-    draw_label(
+    label(
         &painter,
         pos2(fader_b.center().x, fader_b.bottom() + 10.0),
         "ORGAN B",
@@ -487,7 +446,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         state.organ_model = org_models[new_idx % org_models.len()];
         audio_handle.send_command(AudioCommand::SetOrganModel(state.organ_model));
     }
-    draw_label(
+    label(
         &painter,
         pos2(model_rect.center().x, model_rect.top() - 6.0),
         "ORGAN MODEL",
@@ -524,7 +483,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         state.scanner_mode = sc_modes[new_sc % sc_modes.len()];
         audio_handle.send_command(AudioCommand::SetScannerMode(state.scanner_mode));
     }
-    draw_label(
+    label(
         &painter,
         pos2(vib_rect.center().x, vib_rect.top() - 6.0),
         "VIB/CHORUS",
@@ -545,7 +504,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         Stroke::new(1.0_f32, Color32::from_gray(60)),
         StrokeKind::Inside,
     );
-    draw_label(
+    label(
         &painter,
         pos2(perc_rect.center().x, perc_rect.top() - 6.0),
         "B3 PERCUSSION",
@@ -567,7 +526,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
             third: state.perc_third,
         });
     }
-    draw_label(
+    label(
         &painter,
         pos2(p_on_rect.center().x, p_on_rect.center().y),
         "ON",
@@ -589,7 +548,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
             third: state.perc_third,
         });
     }
-    draw_label(
+    label(
         &painter,
         pos2(p_soft_rect.center().x, p_soft_rect.center().y),
         "SOFT",
@@ -611,7 +570,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
             third: state.perc_third,
         });
     }
-    draw_label(
+    label(
         &painter,
         pos2(p_fast_rect.center().x, p_fast_rect.center().y),
         "FAST",
@@ -633,7 +592,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
             third: state.perc_third,
         });
     }
-    draw_label(
+    label(
         &painter,
         pos2(p_3rd_rect.center().x, p_3rd_rect.center().y),
         "3RD",
@@ -680,7 +639,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(panel_rect.left() + 494.0, panel_rect.top() + 24.0),
         pos2(panel_rect.left() + 788.0, panel_rect.top() + 300.0),
     );
-    draw_section_frame(&painter, bay3, "PIANO SECTION");
+    section_frame(&painter, bay3, "PIANO SECTION");
 
     // Piano Layer A & B Strips
     let pfader_a = Rect::from_min_size(
@@ -701,7 +660,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(2, state.piano_a_active));
     }
-    draw_label(
+    label(
         &painter,
         pos2(pfader_a.center().x, pfader_a.bottom() + 10.0),
         "PIANO A",
@@ -728,7 +687,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(3, state.piano_b_active));
     }
-    draw_label(
+    label(
         &painter,
         pos2(pfader_b.center().x, pfader_b.bottom() + 10.0),
         "PIANO B",
@@ -742,7 +701,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay3.left() + 90.0, bay3.top() + 32.0),
         vec2(86.0, 96.0),
     );
-    draw_group_frame(&painter, ac_rect, "ACOUSTICS");
+    group_frame(&painter, ac_rect, "ACOUSTICS");
 
     led(
         &painter,
@@ -751,7 +710,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         LED_RED,
         LED_RED_DIM,
     );
-    draw_label(
+    label(
         &painter,
         pos2(ac_rect.left() + 22.0, ac_rect.top() + 24.0),
         "STRING RES",
@@ -767,7 +726,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         LED_RED,
         LED_RED_DIM,
     );
-    draw_label(
+    label(
         &painter,
         pos2(ac_rect.left() + 22.0, ac_rect.top() + 44.0),
         "PED NOISE",
@@ -793,7 +752,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay3.left() + 90.0, bay3.top() + 140.0),
         vec2(86.0, 110.0),
     );
-    draw_group_frame(&painter, timb_rect, "TIMBRE");
+    group_frame(&painter, timb_rect, "TIMBRE");
     let timbres = [
         PianoTimbre::Off,
         PianoTimbre::Soft,
@@ -823,7 +782,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay3.left() + 184.0, bay3.top() + 32.0),
         vec2(96.0, 140.0),
     );
-    draw_group_frame(&painter, psel_rect, "PIANO SELECT");
+    group_frame(&painter, psel_rect, "PIANO SELECT");
     let p_cats = [
         PianoCategory::Grand,
         PianoCategory::Upright,
@@ -880,7 +839,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     let morph_box =
         Rect::from_min_size(pos2(bay4.left() + 8.0, bay4.top() + 8.0), vec2(204.0, 36.0));
     painter.rect_filled(morph_box, 3.0, Color32::from_rgb(80, 12, 16));
-    draw_label(
+    label(
         &painter,
         pos2(morph_box.center().x, morph_box.top() + 6.0),
         "MORPH ASSIGN",
@@ -897,7 +856,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     if nord_button(ui, b_wheel, "btn_m_wheel", state.morph_wheel_active) {
         state.morph_wheel_active = !state.morph_wheel_active;
     }
-    draw_label(
+    label(
         &painter,
         pos2(b_wheel.center().x, b_wheel.center().y),
         "WHEEL",
@@ -913,7 +872,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     if nord_button(ui, b_at, "btn_m_at", state.morph_at_active) {
         state.morph_at_active = !state.morph_at_active;
     }
-    draw_label(
+    label(
         &painter,
         pos2(b_at.center().x, b_at.center().y),
         "A.T.",
@@ -929,7 +888,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     if nord_button(ui, b_ped, "btn_m_ped", state.morph_ctrl_active) {
         state.morph_ctrl_active = !state.morph_ctrl_active;
     }
-    draw_label(
+    label(
         &painter,
         pos2(b_ped.center().x, b_ped.center().y),
         "CTRLPED",
@@ -963,7 +922,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay4.left() + 8.0, bay4.top() + 154.0),
         vec2(204.0, 110.0),
     );
-    draw_group_frame(&painter, prog_box, "PROGRAM");
+    group_frame(&painter, prog_box, "PROGRAM");
 
     for row in 0..2 {
         for col in 0..4 {
@@ -1001,7 +960,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(panel_rect.left() + 1020.0, panel_rect.top() + 24.0),
         pos2(panel_rect.left() + 1348.0, panel_rect.top() + 300.0),
     );
-    draw_section_frame(&painter, bay5, "SYNTH SECTION");
+    section_frame(&painter, bay5, "SYNTH SECTION");
 
     // Synth Layer A, B, C Strips
     let sfader_a = Rect::from_min_size(
@@ -1022,7 +981,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(4, state.synth_a_active));
     }
-    draw_label(
+    label(
         &painter,
         pos2(sfader_a.center().x, sfader_a.bottom() + 10.0),
         "SYNTH A",
@@ -1049,7 +1008,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(5, state.synth_b_active));
     }
-    draw_label(
+    label(
         &painter,
         pos2(sfader_b.center().x, sfader_b.bottom() + 10.0),
         "SYNTH B",
@@ -1076,7 +1035,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(6, state.synth_c_active));
     }
-    draw_label(
+    label(
         &painter,
         pos2(sfader_c.center().x, sfader_c.bottom() + 10.0),
         "SYNTH C",
@@ -1120,7 +1079,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         );
         audio_handle.send_command(AudioCommand::SetSynthOscMode(state.synth_osc_mode));
     }
-    draw_label(
+    label(
         &painter,
         pos2(osc_m_btn.center().x, osc_m_btn.center().y),
         "MODE",
@@ -1146,7 +1105,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         );
         audio_handle.send_command(AudioCommand::SetSynthWaveform(state.synth_waveform));
     }
-    draw_label(
+    label(
         &painter,
         pos2(wf_btn.center().x, wf_btn.center().y),
         "WAVEFORM",
@@ -1160,7 +1119,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay5.left() + 116.0, bay5.top() + 120.0),
         vec2(204.0, 72.0),
     );
-    draw_group_frame(&painter, flt_rect, "FILTER");
+    group_frame(&painter, flt_rect, "FILTER");
 
     if knob(
         ui,
@@ -1206,7 +1165,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay5.left() + 116.0, bay5.top() + 200.0),
         vec2(204.0, 70.0),
     );
-    draw_group_frame(&painter, env_rect, "AMP ENV");
+    group_frame(&painter, env_rect, "AMP ENV");
 
     if knob(
         ui,
@@ -1254,7 +1213,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(panel_rect.left() + 1354.0, panel_rect.top() + 24.0),
         pos2(panel_rect.left() + 1552.0, panel_rect.top() + 300.0),
     );
-    draw_section_frame(&painter, bay6, "LAYER EFFECTS");
+    section_frame(&painter, bay6, "LAYER EFFECTS");
 
     // FX Focus buttons (Organ, Piano, Synth A/B/C)
     let focus_rect = Rect::from_min_size(
@@ -1282,7 +1241,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     // Mod 1 & Mod 2 Knobs
     let mod1_rect =
         Rect::from_min_size(pos2(bay6.left() + 6.0, bay6.top() + 56.0), vec2(90.0, 70.0));
-    draw_group_frame(&painter, mod1_rect, "MOD 1");
+    group_frame(&painter, mod1_rect, "MOD 1");
     if knob(
         ui,
         pos2(mod1_rect.left() + 24.0, mod1_rect.top() + 36.0),
@@ -1320,7 +1279,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay6.left() + 100.0, bay6.top() + 56.0),
         vec2(90.0, 70.0),
     );
-    draw_group_frame(&painter, mod2_rect, "MOD 2");
+    group_frame(&painter, mod2_rect, "MOD 2");
     if knob(
         ui,
         pos2(mod2_rect.left() + 24.0, mod2_rect.top() + 36.0),
@@ -1359,7 +1318,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay6.left() + 6.0, bay6.top() + 132.0),
         vec2(90.0, 70.0),
     );
-    draw_group_frame(&painter, delay_rect, "DELAY");
+    group_frame(&painter, delay_rect, "DELAY");
     if knob(
         ui,
         pos2(delay_rect.left() + 24.0, delay_rect.top() + 36.0),
@@ -1397,7 +1356,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay6.left() + 100.0, bay6.top() + 132.0),
         vec2(90.0, 70.0),
     );
-    draw_group_frame(&painter, rev_rect, "REVERB");
+    group_frame(&painter, rev_rect, "REVERB");
     if knob(
         ui,
         pos2(rev_rect.center().x, rev_rect.top() + 36.0),
@@ -1419,7 +1378,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         pos2(bay6.left() + 6.0, bay6.top() + 208.0),
         vec2(184.0, 62.0),
     );
-    draw_group_frame(&painter, comp_rect, "COMPRESSOR & DRIVE");
+    group_frame(&painter, comp_rect, "COMPRESSOR & DRIVE");
     if knob(
         ui,
         pos2(comp_rect.left() + 48.0, comp_rect.top() + 32.0),

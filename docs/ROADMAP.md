@@ -101,7 +101,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 **Goal:** Complete 7-layer stage routing, 3-source Morphing, Layer Scene II, and 7 independent per-layer FX racks.
 
 - [x] `crates/nord-core/src/morph.rs`: 3-source Morphing Matrix (`WHEEL`, `A.T.`, `CTRLPED`), `LAYER SCENE II` switcher, and 4-zone Keybed Split router with `Off` / `Small` (6 st) / `Large` (12 st) crossfades
-- [x] `crates/nord-core/src/fx.rs`: Per-layer 5-slot FX chain (`MOD 1`, `MOD 2`, `AMP SIM/EQ`, `DELAY`, `REVERB`) + downstream `MasterCompressor` (`COMP`), `MasterClock` (`MST CLK`), and `CS4392` + `LM833` output stage
+- [x] `crates/nord-core/src/fx.rs`: Per-layer 5-slot FX chain (`MOD 1`, `MOD 2`, `AMP SIM/EQ`, `DELAY`, `REVERB`) + downstream `MasterCompressor` (`COMP`), `MasterClock` (`MST CLK`), and `PCM1791A` + `NJM4580M` output stage
 - [x] `crates/nord-core/src/midi.rs`: Complete Nord Stage 4 MIDI CC decoder/encoder
 - [x] `crates/nord-core/src/engine.rs`: Integrated 7-layer `Stage4Engine` rendering `Organ A/B`, `Piano A/B`, and `Synth A/B/C`
 - [x] Full 3-band semi-parametric EQ in `AMP SIM / EQ` (`BASS` 100 Hz, sweepable `MID` 200 Hz–8 kHz + gain, `TREBLE` 4 kHz) + Cabinet impulse filters (`Small`, `JC`, `Twin`) + `TO ROTARY` routing switch

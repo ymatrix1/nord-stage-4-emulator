@@ -22,13 +22,8 @@ impl Stage4App {
         let active_keys = Arc::new(std::array::from_fn(|_| AtomicBool::new(false)));
         let audio_handle = start_audio_and_midi(Arc::clone(&active_keys));
 
-        let state = Stage4PanelState {
-            panel_texture: Some(nord_gui::style::load_panel_texture(&cc.egui_ctx)),
-            ..Default::default()
-        };
-
         Self {
-            state,
+            state: Stage4PanelState::default(),
             audio_handle,
             active_keys,
         }

@@ -62,4 +62,4 @@ Layer Synth/Piano/Organ Output (Stereo)
 
 After summing all 7 active layers:
 1. **Master Compressor:** RMS/Peak feed-forward stereo bus compressor (`Amount` $0..10$, `Fast` mode $\tau_{\text{atk}} = 1.5\text{ ms}$ / `Normal` mode $\tau_{\text{atk}} = 12\text{ ms}$, ratio $3.5:1$, automatic makeup gain).
-2. **Post-DAC Reconstruction Filter:** Models the hardware `CS4392` DAC + `LM833`/`LF353` active output stage ([research](../research/hardware-and-dac-analysis.md)).
+2. **Post-DAC Reconstruction Filter:** Models the hardware Burr-Brown `PCM1791A` DAC (`U44`/`U45`) + `NJM4580M` dual op-amp active output stage ([research](../research/hardware-architecture.md)).
