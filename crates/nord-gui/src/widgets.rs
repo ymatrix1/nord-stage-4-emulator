@@ -76,7 +76,7 @@ pub fn drawbar(
         painter.rect_stroke(
             cap_rect,
             2.0,
-            Stroke::new(1.0, Color32::from_gray(80)),
+            Stroke::new(1.0_f32, Color32::from_gray(80)),
             StrokeKind::Inside,
         );
 
@@ -87,7 +87,7 @@ pub fn drawbar(
                 pos2(cap_rect.right() - 2.0, cap_rect.center().y),
             ],
             Stroke::new(
-                1.5,
+                1.5_f32,
                 if is_white {
                     Color32::BLACK
                 } else {
@@ -320,5 +320,15 @@ mod tests {
     fn test_widget_color_constants() {
         assert_eq!(LED_RED.r(), 0xFF);
         assert_eq!(LED_GREEN.g(), 0xE6);
+    }
+
+    #[test]
+    fn test_stroke_float_type_regression() {
+        // Enforce f32 compatibility for egui Stroke constructions to prevent
+        // Windows/Linux compiler warnings & clippy errors on trait bounds (From<f64>).
+        let s1 = Stroke::new(1.0_f32, Color32::BLACK);
+        let s2 = Stroke::new(1.5_f32, Color32::WHITE);
+        assert_eq!(s1.width, 1.0_f32);
+        assert_eq!(s2.width, 1.5_f32);
     }
 }
