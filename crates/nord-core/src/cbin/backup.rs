@@ -315,6 +315,60 @@ impl Ns4BackupArchive {
         self.read_entry(&mut reader, query)
     }
 
+    /// Finds an archive entry ending with `ext` (e.g. `".npno"` or `".nsmp4"`) whose filename stem
+    /// matches `target_hash` via OS v1.66 `nord_name_hash` (including uppercase fallback).
+    pub fn find_by_name_hash(&self, ext: &str, target_hash: u32) -> Option<&Ns4BackupEntry> {
+        if target_hash == 0 {
+            return None;
+        }
+        let ext_lower = ext.to_ascii_lowercase();
+        self.entries.iter().find(|e| {
+            e.name.to_ascii_lowercase().ends_with(&ext_lower)
+                && Path::new(&e.name)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|stem| super::presets::nord_name_hash_matches(stem, target_hash))
+        })
+    }
+
+    /// Resolves a `.ns4p` Piano `0x0B` `name_hash` to its matching `.npno` archive entry.
+    pub fn find_piano_by_hash(&self, name_hash: u32) -> Option<&Ns4BackupEntry> {
+        self.find_by_name_hash(".npno", name_hash)
+    }
+
+    /// Resolves a `.ns4p` Synth `0x32` `sample_id` to its matching `.nsmp4` archive entry.
+    pub fn find_sample_by_id(&self, sample_id: u32) -> Option<&Ns4BackupEntry> {
+        self.find_by_name_hash(".nsmp4", sample_id)
+    }
+
+    /// Resolves referenced `.npno` and `.nsmp4` entry paths inside the archive for a decoded program.
+    pub fn resolve_program_sounds(
+        &self,
+        prog: &super::presets::ProgramDecoded,
+    ) -> ProgramSoundRefs {
+        let piano_a = self
+            .find_piano_by_hash(prog.piano.layer_a.name_hash)
+            .map(|e| e.name.clone());
+        let piano_b = self
+            .find_piano_by_hash(prog.piano.layer_b.name_hash)
+            .map(|e| e.name.clone());
+        let resolve_synth = |layer: &super::presets::SynthLayerDecoded| {
+            if layer.osc_mode == crate::synth::SynthOscMode::Sample {
+                self.find_sample_by_id(layer.sample_id)
+                    .map(|e| e.name.clone())
+            } else {
+                None
+            }
+        };
+        ProgramSoundRefs {
+            piano_a,
+            piano_b,
+            synth_a: resolve_synth(&prog.synth.layer_a),
+            synth_b: resolve_synth(&prog.synth.layer_b),
+            synth_c: resolve_synth(&prog.synth.layer_c),
+        }
+    }
+
     /// Reads and parses the root `meta.xml` backup manifest from the archive.
     pub fn read_manifest<R: Read + Seek>(
         &self,
@@ -325,6 +379,16 @@ impl Ns4BackupArchive {
             .map_err(|e| CbinError::BitstreamError(format!("meta.xml is not valid UTF-8: {e}")))?;
         BackupManifest::parse_xml(xml_str)
     }
+}
+
+/// Resolved archive entry paths for a decoded `.ns4p` program's Piano (`.npno`) and Synth (`.nsmp4`) banks.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProgramSoundRefs {
+    pub piano_a: Option<String>,
+    pub piano_b: Option<String>,
+    pub synth_a: Option<String>,
+    pub synth_b: Option<String>,
+    pub synth_c: Option<String>,
 }
 
 fn apply_zip64_extra(
@@ -466,5 +530,41 @@ mod tests {
             .read_entry(&mut cursor, "Program/Test.ns4p")
             .is_err());
         assert!(archive.read_entry(&mut cursor, "missing.ns4p").is_err());
+    }
+
+    #[test]
+    fn test_ns4b_archive_resolves_program_hashes() {
+        let piano_stem = "Astoria Grand Lrg 6.1";
+        let sample_stem = "Ac Guitar Finger_ST Mart 4.1";
+        let zip_bytes = build_synthetic_zip(&[
+            (
+                "Piano/Grand/Astoria Grand Lrg 6.1.npno",
+                ZIP_METHOD_STORED,
+                b"npno",
+            ),
+            (
+                "Samp Lib/Guitar/Ac Guitar Finger_ST Mart 4.1.nsmp4",
+                ZIP_METHOD_STORED,
+                b"nsmp",
+            ),
+        ]);
+        let archive = Ns4BackupArchive::from_bytes(&zip_bytes).expect("parse synthetic ns4b");
+        let mut prog = super::super::presets::ProgramDecoded::default();
+        prog.piano.layer_a.name_hash = super::super::presets::nord_name_hash(piano_stem);
+        prog.synth.layer_b.osc_mode = crate::synth::SynthOscMode::Sample;
+        prog.synth.layer_b.sample_id = super::super::presets::nord_name_hash(sample_stem);
+
+        let refs = archive.resolve_program_sounds(&prog);
+        assert_eq!(
+            refs.piano_a.as_deref(),
+            Some("Piano/Grand/Astoria Grand Lrg 6.1.npno")
+        );
+        assert_eq!(refs.piano_b, None);
+        assert_eq!(refs.synth_a, None);
+        assert_eq!(
+            refs.synth_b.as_deref(),
+            Some("Samp Lib/Guitar/Ac Guitar Finger_ST Mart 4.1.nsmp4")
+        );
+        assert_eq!(refs.synth_c, None);
     }
 }

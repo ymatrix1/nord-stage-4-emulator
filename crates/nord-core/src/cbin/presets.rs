@@ -99,20 +99,152 @@ fn prepare_buffer(raw_payload: &[u8], expected_len: usize, block_tag: u8) -> Vec
     }
 }
 
-fn norm7_to_ms(norm: f32, min_ms: f32, span_ratio: f32) -> f32 {
-    min_ms * span_ratio.powf(norm.clamp(0.0, 1.0))
+/// Exact 128-step hardware Synth Env Attack curve (ms) from NS4 OS v1.66 (`0x53abe4`).
+pub const ENV_ATTACK_MS_TABLE: [f32; 128] = [
+    0.5, 0.6, 0.7, 0.9, 1.1, 1.3, 1.5, 1.8, 2.1, 2.5, 3.0, 3.5, 4.0, 4.7, 5.5, 6.3, 7.3, 8.4, 9.7,
+    11.0, 13.0, 14.0, 16.0, 19.0, 21.0, 24.0, 27.0, 31.0, 34.0, 39.0, 43.0, 49.0, 54.0, 61.0, 68.0,
+    75.0, 84.0, 93.0, 103.0, 114.0, 126.0, 139.0, 153.0, 169.0, 186.0, 204.0, 224.0, 246.0, 269.0,
+    295.0, 322.0, 352.0, 384.0, 419.0, 456.0, 496.0, 540.0, 586.0, 636.0, 690.0, 748.0, 810.0,
+    876.0, 947.0, 1020.0, 1100.0, 1190.0, 1280.0, 1380.0, 1490.0, 1600.0, 1720.0, 1850.0, 1990.0,
+    2130.0, 2280.0, 2450.0, 2620.0, 2810.0, 3000.0, 3210.0, 3430.0, 3660.0, 3910.0, 4170.0, 4450.0,
+    4740.0, 5050.0, 5370.0, 5720.0, 6080.0, 6470.0, 6870.0, 7300.0, 7750.0, 8220.0, 8720.0, 9250.0,
+    9800.0, 10000.0, 11000.0, 12000.0, 12000.0, 13000.0, 14000.0, 15000.0, 15000.0, 16000.0,
+    17000.0, 18000.0, 19000.0, 20000.0, 21000.0, 22000.0, 24000.0, 25000.0, 26000.0, 27000.0,
+    29000.0, 30000.0, 32000.0, 34000.0, 35000.0, 37000.0, 39000.0, 41000.0, 43000.0, 45000.0,
+];
+
+/// Exact 128-step hardware Synth Env Decay curve (ms) from NS4 OS v1.66 (`0x53ade4`; idx 127 = Hold).
+pub const ENV_DECAY_MS_TABLE: [f32; 128] = [
+    3.0, 3.5, 4.0, 4.6, 5.3, 6.0, 6.9, 7.9, 9.0, 10.0, 12.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0,
+    26.0, 29.0, 33.0, 36.0, 41.0, 45.0, 50.0, 55.0, 61.0, 68.0, 75.0, 82.0, 91.0, 100.0, 110.0,
+    120.0, 132.0, 144.0, 158.0, 173.0, 188.0, 206.0, 224.0, 244.0, 265.0, 288.0, 313.0, 340.0,
+    368.0, 399.0, 432.0, 467.0, 505.0, 545.0, 588.0, 634.0, 683.0, 736.0, 792.0, 851.0, 915.0,
+    983.0, 1050.0, 1130.0, 1210.0, 1300.0, 1390.0, 1490.0, 1590.0, 1700.0, 1820.0, 1940.0, 2070.0,
+    2210.0, 2360.0, 2510.0, 2670.0, 2850.0, 3030.0, 3220.0, 3420.0, 3640.0, 3860.0, 4100.0, 4350.0,
+    4610.0, 4890.0, 5180.0, 5490.0, 5810.0, 6150.0, 6500.0, 6880.0, 7270.0, 7680.0, 8110.0, 8570.0,
+    9040.0, 9540.0, 10000.0, 11000.0, 11000.0, 12000.0, 12000.0, 13000.0, 14000.0, 14000.0,
+    15000.0, 16000.0, 17000.0, 18000.0, 19000.0, 20000.0, 20000.0, 22000.0, 23000.0, 24000.0,
+    25000.0, 26000.0, 27000.0, 29000.0, 30000.0, 31000.0, 33000.0, 34000.0, 36000.0, 38000.0,
+    39000.0, 41000.0, 43000.0, 45000.0,
+];
+
+/// Exact 128-step hardware Synth Env Release curve (ms) from NS4 OS v1.66 (`0x53afe4`).
+pub const ENV_RELEASE_MS_TABLE: [f32; 128] = ENV_DECAY_MS_TABLE;
+
+/// Exact 128-step hardware Synth Filter Cutoff curve (Hz) from NS4 OS v1.66 (`0x53b1e4`).
+pub const FILTER_CUTOFF_HZ_TABLE: [f32; 128] = [
+    14.0, 15.0, 15.0, 16.0, 17.0, 18.0, 19.0, 21.0, 22.0, 23.0, 24.0, 26.0, 27.0, 29.0, 31.0, 33.0,
+    35.0, 37.0, 39.0, 41.0, 44.0, 46.0, 49.0, 52.0, 55.0, 58.0, 62.0, 65.0, 69.0, 73.0, 78.0, 82.0,
+    87.0, 92.0, 98.0, 104.0, 110.0, 117.0, 123.0, 131.0, 139.0, 147.0, 156.0, 165.0, 175.0, 185.0,
+    196.0, 208.0, 220.0, 233.0, 247.0, 262.0, 277.0, 294.0, 311.0, 330.0, 349.0, 370.0, 392.0,
+    415.0, 440.0, 466.0, 494.0, 523.0, 554.0, 587.0, 622.0, 659.0, 698.0, 740.0, 784.0, 831.0,
+    880.0, 932.0, 988.0, 1000.0, 1100.0, 1200.0, 1200.0, 1300.0, 1400.0, 1500.0, 1600.0, 1700.0,
+    1800.0, 1900.0, 2000.0, 2100.0, 2200.0, 2300.0, 2500.0, 2600.0, 2800.0, 3000.0, 3100.0, 3300.0,
+    3500.0, 3700.0, 4000.0, 4200.0, 4400.0, 4700.0, 5000.0, 5300.0, 5600.0, 5900.0, 6300.0, 6600.0,
+    7000.0, 7500.0, 7900.0, 8400.0, 8900.0, 9400.0, 10000.0, 11000.0, 11000.0, 12000.0, 13000.0,
+    14000.0, 16000.0, 18000.0, 19000.0, 21000.0, 24000.0, 26000.0, 29000.0, 32000.0,
+];
+
+/// Exact 128-step hardware Synth LFO Rate curve (Hz) from NS4 OS v1.66 (`0x53b3e4`).
+pub const LFO_RATE_HZ_TABLE: [f32; 128] = [
+    0.03, 0.03, 0.03, 0.04, 0.04, 0.04, 0.05, 0.05, 0.05, 0.06, 0.06, 0.07, 0.07, 0.08, 0.09, 0.09,
+    0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.19, 0.2, 0.22, 0.24, 0.26, 0.28, 0.3, 0.32,
+    0.35, 0.38, 0.41, 0.44, 0.47, 0.51, 0.55, 0.6, 0.64, 0.7, 0.75, 0.81, 0.88, 0.95, 1.0, 1.1,
+    1.2, 1.3, 1.4, 1.5, 1.6, 1.8, 1.9, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.5, 3.8, 4.1, 4.4, 4.8,
+    5.2, 5.6, 6.0, 6.5, 7.0, 7.6, 8.2, 8.8, 9.5, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 18.0,
+    19.0, 21.0, 22.0, 24.0, 26.0, 28.0, 30.0, 33.0, 35.0, 38.0, 41.0, 45.0, 48.0, 52.0, 56.0, 61.0,
+    65.0, 71.0, 76.0, 82.0, 89.0, 96.0, 104.0, 112.0, 121.0, 131.0, 141.0, 153.0, 165.0, 178.0,
+    192.0, 208.0, 224.0, 242.0, 262.0, 283.0, 305.0, 330.0, 356.0, 385.0, 415.0, 449.0, 484.0,
+    523.0,
+];
+
+fn table_val_to_idx(table: &[f32; 128], val: f32) -> u32 {
+    let target = val.max(table[0]).ln();
+    let mut best_idx = 0usize;
+    let mut best_err = f32::INFINITY;
+    for (i, &entry) in table.iter().enumerate() {
+        let err = (target - entry.ln()).abs();
+        if err < best_err - 1e-6 {
+            best_err = err;
+            best_idx = i;
+        }
+    }
+    best_idx as u32
 }
 
-fn ms_to_norm7(ms: f32, min_ms: f32, span_ratio: f32) -> f32 {
-    ((ms.max(min_ms) / min_ms).ln() / span_ratio.ln()).clamp(0.0, 1.0)
+/// Converts normalized `0.0..=1.0` cutoff knob/morph position to Hz via the OS v1.66 hardware curve.
+pub fn cutoff_norm_to_hz(norm: f32) -> f32 {
+    let pos = norm.clamp(0.0, 1.0) * 127.0;
+    let lo = (pos.floor() as usize).min(127);
+    let hi = (lo + 1).min(127);
+    let frac = pos - lo as f32;
+    let a = FILTER_CUTOFF_HZ_TABLE[lo];
+    let b = FILTER_CUTOFF_HZ_TABLE[hi];
+    a * (b / a).powf(frac)
 }
 
-fn cutoff_norm_to_hz(norm: f32) -> f32 {
-    80.0 * 200.0f32.powf(norm.clamp(0.0, 1.0))
+/// Converts cutoff Hz to normalized `0.0..=1.0` via the inverse OS v1.66 hardware curve.
+pub fn cutoff_hz_to_norm(hz: f32) -> f32 {
+    if hz <= FILTER_CUTOFF_HZ_TABLE[0] {
+        return 0.0;
+    }
+    if hz >= FILTER_CUTOFF_HZ_TABLE[127] {
+        return 1.0;
+    }
+    for i in 0..127 {
+        let a = FILTER_CUTOFF_HZ_TABLE[i];
+        let b = FILTER_CUTOFF_HZ_TABLE[i + 1];
+        if hz <= b {
+            let frac = if b > a {
+                ((hz / a).ln() / (b / a).ln()).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            return (i as f32 + frac) / 127.0;
+        }
+    }
+    1.0
 }
 
-fn cutoff_hz_to_norm(hz: f32) -> f32 {
-    ((hz.max(80.0) / 80.0).ln() / 200.0f32.ln()).clamp(0.0, 1.0)
+/// Computes Clavia OS v1.66 (`ARM0 @ 0x0a5a44`) preset sound-name hash (MurmurHash2 with BE 4-byte reads, seed = len, `0 -> 1`).
+pub fn nord_name_hash(stem: &str) -> u32 {
+    const M: u32 = 0x5bd1_e995;
+    let data = stem.as_bytes();
+    let mut h: u32 = data.len() as u32;
+    let mut chunks = data.chunks_exact(4);
+    for chunk in &mut chunks {
+        let mut k = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        k = k.wrapping_mul(M);
+        k ^= k >> 24;
+        k = k.wrapping_mul(M);
+        h = h.wrapping_mul(M);
+        h ^= k;
+    }
+    let rem = chunks.remainder();
+    if rem.len() == 3 {
+        h ^= u32::from(rem[2]) << 16;
+    }
+    if rem.len() >= 2 {
+        h ^= u32::from(rem[1]) << 8;
+    }
+    if !rem.is_empty() {
+        h ^= u32::from(rem[0]);
+        h = h.wrapping_mul(M);
+    }
+    h ^= h >> 13;
+    h = h.wrapping_mul(M);
+    h ^= h >> 15;
+    if h == 0 {
+        1
+    } else {
+        h
+    }
+}
+
+/// Checks whether a sound stem matches a `0x0B` Piano `name_hash` or `0x32` Synth `sample_id` (raw or ASCII uppercase).
+pub fn nord_name_hash_matches(stem: &str, target: u32) -> bool {
+    target != 0
+        && (nord_name_hash(stem) == target || nord_name_hash(&stem.to_ascii_uppercase()) == target)
 }
 
 fn split_idx_to_midi(idx: u32) -> u8 {
@@ -1028,8 +1160,8 @@ fn unpack_piano_layer_block(
     };
     let model_id = r.read_bits(5)? as u8;
     r.set_bit_pos(base + 28)?;
-    let variation = r.read_bits(2)? as u8;
     let name_hash = r.read_bits(32)?;
+    let variation = r.read_bits(2)? as u8;
     let acoustic_level = r.read_bits(2)? as u8;
     let string_res = acoustic_level > 0;
     let pedal_noise = r.read_bool()?;
@@ -1090,8 +1222,8 @@ fn pack_piano_layer_block(
     w.write_bits(cat_idx, 3)?;
     w.write_bits(u32::from(layer.model_id.min(31)), 5)?;
     w.set_bit_pos(base + 28)?;
-    w.write_bits(u32::from(layer.variation & 0x03), 2)?;
     w.write_bits(layer.name_hash, 32)?;
+    w.write_bits(u32::from(layer.variation & 0x03), 2)?;
     let acoustic = if layer.string_res {
         layer.acoustic_level.clamp(1, 3)
     } else {
@@ -1362,7 +1494,7 @@ fn unpack_synth_layer_pair(
     // 0x32 Layer block
     r.set_bit_pos(layer_base + 8)?;
     let is_osc_mode = r.read_bool()?;
-    r.set_bit_pos(layer_base + 32)?;
+    r.set_bit_pos(layer_base + 26)?;
     let sample_id = r.read_bits(32)?;
     r.set_bit_pos(layer_base + 135)?;
     let arp_enabled = r.read_bool()?;
@@ -1379,14 +1511,10 @@ fn unpack_synth_layer_pair(
     let (lfo_amt_raw, _) = read_morph(r, sound_base + 164, 7, 127)?;
 
     r.set_bit_pos(sound_base + 195)?;
-    let env_attack_ms = norm7_to_ms(r.read_bits(7)? as f32 / 127.0, 1.0, 5000.0);
-    let dcy_raw = r.read_bits(7)?;
-    let env_decay_ms = if dcy_raw >= 127 {
-        10_000.0
-    } else {
-        norm7_to_ms(dcy_raw as f32 / 127.0, 10.0, 1000.0)
-    };
-    let env_release_ms = norm7_to_ms(r.read_bits(7)? as f32 / 127.0, 2.0, 5000.0);
+    let env_attack_ms = ENV_ATTACK_MS_TABLE[(r.read_bits(7)? as usize).min(127)];
+    let dcy_raw = r.read_bits(7)? as usize;
+    let env_decay_ms = ENV_DECAY_MS_TABLE[dcy_raw.min(127)];
+    let env_release_ms = ENV_RELEASE_MS_TABLE[(r.read_bits(7)? as usize).min(127)];
 
     r.set_bit_pos(sound_base + 218)?;
     let filter_model = match r.read_bits(3)? {
@@ -1421,7 +1549,7 @@ fn unpack_synth_layer_pair(
         detune: (osc_ctrl_raw as f32 / 127.0) * 10.0,
         osc_ctrl_morph,
         filter_model,
-        filter_cutoff_hz: cutoff_norm_to_hz(flt_freq_raw as f32 / 127.0),
+        filter_cutoff_hz: FILTER_CUTOFF_HZ_TABLE[(flt_freq_raw as usize).min(127)],
         filter_cutoff_morph,
         filter_resonance: (flt_res_raw as f32 / 127.0) * 0.95,
         filter_resonance_morph,
@@ -1431,7 +1559,7 @@ fn unpack_synth_layer_pair(
         env_attack_ms,
         env_decay_ms,
         env_release_ms,
-        lfo_rate_hz: 0.1 + (lfo_rate_raw as f32 / 127.0) * 19.9,
+        lfo_rate_hz: LFO_RATE_HZ_TABLE[(lfo_rate_raw as usize).min(127)],
         lfo_amount: lfo_amt_raw as f32 / 127.0,
         arp_enabled,
         arp_bpm,
@@ -1473,7 +1601,7 @@ fn pack_synth_layer_pair(
     w.set_bit_pos(layer_base)?;
     w.write_bits(0x32, 8)?;
     w.write_bool(is_osc_mode)?;
-    w.set_bit_pos(layer_base + 32)?;
+    w.set_bit_pos(layer_base + 26)?;
     w.write_bits(layer.sample_id, 32)?;
     w.set_bit_pos(layer_base + 135)?;
     w.write_bool(layer.arp_enabled)?;
@@ -1501,7 +1629,7 @@ fn pack_synth_layer_pair(
         7,
         127,
     )?;
-    let lfo_rate = (((layer.lfo_rate_hz - 0.1) / 19.9).clamp(0.0, 1.0) * 127.0).round() as u32;
+    let lfo_rate = table_val_to_idx(&LFO_RATE_HZ_TABLE, layer.lfo_rate_hz);
     write_morph(
         w,
         sound_base + 133,
@@ -1515,17 +1643,17 @@ fn pack_synth_layer_pair(
 
     w.set_bit_pos(sound_base + 195)?;
     w.write_bits(
-        (ms_to_norm7(layer.env_attack_ms, 1.0, 5000.0) * 127.0).round() as u32,
+        table_val_to_idx(&ENV_ATTACK_MS_TABLE, layer.env_attack_ms),
         7,
     )?;
-    let dcy_bits = if layer.env_decay_ms >= 9999.0 {
+    let dcy_bits = if layer.env_decay_ms >= 44_000.0 || !layer.env_decay_ms.is_finite() {
         127
     } else {
-        (ms_to_norm7(layer.env_decay_ms, 10.0, 1000.0) * 127.0).round() as u32
+        table_val_to_idx(&ENV_DECAY_MS_TABLE, layer.env_decay_ms).min(126)
     };
     w.write_bits(dcy_bits, 7)?;
     w.write_bits(
-        (ms_to_norm7(layer.env_release_ms, 2.0, 5000.0) * 127.0).round() as u32,
+        table_val_to_idx(&ENV_RELEASE_MS_TABLE, layer.env_release_ms),
         7,
     )?;
 
@@ -1541,7 +1669,7 @@ fn pack_synth_layer_pair(
     write_morph(
         w,
         sound_base + 221,
-        (cutoff_hz_to_norm(layer.filter_cutoff_hz) * 127.0).round() as u32,
+        table_val_to_idx(&FILTER_CUTOFF_HZ_TABLE, layer.filter_cutoff_hz),
         layer.filter_cutoff_morph,
         7,
         127,
@@ -2224,5 +2352,51 @@ mod tests {
         let repacked = hw_prog.to_cbin_file(0, 0).expect("repack hw");
         assert_eq!(repacked.payload[31], 0xAA);
         assert_eq!(repacked.payload[327 + 36], 0x5A);
+    }
+
+    #[test]
+    fn test_arm0_murmurhash2_name_hash_and_bit_offsets() {
+        // Known hashes verified against NS4 v1.66 factory .ns4p & ARM0 @ 0x0a5a44
+        assert_eq!(nord_name_hash("Astoria Grand Lrg 6.1"), 0x444e_bb81);
+        assert_eq!(nord_name_hash("Ac Guitar Finger_ST Mart 4.1"), 0xa281_b28c);
+        assert!(!nord_name_hash_matches("astoria grand lrg 6.1", 0));
+        assert!(nord_name_hash_matches("Astoria Grand Lrg 6.1", 0x444e_bb81));
+        assert!(nord_name_hash_matches(
+            "astoria grand lrg 6.1",
+            nord_name_hash("ASTORIA GRAND LRG 6.1")
+        ));
+
+        // Verify Piano 0x0B name_hash is aligned to bit (base + 28) and Synth 0x32 sample_id to (layer_base + 26)
+        let mut piano_preset = PianoPresetDecoded::default();
+        piano_preset.layer_a.name_hash = 0x444e_bb81;
+        piano_preset.layer_a.variation = 2;
+        let piano_raw = piano_preset.pack().expect("pack piano");
+        let piano_decoded = PianoPresetDecoded::unpack(&piano_raw).expect("unpack piano");
+        assert_eq!(piano_decoded.layer_a.name_hash, 0x444e_bb81);
+        assert_eq!(piano_decoded.layer_a.variation, 2);
+
+        let mut synth_preset = SynthPresetDecoded::default();
+        synth_preset.layer_a.osc_mode = SynthOscMode::Sample;
+        synth_preset.layer_a.sample_id = 0xa281_b28c;
+        synth_preset.layer_a.env_attack_ms = 54.0;
+        synth_preset.layer_a.env_decay_ms = 45_000.0;
+        synth_preset.layer_a.env_release_ms = 1490.0;
+        synth_preset.layer_a.filter_cutoff_hz = 440.0;
+        synth_preset.layer_a.lfo_rate_hz = 523.0;
+        let synth_raw = synth_preset.pack().expect("pack synth");
+        let synth_decoded = SynthPresetDecoded::unpack(&synth_raw).expect("unpack synth");
+        assert_eq!(synth_decoded.layer_a.osc_mode, SynthOscMode::Sample);
+        assert_eq!(synth_decoded.layer_a.sample_id, 0xa281_b28c);
+        assert_eq!(synth_decoded.layer_a.env_attack_ms, 54.0);
+        assert_eq!(synth_decoded.layer_a.env_decay_ms, 45_000.0);
+        assert_eq!(synth_decoded.layer_a.env_release_ms, 1490.0);
+        assert_eq!(synth_decoded.layer_a.filter_cutoff_hz, 440.0);
+        assert_eq!(synth_decoded.layer_a.lfo_rate_hz, 523.0);
+
+        // Cutoff norm<->Hz bijectivity at boundaries and 440 Hz anchor
+        assert_eq!(cutoff_norm_to_hz(0.0), 14.0);
+        assert_eq!(cutoff_norm_to_hz(1.0), 32000.0);
+        assert!((cutoff_norm_to_hz(cutoff_hz_to_norm(440.0)) - 440.0).abs() < 1e-2);
+        assert!((cutoff_norm_to_hz(cutoff_hz_to_norm(3500.0)) - 3500.0).abs() < 1.0);
     }
 }

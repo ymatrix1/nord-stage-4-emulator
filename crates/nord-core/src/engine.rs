@@ -261,18 +261,65 @@ impl Stage4Engine {
         Ok(sound)
     }
 
-    /// Reads an `.ns4p` program entry from an `.ns4b` backup archive and applies it to the engine.
+    /// Reads an `.ns4p` program entry from an `.ns4b` backup archive, applies its parameters,
+    /// and auto-resolves/loads matching active `.npno` & `.nsmp4` banks via `ARM0` MurmurHash2 hashes.
     pub fn load_program_from_backup<R: std::io::Read + std::io::Seek>(
         &mut self,
         archive: &crate::cbin::Ns4BackupArchive,
         reader: &mut R,
         entry_query: &str,
     ) -> Result<crate::cbin::ProgramDecoded, crate::cbin::CbinError> {
+        let (prog, _refs) =
+            self.load_program_with_sounds_from_backup(archive, reader, entry_query)?;
+        Ok(prog)
+    }
+
+    /// Reads an `.ns4p` program entry and auto-loads resolved Piano/Synth sample entries from `archive`.
+    pub fn load_program_with_sounds_from_backup<R: std::io::Read + std::io::Seek>(
+        &mut self,
+        archive: &crate::cbin::Ns4BackupArchive,
+        reader: &mut R,
+        entry_query: &str,
+    ) -> Result<(crate::cbin::ProgramDecoded, crate::cbin::ProgramSoundRefs), crate::cbin::CbinError>
+    {
         let bytes = archive.read_entry(reader, entry_query)?;
         let cbin = crate::cbin::CbinFile::parse(&bytes)?;
         let prog = cbin.decode_program()?;
         self.apply_program(&prog);
-        Ok(prog)
+
+        let refs = archive.resolve_program_sounds(&prog);
+        let active_mask = prog.global.scene_1_mask | prog.global.scene_2_mask;
+        let piano_slots = [
+            (false, prog.piano.layer_a.enabled, &refs.piano_a, 2u8),
+            (true, prog.piano.layer_b.enabled, &refs.piano_b, 3u8),
+        ];
+        for (slot_b, enabled, entry_opt, bit) in piano_slots {
+            let needed = enabled || active_mask == 0 || (active_mask & (1 << bit)) != 0;
+            if needed {
+                if let Some(entry_name) = entry_opt {
+                    if let Ok(npno_bytes) = archive.read_entry(reader, entry_name) {
+                        let _ = self.load_piano_npno_bytes(slot_b, &npno_bytes);
+                    }
+                }
+            }
+        }
+        let synth_slots = [
+            (0usize, prog.synth.layer_a.enabled, &refs.synth_a, 4u8),
+            (1usize, prog.synth.layer_b.enabled, &refs.synth_b, 5u8),
+            (2usize, prog.synth.layer_c.enabled, &refs.synth_c, 6u8),
+        ];
+        for (layer_idx, enabled, entry_opt, bit) in synth_slots {
+            let needed = enabled || active_mask == 0 || (active_mask & (1 << bit)) != 0;
+            if needed {
+                if let Some(entry_name) = entry_opt {
+                    if let Ok(nsmp_bytes) = archive.read_entry(reader, entry_name) {
+                        let _ = self.load_synth_nsmp4_bytes(layer_idx, &nsmp_bytes);
+                    }
+                }
+            }
+        }
+
+        Ok((prog, refs))
     }
 
     /// Applies a decoded Nord Stage 4 Program to the DSP engine.
@@ -425,10 +472,15 @@ impl Stage4Engine {
         synth.resonance = dec.filter_resonance;
         synth.filter_drive = dec.filter_drive;
         synth.filter_env_amount = dec.filter_env_amount;
-        synth.attack_sec = (dec.env_attack_ms / 1000.0).clamp(0.0005, 10.0);
-        synth.decay_sec = (dec.env_decay_ms / 1000.0).clamp(0.005, 15.0);
-        synth.sustain_level = if dec.env_decay_ms >= 9999.0 { 1.0 } else { 0.6 };
-        synth.release_sec = (dec.env_release_ms / 1000.0).clamp(0.002, 10.0);
+        synth.kb_track = dec.kb_track.min(3);
+        synth.attack_sec = (dec.env_attack_ms / 1000.0).clamp(0.0005, 45.0);
+        synth.decay_sec = (dec.env_decay_ms / 1000.0).clamp(0.003, 45.0);
+        synth.sustain_level = if dec.env_decay_ms >= 44_000.0 || !dec.env_decay_ms.is_finite() {
+            1.0
+        } else {
+            0.6
+        };
+        synth.release_sec = (dec.env_release_ms / 1000.0).clamp(0.003, 45.0);
         synth.lfo_rate_hz = dec.lfo_rate_hz;
         synth.lfo_amount = dec.lfo_amount;
         synth.arp_mode = if dec.arp_enabled {
@@ -438,8 +490,7 @@ impl Stage4Engine {
         };
         synth.arp_rate_bpm = dec.arp_bpm;
 
-        let cut_base =
-            ((dec.filter_cutoff_hz.max(80.0) / 80.0).ln() / 200.0f32.ln()).clamp(0.0, 1.0);
+        let cut_base = crate::cbin::cutoff_hz_to_norm(dec.filter_cutoff_hz);
         cutoff_morph.base = cut_base;
         cutoff_morph.delta_wheel = dec.filter_cutoff_morph.wheel;
         cutoff_morph.delta_aftertouch = dec.filter_cutoff_morph.aftertouch;
@@ -527,13 +578,16 @@ impl Stage4Engine {
     pub fn render_frame(&mut self) -> [f32; 2] {
         self.master_clock.advance(self.sample_rate);
 
-        // Apply Morphing Matrix to Synth filter cutoffs (80 Hz .. 16 kHz exponential mapping)
-        let cut_a =
-            80.0 * 200.0f32.powf(self.synth_cutoff_morph[0].evaluate(&self.morph_controllers));
-        let cut_b =
-            80.0 * 200.0f32.powf(self.synth_cutoff_morph[1].evaluate(&self.morph_controllers));
-        let cut_c =
-            80.0 * 200.0f32.powf(self.synth_cutoff_morph[2].evaluate(&self.morph_controllers));
+        // Apply Morphing Matrix to Synth filter cutoffs via OS v1.66 14 Hz .. 32 kHz curve
+        let cut_a = crate::cbin::cutoff_norm_to_hz(
+            self.synth_cutoff_morph[0].evaluate(&self.morph_controllers),
+        );
+        let cut_b = crate::cbin::cutoff_norm_to_hz(
+            self.synth_cutoff_morph[1].evaluate(&self.morph_controllers),
+        );
+        let cut_c = crate::cbin::cutoff_norm_to_hz(
+            self.synth_cutoff_morph[2].evaluate(&self.morph_controllers),
+        );
         if self.synth_cutoff_morph[0].delta_wheel.abs() > 1e-5
             || self.synth_cutoff_morph[0].delta_pedal.abs() > 1e-5
             || self.synth_cutoff_morph[0].delta_aftertouch.abs() > 1e-5
@@ -956,5 +1010,97 @@ mod tests {
             .expect("empty-stroke nsmp4 parses");
         assert_eq!(snd.name, "Pad1");
         assert_eq!(engine.synth_b.loaded_sample_name(), Some("Pad1"));
+
+        // Auto-resolve .npno and .nsmp4 when loading .ns4p from .ns4b
+        let piano_stem = "Astoria Grand Lrg 6.1";
+        let sample_stem = "Ac Guitar Finger_ST Mart 4.1";
+        let mut npno = vec![0u8; 48];
+        npno[0..4].copy_from_slice(b"CBIN");
+        npno[4..8].copy_from_slice(&1u32.to_le_bytes());
+        npno[8..12].copy_from_slice(b"npno");
+        let mut pno_hdr = vec![0u8; 0x90];
+        pno_hdr[0x48..0x48 + 7].copy_from_slice(b"Astoria");
+        pno_hdr[0x68..0x68 + 7].copy_from_slice(b"Astoria");
+        npno.extend_from_slice(b"\0hdr");
+        npno.extend_from_slice(&1u32.to_be_bytes());
+        npno.extend_from_slice(&(pno_hdr.len() as u32).to_be_bytes());
+        npno.extend_from_slice(&pno_hdr);
+
+        let mut prog = crate::cbin::ProgramDecoded {
+            name: "Split Resolve".to_string(),
+            ..Default::default()
+        };
+        prog.global.scene_1_mask = (1 << 2) | (1 << 5); // Piano A + Synth B
+        prog.piano.layer_a.enabled = true;
+        prog.piano.layer_a.name_hash = crate::cbin::nord_name_hash(piano_stem);
+        prog.synth.layer_b.enabled = true;
+        prog.synth.layer_b.osc_mode = crate::synth::SynthOscMode::Sample;
+        prog.synth.layer_b.sample_id = crate::cbin::nord_name_hash(sample_stem);
+        let ns4p_bytes = prog.to_cbin_file(0, 0).expect("pack ns4p").to_bytes();
+
+        let build_test_zip = |entries: &[(&str, &[u8])]| -> Vec<u8> {
+            let mut archive = Vec::new();
+            let mut cd = Vec::new();
+            for &(name, payload) in entries {
+                let lfh_off = archive.len() as u32;
+                let n = name.as_bytes();
+                let sz = payload.len() as u32;
+                archive.extend_from_slice(b"PK\x03\x04");
+                archive.extend_from_slice(&20u16.to_le_bytes());
+                archive.extend_from_slice(&[0u8; 12]);
+                archive.extend_from_slice(&sz.to_le_bytes());
+                archive.extend_from_slice(&sz.to_le_bytes());
+                archive.extend_from_slice(&(n.len() as u16).to_le_bytes());
+                archive.extend_from_slice(&0u16.to_le_bytes());
+                archive.extend_from_slice(n);
+                archive.extend_from_slice(payload);
+
+                cd.extend_from_slice(b"PK\x01\x02");
+                cd.extend_from_slice(&20u16.to_le_bytes());
+                cd.extend_from_slice(&20u16.to_le_bytes());
+                cd.extend_from_slice(&[0u8; 12]);
+                cd.extend_from_slice(&sz.to_le_bytes());
+                cd.extend_from_slice(&sz.to_le_bytes());
+                cd.extend_from_slice(&(n.len() as u16).to_le_bytes());
+                cd.extend_from_slice(&[0u8; 12]);
+                cd.extend_from_slice(&lfh_off.to_le_bytes());
+                cd.extend_from_slice(n);
+            }
+            let cd_off = archive.len() as u32;
+            let cd_sz = cd.len() as u32;
+            let cnt = entries.len() as u16;
+            archive.extend_from_slice(&cd);
+            archive.extend_from_slice(b"PK\x05\x06\0\0\0\0");
+            archive.extend_from_slice(&cnt.to_le_bytes());
+            archive.extend_from_slice(&cnt.to_le_bytes());
+            archive.extend_from_slice(&cd_sz.to_le_bytes());
+            archive.extend_from_slice(&cd_off.to_le_bytes());
+            archive.extend_from_slice(&0u16.to_le_bytes());
+            archive
+        };
+        let zip_bytes = build_test_zip(&[
+            ("Program/Split Resolve.ns4p", &ns4p_bytes),
+            ("Piano/Grand/Astoria Grand Lrg 6.1.npno", &npno),
+            ("Samp Lib/Guitar/Ac Guitar Finger_ST Mart 4.1.nsmp4", &data),
+        ]);
+        let archive = crate::cbin::Ns4BackupArchive::from_bytes(&zip_bytes).expect("parse backup");
+        let mut cursor = std::io::Cursor::new(&zip_bytes);
+        let mut eng2 = Stage4Engine::new(48_000.0);
+        let (_dec, refs) = eng2
+            .load_program_with_sounds_from_backup(
+                &archive,
+                &mut cursor,
+                "Program/Split Resolve.ns4p",
+            )
+            .expect("load program with resolved sounds");
+        assert_eq!(
+            refs.piano_a.as_deref(),
+            Some("Piano/Grand/Astoria Grand Lrg 6.1.npno")
+        );
+        assert_eq!(
+            refs.synth_b.as_deref(),
+            Some("Samp Lib/Guitar/Ac Guitar Finger_ST Mart 4.1.nsmp4")
+        );
+        assert_eq!(eng2.synth_b.loaded_sample_name(), Some("Pad1"));
     }
 }

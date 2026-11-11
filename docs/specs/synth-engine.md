@@ -69,13 +69,13 @@ $$
 u = \frac{\tanh(\text{drive} \cdot x) - k \cdot S}{1 + k \cdot G}
 $$
 
-This resolves the 4-stage feedback loop algebraically on every sample without instability near Nyquist.
+This resolves the 4-stage feedback loop algebraically on every sample without instability near Nyquist. Cutoff frequency (`14 Hz..32 kHz`), keyboard tracking (`kb_track`: `0`, `1/3`, `2/3`, `1/1`), and Morph Matrix modulation follow the 128-step OS v1.66 `FILTER_CUTOFF_HZ_TABLE` (`cutoff_norm_to_hz` / `cutoff_hz_to_norm`).
 
 ---
 
 ## 5. Envelopes, LFO & Arpeggiator
 
-- **Amp Envelope (ADR / ADSR):** Exponential Attack ($0.5\text{ ms}..10\text{ s}$), Decay/Sustain, and Release ($2\text{ ms}..15\text{ s}$) with velocity sensitivity switch.
+- **Amp Envelope (ADR / ADSR):** Exponential Attack (`ENV_ATTACK_MS_TABLE`: $0.5\text{ ms}..45\text{ s}$), Decay/Sustain (`ENV_DECAY_MS_TABLE`: $3.0\text{ ms}..43\text{ s}$, index `127 = Hold/Inf`), and Release (`ENV_RELEASE_MS_TABLE`: $3.0\text{ ms}..45\text{ s}$) with velocity sensitivity switch.
 - **Mod / Filter Envelope (ADR):** Dedicated bipolar/unipolar envelope modulating Osc Pitch, Osc Shape/FM, and Filter Cutoff.
-- **LFO:** 5 waveforms (`Triangle`, `Saw`, `InvSaw`, `Square`, `SampleHold`), routable to Pitch (Vibrato), Osc Mod, and Filter Cutoff; lockable to `MasterClock` divisions (`1/1` to `1/32T`).
+- **LFO:** 5 waveforms (`Triangle`, `Saw`, `InvSaw`, `Square`, `SampleHold`), exponential rate curve (`LFO_RATE_HZ_TABLE`: $0.03\text{ Hz}..523\text{ Hz}$), routable to Pitch (Vibrato), Osc Mod, and Filter Cutoff; lockable to `MasterClock` divisions (`1/1` to `1/32T`).
 - **Arpeggiator:** `Up`, `Down`, `UpDown`, `Random`, `Poly` modes. `Poly` triggers the held chord together; the other modes allocate each step through the regular polyphonic voice allocator. `Random` uses a seeded pseudo-random sequence so rendering is deterministic. The current rate control advances on sixteenth-note steps.

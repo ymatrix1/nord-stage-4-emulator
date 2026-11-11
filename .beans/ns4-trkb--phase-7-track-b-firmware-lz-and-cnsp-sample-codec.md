@@ -17,7 +17,7 @@ Enable native, zero-allocation loading of user-supplied `.npno` (Nord Piano Libr
 ## Acceptance Criteria
 - [x] Solve the literal-run / control-bit framing state machine in Clavia's custom LZ stream (`docs/research/clavia-lz-reconstruction.md`)
 - [x] Implement the firmware `CODE` decompressor in `crates/nord-core/src/firmware.rs` and verify exact output sizes (`798,912 B` for Image 1; `5,499,504 B` for Image 0)
-- [ ] Extract and map the unpacked `ARM0` host binary and `DSPO` / `DSPS` / `DSPF` SHARC DSP segments (segments unpacked; internal symbol mapping ongoing)
+- [x] Map the `ARM0` MurmurHash2 preset link hash (`0x0a5a44`), SHARC `DSPO`/`DSPS`/`DSPF` partition descriptors (`bank1_CODE.bin`), and OS v1.66 5×128 DSP parameter tables (`docs/research/sharc-dsp-and-preset-hash-teardown.md`, `ns4-dspf`)
 - [x] Map the `CNSP` header & stroke tables across `.nsmp4` and `.npno` files (sample rate, bit depth, key-split zones, loop points)
 - [x] Reverse-engineer the `CNSP` audio payload decompression algorithm from differential bitstream analysis (`docs/research/nsmp4-and-npno-cnsp-codec.md`)
 - [x] Implement a clean-room `CNSP` sample decoder and `.ns4b` PKZIP loader in `crates/nord-core` with deterministic unit tests using synthetic fixtures (`ns4-cnsp`)

@@ -70,6 +70,18 @@ pub enum RotarySpeed {
 /// Semitone offsets relative to fundamental (`8'`) for the 9 drawbar buses.
 const DRAWBAR_OFFSETS: [i32; 9] = [-12, 7, 0, 12, 19, 24, 28, 31, 36];
 
+/// Hardware 800 Hz rotary bass/horn crossover verified from NS4 OS v1.66 (`ARM0 @ 0x0db130`).
+pub const ROTARY_CROSSOVER_HZ: f32 = 800.0;
+
+/// Hardware Rotary Bass/Horn balance menu steps (`70/30 .. 30/70`) verified from OS v1.66 (`0x2c20d8`).
+pub const ROTARY_BASS_HORN_BALANCES: [(f32, f32); 5] = [
+    (0.70, 0.30),
+    (0.60, 0.40),
+    (0.50, 0.50),
+    (0.40, 0.60),
+    (0.30, 0.70),
+];
+
 /// Physical modeling B3 & Transistor/Pipe Organ layer with integrated Model 122 Rotary Speaker.
 #[derive(Debug, Clone)]
 pub struct OrganLayer {
@@ -386,7 +398,7 @@ impl OrganLayer {
     /// Processes Model 122 Rotary Speaker with Doppler delay, Close Mic, Angle, Stop Mode, and cabinet reflections.
     fn process_rotary(&mut self, scanner_out: f32, inv_fs: f32) -> [f32; 2] {
         let driven = ((1.0 + 3.0 * self.rotary_drive) * scanner_out).tanh();
-        let alpha = (TAU * 800.0 * inv_fs).clamp(0.01, 0.99);
+        let alpha = (TAU * ROTARY_CROSSOVER_HZ * inv_fs).clamp(0.01, 0.99);
         self.lp_state += alpha * (driven - self.lp_state);
         let bass = self.lp_state;
         let treble = driven - bass;
@@ -733,5 +745,8 @@ mod tests {
             assert!(l.is_finite() && r.is_finite());
             assert_eq!(l, r); // Without rotary, scanner output is dual-mono
         }
+        assert_eq!(ROTARY_CROSSOVER_HZ, 800.0);
+        assert_eq!(ROTARY_BASS_HORN_BALANCES[0], (0.70, 0.30));
+        assert_eq!(ROTARY_BASS_HORN_BALANCES[4], (0.30, 0.70));
     }
 }

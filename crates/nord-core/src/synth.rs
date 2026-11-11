@@ -441,7 +441,7 @@ impl ZdfFilter {
         drive: f32,
         sample_rate: f32,
     ) -> f32 {
-        let fc = cutoff_hz.clamp(20.0, 0.48 * sample_rate);
+        let fc = cutoff_hz.clamp(14.0, 0.48 * sample_rate);
         let g = (PI * fc / sample_rate).tan();
         let g1 = g / (1.0 + g);
 
@@ -570,6 +570,8 @@ pub struct SynthLayer {
     pub resonance: f32,
     pub filter_drive: f32,
     pub filter_env_amount: f32,
+    /// Keyboard cutoff tracking (`0` = Off, `1` = 1/3, `2` = 2/3, `3` = 1/1).
+    pub kb_track: u8,
     pub attack_sec: f32,
     pub decay_sec: f32,
     pub sustain_level: f32,
@@ -626,6 +628,7 @@ impl SynthLayer {
             resonance: 0.3,
             filter_drive: 0.2,
             filter_env_amount: 0.0,
+            kb_track: 0,
             attack_sec: 0.005,
             decay_sec: 0.3,
             sustain_level: 0.7,
@@ -903,9 +906,9 @@ impl SynthLayer {
         let mut mix_r = 0.0f32;
 
         let eff_cutoff = match self.lfo_dest {
-            LfoDestination::FilterCutoff => {
-                (self.cutoff_hz * (1.0 + self.lfo_amount * lfo_val * 0.8)).clamp(20.0, 18000.0)
-            }
+            LfoDestination::FilterCutoff => (self.cutoff_hz
+                * (1.0 + self.lfo_amount * lfo_val * 0.8))
+                .clamp(14.0, 0.48 * self.sample_rate),
             _ => self.cutoff_hz,
         };
 
@@ -934,17 +937,17 @@ impl SynthLayer {
                 continue;
             }
 
-            // Envelope advance
+            // Envelope advance (OS v1.66 hardware floors: 0.5 ms attack, 3.0 ms decay/release, >=44 s decay = Hold)
             if v.gate {
                 if v.amp_env < 0.999 {
-                    let atk = self.attack_sec.max(0.001);
+                    let atk = self.attack_sec.max(0.0005);
                     v.amp_env += (1.0 - v.amp_env) * (inv_fs / atk).min(1.0);
-                } else {
-                    let dec = self.decay_sec.max(0.005);
+                } else if self.decay_sec < 44.0 {
+                    let dec = self.decay_sec.max(0.003);
                     v.amp_env += (self.sustain_level - v.amp_env) * (inv_fs / dec).min(1.0);
                 }
             } else {
-                let rel = self.release_sec.max(0.002);
+                let rel = self.release_sec.max(0.003);
                 v.amp_env *= (-inv_fs / rel).exp();
                 if v.amp_env < 1e-4 {
                     v.amp_env = 0.0;
@@ -1040,13 +1043,19 @@ impl SynthLayer {
             v.mod_phase = (v.mod_phase + fm_ratio * dt) % 1.0;
             v.op3_phase = (v.op3_phase + fm_sub_ratio * dt) % 1.0;
 
-            let voice_cutoff = if self.filter_env_amount.abs() > 1e-4 {
-                (eff_cutoff
-                    * 2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * v.mod_env))
-                .clamp(20.0, 18000.0)
+            let kb_track_scale = if self.kb_track > 0 {
+                let frac = f32::from(self.kb_track.min(3)) / 3.0;
+                2.0f32.powf(((f32::from(v.note) - 60.0) / 12.0) * frac)
             } else {
-                eff_cutoff
+                1.0
             };
+            let env_scale = if self.filter_env_amount.abs() > 1e-4 {
+                2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * v.mod_env)
+            } else {
+                1.0
+            };
+            let voice_cutoff =
+                (eff_cutoff * kb_track_scale * env_scale).clamp(14.0, 0.48 * self.sample_rate);
 
             let filtered_l = v.filter.process(
                 raw_osc_l,
@@ -1554,5 +1563,36 @@ mod tests {
         let [l, r] = layer.render_frame();
         assert!(l.is_finite() && r.is_finite());
         assert!(l > 0.0 && r < 0.0, "stereo polarity L={l} R={r}");
+    }
+
+    #[test]
+    fn test_synth_kb_track_and_14hz_floor() {
+        let mut s_track = SynthLayer::new(48_000.0);
+        s_track.cutoff_hz = 220.0;
+        s_track.kb_track = 3; // 1/1 octave tracking
+        s_track.note_on(84, 120); // +2 octaves above C4 -> 4x cutoff -> brighter than low note
+        let mut rms_high = 0.0f32;
+        for _ in 0..512 {
+            let [l, _] = s_track.render_frame();
+            rms_high += l * l;
+        }
+
+        let mut s_notrack = SynthLayer::new(48_000.0);
+        s_notrack.cutoff_hz = 220.0;
+        s_notrack.kb_track = 0;
+        s_notrack.note_on(84, 120);
+        let mut rms_flat = 0.0f32;
+        for _ in 0..512 {
+            let [l, _] = s_notrack.render_frame();
+            rms_flat += l * l;
+        }
+        assert!(
+            rms_high > rms_flat * 1.5,
+            "1/1 kb_track must open filter on C6 ({rms_high} vs {rms_flat})"
+        );
+
+        let mut flt = ZdfFilter::default();
+        let out = flt.process(1.0, FilterModel::Lp24, 14.0, 0.0, 0.0, 48_000.0);
+        assert!(out.is_finite());
     }
 }

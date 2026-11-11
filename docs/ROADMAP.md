@@ -138,7 +138,8 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Perform differential header analysis across the 195 `.nsmp4` and 38 `.npno` `CNSP` headers (`0x30..0x80`) to map sample rate, bit depth, key-zone split tables, and loop points ([research](research/nord-piano-npno-and-codec.md))
 - [x] Parse `.nsmp4` container chunks and expose initial instrument, key-map, zone, and stroke metadata (`crates/nord-core/src/cbin/sample.rs`)
 - [x] Reverse-engineer the `CNSP` 4-bit DPCM audio payload decompression routine and implement `NpnoInstrument` and `decode_4bit_dpcm` in `crates/nord-core/src/cbin/piano_sample.rs`
-- [x] Complete full-stream extraction of Image 1 (`410,321` B -> `798,912` B, `0xFBB813F8`) and Image 0 (`3,509,573` B -> `5,499,504` B, `0xDE902503`) via `ns4 inspect --verify --unpack` (remaining work: map internal `ARM0` / `DSPO` / `DSPS` / `DSPF` symbols)
+- [x] Complete full-stream extraction of Image 1 (`410,321` B -> `798,912` B, `0xFBB813F8`) and Image 0 (`3,509,573` B -> `5,499,504` B, `0xDE902503`) via `ns4 inspect --verify --unpack`
+- [x] Reverse-engineer `ARM0` preset MurmurHash2 (`0x0a5a44`), fix `.ns4p` `0x0B` / `0x32` hash bit offsets, and wire 1-click `.npno` / `.nsmp4` auto-resolution into `nord-core` & `nord-gui`; extract and calibrate the 5×128 OS v1.66 Synth/Env/Filter/LFO tables (`0x53abe4..0x53b5e4`) and Rotary `800 Hz` / Bass-Horn constants (`ns4-dspf`, [research](research/sharc-dsp-and-preset-hash-teardown.md))
 - [x] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup (`sample.rs`, `piano_sample.rs`, `backup.rs`)
 
 ---
