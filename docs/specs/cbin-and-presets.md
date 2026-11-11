@@ -194,13 +194,26 @@ The `CODE` segments inside OS firmware images are compressed using Clavia's prop
 Stream framing groups up to 8 operations per 1-byte header:
 - **Flag Bit = `1`:** 1 uncompressed literal byte follows.
 - **Flag Bit = `0`:** 1 16-bit match token (2 little-endian bytes) follows.
+- **Initial Extended Literal Run:** At stream start, a `0x00, L` sequence encodes an extended literal run of `17 + L` bytes (e.g. `00 1B` for the 44-byte ARM926EJ-S reset stub).
 - Overlapping runs (where `length > distance`) dynamically repeat bytes in run-length fashion.
 
+#### Checksum Algorithm
+Each segment descriptor stores a 32-bit one's-complement byte checksum:
+```text
+checksum = 0xFFFFFFFF - (sum(segment_bytes) & 0xFFFFFFFF)
+```
+For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file segment payload. For compressed segments (`CODE`), the checksum is computed over the fully decompressed memory image at runtime (`target_address = 0xC0000000`).
+
 #### Rust API (`crates/nord-core/src/firmware.rs`)
+- `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
 - `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareSegment::verify_checksum(&self, payload: &[u8]) -> bool`
 - `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
+- `FirmwareContainer::segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment>`
+- `DspEngineType` (`Organ`, `Synth`, `Effects`, `Routing`, `CoreIdentifier`)
+- `DspPartition` (full partition descriptors with engine categorization)
 
 ### 5.2 Nord Piano (`.npno`) Binary Specification & 4-Bit DPCM Audio Codec
 
@@ -232,3 +245,15 @@ s[n] = s[n-1] + delta * scale
 - `NpnoInstrument::cents_detune_for_note(&self, note: u8) -> i8`
 - `decode_4bit_dpcm(raw_payload: &[u8], scale: f32) -> Vec<f32>`
 - `encode_4bit_dpcm(pcm: &[f32], scale: f32) -> Vec<u8>`
+
+### 5.3 NSMP Sample Library Metadata (`.nsmp4`)
+
+The `.nsmp4`/`nsmp` assets store the `NSMP` marker at offset `0x2C`, then a 12-byte prefix at `0x30..0x3B`. The current metadata parser starts its tagged chunk stream at `0x3C`. Each chunk has a 4-byte tag, a big-endian `u32` chunk ID, a big-endian `u32` payload length, and that many payload bytes. The parser checks chunk bounds and rejects incomplete trailing headers.
+
+The parser currently recognizes:
+
+- `\0hdr`: name at payload offset 10 (up to 32 bytes); the parser also attempts to read an author string at offset 74 (up to 32 bytes), which is not yet independently confirmed.
+- `\0map`: a 128-entry table of 10-byte records starting at offset 6, followed by 16-byte zone records starting at `0x524`.
+- `\0stk`: stroke ID in the first four payload bytes; payload audio remains opaque.
+
+These offsets are an initial metadata mapping based on the locally inspected `Kalimba_KG 4.1.nsmp4` sample from the factory backup and deterministic synthetic fixtures. They are not a complete NSMP or sample-audio specification. The parser preserves no raw chunk data in its high-level result, and does not decode audio. See [`cbin::sample`](../../crates/nord-core/src/cbin/sample.rs).

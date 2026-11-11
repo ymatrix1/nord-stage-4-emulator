@@ -83,6 +83,8 @@ pub enum AudioCommand {
     SetMasterComp(f32),
     /// Activates/deactivates one of the 7 layers (index 0..=6) in both scenes.
     SetLayerActive(usize, bool),
+    /// Loads a complete ProgramDecoded into the DSP engine.
+    LoadProgram(Box<nord_core::cbin::ProgramDecoded>),
 }
 
 /// Handle to communicate with the running audio background thread.
@@ -339,6 +341,9 @@ pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_
                     }
                 }
             }
+        }
+        AudioCommand::LoadProgram(prog) => {
+            engine.apply_program(&prog);
         }
     }
 }
@@ -670,5 +675,23 @@ mod tests {
         assert!(handle.send_midi(note_off));
 
         let _rx = drain_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_apply_audio_command_load_program() {
+        let mut engine = Stage4Engine::new(48000.0);
+        let mut vol = 0.8;
+        let mut prog = nord_core::cbin::ProgramDecoded::default();
+        prog.organ.layer_a_level = 0.42;
+        prog.organ.drawbars_a = [8, 8, 8, 0, 0, 0, 0, 0, 0];
+
+        apply_audio_command(
+            AudioCommand::LoadProgram(Box::new(prog)),
+            &mut engine,
+            &mut vol,
+        );
+
+        assert_eq!(engine.organ_a.drawbars, [8, 8, 8, 0, 0, 0, 0, 0, 0]);
+        assert!((engine.layer_levels[0].base - 0.42).abs() < 1e-5);
     }
 }

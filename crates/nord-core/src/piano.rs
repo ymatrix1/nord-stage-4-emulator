@@ -212,6 +212,26 @@ impl PianoLayer {
             let t60 = (5.0 - 0.15 * i as f32).clamp(1.5, 5.0);
             res.configure(f, t60, fs);
         }
+        let pcm_len = (fs * 1.5) as usize;
+        let mut pcm = Vec::with_capacity(pcm_len);
+        for n in 0..pcm_len {
+            let t = n as f32 / fs;
+            let decay = (-3.0 * t).exp();
+            let sample = ((2.0 * std::f32::consts::PI * 261.63 * t).sin()
+                + 0.5 * (2.0 * std::f32::consts::PI * 523.25 * t).sin()
+                + 0.25 * (2.0 * std::f32::consts::PI * 784.88 * t).sin()
+                + 0.125 * (2.0 * std::f32::consts::PI * 1046.50 * t).sin())
+                * decay
+                * 0.4;
+            pcm.push(sample);
+        }
+        let sound = Some(Arc::new(NpnoSound::new_synthetic(
+            "Default Synthetic Grand",
+            60,
+            &pcm,
+            fs,
+        )));
+
         Self {
             sample_rate: fs,
             category: PianoCategory::Grand,
@@ -221,7 +241,7 @@ impl PianoLayer {
             pedal_noise_enabled: true,
             soft_release: false,
             damper_pedal_down: false,
-            sound: None,
+            sound,
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
             resonators,
             undamped_keys: [false; 128],

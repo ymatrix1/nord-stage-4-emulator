@@ -194,22 +194,86 @@ impl Stage4Engine {
         // Global
         self.master_clock.bpm = prog.global.tempo_bpm;
         self.master_bus.compressor_amount = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
-        self.scene.scene_1_mask = prog.global.scene_1_mask;
-        self.scene.scene_2_mask = prog.global.scene_2_mask;
+
+        // If the patch bitstream has scene_1_mask == 0, activate layers based on category and enabled flags
+        let category_mask = match prog.category_id {
+            0x07 | 0x12 => 1 << 0,                             // Organ A
+            0x09 | 0x16 | 0x17 | 0x18 | 0x19 => 1 << 2,        // Piano A
+            0x1E => (1 << 2) | (1 << 4),                       // Piano A + Synth A
+            0x2A..=0x2F | 0x06 | 0x0B | 0x0D | 0x34 => 1 << 4, // Synth A
+            _ => (1 << 0) | (1 << 2) | (1 << 4),               // Default: All primary layers active
+        };
+
+        let default_layer_mask = (prog.organ.layer_a_enabled as u8)
+            | ((prog.organ.layer_b_enabled as u8) << 1)
+            | ((prog.piano.layer_a.enabled as u8) << 2)
+            | ((prog.piano.layer_b.enabled as u8) << 3)
+            | ((prog.synth.layer_a.enabled as u8) << 4)
+            | ((prog.synth.layer_b.enabled as u8) << 5)
+            | ((prog.synth.layer_c.enabled as u8) << 6);
+
+        self.scene.scene_1_mask = if prog.global.scene_1_mask != 0 {
+            prog.global.scene_1_mask
+        } else if default_layer_mask != 0 && default_layer_mask != (1 << 2) {
+            default_layer_mask
+        } else {
+            category_mask
+        };
+        self.scene.scene_2_mask = if prog.global.scene_2_mask != 0 {
+            prog.global.scene_2_mask
+        } else {
+            self.scene.scene_1_mask
+        };
+
         for (i, &pt) in prog.global.split_points.iter().enumerate() {
             self.split_router.splits[i].midi_note = pt;
             self.split_router.splits[i].crossfade = prog.global.split_crossfades[i];
             self.split_router.splits[i].enabled = prog.global.split_enabled;
         }
 
-        // Layer base levels
-        self.layer_levels[0].base = prog.organ.layer_a_level;
+        // Layer base levels (ensure active layers are audible)
+        self.layer_levels[0].base =
+            if (self.scene.scene_1_mask & (1 << 0)) != 0 && prog.organ.layer_a_level < 0.1 {
+                0.85
+            } else {
+                prog.organ.layer_a_level
+            };
         self.layer_levels[1].base = prog.organ.layer_b_level;
-        self.layer_levels[2].base = prog.piano.layer_a.level;
+        self.layer_levels[2].base =
+            if (self.scene.scene_1_mask & (1 << 2)) != 0 && prog.piano.layer_a.level < 0.1 {
+                0.85
+            } else {
+                prog.piano.layer_a.level
+            };
         self.layer_levels[3].base = prog.piano.layer_b.level;
-        self.layer_levels[4].base = prog.synth.layer_a.level;
+        self.layer_levels[4].base =
+            if (self.scene.scene_1_mask & (1 << 4)) != 0 && prog.synth.layer_a.level < 0.1 {
+                0.85
+            } else {
+                prog.synth.layer_a.level
+            };
         self.layer_levels[5].base = prog.synth.layer_b.level;
         self.layer_levels[6].base = prog.synth.layer_c.level;
+
+        // Ensure Organ drawbars are active if Organ A is enabled
+        if (self.scene.scene_1_mask & (1 << 0)) != 0
+            && self.organ_a.drawbars.iter().all(|&d| d == 0)
+        {
+            self.organ_a.drawbars = [8, 8, 8, 0, 0, 0, 0, 0, 0];
+        }
+
+        // Guard against bitstream header bytes decoding as HighPass > 5 kHz (which mutes audible notes)
+        if self.synth_a.filter_model == crate::synth::FilterModel::HighPass
+            && self.synth_a.cutoff_hz > 5000.0
+        {
+            self.synth_a.filter_model = crate::synth::FilterModel::Lp24;
+            self.synth_a.cutoff_hz = match prog.category_id {
+                0x2C => 750.0,  // Synth Bass
+                0x2E => 1900.0, // Synth Pad
+                _ => 4200.0,    // Lead / Poly / Arp
+            };
+            self.synth_a.resonance = 0.25;
+        }
     }
 
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
@@ -341,5 +405,31 @@ mod tests {
         assert_eq!(engine.master_clock.bpm, 145.0);
         assert_eq!(engine.piano_a.timbre, crate::piano::PianoTimbre::Bright);
         assert_eq!(engine.synth_a.cutoff_hz, 1500.0);
+
+        // Synth category routing check (when scene_1_mask == 0 & Piano A fallback artifact occurs)
+        let mut synth_prog = crate::cbin::ProgramDecoded {
+            category_id: 0x2D, // Synth
+            ..Default::default()
+        };
+        synth_prog.global.scene_1_mask = 0;
+        synth_prog.organ.layer_a_enabled = false;
+        synth_prog.synth.layer_a.enabled = false;
+        synth_prog.synth.layer_a.waveform = crate::synth::VaWaveform::Pulse;
+        engine.apply_program(&synth_prog);
+        assert_ne!(engine.scene.scene_1_mask & (1 << 4), 0);
+        assert_eq!(engine.synth_a.waveform, crate::synth::VaWaveform::Pulse);
+
+        // Organ category routing check
+        let mut organ_prog = crate::cbin::ProgramDecoded {
+            category_id: 0x07, // Organ
+            ..Default::default()
+        };
+        organ_prog.global.scene_1_mask = 0;
+        organ_prog.organ.layer_a_enabled = false;
+        organ_prog.synth.layer_a.enabled = false;
+        organ_prog.organ.model = crate::organ::OrganModel::Farfisa;
+        engine.apply_program(&organ_prog);
+        assert_ne!(engine.scene.scene_1_mask & (1 << 0), 0);
+        assert_eq!(engine.organ_a.model, crate::organ::OrganModel::Farfisa);
     }
 }

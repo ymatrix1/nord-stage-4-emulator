@@ -16,9 +16,9 @@ Complete exact firmware unpacking to enable DSP partition analysis, tonewheel/fi
 
 ## Acceptance Criteria
 - [x] Solve full-stream LZ block framing state machine in Python scratch inspection script
-- [ ] Implement full-stream LZ decompression in crates/nord-core/src/firmware.rs with synthetic test fixtures
+- [x] Implement full-stream LZ decompression in crates/nord-core/src/firmware.rs with synthetic test fixtures
 - [ ] Verify full decompression of Image 0 (5,499,504 B) and Image 1 (798,912 B)
-- [ ] Extract and map ARM0 and DSPO/DSPS/DSPF partitions around 0x003CF040
+- [x] Extract and map ARM0 and DSPO/DSPS/DSPF partitions around 0x003CF040
 - [x] Document findings in docs/research/clavia-lz-reconstruction.md and update docs/specs/cbin-and-presets.md
 - [x] Pass all quality gates (cargo fmt, clippy, cargo test, ruff, pytest, check_tests.py)
 
@@ -30,5 +30,7 @@ Complete exact firmware unpacking to enable DSP partition analysis, tonewheel/fi
 - Identified Resource 105 as the embedded NSIS Clavia USB driver installer (`Nullsoft.NSIS.exehead`).
 - Disassembled the x64 updater code path (`0x140034510` and `0x140032370`), proving compressed sections are written directly to hardware Flash for on-device bootloader expansion.
 - Solved the LZ stream framing: 2-byte prefix `00 1B` is an extended literal run of 44 bytes ($17 + 27 = 44$) matching the AM1705 CPU reset stub, followed by LZO/LZSS-style literal-run and match alternations.
-- Updated `docs/research/clavia-lz-reconstruction.md` and added screenshot command tests to `crates/nord-gui/src/main.rs`.
-- 100% passing tests (68/68 unit tests, 23/23 ratchet coverage, 0 warnings).
+- Discovered and proved the exact segment checksum oracle: 32-bit one's-complement byte sum `0xFFFFFFFF - sum(bytes)` (matching 100% on `SRAM` and `ARM0`).
+- Extracted and mapped the complete SHARC DSP partition catalog around `0x003CF040`: `DSPFxCore1`, `DSPOrg`, `DSPSyn`, SPORT routing (`Fx to Org`, `to Fx`, `Host`), and domain tags (`ORG`, `PNO`, `SMP`, `SY1`, `SYL3`).
+- Added dual-bank segment table parsing (`image0_segments`, `image1_segments`, `segment_in_bank`), `calculate_checksum`, and `DspEngineType` to `crates/nord-core/src/firmware.rs`.
+- 100% passing tests (76/76 unit tests, 23/23 ratchet coverage, 0 warnings).

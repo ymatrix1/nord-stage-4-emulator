@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -41,8 +41,17 @@ jobs:
       - name: Install Linux system dependencies (ALSA)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev
+          sudo rm -f /etc/resolv.conf
+          printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" | sudo tee /etc/resolv.conf
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: Updating apt and installing dependencies..."
+            if sudo apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=20 && \
+               sudo apt-get install -y --no-install-recommends -o Acquire::Retries=5 libasound2-dev libudev-dev; then
+              echo "Dependencies installed successfully."
+              break
+            fi
+            sleep 5
+          done
 
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -55,7 +64,7 @@ jobs:
 
   python:
     name: Python Tools & Unit-Test Ratchet
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout repository

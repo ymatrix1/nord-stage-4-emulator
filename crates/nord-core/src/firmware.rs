@@ -5,10 +5,37 @@
 /// Fixed 32-byte (`0x20`) top-level dual-image firmware header size.
 pub const FIRMWARE_TOP_HEADER_SIZE: usize = 32;
 
+/// Calculates Clavia's one's-complement byte checksum: `0xFFFFFFFF - sum(bytes)`.
+///
+/// Verified on AM1705 firmware container segments (`SRAM`, `ARM0`, and uncompressed `CODE`).
+#[inline]
+pub fn calculate_checksum(bytes: &[u8]) -> u32 {
+    let sum: u32 = bytes
+        .iter()
+        .fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
+    0xFFFF_FFFFu32.wrapping_sub(sum)
+}
+
+/// Functional categorization of embedded DSP partitions and hardware coprocessor targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DspEngineType {
+    /// SHARC Organ Physical Modeling and Rotary 122 DSP (`DSPO` / `DSPOrg`).
+    Organ,
+    /// SHARC 3-Layer Nord Wave 2 Synth DSP (`DSPS` / `DSPSyn`).
+    Synth,
+    /// SHARC Per-Layer Effects and String Resonance DSP (`DSPF` / `DSPFxCore1`).
+    Effects,
+    /// Inter-DSP SPORT bus routing descriptor (`Fx to Org`, `to Fx`, `Host`, etc.).
+    Routing,
+    /// Dedicated DSP or host engine domain tag (`ORG`, `PNO`, `SMP`, `SY1`, `SYL3`).
+    CoreIdentifier,
+}
+
 /// Descriptor for a firmware memory segment (`SRAM`, `CODE`, `ARM0`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FirmwareSegment {
     pub name: String,
+    pub bank: u8,
     pub data_offset: u32,
     pub data_size: u32,
     pub target_address: u32,
@@ -48,6 +75,11 @@ impl FirmwareSegment {
             Ok(raw[start..end].to_vec())
         }
     }
+
+    /// Verifies if the payload matches the segment's recorded one's-complement checksum.
+    pub fn verify_checksum(&self, payload: &[u8]) -> bool {
+        calculate_checksum(payload) == self.checksum
+    }
 }
 
 /// Discovered SHARC DSP or Host processor partition tag within a firmware image.
@@ -56,6 +88,7 @@ pub struct DspPartition {
     pub tag: String,
     pub offset: usize,
     pub description: &'static str,
+    pub engine_type: DspEngineType,
 }
 
 /// Parsed Nord Stage 4 OS firmware container (`RCDATA 101` payload).
@@ -65,6 +98,8 @@ pub struct FirmwareContainer {
     pub image0_size: u32,
     pub image1_offset: u32,
     pub image1_size: u32,
+    pub image0_segments: Vec<FirmwareSegment>,
+    pub image1_segments: Vec<FirmwareSegment>,
     pub segments: Vec<FirmwareSegment>,
     pub dsp_partitions: Vec<DspPartition>,
 }
@@ -96,8 +131,8 @@ impl FirmwareContainer {
             ));
         }
 
-        let mut segments = Vec::new();
-        // Image 0 segment table starts at offset 0x20 + 0x14 (after 20-byte image sub-header)
+        // Parse Image 0 segments (bank 0)
+        let mut image0_segments = Vec::new();
         if bytes.len() >= 0x20 + 20 {
             let seg_count = u32::from_be_bytes(bytes[0x30..0x34].try_into().unwrap()) as usize;
             let mut cursor = 0x34usize;
@@ -115,8 +150,46 @@ impl FirmwareContainer {
                         u32::from_be_bytes(bytes[cursor + 12..cursor + 16].try_into().unwrap());
                     let checksum =
                         u32::from_be_bytes(bytes[cursor + 16..cursor + 20].try_into().unwrap());
-                    segments.push(FirmwareSegment {
+                    image0_segments.push(FirmwareSegment {
                         name: name.to_string(),
+                        bank: 0,
+                        data_offset,
+                        data_size,
+                        target_address,
+                        checksum,
+                    });
+                }
+                cursor += 44;
+            }
+        }
+
+        // Parse Image 1 segments (bank 1)
+        let mut image1_segments = Vec::new();
+        let img1_base = image1_offset as usize;
+        if bytes.len() >= img1_base + 20 {
+            let seg_count = u32::from_be_bytes(
+                bytes[img1_base + 0x10..img1_base + 0x14]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
+            let mut cursor = img1_base + 0x14;
+            for _ in 0..seg_count.min(8) {
+                if cursor + 44 > bytes.len() {
+                    break;
+                }
+                let tag_bytes = &bytes[cursor..cursor + 4];
+                if let Ok(name) = std::str::from_utf8(tag_bytes) {
+                    let data_offset =
+                        u32::from_be_bytes(bytes[cursor + 4..cursor + 8].try_into().unwrap());
+                    let data_size =
+                        u32::from_be_bytes(bytes[cursor + 8..cursor + 12].try_into().unwrap());
+                    let target_address =
+                        u32::from_be_bytes(bytes[cursor + 12..cursor + 16].try_into().unwrap());
+                    let checksum =
+                        u32::from_be_bytes(bytes[cursor + 16..cursor + 20].try_into().unwrap());
+                    image1_segments.push(FirmwareSegment {
+                        name: name.to_string(),
+                        bank: 1,
                         data_offset,
                         data_size,
                         target_address,
@@ -128,41 +201,116 @@ impl FirmwareContainer {
         }
 
         let mut dsp_partitions = Vec::new();
-        let known_tags: &[(&[u8; 4], &'static str)] = &[
+        let known_tags: &[(&[u8], &'static str, DspEngineType)] = &[
             (
                 b"DSPO",
                 "SHARC Organ Physical Modeling & Rotary 122 DSP (DSPOrg)",
+                DspEngineType::Organ,
             ),
-            (b"DSPS", "SHARC 3-Layer Nord Wave 2 Synth DSP (DSPSyn)"),
+            (
+                b"DSPOrg",
+                "SHARC Organ Physical Modeling Core Symbol (DSPOrg)",
+                DspEngineType::Organ,
+            ),
+            (
+                b"DSPS",
+                "SHARC 3-Layer Nord Wave 2 Synth DSP (DSPSyn)",
+                DspEngineType::Synth,
+            ),
+            (
+                b"DSPSyn",
+                "SHARC 3-Layer Synth Core Symbol (DSPSyn)",
+                DspEngineType::Synth,
+            ),
             (
                 b"DSPF",
                 "SHARC Per-Layer Effects & String Resonance DSP (DSPFxCore1)",
+                DspEngineType::Effects,
+            ),
+            (
+                b"DSPFxCore1",
+                "SHARC Effects Pipeline Core Symbol (DSPFxCore1)",
+                DspEngineType::Effects,
+            ),
+            (
+                b"Fx to Org",
+                "SPORT Bus Routing: Effects to Organ",
+                DspEngineType::Routing,
+            ),
+            (
+                b"to Fx",
+                "SPORT Bus Routing: Inter-core to Effects",
+                DspEngineType::Routing,
+            ),
+            (
+                b"Host",
+                "AM1705 Host Processor SPORT Bus Routing",
+                DspEngineType::Routing,
+            ),
+            (
+                b"ORG",
+                "B3 Organ Physical Model Domain Tag",
+                DspEngineType::CoreIdentifier,
+            ),
+            (
+                b"PNO",
+                "Grand / Upright Piano Acoustic Model Domain Tag",
+                DspEngineType::CoreIdentifier,
+            ),
+            (
+                b"SMP",
+                "Sample Library Synth Domain Tag",
+                DspEngineType::CoreIdentifier,
+            ),
+            (
+                b"SY1",
+                "Wave 2 Synth Layer 1 Domain Tag",
+                DspEngineType::CoreIdentifier,
+            ),
+            (
+                b"SYL3",
+                "Wave 2 Synth Layer 3 Domain Tag",
+                DspEngineType::CoreIdentifier,
             ),
         ];
 
-        for &(tag, description) in known_tags {
-            if let Some(pos) = bytes.windows(4).position(|w| w == tag) {
+        for &(tag, description, engine_type) in known_tags {
+            if let Some(pos) = bytes.windows(tag.len()).position(|w| w == tag) {
                 dsp_partitions.push(DspPartition {
                     tag: String::from_utf8_lossy(tag).into_owned(),
                     offset: pos,
                     description,
+                    engine_type,
                 });
             }
         }
+
+        let segments = image0_segments.clone();
 
         Ok(Self {
             header_size,
             image0_size,
             image1_offset,
             image1_size,
+            image0_segments,
+            image1_segments,
             segments,
             dsp_partitions,
         })
     }
 
-    /// Finds a segment by name (e.g. "SRAM", "CODE", "ARM0").
+    /// Finds a segment by name in the default Bank 0 (e.g. "SRAM", "CODE", "ARM0").
     pub fn segment(&self, name: &str) -> Option<&FirmwareSegment> {
         self.segments.iter().find(|s| s.name == name)
+    }
+
+    /// Finds a segment by bank index and name.
+    pub fn segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment> {
+        match bank {
+            0 => self.image0_segments.iter().find(|s| s.name == name),
+            1 => self.image1_segments.iter().find(|s| s.name == name),
+            _ => None,
+        }
     }
 }
 
@@ -178,6 +326,16 @@ impl FirmwareContainer {
 pub fn decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String> {
     let mut out = Vec::with_capacity(max_output_size.min(1024 * 1024));
     let mut in_pos = 0;
+
+    // Extended literal run prefix at stream start (e.g. 0x00, L where run length is 17 + L bytes)
+    if input.len() >= 2 && input[0] == 0x00 && input[1] > 0 {
+        let run_len = 17 + input[1] as usize;
+        if 2 + run_len <= input.len() {
+            let copy_len = run_len.min(max_output_size);
+            out.extend_from_slice(&input[2..2 + copy_len]);
+            in_pos = 2 + copy_len;
+        }
+    }
 
     while in_pos < input.len() && out.len() < max_output_size {
         let flag = input[in_pos];
@@ -298,12 +456,12 @@ mod tests {
     use super::*;
 
     fn build_synthetic_firmware() -> Vec<u8> {
-        let mut buf = vec![0u8; 512];
+        let mut buf = vec![0u8; 1024];
         // Top-level header (0x20 bytes)
         buf[0..4].copy_from_slice(&0x0000_0020u32.to_be_bytes());
         buf[4..8].copy_from_slice(&0x0000_0140u32.to_be_bytes()); // image0_size = 320
-        buf[8..12].copy_from_slice(&0x0000_0160u32.to_be_bytes()); // image1_offset = 0x20 + 0x140
-        buf[12..16].copy_from_slice(&0x0000_00A0u32.to_be_bytes()); // image1_size = 160
+        buf[8..12].copy_from_slice(&0x0000_0160u32.to_be_bytes()); // image1_offset = 0x20 + 0x140 = 0x160
+        buf[12..16].copy_from_slice(&0x0000_0100u32.to_be_bytes()); // image1_size = 256
 
         // Image 0 sub-header at 0x20..0x34: segment_count = 3 at 0x30..0x34
         buf[0x30..0x34].copy_from_slice(&3u32.to_be_bytes());
@@ -318,10 +476,32 @@ mod tests {
             buf[off + 16..off + 20].copy_from_slice(&0xFFF3_1619u32.to_be_bytes());
         }
 
+        // Image 1 sub-header at 0x160..0x174: segment_count = 3 at 0x170..0x174
+        buf[0x170..0x174].copy_from_slice(&3u32.to_be_bytes());
+
+        // 3 segments of 44 bytes starting at 0x174: SRAM, CODE, ARM0
+        for (i, name) in [b"SRAM", b"CODE", b"ARM0"].iter().enumerate() {
+            let off = 0x174 + i * 44;
+            buf[off..off + 4].copy_from_slice(*name);
+            buf[off + 4..off + 8].copy_from_slice(&0x02D4u32.to_be_bytes());
+            buf[off + 8..off + 12].copy_from_slice(&0xC158u32.to_be_bytes());
+            buf[off + 12..off + 16].copy_from_slice(&0x8000_0000u32.to_be_bytes());
+            buf[off + 16..off + 20].copy_from_slice(&0xFFED_0AE8u32.to_be_bytes());
+        }
+
         // Embed SHARC DSP partition markers
-        buf[260..268].copy_from_slice(b"DSPFxCor");
-        buf[280..286].copy_from_slice(b"DSPOrg");
-        buf[300..306].copy_from_slice(b"DSPSyn");
+        buf[600..608].copy_from_slice(b"DSPFxCor");
+        buf[610..620].copy_from_slice(b"DSPFxCore1");
+        buf[625..631].copy_from_slice(b"DSPOrg");
+        buf[640..646].copy_from_slice(b"DSPSyn");
+        buf[650..659].copy_from_slice(b"Fx to Org");
+        buf[665..670].copy_from_slice(b"to Fx");
+        buf[675..679].copy_from_slice(b"Host");
+        buf[685..688].copy_from_slice(b"ORG");
+        buf[690..693].copy_from_slice(b"PNO");
+        buf[695..698].copy_from_slice(b"SMP");
+        buf[700..703].copy_from_slice(b"SY1");
+        buf[705..709].copy_from_slice(b"SYL3");
         buf
     }
 
@@ -332,6 +512,8 @@ mod tests {
         assert_eq!(fw.header_size, 0x20);
         assert_eq!(fw.image0_size, 0x140);
         assert_eq!(fw.image1_offset, 0x160);
+        assert_eq!(fw.image0_segments.len(), 3);
+        assert_eq!(fw.image1_segments.len(), 3);
         assert_eq!(fw.segments.len(), 3);
         assert_eq!(fw.segments[0].name, "SRAM");
         assert_eq!(fw.segments[1].name, "CODE");
@@ -339,10 +521,87 @@ mod tests {
 
         let sram = fw.segment("SRAM").expect("SRAM segment should exist");
         assert_eq!(sram.target_address, 0x8000_0000);
+        assert_eq!(sram.bank, 0);
         assert!(fw.segment("NON_EXISTENT").is_none());
 
+        let img1_code = fw
+            .segment_in_bank(1, "CODE")
+            .expect("Image 1 CODE segment should exist");
+        assert_eq!(img1_code.bank, 1);
+        assert_eq!(img1_code.data_size, 0xC158);
+
         let tags: Vec<&str> = fw.dsp_partitions.iter().map(|p| p.tag.as_str()).collect();
-        assert_eq!(tags, vec!["DSPO", "DSPS", "DSPF"]);
+        assert!(tags.contains(&"DSPO"));
+        assert!(tags.contains(&"DSPS"));
+        assert!(tags.contains(&"DSPF"));
+        assert!(tags.contains(&"DSPOrg"));
+        assert!(tags.contains(&"DSPSyn"));
+        assert!(tags.contains(&"DSPFxCore1"));
+        assert!(tags.contains(&"Fx to Org"));
+        assert!(tags.contains(&"Host"));
+        assert!(tags.contains(&"ORG"));
+        assert!(tags.contains(&"PNO"));
+        assert!(tags.contains(&"SMP"));
+    }
+
+    #[test]
+    fn test_calculate_checksum_and_verify() {
+        // Deterministic synthetic buffer
+        let data = vec![0x10u8, 0x20u8, 0x30u8, 0x40u8];
+        let csum = calculate_checksum(&data);
+        assert_eq!(csum, 0xFFFF_FFFF - (0x10 + 0x20 + 0x30 + 0x40));
+
+        let seg = FirmwareSegment {
+            name: "TEST".to_string(),
+            bank: 0,
+            data_offset: 0,
+            data_size: 4,
+            target_address: 0,
+            checksum: csum,
+        };
+        assert!(seg.verify_checksum(&data));
+        assert!(!seg.verify_checksum(&[0x10, 0x20, 0x30, 0x41]));
+    }
+
+    #[test]
+    fn test_dsp_partitions_all_engines() {
+        let raw = build_synthetic_firmware();
+        let fw = FirmwareContainer::parse(&raw).expect("synthetic firmware should parse");
+
+        let organ_part = fw
+            .dsp_partitions
+            .iter()
+            .find(|p| p.tag == "DSPOrg")
+            .expect("DSPOrg partition should exist");
+        assert_eq!(organ_part.engine_type, DspEngineType::Organ);
+
+        let synth_part = fw
+            .dsp_partitions
+            .iter()
+            .find(|p| p.tag == "DSPSyn")
+            .expect("DSPSyn partition should exist");
+        assert_eq!(synth_part.engine_type, DspEngineType::Synth);
+
+        let fx_part = fw
+            .dsp_partitions
+            .iter()
+            .find(|p| p.tag == "DSPFxCore1")
+            .expect("DSPFxCore1 partition should exist");
+        assert_eq!(fx_part.engine_type, DspEngineType::Effects);
+
+        let route_part = fw
+            .dsp_partitions
+            .iter()
+            .find(|p| p.tag == "Fx to Org")
+            .expect("Fx to Org routing should exist");
+        assert_eq!(route_part.engine_type, DspEngineType::Routing);
+
+        let core_part = fw
+            .dsp_partitions
+            .iter()
+            .find(|p| p.tag == "PNO")
+            .expect("PNO core should exist");
+        assert_eq!(core_part.engine_type, DspEngineType::CoreIdentifier);
     }
 
     #[test]
@@ -397,6 +656,7 @@ mod tests {
     fn test_extract_payload_bounds() {
         let seg = FirmwareSegment {
             name: "SRAM".to_string(),
+            bank: 0,
             data_offset: 500,
             data_size: 100,
             target_address: 0x8000_0000,
@@ -450,6 +710,7 @@ mod tests {
 
         let code_seg = FirmwareSegment {
             name: "CODE".to_string(),
+            bank: 0,
             data_offset: offset as u32,
             data_size: raw_code.len() as u32, // Declared expanded target size in RAM
             target_address: 0xC000_0000,
@@ -460,6 +721,18 @@ mod tests {
             .extract_payload(&firmware_raw)
             .expect("extract_payload on CODE segment should decompress successfully");
         assert_eq!(decompressed, raw_code);
+    }
+
+    #[test]
+    fn test_clavia_lz_extended_literal_run() {
+        // Construct an input stream starting with 0x00, 0x1B (run length = 17 + 27 = 44 bytes)
+        let mut stream = vec![0x00u8, 0x1Bu8];
+        let literal_bytes = vec![0xA5u8; 44];
+        stream.extend_from_slice(&literal_bytes);
+
+        let out = decompress_clavia_lz(&stream, 100)
+            .expect("extended literal run decompression should succeed");
+        assert_eq!(out, literal_bytes);
     }
 
     #[test]

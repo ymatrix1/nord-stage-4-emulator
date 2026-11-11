@@ -1,6 +1,14 @@
 # Local reference dumps (>3 GB .ns4b, firmware installers, PDFs)
 .reference/
 references/
+factory_programs/
+*.ns4p
+*.ns4y
+*.ns4o
+*.ns4l
+*.ns4t
+*.nsmp4
+*.npno
 
 # Rust build artifacts
 target/

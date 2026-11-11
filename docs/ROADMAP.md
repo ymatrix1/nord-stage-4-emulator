@@ -135,6 +135,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Prove `CODE` segments are unencrypted and solve the 16-bit Clavia LZ match token format (`distance = token >> 3`, `length = (token & 7) + 2`) ([research](research/clavia-lz-reconstruction.md))
 - [x] Implement 16-bit Clavia LZ decompressor (`decompress_clavia_lz` / `compress_clavia_lz`) with sliding-window history buffer in `crates/nord-core/src/firmware.rs`
 - [x] Perform differential header analysis across the 195 `.nsmp4` and 38 `.npno` `CNSP` headers (`0x30..0x80`) to map sample rate, bit depth, key-zone split tables, and loop points ([research](research/nord-piano-npno-and-codec.md))
+- [x] Parse `.nsmp4` container chunks and expose initial instrument, key-map, zone, and stroke metadata (`crates/nord-core/src/cbin/sample.rs`)
 - [x] Reverse-engineer the `CNSP` 4-bit DPCM audio payload decompression routine and implement `NpnoInstrument` and `decode_4bit_dpcm` in `crates/nord-core/src/cbin/piano_sample.rs`
 - [ ] Complete full-stream extraction of Image 1 (`411 KB` -> `798 KB`) and Image 0 (`3.51 MB` -> `5.49 MB`) and map the unpacked `ARM0` host binary and `DSPO` / `DSPS` / `DSPF` SHARC DSP segments
 - [ ] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup
