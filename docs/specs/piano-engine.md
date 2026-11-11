@@ -21,9 +21,9 @@ The Stage 4 organizes piano banks into 6 acoustic and electro-mechanical categor
 ### Velocity Response Curves (`KBD TOUCH`)
 
 Maps incoming MIDI velocity $v \in [1, 127]$ to normalized gain/timbre excitation $v_{\text{norm}} \in (0, 1]$:
-- **`Light`:** $\left(\frac{v}{127}\right)^{0.65}$ (easier to reach fortissimo layers)
-- **`Medium` (Default):** $\left(\frac{v}{127}\right)^{1.00}$ (linear response)
-- **`Heavy`:** $\left(\frac{v}{127}\right)^{1.55}$ (wider pianissimo dynamic control)
+- **`Light`:** $\left(\dfrac{v}{127}\right)^{0.65}$ (easier to reach fortissimo layers)
+- **`Medium` (Default):** $\left(\dfrac{v}{127}\right)^{1.00}$ (linear response)
+- **`Heavy`:** $\left(\dfrac{v}{127}\right)^{1.55}$ (wider pianissimo dynamic control)
 
 ---
 
@@ -45,8 +45,9 @@ When `String Resonance` is active on an Acoustic `Grand` or `Upright` model:
 2. **Undamped Held Notes (Pedal Up):** Any key held silently (or after note decay) keeps its individual string resonator undamped; striking a lower note whose 2nd, 3rd, or 4th harmonic matches the held key's fundamental excites sympathetic ringing on that specific pitch.
 
 Each resonator is implemented as a 2-pole high-$Q$ bandpass/comb resonator with frequency-dependent damping:
+
 $$
-y[n] = (1 - r^2) \sin(\omega_0) \cdot x[n] + 2r\cos(\omega_0) \cdot y[n-1] - r^2 \cdot y[n-2], \qquad r = e^{-\frac{3 \ln 10}{T_{60} f_s}}
+y[n] = (1 - r^2) \sin(\omega_0) \cdot x[n] + 2r\cos(\omega_0) \cdot y[n-1] - r^2 \cdot y[n-2], \qquad r = \exp\left(-\frac{3 \ln 10}{T_{60} f_s}\right)
 $$
 
 ---

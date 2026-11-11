@@ -42,8 +42,8 @@ Inspection of the control panel PCB (`12916-Lg.jpg`) and high-resolution panel p
 
 From the Clavia MainBoard schematic (`MainBoard B vers 1.41`, analog output channels `CH1..CH4` and Headphone out):
 1. **D/A Converter (`Cirrus Logic CS4392`):** 24-bit, 192 kHz multi-bit Delta-Sigma DAC with differential analog outputs (`AOUTL±`, `AOUTR±`).
-2. **Differential Reconstruction Filter (`LM833` Dual Low-Noise Audio Op-Amp):** Active 2nd-order low-pass differential summer (`R = 4.7 kΩ`, `C = 820 pF`, $f_{-3\text{dB}} \approx 41.2\text{ kHz}$).
-3. **Output Line Buffer (`LF353` JFET Op-Amp):** High-slew-rate ($13\text{ V/\mu s}$) JFET output stage with AC coupling (`22 µF`).
+2. **Differential Reconstruction Filter (`LM833` Dual Low-Noise Audio Op-Amp):** Active 2nd-order low-pass differential summer ($R = 4.7\text{ k}\Omega$, $C = 820\text{ pF}$, $f_{-3\text{dB}} \approx 41.2\text{ kHz}$).
+3. **Output Line Buffer (`LF353` JFET Op-Amp):** High-slew-rate ($13\text{ V/}\mu\text{s}$) JFET output stage with AC coupling ($22\text{ }\mu\text{F}$).
 
 ---
 

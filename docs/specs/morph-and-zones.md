@@ -16,14 +16,17 @@ The keybed supports up to **3 Split Points** (`Split Low`, `Split Mid`, `Split H
 
 When a layer is active on one side of a split point $k_{\text{split}}$ and inactive on the adjacent side, its note gain $G(k) \in [0, 1]$ is attenuated smoothly across a semitone window $\pm W$:
 - **`Off`:** $W = 0$ (hard split: $G(k) = 1.0$ inside the assigned zone, $0.0$ outside).
-- **`Small`:** $W = 3$ semitones (6-semitone total transition window `[k_split - 3, k_split + 3]`).
-- **`Large`:** $W = 6$ semitones (12-semitone full-octave transition window `[k_split - 6, k_split + 6]`).
+- **`Small`:** $W = 3$ semitones (6-semitone total transition window $[k_{\text{split}} - 3, k_{\text{split}} + 3]$).
+- **`Large`:** $W = 6$ semitones (12-semitone full-octave transition window $[k_{\text{split}} - 6, k_{\text{split}} + 6]$).
 
 For a layer active below $k_{\text{split}}$ with crossfade half-width $W > 0$:
+
 $$
-G_{\text{low}}(k) = \text{clamp}\left(\frac{(k_{\text{split}} + W) - k}{2W},\ 0.0,\ 1.0\right)
+G_{\text{low}}(k) = \operatorname{clamp}\left(\frac{(k_{\text{split}} + W) - k}{2W},\ 0.0,\ 1.0\right)
 $$
+
 And for a layer active above $k_{\text{split}}$:
+
 $$
 G_{\text{high}}(k) = 1.0 - G_{\text{low}}(k)
 $$
@@ -54,7 +57,9 @@ Switching between Scene I and Scene II gates new note-on events to the newly act
 Any continuous parameter $p$ (Layer Level, Organ Drawbars, Synth Cutoff, Resonance, FM Amount, FX Rate/Amount, Delay Send, Reverb Mix) has a base normalized value $v_{\text{base}} \in [0.0, 1.0]$ and up to three signed morph deltas $\Delta_{\text{wheel}}, \Delta_{\text{pedal}}, \Delta_{\text{at}} \in [-1.0, +1.0]$.
 
 Given real-time controller positions $m_{\text{wheel}}, m_{\text{pedal}}, m_{\text{at}} \in [0.0, 1.0]$:
+
 $$
-v_{\text{effective}}(p) = \text{clamp}\left(v_{\text{base}}(p) + m_{\text{wheel}} \cdot \Delta_{\text{wheel}}(p) + m_{\text{pedal}} \cdot \Delta_{\text{pedal}}(p) + m_{\text{at}} \cdot \Delta_{\text{at}}(p),\ 0.0,\ 1.0\right)
+v_{\text{effective}}(p) = \operatorname{clamp}\left(v_{\text{base}}(p) + m_{\text{wheel}} \cdot \Delta_{\text{wheel}}(p) + m_{\text{pedal}} \cdot \Delta_{\text{pedal}}(p) + m_{\text{at}} \cdot \Delta_{\text{at}}(p),\ 0.0,\ 1.0\right)
 $$
+
 All 3 physical sources sum additively and clamp cleanly to $[0.0, 1.0]$, matching the exact hardware behavior when moving the Mod Wheel and Control Pedal simultaneously.

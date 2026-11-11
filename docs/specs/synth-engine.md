@@ -28,16 +28,15 @@ To eliminate aliasing around discontinuous waveform edges (Sawtooth wrap at $\ph
 Let normalized phase increment be $\Delta t = f_0 / f_s \in (0, 0.5)$ and phase be $t \in [0, 1)$:
 
 $$
-\text{poly\_blep}(t, \Delta t) =
-\begin{cases}
-\dfrac{t}{\Delta t} + \dfrac{t}{\Delta t} - \left(\dfrac{t}{\Delta t}\right)^2 - 1, & \text{if } t < \Delta t \\[8pt]
+\operatorname{poly\_blep}(t, \Delta t) = \begin{cases}
+2\left(\dfrac{t}{\Delta t}\right) - \left(\dfrac{t}{\Delta t}\right)^2 - 1, & \text{if } t < \Delta t \\[8pt]
 \left(\dfrac{t - 1}{\Delta t}\right)^2 + 2\left(\dfrac{t - 1}{\Delta t}\right) + 1, & \text{if } t > 1 - \Delta t \\[8pt]
 0, & \text{otherwise}
 \end{cases}
 $$
 
-- **Band-limited Sawtooth:** $y_{\text{saw}}(t) = (2t - 1) - \text{poly\_blep}(t, \Delta t)$
-- **Band-limited Pulse (duty $w$):** $y_{\text{pulse}}(t) = \text{sgn}(w - t) + \text{poly\_blep}(t, \Delta t) - \text{poly\_blep}((t - w) \bmod 1, \Delta t)$
+- **Band-limited Sawtooth:** $y_{\text{saw}}(t) = (2t - 1) - \operatorname{poly\_blep}(t, \Delta t)$
+- **Band-limited Pulse (duty $w$):** $y_{\text{pulse}}(t) = \operatorname{sgn}(w - t) + \operatorname{poly\_blep}(t, \Delta t) - \operatorname{poly\_blep}((t - w) \bmod 1, \Delta t)$
 
 ---
 
@@ -55,16 +54,21 @@ The Nord Stage 4 Synth provides 6 filter models:
 
 Using pre-warped bilinear cutoff gain $g = \tan(\pi \cdot \min(f_c, 0.49 f_s) / f_s)$:
 Each 1-pole trapezoidal integrator stage updates state $s_i$ with zero unit-delay error:
+
 $$
 v_i = \frac{x_i - s_i}{1 + g}, \qquad y_i = v_i + s_i, \qquad s_i \leftarrow y_i + v_i
 $$
+
 For the 4-pole Transistor Ladder (`Ladder24`) with resonance feedback $k \in [0, 4.0]$:
+
 $$
 G = \left(\frac{g}{1 + g}\right)^4, \qquad S = \sum_{m=1}^{4} \left(\frac{g}{1 + g}\right)^{4-m} \frac{s_m}{1 + g}
 $$
+
 $$
 u = \frac{\tanh(\text{drive} \cdot x) - k \cdot S}{1 + k \cdot G}
 $$
+
 This resolves the 4-stage feedback loop algebraically on every sample without instability near Nyquist.
 
 ---

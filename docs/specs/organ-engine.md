@@ -47,7 +47,7 @@ Each octave doubles the number of teeth on the rotating wheel ($2, 4, 8, 16, 32,
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
-Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps, mapped in-3 dB steps per notch below `8`, with `0` = $-\infty$ dB):
+Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps, mapped in -3 dB steps per notch below `8`, with `0` = $-\infty\text{ dB}$):
 
 | Drawbar | Footage | Semitone Offset ($\Delta k$) | Foldback Behavior |
 |---|---|---:|---|

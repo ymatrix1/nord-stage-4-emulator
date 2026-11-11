@@ -68,7 +68,7 @@ This proves that `.ns4p` is a composite container whose 820-byte payload concate
 - `135` bytes of Organ Preset bitstream (`0x5D..0xE3`),
 - `147` bytes of Piano Preset bitstream (`0xE4..0x176`),
 - `493` bytes of Synth Preset bitstream (`0x177..0x363`).
-Total: $48 + 45 + 135 + 147 + 493 = 868\text{ bytes}$!
+Total: 48 + 45 + 135 + 147 + 493 = 868 bytes!
 
 ---
 
