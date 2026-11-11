@@ -4,14 +4,21 @@
 
 Specifies the MIDI Control Change (`CC`), Bank Select, Program Change, and Aftertouch mapping for the Nord Stage 4 Emulator (`NordStage4` / `MIDIOutKeyboard` in firmware).
 
-Implemented in [`crates/nord-core/src/midi.rs`](../../crates/nord-core/src/midi.rs).
+Implemented in [`crates/nord-core/src/midi.rs`](../../crates/nord-core/src/midi.rs) and [`crates/nord-core/src/engine.rs`](../../crates/nord-core/src/engine.rs).
 
 ---
 
 ## 2. Channel Modes
 
-1. **Global Channel (Default Ch 1):** Receives notes, Morph controllers (`CC1`, `CC11`, `Aftertouch`), Sustain (`CC64`), Sostenuto (`CC66`), Soft Pedal (`CC67`), Swell (`CC4`), Program Change, and panel CCs.
-2. **Per-Layer Auxiliary Channels (Optional Ch 1..7):** Direct independent MIDI routing to `Organ A/B`, `Piano A/B`, and `Synth A/B/C` bypassing the keybed split router.
+MIDI channels are represented internally as `0..15` and displayed to users as channels `1..16`.
+
+1. **Global Channel (Default Ch 1; `Off` supported):** Receives notes through the active Layer Scene and keybed split router. Global control messages are processed only on this channel. Setting it to `Off` disables global-channel input.
+2. **Layer Channels (Default `Off` per layer):** Each Organ, Piano, and Synth layer can receive notes on its own assigned channel (`1..16` or `Off`). Layer-channel notes target that layer directly and bypass keybed split assignments. The target layer must be active in the current Layer Scene. `Off` disables that layer's direct MIDI input. If a channel is assigned to multiple layers, each matching active layer receives the note.
+3. **Channel ownership:** Note Off is matched to the same MIDI channel and the layer recipients recorded for Note On. This prevents a release on one channel from releasing another channel's held pitch.
+
+These channel roles follow the [Nord Stage 4 User Manual, OS v1.6x](https://www.nordkeyboards.com/wt/documents/951/Nord%20Stage%204%20User%20Manual%20v1.6X-Edition-N.pdf), MIDI chapter. The hardware also provides per-section `Sect On` settings, a separate Aux KB channel, MIDI receive filters, and NRPN support; those controls are outside this channel-routing change.
+
+In this engine, incoming CC and channel aftertouch affect global controls only when received on the configured Global Channel. Layer-channel CC/NRPN receive filters and the separate Aux KB routing mode are not modeled by this change.
 
 ---
 

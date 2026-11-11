@@ -28,7 +28,11 @@ pub struct Stage4Engine {
     pub split_router: KeybedSplitRouter,
     pub master_bus: MasterBus,
     pub master_clock: MasterClock,
-    note_recipients: [u8; 128],
+    /// MIDI channel (0..15) used for global keybed, controller, and program input.
+    pub global_midi_channel: Option<u8>,
+    /// Optional direct MIDI channel for each layer; these notes bypass keybed splits.
+    pub layer_midi_channels: [Option<u8>; 7],
+    note_hold_counts: [[[u8; 7]; 128]; 16],
 }
 
 impl Stage4Engine {
@@ -52,56 +56,81 @@ impl Stage4Engine {
             split_router: KeybedSplitRouter::default(),
             master_bus: MasterBus::default(),
             master_clock: MasterClock::default(),
-            note_recipients: [0; 128],
+            global_midi_channel: Some(0),
+            layer_midi_channels: [None; 7],
+            note_hold_counts: [[[0; 7]; 128]; 16],
         }
     }
 
     /// Handles a real-time MIDI event across the 4-zone split router, Morph matrix, and 7 layers.
     pub fn handle_midi(&mut self, event: MidiEvent) {
+        let channel = match event {
+            MidiEvent::NoteOn { channel, .. }
+            | MidiEvent::NoteOff { channel, .. }
+            | MidiEvent::ControlChange { channel, .. }
+            | MidiEvent::ChannelAftertouch { channel, .. }
+            | MidiEvent::ProgramChange { channel, .. } => channel,
+        };
+        if channel >= 16 {
+            return;
+        }
         match event {
             MidiEvent::NoteOn { note, velocity, .. } => {
+                let channel_idx = channel as usize;
                 let mut recipients = 0u8;
+                let is_global_channel = self.global_midi_channel == Some(channel);
                 for layer in LayerId::ALL {
                     if !self.scene.is_layer_active(layer) {
                         continue;
                     }
-                    let split_g = self.split_router.note_gain(layer, note);
-                    if split_g <= 0.0 {
+                    let is_layer_channel =
+                        self.layer_midi_channels[layer as usize] == Some(channel);
+                    if !is_global_channel && !is_layer_channel {
+                        continue;
+                    }
+                    let split_gain = if is_global_channel && !is_layer_channel {
+                        self.split_router.note_gain(layer, note)
+                    } else {
+                        1.0
+                    };
+                    if split_gain <= 0.0 {
                         continue;
                     }
                     recipients |= 1 << (layer as u8);
-                    match layer {
-                        LayerId::OrganA => self.organ_a.note_on_with_gain(note, split_g),
-                        LayerId::OrganB => self.organ_b.note_on_with_gain(note, split_g),
-                        LayerId::PianoA => self.piano_a.note_on_with_gain(note, velocity, split_g),
-                        LayerId::PianoB => self.piano_b.note_on_with_gain(note, velocity, split_g),
-                        LayerId::SynthA => self.synth_a.note_on_with_gain(note, velocity, split_g),
-                        LayerId::SynthB => self.synth_b.note_on_with_gain(note, velocity, split_g),
-                        LayerId::SynthC => self.synth_c.note_on_with_gain(note, velocity, split_g),
+                    self.layer_note_on(layer, note, velocity, split_gain);
+                }
+                for layer in LayerId::ALL {
+                    if recipients & (1 << (layer as u8)) != 0 {
+                        let count =
+                            &mut self.note_hold_counts[channel_idx][note as usize][layer as usize];
+                        *count = count.saturating_add(1);
                     }
                 }
-                self.note_recipients[note as usize] |= recipients;
             }
             MidiEvent::NoteOff { note, .. } => {
-                let recipients = std::mem::take(&mut self.note_recipients[note as usize]);
+                let channel_idx = channel as usize;
                 for layer in LayerId::ALL {
-                    if recipients & (1 << (layer as u8)) == 0 {
+                    let count =
+                        &mut self.note_hold_counts[channel_idx][note as usize][layer as usize];
+                    if *count == 0 {
                         continue;
                     }
-                    match layer {
-                        LayerId::OrganA => self.organ_a.note_off(note),
-                        LayerId::OrganB => self.organ_b.note_off(note),
-                        LayerId::PianoA => self.piano_a.note_off(note),
-                        LayerId::PianoB => self.piano_b.note_off(note),
-                        LayerId::SynthA => self.synth_a.note_off(note),
-                        LayerId::SynthB => self.synth_b.note_off(note),
-                        LayerId::SynthC => self.synth_c.note_off(note),
+                    *count -= 1;
+                    let held_on_any_channel = self
+                        .note_hold_counts
+                        .iter()
+                        .any(|counts| counts[note as usize][layer as usize] > 0);
+                    if !held_on_any_channel {
+                        self.layer_note_off(layer, note);
                     }
                 }
             }
             MidiEvent::ControlChange {
                 controller, value, ..
             } => {
+                if self.global_midi_channel != Some(channel) {
+                    return;
+                }
                 let norm = f32::from(value.min(127)) / 127.0;
                 match controller {
                     cc::MOD_WHEEL => self.morph_controllers.mod_wheel = norm,
@@ -140,10 +169,50 @@ impl Stage4Engine {
                 }
             }
             MidiEvent::ChannelAftertouch { pressure, .. } => {
-                self.morph_controllers.aftertouch = f32::from(pressure.min(127)) / 127.0;
+                if self.global_midi_channel == Some(channel) {
+                    self.morph_controllers.aftertouch = f32::from(pressure.min(127)) / 127.0;
+                }
             }
             MidiEvent::ProgramChange { .. } => {}
         }
+    }
+
+    fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
+        match layer {
+            LayerId::OrganA => self.organ_a.note_on_with_gain(note, gain),
+            LayerId::OrganB => self.organ_b.note_on_with_gain(note, gain),
+            LayerId::PianoA => self.piano_a.note_on_with_gain(note, velocity, gain),
+            LayerId::PianoB => self.piano_b.note_on_with_gain(note, velocity, gain),
+            LayerId::SynthA => self.synth_a.note_on_with_gain(note, velocity, gain),
+            LayerId::SynthB => self.synth_b.note_on_with_gain(note, velocity, gain),
+            LayerId::SynthC => self.synth_c.note_on_with_gain(note, velocity, gain),
+        }
+    }
+
+    fn layer_note_off(&mut self, layer: LayerId, note: u8) {
+        match layer {
+            LayerId::OrganA => self.organ_a.note_off(note),
+            LayerId::OrganB => self.organ_b.note_off(note),
+            LayerId::PianoA => self.piano_a.note_off(note),
+            LayerId::PianoB => self.piano_b.note_off(note),
+            LayerId::SynthA => self.synth_a.note_off(note),
+            LayerId::SynthB => self.synth_b.note_off(note),
+            LayerId::SynthC => self.synth_c.note_off(note),
+        }
+    }
+
+    #[cfg(test)]
+    fn note_recipients_for_test(&self, channel: u8, note: u8) -> u8 {
+        self.note_hold_counts[channel as usize][note as usize]
+            .iter()
+            .enumerate()
+            .fold(0, |mask, (layer, count)| {
+                if *count > 0 {
+                    mask | (1 << layer)
+                } else {
+                    mask
+                }
+            })
     }
 
     /// Applies a decoded Nord Stage 4 Program to the DSP engine.
@@ -363,7 +432,7 @@ mod tests {
             note: 60,
             velocity: 91,
         });
-        let recipients = engine.note_recipients[60];
+        let recipients = engine.note_recipients_for_test(0, 60);
         assert_eq!(
             recipients,
             (1 << LayerId::OrganA as u8)
@@ -376,13 +445,19 @@ mod tests {
             note: 60,
             velocity: 91,
         });
-        assert_eq!(engine.note_recipients[60], 0b0111_1111);
+        assert_eq!(engine.note_recipients_for_test(0, 60), 0b0111_1111);
         engine.handle_midi(MidiEvent::NoteOff {
             channel: 0,
             note: 60,
             velocity: 0,
         });
-        assert_eq!(engine.note_recipients[60], 0);
+        assert_eq!(engine.note_recipients_for_test(0, 60), recipients);
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(engine.note_recipients_for_test(0, 60), 0);
     }
 
     #[test]
@@ -397,8 +472,139 @@ mod tests {
             note: 60,
             velocity: 91,
         });
-        let (velocity_response, split_gain) = engine.piano_a.voice_excitation_for_test(60).unwrap();
+        let (velocity_response, split_gain, _) =
+            engine.piano_a.voice_excitation_for_test(60).unwrap();
         assert_eq!(velocity_response, 91.0 / 127.0);
         assert_eq!(split_gain, 0.5);
+    }
+
+    #[test]
+    fn unmapped_midi_channel_does_not_trigger_layers_or_global_controls() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 1,
+            note: 60,
+            velocity: 100,
+        });
+        engine.handle_midi(MidiEvent::ControlChange {
+            channel: 1,
+            controller: cc::MOD_WHEEL,
+            value: 127,
+        });
+        assert_eq!(engine.note_recipients_for_test(1, 60), 0);
+        assert_eq!(engine.morph_controllers.mod_wheel, 0.0);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 16,
+            note: 60,
+            velocity: 100,
+        });
+        assert_eq!(engine.note_recipients_for_test(1, 60), 0);
+    }
+
+    #[test]
+    fn layer_channel_routes_directly_and_note_off_uses_its_channel() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.layer_midi_channels[LayerId::PianoA as usize] = Some(4);
+        engine.split_router.layer_zone_masks[LayerId::PianoA as usize] = 0;
+
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 4,
+            note: 60,
+            velocity: 100,
+        });
+        let (velocity_response, direct_gain, released) =
+            engine.piano_a.voice_excitation_for_test(60).unwrap();
+        assert_eq!(velocity_response, 100.0 / 127.0);
+        assert_eq!(direct_gain, 1.0);
+        assert!(!released);
+        assert_eq!(
+            engine.note_recipients_for_test(4, 60),
+            1 << LayerId::PianoA as u8
+        );
+        engine.handle_midi(MidiEvent::ControlChange {
+            channel: 4,
+            controller: cc::MOD_WHEEL,
+            value: 127,
+        });
+        assert_eq!(engine.morph_controllers.mod_wheel, 0.0);
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(
+            engine.note_recipients_for_test(4, 60),
+            1 << LayerId::PianoA as u8
+        );
+        assert!(!engine.piano_a.voice_excitation_for_test(60).unwrap().2);
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 4,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(engine.note_recipients_for_test(4, 60), 0);
+        assert!(engine.piano_a.voice_excitation_for_test(60).unwrap().2);
+    }
+
+    #[test]
+    fn global_channel_is_configurable_and_can_be_disabled() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.global_midi_channel = Some(7);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 90,
+        });
+        assert_eq!(engine.note_recipients_for_test(0, 60), 0);
+
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 7,
+            note: 60,
+            velocity: 90,
+        });
+        assert_ne!(engine.note_recipients_for_test(7, 60), 0);
+
+        engine.global_midi_channel = None;
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 7,
+            note: 62,
+            velocity: 90,
+        });
+        assert_eq!(engine.note_recipients_for_test(7, 62), 0);
+    }
+
+    #[test]
+    fn overlapping_channels_do_not_release_a_pitch_while_still_held() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.layer_midi_channels[LayerId::PianoA as usize] = Some(4);
+        for channel in [0, 4] {
+            engine.handle_midi(MidiEvent::NoteOn {
+                channel,
+                note: 60,
+                velocity: 100,
+            });
+        }
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert!(engine
+            .piano_a
+            .voice_excitation_for_test(60)
+            .is_some_and(|(_, _, released)| !released));
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 4,
+            note: 60,
+            velocity: 0,
+        });
+        assert!(engine
+            .piano_a
+            .voice_excitation_for_test(60)
+            .is_some_and(|(_, _, released)| released));
     }
 }
