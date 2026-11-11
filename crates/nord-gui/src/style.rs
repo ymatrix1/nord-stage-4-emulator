@@ -52,23 +52,34 @@ pub const LED_AMBER: Color32 = Color32::from_rgb(0xFF, 0xB0, 0x20);
 /// Dim unlit state for amber LEDs (`#45300A`).
 pub const LED_AMBER_DIM: Color32 = Color32::from_rgb(0x45, 0x30, 0x0A);
 
-/// Orange ladder transition LED (`#FF881A`).
-pub const LED_ORANGE: Color32 = Color32::from_rgb(0xFF, 0x88, 0x1A);
-
 /// High-contrast monochrome OLED display background (`#080A0C`).
 pub const OLED_BG: Color32 = Color32::from_rgb(0x08, 0x0A, 0x0C);
 
 /// OLED ice-white pixel graphic & text font color (`#F0F6FC`).
-pub const OLED_FG: Color32 = Color32::from_rgb(0xF0, 0xF6, 0xF8);
-
-/// OLED ice-cyan pixel bloom color (`#6DF8FC`).
-pub const OLED_CYAN: Color32 = Color32::from_rgb(0x6D, 0xF8, 0xFC);
+pub const OLED_FG: Color32 = Color32::from_rgb(0xF0, 0xF6, 0xFC);
 
 /// White harmonic drawbar cap (`#ECEBE6`).
 pub const DRAWBAR_WHITE: Color32 = Color32::from_rgb(0xEC, 0xEB, 0xE6);
 
 /// Black sub/mutation drawbar cap (`#1A1C1E`).
 pub const DRAWBAR_BLACK: Color32 = Color32::from_rgb(0x1A, 0x1C, 0x1E);
+
+/// Raw JPEG bytes of the authentic Nord Stage 4 high-fidelity front panel texture.
+pub const PANEL_TEXTURE_BYTES: &[u8] = include_bytes!("../assets/panel_texture.jpg");
+
+/// Decodes and loads the embedded panel texture into an `egui::TextureHandle`.
+pub fn load_panel_texture(ctx: &egui::Context) -> egui::TextureHandle {
+    let img = image::load_from_memory(PANEL_TEXTURE_BYTES)
+        .expect("Embedded panel_texture.jpg must be valid JPEG");
+    let rgba = img.to_rgba8();
+    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+    let color_image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
+    ctx.load_texture(
+        "stage4_panel_texture",
+        color_image,
+        egui::TextureOptions::LINEAR,
+    )
+}
 
 /// Configure egui visual style to match authentic Nord chassis aesthetics.
 pub fn setup_nord_visuals(ctx: &egui::Context) {
@@ -89,5 +100,13 @@ mod tests {
         assert_eq!(MODULE_SLATE.g(), 0x3D);
         assert_eq!(LED_GREEN.b(), 0x2E);
         assert_eq!(BUTTON_STORE_RED.r(), 0xB8);
+    }
+
+    #[test]
+    fn test_embedded_panel_texture_valid_jpeg() {
+        assert!(PANEL_TEXTURE_BYTES.len() > 1000);
+        let img = image::load_from_memory(PANEL_TEXTURE_BYTES).expect("Valid JPEG");
+        assert!(img.width() >= 1000);
+        assert!(img.height() >= 100);
     }
 }

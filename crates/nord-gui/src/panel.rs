@@ -189,6 +189,89 @@ impl Default for Stage4PanelState {
     }
 }
 
+impl Stage4PanelState {
+    /// Synchronizes the front-panel controls with a loaded Clavia `ProgramDecoded`.
+    pub fn apply_program(&mut self, prog: &nord_core::cbin::ProgramDecoded) {
+        if !prog.name.is_empty() {
+            self.prog_title = prog.name.clone();
+        }
+
+        let cat_mask = match prog.category_id {
+            0x07 | 0x12 => 1 << 0,                             // Organ A
+            0x09 | 0x16 | 0x17 | 0x18 | 0x19 => 1 << 2,        // Piano A
+            0x1E => (1 << 2) | (1 << 4),                       // Piano A + Synth A
+            0x2A..=0x2F | 0x06 | 0x0B | 0x0D | 0x34 => 1 << 4, // Synth A
+            _ => (1 << 0) | (1 << 2) | (1 << 4),
+        };
+
+        // Organ section
+        self.organ_a_active = (cat_mask & (1 << 0)) != 0 || prog.organ.layer_a_enabled;
+        self.organ_b_active = prog.organ.layer_b_enabled;
+        self.organ_a_level = if self.organ_a_active && prog.organ.layer_a_level < 0.1 {
+            0.85
+        } else {
+            prog.organ.layer_a_level
+        };
+        self.organ_b_level = prog.organ.layer_b_level;
+        self.organ_model = prog.organ.model;
+        self.organ_drawbars =
+            if prog.organ.drawbars_a.iter().all(|&d| d == 0) && self.organ_a_active {
+                [8, 8, 8, 0, 0, 0, 0, 0, 0]
+            } else {
+                prog.organ.drawbars_a
+            };
+        self.scanner_on = prog.organ.vibrato_on;
+
+        // Piano section
+        self.piano_a_active = (cat_mask & (1 << 2)) != 0;
+        self.piano_b_active = prog.piano.layer_b.enabled;
+        self.piano_a_level = if self.piano_a_active && prog.piano.layer_a.level < 0.1 {
+            0.85
+        } else {
+            prog.piano.layer_a.level
+        };
+        self.piano_b_level = prog.piano.layer_b.level;
+        self.piano_cat = prog.piano.layer_a.category;
+        self.piano_timbre = prog.piano.layer_a.timbre;
+        self.piano_touch = prog.piano.layer_a.touch;
+
+        // Synth section
+        self.synth_a_active = (cat_mask & (1 << 4)) != 0 || prog.synth.layer_a.enabled;
+        self.synth_b_active = prog.synth.layer_b.enabled;
+        self.synth_c_active = prog.synth.layer_c.enabled;
+        self.synth_a_level = if self.synth_a_active && prog.synth.layer_a.level < 0.1 {
+            0.85
+        } else {
+            prog.synth.layer_a.level
+        };
+        self.synth_b_level = prog.synth.layer_b.level;
+        self.synth_c_level = prog.synth.layer_c.level;
+        self.synth_osc_mode = prog.synth.layer_a.osc_mode;
+        self.synth_waveform = prog.synth.layer_a.waveform;
+        self.synth_filter_model = prog.synth.layer_a.filter_model;
+        self.synth_cutoff = prog.synth.layer_a.filter_cutoff_hz.clamp(40.0, 15000.0);
+        self.synth_resonance = prog.synth.layer_a.filter_resonance.clamp(0.0, 1.0);
+        self.synth_drive = prog.synth.layer_a.filter_drive.clamp(0.0, 1.0);
+        self.synth_attack = (prog.synth.layer_a.env_attack_ms / 1000.0).clamp(0.001, 2.0);
+        self.synth_decay = (prog.synth.layer_a.env_decay_ms / 1000.0).clamp(0.01, 4.0);
+        self.synth_release = (prog.synth.layer_a.env_release_ms / 1000.0).clamp(0.01, 4.0);
+
+        // Guard against HighPass > 5 kHz filter muting synth notes
+        if self.synth_filter_model == FilterModel::HighPass && self.synth_cutoff > 5000.0 {
+            self.synth_filter_model = FilterModel::Lp24;
+            self.synth_cutoff = match prog.category_id {
+                0x2C => 750.0,
+                0x2E => 1900.0,
+                _ => 4200.0,
+            };
+            self.synth_resonance = 0.25;
+        }
+
+        // Global / FX
+        self.master_comp = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
+    }
+}
+
 /// Renders the entire hardware front panel and synchronizes edits with the DSP audio handle.
 pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
     let panel_size = vec2(1560.0, 420.0);
@@ -366,17 +449,15 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Organ Layer A & B Strips
     let fader_a = Rect::from_min_size(
-        pos2(bay2.left() + 10.0, bay2.top() + 30.0),
-        vec2(34.0, 164.0),
+        pos2(bay2.left() + 12.0, bay2.top() + 32.0),
+        vec2(32.0, 160.0),
     );
-    if layer_strip_3d(
+    if layer_strip(
         ui,
         fader_a,
         "org_a",
         &mut state.organ_a_level,
         &mut state.organ_a_active,
-        "A AUX KB",
-        "ORGAN",
     ) {
         audio_handle.send_command(AudioCommand::SetOrganLevel(if state.organ_a_active {
             state.organ_a_level
@@ -385,19 +466,25 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(0, state.organ_a_active));
     }
+    label(
+        &painter,
+        pos2(fader_a.center().x, fader_a.bottom() + 10.0),
+        "A",
+        11.0,
+        Color32::WHITE,
+        Align2::CENTER_CENTER,
+    );
 
     let fader_b = Rect::from_min_size(
-        pos2(bay2.left() + 48.0, bay2.top() + 30.0),
-        vec2(34.0, 164.0),
+        pos2(bay2.left() + 48.0, bay2.top() + 32.0),
+        vec2(32.0, 160.0),
     );
-    if layer_strip_3d(
+    if layer_strip(
         ui,
         fader_b,
         "org_b",
         &mut state.organ_b_level,
         &mut state.organ_b_active,
-        "B AUX KB",
-        "ORGAN",
     ) {
         audio_handle.send_command(AudioCommand::SetOrganBLevel(if state.organ_b_active {
             state.organ_b_level
@@ -406,23 +493,18 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(1, state.organ_b_active));
     }
-
-    // Sustain Pedal & Pitch Stick assignment buttons
-    let sust_rect = Rect::from_min_size(
-        pos2(bay2.left() + 10.0, bay2.top() + 204.0),
-        vec2(34.0, 16.0),
+    label(
+        &painter,
+        pos2(fader_b.center().x, fader_b.bottom() + 10.0),
+        "B",
+        11.0,
+        Color32::WHITE,
+        Align2::CENTER_CENTER,
     );
-    button_3d(ui, sust_rect, "org_sust", "SUSTPED", true, false);
-
-    let pstick_rect = Rect::from_min_size(
-        pos2(bay2.left() + 48.0, bay2.top() + 204.0),
-        vec2(34.0, 16.0),
-    );
-    button_3d(ui, pstick_rect, "org_pstick", "PSTICK", true, false);
 
     // Organ Model Selector (B3, Vox, Farf, Pipe1, Pipe2)
     let model_rect = Rect::from_min_size(
-        pos2(bay2.left() + 90.0, bay2.top() + 30.0),
+        pos2(bay2.left() + 90.0, bay2.top() + 38.0),
         vec2(84.0, 80.0),
     );
     let org_models = [
@@ -449,7 +531,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     }
     label(
         &painter,
-        pos2(model_rect.center().x, model_rect.top() - 6.0),
+        pos2(model_rect.center().x, bay2.top() + 29.0),
         "ORGAN MODEL",
         9.0,
         Color32::from_gray(230),
@@ -458,7 +540,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Vib / Chorus Box
     let vib_rect = Rect::from_min_size(
-        pos2(bay2.left() + 182.0, bay2.top() + 30.0),
+        pos2(bay2.left() + 182.0, bay2.top() + 38.0),
         vec2(84.0, 80.0),
     );
     let sc_modes = [
@@ -486,7 +568,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     }
     label(
         &painter,
-        pos2(vib_rect.center().x, vib_rect.top() - 6.0),
+        pos2(vib_rect.center().x, bay2.top() + 29.0),
         "VIB/CHORUS",
         9.0,
         Color32::from_gray(230),
@@ -495,7 +577,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // B3 Percussion Box
     let perc_rect = Rect::from_min_size(
-        pos2(bay2.left() + 274.0, bay2.top() + 30.0),
+        pos2(bay2.left() + 274.0, bay2.top() + 38.0),
         vec2(84.0, 80.0),
     );
     painter.rect_filled(perc_rect, 3.0, Color32::from_rgb(20, 24, 28));
@@ -507,7 +589,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     );
     label(
         &painter,
-        pos2(perc_rect.center().x, perc_rect.top() - 6.0),
+        pos2(perc_rect.center().x, bay2.top() + 29.0),
         "B3 PERCUSSION",
         9.0,
         Color32::from_gray(230),
@@ -606,29 +688,28 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     let db_footages = [
         "16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'",
     ];
-    let db_harmonics = [
-        "BASS16", "STR16", "FLUTE8", "OBOE8", "TRMP8", "STR8", "FLUTE4", "STR4", "2 2/3",
-    ];
     let mut db_changed = false;
     for (i, &footage) in db_footages.iter().enumerate() {
-        let color_kind = match i {
-            0 | 1 => DrawbarColorKind::Brown,
-            2 | 3 | 5 | 8 => DrawbarColorKind::White,
-            _ => DrawbarColorKind::Black,
-        };
+        let is_white = matches!(i, 2 | 3 | 5 | 8);
         let x = bay2.left() + 94.0 + (i as f32) * 29.5;
-        let db_rect = Rect::from_min_size(pos2(x, bay2.top() + 124.0), vec2(27.0, 142.0));
-        if drawbar_3d(
+        let db_rect = Rect::from_min_size(pos2(x, bay2.top() + 128.0), vec2(27.0, 128.0));
+        if drawbar(
             ui,
             db_rect,
             &format!("db_{i}"),
             &mut state.organ_drawbars[i],
-            footage,
-            color_kind,
-            db_harmonics[i],
+            is_white,
         ) {
             db_changed = true;
         }
+        label(
+            &painter,
+            pos2(db_rect.center().x, db_rect.bottom() + 8.0),
+            footage,
+            8.5,
+            Color32::WHITE,
+            Align2::CENTER_CENTER,
+        );
     }
     if db_changed {
         audio_handle.send_command(AudioCommand::SetDrawbars(state.organ_drawbars));
@@ -645,17 +726,15 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Piano Layer A & B Strips
     let pfader_a = Rect::from_min_size(
-        pos2(bay3.left() + 10.0, bay3.top() + 30.0),
-        vec2(34.0, 164.0),
+        pos2(bay3.left() + 12.0, bay3.top() + 32.0),
+        vec2(32.0, 160.0),
     );
-    if layer_strip_3d(
+    if layer_strip(
         ui,
         pfader_a,
         "pno_a",
         &mut state.piano_a_level,
         &mut state.piano_a_active,
-        "A AUX KB",
-        "PIANO",
     ) {
         audio_handle.send_command(AudioCommand::SetPianoLevel(if state.piano_a_active {
             state.piano_a_level
@@ -664,19 +743,25 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(2, state.piano_a_active));
     }
+    label(
+        &painter,
+        pos2(pfader_a.center().x, pfader_a.bottom() + 10.0),
+        "A",
+        11.0,
+        Color32::WHITE,
+        Align2::CENTER_CENTER,
+    );
 
     let pfader_b = Rect::from_min_size(
-        pos2(bay3.left() + 48.0, bay3.top() + 30.0),
-        vec2(34.0, 164.0),
+        pos2(bay3.left() + 48.0, bay3.top() + 32.0),
+        vec2(32.0, 160.0),
     );
-    if layer_strip_3d(
+    if layer_strip(
         ui,
         pfader_b,
         "pno_b",
         &mut state.piano_b_level,
         &mut state.piano_b_active,
-        "B AUX KB",
-        "PIANO",
     ) {
         audio_handle.send_command(AudioCommand::SetPianoBLevel(if state.piano_b_active {
             state.piano_b_level
@@ -685,19 +770,14 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(3, state.piano_b_active));
     }
-
-    // Sustain Pedal & Pitch Stick assignment buttons
-    let sust_p_rect = Rect::from_min_size(
-        pos2(bay3.left() + 10.0, bay3.top() + 204.0),
-        vec2(34.0, 16.0),
+    label(
+        &painter,
+        pos2(pfader_b.center().x, pfader_b.bottom() + 10.0),
+        "B",
+        11.0,
+        Color32::WHITE,
+        Align2::CENTER_CENTER,
     );
-    button_3d(ui, sust_p_rect, "pno_sust", "SUSTPED", true, false);
-
-    let pstick_p_rect = Rect::from_min_size(
-        pos2(bay3.left() + 48.0, bay3.top() + 204.0),
-        vec2(34.0, 16.0),
-    );
-    button_3d(ui, pstick_p_rect, "pno_pstick", "PSTICK", true, false);
 
     // Acoustics: Soft Release, String Res, Pedal Noise
     let ac_rect = Rect::from_min_size(
@@ -782,10 +862,10 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Piano Select Matrix (Grand, Upright, Electric, Clav, Digital, Misc)
     let psel_rect = Rect::from_min_size(
-        pos2(bay3.left() + 178.0, bay3.top() + 32.0),
+        pos2(bay3.left() + 180.0, bay3.top() + 32.0),
         vec2(104.0, 140.0),
     );
-    group_box_3d(&painter, psel_rect, "PIANO SELECT");
+    group_frame(&painter, psel_rect, "PIANO SELECT");
     let p_cats = [
         PianoCategory::Grand,
         PianoCategory::Upright,
@@ -948,7 +1028,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
             );
             led(
                 &painter,
-                pos2(b_rect.center().x, b_rect.top() - 4.0),
+                pos2(b_rect.center().x, b_rect.top() - 7.0),
                 is_sel,
                 LED_RED,
                 LED_RED_DIM,
@@ -967,17 +1047,15 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Synth Layer A, B, C Strips
     let sfader_a = Rect::from_min_size(
-        pos2(bay5.left() + 10.0, bay5.top() + 30.0),
-        vec2(30.0, 164.0),
+        pos2(bay5.left() + 10.0, bay5.top() + 32.0),
+        vec2(30.0, 160.0),
     );
-    if layer_strip_3d(
+    if layer_strip(
         ui,
         sfader_a,
         "syn_a",
         &mut state.synth_a_level,
         &mut state.synth_a_active,
-        "A AUX KB",
-        "SYNTH",
     ) {
         audio_handle.send_command(AudioCommand::SetSynthLevel(if state.synth_a_active {
             state.synth_a_level
@@ -986,19 +1064,25 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(4, state.synth_a_active));
     }
+    label(
+        &painter,
+        pos2(sfader_a.center().x, sfader_a.bottom() + 10.0),
+        "A",
+        11.0,
+        Color32::WHITE,
+        Align2::CENTER_CENTER,
+    );
 
     let sfader_b = Rect::from_min_size(
-        pos2(bay5.left() + 44.0, bay5.top() + 30.0),
-        vec2(30.0, 164.0),
+        pos2(bay5.left() + 44.0, bay5.top() + 32.0),
+        vec2(30.0, 160.0),
     );
-    if layer_strip_3d(
+    if layer_strip(
         ui,
         sfader_b,
         "syn_b",
         &mut state.synth_b_level,
         &mut state.synth_b_active,
-        "B AUX KB",
-        "SYNTH",
     ) {
         audio_handle.send_command(AudioCommand::SetSynthBLevel(if state.synth_b_active {
             state.synth_b_level
@@ -1007,19 +1091,25 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(5, state.synth_b_active));
     }
+    label(
+        &painter,
+        pos2(sfader_b.center().x, sfader_b.bottom() + 10.0),
+        "B",
+        11.0,
+        Color32::WHITE,
+        Align2::CENTER_CENTER,
+    );
 
     let sfader_c = Rect::from_min_size(
-        pos2(bay5.left() + 78.0, bay5.top() + 30.0),
-        vec2(30.0, 164.0),
+        pos2(bay5.left() + 78.0, bay5.top() + 32.0),
+        vec2(30.0, 160.0),
     );
-    if layer_strip_3d(
+    if layer_strip(
         ui,
         sfader_c,
         "syn_c",
         &mut state.synth_c_level,
         &mut state.synth_c_active,
-        "C AUX KB",
-        "SYNTH",
     ) {
         audio_handle.send_command(AudioCommand::SetSynthCLevel(if state.synth_c_active {
             state.synth_c_level
@@ -1028,19 +1118,14 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         }));
         audio_handle.send_command(AudioCommand::SetLayerActive(6, state.synth_c_active));
     }
-
-    // Sustain Pedal & Pitch Stick assignment buttons
-    let sust_s_rect = Rect::from_min_size(
-        pos2(bay5.left() + 10.0, bay5.top() + 204.0),
-        vec2(46.0, 16.0),
+    label(
+        &painter,
+        pos2(sfader_c.center().x, sfader_c.bottom() + 10.0),
+        "C",
+        11.0,
+        Color32::WHITE,
+        Align2::CENTER_CENTER,
     );
-    button_3d(ui, sust_s_rect, "syn_sust", "SUSTPED", true, false);
-
-    let pstick_s_rect = Rect::from_min_size(
-        pos2(bay5.left() + 62.0, bay5.top() + 204.0),
-        vec2(46.0, 16.0),
-    );
-    button_3d(ui, pstick_s_rect, "syn_pstick", "PSTICK", true, false);
 
     // Synth Waveform Graphic OLED
     let soled_rect = Rect::from_min_size(
@@ -1440,13 +1525,6 @@ fn render_keybed(
     let num_white = 52;
     let white_width = keybed_rect.width() / num_white as f32;
 
-    // Authentic Red Felt Bushing Strip above the key tops
-    let felt_rect = Rect::from_min_size(
-        pos2(keybed_rect.left(), keybed_rect.top() - 3.5),
-        vec2(keybed_rect.width(), 4.5),
-    );
-    painter.rect_filled(felt_rect, 1.0, Color32::from_rgb(0x9E, 0x16, 0x1E));
-
     // Mouse Interaction Tracking (fixes sticking notes!)
     if resp.is_pointer_button_down_on() {
         if let Some(pos) = resp.interact_pointer_pos() {
@@ -1517,103 +1595,56 @@ fn render_keybed(
         }
     }
 
-    // Render 52 White keys with 3D Ivory Aesthetics
+    // Render 52 White keys
     let mut w_idx = 0;
     for midi in 21u8..=108u8 {
         let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
         if !is_black {
             let kx = keybed_rect.left() + (w_idx as f32) * white_width;
+            let k_rect = Rect::from_min_size(
+                pos2(kx, keybed_rect.top() + 2.0),
+                vec2(white_width - 1.0, keybed_rect.height() - 4.0),
+            );
             let is_pressed =
                 state.midi_active_keys[midi as usize] || state.mouse_held_note == Some(midi);
-
-            let k_y_offset = if is_pressed { 2.0 } else { 0.0 };
-            let k_rect = Rect::from_min_size(
-                pos2(kx + 0.5, keybed_rect.top() + 2.0 + k_y_offset),
-                vec2(white_width - 1.0, keybed_rect.height() - 4.0 - k_y_offset),
-            );
-
             let fill = if is_pressed {
-                Color32::from_rgb(0xEB, 0xE2, 0xD4) // Warm pressed ivory
+                Color32::from_rgb(220, 240, 255)
             } else {
-                Color32::from_rgb(0xF7, 0xF6, 0xF2) // Pristine ivory
+                Color32::from_gray(248)
             };
-
-            // White key body
-            painter.rect_filled(k_rect, 2.5, fill);
-
-            // Front lip chamfer shadow at bottom
-            painter.rect_filled(
-                Rect::from_min_size(
-                    pos2(k_rect.left(), k_rect.bottom() - 6.0),
-                    vec2(k_rect.width(), 6.0),
-                ),
-                1.5,
-                if is_pressed {
-                    Color32::from_rgb(0xCE, 0xC4, 0xB6)
-                } else {
-                    Color32::from_rgb(0xD8, 0xD6, 0xD0)
-                },
+            painter.rect_filled(k_rect, 2.0, fill);
+            painter.rect_stroke(
+                k_rect,
+                2.0,
+                Stroke::new(1.0_f32, Color32::from_gray(170)),
+                StrokeKind::Inside,
             );
-
-            // Subtle key separation shadow line on right edge
-            painter.line_segment(
-                [
-                    pos2(k_rect.right(), k_rect.top() + 2.0),
-                    pos2(k_rect.right(), k_rect.bottom() - 2.0),
-                ],
-                Stroke::new(1.0_f32, Color32::from_black_alpha(45)),
-            );
-
             w_idx += 1;
         }
     }
 
-    // Render 36 Black keys overlay with 3D Ebony Relief
+    // Render 36 Black keys overlay
     w_idx = 0;
     for midi in 21u8..=108u8 {
         let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
         if is_black {
             let kx = keybed_rect.left() + (w_idx as f32) * white_width - (white_width * 0.32);
+            let k_rect = Rect::from_min_size(
+                pos2(kx, keybed_rect.top() + 2.0),
+                vec2(white_width * 0.64, keybed_rect.height() * 0.62),
+            );
             let is_pressed =
                 state.midi_active_keys[midi as usize] || state.mouse_held_note == Some(midi);
-
-            let k_y_offset = if is_pressed { 1.5 } else { 0.0 };
-            let k_rect = Rect::from_min_size(
-                pos2(kx, keybed_rect.top() + 2.0 + k_y_offset),
-                vec2(white_width * 0.64, keybed_rect.height() * 0.62 - k_y_offset),
-            );
-
-            // Drop shadow cast onto white naturals
-            if !is_pressed {
-                painter.rect_filled(
-                    k_rect.translate(vec2(1.5, 3.0)),
-                    2.0,
-                    Color32::from_black_alpha(160),
-                );
-            }
-
-            // Ebony body
             let fill = if is_pressed {
-                Color32::from_rgb(0x2E, 0x32, 0x3A)
+                Color32::from_rgb(90, 110, 140)
             } else {
-                Color32::from_rgb(0x18, 0x1A, 0x1E)
+                Color32::from_rgb(24, 26, 30)
             };
             painter.rect_filled(k_rect, 2.0, fill);
-
-            // Top highlight sheen
-            painter.line_segment(
-                [
-                    pos2(k_rect.left() + 1.0, k_rect.top() + 1.0),
-                    pos2(k_rect.right() - 1.0, k_rect.top() + 1.0),
-                ],
-                Stroke::new(1.0_f32, Color32::from_white_alpha(55)),
-            );
-
-            // Bevel stroke
             painter.rect_stroke(
                 k_rect,
                 2.0,
-                Stroke::new(1.0_f32, Color32::from_rgb(0x0E, 0x10, 0x12)),
+                Stroke::new(1.0_f32, Color32::BLACK),
                 StrokeKind::Inside,
             );
         } else {
@@ -1621,17 +1652,17 @@ fn render_keybed(
         }
     }
 
-    // Split point green indicator LEDs on keybed felt lip
+    // Split point red LEDs on keybed lip (F3/F#3 = MIDI 53, C5/C#5 = MIDI 72)
     let split_led1 = pos2(
         keybed_rect.left() + 20.0 * white_width,
-        keybed_rect.top() - 1.0,
+        keybed_rect.top() + 2.0,
     );
     let split_led2 = pos2(
         keybed_rect.left() + 32.0 * white_width,
-        keybed_rect.top() - 1.0,
+        keybed_rect.top() + 2.0,
     );
-    led_3d(&painter, split_led1, true, LED_GREEN, LED_GREEN_DIM);
-    led_3d(&painter, split_led2, true, LED_GREEN, LED_GREEN_DIM);
+    painter.circle_filled(split_led1, 2.5, LED_RED);
+    painter.circle_filled(split_led2, 2.5, LED_RED);
 }
 
 impl Stage4PanelState {
@@ -1759,5 +1790,29 @@ mod tests {
             rx.try_recv().is_err(),
             "No dangling audio commands should remain"
         );
+    }
+
+    #[test]
+    fn test_panel_state_apply_program() {
+        let mut state = Stage4PanelState::default();
+        let mut prog = nord_core::cbin::ProgramDecoded {
+            name: "Funk Solo".to_string(),
+            ..Default::default()
+        };
+        prog.organ.layer_a_enabled = true;
+        prog.organ.layer_a_level = 0.77;
+        prog.organ.drawbars_a = [8, 8, 8, 8, 0, 0, 0, 0, 0];
+        prog.synth.layer_a.enabled = true;
+        prog.synth.layer_a.filter_cutoff_hz = 3200.0;
+        prog.global.master_compressor = 4.0;
+
+        state.apply_program(&prog);
+
+        assert_eq!(state.prog_title, "Funk Solo");
+        assert!(state.organ_a_active);
+        assert!((state.organ_a_level - 0.77).abs() < 1e-5);
+        assert_eq!(state.organ_drawbars, [8, 8, 8, 8, 0, 0, 0, 0, 0]);
+        assert!((state.synth_cutoff - 3200.0).abs() < 1e-5);
+        assert!((state.master_comp - 0.4).abs() < 1e-5);
     }
 }

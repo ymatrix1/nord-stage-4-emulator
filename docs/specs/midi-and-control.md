@@ -57,3 +57,22 @@ Implemented in [`crates/nord-core/src/midi.rs`](../../crates/nord-core/src/midi.
 | `115` | Master Compressor Amount | `0..127` | Master |
 | `120` | All Sound Off | `0` | Channel Mode |
 | `123` | All Notes Off | `0` | Channel Mode |
+
+---
+
+## 4. Audio Host and MIDI Event Delivery Specification
+
+Implemented in [`crates/nord-gui/src/audio.rs`](../../crates/nord-gui/src/audio.rs).
+
+### 4.1 Audio Output Formats & Channel Layout
+- **Sample Formats:**
+  - `F32` (normalized float `-1.0..1.0`): direct engine floating point output scaled by master volume.
+  - `I16` (signed 16-bit PCM `-32767..32767`): clamped and rounded `(sample.clamp(-1.0, 1.0) * 32767.0).round() as i16`.
+- **Channel Allocation:**
+  - `channels >= 2`: Channel 0 is Stereo Left, Channel 1 is Stereo Right. All surplus channels (`2..channels`) are strictly zeroed (`0.0` / `0`) to prevent uninitialized memory noise.
+  - `channels == 1`: Mono downmix averaging `(Left + Right) * 0.5`.
+
+### 4.2 Event Queue & Backpressure Policy
+- The `AudioHandle` provides a bounded queue (`bounded(1024)`) connecting MIDI/UI threads to the real-time audio thread.
+- **Non-critical events** (continuous controllers, pitch bend, note-on) use non-blocking `try_send` and drop on queue saturation to preserve real-time responsiveness and avoid latency spikes.
+- **Critical note-lifecycle events** (`NoteOff`, `AllNotesOff` / `CC123`, `AllSoundOff` / `CC120`, and `SustainPedal(0)` / `CC64=0`) use a retry timeout (`send_timeout`) allowing the audio thread to drain before delivery, ensuring keys and pedal states are never left permanently stuck.

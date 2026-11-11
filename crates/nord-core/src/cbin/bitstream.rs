@@ -17,8 +17,18 @@ impl<'a> BitReader<'a> {
         self.bit_pos
     }
 
-    pub fn set_bit_pos(&mut self, pos: usize) {
+    /// Sets the bit reader cursor position, validating against total payload bit count.
+    pub fn set_bit_pos(&mut self, pos: usize) -> Result<(), CbinError> {
+        let total_bits = self.data.len().checked_mul(8).ok_or_else(|| {
+            CbinError::BitstreamError("bitstream data length overflow".to_string())
+        })?;
+        if pos > total_bits {
+            return Err(CbinError::BitstreamError(format!(
+                "cursor seek {pos} out of bounds (total bits {total_bits})"
+            )));
+        }
         self.bit_pos = pos;
+        Ok(())
     }
 
     pub fn read_bits(&mut self, count: usize) -> Result<u32, CbinError> {
@@ -27,12 +37,16 @@ impl<'a> BitReader<'a> {
                 "cannot read {count} bits into u32 (maximum 32)"
             )));
         }
-        if self.bit_pos + count > self.data.len() * 8 {
+        let total_bits = self.data.len().checked_mul(8).ok_or_else(|| {
+            CbinError::BitstreamError("bitstream data length overflow".to_string())
+        })?;
+        let end_pos = self.bit_pos.checked_add(count).ok_or_else(|| {
+            CbinError::BitstreamError("bitstream read cursor position overflow".to_string())
+        })?;
+        if end_pos > total_bits {
             return Err(CbinError::BitstreamError(format!(
                 "bitstream overrun: pos {} + count {} > total bits {}",
-                self.bit_pos,
-                count,
-                self.data.len() * 8
+                self.bit_pos, count, total_bits
             )));
         }
         let mut val = 0u32;
@@ -66,8 +80,18 @@ impl<'a> BitWriter<'a> {
         self.bit_pos
     }
 
-    pub fn set_bit_pos(&mut self, pos: usize) {
+    /// Sets the bit writer cursor position, validating against total buffer bit count.
+    pub fn set_bit_pos(&mut self, pos: usize) -> Result<(), CbinError> {
+        let total_bits = self.data.len().checked_mul(8).ok_or_else(|| {
+            CbinError::BitstreamError("bitstream data length overflow".to_string())
+        })?;
+        if pos > total_bits {
+            return Err(CbinError::BitstreamError(format!(
+                "writer seek {pos} out of bounds (total bits {total_bits})"
+            )));
+        }
         self.bit_pos = pos;
+        Ok(())
     }
 
     pub fn write_bits(&mut self, value: u32, count: usize) -> Result<(), CbinError> {
@@ -76,12 +100,16 @@ impl<'a> BitWriter<'a> {
                 "cannot write {count} bits from u32"
             )));
         }
-        if self.bit_pos + count > self.data.len() * 8 {
+        let total_bits = self.data.len().checked_mul(8).ok_or_else(|| {
+            CbinError::BitstreamError("bitstream data length overflow".to_string())
+        })?;
+        let end_pos = self.bit_pos.checked_add(count).ok_or_else(|| {
+            CbinError::BitstreamError("bitstream write cursor position overflow".to_string())
+        })?;
+        if end_pos > total_bits {
             return Err(CbinError::BitstreamError(format!(
                 "bitstream write overrun: pos {} + count {} > total bits {}",
-                self.bit_pos,
-                count,
-                self.data.len() * 8
+                self.bit_pos, count, total_bits
             )));
         }
         for i in 0..count {
@@ -135,5 +163,19 @@ mod tests {
         assert!(r.read_bits(16).is_ok());
         assert!(r.read_bits(1).is_err()); // overrun
         assert!(r.read_bits(33).is_err()); // count > 32
+    }
+
+    #[test]
+    fn test_bit_cursor_seek_bounds_and_overflow() {
+        let mut buf = [0u8; 4];
+        let mut r = BitReader::new(&buf);
+        assert!(r.set_bit_pos(32).is_ok());
+        assert!(r.set_bit_pos(33).is_err());
+        assert!(r.set_bit_pos(usize::MAX).is_err());
+
+        let mut w = BitWriter::new(&mut buf);
+        assert!(w.set_bit_pos(32).is_ok());
+        assert!(w.set_bit_pos(33).is_err());
+        assert!(w.set_bit_pos(usize::MAX).is_err());
     }
 }

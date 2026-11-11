@@ -48,7 +48,7 @@ flowchart TD
     SynB --> FX_SB
     SynC --> FX_SC
 
-    FX_OA & FX_OB & FX_PA & FX_PB & FX_SA & FX_SB & FX_SC --> Master["Master Bus: Global Compressor + CS4392 Reconstruction LP + Master Clock"]
+    FX_OA & FX_OB & FX_PA & FX_PB & FX_SA & FX_SB & FX_SC --> Master["Master Bus: Global Compressor + PCM1791A Reconstruction LP + Master Clock"]
 ```
 
 ---

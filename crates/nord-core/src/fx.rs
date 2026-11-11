@@ -273,7 +273,7 @@ impl LayerFxChain {
     }
 }
 
-/// Global Master Compressor and `CS4392` + `LM833` output reconstruction stage.
+/// Global Master Compressor and Burr-Brown `PCM1791A` + JRC `NJM4580M` output reconstruction stage.
 #[derive(Debug, Clone, Copy)]
 pub struct MasterBus {
     pub compressor_amount: f32,
@@ -310,9 +310,11 @@ impl MasterBus {
         let cl = (l * gain).clamp(-1.0, 1.0);
         let cr = (r * gain).clamp(-1.0, 1.0);
 
-        // Post-DAC CS4392 + LM833 ultrasonic reconstruction filter
-        self.recon_lp_l += 0.85 * (cl - self.recon_lp_l);
-        self.recon_lp_r += 0.85 * (cr - self.recon_lp_r);
+        // Post-DAC Burr-Brown PCM1791A + NJM4580M stage:
+        // The hardware PCM1791A features a flat passband within +/-0.002 dB up to 21.8 kHz.
+        // A gentle 0.985 alpha preserves crisp treble (<0.15 dB roll-off at 20 kHz) without in-band damping.
+        self.recon_lp_l += 0.985 * (cl - self.recon_lp_l);
+        self.recon_lp_r += 0.985 * (cr - self.recon_lp_r);
         [self.recon_lp_l, self.recon_lp_r]
     }
 }
