@@ -1,10 +1,10 @@
 ---
 # ns4-707f
 title: 'Phase 6: 1:1 Front-Panel GUI, Standalone App & CLAP/VST3 DAW Plugin (nih-plug)'
-status: todo
+status: in-progress
 type: epic
 created_at: 2026-11-11T00:47:46Z
-updated_at: 2026-11-11T00:55:00Z
+updated_at: 2026-11-11T02:55:00Z
 ---
 
 ## Context

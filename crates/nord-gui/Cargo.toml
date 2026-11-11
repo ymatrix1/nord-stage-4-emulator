@@ -1,0 +1,25 @@
+[package]
+name = "nord-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "1:1 Hardware Front-Panel GUI and standalone application for the Nord Stage 4 Emulator"
+
+[lib]
+name = "nord_gui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nord-stage4"
+path = "src/main.rs"
+
+[dependencies]
+nord-core = { path = "../nord-core" }
+egui = "0.31"
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow"] }
+cpal = "0.15"
+midir = "0.10"
+crossbeam-channel = "0.5"
+serde = { version = "1.0", features = ["derive"] }
