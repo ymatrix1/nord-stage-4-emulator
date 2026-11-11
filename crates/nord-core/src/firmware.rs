@@ -17,23 +17,35 @@ pub struct FirmwareSegment {
 
 impl FirmwareSegment {
     /// Extracts and decompresses the segment payload from raw firmware bytes.
+    ///
+    /// For compressed segments (e.g. `CODE`), `self.data_size` represents the declared
+    /// expanded memory size at runtime, and `decompress_clavia_lz` decompresses the
+    /// stream up to `self.data_size`.
     pub fn extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String> {
         let start = self.data_offset as usize;
-        let end = start.saturating_add(self.data_size as usize);
-        if end > raw.len() {
+        if start >= raw.len() {
             return Err(format!(
-                "segment {} exceeds firmware boundary: 0x{:X}..0x{:X} > 0x{:X}",
+                "segment {} start offset 0x{:X} exceeds firmware size 0x{:X}",
                 self.name,
                 start,
-                end,
                 raw.len()
             ));
         }
-        let slice = &raw[start..end];
+        let slice = &raw[start..];
         if self.name == "CODE" {
             decompress_clavia_lz(slice, self.data_size as usize)
         } else {
-            Ok(slice.to_vec())
+            let end = start.saturating_add(self.data_size as usize);
+            if end > raw.len() {
+                return Err(format!(
+                    "segment {} exceeds firmware boundary: 0x{:X}..0x{:X} > 0x{:X}",
+                    self.name,
+                    start,
+                    end,
+                    raw.len()
+                ));
+            }
+            Ok(raw[start..end].to_vec())
         }
     }
 }
@@ -392,5 +404,68 @@ mod tests {
         };
         let small_buf = vec![0u8; 200];
         assert!(seg.extract_payload(&small_buf).is_err());
+    }
+
+    #[test]
+    fn test_clavia_lz_empty_and_single_byte() {
+        let empty: &[u8] = b"";
+        let c_empty = compress_clavia_lz(empty);
+        let d_empty = decompress_clavia_lz(&c_empty, 10).expect("empty should decompress");
+        assert_eq!(d_empty, empty);
+
+        let single = b"Z";
+        let c_single = compress_clavia_lz(single);
+        let d_single = decompress_clavia_lz(&c_single, 10).expect("single should decompress");
+        assert_eq!(d_single, single);
+    }
+
+    #[test]
+    fn test_clavia_lz_all_match_lengths_2_through_9() {
+        for target_len in 2..=9 {
+            let mut data = vec![b'B'; 30];
+            // Introduce unique prefix then repeating pattern of length target_len
+            let pattern = vec![b'X'; target_len];
+            data.extend_from_slice(&pattern);
+            data.extend_from_slice(&pattern); // repeat to trigger match
+
+            let compressed = compress_clavia_lz(&data);
+            let decompressed = decompress_clavia_lz(&compressed, data.len() * 2)
+                .expect("decompression of match length test must succeed");
+            assert_eq!(
+                decompressed, data,
+                "failed roundtrip for match length {target_len}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_payload_code_segment_decompression() {
+        let raw_code = b"ARM926EJ-S startup code payload with repeating patterns: 00 80 e3 00 f0 21 e1 00 80 e3 00 f0 21 e1";
+        let compressed_code = compress_clavia_lz(raw_code);
+
+        // Build a buffer with a CODE segment starting at offset 64
+        let offset = 64usize;
+        let mut firmware_raw = vec![0u8; offset + compressed_code.len() + 32];
+        firmware_raw[offset..offset + compressed_code.len()].copy_from_slice(&compressed_code);
+
+        let code_seg = FirmwareSegment {
+            name: "CODE".to_string(),
+            data_offset: offset as u32,
+            data_size: raw_code.len() as u32, // Declared expanded target size in RAM
+            target_address: 0xC000_0000,
+            checksum: 0x1234_5678,
+        };
+
+        let decompressed = code_seg
+            .extract_payload(&firmware_raw)
+            .expect("extract_payload on CODE segment should decompress successfully");
+        assert_eq!(decompressed, raw_code);
+    }
+
+    #[test]
+    fn test_clavia_lz_truncated_token_error() {
+        // Flag byte indicating a match token (bit 0 = 0), but only 1 byte follows instead of 2
+        let truncated = vec![0x00u8, 0xCDu8];
+        assert!(decompress_clavia_lz(&truncated, 100).is_err());
     }
 }

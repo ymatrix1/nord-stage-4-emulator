@@ -1,19 +1,31 @@
 # Research: Clavia Custom LZ Format Reverse Engineering
 
 - **Target:** Nord Stage 4 Firmware (AM1705 Host OS, `CODE` segments)
-- **Source:** `Update Nord Stage 4 OS v1.66.exe` (Resource 101, Image 1 `0xc42c`..`0x706fd`)
-- **Status:** Token format and LZ back-reference structure proven against known ARM926EJ-S startup code.
+- **Source:** `Update Nord Stage 4 OS v1.66.exe` (PE Resource 101, offset `0x79CB30`, Image 1 `0xC42C`..`0x706FE`)
+- **Status:** Verified token format, stream framing, and reference Rust decompressor implemented in `crates/nord-core/src/firmware.rs`.
 
 ---
 
-## 1. Verified Discovery: Token Bit Structure
+## 1. Physical Location and Segment Memory Map
 
-By comparing the compressed `CODE` stream against the known ARM926EJ-S startup sequence (PSR mode initialization, cache invalidation, and stack pointer setup across ARM modes `0x13`, `0x17`, `0x1b`, `0x12`, `0x11`, `0x1f`), we solved the exact 16-bit match token format:
+Resource 101 (`4,037,080` bytes) embeds dual firmware banks (Image 0 and Image 1):
 
-### 16-bit Match Token (`(byte1 << 8) | byte0` or Little-Endian `[b0, b1]`):
+| Segment | Offset in Image 1 | File Offset (v1.66) | Compressed Size | Target Address | Expanded Size |
+|---|---|---|---|---|---|
+| `SRAM` | `0x0002D4` | `0x36927A` | `49,496` B (`0xC158`) | `0x80000000` | Uncompressed |
+| `CODE` | `0x00C42C` | `0x3753D2` | `410,322` B (`0x642D2`)| `0xC0000000` | `798,912` B (`0xC30C0`, 1.946x) |
+| `ARM0` | `0x0706FE` | `0x3D96A4` | `820` B (`0x0334`) | `0xFFFF0020` | Uncompressed |
+
+---
+
+## 2. Verified Token Bit Structure
+
+By comparing the compressed `CODE` stream against the known ARM926EJ-S startup sequence, we proved the exact 16-bit match token layout:
+
+### 16-bit Match Token (`(byte1 << 8) | byte0` Little-Endian):
 ```text
-Bit 15 .. Bit 3: Distance / Offset in history buffer
-Bit  2 .. Bit 0: Match Length - 2 (3 bits, values 0..7 -> length 2..9 bytes)
+Bit 15 .. Bit 3: Distance / Offset in history buffer (13 bits, range 1..8191)
+Bit  2 .. Bit 0: Match Length - 2 (3 bits, range 0..7 -> lengths 2..9 bytes)
 ```
 
 ### Mathematical Proof:
@@ -29,8 +41,53 @@ Bit  2 .. Bit 0: Match Length - 2 (3 bits, values 0..7 -> length 2..9 bytes)
 
 ---
 
-## 2. Stream Control Structure
+## 3. Disassembly of the Initial 44-Byte ARM Reset Stub
 
-- Stream begins with uncompressed literal block `00 1b` (27 bytes of ARM cache/MMU reset stub).
-- The compressor mixes literal bytes and 16-bit back-references.
-- Standard LZSS/UCL variants (NRV2B, NRV2D, Okumura LZSS) do not work out of the box because Clavia uses this tailored 13-bit distance + 3-bit length bit-packing scheme.
+The `CODE` segment begins with uncompressed literal ARM instructions from offset `0x02` to `0x2E` initializing the AM1705 CPU:
+
+```arm
+mrs r0, CPSR
+orr r0, r0, #0xC0          ; Disable IRQ and FIQ
+msr CPSR_c, r0
+mov r0, #0
+mcr p15, 0, r0, c7, c7, 0  ; Invalidate Instruction & Data caches
+mcr p15, 0, r0, c7, c10, 4 ; Drain write buffer
+mrc p15, 0, r0, c1, c0, 0  ; Read CP15 Control Register
+orr r0, r0, #0x1000        ; Enable Instruction Cache (bit 12)
+mcr p15, 0, r0, c1, c0, 0  ; Write CP15 Control Register
+mrs r0, CPSR
+bic r0, r0, #0x1F          ; Clear ARM processor mode bits
+```
+
+---
+
+## 4. Mode Setup Loop & 7-Byte Compressed Slices
+
+Following the reset stub, the compressor encodes the stack pointer initialization across ARM modes (`0x13`, `0x17`, `0x1b`, `0x12`, `0x11`, `0x1f`). Each mode takes 7 bytes in the stream to emit 12 bytes of ARM machine code:
+
+```text
+Stream Offset   Bytes                       Expanded Output (12 Bytes)
+0x36            [17] [cd 02] [60] [29 4d 00] -> Abort mode SP setup (60 d0 9f e5)
+0x3D            [1b] [cd 02] [50] [29 4d 00] -> Undefined mode SP setup (50 d0 9f e5)
+0x44            [12] [cd 02] [40] [29 4d 00] -> IRQ mode SP setup (40 d0 9f e5)
+0x4B            [11] [cd 02] [30] [29 4d 00] -> FIQ mode SP setup (30 d0 9f e5)
+0x52            [1f] [cd 02] [20] ...        -> System mode SP setup (20 d0 9f e5)
+```
+
+The stack pointer load offset decrements by `0x10` bytes (`16` bytes / 4 words) across each mode, loading per-mode stack bases from the trailing literal pool.
+
+---
+
+## 5. Reference Implementation & Tests
+
+Implemented in Rust within `crates/nord-core/src/firmware.rs`:
+- `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
+- `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
+- `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+
+### Test Coverage
+- `test_clavia_lz_roundtrip_synthetic`: lossless bit-exact round-trip.
+- `test_clavia_lz_token_bit_structure`: verifies mathematical bitfield formula.
+- `test_clavia_lz_all_match_lengths_2_through_9`: tests every valid match length.
+- `test_clavia_lz_bounds_protection`: validates resistance against distance 0, buffer overrun, and truncated tokens.
+- `test_extract_payload_code_segment_decompression`: validates segment-level extraction.

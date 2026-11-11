@@ -158,3 +158,33 @@ Within the `CODE` / `ARM0` data payload of Image 0 (around `0x003CF040`), the em
 - **`DSPF`** (`DSPFxCore1 L1 bl.0`): Effects & Piano Resonance DSP core.
 - **`DSPO`** (`DSPOrg`): Organ Physical Modeling & Rotary Speaker DSP core.
 - **`DSPS`** (`DSPSyn`): 3-Layer Nord Wave 2 Synth DSP core.
+
+### 5.1 Clavia 16-Bit LZ Stream Compression (`CODE` Segments)
+
+The `CODE` segments inside OS firmware images are compressed using Clavia's proprietary 16-bit LZ sliding-window scheme (`crates/nord-core/src/firmware.rs`).
+
+#### 16-Bit Match Token Bitfield Layout (Little-Endian `u16`)
+
+```text
+ 15                                      3   2        0
+┌─────────────────────────────────────────┬────────────┐
+│ Distance in History Buffer (13 bits)    │ Length - 2 │
+│ Range: 1 .. 8191 bytes                  │ 3 bits     │
+│ (distance = token >> 3)                 │ 2..9 bytes │
+└─────────────────────────────────────────┴────────────┘
+```
+
+- **Bits 2..0 (3 bits):** Match length minus 2 (`length = (token & 0x07) + 2`), encoding lengths from `2` to `9` bytes.
+- **Bits 15..3 (13 bits):** Sliding-window back-reference distance (`distance = token >> 3`), allowing lookup up to `8,191` bytes behind the current write cursor.
+
+#### Stream Framing & Flag Bytes
+Stream framing groups up to 8 operations per 1-byte header:
+- **Flag Bit = `1`:** 1 uncompressed literal byte follows.
+- **Flag Bit = `0`:** 1 16-bit match token (2 little-endian bytes) follows.
+- Overlapping runs (where `length > distance`) dynamically repeat bytes in run-length fashion.
+
+#### Rust API (`crates/nord-core/src/firmware.rs`)
+- `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
+- `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
+- `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
