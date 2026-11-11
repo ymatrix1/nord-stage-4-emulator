@@ -15,6 +15,29 @@ pub struct FirmwareSegment {
     pub checksum: u32,
 }
 
+impl FirmwareSegment {
+    /// Extracts and decompresses the segment payload from raw firmware bytes.
+    pub fn extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String> {
+        let start = self.data_offset as usize;
+        let end = start.saturating_add(self.data_size as usize);
+        if end > raw.len() {
+            return Err(format!(
+                "segment {} exceeds firmware boundary: 0x{:X}..0x{:X} > 0x{:X}",
+                self.name,
+                start,
+                end,
+                raw.len()
+            ));
+        }
+        let slice = &raw[start..end];
+        if self.name == "CODE" {
+            decompress_clavia_lz(slice, self.data_size as usize)
+        } else {
+            Ok(slice.to_vec())
+        }
+    }
+}
+
 /// Discovered SHARC DSP or Host processor partition tag within a firmware image.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DspPartition {
@@ -124,6 +147,138 @@ impl FirmwareContainer {
             dsp_partitions,
         })
     }
+
+    /// Finds a segment by name (e.g. "SRAM", "CODE", "ARM0").
+    pub fn segment(&self, name: &str) -> Option<&FirmwareSegment> {
+        self.segments.iter().find(|s| s.name == name)
+    }
+}
+
+/// Decompresses a byte slice encoded with Clavia's custom 16-bit LZ token compression format.
+///
+/// Match token layout (16-bit little-endian word):
+/// - Bits 2..0: Match length minus 2 (range: 2..9 bytes)
+/// - Bits 15..3: Back-reference distance in history buffer (range: 1..8191 bytes)
+///
+/// Stream framing uses a flag byte before every group of up to 8 items:
+/// - Bit = 1: Uncompressed literal byte (1 byte follows)
+/// - Bit = 0: 16-bit match token (2 little-endian bytes follow)
+pub fn decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String> {
+    let mut out = Vec::with_capacity(max_output_size.min(1024 * 1024));
+    let mut in_pos = 0;
+
+    while in_pos < input.len() && out.len() < max_output_size {
+        let flag = input[in_pos];
+        in_pos += 1;
+
+        for bit in 0..8 {
+            if in_pos >= input.len() || out.len() >= max_output_size {
+                break;
+            }
+
+            let is_literal = ((flag >> bit) & 1) != 0;
+            if is_literal {
+                out.push(input[in_pos]);
+                in_pos += 1;
+            } else {
+                if in_pos + 2 > input.len() {
+                    return Err(format!(
+                        "unexpected end of stream reading LZ token at input offset 0x{in_pos:X}"
+                    ));
+                }
+                let token = u16::from_le_bytes([input[in_pos], input[in_pos + 1]]);
+                in_pos += 2;
+
+                let length = (token & 0x07) as usize + 2;
+                let distance = (token >> 3) as usize;
+
+                if distance == 0 {
+                    return Err("invalid LZ distance 0".to_string());
+                }
+                if distance > out.len() {
+                    return Err(format!(
+                        "LZ distance {distance} exceeds current output buffer length {}",
+                        out.len()
+                    ));
+                }
+
+                let start = out.len() - distance;
+                for i in 0..length {
+                    if out.len() >= max_output_size {
+                        break;
+                    }
+                    let byte = out[start + i];
+                    out.push(byte);
+                }
+            }
+        }
+    }
+
+    Ok(out)
+}
+
+/// Compresses raw data into Clavia's custom 16-bit LZ token format.
+pub fn compress_clavia_lz(input: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut in_pos = 0;
+
+    while in_pos < input.len() {
+        let mut commands: Vec<(bool, u8, u16)> = Vec::with_capacity(8);
+        for _ in 0..8 {
+            if in_pos >= input.len() {
+                break;
+            }
+
+            let win_start = in_pos.saturating_sub(8191);
+            let mut best_len = 0;
+            let mut best_dist = 0;
+
+            for start in win_start..in_pos {
+                let dist = in_pos - start;
+                let mut len = 0;
+                while in_pos + len < input.len()
+                    && len < 9
+                    && input[start + len] == input[in_pos + len]
+                {
+                    len += 1;
+                }
+                if len >= 2 && len > best_len {
+                    best_len = len;
+                    best_dist = dist;
+                    if len == 9 {
+                        break;
+                    }
+                }
+            }
+
+            if best_len >= 2 {
+                let token = ((best_dist as u16) << 3) | ((best_len - 2) as u16 & 0x07);
+                commands.push((false, 0u8, token));
+                in_pos += best_len;
+            } else {
+                commands.push((true, input[in_pos], 0u16));
+                in_pos += 1;
+            }
+        }
+
+        let mut flag = 0u8;
+        for (bit, &(is_lit, _, _)) in commands.iter().enumerate() {
+            if is_lit {
+                flag |= 1 << bit;
+            }
+        }
+        out.push(flag);
+
+        for &(is_lit, byte, token) in &commands {
+            if is_lit {
+                out.push(byte);
+            } else {
+                out.extend_from_slice(&token.to_le_bytes());
+            }
+        }
+    }
+
+    out
 }
 
 #[cfg(test)]
@@ -170,6 +325,10 @@ mod tests {
         assert_eq!(fw.segments[1].name, "CODE");
         assert_eq!(fw.segments[2].name, "ARM0");
 
+        let sram = fw.segment("SRAM").expect("SRAM segment should exist");
+        assert_eq!(sram.target_address, 0x8000_0000);
+        assert!(fw.segment("NON_EXISTENT").is_none());
+
         let tags: Vec<&str> = fw.dsp_partitions.iter().map(|p| p.tag.as_str()).collect();
         assert_eq!(tags, vec!["DSPO", "DSPS", "DSPF"]);
     }
@@ -180,5 +339,58 @@ mod tests {
         let mut bad = build_synthetic_firmware();
         bad[3] = 0x99;
         assert!(FirmwareContainer::parse(&bad).is_err());
+    }
+
+    #[test]
+    fn test_clavia_lz_roundtrip_synthetic() {
+        let original = b"Nord Stage 4 OS Firmware LZ Token Compressor/Decompressor Verification Test! Repeating: 123456789 123456789 123456789 AAAAAAAAAAAAAAAAAAAA";
+        let compressed = compress_clavia_lz(original);
+        assert!(compressed.len() < original.len());
+
+        let decompressed = decompress_clavia_lz(&compressed, original.len() * 2)
+            .expect("decompression should succeed");
+        assert_eq!(decompressed, original);
+    }
+
+    #[test]
+    fn test_clavia_lz_token_bit_structure() {
+        // Test token structure explicitly:
+        // token: length = 7 (bits 2..0 = 5), distance = 89 (bits 15..3 = 89)
+        // w = (89 << 3) | 5 = 0x02CD
+        let dist = 89u16;
+        let len = 7u16;
+        let token = (dist << 3) | ((len - 2) & 0x07);
+        assert_eq!(token, 0x02CD);
+
+        let decoded_len = (token & 0x07) + 2;
+        let decoded_dist = token >> 3;
+        assert_eq!(decoded_len, 7);
+        assert_eq!(decoded_dist, 89);
+    }
+
+    #[test]
+    fn test_clavia_lz_bounds_protection() {
+        // Distance 0 should fail
+        let mut bad_token = vec![0x00u8]; // Flag: bit 0 = match
+        bad_token.extend_from_slice(&0x0000u16.to_le_bytes()); // distance 0, length 2
+        assert!(decompress_clavia_lz(&bad_token, 100).is_err());
+
+        // Distance exceeding output length should fail
+        let mut bad_dist = vec![0x00u8];
+        bad_dist.extend_from_slice(&0x0100u16.to_le_bytes()); // distance 32 > out.len() (0)
+        assert!(decompress_clavia_lz(&bad_dist, 100).is_err());
+    }
+
+    #[test]
+    fn test_extract_payload_bounds() {
+        let seg = FirmwareSegment {
+            name: "SRAM".to_string(),
+            data_offset: 500,
+            data_size: 100,
+            target_address: 0x8000_0000,
+            checksum: 0,
+        };
+        let small_buf = vec![0u8; 200];
+        assert!(seg.extract_payload(&small_buf).is_err());
     }
 }

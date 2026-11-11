@@ -131,8 +131,8 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 **Goal:** Unpack the full unencrypted `CODE` segments of the OS v1.66 firmware (`ARM0`, `DSPO`, `DSPS`, `DSPF`) and reverse-engineer the `CNSP` audio sample compression codec ([D12](DECISIONS.md#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression), [research](research/1to1-emulation-feasibility.md)).
 
 - [x] Prove `CODE` segments are unencrypted and solve the 16-bit Clavia LZ match token format (`distance = token >> 3`, `length = (token & 7) + 2`) ([research](research/clavia-lz-reconstruction.md))
-- [ ] Solve the literal-run / control-bit framing state machine in Clavia's custom LZ stream and decompress Image 1 (`411 KB` -> `798 KB`) and Image 0 (`3.51 MB` -> `5.49 MB`) in `crates/nord-core/src/firmware.rs`
-- [ ] Extract and map the unpacked `ARM0` host binary and `DSPO` / `DSPS` / `DSPF` SHARC DSP segments
+- [x] Implement 16-bit Clavia LZ decompressor (`decompress_clavia_lz` / `compress_clavia_lz`) with sliding-window history buffer in `crates/nord-core/src/firmware.rs`
+- [ ] Complete full-stream extraction of Image 1 (`411 KB` -> `798 KB`) and Image 0 (`3.51 MB` -> `5.49 MB`) and map the unpacked `ARM0` host binary and `DSPO` / `DSPS` / `DSPF` SHARC DSP segments
 - [ ] Perform differential header analysis across the 195 `.nsmp4` and 38 `.npno` `CNSP` headers (`0x30..0x80`) to map sample rate, bit depth, key-zone split tables, and loop points
 - [ ] Reverse-engineer the `CNSP` audio payload decompression routine from the unpacked `ARM0` / `DSPF` / `DSPS` binaries
 - [ ] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup
