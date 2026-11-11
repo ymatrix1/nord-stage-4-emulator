@@ -80,7 +80,7 @@ impl Stage4Engine {
                         LayerId::SynthC => self.synth_c.note_on_with_gain(note, velocity, split_g),
                     }
                 }
-                self.note_recipients[note as usize] = recipients;
+                self.note_recipients[note as usize] |= recipients;
             }
             MidiEvent::NoteOff { note, .. } => {
                 let recipients = std::mem::take(&mut self.note_recipients[note as usize]);
@@ -371,6 +371,12 @@ mod tests {
                 | (1 << LayerId::SynthA as u8)
         );
         engine.scene.scene_2_active = true;
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 91,
+        });
+        assert_eq!(engine.note_recipients[60], 0b0111_1111);
         engine.handle_midi(MidiEvent::NoteOff {
             channel: 0,
             note: 60,
