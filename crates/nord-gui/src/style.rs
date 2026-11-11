@@ -55,6 +55,15 @@ pub const DRAWBAR_WHITE: Color32 = Color32::from_rgb(0xEC, 0xEB, 0xE6);
 /// Black sub/mutation drawbar cap (`#1A1C1E`).
 pub const DRAWBAR_BLACK: Color32 = Color32::from_rgb(0x1A, 0x1C, 0x1E);
 
+/// Configure egui visual style to match authentic Nord chassis aesthetics.
+pub fn setup_nord_visuals(ctx: &egui::Context) {
+    let mut visuals = egui::Visuals::dark();
+    visuals.panel_fill = CHASSIS_RED;
+    visuals.window_fill = MODULE_SLATE;
+    visuals.extreme_bg_color = OLED_BG;
+    ctx.set_visuals(visuals);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

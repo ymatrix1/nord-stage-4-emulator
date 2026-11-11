@@ -2,10 +2,12 @@
 //!
 //! Spec: `docs/specs/visual-style-and-panel.md`
 
+use crate::audio::{AudioCommand, AudioHandle};
 use crate::style::*;
 use crate::widgets::*;
 use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Sense, Stroke, StrokeKind, Ui};
 use nord_core::engine::Stage4Engine;
+use nord_core::midi::MidiEvent;
 use nord_core::organ::{OrganModel, RotarySpeed, ScannerMode};
 
 /// Complete Nord Stage 4 interactive front-panel GUI component.
@@ -71,244 +73,292 @@ impl Default for Stage4PanelState {
     }
 }
 
-impl Stage4PanelState {
-    /// Renders the entire hardware front panel and synchronizes edits with the DSP engine.
-    pub fn ui(&mut self, ui: &mut Ui, engine: &mut Stage4Engine) {
-        ui.vertical(|ui| {
-            // Main Top Panel (Crimson Chassis with 6 Horizontal Bays)
-            let panel_size = vec2(1560.0, 310.0);
-            let (panel_rect, _) = ui.allocate_exact_size(panel_size, Sense::hover());
-            let painter = ui.painter();
+/// Renders the entire hardware front panel and synchronizes edits with the DSP audio handle.
+pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
+    ui.vertical(|ui| {
+        // Main Top Panel (Crimson Chassis with 6 Horizontal Bays)
+        let panel_size = vec2(1560.0, 310.0);
+        let (panel_rect, _) = ui.allocate_exact_size(panel_size, Sense::hover());
+        let painter = ui.painter();
 
-            // Background Outer Crimson Chassis
-            painter.rect_filled(panel_rect, 6.0, CHASSIS_RED);
-            painter.rect_stroke(
-                panel_rect,
-                6.0,
-                Stroke::new(2.0, CHASSIS_DARK),
-                StrokeKind::Inside,
-            );
+        // Background Outer Crimson Chassis
+        painter.rect_filled(panel_rect, 6.0, CHASSIS_RED);
+        painter.rect_stroke(
+            panel_rect,
+            6.0,
+            Stroke::new(2.0_f32, CHASSIS_DARK),
+            StrokeKind::Inside,
+        );
 
-            // Inner bays layout:
-            // Bay 1: Left Master & Rotary (x: 10..180, width 170)
-            // Bay 2: Organ Section (Slate, x: 190..530, width 340)
-            // Bay 3: Piano Section (Slate, x: 540..850, width 310)
-            // Bay 4: Program / Morph (Crimson, x: 860..1070, width 210)
-            // Bay 5: Synth Section (Slate, x: 1080..1360, width 280)
-            // Bay 6: Layer Effects (Slate, x: 1370..1550, width 180)
+        // Render Bay 2 (Organ Section - Slate)
+        let organ_rect = Rect::from_min_size(
+            pos2(panel_rect.left() + 190.0, panel_rect.top() + 10.0),
+            vec2(340.0, 290.0),
+        );
+        painter.rect_filled(organ_rect, 4.0, MODULE_SLATE);
+        painter.rect_stroke(
+            organ_rect,
+            4.0,
+            Stroke::new(1.5_f32, GROUP_BORDER),
+            StrokeKind::Inside,
+        );
+        let organ_hdr = Rect::from_min_size(organ_rect.min, vec2(340.0, 18.0));
+        painter.rect_filled(organ_hdr, 4.0, MODULE_HEADER_BAR);
+        painter.text(
+            organ_hdr.center(),
+            Align2::CENTER_CENTER,
+            "ORGAN SECTION",
+            FontId::proportional(11.0),
+            Color32::BLACK,
+        );
 
-            // Render Bay 2 (Organ Section - Slate)
-            let organ_rect = Rect::from_min_size(
-                pos2(panel_rect.left() + 190.0, panel_rect.top() + 10.0),
-                vec2(340.0, 290.0),
-            );
-            painter.rect_filled(organ_rect, 4.0, MODULE_SLATE);
-            painter.rect_stroke(
-                organ_rect,
-                4.0,
-                Stroke::new(1.5, GROUP_BORDER),
-                StrokeKind::Inside,
-            );
-            // Header bar
-            let organ_hdr = Rect::from_min_size(organ_rect.min, vec2(340.0, 18.0));
-            painter.rect_filled(organ_hdr, 4.0, MODULE_HEADER_BAR);
-            painter.text(
-                organ_hdr.center(),
-                Align2::CENTER_CENTER,
-                "ORGAN SECTION",
-                FontId::proportional(11.0),
-                Color32::BLACK,
-            );
+        // Render Bay 3 (Piano Section - Slate)
+        let piano_rect = Rect::from_min_size(
+            pos2(panel_rect.left() + 540.0, panel_rect.top() + 10.0),
+            vec2(310.0, 290.0),
+        );
+        painter.rect_filled(piano_rect, 4.0, MODULE_SLATE);
+        painter.rect_stroke(
+            piano_rect,
+            4.0,
+            Stroke::new(1.5_f32, GROUP_BORDER),
+            StrokeKind::Inside,
+        );
+        let piano_hdr = Rect::from_min_size(piano_rect.min, vec2(310.0, 18.0));
+        painter.rect_filled(piano_hdr, 4.0, MODULE_HEADER_BAR);
+        painter.text(
+            piano_hdr.center(),
+            Align2::CENTER_CENTER,
+            "PIANO SECTION",
+            FontId::proportional(11.0),
+            Color32::BLACK,
+        );
 
-            // Render Bay 3 (Piano Section - Slate)
-            let piano_rect = Rect::from_min_size(
-                pos2(panel_rect.left() + 540.0, panel_rect.top() + 10.0),
-                vec2(310.0, 290.0),
-            );
-            painter.rect_filled(piano_rect, 4.0, MODULE_SLATE);
-            painter.rect_stroke(
-                piano_rect,
-                4.0,
-                Stroke::new(1.5, GROUP_BORDER),
-                StrokeKind::Inside,
-            );
-            let piano_hdr = Rect::from_min_size(piano_rect.min, vec2(310.0, 18.0));
-            painter.rect_filled(piano_hdr, 4.0, MODULE_HEADER_BAR);
-            painter.text(
-                piano_hdr.center(),
-                Align2::CENTER_CENTER,
-                "PIANO SECTION",
-                FontId::proportional(11.0),
-                Color32::BLACK,
-            );
+        // Render Bay 4 (Program & Morph - Crimson)
+        let prog_rect = Rect::from_min_size(
+            pos2(panel_rect.left() + 860.0, panel_rect.top() + 10.0),
+            vec2(210.0, 290.0),
+        );
+        painter.rect_filled(prog_rect, 4.0, Color32::from_rgb(120, 20, 24));
+        painter.rect_stroke(
+            prog_rect,
+            4.0,
+            Stroke::new(1.5_f32, GROUP_BORDER),
+            StrokeKind::Inside,
+        );
 
-            // Render Bay 4 (Program & Morph - Crimson)
-            let prog_rect = Rect::from_min_size(
-                pos2(panel_rect.left() + 860.0, panel_rect.top() + 10.0),
-                vec2(210.0, 290.0),
-            );
-            painter.rect_filled(prog_rect, 4.0, Color32::from_rgb(120, 20, 24));
-            painter.rect_stroke(
-                prog_rect,
-                4.0,
-                Stroke::new(1.5, GROUP_BORDER),
-                StrokeKind::Inside,
-            );
+        // Render Bay 5 (Synth Section - Slate)
+        let synth_rect = Rect::from_min_size(
+            pos2(panel_rect.left() + 1080.0, panel_rect.top() + 10.0),
+            vec2(280.0, 290.0),
+        );
+        painter.rect_filled(synth_rect, 4.0, MODULE_SLATE);
+        painter.rect_stroke(
+            synth_rect,
+            4.0,
+            Stroke::new(1.5_f32, GROUP_BORDER),
+            StrokeKind::Inside,
+        );
+        let synth_hdr = Rect::from_min_size(synth_rect.min, vec2(280.0, 18.0));
+        painter.rect_filled(synth_hdr, 4.0, MODULE_HEADER_BAR);
+        painter.text(
+            synth_hdr.center(),
+            Align2::CENTER_CENTER,
+            "SYNTH SECTION",
+            FontId::proportional(11.0),
+            Color32::BLACK,
+        );
 
-            // Render Bay 5 (Synth Section - Slate)
-            let synth_rect = Rect::from_min_size(
-                pos2(panel_rect.left() + 1080.0, panel_rect.top() + 10.0),
-                vec2(280.0, 290.0),
-            );
-            painter.rect_filled(synth_rect, 4.0, MODULE_SLATE);
-            painter.rect_stroke(
-                synth_rect,
-                4.0,
-                Stroke::new(1.5, GROUP_BORDER),
-                StrokeKind::Inside,
-            );
-            let synth_hdr = Rect::from_min_size(synth_rect.min, vec2(280.0, 18.0));
-            painter.rect_filled(synth_hdr, 4.0, MODULE_HEADER_BAR);
-            painter.text(
-                synth_hdr.center(),
-                Align2::CENTER_CENTER,
-                "SYNTH SECTION",
-                FontId::proportional(11.0),
-                Color32::BLACK,
-            );
+        // Render Bay 6 (Layer Effects - Slate)
+        let fx_rect = Rect::from_min_size(
+            pos2(panel_rect.left() + 1370.0, panel_rect.top() + 10.0),
+            vec2(175.0, 290.0),
+        );
+        painter.rect_filled(fx_rect, 4.0, MODULE_SLATE);
+        painter.rect_stroke(
+            fx_rect,
+            4.0,
+            Stroke::new(1.5_f32, GROUP_BORDER),
+            StrokeKind::Inside,
+        );
+        let fx_hdr = Rect::from_min_size(fx_rect.min, vec2(175.0, 18.0));
+        painter.rect_filled(fx_hdr, 4.0, MODULE_HEADER_BAR);
+        painter.text(
+            fx_hdr.center(),
+            Align2::CENTER_CENTER,
+            "LAYER EFFECTS",
+            FontId::proportional(11.0),
+            Color32::BLACK,
+        );
 
-            // Render Bay 6 (Layer Effects - Slate)
-            let fx_rect = Rect::from_min_size(
-                pos2(panel_rect.left() + 1370.0, panel_rect.top() + 10.0),
-                vec2(175.0, 290.0),
-            );
-            painter.rect_filled(fx_rect, 4.0, MODULE_SLATE);
-            painter.rect_stroke(
-                fx_rect,
-                4.0,
-                Stroke::new(1.5, GROUP_BORDER),
-                StrokeKind::Inside,
-            );
-            let fx_hdr = Rect::from_min_size(fx_rect.min, vec2(175.0, 18.0));
-            painter.rect_filled(fx_hdr, 4.0, MODULE_HEADER_BAR);
-            painter.text(
-                fx_hdr.center(),
-                Align2::CENTER_CENTER,
-                "LAYER EFFECTS",
-                FontId::proportional(11.0),
-                Color32::BLACK,
-            );
-
-            // Interactive widgets overlay
-            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(panel_rect), |ui| {
-                ui.horizontal(|ui| {
-                    ui.add_space(200.0);
-                    // Organ Faders & Drawbars
-                    layer_fader_with_ladder(
+        // Interactive widgets overlay
+        ui.allocate_new_ui(egui::UiBuilder::new().max_rect(panel_rect), |ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(200.0);
+                // Organ Faders & Drawbars
+                if layer_fader_with_ladder(
+                    ui,
+                    &mut state.organ_a_level,
+                    &mut state.organ_a_active,
+                    "ORGAN A",
+                )
+                .changed()
+                {
+                    audio_handle.send_command(AudioCommand::SetOrganLevel(
+                        if state.organ_a_active {
+                            state.organ_a_level
+                        } else {
+                            0.0
+                        },
+                    ));
+                }
+                layer_fader_with_ladder(
+                    ui,
+                    &mut state.organ_b_level,
+                    &mut state.organ_b_active,
+                    "ORGAN B",
+                );
+                ui.add_space(8.0);
+                let mut drawbar_changed = false;
+                for i in 0..9 {
+                    let is_white = matches!(i, 2 | 3 | 5 | 8);
+                    let foot_labels = [
+                        "16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'",
+                    ];
+                    if drawbar(
                         ui,
-                        &mut self.organ_a_level,
-                        &mut self.organ_a_active,
-                        "ORGAN A",
-                    );
-                    layer_fader_with_ladder(
-                        ui,
-                        &mut self.organ_b_level,
-                        &mut self.organ_b_active,
-                        "ORGAN B",
-                    );
-                    ui.add_space(8.0);
-                    for i in 0..9 {
-                        let is_white = matches!(i, 2 | 3 | 5 | 8);
-                        let foot_labels = [
-                            "16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'",
-                        ];
-                        drawbar(
-                            ui,
-                            &mut self.organ_drawbars[i],
-                            "",
-                            foot_labels[i],
-                            is_white,
-                        );
+                        &mut state.organ_drawbars[i],
+                        "",
+                        foot_labels[i],
+                        is_white,
+                    )
+                    .changed()
+                    {
+                        drawbar_changed = true;
                     }
+                }
+                if drawbar_changed {
+                    audio_handle.send_command(AudioCommand::SetDrawbars(state.organ_drawbars));
+                }
 
-                    ui.add_space(25.0);
-                    // Piano Faders
-                    layer_fader_with_ladder(
-                        ui,
-                        &mut self.piano_a_level,
-                        &mut self.piano_a_active,
-                        "PIANO A",
-                    );
-                    layer_fader_with_ladder(
-                        ui,
-                        &mut self.piano_b_level,
-                        &mut self.piano_b_active,
-                        "PIANO B",
-                    );
+                ui.add_space(25.0);
+                // Piano Faders
+                if layer_fader_with_ladder(
+                    ui,
+                    &mut state.piano_a_level,
+                    &mut state.piano_a_active,
+                    "PIANO A",
+                )
+                .changed()
+                {
+                    audio_handle.send_command(AudioCommand::SetPianoLevel(
+                        if state.piano_a_active {
+                            state.piano_a_level
+                        } else {
+                            0.0
+                        },
+                    ));
+                }
+                layer_fader_with_ladder(
+                    ui,
+                    &mut state.piano_b_level,
+                    &mut state.piano_b_active,
+                    "PIANO B",
+                );
 
-                    ui.add_space(35.0);
-                    // Program OLED
-                    program_oled(
-                        ui,
-                        &self.prog_id,
-                        &self.prog_title,
-                        "B3 888000000",
-                        "White Grand XL",
-                        "SuperSaw Pad",
-                    );
+                ui.add_space(35.0);
+                // Program OLED
+                program_oled(
+                    ui,
+                    &state.prog_id,
+                    &state.prog_title,
+                    "B3 888000000",
+                    "White Grand XL",
+                    "SuperSaw Pad",
+                );
 
-                    ui.add_space(35.0);
-                    // Synth Faders
-                    layer_fader_with_ladder(
-                        ui,
-                        &mut self.synth_a_level,
-                        &mut self.synth_a_active,
-                        "SYNTH A",
-                    );
-                    layer_fader_with_ladder(
-                        ui,
-                        &mut self.synth_b_level,
-                        &mut self.synth_b_active,
-                        "SYNTH B",
-                    );
-                    layer_fader_with_ladder(
-                        ui,
-                        &mut self.synth_c_level,
-                        &mut self.synth_c_active,
-                        "SYNTH C",
-                    );
+                ui.add_space(35.0);
+                // Synth Faders
+                if layer_fader_with_ladder(
+                    ui,
+                    &mut state.synth_a_level,
+                    &mut state.synth_a_active,
+                    "SYNTH A",
+                )
+                .changed()
+                {
+                    audio_handle.send_command(AudioCommand::SetSynthLevel(
+                        if state.synth_a_active {
+                            state.synth_a_level
+                        } else {
+                            0.0
+                        },
+                    ));
+                }
+                layer_fader_with_ladder(
+                    ui,
+                    &mut state.synth_b_level,
+                    &mut state.synth_b_active,
+                    "SYNTH B",
+                );
+                layer_fader_with_ladder(
+                    ui,
+                    &mut state.synth_c_level,
+                    &mut state.synth_c_active,
+                    "SYNTH C",
+                );
 
-                    ui.add_space(10.0);
-                    nord_knob(ui, &mut self.synth_cutoff, 20.0, 15000.0, "FREQ");
-                    nord_knob(ui, &mut self.synth_resonance, 0.0, 1.0, "RES");
+                ui.add_space(10.0);
+                if nord_knob(ui, &mut state.synth_cutoff, 20.0, 15000.0, "FREQ").changed() {
+                    audio_handle.send_command(AudioCommand::SetSynthCutoff(state.synth_cutoff));
+                }
+                if nord_knob(ui, &mut state.synth_resonance, 0.0, 1.0, "RES").changed() {
+                    audio_handle
+                        .send_command(AudioCommand::SetSynthResonance(state.synth_resonance));
+                }
 
-                    ui.add_space(30.0);
-                    // FX Knobs
-                    nord_knob(ui, &mut self.fx_drive, 0.0, 1.0, "DRIVE");
-                    nord_knob(ui, &mut self.fx_reverb, 0.0, 1.0, "REVERB");
-                });
+                ui.add_space(30.0);
+                // FX Knobs
+                nord_knob(ui, &mut state.fx_drive, 0.0, 1.0, "DRIVE");
+                if nord_knob(ui, &mut state.fx_reverb, 0.0, 1.0, "REVERB").changed() {
+                    audio_handle.send_command(AudioCommand::SetReverbMix(state.fx_reverb));
+                }
             });
-
-            // 88-Key Interactive Keybed
-            ui.add_space(10.0);
-            render_keybed(ui, &mut self.active_keys, engine);
         });
 
-        // Push GUI state directly into engine
-        engine.organ_a.drawbars = self.organ_drawbars;
-        engine.organ_a.rotary_drive = self.rotary_drive;
-        engine.organ_a.rotary_speed = self.rotary_speed;
-        engine.organ_a.scanner_mode = self.scanner_mode;
-        engine.synth_a.cutoff_hz = self.synth_cutoff;
-        engine.synth_a.resonance = self.synth_resonance;
-        engine.fx_chains[0].reverb_mix = self.fx_reverb;
+        // 88-Key Interactive Keybed
+        ui.add_space(10.0);
+        render_keybed(ui, &mut state.active_keys, audio_handle);
+    });
+}
+
+impl Stage4PanelState {
+    /// Renders the front panel directly targeting a synchronous engine (e.g. for testing/offline rendering).
+    pub fn ui(&mut self, ui: &mut Ui, engine: &mut Stage4Engine) {
+        let (audio_handle, rx) = AudioHandle::new();
+        render_stage4_panel(ui, self, &audio_handle);
+
+        while let Ok(cmd) = rx.try_recv() {
+            match cmd {
+                AudioCommand::Midi(ev) => engine.handle_midi(ev),
+                AudioCommand::SetDrawbars(d) => engine.organ_a.drawbars = d,
+                AudioCommand::SetOrganLevel(l) => engine.layer_levels[0].base = l,
+                AudioCommand::SetPianoLevel(l) => engine.layer_levels[2].base = l,
+                AudioCommand::SetSynthLevel(l) => engine.layer_levels[4].base = l,
+                AudioCommand::SetSynthCutoff(co) => engine.synth_a.cutoff_hz = co,
+                AudioCommand::SetSynthResonance(res) => engine.synth_a.resonance = res,
+                AudioCommand::SetReverbMix(rev) => engine.fx_chains[0].reverb_mix = rev,
+                AudioCommand::SetRotarySpeed(sp) => engine.organ_a.rotary_speed = sp,
+                _ => {}
+            }
+        }
     }
 }
 
-/// 88-Key Piano Keyboard with Triple Split-Point visual markers.
-fn render_keybed(ui: &mut Ui, active_keys: &mut [bool; 128], _engine: &mut Stage4Engine) {
+/// 88-Key Piano Keyboard with interactive mouse clicking and Triple Split-Point visual markers.
+fn render_keybed(ui: &mut Ui, active_keys: &mut [bool; 128], audio_handle: &AudioHandle) {
     let keybed_size = vec2(1560.0, 100.0);
-    let (rect, _) = ui.allocate_exact_size(keybed_size, Sense::click_and_drag());
+    let (rect, response) = ui.allocate_exact_size(keybed_size, Sense::click_and_drag());
     let painter = ui.painter();
 
     // Keybed frame
@@ -318,6 +368,73 @@ fn render_keybed(ui: &mut Ui, active_keys: &mut [bool; 128], _engine: &mut Stage
     // 52 natural (white) keys
     let num_white = 52;
     let white_width = rect.width() / num_white as f32;
+
+    // Check mouse interaction on keys
+    if response.is_pointer_button_down_on() {
+        if let Some(pos) = response.interact_pointer_pos() {
+            // Determine clicked key
+            let rel_x = pos.x - rect.left();
+            let mut clicked_midi: Option<u8> = None;
+
+            // First check black keys
+            let mut white_idx = 0;
+            for midi in 21u8..=108u8 {
+                let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
+                if is_black {
+                    let kx = (white_idx as f32) * white_width - (white_width * 0.32);
+                    let kw = white_width * 0.64;
+                    let kh = (rect.height() - 6.0) * 0.62;
+                    let rel_y = pos.y - rect.top();
+                    if rel_x >= kx && rel_x <= (kx + kw) && rel_y <= kh {
+                        clicked_midi = Some(midi);
+                        break;
+                    }
+                } else {
+                    white_idx += 1;
+                }
+            }
+
+            // If not black key, find white key
+            if clicked_midi.is_none() {
+                let w_idx = (rel_x / white_width).floor() as usize;
+                let mut curr_w = 0;
+                for midi in 21u8..=108u8 {
+                    let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
+                    if !is_black {
+                        if curr_w == w_idx {
+                            clicked_midi = Some(midi);
+                            break;
+                        }
+                        curr_w += 1;
+                    }
+                }
+            }
+
+            if let Some(midi) = clicked_midi {
+                if !active_keys[midi as usize] {
+                    active_keys[midi as usize] = true;
+                    audio_handle.send_midi(MidiEvent::NoteOn {
+                        channel: 0,
+                        note: midi,
+                        velocity: 100,
+                    });
+                }
+            }
+        }
+    } else {
+        // Release mouse pressed keys
+        for midi in 21u8..=108u8 {
+            if active_keys[midi as usize] {
+                // If response lost click
+                active_keys[midi as usize] = false;
+                audio_handle.send_midi(MidiEvent::NoteOff {
+                    channel: 0,
+                    note: midi,
+                    velocity: 0,
+                });
+            }
+        }
+    }
 
     let mut white_idx = 0;
     for midi in 21u8..=108u8 {
@@ -340,7 +457,7 @@ fn render_keybed(ui: &mut Ui, active_keys: &mut [bool; 128], _engine: &mut Stage
             painter.rect_stroke(
                 key_rect,
                 2.0,
-                Stroke::new(1.0, Color32::from_gray(180)),
+                Stroke::new(1.0_f32, Color32::from_gray(180)),
                 StrokeKind::Inside,
             );
             white_idx += 1;
@@ -367,7 +484,7 @@ fn render_keybed(ui: &mut Ui, active_keys: &mut [bool; 128], _engine: &mut Stage
             painter.rect_stroke(
                 key_rect,
                 1.5,
-                Stroke::new(1.0, Color32::BLACK),
+                Stroke::new(1.0_f32, Color32::BLACK),
                 StrokeKind::Inside,
             );
         } else {
@@ -392,5 +509,20 @@ mod tests {
         assert_eq!(state.prog_id, "A:11");
         assert_eq!(state.organ_drawbars[0], 8);
         assert_eq!(state.synth_cutoff, 2400.0);
+    }
+
+    #[test]
+    fn test_panel_state_audio_sync() {
+        let mut state = Stage4PanelState::default();
+        let (audio_handle, rx) = AudioHandle::new();
+        state.organ_drawbars[0] = 5;
+        audio_handle.send_command(AudioCommand::SetDrawbars(state.organ_drawbars));
+
+        match rx.try_recv() {
+            Ok(AudioCommand::SetDrawbars(d)) => {
+                assert_eq!(d[0], 5);
+            }
+            _ => panic!("Expected SetDrawbars"),
+        }
     }
 }
