@@ -52,17 +52,11 @@ pub const LED_AMBER: Color32 = Color32::from_rgb(0xFF, 0xB0, 0x20);
 /// Dim unlit state for amber LEDs (`#45300A`).
 pub const LED_AMBER_DIM: Color32 = Color32::from_rgb(0x45, 0x30, 0x0A);
 
-/// Orange ladder transition LED (`#FF881A`).
-pub const LED_ORANGE: Color32 = Color32::from_rgb(0xFF, 0x88, 0x1A);
-
 /// High-contrast monochrome OLED display background (`#080A0C`).
 pub const OLED_BG: Color32 = Color32::from_rgb(0x08, 0x0A, 0x0C);
 
 /// OLED ice-white pixel graphic & text font color (`#F0F6FC`).
-pub const OLED_FG: Color32 = Color32::from_rgb(0xF0, 0xF6, 0xF8);
-
-/// OLED ice-cyan pixel bloom color (`#6DF8FC`).
-pub const OLED_CYAN: Color32 = Color32::from_rgb(0x6D, 0xF8, 0xFC);
+pub const OLED_FG: Color32 = Color32::from_rgb(0xF0, 0xF6, 0xFC);
 
 /// White harmonic drawbar cap (`#ECEBE6`).
 pub const DRAWBAR_WHITE: Color32 = Color32::from_rgb(0xEC, 0xEB, 0xE6);
