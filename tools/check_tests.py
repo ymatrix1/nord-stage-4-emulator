@@ -35,7 +35,8 @@ SKIP_DIRS = {
 
 RUST_TEST = re.compile(r"#\[test\]")
 RUST_DECLARATION_ONLY = re.compile(
-    r"^\s*(//.*|(pub(\(crate\))? )?mod \w+;|(pub(\(crate\))? )?use [\w:{}, ]+;|#\[cfg\(.*\)\])?\s*$"
+    r"^\s*(//.*|(pub(\(crate\))? )?mod \w+;|(pub(\(crate\))? )?use [\w:{}, *]+;"
+    r"|#\[cfg\(.*\)\])?\s*$"
 )
 GENERATED = re.compile(r"GENERATED|DO NOT EDIT|Code generated")
 
