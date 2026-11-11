@@ -10,6 +10,9 @@ pub const CHASSIS_RED: Color32 = Color32::from_rgb(0x8E, 0x1B, 0x1F);
 /// Dark recessed chassis chamfer shadow (`#641014`).
 pub const CHASSIS_DARK: Color32 = Color32::from_rgb(0x64, 0x10, 0x14);
 
+/// Bright red highlight for recessed STORE / ARP RUN buttons (`#B8252A`).
+pub const BUTTON_STORE_RED: Color32 = Color32::from_rgb(0xB8, 0x25, 0x2A);
+
 /// Anodized Slate Blue-Grey Module Background (`#323D47`).
 pub const MODULE_SLATE: Color32 = Color32::from_rgb(0x32, 0x3D, 0x47);
 
@@ -28,6 +31,9 @@ pub const BUTTON_GREY: Color32 = Color32::from_rgb(0x8C, 0x91, 0x96);
 /// Black selector pill button (`#1C1F22`).
 pub const BUTTON_BLACK: Color32 = Color32::from_rgb(0x1C, 0x1F, 0x22);
 
+/// Recessed button bezel dark border (`#0D0F11`).
+pub const BUTTON_BEZEL: Color32 = Color32::from_rgb(0x0D, 0x0F, 0x11);
+
 /// Active state indicator LED red (`#FF2A2A`).
 pub const LED_RED: Color32 = Color32::from_rgb(0xFF, 0x2A, 0x2A);
 
@@ -42,6 +48,9 @@ pub const LED_GREEN_DIM: Color32 = Color32::from_rgb(0x0F, 0x38, 0x0A);
 
 /// Amber Morph assignment LED (`#FFB020`).
 pub const LED_AMBER: Color32 = Color32::from_rgb(0xFF, 0xB0, 0x20);
+
+/// Dim unlit state for amber LEDs (`#45300A`).
+pub const LED_AMBER_DIM: Color32 = Color32::from_rgb(0x45, 0x30, 0x0A);
 
 /// High-contrast monochrome OLED display background (`#080A0C`).
 pub const OLED_BG: Color32 = Color32::from_rgb(0x08, 0x0A, 0x0C);
@@ -73,5 +82,6 @@ mod tests {
         assert_eq!(CHASSIS_RED.r(), 0x8E);
         assert_eq!(MODULE_SLATE.g(), 0x3D);
         assert_eq!(LED_GREEN.b(), 0x2E);
+        assert_eq!(BUTTON_STORE_RED.r(), 0xB8);
     }
 }

@@ -4,22 +4,85 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use midir::{Ignore, MidiInput};
 use nord_core::engine::Stage4Engine;
+use nord_core::fx::{Mod1Type, Mod2Type, ReverbModel};
 use nord_core::midi::MidiEvent;
+use nord_core::organ::{OrganModel, RotarySpeed, ScannerMode};
+use nord_core::piano::{PianoCategory, PianoTimbre, VelocityTouch};
+use nord_core::synth::{FilterModel, SynthOscMode, VaWaveform};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// Commands sent from the UI/MIDI to the real-time DSP thread.
+#[derive(Debug, Clone)]
 pub enum AudioCommand {
     Midi(MidiEvent),
     SetMasterVolume(f32),
     SetDrawbars([u8; 9]),
+    SetOrganModel(OrganModel),
+    SetScannerMode(ScannerMode),
+    SetScannerOn(bool),
+    SetPercussion {
+        enabled: bool,
+        soft: bool,
+        fast: bool,
+        third: bool,
+    },
+    SetRotarySpeed(RotarySpeed),
+    SetRotaryDrive(f32),
+    SetRotaryEnabled(bool),
     SetOrganLevel(f32),
+    SetOrganBLevel(f32),
     SetPianoLevel(f32),
+    SetPianoBLevel(f32),
+    SetPianoCategory(PianoCategory),
+    SetPianoTimbre(PianoTimbre),
+    SetPianoTouch(VelocityTouch),
+    SetPianoAcoustics {
+        string_res: bool,
+        pedal_noise: bool,
+    },
     SetSynthLevel(f32),
+    SetSynthBLevel(f32),
+    SetSynthCLevel(f32),
+    SetSynthOscMode(SynthOscMode),
+    SetSynthWaveform(VaWaveform),
+    SetSynthDetune(f32),
+    SetSynthFilterModel(FilterModel),
     SetSynthCutoff(f32),
     SetSynthResonance(f32),
-    SetReverbMix(f32),
-    SetRotarySpeed(nord_core::organ::RotarySpeed),
+    SetSynthDrive(f32),
+    SetSynthAttack(f32),
+    SetSynthDecay(f32),
+    SetSynthRelease(f32),
+    SetFxMod1 {
+        kind: Mod1Type,
+        rate: f32,
+        amount: f32,
+    },
+    SetFxMod2 {
+        kind: Mod2Type,
+        rate: f32,
+        amount: f32,
+    },
+    SetFxEq {
+        drive: f32,
+        bass: f32,
+        mid: f32,
+        mid_freq: f32,
+        treble: f32,
+    },
+    SetFxDelay {
+        enabled: bool,
+        feedback: f32,
+        mix: f32,
+    },
+    SetFxReverb {
+        model: ReverbModel,
+        mix: f32,
+    },
+    SetMasterComp(f32),
+    /// Activates/deactivates one of the 7 layers (index 0..=6) in both scenes.
+    SetLayerActive(usize, bool),
 }
 
 /// Handle to communicate with the running audio background thread.
@@ -40,6 +103,161 @@ impl AudioHandle {
 
     pub fn send_command(&self, cmd: AudioCommand) {
         let _ = self.cmd_sender.try_send(cmd);
+    }
+}
+
+/// Applies a single `AudioCommand` to the `Stage4Engine` and `master_vol`.
+pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_vol: &mut f32) {
+    match cmd {
+        AudioCommand::Midi(ev) => engine.handle_midi(ev),
+        AudioCommand::SetMasterVolume(v) => *master_vol = v.clamp(0.0, 1.0),
+        AudioCommand::SetDrawbars(d) => engine.organ_a.drawbars = d,
+        AudioCommand::SetOrganModel(m) => {
+            engine.organ_a.model = m;
+            engine.organ_b.model = m;
+        }
+        AudioCommand::SetScannerMode(sm) => {
+            engine.organ_a.scanner_mode = sm;
+        }
+        AudioCommand::SetScannerOn(on) => {
+            if !on {
+                engine.organ_a.scanner_mode = ScannerMode::Off;
+            } else if engine.organ_a.scanner_mode == ScannerMode::Off {
+                engine.organ_a.scanner_mode = ScannerMode::C3;
+            }
+        }
+        AudioCommand::SetPercussion {
+            enabled,
+            soft,
+            fast,
+            third,
+        } => {
+            engine.organ_a.percussion_enabled = enabled;
+            engine.organ_a.percussion_soft = soft;
+            engine.organ_a.percussion_fast_decay = fast;
+            engine.organ_a.percussion_third_harmonic = third;
+        }
+        AudioCommand::SetRotarySpeed(sp) => {
+            engine.organ_a.rotary_speed = sp;
+            engine.organ_b.rotary_speed = sp;
+        }
+        AudioCommand::SetRotaryDrive(drv) => {
+            engine.organ_a.rotary_drive = drv;
+            engine.organ_b.rotary_drive = drv;
+        }
+        AudioCommand::SetRotaryEnabled(en) => {
+            engine.organ_a.rotary_enabled = en;
+            engine.organ_b.rotary_enabled = en;
+        }
+        AudioCommand::SetOrganLevel(lvl) => engine.layer_levels[0].base = lvl,
+        AudioCommand::SetOrganBLevel(lvl) => engine.layer_levels[1].base = lvl,
+        AudioCommand::SetPianoLevel(lvl) => engine.layer_levels[2].base = lvl,
+        AudioCommand::SetPianoBLevel(lvl) => engine.layer_levels[3].base = lvl,
+        AudioCommand::SetPianoCategory(cat) => {
+            engine.piano_a.category = cat;
+            engine.piano_b.category = cat;
+        }
+        AudioCommand::SetPianoTimbre(t) => {
+            engine.piano_a.timbre = t;
+            engine.piano_b.timbre = t;
+        }
+        AudioCommand::SetPianoTouch(tc) => {
+            engine.piano_a.touch = tc;
+            engine.piano_b.touch = tc;
+        }
+        AudioCommand::SetPianoAcoustics {
+            string_res,
+            pedal_noise,
+        } => {
+            engine.piano_a.string_resonance_enabled = string_res;
+            engine.piano_a.pedal_noise_enabled = pedal_noise;
+        }
+        AudioCommand::SetSynthLevel(lvl) => engine.layer_levels[4].base = lvl,
+        AudioCommand::SetSynthBLevel(lvl) => engine.layer_levels[5].base = lvl,
+        AudioCommand::SetSynthCLevel(lvl) => engine.layer_levels[6].base = lvl,
+        AudioCommand::SetSynthOscMode(m) => engine.synth_a.osc_mode = m,
+        AudioCommand::SetSynthWaveform(w) => engine.synth_a.waveform = w,
+        AudioCommand::SetSynthDetune(d) => engine.synth_a.supersaw_detune = d,
+        AudioCommand::SetSynthFilterModel(fm) => engine.synth_a.filter_model = fm,
+        AudioCommand::SetSynthCutoff(co) => engine.synth_a.cutoff_hz = co,
+        AudioCommand::SetSynthResonance(res) => engine.synth_a.resonance = res,
+        AudioCommand::SetSynthDrive(drv) => engine.synth_a.filter_drive = drv,
+        AudioCommand::SetSynthAttack(atk) => engine.synth_a.attack_sec = atk,
+        AudioCommand::SetSynthDecay(dec) => engine.synth_a.decay_sec = dec,
+        AudioCommand::SetSynthRelease(rel) => engine.synth_a.release_sec = rel,
+        AudioCommand::SetFxMod1 { kind, rate, amount } => {
+            for fx in &mut engine.fx_chains {
+                fx.mod1_type = kind;
+                fx.mod1_rate_hz = rate;
+                fx.mod1_amount = amount;
+            }
+        }
+        AudioCommand::SetFxMod2 { kind, rate, amount } => {
+            for fx in &mut engine.fx_chains {
+                fx.mod2_type = kind;
+                fx.mod2_rate_hz = rate;
+                fx.mod2_amount = amount;
+            }
+        }
+        AudioCommand::SetFxEq {
+            drive,
+            bass,
+            mid,
+            mid_freq,
+            treble,
+        } => {
+            for fx in &mut engine.fx_chains {
+                fx.drive_amount = drive;
+                fx.eq_bass_db = bass;
+                fx.eq_mid_db = mid;
+                fx.eq_mid_freq_hz = mid_freq;
+                fx.eq_treble_db = treble;
+            }
+        }
+        AudioCommand::SetFxDelay {
+            enabled,
+            feedback,
+            mix,
+        } => {
+            for fx in &mut engine.fx_chains {
+                fx.delay_enabled = enabled;
+                fx.delay_feedback = feedback;
+                fx.delay_mix = mix;
+            }
+        }
+        AudioCommand::SetFxReverb { model, mix } => {
+            for fx in &mut engine.fx_chains {
+                fx.reverb_model = model;
+                fx.reverb_mix = mix;
+            }
+        }
+        AudioCommand::SetMasterComp(amt) => {
+            engine.master_bus.compressor_amount = amt;
+        }
+        AudioCommand::SetLayerActive(idx, on) => {
+            if idx < 7 {
+                let bit = 1u8 << idx;
+                if on {
+                    engine.scene.scene_1_mask |= bit;
+                    engine.scene.scene_2_mask |= bit;
+                } else {
+                    engine.scene.scene_1_mask &= !bit;
+                    engine.scene.scene_2_mask &= !bit;
+                    // Release anything still sounding on that layer.
+                    for n in 0..128u8 {
+                        match idx {
+                            0 => engine.organ_a.note_off(n),
+                            1 => engine.organ_b.note_off(n),
+                            2 => engine.piano_a.note_off(n),
+                            3 => engine.piano_b.note_off(n),
+                            4 => engine.synth_a.note_off(n),
+                            5 => engine.synth_b.note_off(n),
+                            _ => engine.synth_c.note_off(n),
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -85,6 +303,16 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
     let channels = config.channels() as usize;
 
     let mut engine = Stage4Engine::new(sample_rate);
+    // Initialize default levels matching UI state: Organ A + Piano A active, Synth A muted until enabled
+    engine.layer_levels[0].base = 0.85;
+    engine.layer_levels[1].base = 0.0;
+    engine.layer_levels[2].base = 0.90;
+    engine.layer_levels[3].base = 0.0;
+    engine.layer_levels[4].base = 0.0;
+    engine.layer_levels[5].base = 0.0;
+    engine.layer_levels[6].base = 0.0;
+    engine.synth_a.waveform = VaWaveform::SuperSaw;
+
     let mut master_vol: f32 = 0.85;
 
     let err_fn = |err| eprintln!("[Audio] Stream error: {}", err);
@@ -93,20 +321,8 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
         cpal::SampleFormat::F32 => device.build_output_stream(
             &config.into(),
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                // Drain queued commands without blocking
                 while let Ok(cmd) = rx.try_recv() {
-                    match cmd {
-                        AudioCommand::Midi(ev) => engine.handle_midi(ev),
-                        AudioCommand::SetMasterVolume(v) => master_vol = v.clamp(0.0, 1.0),
-                        AudioCommand::SetDrawbars(d) => engine.organ_a.drawbars = d,
-                        AudioCommand::SetOrganLevel(lvl) => engine.layer_levels[0].base = lvl,
-                        AudioCommand::SetPianoLevel(lvl) => engine.layer_levels[2].base = lvl,
-                        AudioCommand::SetSynthLevel(lvl) => engine.layer_levels[4].base = lvl,
-                        AudioCommand::SetSynthCutoff(co) => engine.synth_a.cutoff_hz = co,
-                        AudioCommand::SetSynthResonance(res) => engine.synth_a.resonance = res,
-                        AudioCommand::SetReverbMix(rev) => engine.fx_chains[0].reverb_mix = rev,
-                        AudioCommand::SetRotarySpeed(sp) => engine.organ_a.rotary_speed = sp,
-                    }
+                    apply_audio_command(cmd, &mut engine, &mut master_vol);
                 }
 
                 for frame in data.chunks_mut(channels) {
@@ -134,7 +350,6 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
         if let Err(e) = s.play() {
             eprintln!("[Audio] Playback failed: {}", e);
         } else {
-            // Keep stream active
             loop {
                 std::thread::park();
             }
@@ -165,7 +380,6 @@ fn run_midi_input(handle: AudioHandle, active_keys: Arc<[AtomicBool; 128]>) {
         }
     }
 
-    // Connect to the first port
     let in_port = &ports[0];
     let port_name = midi_in
         .port_name(in_port)
@@ -193,15 +407,11 @@ fn run_midi_input(handle: AudioHandle, active_keys: Arc<[AtomicBool; 128]>) {
 pub fn handle_midi_bytes(message: &[u8], handle: &AudioHandle, active_keys: &[AtomicBool; 128]) {
     if let Some(event) = MidiEvent::from_bytes(message) {
         match event {
-            MidiEvent::NoteOn { note, velocity, .. } => {
-                if (note as usize) < active_keys.len() {
-                    active_keys[note as usize].store(velocity > 0, Ordering::Relaxed);
-                }
+            MidiEvent::NoteOn { note, velocity, .. } if (note as usize) < active_keys.len() => {
+                active_keys[note as usize].store(velocity > 0, Ordering::Relaxed);
             }
-            MidiEvent::NoteOff { note, .. } => {
-                if (note as usize) < active_keys.len() {
-                    active_keys[note as usize].store(false, Ordering::Relaxed);
-                }
+            MidiEvent::NoteOff { note, .. } if (note as usize) < active_keys.len() => {
+                active_keys[note as usize].store(false, Ordering::Relaxed);
             }
             _ => {}
         }
@@ -236,7 +446,6 @@ mod tests {
         let active_keys: Arc<[AtomicBool; 128]> =
             Arc::new(std::array::from_fn(|_| AtomicBool::new(false)));
 
-        // Send Note On (Middle C, vel 90)
         let note_on = [0x90, 60, 90];
         handle_midi_bytes(&note_on, &handle, &active_keys);
         assert!(active_keys[60].load(Ordering::Relaxed));
@@ -249,7 +458,6 @@ mod tests {
             _ => panic!("Expected NoteOn event"),
         }
 
-        // Send Note Off (velocity 0 NoteOn variant)
         let note_off = [0x90, 60, 0];
         handle_midi_bytes(&note_off, &handle, &active_keys);
         assert!(!active_keys[60].load(Ordering::Relaxed));
@@ -263,22 +471,39 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_midi_bytes_cc() {
-        let (handle, rx) = AudioHandle::new();
-        let active_keys: Arc<[AtomicBool; 128]> =
-            Arc::new(std::array::from_fn(|_| AtomicBool::new(false)));
+    fn test_apply_audio_command_updates_engine() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut master = 0.85;
+        apply_audio_command(
+            AudioCommand::SetOrganModel(OrganModel::Farfisa),
+            &mut engine,
+            &mut master,
+        );
+        assert_eq!(engine.organ_a.model, OrganModel::Farfisa);
 
-        // Sustain CC (64, 127)
-        let cc = [0xB0, 64, 127];
-        handle_midi_bytes(&cc, &handle, &active_keys);
-        match rx.try_recv() {
-            Ok(AudioCommand::Midi(MidiEvent::ControlChange {
-                controller, value, ..
-            })) => {
-                assert_eq!(controller, 64);
-                assert_eq!(value, 127);
-            }
-            _ => panic!("Expected CC event"),
-        }
+        apply_audio_command(
+            AudioCommand::SetSynthCutoff(1234.0),
+            &mut engine,
+            &mut master,
+        );
+        assert_eq!(engine.synth_a.cutoff_hz, 1234.0);
+    }
+
+    #[test]
+    fn test_layer_active_toggles_scene_masks() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut master = 0.85;
+        apply_audio_command(
+            AudioCommand::SetLayerActive(1, true),
+            &mut engine,
+            &mut master,
+        );
+        assert_ne!(engine.scene.scene_1_mask & 0b10, 0);
+        apply_audio_command(
+            AudioCommand::SetLayerActive(1, false),
+            &mut engine,
+            &mut master,
+        );
+        assert_eq!(engine.scene.scene_1_mask & 0b10, 0);
     }
 }

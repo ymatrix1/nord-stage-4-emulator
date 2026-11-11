@@ -223,9 +223,24 @@ impl Stage4Engine {
             80.0 * 200.0f32.powf(self.synth_cutoff_morph[1].evaluate(&self.morph_controllers));
         let cut_c =
             80.0 * 200.0f32.powf(self.synth_cutoff_morph[2].evaluate(&self.morph_controllers));
-        self.synth_a.cutoff_hz = cut_a;
-        self.synth_b.cutoff_hz = cut_b;
-        self.synth_c.cutoff_hz = cut_c;
+        if self.synth_cutoff_morph[0].delta_wheel.abs() > 1e-5
+            || self.synth_cutoff_morph[0].delta_pedal.abs() > 1e-5
+            || self.synth_cutoff_morph[0].delta_aftertouch.abs() > 1e-5
+        {
+            self.synth_a.cutoff_hz = cut_a;
+        }
+        if self.synth_cutoff_morph[1].delta_wheel.abs() > 1e-5
+            || self.synth_cutoff_morph[1].delta_pedal.abs() > 1e-5
+            || self.synth_cutoff_morph[1].delta_aftertouch.abs() > 1e-5
+        {
+            self.synth_b.cutoff_hz = cut_b;
+        }
+        if self.synth_cutoff_morph[2].delta_wheel.abs() > 1e-5
+            || self.synth_cutoff_morph[2].delta_pedal.abs() > 1e-5
+            || self.synth_cutoff_morph[2].delta_aftertouch.abs() > 1e-5
+        {
+            self.synth_c.cutoff_hz = cut_c;
+        }
 
         let raw_layers = [
             self.organ_a.render_frame(),

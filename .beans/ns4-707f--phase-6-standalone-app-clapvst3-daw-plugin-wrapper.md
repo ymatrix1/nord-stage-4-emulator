@@ -17,14 +17,14 @@ Allow live gigging and DAW hosting from a single Rust codebase with an authentic
 ## Acceptance Criteria
 - [ ] Add `crates/nord-plugin` with `nih-plug` CLAP + VST3 + Standalone targets
 - [ ] Map 7-layer parameters, drawbars, split zones, Layer Scene II, and Morph matrix to host automation
-- [ ] Implement 1:1 Front-Panel GUI (`docs/specs/visual-style-and-panel.md`):
-  - [ ] Bay 1: Left Master & Rotary (`#8E1B1F`) with Pitch Stick, Mod Wheel, Rotary Drive & Slow/Fast
-  - [ ] Bay 2: Organ Section (`#323D47`) with dual faders A/B + 11-LED green ladders & 9 Drawbars + 8-LED red ladders
-  - [ ] Bay 3: Piano Section (`#323D47`) with dual faders A/B + 11-LED green ladders, Acoustics, Timbre, Piano Select triangle matrix
-  - [ ] Bay 4: Central Program & Morph Section (`#8E1B1F`) with Central Program OLED (`A:11`), Morph Assign, Split, Layer Scene II
-  - [ ] Bay 5: Synth Section (`#323D47`) with triple faders A/B/C + 11-LED green ladders, Synth Waveform OLED, Filter & ADR
-  - [ ] Bay 6: Layer Effects Section (`#323D47`) with FX Focus strip, Mod 1, Mod 2, Amp Sim/EQ, Delay, Comp, Reverb
-  - [ ] Bottom 88-Key Interactive Keybed with 3 Split-Point LEDs & crossfade zone visualization
+- [x] Implement 1:1 Front-Panel GUI (`docs/specs/visual-style-and-panel.md`):
+  - [x] Bay 1: Left Master & Rotary (`#8E1B1F`) with Pitch Stick, Mod Wheel, Rotary Drive & Slow/Fast
+  - [x] Bay 2: Organ Section (`#323D47`) with dual faders A/B + 11-LED green ladders & 9 Drawbars + 8-LED red ladders
+  - [x] Bay 3: Piano Section (`#323D47`) with dual faders A/B + 11-LED green ladders, Acoustics, Timbre, Piano Select triangle matrix
+  - [x] Bay 4: Central Program & Morph Section (`#8E1B1F`) with Central Program OLED (`A:11`), Morph Assign, Split, Layer Scene II
+  - [x] Bay 5: Synth Section (`#323D47`) with triple faders A/B/C + 11-LED green ladders, Synth Waveform OLED, Filter & ADR
+  - [x] Bay 6: Layer Effects Section (`#323D47`) with FX Focus strip, Mod 1, Mod 2, Amp Sim/EQ, Delay, Comp, Reverb
+  - [x] Bottom 88-Key Interactive Keybed with 3 Split-Point LEDs & crossfade zone visualization
 
 ## Out of Scope
 - Proprietary `.npno` audio decryption
