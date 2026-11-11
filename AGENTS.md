@@ -18,6 +18,7 @@ Canonical instructions for every AI coding agent (Claude Code, Google Antigravit
 | Subsystem specs | [docs/specs/README.md](docs/specs/README.md) |
 | Decisions | [docs/DECISIONS.md](docs/DECISIONS.md) |
 | Open questions | [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md) |
+| Technical debt | [docs/TECH_DEBT.md](docs/TECH_DEBT.md) |
 | Glossary | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
 | Reverse-engineering findings | [docs/research/](docs/research/) |
 
