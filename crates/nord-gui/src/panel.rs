@@ -779,8 +779,8 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Piano Select Matrix (Grand, Upright, Electric, Clav, Digital, Misc)
     let psel_rect = Rect::from_min_size(
-        pos2(bay3.left() + 184.0, bay3.top() + 32.0),
-        vec2(96.0, 140.0),
+        pos2(bay3.left() + 180.0, bay3.top() + 32.0),
+        vec2(104.0, 140.0),
     );
     group_frame(&painter, psel_rect, "PIANO SELECT");
     let p_cats = [
@@ -797,9 +797,9 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         .unwrap_or(0);
     if let Some(new_cat) = triangle_matrix_selector(
         ui,
-        psel_rect.shrink(6.0),
+        psel_rect.shrink(4.0),
         "sel_piano_cat",
-        &["GRAND", "UPRIGHT", "ELECTRIC"],
+        &["GRAND", "UPRIGHT", "ELEC"],
         &["CLAV", "DIGITAL", "MISC"],
         cur_cat_idx,
     ) {
@@ -945,7 +945,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
             );
             led(
                 &painter,
-                pos2(b_rect.center().x, b_rect.top() - 4.0),
+                pos2(b_rect.center().x, b_rect.top() - 7.0),
                 is_sel,
                 LED_RED,
                 LED_RED_DIM,

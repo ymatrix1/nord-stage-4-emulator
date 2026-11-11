@@ -472,20 +472,20 @@ pub fn triangle_matrix_selector(
         let is_sel = selected_idx == i;
         let y = rect.top() + 4.0 + (i as f32) * row_h;
         // triangle
-        let tri_center = pos2(rect.left() + 10.0, y + row_h * 0.5);
+        let tri_center = pos2(rect.left() + 7.0, y + row_h * 0.5);
         let col = if is_sel { LED_RED } else { LED_RED_DIM };
         p.text(
             tri_center,
             Align2::CENTER_CENTER,
             "►",
-            FontId::proportional(8.0),
+            FontId::proportional(7.5),
             col,
         );
         p.text(
-            pos2(rect.left() + 18.0, y + row_h * 0.5),
+            pos2(rect.left() + 14.0, y + row_h * 0.5),
             Align2::LEFT_CENTER,
             name,
-            FontId::proportional(8.5),
+            FontId::proportional(7.5),
             if is_sel {
                 Color32::WHITE
             } else {
@@ -498,20 +498,20 @@ pub fn triangle_matrix_selector(
         let idx = left_items.len() + i;
         let is_sel = selected_idx == idx;
         let y = rect.top() + 4.0 + (i as f32) * row_h;
-        let tri_center = pos2(rect.right() - 10.0, y + row_h * 0.5);
+        let tri_center = pos2(rect.right() - 7.0, y + row_h * 0.5);
         let col = if is_sel { LED_RED } else { LED_RED_DIM };
         p.text(
             tri_center,
             Align2::CENTER_CENTER,
             "◄",
-            FontId::proportional(8.0),
+            FontId::proportional(7.5),
             col,
         );
         p.text(
-            pos2(rect.right() - 18.0, y + row_h * 0.5),
+            pos2(rect.right() - 14.0, y + row_h * 0.5),
             Align2::RIGHT_CENTER,
             name,
-            FontId::proportional(8.5),
+            FontId::proportional(7.5),
             if is_sel {
                 Color32::WHITE
             } else {

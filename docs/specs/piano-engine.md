@@ -70,3 +70,38 @@ Upon receiving MIDI `NoteOff` or Damper Pedal Release (`CC64 < 64`), the vibrati
    When `soft_release` is active on the front panel, the damper descends with a gentler time constant $\tau = 180\text{ ms}$, modeling lighter felt contact for expressive legato phrasing and ambient tail preservation.
 3. **Voice Deactivation Invariant:**
    A voice remains in `releasing` state and active in the polyphonic voice matrix until $v_{\text{env}} < 10^{-4}$ ($-80\text{ dB}$), at which point it is safely marked inactive (`v.active = false`) without memory allocations or locking.
+
+---
+
+## 7. Multisample Stroke Playback & Pitch Transposition
+
+Implemented in [`crates/nord-core/src/piano.rs`](../../crates/nord-core/src/piano.rs) (`NpnoSound`, `LoadedPianoStroke`).
+
+When a pre-decoded `.npno` instrument is loaded via `PianoLayer::set_sound`:
+1. **Zone and Detuning Lookup:**
+   The struck MIDI note index ($n \in [0, 127]$) resolves its assigned multisample stroke via `key_map[n]` and its signed calibration detune via `tuning_cents[n]`.
+2. **Pitch Transposition Ratio:**
+   The fractional playback speed increment per engine sample frame is calculated as:
+   $$
+   r = 2^{\frac{(n - n_{\text{root}}) + \frac{c}{100}}{12}}, \qquad \text{sample\_step} = r \cdot \frac{f_{\text{s, stroke}}}{f_{\text{s, engine}}}
+   $$
+3. **Linear Fractional Sample Interpolation:**
+   To guarantee clean, anti-aliased transposition without DSP buffer clicks or heap allocations during real-time rendering:
+   $$
+   x[t] = x[k] + \mathrm{frac} \cdot (x[k+1] - x[k]), \qquad k = \lfloor \text{sample\_pos} \rfloor, \quad \mathrm{frac} = \text{sample\_pos} - k
+   $$
+4. **Resilient Fallback:**
+   If no sample is loaded, or if the note is outside the mapped multisample zones, the engine smoothly falls back to the mathematical harmonic oscillator bank.
+
+---
+
+## 8. Polyphonic Voice Stealing Priority
+
+When note-on events exceed the pre-allocated voice capacity (`MAX_PIANO_VOICES = 24` per layer):
+1. **Note Match:** If an existing voice is already sounding the exact same MIDI note, it is re-triggered with updated velocity and envelope.
+2. **Free Voice:** The first inactive voice (`!v.active`) is selected.
+3. **Priority Stealing:** If all voices are occupied, the allocator computes a stealing score:
+   $$
+   \text{score} = \begin{cases} v_{\text{env}} \cdot 0.1 & \text{if } v_{\text{releasing}} \\ v_{\text{env}} & \text{otherwise} \end{cases}
+   $$
+   The voice with the lowest score (decaying released notes first, then quietest sustaining notes) is recycled, preserving loud bass roots and active top melody notes without audible voice drops.
