@@ -145,6 +145,16 @@ impl Stage4Engine {
                         self.piano_a.set_damper_pedal(down, value);
                         self.piano_b.set_damper_pedal(down, value);
                     }
+                    cc::SOSTENUTO_PEDAL => {
+                        let down = value >= 64;
+                        self.piano_a.set_sostenuto_pedal(down, value);
+                        self.piano_b.set_sostenuto_pedal(down, value);
+                    }
+                    cc::SOFT_PEDAL => {
+                        let down = value >= 64;
+                        self.piano_a.set_soft_pedal(down, value);
+                        self.piano_b.set_soft_pedal(down, value);
+                    }
                     cc::SYNTH_FILTER_CUTOFF => {
                         for m in &mut self.synth_cutoff_morph {
                             m.base = norm;
@@ -250,6 +260,9 @@ impl Stage4Engine {
             piano.string_resonance_enabled = dec.string_res;
             piano.pedal_noise_enabled = dec.pedal_noise;
             piano.soft_release = dec.soft_release;
+            piano.unison = dec.unison.min(3);
+            piano.dyn_comp = dec.dyn_comp.min(3);
+            piano.octave_shift = dec.octave.clamp(-2, 2);
         }
 
         // Synth (Layers A, B & C + cutoff morph matrix)

@@ -56,11 +56,14 @@ $$
 
 ---
 
-## 5. Dynamic Pedal Noise (`Piano Pedal` in Firmware)
+## 5. Dynamic Pedal Noise (`Piano Pedal` in Firmware) & Unison / Dyn Comp
 
-When `Pedal Noise` is enabled and `CC64` changes rapidly:
-- **Damper Lift (Note-On of Pedal):** Velocity of pedal depression ($\Delta\text{CC64} / \Delta t$) scales a short low-passed mechanical thump ($f_c = 140\text{ Hz}$) plus an airy felt-release brush transient, exciting the sympathetic string resonator bank.
-- **Damper Drop (Pedal Release):** Generates a damped felt thud ($f_c = 95\text{ Hz}$, $\tau = 65\text{ ms}$) as all dampers return to the strings.
+When `Pedal Noise` is enabled and `CC64`, `CC66`, or `CC67` transitions:
+- **Damper Lift (`CC64 >= 64`):** Velocity of pedal depression scales a low-passed mechanical thump ($f_c = 140\text{ Hz}$) plus an airy felt-release brush transient (`pedal_brush_env`) exciting the sympathetic string resonator bank.
+- **Damper Drop (`CC64 < 64`):** Generates a deeper damped felt thud ($f_c = 95\text{ Hz}$).
+- **Sostenuto (`CC66`):** Captures notes currently active at pedal-down (`sostenuto_held`) until pedal release and triggers a lighter mechanical rod transient ($f_c = 120\text{ Hz}$).
+- **Una Corda / Soft (`CC67`):** Softens hammer strike excitation ($0.76\times$ gain, $0.90\times$ post-shaping) and triggers rail-shift noise ($f_c = 160\text{ Hz}$).
+- **Piano `UNISON` (`1, 2, 3`) & `DYN COMP` (`1, 2, 3`):** `unison` adds symmetric stereo hammer/string detune (`3.5`, `7.0`, `11.5` cents) across active voices; `dyn_comp` compresses strike velocity curves and applies fast output dynamic leveling.
 
 ---
 
@@ -81,9 +84,9 @@ Upon receiving MIDI `NoteOff` or Damper Pedal Release (`CC64 < 64`), the vibrati
 
 Implemented in [`crates/nord-core/src/piano.rs`](../../crates/nord-core/src/piano.rs) (`NpnoSound`, `LoadedPianoStroke`).
 
-When a pre-decoded `.npno` instrument is loaded via `PianoLayer::set_sound`:
-1. **Zone and Detuning Lookup:**
-   The struck MIDI note index ($n \in [0, 127]$) resolves its assigned multisample stroke via `key_map[n]` and its signed calibration detune via `tuning_cents[n]`.
+When a pre-decoded `.npno` or open SFZ/WAV (`NpnoSound::from_sfz_str` / `from_sfz_path`, `parse_wav_mono` 8/16/24/32-bit mono/stereo) instrument is loaded via `PianoLayer::set_sound`:
+1. **Zone, Velocity, and Release Lookup (`NpnoSound::select_stroke`):**
+   Multi-velocity SFZ `<region>` zones (`lovel..=hivel`, `lokey..=hikey`, `trigger=release`) are deduplicated in RAM (`Arc<[f32]>`). Key-off events spawn matching `trigger=release` samples without heap allocation. For `.npno` files, `key_map[n]` and `tuning_cents[n]` resolve the stroke directly.
 2. **Pitch Transposition Ratio:**
    The fractional playback speed increment per engine sample frame is calculated as:
    $$
