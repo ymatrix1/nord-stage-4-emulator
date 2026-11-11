@@ -98,7 +98,9 @@ impl AudioHandle {
     }
 
     pub fn send_midi(&self, event: MidiEvent) {
-        let _ = self.cmd_sender.try_send(AudioCommand::Midi(event));
+        // MIDI events preserve note-on/note-off ordering; wait for queue capacity rather than
+        // silently dropping an event and leaving a voice held indefinitely.
+        let _ = self.cmd_sender.send(AudioCommand::Midi(event));
     }
 
     pub fn send_command(&self, cmd: AudioCommand) {
@@ -301,6 +303,12 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
 
     let sample_rate = config.sample_rate().0 as f32;
     let channels = config.channels() as usize;
+    if channels == 0 {
+        eprintln!("[Audio] Output device reported zero channels.");
+        return;
+    }
+    let sample_format = config.sample_format();
+    let stream_config: cpal::StreamConfig = config.into();
 
     let mut engine = Stage4Engine::new(sample_rate);
     // Initialize default levels matching UI state: Organ A + Piano A active, Synth A muted until enabled
@@ -317,25 +325,19 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
 
     let err_fn = |err| eprintln!("[Audio] Stream error: {}", err);
 
-    let stream = match config.sample_format() {
+    let stream = match sample_format {
         cpal::SampleFormat::F32 => device.build_output_stream(
-            &config.into(),
+            &stream_config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                while let Ok(cmd) = rx.try_recv() {
-                    apply_audio_command(cmd, &mut engine, &mut master_vol);
-                }
-
-                for frame in data.chunks_mut(channels) {
-                    let [l, r] = engine.render_frame();
-                    let out_l = l * master_vol;
-                    let out_r = r * master_vol;
-                    if channels >= 2 {
-                        frame[0] = out_l;
-                        frame[1] = out_r;
-                    } else if channels == 1 {
-                        frame[0] = (out_l + out_r) * 0.5;
-                    }
-                }
+                render_output_f32(data, channels, &rx, &mut engine, &mut master_vol);
+            },
+            err_fn,
+            None,
+        ),
+        cpal::SampleFormat::I16 => device.build_output_stream(
+            &stream_config,
+            move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                render_output_i16(data, channels, &rx, &mut engine, &mut master_vol);
             },
             err_fn,
             None,
@@ -355,6 +357,80 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
             }
         }
     }
+}
+
+fn drain_audio_commands(
+    rx: &Receiver<AudioCommand>,
+    engine: &mut Stage4Engine,
+    master_vol: &mut f32,
+) {
+    while let Ok(cmd) = rx.try_recv() {
+        apply_audio_command(cmd, engine, master_vol);
+    }
+}
+
+fn render_output_f32(
+    data: &mut [f32],
+    channels: usize,
+    rx: &Receiver<AudioCommand>,
+    engine: &mut Stage4Engine,
+    master_vol: &mut f32,
+) {
+    if channels == 0 {
+        return;
+    }
+    drain_audio_commands(rx, engine, master_vol);
+    for frame in data.chunks_mut(channels) {
+        let [left, right] = engine.render_frame();
+        write_f32_frame(frame, [left * *master_vol, right * *master_vol]);
+    }
+}
+
+fn render_output_i16(
+    data: &mut [i16],
+    channels: usize,
+    rx: &Receiver<AudioCommand>,
+    engine: &mut Stage4Engine,
+    master_vol: &mut f32,
+) {
+    if channels == 0 {
+        return;
+    }
+    drain_audio_commands(rx, engine, master_vol);
+    for frame in data.chunks_mut(channels) {
+        let [left, right] = engine.render_frame();
+        write_i16_frame(frame, [left * *master_vol, right * *master_vol]);
+    }
+}
+
+fn write_f32_frame(frame: &mut [f32], stereo: [f32; 2]) {
+    frame.fill(0.0);
+    match frame.len() {
+        0 => {}
+        1 => frame[0] = (stereo[0] + stereo[1]) * 0.5,
+        _ => {
+            frame[0] = stereo[0];
+            frame[1] = stereo[1];
+        }
+    }
+}
+
+fn write_i16_frame(frame: &mut [i16], stereo: [f32; 2]) {
+    frame.fill(0);
+    match frame.len() {
+        0 => {}
+        1 => frame[0] = float_to_i16((stereo[0] + stereo[1]) * 0.5),
+        _ => {
+            frame[0] = float_to_i16(stereo[0]);
+            frame[1] = float_to_i16(stereo[1]);
+        }
+    }
+}
+
+fn float_to_i16(sample: f32) -> i16 {
+    (sample.clamp(-1.0, 1.0) * 32768.0)
+        .round()
+        .clamp(f32::from(i16::MIN), f32::from(i16::MAX)) as i16
 }
 
 fn run_midi_input(handle: AudioHandle, active_keys: Arc<[AtomicBool; 128]>) {
@@ -505,5 +581,71 @@ mod tests {
             &mut master,
         );
         assert_eq!(engine.scene.scene_1_mask & 0b10, 0);
+    }
+
+    #[test]
+    fn output_frames_downmix_mono_and_zero_extra_channels() {
+        let mut mono = [99.0];
+        write_f32_frame(&mut mono, [0.25, -0.75]);
+        assert_eq!(mono, [-0.25]);
+
+        let mut surround = [99.0; 4];
+        write_f32_frame(&mut surround, [0.25, -0.75]);
+        assert_eq!(surround, [0.25, -0.75, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn i16_output_converts_clamps_and_clears_extra_channels() {
+        let mut stereo = [0; 4];
+        write_i16_frame(&mut stereo, [2.0, -2.0]);
+        assert_eq!(stereo, [i16::MAX, i16::MIN, 0, 0]);
+
+        let mut mono = [0];
+        write_i16_frame(&mut mono, [0.5, 0.0]);
+        assert_eq!(mono, [8192]);
+    }
+
+    #[test]
+    fn midi_note_off_is_delivered_when_command_queue_is_full() {
+        let (handle, rx) = AudioHandle::new();
+        for _ in 0..1024 {
+            handle.send_command(AudioCommand::SetMasterVolume(0.5));
+        }
+
+        let midi_sender = handle.clone();
+        let sender = std::thread::spawn(move || {
+            midi_sender.send_midi(MidiEvent::NoteOff {
+                channel: 0,
+                note: 60,
+                velocity: 0,
+            });
+        });
+
+        // Free one slot, allowing the blocked MIDI sender to enqueue its Note Off.
+        rx.recv().expect("queue was filled");
+        sender.join().expect("MIDI sender should complete");
+
+        let mut received_note_off = false;
+        while let Ok(command) = rx.try_recv() {
+            if matches!(
+                command,
+                AudioCommand::Midi(MidiEvent::NoteOff { note: 60, .. })
+            ) {
+                received_note_off = true;
+            }
+        }
+        assert!(received_note_off, "Note Off must survive queue saturation");
+    }
+
+    #[test]
+    fn render_callbacks_accept_zero_channel_buffers_without_panicking() {
+        let (handle, rx) = AudioHandle::new();
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut master = 0.85;
+        let mut output = [0.0; 2];
+
+        render_output_f32(&mut output, 0, &rx, &mut engine, &mut master);
+        assert_eq!(output, [0.0; 2]);
+        drop(handle);
     }
 }
