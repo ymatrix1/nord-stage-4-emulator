@@ -540,7 +540,7 @@ impl SynthPresetDecoded {
             };
             w.write_bits(mode_idx, 2)?;
             let wave_idx = match l.waveform {
-                VaWaveform::Saw => 0,
+                VaWaveform::Saw | VaWaveform::SuperSaw => 0,
                 VaWaveform::Pulse => 1,
                 VaWaveform::Triangle => 2,
                 VaWaveform::Sine => 3,

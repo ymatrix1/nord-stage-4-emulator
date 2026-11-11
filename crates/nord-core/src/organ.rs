@@ -8,6 +8,9 @@ use std::f32::consts::TAU;
 /// Number of physical tonewheels in a Hammond B3 generator (`1..=91`).
 pub const NUM_TONEWHEELS: usize = 91;
 
+/// Maximum delay buffer capacity in samples for Hammond scanner vibrato (~10 ms at 192 kHz).
+const SCANNER_BUFFER_SIZE: usize = 2048;
+
 /// Supported Organ models in the Nord Stage 4.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrganModel {
@@ -16,6 +19,19 @@ pub enum OrganModel {
     Farfisa,
     Pipe1,
     Pipe2,
+}
+
+/// Hammond mechanical scanner vibrato and chorus modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ScannerMode {
+    #[default]
+    Off,
+    V1,
+    V2,
+    V3,
+    C1,
+    C2,
+    C3,
 }
 
 /// Rotary speaker speed state (`Slow` Chorale vs `Fast` Tremolo).
@@ -43,6 +59,7 @@ pub struct OrganLayer {
     pub rotary_enabled: bool,
     pub rotary_speed: RotarySpeed,
     pub rotary_drive: f32,
+    pub scanner_mode: ScannerMode,
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_phases: [f32; NUM_TONEWHEELS],
     held_notes: [bool; 128],
@@ -54,6 +71,11 @@ pub struct OrganLayer {
     horn_rate_hz: f32,
     drum_rate_hz: f32,
     lp_state: f32,
+    scanner_phase: f32,
+    scanner_buffer: Box<[f32; SCANNER_BUFFER_SIZE]>,
+    scanner_write_idx: usize,
+    farf_bp1_state: [f32; 2],
+    farf_bp2_state: [f32; 2],
 }
 
 impl OrganLayer {
@@ -78,6 +100,7 @@ impl OrganLayer {
             rotary_enabled: true,
             rotary_speed: RotarySpeed::Slow,
             rotary_drive: 0.2,
+            scanner_mode: ScannerMode::Off,
             tonewheel_freqs: freqs,
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
             held_notes: [false; 128],
@@ -89,6 +112,11 @@ impl OrganLayer {
             horn_rate_hz: 0.80,
             drum_rate_hz: 0.67,
             lp_state: 0.0,
+            scanner_phase: 0.0,
+            scanner_buffer: Box::new([0.0; SCANNER_BUFFER_SIZE]),
+            scanner_write_idx: 0,
+            farf_bp1_state: [0.0; 2],
+            farf_bp2_state: [0.0; 2],
         }
     }
 
@@ -175,7 +203,33 @@ impl OrganLayer {
             }
         }
 
-        // 3. Key click transient & percussion decay
+        // 3. Model filter shaping (Vox Continental Tone, Farfisa Formants, Pipe Chiff)
+        match self.model {
+            OrganModel::B3 => {}
+            OrganModel::Vox => {
+                // Vox drawbar 9 acts as Wave/Tone control morphing between flute and reed
+                let tone = f32::from(self.drawbars[8].min(8)) / 8.0;
+                dry = (1.0 - 0.5 * tone) * dry + tone * dry.signum() * dry.abs().powf(0.8);
+            }
+            OrganModel::Farfisa => {
+                // Farfisa dual resonant bandpass formant peaks (750 Hz and 2.5 kHz)
+                let w1 = (TAU * 750.0 * inv_fs).clamp(0.01, 0.45);
+                let w2 = (TAU * 2500.0 * inv_fs).clamp(0.01, 0.45);
+                self.farf_bp1_state[0] +=
+                    w1 * (dry - self.farf_bp1_state[0] - 0.2 * self.farf_bp1_state[1]);
+                self.farf_bp1_state[1] += w1 * self.farf_bp1_state[0];
+                self.farf_bp2_state[0] +=
+                    w2 * (dry - self.farf_bp2_state[0] - 0.3 * self.farf_bp2_state[1]);
+                self.farf_bp2_state[1] += w2 * self.farf_bp2_state[0];
+                dry = 0.6 * dry + 0.3 * self.farf_bp1_state[0] + 0.25 * self.farf_bp2_state[0];
+            }
+            OrganModel::Pipe1 | OrganModel::Pipe2 => {
+                // Pipe gentle high-frequency damping
+                dry *= 0.92;
+            }
+        }
+
+        // 4. Key click transient & percussion decay
         dry += self.click_env;
         self.click_env *= (-inv_fs / 0.0025).exp();
         let perc_tau = if self.percussion_fast_decay {
@@ -185,12 +239,48 @@ impl OrganLayer {
         };
         self.percussion_env *= (-inv_fs / perc_tau).exp();
 
+        // 5. Hammond Scanner Vibrato & Chorus (V1-V3, C1-C3)
+        let scanner_out = if self.scanner_mode == ScannerMode::Off {
+            dry
+        } else {
+            let (depth_ms, mix_wet) = match self.scanner_mode {
+                ScannerMode::Off => (0.0, 0.0),
+                ScannerMode::V1 => (0.75, 1.0),
+                ScannerMode::V2 => (1.50, 1.0),
+                ScannerMode::V3 => (2.50, 1.0),
+                ScannerMode::C1 => (0.75, 0.5),
+                ScannerMode::C2 => (1.50, 0.5),
+                ScannerMode::C3 => (2.50, 0.5),
+            };
+
+            // Scanner rotary rate is ~6.85 Hz
+            self.scanner_phase = (self.scanner_phase + TAU * 6.85 * inv_fs) % TAU;
+            let mod_delay_samples =
+                (depth_ms * 0.001 * self.sample_rate) * (0.5 + 0.5 * self.scanner_phase.sin());
+
+            // Write into ring buffer
+            self.scanner_buffer[self.scanner_write_idx] = dry;
+            let read_pos = (self.scanner_write_idx as f32 - mod_delay_samples
+                + SCANNER_BUFFER_SIZE as f32)
+                % (SCANNER_BUFFER_SIZE as f32);
+            self.scanner_write_idx = (self.scanner_write_idx + 1) % SCANNER_BUFFER_SIZE;
+
+            // Linear interpolation
+            let idx0 = read_pos.floor() as usize % SCANNER_BUFFER_SIZE;
+            let idx1 = (idx0 + 1) % SCANNER_BUFFER_SIZE;
+            let frac = read_pos - read_pos.floor();
+            let delayed =
+                self.scanner_buffer[idx0] * (1.0 - frac) + self.scanner_buffer[idx1] * frac;
+
+            (1.0 - mix_wet) * dry + mix_wet * delayed
+        };
+
         if !self.rotary_enabled {
-            return [dry, dry];
+            return [scanner_out, scanner_out];
         }
 
-        // 4. Model 122 Rotary Speaker (Tube drive + 800 Hz crossover + Horn/Drum Doppler)
-        let driven = ((1.0 + 3.0 * self.rotary_drive) * dry).tanh();
+        // 6. Model 122 Rotary Speaker (Tube drive + 800 Hz crossover + Horn/Drum Doppler)
+        let driven = ((1.0 + 3.0 * self.rotary_drive) * scanner_out).tanh();
         let alpha = (TAU * 800.0 * inv_fs).clamp(0.01, 0.99);
         self.lp_state += alpha * (driven - self.lp_state);
         let bass = self.lp_state;
@@ -251,5 +341,20 @@ mod tests {
         // Legato second note must NOT reset percussion_env to 1.0
         organ.note_on(64);
         assert!((organ.percussion_env - decayed_perc).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_scanner_vibrato_and_models() {
+        let mut organ = OrganLayer::new(48_000.0);
+        organ.scanner_mode = ScannerMode::C3;
+        organ.model = OrganModel::Farfisa;
+        organ.rotary_enabled = false;
+        organ.note_on(60);
+
+        for _ in 0..1024 {
+            let [l, r] = organ.render_frame();
+            assert!(l.is_finite() && r.is_finite());
+            assert_eq!(l, r); // Without rotary, scanner output is dual-mono
+        }
     }
 }

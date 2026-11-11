@@ -8,6 +8,9 @@ use std::f32::consts::TAU;
 /// Maximum simultaneous polyphonic voices per Piano layer (`16` pre-allocated in core; scalable to 120).
 pub const MAX_PIANO_VOICES: usize = 24;
 
+/// Number of chromatic resonant sympathetic strings (12 octave-distributed strings across the keyboard).
+pub const NUM_SYMPATHETIC_STRINGS: usize = 12;
+
 /// Piano instrument categories on the Nord Stage 4.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PianoCategory {
@@ -101,7 +104,8 @@ pub struct PianoLayer {
     pub pedal_noise_enabled: bool,
     pub damper_pedal_down: bool,
     voices: [PianoVoice; MAX_PIANO_VOICES],
-    resonators: [ModalResonator; 12],
+    resonators: [ModalResonator; NUM_SYMPATHETIC_STRINGS],
+    undamped_keys: [bool; 128],
     pedal_noise_env: f32,
     timbre_lp: f32,
 }
@@ -109,11 +113,13 @@ pub struct PianoLayer {
 impl PianoLayer {
     pub fn new(sample_rate: f32) -> Self {
         let fs = sample_rate.max(8000.0);
-        let mut resonators = [ModalResonator::default(); 12];
-        // Tune 12 sympathetic harp modes across C2..B3
+        let mut resonators = [ModalResonator::default(); NUM_SYMPATHETIC_STRINGS];
+        // Tune 12 sympathetic resonance modes across the keyboard (C2 up to B7)
         for (i, res) in resonators.iter_mut().enumerate() {
-            let f = 65.406 * 2.0f32.powf(i as f32 / 6.0);
-            res.configure(f, 4.0, fs);
+            let midi_note = 24.0 + (i as f32) * 7.0;
+            let f = 440.0 * 2.0f32.powf((midi_note - 69.0) / 12.0);
+            let t60 = (5.0 - 0.15 * i as f32).clamp(1.5, 5.0);
+            res.configure(f, t60, fs);
         }
         Self {
             sample_rate: fs,
@@ -125,6 +131,7 @@ impl PianoLayer {
             damper_pedal_down: false,
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
             resonators,
+            undamped_keys: [false; 128],
             pedal_noise_env: 0.0,
             timbre_lp: 0.0,
         }
@@ -133,6 +140,8 @@ impl PianoLayer {
     pub fn note_on(&mut self, note: u8, velocity: u8) {
         let amp = self.touch.map_velocity(velocity);
         let freq = 440.0 * 2.0f32.powf((f32::from(note) - 69.0) / 12.0);
+        let note_idx = (note as usize).min(127);
+        self.undamped_keys[note_idx] = true;
         // Reuse existing note or find first free slot (else voice 0)
         let idx = self
             .voices
@@ -152,6 +161,8 @@ impl PianoLayer {
     }
 
     pub fn note_off(&mut self, note: u8) {
+        let note_idx = (note as usize).min(127);
+        self.undamped_keys[note_idx] = false;
         for v in &mut self.voices {
             if v.active && v.note == note {
                 if self.damper_pedal_down {
@@ -217,11 +228,21 @@ impl PianoLayer {
             PianoTimbre::Bright | PianoTimbre::Dyno1 | PianoTimbre::Dyno2 => sum + 0.65 * high,
         };
 
-        // Sympathetic string resonance when damper pedal is depressed
+        // Sympathetic string resonance: fires either across all 12 strings when damper pedal is down,
+        // or specifically across undamped held keys (Nord Advanced String Resonance Gen 2)
         let mut res_sum = 0.0f32;
-        if self.string_resonance_enabled && self.damper_pedal_down {
-            for r in &mut self.resonators {
-                res_sum += r.process(shaped * 0.015);
+        if self.string_resonance_enabled {
+            if self.damper_pedal_down {
+                for r in &mut self.resonators {
+                    res_sum += r.process(shaped * 0.008);
+                }
+            } else {
+                for (i, r) in self.resonators.iter_mut().enumerate() {
+                    let midi_note = 24 + i * 7;
+                    if midi_note < 128 && self.undamped_keys[midi_note] {
+                        res_sum += r.process(shaped * 0.015);
+                    }
+                }
             }
         }
 

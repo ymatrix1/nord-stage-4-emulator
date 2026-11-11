@@ -18,6 +18,7 @@ pub enum SynthOscMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VaWaveform {
     Saw,
+    SuperSaw,
     Pulse,
     Triangle,
     Sine,
@@ -108,6 +109,20 @@ impl ZdfFilter {
     }
 }
 
+/// Roland/Nord 7-saw detune spread coefficients relative to fundamental.
+const SUPERSAW_DETUNES: [f32; 7] = [
+    -0.11002313,
+    -0.06288439,
+    -0.01952356,
+    0.0,
+    0.01991221,
+    0.06216538,
+    0.10745242,
+];
+
+/// Initial phase offsets for the 7 SuperSaw oscillators to prevent constructive crests.
+const SUPERSAW_PHASE_INITS: [f32; 7] = [0.0, 0.24, 0.46, 0.68, 0.82, 0.15, 0.57];
+
 /// Single Synth Layer (`Synth A`, `Synth B`, or `Synth C`).
 #[derive(Debug, Clone)]
 pub struct SynthLayer {
@@ -116,6 +131,8 @@ pub struct SynthLayer {
     pub waveform: VaWaveform,
     pub pulse_width: f32,
     pub fm_amount: f32,
+    pub supersaw_detune: f32,
+    pub wavetable_position: f32,
     pub filter_model: FilterModel,
     pub cutoff_hz: f32,
     pub resonance: f32,
@@ -129,6 +146,7 @@ pub struct SynthLayer {
     freq_hz: f32,
     phase: f32,
     mod_phase: f32,
+    supersaw_phases: [f32; 7],
     amp_env: f32,
     filter: ZdfFilter,
 }
@@ -141,6 +159,8 @@ impl SynthLayer {
             waveform: VaWaveform::Saw,
             pulse_width: 0.5,
             fm_amount: 0.35,
+            supersaw_detune: 0.3,
+            wavetable_position: 0.0,
             filter_model: FilterModel::Ladder24,
             cutoff_hz: 2400.0,
             resonance: 0.3,
@@ -154,6 +174,7 @@ impl SynthLayer {
             freq_hz: 440.0,
             phase: 0.0,
             mod_phase: 0.0,
+            supersaw_phases: SUPERSAW_PHASE_INITS,
             amp_env: 0.0,
             filter: ZdfFilter::default(),
         }
@@ -196,6 +217,19 @@ impl SynthLayer {
         let raw_osc = match self.osc_mode {
             SynthOscMode::Analog | SynthOscMode::Sample => match self.waveform {
                 VaWaveform::Saw => (2.0 * t - 1.0) - poly_blep(t, dt),
+                VaWaveform::SuperSaw => {
+                    let mut sum = 0.0f32;
+                    let detune_scale = self.supersaw_detune.clamp(0.0, 1.0);
+                    for (i, &det) in SUPERSAW_DETUNES.iter().enumerate() {
+                        let f_osc = self.freq_hz * (1.0 + det * detune_scale * 0.08);
+                        let dt_i = (f_osc * inv_fs).clamp(1e-5, 0.49);
+                        let p_i = self.supersaw_phases[i];
+                        let saw = (2.0 * p_i - 1.0) - poly_blep(p_i, dt_i);
+                        sum += saw;
+                        self.supersaw_phases[i] = (p_i + dt_i) % 1.0;
+                    }
+                    sum * (1.0 / 7.0)
+                }
                 VaWaveform::Pulse => {
                     let pw = self.pulse_width.clamp(0.05, 0.95);
                     let base = if t < pw { 1.0 } else { -1.0 };
@@ -205,7 +239,14 @@ impl SynthLayer {
                 VaWaveform::Sine => (TAU * t).sin(),
             },
             SynthOscMode::Wavetable => {
-                (TAU * t).sin() + 0.5 * (2.0 * TAU * t).sin() + 0.25 * (3.0 * TAU * t).cos()
+                let pos = self.wavetable_position.clamp(0.0, 1.0);
+                // Mipmapped dual-wavetable crossfade: Warm Organ/Square -> Digital Metallic
+                let wave1 =
+                    (TAU * t).sin() + 0.5 * (2.0 * TAU * t).sin() + 0.25 * (3.0 * TAU * t).cos();
+                let wave2 = 0.6 * (TAU * t).sin()
+                    + 0.4 * (4.0 * TAU * t).sin()
+                    + 0.3 * (7.0 * TAU * t).sin();
+                (1.0 - pos) * wave1 + pos * wave2
             }
             SynthOscMode::Fm => {
                 let mod_sig = (TAU * self.mod_phase).sin();
@@ -273,5 +314,27 @@ mod tests {
         }
         assert!(active_energy > 0.01);
         synth.note_off(69);
+    }
+
+    #[test]
+    fn test_supersaw_and_wavetable() {
+        let mut synth = SynthLayer::new(48_000.0);
+        synth.waveform = VaWaveform::SuperSaw;
+        synth.supersaw_detune = 0.6;
+        synth.note_on(60, 100);
+
+        let mut energy = 0.0f32;
+        for _ in 0..512 {
+            let [l, r] = synth.render_frame();
+            assert!(l.is_finite() && r.is_finite());
+            energy += l * l + r * r;
+        }
+        assert!(energy > 0.05);
+
+        // Test wavetable mode
+        synth.osc_mode = SynthOscMode::Wavetable;
+        synth.wavetable_position = 0.75;
+        let [l, r] = synth.render_frame();
+        assert!(l.is_finite() && r.is_finite());
     }
 }

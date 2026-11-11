@@ -88,3 +88,36 @@ Firmware strings confirm the dedicated `LeslieHorn` and `Rotary Mic Distance` pa
    - **Fast (Tremolo):** Horn = $6.85\text{ Hz}$ ($411\text{ RPM}$), Bass Drum = $5.70\text{ Hz}$ ($342\text{ RPM}$).
    - **Acceleration / Deceleration Time Constants:** Horn ramps in $\tau_{\text{horn}} \approx 0.7\text{ s}$; heavy wooden Bass Drum ramps in $\tau_{\text{drum}} \approx 4.2\text{ s}$.
 4. **Doppler Pitch & Amplitude Modulation:** Stereo left/right virtual microphones separated by $90^\circ..180^\circ$ modulate delay lines ($\pm 0.45\text{ ms}$ excursion) and directional horn beaming.
+
+---
+
+## 5. Hammond Scanner Vibrato & Chorus (V1–V3, C1–C3)
+
+The Hammond mechanical scanner vibrato consists of a multi-tap LC delay line (9 phase-shift stages) sampled by a 16-segment rotary capacitive scanner driven by the synchronous motor shaft at ~6.8 Hz.
+
+| Mode Enum | Mode | Description |
+|---|---|---|
+| `Off` | Off | Pure unmodulated tonewheel bus |
+| `V1` | Vibrato 1 | Subtle pitch vibrato (~0.8% frequency excursion, 100% wet phase-shifted signal) |
+| `V2` | Vibrato 2 | Standard medium depth vibrato (~1.5% excursion) |
+| `V3` | Vibrato 3 | Full deep pitch vibrato (~2.5% excursion) |
+| `C1` | Chorus 1 | Subtle chorus (50% dry + 50% V1 wet signal) |
+| `C2` | Chorus 2 | Classic Hammond organ shimmer (50% dry + 50% V2 wet signal) |
+| `C3` | Chorus 3 | Deep rich chorus (50% dry + 50% V3 wet signal) |
+
+---
+
+## 6. Transistor & Pipe Organ Filter Banks
+
+### 6.1 Vox Continental Model
+12 master top-octave dividers generating unfiltered square/reed and filtered sine/flute waves:
+- Drawbar 1..4 (`16'`, `8'`, `4'`, `IV` Mixture): Control relative balance between fundamental registers.
+- Drawbar 9: Acts as the classic Vox **Tone / Wave** control (morphing between pure Flute/Sine and rich Reed/Square wave).
+
+### 6.2 Farfisa Compact Model
+Multi-contact keying feeding multi-tab resonant bandpass filter banks:
+- **Flute 8'**, **Oboe 8'**, **Clarinet 16'**, **Strings 4'**: Emulated via parallel resonant 2-pole bandpass filters with formant peaks at 750 Hz, 1.2 kHz, 2.5 kHz, and 4.2 kHz.
+
+### 6.3 Liturgical Pipe Models
+- **Pipe 1:** Pure principal flutes with characteristic chiff wind transient on note-on.
+- **Pipe 2:** Rich swell/mixture plenum with subtle pipe chorus detune ($\pm 2\text{ cents}$) across adjacent ranks.
