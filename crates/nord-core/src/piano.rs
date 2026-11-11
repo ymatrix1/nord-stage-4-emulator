@@ -204,11 +204,11 @@ pub struct PianoLayer {
 
 impl PianoLayer {
     #[cfg(test)]
-    pub(crate) fn voice_excitation_for_test(&self, note: u8) -> Option<(f32, f32)> {
+    pub(crate) fn voice_excitation_for_test(&self, note: u8) -> Option<(f32, f32, bool)> {
         self.voices
             .iter()
             .find(|v| v.active && v.note == note)
-            .map(|v| (v.amp, v.gain))
+            .map(|v| (v.amp, v.gain, v.releasing))
     }
 
     pub fn new(sample_rate: f32) -> Self {
