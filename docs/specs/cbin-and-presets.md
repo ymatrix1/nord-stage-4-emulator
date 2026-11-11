@@ -188,3 +188,34 @@ Stream framing groups up to 8 operations per 1-byte header:
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
 - `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
 - `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
+
+### 5.2 Nord Piano (`.npno`) Binary Specification & 4-Bit DPCM Audio Codec
+
+Nord Piano files (`.npno`) store high-fidelity multisampled acoustic, electric, and digital pianos inside a 48-byte `CBIN` container header (`kind = "npno"`):
+
+#### Layout of `.npno` Header & Tables
+- `0x0000..0x0030`: 48-byte `CBIN` container header (`tag = "npno"`).
+- `0x002C`: `CNSP` sub-header signature.
+- `0x0048..0x0068`: Short instrument name (ASCII, 32 bytes).
+- `0x0068..0x0088`: Long instrument name (ASCII, 32 bytes).
+- `0x00B8..0x0138`: 128-byte lookup table mapping every MIDI note (`0..127`) to its multisample root key.
+- `0x01C8..0x0248`: 128-byte lookup table of signed 8-bit integers (`i8`) representing micro-cents fine-tuning calibration per key.
+- `0x0238..0x02B8`: 128-byte lookup table of velocity tier boundaries per key.
+- `0x0760..`: Multisample stroke descriptor table (`data_offset`, `data_size`, `loop_start`, `loop_end`).
+
+#### 4-Bit Differential PCM Audio Codec (`AVCSmpDecode`)
+Audio payloads encode two 4-bit signed delta samples per byte:
+```text
+byte = (sample_hi << 4) | (sample_lo & 0x0F)
+s[n] = s[n-1] + delta * scale
+```
+- `sample_hi`: High nibble (`(byte >> 4) & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
+- `sample_lo`: Low nibble (`byte & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
+- Compression ratio: 4:1 vs 16-bit PCM, 6:1 vs 24-bit PCM.
+
+#### Rust API (`crates/nord-core/src/cbin/piano_sample.rs`)
+- `NpnoInstrument::parse(bytes: &[u8]) -> Result<NpnoInstrument, String>`
+- `NpnoInstrument::root_key_for_note(&self, note: u8) -> Option<u8>`
+- `NpnoInstrument::cents_detune_for_note(&self, note: u8) -> i8`
+- `decode_4bit_dpcm(raw_payload: &[u8], scale: f32) -> Vec<f32>`
+- `encode_4bit_dpcm(pcm: &[f32], scale: f32) -> Vec<u8>`
