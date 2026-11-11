@@ -30,6 +30,10 @@ A `.ns4b` archive is a standard PKZIP (`50 4B 03 04`) archive containing a root 
 | `Piano/*/` | `.npno` | 38 | Variable | Nord Piano Library v6+ compressed multisamples |
 | `Sample/*/` | `.nsmp4` | 195 | Variable | Nord Sample Library 4 compressed sample banks |
 
+### Manifest and Bit-Field Bounds
+
+`meta.xml` is parsed as XML and must have a `<backup>` root with all required numeric version and product attributes. XML-valid whitespace around `=` and either quote style are accepted. Bitstream cursor seeks must remain within the payload; reads and writes reject checked-add overflow and ranges beyond the payload before changing data or cursor state.
+
 ---
 
 ## 3. Clavia Binary (`CBIN`) 48-Byte Header Specification

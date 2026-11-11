@@ -17,8 +17,10 @@ impl<'a> BitReader<'a> {
         self.bit_pos
     }
 
-    pub fn set_bit_pos(&mut self, pos: usize) {
+    pub fn set_bit_pos(&mut self, pos: usize) -> Result<(), CbinError> {
+        validate_position(pos, self.data.len())?;
         self.bit_pos = pos;
+        Ok(())
     }
 
     pub fn read_bits(&mut self, count: usize) -> Result<u32, CbinError> {
@@ -27,14 +29,7 @@ impl<'a> BitReader<'a> {
                 "cannot read {count} bits into u32 (maximum 32)"
             )));
         }
-        if self.bit_pos + count > self.data.len() * 8 {
-            return Err(CbinError::BitstreamError(format!(
-                "bitstream overrun: pos {} + count {} > total bits {}",
-                self.bit_pos,
-                count,
-                self.data.len() * 8
-            )));
-        }
+        checked_end(self.bit_pos, count, self.data.len())?;
         let mut val = 0u32;
         for _ in 0..count {
             let byte_idx = self.bit_pos / 8;
@@ -66,8 +61,10 @@ impl<'a> BitWriter<'a> {
         self.bit_pos
     }
 
-    pub fn set_bit_pos(&mut self, pos: usize) {
+    pub fn set_bit_pos(&mut self, pos: usize) -> Result<(), CbinError> {
+        validate_position(pos, self.data.len())?;
         self.bit_pos = pos;
+        Ok(())
     }
 
     pub fn write_bits(&mut self, value: u32, count: usize) -> Result<(), CbinError> {
@@ -76,14 +73,7 @@ impl<'a> BitWriter<'a> {
                 "cannot write {count} bits from u32"
             )));
         }
-        if self.bit_pos + count > self.data.len() * 8 {
-            return Err(CbinError::BitstreamError(format!(
-                "bitstream write overrun: pos {} + count {} > total bits {}",
-                self.bit_pos,
-                count,
-                self.data.len() * 8
-            )));
-        }
+        checked_end(self.bit_pos, count, self.data.len())?;
         for i in 0..count {
             let shift = count - 1 - i;
             let bit = ((value >> shift) & 1) as u8;
@@ -102,6 +92,33 @@ impl<'a> BitWriter<'a> {
     pub fn write_bool(&mut self, val: bool) -> Result<(), CbinError> {
         self.write_bits(if val { 1 } else { 0 }, 1)
     }
+}
+
+fn validate_position(pos: usize, byte_len: usize) -> Result<(), CbinError> {
+    let total_bits = byte_len
+        .checked_mul(8)
+        .ok_or_else(|| CbinError::BitstreamError("bitstream length overflow".to_owned()))?;
+    if pos > total_bits {
+        return Err(CbinError::BitstreamError(format!(
+            "bit position {pos} exceeds total bits {total_bits}"
+        )));
+    }
+    Ok(())
+}
+
+fn checked_end(pos: usize, count: usize, byte_len: usize) -> Result<usize, CbinError> {
+    let end = pos.checked_add(count).ok_or_else(|| {
+        CbinError::BitstreamError(format!("bit position overflow: {pos} + {count}"))
+    })?;
+    let total_bits = byte_len
+        .checked_mul(8)
+        .ok_or_else(|| CbinError::BitstreamError("bitstream length overflow".to_owned()))?;
+    if end > total_bits {
+        return Err(CbinError::BitstreamError(format!(
+            "bit range {pos}..{end} exceeds total bits {total_bits}"
+        )));
+    }
+    Ok(end)
 }
 
 #[cfg(test)]
@@ -135,5 +152,26 @@ mod tests {
         assert!(r.read_bits(16).is_ok());
         assert!(r.read_bits(1).is_err()); // overrun
         assert!(r.read_bits(33).is_err()); // count > 32
+    }
+
+    #[test]
+    fn cursor_seeks_reject_out_of_range_positions_without_changing_cursor() {
+        let mut data = [0u8; 2];
+        let mut reader = BitReader::new(&data);
+        assert!(reader.set_bit_pos(16).is_ok());
+        assert!(reader.set_bit_pos(17).is_err());
+        assert!(reader.set_bit_pos(usize::MAX).is_err());
+        assert_eq!(reader.bit_pos(), 16);
+
+        let mut writer = BitWriter::new(&mut data);
+        assert!(writer.set_bit_pos(16).is_ok());
+        assert!(writer.set_bit_pos(usize::MAX).is_err());
+        assert_eq!(writer.bit_pos(), 16);
+    }
+
+    #[test]
+    fn read_and_write_ranges_reject_addition_overflow() {
+        assert!(checked_end(usize::MAX, 1, 2).is_err());
+        assert!(checked_end(15, 2, 2).is_err());
     }
 }

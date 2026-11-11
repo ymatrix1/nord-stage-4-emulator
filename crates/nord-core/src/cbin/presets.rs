@@ -67,7 +67,7 @@ impl OrganPresetDecoded {
         }
         let mut r = BitReader::new(slice);
         // Skip first 9 signature bytes = 72 bits
-        r.set_bit_pos(72);
+        r.set_bit_pos(72)?;
 
         let model_idx = r.read_bits(3)?;
         let model = match model_idx {
@@ -133,7 +133,7 @@ impl OrganPresetDecoded {
         out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
 
         let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72);
+        w.set_bit_pos(72)?;
 
         let model_idx = match self.model {
             OrganModel::B3 => 0,
@@ -250,7 +250,7 @@ impl PianoPresetDecoded {
             });
         }
         let mut r = BitReader::new(slice);
-        r.set_bit_pos(72);
+        r.set_bit_pos(72)?;
 
         let unpack_layer = |r: &mut BitReader| -> Result<PianoLayerDecoded, CbinError> {
             let enabled = r.read_bool()?;
@@ -314,7 +314,7 @@ impl PianoPresetDecoded {
         out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
 
         let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72);
+        w.set_bit_pos(72)?;
 
         let pack_layer = |l: &PianoLayerDecoded, w: &mut BitWriter| -> Result<(), CbinError> {
             w.write_bool(l.enabled)?;
@@ -444,7 +444,7 @@ impl SynthPresetDecoded {
             });
         }
         let mut r = BitReader::new(slice);
-        r.set_bit_pos(72);
+        r.set_bit_pos(72)?;
 
         let unpack_layer = |r: &mut BitReader| -> Result<SynthLayerDecoded, CbinError> {
             let enabled = r.read_bool()?;
@@ -526,7 +526,7 @@ impl SynthPresetDecoded {
         out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
 
         let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72);
+        w.set_bit_pos(72)?;
 
         let pack_layer = |l: &SynthLayerDecoded, w: &mut BitWriter| -> Result<(), CbinError> {
             w.write_bool(l.enabled)?;
@@ -636,7 +636,7 @@ impl GlobalProgramDecoded {
         }
         let mut r = BitReader::new(slice);
         // Byte 0 is 0x2C signature = 8 bits
-        r.set_bit_pos(8);
+        r.set_bit_pos(8)?;
 
         let tempo_bpm = 30.0 + (r.read_bits(9)? as f32 / 511.0) * 270.0;
         let master_compressor = (r.read_bits(7)? as f32 / 127.0) * 10.0;
@@ -675,7 +675,7 @@ impl GlobalProgramDecoded {
         out[0] = 0x2C;
 
         let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(8);
+        w.set_bit_pos(8)?;
 
         let bpm_norm = ((self.tempo_bpm - 30.0) / 270.0).clamp(0.0, 1.0);
         w.write_bits((bpm_norm * 511.0).round() as u32, 9)?;
