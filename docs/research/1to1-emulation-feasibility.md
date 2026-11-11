@@ -47,7 +47,7 @@ Both firmware images share one layout (big-endian segment table of `SRAM`, `CODE
 | | Image 0 (main OS) | Image 1 (second bank) |
 |---|---|---|
 | `SRAM` segment | file `0x2D4`, `0xFC80` B, target `0x80000000` | file `0x2D4`, `0xC158` B, target `0x80000000` |
-| `CODE` segment | file `0xFF54`, declared size `0x53EA70` (5,499,504 B), target `0xC0000000` | file `0xC42C`, declared size `0xC30C0` (799,936 B), target `0xC0000000` |
+| `CODE` segment | file `0xFF54`, declared size `0x53EA70` (5,499,504 B), target `0xC0000000` | file `0xC42C`, declared size `0xC30C0` (798,912 B), target `0xC0000000` |
 | `CODE` bytes actually in file | 3,510,322 | 411,142 |
 | Expansion implied | about 1.57x | about 1.95x |
 | `ARM0` | entry `0x2EC`, vector base `0xFFFF0020` | entry `0x334`, vector base `0xFFFF0020` |
@@ -62,9 +62,25 @@ Findings:
 
 **Consequence:** the DSP images are most likely inside the expanded `CODE` and are recoverable once the expander is identified. The expander is not in the plain `SRAM` literals (no reference to `0xC0000000` or the declared sizes), so it is probably in the AM1705 boot path or in the Windows updater and flasher helper (`Res 105`, 587,736 B), which is the next place to look.
 
+## 7. Where the expander lives (updater analysis)
+
+The embedded helper (`Res 105`, 587,736 B) is an **NSIS installer** (`.ndata` section), most likely the Clavia USB driver installer, not a flasher. Dead end for the question.
+
+The updater itself (`AVCUpdateEngine`, build path `clavia\build\nordgrand2\pc\osupdate`) contains the protocol strings:
+- `Resource CAB-file does not validate` / `header is invalid` / `parse error`, and `OS BinFile seems broken. Checksum does not match.`
+- `BIN-file code section started.` and **`ERROR: Cannot send compressed section %d to RAM.`**
+- States for `Erase sector`, `CAckXfrBegin/Data/End`, and `Rebooting to update mode...`; the transport is a USB "IT-protocol".
+
+So the PC sends compressed sections into the instrument RAM while it runs in update mode, and the **instrument expands them**. The updater never decompresses anything on the PC. Our extraction of `Res 101` therefore contains compressed data whose expander lives on the device (bootloader or ROM), which we do not have.
+
+Searches of the plain `SRAM` segments of both images found no byte-copy decode loops, and LZ4, LZO, Snappy and LZF decoders all fail at offsets 0 to 63. Standard deflate, zlib and raw LZMA1 also fail.
+
+**Consequence:** recovering the algorithm now means inferring the scheme from the compressed stream alone, using the ARM reset stub and the repeated ARM fragments as known plaintext. That is feasible in principle but is a research effort, not a quick extraction.
+
 ## 5. Remaining legitimate steps
 
 1. Find the `CODE` expander: inspect the flasher helper (`Res 105`) and the updater, and the plain `SRAM` code for token-parsing loops (byte loads, shifts, back-reference copies).
 2. Search for a zero-header block structure in `CNSP` payloads (compare two instruments of different lengths).
 3. Obtain a Stage 4 teardown or FCC internal photos for the central chip.
+
 
