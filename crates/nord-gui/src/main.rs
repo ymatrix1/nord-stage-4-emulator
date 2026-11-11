@@ -39,7 +39,8 @@ impl Stage4App {
 
         if let Some(path) = initial_program {
             if let Ok(bytes) = std::fs::read(&path) {
-                app.load_program_from_bytes(&bytes);
+                let stem = path.file_stem().and_then(|s| s.to_str());
+                app.load_program_from_bytes(&bytes, stem);
             } else {
                 eprintln!("[GUI] Could not read program file: {}", path.display());
             }
@@ -48,12 +49,20 @@ impl Stage4App {
         app
     }
 
-    fn load_program_from_bytes(&mut self, bytes: &[u8]) -> bool {
+    fn load_program_from_bytes(&mut self, bytes: &[u8], title_override: Option<&str>) -> bool {
         let decoded = nord_core::cbin::CbinFile::parse(bytes)
             .and_then(|cbin| nord_core::cbin::ProgramDecoded::from_cbin_file(&cbin));
         match decoded {
-            Ok(prog) => {
-                println!("[GUI] Loaded program: {}", prog.name);
+            Ok(mut prog) => {
+                if let Some(title) = title_override {
+                    if !title.is_empty() {
+                        prog.name = title.to_string();
+                    }
+                }
+                println!(
+                    "[GUI] Loaded program: {} (category=0x{:02X})",
+                    prog.name, prog.category_id
+                );
                 self.state.apply_program(&prog);
                 let _ = self
                     .audio_handle
@@ -79,11 +88,12 @@ impl eframe::App for Stage4App {
                 if let Some(path) = &dropped.path {
                     if path.extension().and_then(|s| s.to_str()) == Some("ns4p") {
                         if let Ok(bytes) = std::fs::read(path) {
-                            self.load_program_from_bytes(&bytes);
+                            let stem = path.file_stem().and_then(|s| s.to_str());
+                            self.load_program_from_bytes(&bytes, stem);
                         }
                     }
                 } else if let Some(bytes) = &dropped.bytes {
-                    self.load_program_from_bytes(bytes);
+                    self.load_program_from_bytes(bytes, None);
                 }
             }
         });
