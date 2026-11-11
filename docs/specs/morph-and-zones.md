@@ -31,6 +31,8 @@ $$
 G_{\text{high}}(k) = 1.0 - G_{\text{low}}(k)
 $$
 
+The router applies this gain to each layer's rendered note signal. MIDI velocity is passed through unchanged so split position does not alter velocity-sensitive instrument response.
+
 ---
 
 ## 3. Layer Scene II Toggle

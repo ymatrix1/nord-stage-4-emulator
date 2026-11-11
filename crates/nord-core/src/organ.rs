@@ -63,6 +63,7 @@ pub struct OrganLayer {
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_phases: [f32; NUM_TONEWHEELS],
     held_notes: [bool; 128],
+    note_gains: [f32; 128],
     active_key_count: usize,
     percussion_env: f32,
     click_env: f32,
@@ -104,6 +105,7 @@ impl OrganLayer {
             tonewheel_freqs: freqs,
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
             held_notes: [false; 128],
+            note_gains: [1.0; 128],
             active_key_count: 0,
             percussion_env: 0.0,
             click_env: 0.0,
@@ -122,12 +124,17 @@ impl OrganLayer {
 
     /// Triggers a key-down event with single-trigger B3 percussion and key-click transient.
     pub fn note_on(&mut self, note: u8) {
+        self.note_on_with_gain(note, 1.0);
+    }
+
+    pub fn note_on_with_gain(&mut self, note: u8, gain: f32) {
         let idx = (note as usize).min(127);
         if !self.held_notes[idx] {
             if self.active_key_count == 0 && self.percussion_enabled {
                 self.percussion_env = 1.0;
             }
             self.held_notes[idx] = true;
+            self.note_gains[idx] = gain.clamp(0.0, 1.0);
             self.active_key_count += 1;
             self.click_env = 0.25;
         }
@@ -189,7 +196,7 @@ impl OrganLayer {
                 }
                 let gain = f32::from(level.min(8)) / 8.0;
                 let tw = Self::foldback_tonewheel(i32::from(note) + DRAWBAR_OFFSETS[db_idx]);
-                dry += gain * tw_signals[tw] * 0.08;
+                dry += gain * tw_signals[tw] * self.note_gains[note as usize] * 0.08;
             }
             if self.percussion_env > 1e-4 {
                 let perc_offset = if self.percussion_third_harmonic {
@@ -199,7 +206,10 @@ impl OrganLayer {
                 };
                 let tw = Self::foldback_tonewheel(i32::from(note) + perc_offset);
                 let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
-                dry += self.percussion_env * tw_signals[tw] * perc_gain;
+                dry += self.percussion_env
+                    * tw_signals[tw]
+                    * perc_gain
+                    * self.note_gains[note as usize];
             }
         }
 
