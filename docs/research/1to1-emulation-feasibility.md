@@ -77,10 +77,15 @@ Searches of the plain `SRAM` segments of both images found no byte-copy decode l
 
 **Consequence:** recovering the algorithm now means inferring the scheme from the compressed stream alone, using the ARM reset stub and the repeated ARM fragments as known plaintext. That is feasible in principle but is a research effort, not a quick extraction.
 
+## 8. Clavia USB Driver installer v4.08 (checked, no help)
+
+`Nord Keyboards Driver Installer v4.08.exe` (589,960 B) is an NSIS installer (different build from the 587,736 B copy embedded in the OS updater). Its decoded script lists only USB driver packages (`ClaviaCD`, `ClaviaUSB64` legacy, `ClaviaWinUSB`, `DriverTools.exe`, `.inf` and `.cat` files) and registry and start-menu handling for Nord Sound Manager and Nord Sample Editor. It contains no firmware, no decompressor and no IT-protocol logic: the device speaks the protocol, and the driver only provides the USB transport. It does not help with the `CODE` expander.
+
 ## 5. Remaining legitimate steps
 
 1. Find the `CODE` expander: inspect the flasher helper (`Res 105`) and the updater, and the plain `SRAM` code for token-parsing loops (byte loads, shifts, back-reference copies).
 2. Search for a zero-header block structure in `CNSP` payloads (compare two instruments of different lengths).
 3. Obtain a Stage 4 teardown or FCC internal photos for the central chip.
+
 
 
