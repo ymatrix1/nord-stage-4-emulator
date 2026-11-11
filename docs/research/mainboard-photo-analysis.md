@@ -19,7 +19,7 @@
 | Item | Evidence | Confidence |
 |---|---|---|
 | TI `AM1705DPTP4` (ARM926EJ-S, 176-pin HLQFP, no DSP core) | Legible package marking | High |
-| ≥ 4 Analog Devices QFP DSPs | `ANALOG DEVICES` legible on one | Medium (part number unreadable) |
+| ≥ 4 Analog Devices QFP DSPs | `ANALOG DEVICES` legible on Stage 4 photo (`657785317_*.webp`); on sibling `NP4 Main v 0.72` (`c0840e60-74b3-11eb-baf8-a528ac652aed.jpg`) paired with `AM1705DPTP4`, chips read `ADSP-21489 KSWZ-4B` (`#1823`, `4259498.1B-0.2`, 400 MHz SHARC®, 176-LQFP) | Medium on NS4 (High on NP4) |
 | 1 large central QFP | Logo illegible | Unknown |
 | 8 + 2 memory ICs | Visual only | Low (type unknown) |
 | Buck-converter + trimpot mods on 3 DSPs | Wired on, non-stock | High (repair mod) |
