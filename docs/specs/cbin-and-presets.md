@@ -17,6 +17,19 @@ A `.ns4b` archive is a standard PKZIP (`50 4B 03 04`) archive containing a root 
 <backup file_version="1" backup_format_version="1" product_id="46" product_version="166" product_build="2934" product_content_version="0" manager_version="918" manager_build="1444"/>
 ```
 
+#### 2.1 Manifest Parsing Robustness
+The manifest parser in [`crates/nord-core/src/cbin/manifest.rs`](../../crates/nord-core/src/cbin/manifest.rs) (`BackupManifest::parse_xml`):
+- Requires the root `<backup ...>` element tag, rejecting non-manifest XML documents.
+- Supports both double-quoted (`"46"`) and single-quoted (`'46'`) attribute values.
+- Permits arbitrary whitespace around assignment operators (e.g. `product_id = '46'`).
+- Validates that all integer attributes are non-negative decimal strings and that quote delimiters are strictly matched.
+
+#### 2.2 Bitstream Reader and Writer Invariants
+The bit-level streaming codecs in [`crates/nord-core/src/cbin/bitstream.rs`](../../crates/nord-core/src/cbin/bitstream.rs) (`BitReader`, `BitWriter`):
+- Use checked arithmetic (`checked_add`, `checked_mul`) for all bit-offset calculations to guarantee immunity against integer overflow on 32-bit and 64-bit architectures.
+- Validate cursor seeks (`set_bit_pos(pos)`) against the total bit length of the payload, returning `CbinError::BitstreamError` if `pos > total_bits`.
+- Guard reads (`read_bits(count)`) and writes (`write_bits(value, count)`) against buffer overruns and enforce the 32-bit word boundary limit (`count <= 32`).
+
 ### Archive Directory Structure (Factory Restore RevK v1.66)
 
 | Directory | Extension | Count | Exact Size (Bytes) | Description |
