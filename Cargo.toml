@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/nord-core",
     "crates/nord-gui",
+    "crates/nord-plugin",
 ]
 
 [workspace.package]
