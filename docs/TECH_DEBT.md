@@ -14,7 +14,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 | **TD-03** | `crates/nord-core::piano` | Low | In-memory synthetic multi-sample wavetable fallback pending open SFZ loader | Phase 4 (`ns4-pno4`) | Open |
 | **TD-04** | `crates/nord-core::organ` | Low | Simplified key-click transient model instead of physical contact bounce network | Phase 2.2 (`ns4-orgn`) | Open |
 | **TD-05** | `crates/nord-core::engine` | Low | Boxed heap allocations for delay buffers occur during `Stage4Engine::new()` | Maintenance | Accepted (Zero RT allocs) |
-| **TD-06** | `docs/research` | High | `CNSP` compressed sample codec is opaque; requires clean-room SFZ fallback | Track B / Research | Open |
+| **TD-06** | `docs/research` | High | `CNSP` compressed sample codec & full LZ firmware framing remain to be decoded | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | In Progress (Planned) |
 | **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Open |
 
 ---
@@ -46,10 +46,13 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 - **Debt / Trade-off:** Buffer memory is allocated on the heap inside `Box::new()` during initialization (`Stage4Engine::new()`).
 - **Status:** **Accepted Architecture Invariant**. Real-time DSP rendering (`render_frame` / `process_block`) remains strictly zero-allocation and lock-free.
 
-### TD-06: Reverse-Engineered Sample Payload (`CNSP`)
-- **Context:** Factory backup `.ns4b` contains 233 sample files in `.nsmp4` and `.npno` formats. Analysis shows standard 48-byte `CBIN` headers followed by high-entropy `CNSP` compressed payloads (~7.5 bits/byte).
-- **Debt:** Without a reverse-engineered `CNSP` decompressor, the emulator cannot directly play proprietary factory samples.
-- **Remediation Plan:** Maintain clean-room Track A architecture utilizing open sample libraries (SFZ/WAV) while keeping sample codec reverse-engineering in Track B research.
+### TD-06: Reverse-Engineered Sample Payload (`CNSP`) & Firmware LZ Framing
+- **Context:** Factory backup `.ns4b` contains 233 sample files in `.nsmp4` and `.npno` formats. Analysis shows standard 48-byte `CBIN` headers followed by high-entropy `CNSP` compressed payloads (~7.5 bits/byte). Meanwhile, the firmware `CODE` segment is proven unencrypted using a 16-bit LZ token scheme (`distance = token >> 3`, `length = (token & 7) + 2`).
+- **Debt:** Without completing the LZ literal-run state machine and reverse-engineering the `CNSP` decompressor, the emulator cannot directly load a user's local `.npno` and `.nsmp4` files from their `.ns4b` backup.
+- **Remediation Plan (Track B — [D12](DECISIONS.md)):**
+  1. Solve the literal-run framing in the custom LZ stream (`crates/nord-core/src/firmware.rs`) to unpack `ARM0`, `DSPO`, `DSPS`, and `DSPF`.
+  2. Perform differential analysis across all 233 `CNSP` headers (`0x30..0x80`) and disassemble the `CNSP` decompression routine from the unpacked firmware images.
+  3. Implement a clean-room `CNSP` reader in `crates/nord-core` alongside open SFZ sample support.
 
 ---
 

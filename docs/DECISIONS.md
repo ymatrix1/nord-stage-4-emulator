@@ -17,6 +17,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D9](#d9-beans-for-in-repo-task-tracking) | 2026-11-10 | `beans` for in-repo task tracking | accepted |
 | [D10](#d10-every-source-file-ships-unit-tests-enforced-in-ci) | 2026-11-10 | Every source file ships unit tests enforced by `tools/check_tests.py` | accepted |
 | [D11](#d11-dual-target-delivery-daw-plugin-clap--vst3-and-standalone-application) | 2026-11-10 | Dual-target delivery: DAW Plugin (`CLAP` + `VST3`) AND Standalone application | accepted |
+| [D12](#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression) | 2026-11-11 | Pursue Track B reverse engineering for `CNSP` sample codec and full LZ firmware decompression | accepted |
 
 ---
 
@@ -131,4 +132,17 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** One DSP core (`nord-core`) and one GUI/parameter definition compile to both native DAW plugins and a standalone executable with audio/MIDI device selection at zero duplication cost.
 - **Alternatives:** Standalone only (cannot host inside a DAW project); plugin only (requires a DAW host just to play live).
 - **Impact:** Phase 6 delivers both the standalone binary and the `.clap` / `.vst3` bundles in CI/CD releases.
+
+### D12. Pursue Track B reverse engineering for CNSP sample codec and firmware decompression
+
+- **Status:** accepted 2026-11-11
+- **Decided by:** Yuri Olive ("we should try path B", "lets document that, not implement yet")
+- **Context:** While Track A (clean-room mathematical physical modeling + open SFZ sample playback) remains the primary portable runtime architecture, the 233 factory sample files (195 `.nsmp4` and 38 `.npno` files inside the `.ns4b` archive) use the proprietary `CNSP` audio payload format. Additionally, we proved that the firmware `CODE` segment is 100% unencrypted and compressed with a custom 16-bit LZ token scheme (`distance = token >> 3`, `length = (token & 7) + 2`).
+- **Decision:** Formally pursue **Track B** as a parallel reverse-engineering and interoperability effort to:
+  1. Complete the control-bit/literal state machine for the Clavia custom LZ firmware decompressor to unpack the full `ARM0` host binary and embedded `DSPO`/`DSPS`/`DSPF` SHARC images.
+  2. Locate and disassemble the `CNSP` sample decoding routine inside the unpacked `ARM0` / `DSPF` / `DSPS` binaries, or derive the `CNSP` bitstream format via differential analysis across `.nsmp4` and `.npno` headers (`0x30..0x80`).
+  3. Enable native user-supplied `.nsmp4` and `.npno` sample loading directly from a user's legally owned `.ns4b` backup archive without redistributing proprietary sample assets in git.
+- **Why:** Unlocks true 1:1 sonic compatibility with factory `.ns4p` programs that reference specific `.npno` pianos and `.nsmp4` synth samples, and extracts exact SHARC DSP filter coefficient tables.
+- **Alternatives:** Relying strictly on open SFZ approximations (leaves `.npno` and `.nsmp4` payloads unreadable).
+- **Impact:** Updates `docs/ROADMAP.md`, `docs/TECH_DEBT.md`, and `docs/research/1to1-emulation-feasibility.md` with structured Track B milestones before implementation begins.
 

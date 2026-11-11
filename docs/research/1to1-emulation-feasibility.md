@@ -89,10 +89,20 @@ By comparing the compressed `CODE` stream against the known ARM926EJ-S startup c
 - **Distance:** `token >> 3` (13 bits, up to 8192 bytes history buffer).
 - For complete derivation and verified offsets, see [`clavia-lz-reconstruction.md`](clavia-lz-reconstruction.md).
 
-## 5. Remaining legitimate steps
+## 5. Track B Action Plan (Firmware & `CNSP` Sample Codec Reverse Engineering)
 
-1. Search for a zero-header block structure in `CNSP` payloads (compare two instruments of different lengths).
-2. Obtain a Stage 4 teardown or FCC internal photos for the central chip.
+Per [D12](../DECISIONS.md#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression), Track B is now an active research & reverse-engineering roadmap:
+
+1. **Step 1 — Complete Clavia Custom LZ Decompressor (`CODE` Segment):**
+   - Resolve the exact control-byte / literal-run state machine connecting the `00 1b` initial literal block and the 16-bit `(distance << 3) | (length - 2)` match tokens in Image 1 (`0xC42C`, 411 KB -> 798 KB) and Image 0 (`0xFF54`, 3.51 MB -> 5.49 MB).
+   - Extract the decompressed `ARM0` host OS image and embedded `DSPO`, `DSPS`, and `DSPF` SHARC DSP segments.
+2. **Step 2 — `CNSP` Header & Payload Differential Analysis:**
+   - Compare the 80-byte `CNSP` sub-header (`0x30..0x80` after the 48-byte `CBIN` header) across all 195 `.nsmp4` and 38 `.npno` files to map sample rate, bit depth, key-split zone table, loop points, and bitstream offset pointers.
+   - Locate the `CNSP` parser and audio decompression routine inside the unpacked `ARM0` / `DSPF` / `DSPS` binaries (or Nord Sample Editor 4 binary symbols) to identify the exact entropy/predictor coding (e.g., Rice/Golomb + LPC/ADPCM predictor).
+3. **Step 3 — Clean-Room `CNSP` Decoder Implementation:**
+   - Implement a zero-allocation `CNSP` sample decoder in `crates/nord-core::cbin::cnsp` so users can point the emulator directly at their own `.ns4b` backup archive to load authentic `.npno` and `.nsmp4` instruments in place.
+4. **Step 4 — Hardware Bus & SHARC Coefficient Extraction:**
+   - Extract lookup tables, nonlinear saturation curves, and filter coefficients from the unpacked `DSPO`/`DSPS`/`DSPF` binaries to validate or refine `crates/nord-core` DSP routines.
 
 
 
