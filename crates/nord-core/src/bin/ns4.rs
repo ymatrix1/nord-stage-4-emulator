@@ -26,6 +26,12 @@ fn run_cli(args: &[String]) -> Result<String, String> {
             // Check if file is a Clavia firmware container (starts with 0x00000020 header size)
             if bytes.len() >= 32 && u32::from_be_bytes(bytes[0..4].try_into().unwrap_or([0; 4])) == 0x20 {
                 let fw = FirmwareContainer::parse(&bytes).map_err(|e| e.to_string())?;
+                let verify = args.iter().any(|a| a == "--verify");
+                let unpack_dir = args
+                    .iter()
+                    .position(|a| a == "--unpack")
+                    .and_then(|idx| args.get(idx + 1))
+                    .cloned();
                 let mut out = format!(
                     "Firmware Container: {path}\n\
                      Header Size: {} B\n\
@@ -42,6 +48,39 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 );
                 for p in &fw.dsp_partitions {
                     out.push_str(&format!("  [0x{:06X}] {:<12} {:?}: {}\n", p.offset, p.tag, p.engine_type, p.description));
+                }
+                if verify || unpack_dir.is_some() {
+                    if let Some(ref dir) = unpack_dir {
+                        fs::create_dir_all(dir)
+                            .map_err(|e| format!("failed to create {dir}: {e}"))?;
+                    }
+                    out.push_str("Segments:\n");
+                    for (bank, segs) in [(0u8, &fw.image0_segments), (1u8, &fw.image1_segments)] {
+                        for seg in segs {
+                            let extracted = fw.extract_segment(bank, &seg.name, &bytes)?;
+                            let ok = seg.verify_checksum(&extracted);
+                            out.push_str(&format!(
+                                "  bank{}_{}: {} B @ 0x{:08X} checksum={}\n",
+                                bank,
+                                seg.name,
+                                extracted.len(),
+                                seg.target_address,
+                                if ok { "OK" } else { "MISMATCH" }
+                            ));
+                            if verify && !ok {
+                                return Err(format!(
+                                    "checksum mismatch on bank {bank} segment {}",
+                                    seg.name
+                                ));
+                            }
+                            if let Some(ref dir) = unpack_dir {
+                                let dest = std::path::Path::new(dir)
+                                    .join(format!("bank{}_{}.bin", bank, seg.name));
+                                fs::write(&dest, &extracted)
+                                    .map_err(|e| format!("failed to write {}: {e}", dest.display()))?;
+                            }
+                        }
+                    }
                 }
                 return Ok(out);
             }
@@ -190,7 +229,7 @@ fn run_cli(args: &[String]) -> Result<String, String> {
             ))
         }
         other => Err(format!(
-            "unknown command '{other}' (expected: info | inspect <path> [--json] | convert <path> ... | render-demo | render-patch <path>)"
+            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | convert <path> ... | render-demo | render-patch <path>)"
         )),
     }
 }
@@ -331,5 +370,103 @@ mod tests {
         assert!(out.contains("DSPOrg"));
 
         let _ = fs::remove_file(fw_path);
+    }
+
+    #[test]
+    fn test_cli_inspect_firmware_verify_and_unpack() {
+        use nord_core::firmware::{calculate_checksum, compress_clavia_lz};
+
+        let sram0_raw = vec![0xAAu8; 32];
+        let code0_raw: Vec<u8> = (0..128u16).map(|i| ((i * 7) & 0xFF) as u8).collect();
+        let code0_comp = compress_clavia_lz(&code0_raw);
+
+        let code1_raw = b"Bank 1 uncompressed or LZO1X CODE segment payload!!".to_vec();
+        let code1_comp = compress_clavia_lz(&code1_raw);
+
+        // Layout:
+        // Top header: 0x20 bytes
+        // Image 0 subheader starts at 0x20 (header_size), segment descriptors at 0x34 and 0x60 (44 bytes each -> ends at 0x8C)
+        // Image 0 bank_base = 0x20.
+        // Image 1 starts at image1_offset = 0x200.
+        let image0_bank_base = 0x20usize;
+        let sram0_off = 0xA0usize;
+        let code0_off = sram0_off + sram0_raw.len();
+        let image1_offset = 0x200usize;
+
+        let code1_rel_off = 0x50usize;
+        let code1_abs_off = image1_offset + code1_rel_off;
+        let total_len = code1_abs_off + code1_comp.len();
+
+        let mut buf = vec![0u8; total_len];
+        buf[0..4].copy_from_slice(&0x20u32.to_be_bytes());
+        buf[4..8].copy_from_slice(&((image1_offset - image0_bank_base) as u32).to_be_bytes());
+        buf[8..12].copy_from_slice(&(image1_offset as u32).to_be_bytes());
+        buf[12..16].copy_from_slice(&((total_len - image1_offset) as u32).to_be_bytes());
+
+        // Image 0 subheader at 0x30 (2 segments, 44 bytes per descriptor)
+        buf[0x30..0x34].copy_from_slice(&2u32.to_be_bytes());
+        // Seg 0: SRAM at 0x34
+        buf[0x34..0x38].copy_from_slice(b"SRAM");
+        buf[0x38..0x3C].copy_from_slice(&((sram0_off - image0_bank_base) as u32).to_be_bytes());
+        buf[0x3C..0x40].copy_from_slice(&(sram0_raw.len() as u32).to_be_bytes());
+        buf[0x40..0x44].copy_from_slice(&0x0000_0000u32.to_be_bytes());
+        buf[0x44..0x48].copy_from_slice(&calculate_checksum(&sram0_raw).to_be_bytes());
+        buf[sram0_off..sram0_off + sram0_raw.len()].copy_from_slice(&sram0_raw);
+
+        // Seg 1: CODE at 0x60 (= 0x34 + 44)
+        buf[0x60..0x64].copy_from_slice(b"CODE");
+        buf[0x64..0x68].copy_from_slice(&((code0_off - image0_bank_base) as u32).to_be_bytes());
+        buf[0x68..0x6C].copy_from_slice(&(code0_raw.len() as u32).to_be_bytes());
+        buf[0x6C..0x70].copy_from_slice(&0x4000_0000u32.to_be_bytes());
+        buf[0x70..0x74].copy_from_slice(&calculate_checksum(&code0_raw).to_be_bytes());
+        buf[code0_off..code0_off + code0_comp.len()].copy_from_slice(&code0_comp);
+
+        // Image 1 subheader at image1_offset + 0x10 (1 segment: CODE at +0x14, 44 bytes)
+        buf[image1_offset + 0x10..image1_offset + 0x14].copy_from_slice(&1u32.to_be_bytes());
+        buf[image1_offset + 0x14..image1_offset + 0x18].copy_from_slice(b"CODE");
+        buf[image1_offset + 0x18..image1_offset + 0x1C]
+            .copy_from_slice(&(code1_rel_off as u32).to_be_bytes());
+        buf[image1_offset + 0x1C..image1_offset + 0x20]
+            .copy_from_slice(&(code1_raw.len() as u32).to_be_bytes());
+        buf[image1_offset + 0x20..image1_offset + 0x24]
+            .copy_from_slice(&0x4000_0000u32.to_be_bytes());
+        buf[image1_offset + 0x24..image1_offset + 0x28]
+            .copy_from_slice(&calculate_checksum(&code1_raw).to_be_bytes());
+        buf[code1_abs_off..code1_abs_off + code1_comp.len()].copy_from_slice(&code1_comp);
+
+        let fw_path = std::env::temp_dir().join("ns4_test_fw_unpack.bin");
+        let unpack_dir = std::env::temp_dir().join("ns4_test_fw_unpack_out");
+        let _ = fs::remove_dir_all(&unpack_dir);
+        fs::write(&fw_path, &buf).unwrap();
+
+        let out = run_cli(&[
+            "ns4".to_string(),
+            "inspect".to_string(),
+            fw_path.to_string_lossy().to_string(),
+            "--verify".to_string(),
+            "--unpack".to_string(),
+            unpack_dir.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+
+        assert!(out.contains("bank0_SRAM: 32 B @ 0x00000000 checksum=OK"));
+        assert!(out.contains("bank0_CODE: 128 B @ 0x40000000 checksum=OK"));
+        assert!(out.contains("bank1_CODE:"));
+        assert!(out.contains("checksum=OK"));
+        assert_eq!(
+            fs::read(unpack_dir.join("bank0_SRAM.bin")).unwrap(),
+            sram0_raw
+        );
+        assert_eq!(
+            fs::read(unpack_dir.join("bank0_CODE.bin")).unwrap(),
+            code0_raw
+        );
+        assert_eq!(
+            fs::read(unpack_dir.join("bank1_CODE.bin")).unwrap(),
+            code1_raw
+        );
+
+        let _ = fs::remove_file(fw_path);
+        let _ = fs::remove_dir_all(unpack_dir);
     }
 }

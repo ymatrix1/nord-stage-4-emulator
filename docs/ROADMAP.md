@@ -132,12 +132,12 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 
 **Goal:** Unpack the full unencrypted `CODE` segments of the OS v1.66 firmware (`ARM0`, `DSPO`, `DSPS`, `DSPF`) and reverse-engineer the `CNSP` audio sample compression codec ([D12](DECISIONS.md#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression), [research](research/1to1-emulation-feasibility.md)).
 
-- [x] Prove `CODE` segments are unencrypted and solve the 16-bit Clavia LZ match token format (`distance = token >> 3`, `length = (token & 7) + 2`) ([research](research/clavia-lz-reconstruction.md))
-- [x] Implement 16-bit Clavia LZ decompressor (`decompress_clavia_lz` / `compress_clavia_lz`) with sliding-window history buffer in `crates/nord-core/src/firmware.rs`
+- [x] Prove `CODE` segments are unencrypted and solve the Clavia **LZO1X** stream format (replacing initial 16-bit LZ guess) ([research](research/clavia-lz-reconstruction.md))
+- [x] Implement full-stream LZO1X decompressor (`decompress_clavia_lz` / `compress_clavia_lz`) and bank-relative extraction (`FirmwareContainer::extract_segment`) in `crates/nord-core/src/firmware.rs`
 - [x] Perform differential header analysis across the 195 `.nsmp4` and 38 `.npno` `CNSP` headers (`0x30..0x80`) to map sample rate, bit depth, key-zone split tables, and loop points ([research](research/nord-piano-npno-and-codec.md))
 - [x] Parse `.nsmp4` container chunks and expose initial instrument, key-map, zone, and stroke metadata (`crates/nord-core/src/cbin/sample.rs`)
 - [x] Reverse-engineer the `CNSP` 4-bit DPCM audio payload decompression routine and implement `NpnoInstrument` and `decode_4bit_dpcm` in `crates/nord-core/src/cbin/piano_sample.rs`
-- [ ] Complete full-stream extraction of Image 1 (`411 KB` -> `798 KB`) and Image 0 (`3.51 MB` -> `5.49 MB`) and map the unpacked `ARM0` host binary and `DSPO` / `DSPS` / `DSPF` SHARC DSP segments
+- [x] Complete full-stream extraction of Image 1 (`410,321` B -> `798,912` B, `0xFBB813F8`) and Image 0 (`3,509,573` B -> `5,499,504` B, `0xDE902503`) via `ns4 inspect --verify --unpack` (remaining work: map internal `ARM0` / `DSPO` / `DSPS` / `DSPF` symbols)
 - [ ] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup
 
 ---

@@ -163,39 +163,32 @@ The Windows updater (`Update Nord Stage 4 OS v1.66.exe`) embeds the firmware pay
 ### Image Segment Table (`+0x00` of each Image)
 
 Each image begins with a 20-byte sub-header (`version` = `0x0064` = `100`, `segment_count` = `3` at `+0x10` BE), followed by three 44-byte (`0x2C`) segment descriptors:
-1. **`SRAM`**: Target SRAM load address, size, and CRC.
-2. **`CODE`**: Compressed/executable code region metadata.
-3. **`ARM0`**: Primary ARM host controller image.
+1. **`SRAM`**: Target SRAM load address, size, and one's-complement checksum (uncompressed).
+2. **`CODE`**: **LZO1X**-compressed ARM926EJ-S & SHARC executable memory image (`target_address = 0xC0000000`).
+3. **`ARM0`**: Primary ARM host controller bootstrap/stub image (uncompressed).
 
-Within the `CODE` / `ARM0` data payload of Image 0 (around `0x003CF040`), the embedded Analog Devices SHARC DSP cores are indexed by their module tags:
+Segment `data_offset` values are relative to each bank's base offset in the firmware container:
+- **Bank 0 (Image 0):** relative to `header_size` (`0x0020`).
+- **Bank 1 (Image 1):** relative to `image1_offset` (`header_size + image0_size`, `0x368FA6` in OS v1.66).
+
+Within the decompressed `CODE` payload of Image 0 (and mirrored references in the container), the embedded Analog Devices SHARC DSP cores are indexed by their module tags:
 - **`DSPF`** (`DSPFxCore1 L1 bl.0`): Effects & Piano Resonance DSP core.
 - **`DSPO`** (`DSPOrg`): Organ Physical Modeling & Rotary Speaker DSP core.
 - **`DSPS`** (`DSPSyn`): 3-Layer Nord Wave 2 Synth DSP core.
 
-### 5.1 Clavia 16-Bit LZ Stream Compression (`CODE` Segments)
+### 5.1 Clavia LZO1X Stream Compression (`CODE` Segments)
 
-The `CODE` segments inside OS firmware images are compressed using Clavia's proprietary 16-bit LZ sliding-window scheme (`crates/nord-core/src/firmware.rs`).
+The `CODE` segments inside OS firmware images are compressed using standard **LZO1X** (`crates/nord-core/src/firmware.rs`), verified bit-exact against both OS v1.66 banks:
+- **Bank 0 `CODE`:** `0x358D45` compressed bytes &rarr; `5,499,504` (`0x53EA70`) decompressed bytes, checksum `0xDE902503` (`OK`).
+- **Bank 1 `CODE`:** `0x0642D1` compressed bytes &rarr; `798,912` (`0x0C30C0`) decompressed bytes, checksum `0xFBB813F8` (`OK`).
 
-#### 16-Bit Match Token Bitfield Layout (Little-Endian `u16`)
-
-```text
- 15                                      3   2        0
-┌─────────────────────────────────────────┬────────────┐
-│ Distance in History Buffer (13 bits)    │ Length - 2 │
-│ Range: 1 .. 8191 bytes                  │ 3 bits     │
-│ (distance = token >> 3)                 │ 2..9 bytes │
-└─────────────────────────────────────────┴────────────┘
-```
-
-- **Bits 2..0 (3 bits):** Match length minus 2 (`length = (token & 0x07) + 2`), encoding lengths from `2` to `9` bytes.
-- **Bits 15..3 (13 bits):** Sliding-window back-reference distance (`distance = token >> 3`), allowing lookup up to `8,191` bytes behind the current write cursor.
-
-#### Stream Framing & Flag Bytes
-Stream framing groups up to 8 operations per 1-byte header:
-- **Flag Bit = `1`:** 1 uncompressed literal byte follows.
-- **Flag Bit = `0`:** 1 16-bit match token (2 little-endian bytes) follows.
-- **Initial Extended Literal Run:** At stream start, a `0x00, L` sequence encodes an extended literal run of `17 + L` bytes (e.g. `00 1B` for the 44-byte ARM926EJ-S reset stub).
-- Overlapping runs (where `length > distance`) dynamically repeat bytes in run-length fashion.
+#### LZO1X Token Encoding Summary
+- **First byte (`t > 17`):** Initial literal run of `t - 17` bytes at stream start.
+- **`0..15` (`M1` / literal run):** `t == 0` encodes an extended literal run (`18 + sum(0xFF * 255) + next_nonzero` bytes; e.g. `00 1B` = `18 + 27 = 45` bytes for the ARM926EJ-S exception vectors + constant pool header); `1..=15` encodes a short M1 back-reference when preceded by a match, or a `3 + t` literal run otherwise.
+- **`16..31` (`M4` / EOF):** `length = (t & 7)` (extended if `0`), `offset = 16384 + ((t & 8) << 11) + ((le16 >> 2) & 0x3FFF)`; `offset == 16384` (`11 00 00`) marks end-of-stream.
+- **`32..63` (`M3`):** `length = (t & 31)` (extended if `0`) `+ 2`, `offset = 1 + ((le16 >> 2) & 0x3FFF)`.
+- **`64..255` (`M2`):** `length = ((t >> 5) - 1)`, `offset = 1 + ((t >> 2) & 7) + (next_byte << 3)` (`1..=2048` bytes).
+- **Trailing literal nibble:** The low 2 bits (`last & 0x03`) of the two-byte match operand supply `0..=3` trailing literal bytes after every M2/M3/M4 match; an M2 match uses `last = next_byte` in the same way? Specifically, `t & 0x03` of the first M2 byte (`byte0 & 3`) gives trailing literals, whereas M3/M4 use the low 2 bits of the 16-bit LE operand's low byte (`op0 & 3`).
 
 #### Checksum Algorithm
 Each segment descriptor stores a 32-bit one's-complement byte checksum:
@@ -204,16 +197,20 @@ checksum = 0xFFFFFFFF - (sum(segment_bytes) & 0xFFFFFFFF)
 ```
 For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file segment payload. For compressed segments (`CODE`), the checksum is computed over the fully decompressed memory image at runtime (`target_address = 0xC0000000`).
 
-#### Rust API (`crates/nord-core/src/firmware.rs`)
+#### Rust API (`crates/nord-core/src/firmware.rs`) & CLI
 - `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
-- `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareContainer::bank_base(&self, bank: u8) -> Result<usize, String>`
+- `FirmwareContainer::extract_segment(&self, bank: u8, name: &str, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>` (Bank 0 base `0x20`)
+- `FirmwareSegment::extract_payload_from(&self, bank_base: usize, raw: &[u8]) -> Result<Vec<u8>, String>`
 - `FirmwareSegment::verify_checksum(&self, payload: &[u8]) -> bool`
 - `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
 - `FirmwareContainer::segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment>`
 - `DspEngineType` (`Organ`, `Synth`, `Effects`, `Routing`, `CoreIdentifier`)
 - `DspPartition` (full partition descriptors with engine categorization)
+- CLI: `ns4 inspect <fw_bin> --verify --unpack <out_dir>` verifies every segment's checksum and extracts `bank{0,1}_{SRAM,CODE,ARM0}.bin`.
 
 ### 5.2 Nord Piano (`.npno`) Binary Specification & 4-Bit DPCM Audio Codec
 
