@@ -57,6 +57,8 @@ pub enum PianoTimbre {
 struct PianoVoice {
     active: bool,
     sustained: bool,
+    releasing: bool,
+    soft_release: bool,
     note: u8,
     freq: f32,
     phase: f32,
@@ -102,6 +104,7 @@ pub struct PianoLayer {
     pub timbre: PianoTimbre,
     pub string_resonance_enabled: bool,
     pub pedal_noise_enabled: bool,
+    pub soft_release: bool,
     pub damper_pedal_down: bool,
     voices: [PianoVoice; MAX_PIANO_VOICES],
     resonators: [ModalResonator; NUM_SYMPATHETIC_STRINGS],
@@ -128,6 +131,7 @@ impl PianoLayer {
             timbre: PianoTimbre::Off,
             string_resonance_enabled: true,
             pedal_noise_enabled: true,
+            soft_release: false,
             damper_pedal_down: false,
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
             resonators,
@@ -152,6 +156,8 @@ impl PianoLayer {
         self.voices[idx] = PianoVoice {
             active: true,
             sustained: false,
+            releasing: false,
+            soft_release: false,
             note,
             freq,
             phase: 0.0,
@@ -168,7 +174,8 @@ impl PianoLayer {
                 if self.damper_pedal_down {
                     v.sustained = true;
                 } else {
-                    v.active = false;
+                    v.releasing = true;
+                    v.soft_release = self.soft_release;
                 }
             }
         }
@@ -183,8 +190,9 @@ impl PianoLayer {
             if !down {
                 for v in &mut self.voices {
                     if v.sustained {
-                        v.active = false;
                         v.sustained = false;
+                        v.releasing = true;
+                        v.soft_release = self.soft_release;
                     }
                 }
             }
@@ -206,9 +214,19 @@ impl PianoLayer {
             sum += sig * v.amp * v.env * 0.2;
 
             v.phase = (p + TAU * v.freq * inv_fs) % TAU;
-            v.env *= (-inv_fs / 1.8).exp();
+            let decay_time = if v.releasing {
+                if v.soft_release {
+                    0.180
+                } else {
+                    0.080
+                }
+            } else {
+                1.8
+            };
+            v.env *= (-inv_fs / decay_time).exp();
             if v.env < 1e-4 {
                 v.active = false;
+                v.releasing = false;
             }
         }
 
@@ -280,6 +298,41 @@ mod tests {
         assert!(energy > 0.005);
 
         piano.set_damper_pedal(false, 64);
+        // Releasing pedal triggers smooth felt damper decay; active during decay
+        assert!(piano.voices.iter().any(|v| v.active && v.releasing));
+
+        // After decay period (~0.8s = 40,000 samples at 48kHz), all voices have decayed
+        for _ in 0..50_000 {
+            piano.render_frame();
+        }
         assert!(piano.voices.iter().all(|v| !v.active));
+    }
+
+    #[test]
+    fn test_piano_exponential_damping_and_soft_release() {
+        let mut piano_normal = PianoLayer::new(48_000.0);
+        piano_normal.soft_release = false;
+        piano_normal.note_on(60, 100);
+        piano_normal.note_off(60);
+
+        let mut piano_soft = PianoLayer::new(48_000.0);
+        piano_soft.soft_release = true;
+        piano_soft.note_on(60, 100);
+        piano_soft.note_off(60);
+
+        // Render 2000 samples (~42ms)
+        for _ in 0..2000 {
+            piano_normal.render_frame();
+            piano_soft.render_frame();
+        }
+
+        let env_normal = piano_normal.voices[0].env;
+        let env_soft = piano_soft.voices[0].env;
+
+        // Soft release felt descends gentler, preserving more string energy
+        assert!(env_soft > env_normal);
+        assert!(env_normal > 0.0);
+        assert!(piano_normal.voices[0].releasing);
+        assert!(piano_soft.voices[0].releasing);
     }
 }

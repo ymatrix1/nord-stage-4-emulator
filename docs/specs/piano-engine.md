@@ -57,3 +57,16 @@ $$
 When `Pedal Noise` is enabled and `CC64` changes rapidly:
 - **Damper Lift (Note-On of Pedal):** Velocity of pedal depression ($\Delta\text{CC64} / \Delta t$) scales a short low-passed mechanical thump ($f_c = 140\text{ Hz}$) plus an airy felt-release brush transient, exciting the sympathetic string resonator bank.
 - **Damper Drop (Pedal Release):** Generates a damped felt thud ($f_c = 95\text{ Hz}$, $\tau = 65\text{ ms}$) as all dampers return to the strings.
+
+---
+
+## 6. Damper Release Envelopes & Soft Release (`SOFT REL`)
+
+Upon receiving MIDI `NoteOff` or Damper Pedal Release (`CC64 < 64`), the vibrating string is not instantly silenced to zero; instead, an authentic felt damper contact decay is applied:
+
+1. **Standard Key Release:**
+   Exponential envelope decay with time constant $\tau = 80\text{ ms}$ ($v_{\text{env}}[n] = v_{\text{env}}[n-1] \cdot \exp(-1 / (0.080 \cdot f_s))$). This completely eliminates high-frequency step discontinuities and audio clicks.
+2. **Soft Release (`SOFT REL`):**
+   When `soft_release` is active on the front panel, the damper descends with a gentler time constant $\tau = 180\text{ ms}$, modeling lighter felt contact for expressive legato phrasing and ambient tail preservation.
+3. **Voice Deactivation Invariant:**
+   A voice remains in `releasing` state and active in the polyphonic voice matrix until $v_{\text{env}} < 10^{-4}$ ($-80\text{ dB}$), at which point it is safely marked inactive (`v.active = false`) without memory allocations or locking.

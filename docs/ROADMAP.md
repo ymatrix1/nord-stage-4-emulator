@@ -89,6 +89,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] `crates/nord-core/src/piano.rs`: Multisample voice state, `KB TOUCH` velocity curves (`Light`, `Med`, `Heavy`), `TIMBRE` spectral presets (`Soft`, `Mid`, `Bright`, `Dyno1`, `Dyno2`), `Sustain` damper logic, and 12-band Modal Sympathetic String Resonance bank
 - [ ] Streaming / RAM-cached open **SFZ / WAV multisample loader** supporting multi-velocity layers and key-off release samples (`SOFT REL`)
 - [x] Pitch-specific **Undamped Note Sympathetic Resonance**: holding silent keys while striking lower notes excites the exact overtone resonators of the held notes
+- [x] Exponential felt **Damper Release Envelopes** (80ms standard / 180ms `SOFT REL`) eliminating key-off and sustain pedal lift audio pops
 - [ ] Velocity-sensitive **Dynamic Pedal Noise** (`PED NOISE`) for Damper (`CC64`), Sostenuto (`CC66`), and Una Corda (`CC67`)
 - [ ] Piano `UNISON` (`1`, `2`, `3` subtle hammer-detune width) and `DYN COMP` (`1`, `2`, `3` dynamic range compression)
 - [ ] 120-voice polyphony steal priority algorithm (preserving bass roots, top melody notes, and newly struck notes over decaying sustained mid-register voices)
