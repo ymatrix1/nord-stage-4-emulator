@@ -203,47 +203,35 @@ impl Stage4PanelState {
             0x2A..=0x2F | 0x06 | 0x0B | 0x0D | 0x34 => 1 << 4, // Synth A
             _ => (1 << 0) | (1 << 2) | (1 << 4),
         };
+        let scene_mask = if prog.global.scene_1_mask != 0 {
+            prog.global.scene_1_mask
+        } else {
+            cat_mask
+        };
 
         // Organ section
-        self.organ_a_active = (cat_mask & (1 << 0)) != 0 || prog.organ.layer_a_enabled;
-        self.organ_b_active = prog.organ.layer_b_enabled;
-        self.organ_a_level = if self.organ_a_active && prog.organ.layer_a_level < 0.1 {
-            0.85
-        } else {
-            prog.organ.layer_a_level
-        };
+        self.organ_a_active = (scene_mask & (1 << 0)) != 0;
+        self.organ_b_active = (scene_mask & (1 << 1)) != 0;
+        self.organ_a_level = prog.organ.layer_a_level;
         self.organ_b_level = prog.organ.layer_b_level;
         self.organ_model = prog.organ.model;
-        self.organ_drawbars =
-            if prog.organ.drawbars_a.iter().all(|&d| d == 0) && self.organ_a_active {
-                [8, 8, 8, 0, 0, 0, 0, 0, 0]
-            } else {
-                prog.organ.drawbars_a
-            };
+        self.organ_drawbars = prog.organ.drawbars_a;
         self.scanner_on = prog.organ.vibrato_on;
 
         // Piano section
-        self.piano_a_active = (cat_mask & (1 << 2)) != 0;
-        self.piano_b_active = prog.piano.layer_b.enabled;
-        self.piano_a_level = if self.piano_a_active && prog.piano.layer_a.level < 0.1 {
-            0.85
-        } else {
-            prog.piano.layer_a.level
-        };
+        self.piano_a_active = (scene_mask & (1 << 2)) != 0;
+        self.piano_b_active = (scene_mask & (1 << 3)) != 0;
+        self.piano_a_level = prog.piano.layer_a.level;
         self.piano_b_level = prog.piano.layer_b.level;
         self.piano_cat = prog.piano.layer_a.category;
         self.piano_timbre = prog.piano.layer_a.timbre;
         self.piano_touch = prog.piano.layer_a.touch;
 
         // Synth section
-        self.synth_a_active = (cat_mask & (1 << 4)) != 0 || prog.synth.layer_a.enabled;
-        self.synth_b_active = prog.synth.layer_b.enabled;
-        self.synth_c_active = prog.synth.layer_c.enabled;
-        self.synth_a_level = if self.synth_a_active && prog.synth.layer_a.level < 0.1 {
-            0.85
-        } else {
-            prog.synth.layer_a.level
-        };
+        self.synth_a_active = (scene_mask & (1 << 4)) != 0;
+        self.synth_b_active = (scene_mask & (1 << 5)) != 0;
+        self.synth_c_active = (scene_mask & (1 << 6)) != 0;
+        self.synth_a_level = prog.synth.layer_a.level;
         self.synth_b_level = prog.synth.layer_b.level;
         self.synth_c_level = prog.synth.layer_c.level;
         self.synth_osc_mode = prog.synth.layer_a.osc_mode;
@@ -256,19 +244,51 @@ impl Stage4PanelState {
         self.synth_decay = (prog.synth.layer_a.env_decay_ms / 1000.0).clamp(0.01, 4.0);
         self.synth_release = (prog.synth.layer_a.env_release_ms / 1000.0).clamp(0.01, 4.0);
 
-        // Guard against HighPass > 5 kHz filter muting synth notes
-        if self.synth_filter_model == FilterModel::HighPass && self.synth_cutoff > 5000.0 {
-            self.synth_filter_model = FilterModel::Lp24;
-            self.synth_cutoff = match prog.category_id {
-                0x2C => 750.0,
-                0x2E => 1900.0,
-                _ => 4200.0,
-            };
-            self.synth_resonance = 0.25;
-        }
-
-        // Global / FX
+        // Global / FX (focus FX panel on first active primary section)
+        let primary_fx = if self.synth_a_active {
+            &prog.synth.fx_a
+        } else if self.piano_a_active {
+            &prog.piano.fx_a
+        } else {
+            &prog.organ.fx
+        };
         self.master_comp = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
+        self.mod1_type = primary_fx.mod1_type();
+        self.mod1_rate = 0.1 + primary_fx.mod1_rate * 14.9;
+        self.mod1_amount = if primary_fx.mod1_enabled {
+            primary_fx.mod1_amount
+        } else {
+            0.0
+        };
+        self.mod2_type = primary_fx.mod2_type();
+        self.mod2_rate = 0.1 + primary_fx.mod2_rate * 9.9;
+        self.mod2_amount = if primary_fx.mod2_enabled {
+            primary_fx.mod2_amount
+        } else {
+            0.0
+        };
+        self.eq_drive = if primary_fx.amp_enabled {
+            (primary_fx.amp_drive / 10.0).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.eq_bass = primary_fx.eq_bass_db;
+        self.eq_mid = primary_fx.eq_mid_db;
+        self.eq_mid_freq = primary_fx.eq_mid_freq_hz();
+        self.eq_treble = primary_fx.eq_treble_db;
+        self.delay_on = primary_fx.delay_enabled;
+        self.delay_feedback = primary_fx.delay_feedback;
+        self.delay_mix = if primary_fx.delay_enabled {
+            primary_fx.delay_mix
+        } else {
+            0.0
+        };
+        self.reverb_model = primary_fx.reverb_model();
+        self.reverb_mix = if primary_fx.reverb_enabled {
+            primary_fx.reverb_amount
+        } else {
+            0.0
+        };
     }
 }
 

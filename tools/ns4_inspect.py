@@ -66,6 +66,9 @@ class BitReader:
         self.data = data
         self.bit_pos = 0
 
+    def set_bit_pos(self, bit_pos: int) -> None:
+        self.bit_pos = bit_pos
+
     def read_bits(self, count: int) -> int:
         val = 0
         for _ in range(count):
@@ -79,67 +82,413 @@ class BitReader:
     def read_bool(self) -> bool:
         return self.read_bits(1) != 0
 
+    def read_signed(self, count: int) -> int:
+        raw = self.read_bits(count)
+        sign_bit = 1 << (count - 1)
+        return raw - (1 << count) if (raw & sign_bit) else raw
 
-def decode_organ_payload(payload: bytes) -> dict:
-    if len(payload) < 135:
-        raise ValueError(f"organ payload too short: {len(payload)} < 135")
-    r = BitReader(payload)
-    r.bit_pos = 72
-    models = ["B3", "Vox", "Farfisa", "Pipe1", "Pipe2"]
-    model_idx = r.read_bits(3)
-    model = models[model_idx] if model_idx < len(models) else "Unknown"
-    perc_on = r.read_bool()
-    perc_soft = r.read_bool()
-    perc_fast = r.read_bool()
-    perc_third = r.read_bool()
-    vib_on = r.read_bool()
-    vib_type = r.read_bits(3)
-    rot_speeds = ["Stop", "Slow", "Fast"]
-    rot_spd_idx = r.read_bits(2)
-    rot_speed = rot_speeds[rot_spd_idx] if rot_spd_idx < len(rot_speeds) else "Unknown"
-    rot_drive = round((r.read_bits(7) / 127.0) * 10.0, 2)
+    def read_morph(self, bit_pos: int, width: int, max_val: int) -> tuple[int, dict[str, float]]:
+        self.bit_pos = bit_pos
+        base = self.read_bits(width)
+        deltas = {
+            "wheel": round((self.read_bits(width + 1) - max_val) / max_val, 3),
+            "aftertouch": round((self.read_bits(width + 1) - max_val) / max_val, 3),
+            "ctrl_pedal": round((self.read_bits(width + 1) - max_val) / max_val, 3),
+        }
+        return base, deltas
 
-    la_enabled = r.read_bool()
-    la_level = round(r.read_bits(7) / 127.0, 2)
-    la_octave = r.read_bits(3) - 2
-    drawbars_a = [min(r.read_bits(4), 8) for _ in range(9)]
 
-    lb_enabled = r.read_bool()
-    lb_level = round(r.read_bits(7) / 127.0, 2)
-    lb_octave = r.read_bits(3) - 2
-    drawbars_b = [min(r.read_bits(4), 8) for _ in range(9)]
+SPLIT_NOTE_TABLE = [41, 48, 53, 60, 65, 72, 77, 84, 89, 96]
+ORGAN_MODELS = ["B3", "Vox", "Farfisa", "Pipe1", "Pipe2"]
+VIBRATO_TYPES = ["V1", "C1", "V2", "C2", "V3", "C3"]
+PIANO_CATEGORIES = ["Grand", "Upright", "Electric", "Clav", "Digital", "Misc"]
+PIANO_TOUCHES = ["Light", "Medium", "Heavy"]
+PIANO_TIMBRES = ["Off", "Soft", "Mid", "Bright", "Dyno1", "Dyno2"]
+MOD1_TYPES = [
+    "AutoPanSoft",
+    "AutoPanHard",
+    "TremoloSoft",
+    "TremoloHard",
+    "RingMod",
+    "RingModStereo",
+    "AWahCry",
+    "AWahEnv",
+    "WahWahLfo",
+    "WahWahPedal",
+    "PumpLfo",
+    "PumpPedal",
+]
+MOD2_TYPES = [
+    "Phaser1",
+    "Phaser2",
+    "FlangerStereo",
+    "FlangerMono",
+    "ChorusAnalog",
+    "VibeStereo",
+    "VibeMono",
+    "EnsembleStereo",
+    "EnsembleMono",
+    "SpinTreble",
+    "SpinBass",
+    "SpinBoth",
+]
+REVERB_TYPES = ["Spring", "Booth", "Room", "Stage", "Hall", "Cathedral"]
+
+
+def decode_fx_payload(payload: bytes) -> dict:
+    """Decodes hardware `0x36` 55-byte per-layer FX chain."""
+    if len(payload) < 55:
+        raise ValueError(f"fx payload too short: {len(payload)} < 55")
+    r = BitReader(payload[:55])
+    r.set_bit_pos(8)
+    mod1_on = r.read_bool()
+    mod1_sync = r.read_bool()
+    mod1_rate, mod1_rate_m = r.read_morph(10, 7, 127)
+    mod1_amt, mod1_amt_m = r.read_morph(41, 7, 127)
+    r.set_bit_pos(72)
+    mod1_type_idx = r.read_bits(4)
+
+    mod2_on = r.read_bool()
+    mod2_rate, mod2_rate_m = r.read_morph(77, 7, 127)
+    mod2_amt, mod2_amt_m = r.read_morph(108, 7, 127)
+    r.set_bit_pos(139)
+    mod2_type_idx = r.read_bits(4)
+
+    amp_on = r.read_bool()
+    eq_treble = round(r.read_signed(7) * 0.25, 2)
+    eq_mid = round(r.read_signed(7) * 0.25, 2)
+    eq_bass = round(r.read_signed(7) * 0.25, 2)
+    eq_mid_freq, _ = r.read_morph(165, 7, 127)
+    amp_drive, _ = r.read_morph(196, 7, 127)
+
+    r.set_bit_pos(231)
+    comp_on = r.read_bool()
+    comp_amt = round(r.read_bits(7) / 127.0, 3)
+    comp_fast = r.read_bool()
+
+    dly_on = r.read_bool()
+    dly_sync = r.read_bool()
+    dly_rate, _ = r.read_morph(242, 14, 16383)
+    dly_mix, _ = r.read_morph(301, 7, 127)
+    r.set_bit_pos(332)
+    dly_mode = r.read_bits(2)
+    dly_pp = r.read_bool()
+    dly_flt = r.read_bool()
+    dly_fb, _ = r.read_morph(336, 7, 127)
+    r.set_bit_pos(367)
+    dly_fb_fx = r.read_bits(4)
+
+    rvb_on = r.read_bool()
+    rvb_amt, rvb_amt_m = r.read_morph(372, 7, 127)
+    r.set_bit_pos(403)
+    rvb_color = r.read_bits(2)
+    rvb_type_idx = r.read_bits(3)
+    amp_type_new = r.read_bits(9)
 
     return {
-        "model": model,
+        "mod1": {
+            "enabled": mod1_on,
+            "clock_sync": mod1_sync,
+            "type": MOD1_TYPES[mod1_type_idx]
+            if mod1_type_idx < len(MOD1_TYPES)
+            else f"Unknown({mod1_type_idx})",
+            "rate": round(mod1_rate / 127.0, 3),
+            "rate_morph": mod1_rate_m,
+            "amount": round(mod1_amt / 127.0, 3),
+            "amount_morph": mod1_amt_m,
+        },
+        "mod2": {
+            "enabled": mod2_on,
+            "type": MOD2_TYPES[mod2_type_idx]
+            if mod2_type_idx < len(MOD2_TYPES)
+            else f"Unknown({mod2_type_idx})",
+            "rate": round(mod2_rate / 127.0, 3),
+            "rate_morph": mod2_rate_m,
+            "amount": round(mod2_amt / 127.0, 3),
+            "amount_morph": mod2_amt_m,
+        },
+        "amp_eq": {
+            "enabled": amp_on,
+            "amp_type_new": amp_type_new,
+            "treble_db": eq_treble,
+            "mid_db": eq_mid,
+            "bass_db": eq_bass,
+            "mid_freq": round(eq_mid_freq / 127.0, 3),
+            "drive": round((amp_drive / 127.0) * 10.0, 2),
+        },
+        "comp": {"enabled": comp_on, "amount": comp_amt, "fast": comp_fast},
+        "delay": {
+            "enabled": dly_on,
+            "clock_sync": dly_sync,
+            "rate": round(dly_rate / 16383.0, 4),
+            "mix": round(dly_mix / 127.0, 3),
+            "feedback": round(dly_fb / 127.0, 3),
+            "mode": dly_mode,
+            "ping_pong": dly_pp,
+            "filter": dly_flt,
+            "fb_fx_type": dly_fb_fx,
+        },
+        "reverb": {
+            "enabled": rvb_on,
+            "type": REVERB_TYPES[rvb_type_idx]
+            if rvb_type_idx < len(REVERB_TYPES)
+            else f"Unknown({rvb_type_idx})",
+            "color": rvb_color,
+            "amount": round(rvb_amt / 127.0, 3),
+            "amount_morph": rvb_amt_m,
+        },
+    }
+
+
+def decode_global_payload(payload: bytes) -> dict:
+    """Decodes hardware `0x2C` 45-byte Global program block."""
+    if len(payload) < 45:
+        raise ValueError(f"global payload too short: {len(payload)} < 45")
+    r = BitReader(payload[:45])
+    r.set_bit_pos(8)
+    split_enabled = r.read_bool()
+    zone_en = [r.read_bool() for _ in range(3)]
+    split_pts = [SPLIT_NOTE_TABLE[min(r.read_bits(4), len(SPLIT_NOTE_TABLE) - 1)] for _ in range(3)]
+    split_xfade = [r.read_bits(2) for _ in range(3)]
+    r.set_bit_pos(35)
+    tempo_bpm = 30 + r.read_bits(8)
+    r.set_bit_pos(284)
+    sec_en_i = r.read_bits(3)
+    sec_en_ii = r.read_bits(3)
+    return {
+        "tempo_bpm": tempo_bpm,
+        "split_enabled": split_enabled,
+        "split_zone_enabled": zone_en,
+        "split_points": split_pts,
+        "split_crossfades": split_xfade,
+        "section_enable_i": sec_en_i,
+        "section_enable_ii": sec_en_ii,
+    }
+
+
+def _decode_organ_layer(r: BitReader, base: int, enabled: bool, level: float) -> dict:
+    r.set_bit_pos(base + 12)
+    octave = max(-2, min(2, r.read_signed(4)))
+    r.set_bit_pos(base + 17)
+    model_idx = r.read_bits(3)
+    drawbars = []
+    drawbar_morphs = []
+    for i in range(9):
+        db, db_m = r.read_morph(base + 40 + i * 19, 4, 8)
+        drawbars.append(min(db, 8))
+        drawbar_morphs.append(db_m)
+    r.set_bit_pos(base + 232)
+    vib_on = r.read_bool()
+    perc_on = r.read_bool()
+    perc_third = r.read_bool()
+    perc_fast = r.read_bool()
+    perc_soft = r.read_bool()
+    return {
+        "enabled": enabled,
+        "level": round(level, 3),
+        "octave": octave,
+        "model": ORGAN_MODELS[model_idx]
+        if model_idx < len(ORGAN_MODELS)
+        else f"Unknown({model_idx})",
+        "drawbars": drawbars,
+        "drawbar_morphs": drawbar_morphs,
+        "vibrato_on": vib_on,
         "percussion": {
             "enabled": perc_on,
-            "soft": perc_soft,
-            "fast": perc_fast,
             "third": perc_third,
+            "fast": perc_fast,
+            "soft": perc_soft,
         },
-        "vibrato": {"enabled": vib_on, "type": vib_type},
-        "rotary": {"speed": rot_speed, "drive": rot_drive},
-        "layer_a": {
-            "enabled": la_enabled,
-            "level": la_level,
-            "octave": la_octave,
-            "drawbars": drawbars_a,
-        },
-        "layer_b": {
-            "enabled": lb_enabled,
-            "level": lb_level,
-            "octave": lb_octave,
-            "drawbars": drawbars_b,
-        },
+    }
+
+
+def decode_organ_payload(payload: bytes) -> dict:
+    """Decodes hardware `0x11` 135-byte Organ block (with `0x03` layers + `0x36` FX)."""
+    if len(payload) < 135:
+        raise ValueError(f"organ payload too short: {len(payload)} < 135")
+    r = BitReader(payload[:135])
+    r.set_bit_pos(9)
+    enable_i = r.read_bits(2)
+    r.set_bit_pos(12)
+    enable_ii = r.read_bits(2)
+    lvl_a, lvl_a_m = r.read_morph(14, 7, 127)
+    lvl_b, lvl_b_m = r.read_morph(45, 7, 127)
+
+    r.set_bit_pos(80)
+    rot_enabled = r.read_bool()
+    leslie_bits = r.read_bits(2)
+    rot_speed = {0: "Stop", 1: "Slow", 2: "Stop", 3: "Fast"}[leslie_bits]
+    r.set_bit_pos(92)
+    rot_drive = round((r.read_bits(7) / 127.0) * 10.0, 2)
+    r.set_bit_pos(130)
+    vib_idx = min(r.read_bits(3), 5)
+
+    la = _decode_organ_layer(r, 144, (enable_i & 0x01) != 0, lvl_a / 127.0)
+    lb = _decode_organ_layer(r, 392, (enable_i & 0x02) != 0, lvl_b / 127.0)
+    la["level_morph"] = lvl_a_m
+    lb["level_morph"] = lvl_b_m
+
+    return {
+        "model": la["model"],
+        "enable_ii_mask": enable_ii,
+        "percussion": la["percussion"],
+        "vibrato": {"enabled": la["vibrato_on"], "type": VIBRATO_TYPES[vib_idx]},
+        "rotary": {"enabled": rot_enabled, "speed": rot_speed, "drive": rot_drive},
+        "layer_a": la,
+        "layer_b": lb,
+        "fx": decode_fx_payload(payload[80:135]),
+    }
+
+
+def _decode_piano_layer(r: BitReader, base: int, enabled: bool, level: float) -> dict:
+    r.set_bit_pos(base + 12)
+    octave = max(-2, min(2, r.read_signed(4)))
+    r.set_bit_pos(base + 18)
+    cat_idx = r.read_bits(3)
+    model_id = r.read_bits(5)
+    r.set_bit_pos(base + 28)
+    variation = r.read_bits(2)
+    name_hash = r.read_bits(32)
+    acoustic = r.read_bits(2)
+    pedal_noise = r.read_bool()
+    touch_idx = r.read_bits(2)
+    unison = r.read_bits(2)
+    dyn_comp = r.read_bits(2)
+    timbre_idx = r.read_bits(3)
+    return {
+        "enabled": enabled,
+        "level": round(level, 3),
+        "octave": octave,
+        "category": PIANO_CATEGORIES[cat_idx]
+        if cat_idx < len(PIANO_CATEGORIES)
+        else f"Unknown({cat_idx})",
+        "model_id": model_id,
+        "variation": variation,
+        "name_hash": f"0x{name_hash:08x}",
+        "acoustic_level": acoustic,
+        "pedal_noise": pedal_noise,
+        "touch": PIANO_TOUCHES[min(touch_idx, 2)],
+        "unison": unison,
+        "dyn_comp": dyn_comp,
+        "timbre": PIANO_TIMBRES[min(timbre_idx, 5)],
+    }
+
+
+def decode_piano_payload(payload: bytes) -> dict:
+    """Decodes hardware `0x0C` 147-byte Piano block (with `0x0B` layers + `0x36` FX)."""
+    if len(payload) < 147:
+        raise ValueError(f"piano payload too short: {len(payload)} < 147")
+    r = BitReader(payload[:147])
+    r.set_bit_pos(9)
+    enable_i = r.read_bits(2)
+    r.set_bit_pos(12)
+    enable_ii = r.read_bits(2)
+    lvl_a, lvl_a_m = r.read_morph(14, 7, 127)
+    lvl_b, lvl_b_m = r.read_morph(45, 7, 127)
+    la = _decode_piano_layer(r, 104, (enable_i & 0x01) != 0, lvl_a / 127.0)
+    lb = _decode_piano_layer(r, 200, (enable_i & 0x02) != 0, lvl_b / 127.0)
+    la["level_morph"] = lvl_a_m
+    lb["level_morph"] = lvl_b_m
+    return {
+        "enable_ii_mask": enable_ii,
+        "layer_a": la,
+        "layer_b": lb,
+        "fx_a": decode_fx_payload(payload[37:92]),
+        "fx_b": decode_fx_payload(payload[92:147]),
+    }
+
+
+def _decode_synth_layer(
+    r: BitReader, layer_base: int, sound_base: int, enabled: bool, level: float, pan: float
+) -> dict:
+    r.set_bit_pos(layer_base + 8)
+    is_osc = r.read_bool()
+    r.set_bit_pos(layer_base + 32)
+    sample_id = r.read_bits(32)
+    r.set_bit_pos(layer_base + 135)
+    arp_run = r.read_bool()
+    arp_rate, _ = r.read_morph(layer_base + 175, 7, 127)
+
+    r.set_bit_pos(sound_base + 8)
+    osc_bank = r.read_bits(3)
+    osc_cat = r.read_bits(4)
+    osc_wave = r.read_bits(10)
+    osc_ctrl, _ = r.read_morph(sound_base + 25, 7, 127)
+    lfo_rate, _ = r.read_morph(sound_base + 133, 7, 127)
+    lfo_amt, _ = r.read_morph(sound_base + 164, 7, 127)
+
+    r.set_bit_pos(sound_base + 218)
+    flt_type = r.read_bits(3)
+    flt_freq, flt_freq_m = r.read_morph(sound_base + 221, 7, 127)
+    flt_res, _ = r.read_morph(sound_base + 252, 7, 127)
+    cutoff_hz = round(80.0 * (200.0 ** (flt_freq / 127.0)), 1)
+
+    return {
+        "enabled": enabled,
+        "level": round(level, 3),
+        "pan": round(pan, 3),
+        "is_osc_mode": is_osc,
+        "sample_id": f"0x{sample_id:08x}",
+        "osc_bank": osc_bank,
+        "osc_cat": osc_cat,
+        "osc_wave": osc_wave,
+        "osc_ctrl": round(osc_ctrl / 127.0, 3),
+        "lfo_rate": round(0.1 + (lfo_rate / 127.0) * 19.9, 2),
+        "lfo_amount": round(lfo_amt / 127.0, 3),
+        "filter_type": flt_type,
+        "filter_cutoff_hz": cutoff_hz,
+        "filter_cutoff_morph": flt_freq_m,
+        "filter_resonance": round((flt_res / 127.0) * 0.95, 3),
+        "arp_enabled": arp_run,
+        "arp_bpm": round(30.0 + (arp_rate / 127.0) * 270.0, 1),
+    }
+
+
+def decode_synth_payload(payload: bytes) -> dict:
+    """Decodes hardware `0x1E` 493-byte Synth block (`0x32` + `0x2F` + `0x36`)."""
+    if len(payload) < 493:
+        raise ValueError(f"synth payload too short: {len(payload)} < 493")
+    r = BitReader(payload[:493])
+    r.set_bit_pos(10)
+    enable_i = r.read_bits(3)
+    r.set_bit_pos(15)
+    enable_ii = r.read_bits(3)
+    lvl_a, _ = r.read_morph(18, 7, 127)
+    lvl_b, _ = r.read_morph(49, 7, 127)
+    lvl_c, _ = r.read_morph(80, 7, 127)
+    r.set_bit_pos(111)
+    pan_a = r.read_bits(7) / 127.0
+    r.set_bit_pos(142)
+    pan_b = r.read_bits(7) / 127.0
+    r.set_bit_pos(173)
+    pan_c = r.read_bits(7) / 127.0
+
+    return {
+        "enable_ii_mask": enable_ii,
+        "layer_a": _decode_synth_layer(r, 248, 1472, (enable_i & 0x01) != 0, lvl_a / 127.0, pan_a),
+        "layer_b": _decode_synth_layer(r, 656, 1856, (enable_i & 0x02) != 0, lvl_b / 127.0, pan_b),
+        "layer_c": _decode_synth_layer(r, 1064, 2240, (enable_i & 0x04) != 0, lvl_c / 127.0, pan_c),
+        "fx_a": decode_fx_payload(payload[328:383]),
+        "fx_b": decode_fx_payload(payload[383:438]),
+        "fx_c": decode_fx_payload(payload[438:493]),
     }
 
 
 def decode_cbin_payload(tag: str, payload: bytes) -> dict:
     if tag == "ns4o":
         return {"organ": decode_organ_payload(payload)}
+    if tag == "ns4n" and len(payload) >= 147:
+        return {"piano": decode_piano_payload(payload), "piano_bytes": len(payload)}
+    if tag == "ns4y" and len(payload) >= 493:
+        return {"synth": decode_synth_payload(payload), "synth_bytes": len(payload)}
+    if tag == "ns4t" and len(payload) >= 55:
+        return {"fx": decode_fx_payload(payload), "fx_bytes": len(payload)}
     if tag in ("ns4p", "ns4l") and len(payload) >= 820:
         return {
+            "global": decode_global_payload(payload[0:45]),
             "organ": decode_organ_payload(payload[45:180]),
+            "piano": decode_piano_payload(payload[180:327]),
+            "synth": decode_synth_payload(payload[327:820]),
             "piano_bytes": len(payload[180:327]),
             "synth_bytes": len(payload[327:820]),
         }

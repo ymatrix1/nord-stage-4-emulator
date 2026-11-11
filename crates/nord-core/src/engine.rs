@@ -216,75 +216,78 @@ impl Stage4Engine {
     }
 
     /// Applies a decoded Nord Stage 4 Program to the DSP engine.
+    /// Applies all decoded CBIN program settings (layers, scenes, splits, morphs, and 7 FX chains).
     pub fn apply_program(&mut self, prog: &crate::cbin::ProgramDecoded) {
-        // Organ
+        // Organ (Layers A & B + shared Organ FX)
         self.organ_a.model = prog.organ.model;
-        self.organ_b.model = prog.organ.model;
+        self.organ_b.model = prog.organ.model_b;
         self.organ_a.drawbars = prog.organ.drawbars_a;
         self.organ_b.drawbars = prog.organ.drawbars_b;
-        self.organ_a.percussion_enabled = prog.organ.percussion_on;
-        self.organ_a.percussion_soft = prog.organ.percussion_soft;
-        self.organ_a.percussion_fast_decay = prog.organ.percussion_fast;
-        self.organ_a.percussion_third_harmonic = prog.organ.percussion_third;
-        self.organ_a.rotary_speed = prog.organ.rotary_speed;
-        self.organ_a.rotary_drive = prog.organ.rotary_drive;
+        for (organ, vib_on) in [
+            (&mut self.organ_a, prog.organ.vibrato_on),
+            (&mut self.organ_b, prog.organ.vibrato_on_b),
+        ] {
+            organ.percussion_enabled = prog.organ.percussion_on;
+            organ.percussion_soft = prog.organ.percussion_soft;
+            organ.percussion_fast_decay = prog.organ.percussion_fast;
+            organ.percussion_third_harmonic = prog.organ.percussion_third;
+            organ.scanner_mode = prog.organ.scanner_mode(vib_on);
+            organ.rotary_enabled = prog.organ.rotary_enabled;
+            organ.rotary_speed = prog.organ.rotary_speed;
+            organ.rotary_drive = prog.organ.rotary_drive;
+        }
 
-        // Piano
-        self.piano_a.category = prog.piano.layer_a.category;
-        self.piano_b.category = prog.piano.layer_b.category;
-        self.piano_a.timbre = prog.piano.layer_a.timbre;
-        self.piano_b.timbre = prog.piano.layer_b.timbre;
-        self.piano_a.touch = prog.piano.layer_a.touch;
-        self.piano_b.touch = prog.piano.layer_b.touch;
-        self.piano_a.string_resonance_enabled = prog.piano.layer_a.string_res;
-        self.piano_b.string_resonance_enabled = prog.piano.layer_b.string_res;
-        self.piano_a.pedal_noise_enabled = prog.piano.layer_a.pedal_noise;
-        self.piano_b.pedal_noise_enabled = prog.piano.layer_b.pedal_noise;
+        // Piano (Layers A & B)
+        for (piano, dec) in [
+            (&mut self.piano_a, &prog.piano.layer_a),
+            (&mut self.piano_b, &prog.piano.layer_b),
+        ] {
+            piano.category = dec.category;
+            piano.timbre = dec.timbre;
+            piano.touch = dec.touch;
+            piano.string_resonance_enabled = dec.string_res;
+            piano.pedal_noise_enabled = dec.pedal_noise;
+            piano.soft_release = dec.soft_release;
+        }
 
-        // Synth
-        self.synth_a.osc_mode = prog.synth.layer_a.osc_mode;
-        self.synth_a.waveform = prog.synth.layer_a.waveform;
-        self.synth_a.filter_model = prog.synth.layer_a.filter_model;
-        self.synth_a.cutoff_hz = prog.synth.layer_a.filter_cutoff_hz;
-        self.synth_a.resonance = prog.synth.layer_a.filter_resonance;
-        self.synth_a.filter_drive = prog.synth.layer_a.filter_drive;
-        self.synth_a.attack_sec = prog.synth.layer_a.env_attack_ms / 1000.0;
-        self.synth_a.decay_sec = prog.synth.layer_a.env_decay_ms / 1000.0;
-        self.synth_a.release_sec = prog.synth.layer_a.env_release_ms / 1000.0;
+        // Synth (Layers A, B & C + cutoff morph matrix)
+        Self::apply_synth_layer(
+            &mut self.synth_a,
+            &mut self.synth_cutoff_morph[0],
+            &prog.synth.layer_a,
+        );
+        Self::apply_synth_layer(
+            &mut self.synth_b,
+            &mut self.synth_cutoff_morph[1],
+            &prog.synth.layer_b,
+        );
+        Self::apply_synth_layer(
+            &mut self.synth_c,
+            &mut self.synth_cutoff_morph[2],
+            &prog.synth.layer_c,
+        );
 
-        self.synth_b.osc_mode = prog.synth.layer_b.osc_mode;
-        self.synth_b.waveform = prog.synth.layer_b.waveform;
-        self.synth_b.filter_model = prog.synth.layer_b.filter_model;
-        self.synth_b.cutoff_hz = prog.synth.layer_b.filter_cutoff_hz;
-        self.synth_b.resonance = prog.synth.layer_b.filter_resonance;
-        self.synth_b.filter_drive = prog.synth.layer_b.filter_drive;
-        self.synth_b.attack_sec = prog.synth.layer_b.env_attack_ms / 1000.0;
-        self.synth_b.decay_sec = prog.synth.layer_b.env_decay_ms / 1000.0;
-        self.synth_b.release_sec = prog.synth.layer_b.env_release_ms / 1000.0;
-
-        self.synth_c.osc_mode = prog.synth.layer_c.osc_mode;
-        self.synth_c.waveform = prog.synth.layer_c.waveform;
-        self.synth_c.filter_model = prog.synth.layer_c.filter_model;
-        self.synth_c.cutoff_hz = prog.synth.layer_c.filter_cutoff_hz;
-        self.synth_c.resonance = prog.synth.layer_c.filter_resonance;
-        self.synth_c.filter_drive = prog.synth.layer_c.filter_drive;
-        self.synth_c.attack_sec = prog.synth.layer_c.env_attack_ms / 1000.0;
-        self.synth_c.decay_sec = prog.synth.layer_c.env_decay_ms / 1000.0;
-        self.synth_c.release_sec = prog.synth.layer_c.env_release_ms / 1000.0;
+        // Per-layer 0x36 FX chains
+        Self::apply_fx_chain(&mut self.fx_chains[0], &prog.organ.fx);
+        Self::apply_fx_chain(&mut self.fx_chains[1], &prog.organ.fx);
+        Self::apply_fx_chain(&mut self.fx_chains[2], &prog.piano.fx_a);
+        Self::apply_fx_chain(&mut self.fx_chains[3], &prog.piano.fx_b);
+        Self::apply_fx_chain(&mut self.fx_chains[4], &prog.synth.fx_a);
+        Self::apply_fx_chain(&mut self.fx_chains[5], &prog.synth.fx_b);
+        Self::apply_fx_chain(&mut self.fx_chains[6], &prog.synth.fx_c);
 
         // Global
         self.master_clock.bpm = prog.global.tempo_bpm;
         self.master_bus.compressor_amount = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
 
-        // If the patch bitstream has scene_1_mask == 0, activate layers based on category and enabled flags
+        // Scene / section masks (with fallback when synthetic tests leave scene_1_mask == 0)
         let category_mask = match prog.category_id {
-            0x07 | 0x12 => 1 << 0,                             // Organ A
-            0x09 | 0x16 | 0x17 | 0x18 | 0x19 => 1 << 2,        // Piano A
-            0x1E => (1 << 2) | (1 << 4),                       // Piano A + Synth A
-            0x2A..=0x2F | 0x06 | 0x0B | 0x0D | 0x34 => 1 << 4, // Synth A
-            _ => (1 << 0) | (1 << 2) | (1 << 4),               // Default: All primary layers active
+            0x07 | 0x12 => 1 << 0,
+            0x09 | 0x16 | 0x17 | 0x18 | 0x19 => 1 << 2,
+            0x1E => (1 << 2) | (1 << 4),
+            0x2A..=0x2F | 0x06 | 0x0B | 0x0D | 0x34 => 1 << 4,
+            _ => (1 << 0) | (1 << 2) | (1 << 4),
         };
-
         let default_layer_mask = (prog.organ.layer_a_enabled as u8)
             | ((prog.organ.layer_b_enabled as u8) << 1)
             | ((prog.piano.layer_a.enabled as u8) << 2)
@@ -306,55 +309,109 @@ impl Stage4Engine {
             self.scene.scene_1_mask
         };
 
+        let any_zone_flag = prog.global.split_zone_enabled.iter().any(|&e| e);
         for (i, &pt) in prog.global.split_points.iter().enumerate() {
             self.split_router.splits[i].midi_note = pt;
             self.split_router.splits[i].crossfade = prog.global.split_crossfades[i];
-            self.split_router.splits[i].enabled = prog.global.split_enabled;
+            self.split_router.splits[i].enabled =
+                prog.global.split_enabled && (!any_zone_flag || prog.global.split_zone_enabled[i]);
         }
 
-        // Layer base levels (ensure active layers are audible)
-        self.layer_levels[0].base =
-            if (self.scene.scene_1_mask & (1 << 0)) != 0 && prog.organ.layer_a_level < 0.1 {
-                0.85
-            } else {
-                prog.organ.layer_a_level
-            };
-        self.layer_levels[1].base = prog.organ.layer_b_level;
-        self.layer_levels[2].base =
-            if (self.scene.scene_1_mask & (1 << 2)) != 0 && prog.piano.layer_a.level < 0.1 {
-                0.85
-            } else {
-                prog.piano.layer_a.level
-            };
-        self.layer_levels[3].base = prog.piano.layer_b.level;
-        self.layer_levels[4].base =
-            if (self.scene.scene_1_mask & (1 << 4)) != 0 && prog.synth.layer_a.level < 0.1 {
-                0.85
-            } else {
-                prog.synth.layer_a.level
-            };
-        self.layer_levels[5].base = prog.synth.layer_b.level;
-        self.layer_levels[6].base = prog.synth.layer_c.level;
-
-        // Ensure Organ drawbars are active if Organ A is enabled
-        if (self.scene.scene_1_mask & (1 << 0)) != 0
-            && self.organ_a.drawbars.iter().all(|&d| d == 0)
-        {
-            self.organ_a.drawbars = [8, 8, 8, 0, 0, 0, 0, 0, 0];
+        // Layer levels + morph deltas
+        let level_specs = [
+            (prog.organ.layer_a_level, prog.organ.layer_a_level_morph),
+            (prog.organ.layer_b_level, prog.organ.layer_b_level_morph),
+            (prog.piano.layer_a.level, prog.piano.layer_a.level_morph),
+            (prog.piano.layer_b.level, prog.piano.layer_b.level_morph),
+            (prog.synth.layer_a.level, prog.synth.layer_a.level_morph),
+            (prog.synth.layer_b.level, prog.synth.layer_b.level_morph),
+            (prog.synth.layer_c.level, prog.synth.layer_c.level_morph),
+        ];
+        for (slot, (lvl, morph)) in self.layer_levels.iter_mut().zip(level_specs) {
+            slot.base = lvl.clamp(0.0, 1.0);
+            slot.delta_wheel = morph.wheel;
+            slot.delta_aftertouch = morph.aftertouch;
+            slot.delta_pedal = morph.ctrl_pedal;
         }
+    }
 
-        // Guard against bitstream header bytes decoding as HighPass > 5 kHz (which mutes audible notes)
-        if self.synth_a.filter_model == crate::synth::FilterModel::HighPass
-            && self.synth_a.cutoff_hz > 5000.0
-        {
-            self.synth_a.filter_model = crate::synth::FilterModel::Lp24;
-            self.synth_a.cutoff_hz = match prog.category_id {
-                0x2C => 750.0,  // Synth Bass
-                0x2E => 1900.0, // Synth Pad
-                _ => 4200.0,    // Lead / Poly / Arp
-            };
-            self.synth_a.resonance = 0.25;
+    fn apply_synth_layer(
+        synth: &mut SynthLayer,
+        cutoff_morph: &mut MorphParameter,
+        dec: &crate::cbin::SynthLayerDecoded,
+    ) {
+        let ctrl_norm = (dec.detune / 10.0).clamp(0.0, 1.0);
+        synth.osc_mode = dec.osc_mode;
+        synth.waveform = dec.waveform;
+        synth.fm_amount = ctrl_norm;
+        synth.supersaw_detune = ctrl_norm;
+        synth.pulse_width = 0.5 - ctrl_norm * 0.45;
+        synth.wavetable_position = ctrl_norm;
+        synth.filter_model = dec.filter_model;
+        synth.cutoff_hz = dec.filter_cutoff_hz;
+        synth.resonance = dec.filter_resonance;
+        synth.filter_drive = dec.filter_drive;
+        synth.attack_sec = (dec.env_attack_ms / 1000.0).clamp(0.0005, 10.0);
+        synth.decay_sec = (dec.env_decay_ms / 1000.0).clamp(0.005, 15.0);
+        synth.sustain_level = if dec.env_decay_ms >= 9999.0 { 1.0 } else { 0.6 };
+        synth.release_sec = (dec.env_release_ms / 1000.0).clamp(0.002, 10.0);
+        synth.lfo_rate_hz = dec.lfo_rate_hz;
+        synth.lfo_amount = dec.lfo_amount;
+        synth.arp_mode = if dec.arp_enabled {
+            crate::synth::ArpMode::Up
+        } else {
+            crate::synth::ArpMode::Off
+        };
+        synth.arp_rate_bpm = dec.arp_bpm;
+
+        let cut_base =
+            ((dec.filter_cutoff_hz.max(80.0) / 80.0).ln() / 200.0f32.ln()).clamp(0.0, 1.0);
+        cutoff_morph.base = cut_base;
+        cutoff_morph.delta_wheel = dec.filter_cutoff_morph.wheel;
+        cutoff_morph.delta_aftertouch = dec.filter_cutoff_morph.aftertouch;
+        cutoff_morph.delta_pedal = dec.filter_cutoff_morph.ctrl_pedal;
+    }
+
+    fn apply_fx_chain(fx: &mut LayerFxChain, dec: &crate::cbin::FxDecoded) {
+        fx.mod1_type = dec.mod1_type();
+        fx.mod1_rate_hz = 0.1 + dec.mod1_rate.clamp(0.0, 1.0) * 14.9;
+        fx.mod1_amount = if dec.mod1_enabled {
+            dec.mod1_amount.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        fx.mod2_type = dec.mod2_type();
+        fx.mod2_rate_hz = 0.1 + dec.mod2_rate.clamp(0.0, 1.0) * 9.9;
+        fx.mod2_amount = if dec.mod2_enabled {
+            dec.mod2_amount.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        if dec.amp_enabled {
+            fx.drive_amount = (dec.amp_drive / 10.0).clamp(0.0, 1.0);
+            fx.eq_bass_db = dec.eq_bass_db;
+            fx.eq_mid_db = dec.eq_mid_db;
+            fx.eq_mid_freq_hz = dec.eq_mid_freq_hz();
+            fx.eq_treble_db = dec.eq_treble_db;
+        } else {
+            fx.drive_amount = 0.0;
+            fx.eq_bass_db = 0.0;
+            fx.eq_mid_db = 0.0;
+            fx.eq_treble_db = 0.0;
         }
+        fx.delay_enabled = dec.delay_enabled;
+        fx.delay_feedback = dec.delay_feedback.clamp(0.0, 0.95);
+        fx.delay_mix = if dec.delay_enabled {
+            dec.delay_mix.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        fx.reverb_model = dec.reverb_model();
+        fx.reverb_mix = if dec.reverb_enabled {
+            dec.reverb_amount.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
     }
 
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
@@ -512,6 +569,54 @@ mod tests {
         engine.apply_program(&organ_prog);
         assert_ne!(engine.scene.scene_1_mask & (1 << 0), 0);
         assert_eq!(engine.organ_a.model, crate::organ::OrganModel::Farfisa);
+    }
+
+    #[test]
+    fn test_engine_apply_program_wires_fx_morph_and_preserves_highpass() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut prog = crate::cbin::ProgramDecoded::default();
+        prog.organ.vibrato_on = true;
+        prog.organ.vibrato_type = 5; // C3
+        prog.organ.rotary_enabled = false;
+        prog.organ.fx.mod2_enabled = true;
+        prog.organ.fx.mod2_type_raw = 0; // Phaser
+        prog.organ.fx.mod2_amount = 0.6;
+        prog.organ.fx.amp_enabled = true;
+        prog.organ.fx.eq_mid_db = -4.0;
+
+        prog.synth.layer_a.filter_model = crate::synth::FilterModel::HighPass;
+        prog.synth.layer_a.filter_cutoff_hz = 6500.0;
+        prog.synth.layer_a.filter_cutoff_morph.wheel = 0.25;
+        prog.synth.layer_a.level = 0.0;
+        prog.synth.layer_a.level_morph.wheel = 0.85;
+        prog.synth.fx_a.reverb_enabled = true;
+        prog.synth.fx_a.reverb_type_raw = 4; // Hall
+        prog.synth.fx_a.reverb_amount = 0.45;
+        prog.synth.fx_a.delay_enabled = true;
+        prog.synth.fx_a.delay_mix = 0.35;
+
+        engine.apply_program(&prog);
+
+        assert_eq!(engine.organ_a.scanner_mode, crate::organ::ScannerMode::C3);
+        assert!(!engine.organ_a.rotary_enabled);
+        assert_eq!(engine.fx_chains[0].mod2_type, crate::fx::Mod2Type::Phaser);
+        assert!((engine.fx_chains[0].eq_mid_db + 4.0).abs() < 1e-4);
+
+        assert_eq!(
+            engine.synth_a.filter_model,
+            crate::synth::FilterModel::HighPass
+        );
+        assert_eq!(engine.synth_a.cutoff_hz, 6500.0);
+        assert!((engine.synth_cutoff_morph[0].delta_wheel - 0.25).abs() < 1e-4);
+        assert_eq!(engine.layer_levels[4].base, 0.0);
+        assert!((engine.layer_levels[4].delta_wheel - 0.85).abs() < 1e-4);
+        assert_eq!(
+            engine.fx_chains[4].reverb_model,
+            crate::fx::ReverbModel::Hall
+        );
+        assert!((engine.fx_chains[4].reverb_mix - 0.45).abs() < 1e-4);
+        assert!(engine.fx_chains[4].delay_enabled);
+        assert!((engine.fx_chains[4].delay_mix - 0.35).abs() < 1e-4);
     }
 
     #[test]

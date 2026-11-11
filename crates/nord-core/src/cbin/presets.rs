@@ -1,62 +1,334 @@
-//! Decoded Organ / Piano / Synth / Global / Program bitstream structures.
+//! Decoded Organ / Piano / Synth / FX / Global / Program bitstream structures.
+//!
+//! All bit offsets and morph encodings (`W`-bit base + three `(W+1)`-bit
+//! Wheel/Aftertouch/Control-Pedal deltas with zero sentinel `max_val`) match
+//! Nord Stage 4 OS v1.66 `Buffer_*` serialization and verified factory `.ns4b` presets.
 
 use super::bitstream::{BitReader, BitWriter};
 use super::container::{CbinError, CbinFile, CbinHeader, CbinKind};
+use crate::fx::{Mod1Type, Mod2Type, ReverbModel};
 use crate::morph::CrossfadeWidth;
-use crate::organ::{OrganModel, RotarySpeed};
+use crate::organ::{OrganModel, RotarySpeed, ScannerMode};
 use crate::piano::{PianoCategory, PianoTimbre, VelocityTouch};
 use crate::synth::{FilterModel, SynthOscMode, VaWaveform};
 use serde::{Deserialize, Serialize};
 
-/// Decoded Organ section configuration across Layer A and Layer B.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct OrganPresetDecoded {
-    pub model: OrganModel,
-    pub percussion_on: bool,
-    pub percussion_soft: bool,
-    pub percussion_fast: bool,
-    pub percussion_third: bool,
-    pub vibrato_on: bool,
-    pub vibrato_type: u8,
-    pub rotary_speed: RotarySpeed,
-    pub rotary_drive: f32,
-    pub layer_a_enabled: bool,
-    pub layer_a_level: f32,
-    pub layer_a_octave: i8,
-    pub drawbars_a: [u8; 9],
-    pub layer_b_enabled: bool,
-    pub layer_b_level: f32,
-    pub layer_b_octave: i8,
-    pub drawbars_b: [u8; 9],
+const SPLIT_NOTE_TABLE: [u8; 10] = [41, 48, 53, 60, 65, 72, 77, 84, 89, 96];
+
+/// Normalized (`-1.0..=1.0`) Morph deltas for `[ModWheel, Aftertouch, CtrlPedal]`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct MorphDeltas {
+    pub wheel: f32,
+    pub aftertouch: f32,
+    pub ctrl_pedal: f32,
 }
 
-impl Default for OrganPresetDecoded {
+impl MorphDeltas {
+    pub fn is_zero(self) -> bool {
+        self.wheel.abs() < 1e-4 && self.aftertouch.abs() < 1e-4 && self.ctrl_pedal.abs() < 1e-4
+    }
+}
+
+fn decode_signed(raw: u32, bits: usize) -> i32 {
+    let sign_bit = 1u32 << (bits - 1);
+    let mask = (1u32 << bits) - 1;
+    let masked = raw & mask;
+    if (masked & sign_bit) != 0 {
+        (masked as i32) - ((1u32 << bits) as i32)
+    } else {
+        masked as i32
+    }
+}
+
+fn encode_signed(val: i32, bits: usize) -> u32 {
+    let mask = (1u32 << bits) - 1;
+    (val as u32) & mask
+}
+
+fn read_morph(
+    r: &mut BitReader,
+    bit_pos: usize,
+    width: usize,
+    max_val: u32,
+) -> Result<(u32, MorphDeltas), CbinError> {
+    r.set_bit_pos(bit_pos)?;
+    let base = r.read_bits(width)?;
+    let max_i = max_val as i32;
+    let max_f = max_val as f32;
+    let w = (r.read_bits(width + 1)? as i32 - max_i) as f32 / max_f;
+    let at = (r.read_bits(width + 1)? as i32 - max_i) as f32 / max_f;
+    let cp = (r.read_bits(width + 1)? as i32 - max_i) as f32 / max_f;
+    Ok((
+        base,
+        MorphDeltas {
+            wheel: w,
+            aftertouch: at,
+            ctrl_pedal: cp,
+        },
+    ))
+}
+
+fn write_morph(
+    w_out: &mut BitWriter,
+    bit_pos: usize,
+    base: u32,
+    deltas: MorphDeltas,
+    width: usize,
+    max_val: u32,
+) -> Result<(), CbinError> {
+    w_out.set_bit_pos(bit_pos)?;
+    w_out.write_bits(base.min(max_val), width)?;
+    let max_i = max_val as i32;
+    let max_f = max_val as f32;
+    for d in [deltas.wheel, deltas.aftertouch, deltas.ctrl_pedal] {
+        let raw = (max_i + (d * max_f).round() as i32).clamp(0, max_i * 2) as u32;
+        w_out.write_bits(raw, width + 1)?;
+    }
+    Ok(())
+}
+
+fn prepare_buffer(raw_payload: &[u8], expected_len: usize, block_tag: u8) -> Vec<u8> {
+    if raw_payload.len() >= expected_len {
+        let mut out = raw_payload[..expected_len].to_vec();
+        out[0] = block_tag;
+        out
+    } else {
+        let mut out = vec![0u8; expected_len];
+        out[0] = block_tag;
+        out
+    }
+}
+
+fn norm7_to_ms(norm: f32, min_ms: f32, span_ratio: f32) -> f32 {
+    min_ms * span_ratio.powf(norm.clamp(0.0, 1.0))
+}
+
+fn ms_to_norm7(ms: f32, min_ms: f32, span_ratio: f32) -> f32 {
+    ((ms.max(min_ms) / min_ms).ln() / span_ratio.ln()).clamp(0.0, 1.0)
+}
+
+fn cutoff_norm_to_hz(norm: f32) -> f32 {
+    80.0 * 200.0f32.powf(norm.clamp(0.0, 1.0))
+}
+
+fn cutoff_hz_to_norm(hz: f32) -> f32 {
+    ((hz.max(80.0) / 80.0).ln() / 200.0f32.ln()).clamp(0.0, 1.0)
+}
+
+fn split_idx_to_midi(idx: u32) -> u8 {
+    SPLIT_NOTE_TABLE[(idx as usize).min(SPLIT_NOTE_TABLE.len() - 1)]
+}
+
+fn midi_to_split_idx(midi: u8) -> u32 {
+    SPLIT_NOTE_TABLE
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, &n)| n.abs_diff(midi))
+        .map_or(4, |(idx, _)| idx as u32)
+}
+
+/// Decoded hardware per-layer FX chain block (`0x36`, 55 bytes = 440 bits).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FxDecoded {
+    pub mod1_enabled: bool,
+    pub mod1_clock_sync: bool,
+    pub mod1_type_raw: u8,
+    pub mod1_rate: f32,
+    pub mod1_rate_morph: MorphDeltas,
+    pub mod1_amount: f32,
+    pub mod1_amount_morph: MorphDeltas,
+    pub mod2_enabled: bool,
+    pub mod2_type_raw: u8,
+    pub mod2_rate: f32,
+    pub mod2_rate_morph: MorphDeltas,
+    pub mod2_amount: f32,
+    pub mod2_amount_morph: MorphDeltas,
+    pub amp_enabled: bool,
+    pub amp_type_new: u16,
+    pub eq_treble_db: f32,
+    pub eq_mid_db: f32,
+    pub eq_bass_db: f32,
+    pub eq_mid_freq_norm: f32,
+    pub eq_mid_freq_morph: MorphDeltas,
+    pub amp_drive: f32,
+    pub amp_drive_morph: MorphDeltas,
+    pub comp_enabled: bool,
+    pub comp_amount: f32,
+    pub comp_fast: bool,
+    pub delay_enabled: bool,
+    pub delay_clock_sync: bool,
+    pub delay_rate_norm: f32,
+    pub delay_rate_morph: MorphDeltas,
+    pub delay_mix: f32,
+    pub delay_mix_morph: MorphDeltas,
+    pub delay_mode: u8,
+    pub delay_ping_pong: bool,
+    pub delay_fb_filter: bool,
+    pub delay_feedback: f32,
+    pub delay_feedback_morph: MorphDeltas,
+    pub delay_fb_fx_type: u8,
+    pub reverb_enabled: bool,
+    pub reverb_type_raw: u8,
+    pub reverb_color: u8,
+    pub reverb_amount: f32,
+    pub reverb_amount_morph: MorphDeltas,
+    #[serde(skip)]
+    raw_payload: Vec<u8>,
+}
+
+impl Default for FxDecoded {
     fn default() -> Self {
         Self {
-            model: OrganModel::B3,
-            percussion_on: false,
-            percussion_soft: false,
-            percussion_fast: false,
-            percussion_third: false,
-            vibrato_on: false,
-            vibrato_type: 0,
-            rotary_speed: RotarySpeed::Slow,
-            rotary_drive: 0.0,
-            layer_a_enabled: true,
-            layer_a_level: 0.8,
-            layer_a_octave: 0,
-            drawbars_a: [8, 8, 8, 0, 0, 0, 0, 0, 0],
-            layer_b_enabled: false,
-            layer_b_level: 0.8,
-            layer_b_octave: 0,
-            drawbars_b: [8, 8, 8, 8, 8, 8, 8, 8, 8],
+            mod1_enabled: false,
+            mod1_clock_sync: false,
+            mod1_type_raw: 0,
+            mod1_rate: 0.4,
+            mod1_rate_morph: MorphDeltas::default(),
+            mod1_amount: 0.5,
+            mod1_amount_morph: MorphDeltas::default(),
+            mod2_enabled: false,
+            mod2_type_raw: 4, // Chorus Analog
+            mod2_rate: 0.3,
+            mod2_rate_morph: MorphDeltas::default(),
+            mod2_amount: 0.4,
+            mod2_amount_morph: MorphDeltas::default(),
+            amp_enabled: false,
+            amp_type_new: 0,
+            eq_treble_db: 0.0,
+            eq_mid_db: 0.0,
+            eq_bass_db: 0.0,
+            eq_mid_freq_norm: 64.0 / 127.0,
+            eq_mid_freq_morph: MorphDeltas::default(),
+            amp_drive: 0.0,
+            amp_drive_morph: MorphDeltas::default(),
+            comp_enabled: false,
+            comp_amount: 0.0,
+            comp_fast: false,
+            delay_enabled: false,
+            delay_clock_sync: false,
+            delay_rate_norm: 0.25,
+            delay_rate_morph: MorphDeltas::default(),
+            delay_mix: 0.0,
+            delay_mix_morph: MorphDeltas::default(),
+            delay_mode: 0,
+            delay_ping_pong: false,
+            delay_fb_filter: false,
+            delay_feedback: 0.3,
+            delay_feedback_morph: MorphDeltas::default(),
+            delay_fb_fx_type: 0,
+            reverb_enabled: false,
+            reverb_type_raw: 3, // Stage
+            reverb_color: 0,
+            reverb_amount: 0.0,
+            reverb_amount_morph: MorphDeltas::default(),
+            raw_payload: Vec::new(),
         }
     }
 }
 
-impl OrganPresetDecoded {
-    pub const SIGNATURE_PREFIX: [u8; 9] = [0x11, 0x27, 0xFB, 0xFB, 0xFB, 0xFF, 0xF7, 0xF7, 0xF7];
-    pub const PAYLOAD_LEN: usize = 135;
+impl PartialEq for FxDecoded {
+    fn eq(&self, other: &Self) -> bool {
+        self.mod1_enabled == other.mod1_enabled
+            && self.mod1_clock_sync == other.mod1_clock_sync
+            && self.mod1_type_raw == other.mod1_type_raw
+            && self.mod1_rate == other.mod1_rate
+            && self.mod1_rate_morph == other.mod1_rate_morph
+            && self.mod1_amount == other.mod1_amount
+            && self.mod1_amount_morph == other.mod1_amount_morph
+            && self.mod2_enabled == other.mod2_enabled
+            && self.mod2_type_raw == other.mod2_type_raw
+            && self.mod2_rate == other.mod2_rate
+            && self.mod2_rate_morph == other.mod2_rate_morph
+            && self.mod2_amount == other.mod2_amount
+            && self.mod2_amount_morph == other.mod2_amount_morph
+            && self.amp_enabled == other.amp_enabled
+            && self.amp_type_new == other.amp_type_new
+            && self.eq_treble_db == other.eq_treble_db
+            && self.eq_mid_db == other.eq_mid_db
+            && self.eq_bass_db == other.eq_bass_db
+            && self.eq_mid_freq_norm == other.eq_mid_freq_norm
+            && self.eq_mid_freq_morph == other.eq_mid_freq_morph
+            && self.amp_drive == other.amp_drive
+            && self.amp_drive_morph == other.amp_drive_morph
+            && self.comp_enabled == other.comp_enabled
+            && self.comp_amount == other.comp_amount
+            && self.comp_fast == other.comp_fast
+            && self.delay_enabled == other.delay_enabled
+            && self.delay_clock_sync == other.delay_clock_sync
+            && self.delay_rate_norm == other.delay_rate_norm
+            && self.delay_rate_morph == other.delay_rate_morph
+            && self.delay_mix == other.delay_mix
+            && self.delay_mix_morph == other.delay_mix_morph
+            && self.delay_mode == other.delay_mode
+            && self.delay_ping_pong == other.delay_ping_pong
+            && self.delay_fb_filter == other.delay_fb_filter
+            && self.delay_feedback == other.delay_feedback
+            && self.delay_feedback_morph == other.delay_feedback_morph
+            && self.delay_fb_fx_type == other.delay_fb_fx_type
+            && self.reverb_enabled == other.reverb_enabled
+            && self.reverb_type_raw == other.reverb_type_raw
+            && self.reverb_color == other.reverb_color
+            && self.reverb_amount == other.reverb_amount
+            && self.reverb_amount_morph == other.reverb_amount_morph
+    }
+}
+
+impl FxDecoded {
+    pub const BLOCK_TAG: u8 = 0x36;
+    pub const PAYLOAD_LEN: usize = 55;
+
+    /// Maps hardware `Edt_Effects_kFx1Type` (0..=11) into `Mod1Type`.
+    pub fn mod1_type(&self) -> Mod1Type {
+        if !self.mod1_enabled {
+            return Mod1Type::Off;
+        }
+        match self.mod1_type_raw {
+            0 | 1 => Mod1Type::AutoPan,
+            2 | 3 | 10 | 11 => Mod1Type::Tremolo,
+            4 | 5 => Mod1Type::RingMod,
+            6..=9 => Mod1Type::Wah,
+            _ => Mod1Type::Tremolo,
+        }
+    }
+
+    /// Maps hardware `Edt_Effects_kFx2Type` (0..=11) into `Mod2Type`.
+    pub fn mod2_type(&self) -> Mod2Type {
+        if !self.mod2_enabled {
+            return Mod2Type::Off;
+        }
+        match self.mod2_type_raw {
+            0 | 1 => Mod2Type::Phaser,
+            2 | 3 => Mod2Type::Flanger,
+            4 | 7 | 8 => Mod2Type::Chorus,
+            5 | 6 | 9..=11 => Mod2Type::Vibe,
+            _ => Mod2Type::Chorus,
+        }
+    }
+
+    /// Maps hardware `Edt_Effects_kRvbType` (0..=5) into `ReverbModel`.
+    pub fn reverb_model(&self) -> ReverbModel {
+        if !self.reverb_enabled {
+            return ReverbModel::Off;
+        }
+        match self.reverb_type_raw {
+            0 | 1 => ReverbModel::Booth,
+            2 => ReverbModel::Room,
+            3 => ReverbModel::Stage,
+            4 => ReverbModel::Hall,
+            5 => ReverbModel::Cathedral,
+            _ => ReverbModel::Stage,
+        }
+    }
+
+    /// Computes EQ Mid center frequency in Hz (`200..8000 Hz`).
+    pub fn eq_mid_freq_hz(&self) -> f32 {
+        200.0 * 40.0f32.powf(self.eq_mid_freq_norm.clamp(0.0, 1.0))
+    }
+
+    /// Computes Delay time in milliseconds (`20..2000 ms`).
+    pub fn delay_time_ms(&self) -> f32 {
+        20.0 + self.delay_rate_norm.clamp(0.0, 1.0) * 1980.0
+    }
 
     pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
         if slice.len() < Self::PAYLOAD_LEN {
@@ -65,134 +337,609 @@ impl OrganPresetDecoded {
                 min: Self::PAYLOAD_LEN,
             });
         }
-        let mut r = BitReader::new(slice);
-        // Skip first 9 signature bytes = 72 bits
+        let mut r = BitReader::new(&slice[..Self::PAYLOAD_LEN]);
+        r.set_bit_pos(8)?;
+
+        let mod1_enabled = r.read_bool()?;
+        let mod1_clock_sync = r.read_bool()?;
+        let (mod1_rate_raw, mod1_rate_morph) = read_morph(&mut r, 10, 7, 127)?;
+        let (mod1_amt_raw, mod1_amount_morph) = read_morph(&mut r, 41, 7, 127)?;
         r.set_bit_pos(72)?;
+        let mod1_type_raw = r.read_bits(4)? as u8;
 
-        let model_idx = r.read_bits(3)?;
-        let model = match model_idx {
-            0 => OrganModel::B3,
-            1 => OrganModel::Vox,
-            2 => OrganModel::Farfisa,
-            3 => OrganModel::Pipe1,
-            _ => OrganModel::Pipe2,
-        };
-        let percussion_on = r.read_bool()?;
-        let percussion_soft = r.read_bool()?;
-        let percussion_fast = r.read_bool()?;
-        let percussion_third = r.read_bool()?;
-        let vibrato_on = r.read_bool()?;
-        let vibrato_type = (r.read_bits(3)? as u8).min(5);
-        let speed_idx = r.read_bits(2)?;
-        let rotary_speed = match speed_idx {
-            0 => RotarySpeed::Stop,
-            1 => RotarySpeed::Slow,
-            _ => RotarySpeed::Fast,
-        };
-        let rotary_drive = (r.read_bits(7)? as f32 / 127.0) * 10.0;
+        let mod2_enabled = r.read_bool()?;
+        let (mod2_rate_raw, mod2_rate_morph) = read_morph(&mut r, 77, 7, 127)?;
+        let (mod2_amt_raw, mod2_amount_morph) = read_morph(&mut r, 108, 7, 127)?;
+        r.set_bit_pos(139)?;
+        let mod2_type_raw = r.read_bits(4)? as u8;
 
-        let layer_a_enabled = r.read_bool()?;
-        let layer_a_level = r.read_bits(7)? as f32 / 127.0;
-        let layer_a_octave = (r.read_bits(3)? as i8) - 2;
-        let mut drawbars_a = [0u8; 9];
-        for db in &mut drawbars_a {
-            *db = (r.read_bits(4)? as u8).min(8);
-        }
+        let amp_enabled = r.read_bool()?;
+        let eq_treble_db = decode_signed(r.read_bits(7)?, 7) as f32 * 0.25;
+        let eq_mid_db = decode_signed(r.read_bits(7)?, 7) as f32 * 0.25;
+        let eq_bass_db = decode_signed(r.read_bits(7)?, 7) as f32 * 0.25;
+        let (eq_mid_freq_raw, eq_mid_freq_morph) = read_morph(&mut r, 165, 7, 127)?;
+        let (amp_drive_raw, amp_drive_morph) = read_morph(&mut r, 196, 7, 127)?;
 
-        let layer_b_enabled = r.read_bool()?;
-        let layer_b_level = r.read_bits(7)? as f32 / 127.0;
-        let layer_b_octave = (r.read_bits(3)? as i8) - 2;
-        let mut drawbars_b = [0u8; 9];
-        for db in &mut drawbars_b {
-            *db = (r.read_bits(4)? as u8).min(8);
-        }
+        r.set_bit_pos(231)?;
+        let comp_enabled = r.read_bool()?;
+        let comp_amount = r.read_bits(7)? as f32 / 127.0;
+        let comp_fast = r.read_bool()?;
+
+        let delay_enabled = r.read_bool()?;
+        let delay_clock_sync = r.read_bool()?;
+        let (dly_rate_raw, delay_rate_morph) = read_morph(&mut r, 242, 14, 16383)?;
+        let (dly_mix_raw, delay_mix_morph) = read_morph(&mut r, 301, 7, 127)?;
+        r.set_bit_pos(332)?;
+        let delay_mode = r.read_bits(2)? as u8;
+        let delay_ping_pong = r.read_bool()?;
+        let delay_fb_filter = r.read_bool()?;
+        let (dly_fb_raw, delay_feedback_morph) = read_morph(&mut r, 336, 7, 127)?;
+        r.set_bit_pos(367)?;
+        let delay_fb_fx_type = r.read_bits(4)? as u8;
+
+        let reverb_enabled = r.read_bool()?;
+        let (rvb_amt_raw, reverb_amount_morph) = read_morph(&mut r, 372, 7, 127)?;
+        r.set_bit_pos(403)?;
+        let reverb_color = r.read_bits(2)? as u8;
+        let reverb_type_raw = r.read_bits(3)? as u8;
+        let amp_type_new = r.read_bits(9)? as u16;
 
         Ok(Self {
-            model,
-            percussion_on,
-            percussion_soft,
-            percussion_fast,
-            percussion_third,
-            vibrato_on,
-            vibrato_type,
-            rotary_speed,
-            rotary_drive,
-            layer_a_enabled,
-            layer_a_level,
-            layer_a_octave,
-            drawbars_a,
-            layer_b_enabled,
-            layer_b_level,
-            layer_b_octave,
-            drawbars_b,
+            mod1_enabled,
+            mod1_clock_sync,
+            mod1_type_raw,
+            mod1_rate: mod1_rate_raw as f32 / 127.0,
+            mod1_rate_morph,
+            mod1_amount: mod1_amt_raw as f32 / 127.0,
+            mod1_amount_morph,
+            mod2_enabled,
+            mod2_type_raw,
+            mod2_rate: mod2_rate_raw as f32 / 127.0,
+            mod2_rate_morph,
+            mod2_amount: mod2_amt_raw as f32 / 127.0,
+            mod2_amount_morph,
+            amp_enabled,
+            amp_type_new,
+            eq_treble_db,
+            eq_mid_db,
+            eq_bass_db,
+            eq_mid_freq_norm: eq_mid_freq_raw as f32 / 127.0,
+            eq_mid_freq_morph,
+            amp_drive: (amp_drive_raw as f32 / 127.0) * 10.0,
+            amp_drive_morph,
+            comp_enabled,
+            comp_amount,
+            comp_fast,
+            delay_enabled,
+            delay_clock_sync,
+            delay_rate_norm: dly_rate_raw as f32 / 16383.0,
+            delay_rate_morph,
+            delay_mix: dly_mix_raw as f32 / 127.0,
+            delay_mix_morph,
+            delay_mode,
+            delay_ping_pong,
+            delay_fb_filter,
+            delay_feedback: dly_fb_raw as f32 / 127.0,
+            delay_feedback_morph,
+            delay_fb_fx_type,
+            reverb_enabled,
+            reverb_type_raw,
+            reverb_color,
+            reverb_amount: rvb_amt_raw as f32 / 127.0,
+            reverb_amount_morph,
+            raw_payload: slice[..Self::PAYLOAD_LEN].to_vec(),
         })
     }
 
     pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
-
+        let mut out = prepare_buffer(&self.raw_payload, Self::PAYLOAD_LEN, Self::BLOCK_TAG);
         let mut w = BitWriter::new(&mut out);
+
+        w.set_bit_pos(8)?;
+        w.write_bool(self.mod1_enabled)?;
+        w.write_bool(self.mod1_clock_sync)?;
+        write_morph(
+            &mut w,
+            10,
+            (self.mod1_rate.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.mod1_rate_morph,
+            7,
+            127,
+        )?;
+        write_morph(
+            &mut w,
+            41,
+            (self.mod1_amount.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.mod1_amount_morph,
+            7,
+            127,
+        )?;
         w.set_bit_pos(72)?;
+        w.write_bits(u32::from(self.mod1_type_raw & 0x0F), 4)?;
 
-        let model_idx = match self.model {
-            OrganModel::B3 => 0,
-            OrganModel::Vox => 1,
-            OrganModel::Farfisa => 2,
-            OrganModel::Pipe1 => 3,
-            OrganModel::Pipe2 => 4,
-        };
-        w.write_bits(model_idx, 3)?;
-        w.write_bool(self.percussion_on)?;
-        w.write_bool(self.percussion_soft)?;
-        w.write_bool(self.percussion_fast)?;
-        w.write_bool(self.percussion_third)?;
-        w.write_bool(self.vibrato_on)?;
-        w.write_bits(u32::from(self.vibrato_type & 0x07), 3)?;
-        let speed_idx = match self.rotary_speed {
-            RotarySpeed::Stop => 0,
-            RotarySpeed::Slow => 1,
-            RotarySpeed::Fast => 2,
-        };
-        w.write_bits(speed_idx, 2)?;
-        let drive_bits = ((self.rotary_drive / 10.0).clamp(0.0, 1.0) * 127.0).round() as u32;
-        w.write_bits(drive_bits, 7)?;
+        w.write_bool(self.mod2_enabled)?;
+        write_morph(
+            &mut w,
+            77,
+            (self.mod2_rate.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.mod2_rate_morph,
+            7,
+            127,
+        )?;
+        write_morph(
+            &mut w,
+            108,
+            (self.mod2_amount.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.mod2_amount_morph,
+            7,
+            127,
+        )?;
+        w.set_bit_pos(139)?;
+        w.write_bits(u32::from(self.mod2_type_raw & 0x0F), 4)?;
 
-        w.write_bool(self.layer_a_enabled)?;
+        w.write_bool(self.amp_enabled)?;
         w.write_bits(
-            (self.layer_a_level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            encode_signed(
+                (self.eq_treble_db * 4.0).round().clamp(-60.0, 60.0) as i32,
+                7,
+            ),
             7,
         )?;
-        w.write_bits((self.layer_a_octave + 2).clamp(0, 4) as u32, 3)?;
-        for &db in &self.drawbars_a {
-            w.write_bits(u32::from(db.min(8)), 4)?;
-        }
-
-        w.write_bool(self.layer_b_enabled)?;
         w.write_bits(
-            (self.layer_b_level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            encode_signed((self.eq_mid_db * 4.0).round().clamp(-60.0, 60.0) as i32, 7),
             7,
         )?;
-        w.write_bits((self.layer_b_octave + 2).clamp(0, 4) as u32, 3)?;
-        for &db in &self.drawbars_b {
-            w.write_bits(u32::from(db.min(8)), 4)?;
-        }
+        w.write_bits(
+            encode_signed((self.eq_bass_db * 4.0).round().clamp(-60.0, 60.0) as i32, 7),
+            7,
+        )?;
+        write_morph(
+            &mut w,
+            165,
+            (self.eq_mid_freq_norm.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.eq_mid_freq_morph,
+            7,
+            127,
+        )?;
+        write_morph(
+            &mut w,
+            196,
+            ((self.amp_drive / 10.0).clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.amp_drive_morph,
+            7,
+            127,
+        )?;
+
+        w.set_bit_pos(231)?;
+        w.write_bool(self.comp_enabled)?;
+        w.write_bits((self.comp_amount.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
+        w.write_bool(self.comp_fast)?;
+
+        w.write_bool(self.delay_enabled)?;
+        w.write_bool(self.delay_clock_sync)?;
+        write_morph(
+            &mut w,
+            242,
+            (self.delay_rate_norm.clamp(0.0, 1.0) * 16383.0).round() as u32,
+            self.delay_rate_morph,
+            14,
+            16383,
+        )?;
+        write_morph(
+            &mut w,
+            301,
+            (self.delay_mix.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.delay_mix_morph,
+            7,
+            127,
+        )?;
+        w.set_bit_pos(332)?;
+        w.write_bits(u32::from(self.delay_mode & 0x03), 2)?;
+        w.write_bool(self.delay_ping_pong)?;
+        w.write_bool(self.delay_fb_filter)?;
+        write_morph(
+            &mut w,
+            336,
+            (self.delay_feedback.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.delay_feedback_morph,
+            7,
+            127,
+        )?;
+        w.set_bit_pos(367)?;
+        w.write_bits(u32::from(self.delay_fb_fx_type & 0x0F), 4)?;
+
+        w.write_bool(self.reverb_enabled)?;
+        write_morph(
+            &mut w,
+            372,
+            (self.reverb_amount.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.reverb_amount_morph,
+            7,
+            127,
+        )?;
+        w.set_bit_pos(403)?;
+        w.write_bits(u32::from(self.reverb_color & 0x03), 2)?;
+        w.write_bits(u32::from(self.reverb_type_raw & 0x07), 3)?;
+        w.write_bits(u32::from(self.amp_type_new & 0x01FF), 9)?;
 
         Ok(out)
     }
 }
 
-/// Decoded single Piano layer configuration.
+/// Decoded Organ section configuration across Layer A, Layer B, and shared FX (`0x11`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrganPresetDecoded {
+    pub model: OrganModel,
+    pub model_b: OrganModel,
+    pub percussion_on: bool,
+    pub percussion_soft: bool,
+    pub percussion_fast: bool,
+    pub percussion_third: bool,
+    pub vibrato_on: bool,
+    pub vibrato_on_b: bool,
+    pub vibrato_type: u8,
+    pub rotary_enabled: bool,
+    pub rotary_speed: RotarySpeed,
+    pub rotary_drive: f32,
+    pub layer_a_enabled: bool,
+    pub layer_a_level: f32,
+    pub layer_a_level_morph: MorphDeltas,
+    pub layer_a_octave: i8,
+    pub drawbars_a: [u8; 9],
+    pub drawbars_a_morph: [MorphDeltas; 9],
+    pub layer_b_enabled: bool,
+    pub layer_b_level: f32,
+    pub layer_b_level_morph: MorphDeltas,
+    pub layer_b_octave: i8,
+    pub drawbars_b: [u8; 9],
+    pub drawbars_b_morph: [MorphDeltas; 9],
+    pub enable_ii_mask: u8,
+    pub fx: FxDecoded,
+    #[serde(skip)]
+    raw_payload: Vec<u8>,
+}
+
+impl Default for OrganPresetDecoded {
+    fn default() -> Self {
+        Self {
+            model: OrganModel::B3,
+            model_b: OrganModel::B3,
+            percussion_on: false,
+            percussion_soft: false,
+            percussion_fast: false,
+            percussion_third: false,
+            vibrato_on: false,
+            vibrato_on_b: false,
+            vibrato_type: 5, // C3 default
+            rotary_enabled: true,
+            rotary_speed: RotarySpeed::Slow,
+            rotary_drive: 0.0,
+            layer_a_enabled: true,
+            layer_a_level: 0.8,
+            layer_a_level_morph: MorphDeltas::default(),
+            layer_a_octave: 0,
+            drawbars_a: [8, 8, 8, 0, 0, 0, 0, 0, 0],
+            drawbars_a_morph: [MorphDeltas::default(); 9],
+            layer_b_enabled: false,
+            layer_b_level: 0.8,
+            layer_b_level_morph: MorphDeltas::default(),
+            layer_b_octave: 0,
+            drawbars_b: [8, 8, 8, 8, 8, 8, 8, 8, 8],
+            drawbars_b_morph: [MorphDeltas::default(); 9],
+            enable_ii_mask: 0b01,
+            fx: FxDecoded::default(),
+            raw_payload: Vec::new(),
+        }
+    }
+}
+
+impl PartialEq for OrganPresetDecoded {
+    fn eq(&self, other: &Self) -> bool {
+        self.model == other.model
+            && self.model_b == other.model_b
+            && self.percussion_on == other.percussion_on
+            && self.percussion_soft == other.percussion_soft
+            && self.percussion_fast == other.percussion_fast
+            && self.percussion_third == other.percussion_third
+            && self.vibrato_on == other.vibrato_on
+            && self.vibrato_on_b == other.vibrato_on_b
+            && self.vibrato_type == other.vibrato_type
+            && self.rotary_enabled == other.rotary_enabled
+            && self.rotary_speed == other.rotary_speed
+            && self.rotary_drive == other.rotary_drive
+            && self.layer_a_enabled == other.layer_a_enabled
+            && self.layer_a_level == other.layer_a_level
+            && self.layer_a_level_morph == other.layer_a_level_morph
+            && self.layer_a_octave == other.layer_a_octave
+            && self.drawbars_a == other.drawbars_a
+            && self.drawbars_a_morph == other.drawbars_a_morph
+            && self.layer_b_enabled == other.layer_b_enabled
+            && self.layer_b_level == other.layer_b_level
+            && self.layer_b_level_morph == other.layer_b_level_morph
+            && self.layer_b_octave == other.layer_b_octave
+            && self.drawbars_b == other.drawbars_b
+            && self.drawbars_b_morph == other.drawbars_b_morph
+            && self.enable_ii_mask == other.enable_ii_mask
+            && self.fx == other.fx
+    }
+}
+
+struct OrganLayerRaw {
+    model: OrganModel,
+    octave: i8,
+    drawbars: [u8; 9],
+    drawbar_morphs: [MorphDeltas; 9],
+    vibrato_on: bool,
+    perc_on: bool,
+    perc_third: bool,
+    perc_fast: bool,
+    perc_soft: bool,
+}
+
+fn decode_organ_model(idx: u32) -> OrganModel {
+    match idx {
+        0 => OrganModel::B3,
+        1 => OrganModel::Vox,
+        2 => OrganModel::Farfisa,
+        3 => OrganModel::Pipe1,
+        _ => OrganModel::Pipe2,
+    }
+}
+
+fn encode_organ_model(model: OrganModel) -> u32 {
+    match model {
+        OrganModel::B3 => 0,
+        OrganModel::Vox => 1,
+        OrganModel::Farfisa => 2,
+        OrganModel::Pipe1 => 3,
+        OrganModel::Pipe2 => 4,
+    }
+}
+
+fn unpack_organ_layer_block(r: &mut BitReader, base: usize) -> Result<OrganLayerRaw, CbinError> {
+    r.set_bit_pos(base + 12)?;
+    let octave = decode_signed(r.read_bits(4)?, 4).clamp(-2, 2) as i8;
+    r.set_bit_pos(base + 17)?;
+    let model = decode_organ_model(r.read_bits(3)?);
+
+    let mut drawbars = [0u8; 9];
+    let mut drawbar_morphs = [MorphDeltas::default(); 9];
+    for i in 0..9 {
+        let (db, morph) = read_morph(r, base + 40 + i * 19, 4, 8)?;
+        drawbars[i] = (db as u8).min(8);
+        drawbar_morphs[i] = morph;
+    }
+
+    r.set_bit_pos(base + 232)?;
+    let vibrato_on = r.read_bool()?;
+    let perc_on = r.read_bool()?;
+    let perc_third = r.read_bool()?;
+    let perc_fast = r.read_bool()?;
+    let perc_soft = r.read_bool()?;
+
+    Ok(OrganLayerRaw {
+        model,
+        octave,
+        drawbars,
+        drawbar_morphs,
+        vibrato_on,
+        perc_on,
+        perc_third,
+        perc_fast,
+        perc_soft,
+    })
+}
+
+fn pack_organ_layer_block(
+    w: &mut BitWriter,
+    base: usize,
+    layer: &OrganLayerRaw,
+) -> Result<(), CbinError> {
+    w.set_bit_pos(base)?;
+    w.write_bits(0x03, 8)?;
+    w.set_bit_pos(base + 12)?;
+    w.write_bits(encode_signed(i32::from(layer.octave.clamp(-2, 2)), 4), 4)?;
+    w.set_bit_pos(base + 17)?;
+    w.write_bits(encode_organ_model(layer.model), 3)?;
+
+    for i in 0..9 {
+        write_morph(
+            w,
+            base + 40 + i * 19,
+            u32::from(layer.drawbars[i].min(8)),
+            layer.drawbar_morphs[i],
+            4,
+            8,
+        )?;
+    }
+
+    w.set_bit_pos(base + 232)?;
+    w.write_bool(layer.vibrato_on)?;
+    w.write_bool(layer.perc_on)?;
+    w.write_bool(layer.perc_third)?;
+    w.write_bool(layer.perc_fast)?;
+    w.write_bool(layer.perc_soft)?;
+    Ok(())
+}
+
+impl OrganPresetDecoded {
+    pub const BLOCK_TAG: u8 = 0x11;
+    pub const PAYLOAD_LEN: usize = 135;
+
+    /// Converts hardware `Edt_OrgCom_kVibratoTypeB3` (0..=5) to `ScannerMode`.
+    pub fn scanner_mode(&self, layer_vibrato_on: bool) -> ScannerMode {
+        if !layer_vibrato_on {
+            return ScannerMode::Off;
+        }
+        match self.vibrato_type {
+            0 => ScannerMode::V1,
+            1 => ScannerMode::C1,
+            2 => ScannerMode::V2,
+            3 => ScannerMode::C2,
+            4 => ScannerMode::V3,
+            _ => ScannerMode::C3,
+        }
+    }
+
+    pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
+        if slice.len() < Self::PAYLOAD_LEN {
+            return Err(CbinError::TooShort {
+                actual: slice.len(),
+                min: Self::PAYLOAD_LEN,
+            });
+        }
+        let mut r = BitReader::new(&slice[..Self::PAYLOAD_LEN]);
+        r.set_bit_pos(9)?;
+        let enable_i = r.read_bits(2)? as u8;
+        r.set_bit_pos(12)?;
+        let enable_ii_mask = r.read_bits(2)? as u8;
+
+        let (lvl_a_raw, layer_a_level_morph) = read_morph(&mut r, 14, 7, 127)?;
+        let (lvl_b_raw, layer_b_level_morph) = read_morph(&mut r, 45, 7, 127)?;
+
+        r.set_bit_pos(80)?;
+        let rotary_enabled = r.read_bool()?;
+        let leslie_bits = r.read_bits(2)?;
+        let rotary_speed = match leslie_bits {
+            0 | 2 => RotarySpeed::Stop,
+            1 => RotarySpeed::Slow,
+            _ => RotarySpeed::Fast,
+        };
+        r.set_bit_pos(92)?;
+        let rotary_drive = (r.read_bits(7)? as f32 / 127.0) * 10.0;
+        r.set_bit_pos(130)?;
+        let vibrato_type = (r.read_bits(3)? as u8).min(5);
+
+        let lay_a = unpack_organ_layer_block(&mut r, 144)?;
+        let lay_b = unpack_organ_layer_block(&mut r, 392)?;
+        let fx = FxDecoded::unpack(&slice[80..135])?;
+
+        Ok(Self {
+            model: lay_a.model,
+            model_b: lay_b.model,
+            percussion_on: lay_a.perc_on,
+            percussion_soft: lay_a.perc_soft,
+            percussion_fast: lay_a.perc_fast,
+            percussion_third: lay_a.perc_third,
+            vibrato_on: lay_a.vibrato_on,
+            vibrato_on_b: lay_b.vibrato_on,
+            vibrato_type,
+            rotary_enabled,
+            rotary_speed,
+            rotary_drive,
+            layer_a_enabled: (enable_i & 0x01) != 0,
+            layer_a_level: lvl_a_raw as f32 / 127.0,
+            layer_a_level_morph,
+            layer_a_octave: lay_a.octave,
+            drawbars_a: lay_a.drawbars,
+            drawbars_a_morph: lay_a.drawbar_morphs,
+            layer_b_enabled: (enable_i & 0x02) != 0,
+            layer_b_level: lvl_b_raw as f32 / 127.0,
+            layer_b_level_morph,
+            layer_b_octave: lay_b.octave,
+            drawbars_b: lay_b.drawbars,
+            drawbars_b_morph: lay_b.drawbar_morphs,
+            enable_ii_mask,
+            fx,
+            raw_payload: slice[..Self::PAYLOAD_LEN].to_vec(),
+        })
+    }
+
+    pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
+        let mut out = prepare_buffer(&self.raw_payload, Self::PAYLOAD_LEN, Self::BLOCK_TAG);
+        let mut w = BitWriter::new(&mut out);
+
+        let enable_i = (u32::from(self.layer_b_enabled) << 1) | u32::from(self.layer_a_enabled);
+        w.set_bit_pos(9)?;
+        w.write_bits(enable_i, 2)?;
+        w.set_bit_pos(12)?;
+        w.write_bits(u32::from(self.enable_ii_mask & 0x03), 2)?;
+
+        write_morph(
+            &mut w,
+            14,
+            (self.layer_a_level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.layer_a_level_morph,
+            7,
+            127,
+        )?;
+        write_morph(
+            &mut w,
+            45,
+            (self.layer_b_level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.layer_b_level_morph,
+            7,
+            127,
+        )?;
+
+        w.set_bit_pos(80)?;
+        w.write_bool(self.rotary_enabled)?;
+        let leslie_bits = match self.rotary_speed {
+            RotarySpeed::Stop => 0b00,
+            RotarySpeed::Slow => 0b01,
+            RotarySpeed::Fast => 0b11,
+        };
+        w.write_bits(leslie_bits, 2)?;
+        w.set_bit_pos(92)?;
+        w.write_bits(
+            ((self.rotary_drive / 10.0).clamp(0.0, 1.0) * 127.0).round() as u32,
+            7,
+        )?;
+        w.set_bit_pos(130)?;
+        w.write_bits(u32::from(self.vibrato_type.min(5)), 3)?;
+
+        pack_organ_layer_block(
+            &mut w,
+            144,
+            &OrganLayerRaw {
+                model: self.model,
+                octave: self.layer_a_octave,
+                drawbars: self.drawbars_a,
+                drawbar_morphs: self.drawbars_a_morph,
+                vibrato_on: self.vibrato_on,
+                perc_on: self.percussion_on,
+                perc_third: self.percussion_third,
+                perc_fast: self.percussion_fast,
+                perc_soft: self.percussion_soft,
+            },
+        )?;
+        pack_organ_layer_block(
+            &mut w,
+            392,
+            &OrganLayerRaw {
+                model: self.model_b,
+                octave: self.layer_b_octave,
+                drawbars: self.drawbars_b,
+                drawbar_morphs: self.drawbars_b_morph,
+                vibrato_on: self.vibrato_on_b,
+                perc_on: false,
+                perc_third: false,
+                perc_fast: false,
+                perc_soft: false,
+            },
+        )?;
+
+        let fx_bytes = self.fx.pack()?;
+        out[80..135].copy_from_slice(&fx_bytes);
+        Ok(out)
+    }
+}
+
+/// Decoded single Piano layer configuration (`0x0B`, 12 bytes = 96 bits).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PianoLayerDecoded {
     pub enabled: bool,
     pub level: f32,
+    pub level_morph: MorphDeltas,
     pub octave: i8,
     pub category: PianoCategory,
     pub model_id: u8,
+    pub variation: u8,
+    pub name_hash: u32,
     pub timbre: PianoTimbre,
     pub touch: VelocityTouch,
     pub string_res: bool,
+    pub acoustic_level: u8,
     pub pedal_noise: bool,
     pub soft_release: bool,
     pub dyn_comp: u8,
@@ -204,12 +951,16 @@ impl Default for PianoLayerDecoded {
         Self {
             enabled: true,
             level: 0.8,
+            level_morph: MorphDeltas::default(),
             octave: 0,
             category: PianoCategory::Grand,
             model_id: 1,
+            variation: 0,
+            name_hash: 0,
             timbre: PianoTimbre::Off,
             touch: VelocityTouch::Medium,
             string_res: true,
+            acoustic_level: 2,
             pedal_noise: true,
             soft_release: false,
             dyn_comp: 0,
@@ -218,11 +969,16 @@ impl Default for PianoLayerDecoded {
     }
 }
 
-/// Decoded Piano section configuration across Layer A and Layer B.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Decoded Piano section configuration across Layer A, Layer B, and per-layer FX (`0x0C`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PianoPresetDecoded {
     pub layer_a: PianoLayerDecoded,
     pub layer_b: PianoLayerDecoded,
+    pub enable_ii_mask: u8,
+    pub fx_a: FxDecoded,
+    pub fx_b: FxDecoded,
+    #[serde(skip)]
+    raw_payload: Vec<u8>,
 }
 
 impl Default for PianoPresetDecoded {
@@ -234,12 +990,137 @@ impl Default for PianoPresetDecoded {
                 category: PianoCategory::Upright,
                 ..PianoLayerDecoded::default()
             },
+            enable_ii_mask: 0b01,
+            fx_a: FxDecoded::default(),
+            fx_b: FxDecoded::default(),
+            raw_payload: Vec::new(),
         }
     }
 }
 
+impl PartialEq for PianoPresetDecoded {
+    fn eq(&self, other: &Self) -> bool {
+        self.layer_a == other.layer_a
+            && self.layer_b == other.layer_b
+            && self.enable_ii_mask == other.enable_ii_mask
+            && self.fx_a == other.fx_a
+            && self.fx_b == other.fx_b
+    }
+}
+
+fn unpack_piano_layer_block(
+    r: &mut BitReader,
+    base: usize,
+    enabled: bool,
+    level: f32,
+    level_morph: MorphDeltas,
+) -> Result<PianoLayerDecoded, CbinError> {
+    r.set_bit_pos(base + 12)?;
+    let octave = decode_signed(r.read_bits(4)?, 4).clamp(-2, 2) as i8;
+    r.set_bit_pos(base + 18)?;
+    let category = match r.read_bits(3)? {
+        0 => PianoCategory::Grand,
+        1 => PianoCategory::Upright,
+        2 => PianoCategory::Electric,
+        3 => PianoCategory::Clav,
+        4 => PianoCategory::Digital,
+        _ => PianoCategory::Misc,
+    };
+    let model_id = r.read_bits(5)? as u8;
+    r.set_bit_pos(base + 28)?;
+    let variation = r.read_bits(2)? as u8;
+    let name_hash = r.read_bits(32)?;
+    let acoustic_level = r.read_bits(2)? as u8;
+    let string_res = acoustic_level > 0;
+    let pedal_noise = r.read_bool()?;
+    let touch = match r.read_bits(2)? {
+        0 => VelocityTouch::Light,
+        1 => VelocityTouch::Medium,
+        _ => VelocityTouch::Heavy,
+    };
+    let unison = r.read_bits(2)? as u8;
+    let dyn_comp = r.read_bits(2)? as u8;
+    let timbre = match r.read_bits(3)? {
+        0 => PianoTimbre::Off,
+        1 => PianoTimbre::Soft,
+        2 => PianoTimbre::Mid,
+        3 => PianoTimbre::Bright,
+        4 => PianoTimbre::Dyno1,
+        _ => PianoTimbre::Dyno2,
+    };
+
+    Ok(PianoLayerDecoded {
+        enabled,
+        level,
+        level_morph,
+        octave,
+        category,
+        model_id,
+        variation,
+        name_hash,
+        timbre,
+        touch,
+        string_res,
+        acoustic_level,
+        pedal_noise,
+        soft_release: acoustic_level > 0,
+        dyn_comp,
+        unison,
+    })
+}
+
+fn pack_piano_layer_block(
+    w: &mut BitWriter,
+    base: usize,
+    layer: &PianoLayerDecoded,
+) -> Result<(), CbinError> {
+    w.set_bit_pos(base)?;
+    w.write_bits(0x0B, 8)?;
+    w.set_bit_pos(base + 12)?;
+    w.write_bits(encode_signed(i32::from(layer.octave.clamp(-2, 2)), 4), 4)?;
+    w.set_bit_pos(base + 18)?;
+    let cat_idx = match layer.category {
+        PianoCategory::Grand => 0,
+        PianoCategory::Upright => 1,
+        PianoCategory::Electric => 2,
+        PianoCategory::Clav => 3,
+        PianoCategory::Digital => 4,
+        PianoCategory::Misc => 5,
+    };
+    w.write_bits(cat_idx, 3)?;
+    w.write_bits(u32::from(layer.model_id.min(31)), 5)?;
+    w.set_bit_pos(base + 28)?;
+    w.write_bits(u32::from(layer.variation & 0x03), 2)?;
+    w.write_bits(layer.name_hash, 32)?;
+    let acoustic = if layer.string_res {
+        layer.acoustic_level.clamp(1, 3)
+    } else {
+        0
+    };
+    w.write_bits(u32::from(acoustic), 2)?;
+    w.write_bool(layer.pedal_noise)?;
+    let touch_idx = match layer.touch {
+        VelocityTouch::Light => 0,
+        VelocityTouch::Medium => 1,
+        VelocityTouch::Heavy => 2,
+    };
+    w.write_bits(touch_idx, 2)?;
+    w.write_bits(u32::from(layer.unison.min(3)), 2)?;
+    w.write_bits(u32::from(layer.dyn_comp.min(3)), 2)?;
+    let timbre_idx = match layer.timbre {
+        PianoTimbre::Off => 0,
+        PianoTimbre::Soft => 1,
+        PianoTimbre::Mid => 2,
+        PianoTimbre::Bright => 3,
+        PianoTimbre::Dyno1 => 4,
+        PianoTimbre::Dyno2 => 5,
+    };
+    w.write_bits(timbre_idx, 3)?;
+    Ok(())
+}
+
 impl PianoPresetDecoded {
-    pub const SIGNATURE_PREFIX: [u8; 9] = [0x0C, 0x27, 0x1B, 0xFB, 0xFB, 0xFD, 0xA7, 0xF7, 0xF7];
+    pub const BLOCK_TAG: u8 = 0x0C;
     pub const PAYLOAD_LEN: usize = 147;
 
     pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
@@ -249,136 +1130,108 @@ impl PianoPresetDecoded {
                 min: Self::PAYLOAD_LEN,
             });
         }
-        let mut r = BitReader::new(slice);
-        r.set_bit_pos(72)?;
+        let mut r = BitReader::new(&slice[..Self::PAYLOAD_LEN]);
+        r.set_bit_pos(9)?;
+        let enable_i = r.read_bits(2)? as u8;
+        r.set_bit_pos(12)?;
+        let enable_ii_mask = r.read_bits(2)? as u8;
 
-        let unpack_layer = |r: &mut BitReader| -> Result<PianoLayerDecoded, CbinError> {
-            let enabled = r.read_bool()?;
-            let level = r.read_bits(7)? as f32 / 127.0;
-            let octave = (r.read_bits(3)? as i8) - 2;
-            let cat_idx = r.read_bits(3)?;
-            let category = match cat_idx {
-                0 => PianoCategory::Grand,
-                1 => PianoCategory::Upright,
-                2 => PianoCategory::Electric,
-                3 => PianoCategory::Clav,
-                4 => PianoCategory::Digital,
-                _ => PianoCategory::Misc,
-            };
-            let model_id = r.read_bits(8)? as u8;
-            let timbre_idx = r.read_bits(3)?;
-            let timbre = match timbre_idx {
-                0 => PianoTimbre::Off,
-                1 => PianoTimbre::Soft,
-                2 => PianoTimbre::Mid,
-                3 => PianoTimbre::Bright,
-                4 => PianoTimbre::Dyno1,
-                _ => PianoTimbre::Dyno2,
-            };
-            let touch_idx = r.read_bits(2)?;
-            let touch = match touch_idx {
-                0 => VelocityTouch::Light,
-                1 => VelocityTouch::Medium,
-                _ => VelocityTouch::Heavy,
-            };
-            let string_res = r.read_bool()?;
-            let pedal_noise = r.read_bool()?;
-            let soft_release = r.read_bool()?;
-            let dyn_comp = (r.read_bits(2)? as u8).min(3);
-            let unison = (r.read_bits(2)? as u8).min(3);
+        let (lvl_a_raw, lvl_a_morph) = read_morph(&mut r, 14, 7, 127)?;
+        let (lvl_b_raw, lvl_b_morph) = read_morph(&mut r, 45, 7, 127)?;
 
-            Ok(PianoLayerDecoded {
-                enabled,
-                level,
-                octave,
-                category,
-                model_id,
-                timbre,
-                touch,
-                string_res,
-                pedal_noise,
-                soft_release,
-                dyn_comp,
-                unison,
-            })
-        };
+        let layer_a = unpack_piano_layer_block(
+            &mut r,
+            104,
+            (enable_i & 0x01) != 0,
+            lvl_a_raw as f32 / 127.0,
+            lvl_a_morph,
+        )?;
+        let layer_b = unpack_piano_layer_block(
+            &mut r,
+            200,
+            (enable_i & 0x02) != 0,
+            lvl_b_raw as f32 / 127.0,
+            lvl_b_morph,
+        )?;
+        let fx_a = FxDecoded::unpack(&slice[37..92])?;
+        let fx_b = FxDecoded::unpack(&slice[92..147])?;
 
-        let layer_a = unpack_layer(&mut r)?;
-        let layer_b = unpack_layer(&mut r)?;
-
-        Ok(Self { layer_a, layer_b })
+        Ok(Self {
+            layer_a,
+            layer_b,
+            enable_ii_mask,
+            fx_a,
+            fx_b,
+            raw_payload: slice[..Self::PAYLOAD_LEN].to_vec(),
+        })
     }
 
     pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
-
+        let mut out = prepare_buffer(&self.raw_payload, Self::PAYLOAD_LEN, Self::BLOCK_TAG);
         let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72)?;
 
-        let pack_layer = |l: &PianoLayerDecoded, w: &mut BitWriter| -> Result<(), CbinError> {
-            w.write_bool(l.enabled)?;
-            w.write_bits((l.level.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
-            w.write_bits((l.octave + 2).clamp(0, 4) as u32, 3)?;
-            let cat_idx = match l.category {
-                PianoCategory::Grand => 0,
-                PianoCategory::Upright => 1,
-                PianoCategory::Electric => 2,
-                PianoCategory::Clav => 3,
-                PianoCategory::Digital => 4,
-                PianoCategory::Misc => 5,
-            };
-            w.write_bits(cat_idx, 3)?;
-            w.write_bits(u32::from(l.model_id), 8)?;
-            let timbre_idx = match l.timbre {
-                PianoTimbre::Off => 0,
-                PianoTimbre::Soft => 1,
-                PianoTimbre::Mid => 2,
-                PianoTimbre::Bright => 3,
-                PianoTimbre::Dyno1 => 4,
-                PianoTimbre::Dyno2 => 5,
-            };
-            w.write_bits(timbre_idx, 3)?;
-            let touch_idx = match l.touch {
-                VelocityTouch::Light => 0,
-                VelocityTouch::Medium => 1,
-                VelocityTouch::Heavy => 2,
-            };
-            w.write_bits(touch_idx, 2)?;
-            w.write_bool(l.string_res)?;
-            w.write_bool(l.pedal_noise)?;
-            w.write_bool(l.soft_release)?;
-            w.write_bits(u32::from(l.dyn_comp.min(3)), 2)?;
-            w.write_bits(u32::from(l.unison.min(3)), 2)?;
-            Ok(())
-        };
+        let enable_i = (u32::from(self.layer_b.enabled) << 1) | u32::from(self.layer_a.enabled);
+        w.set_bit_pos(9)?;
+        w.write_bits(enable_i, 2)?;
+        w.set_bit_pos(12)?;
+        w.write_bits(u32::from(self.enable_ii_mask & 0x03), 2)?;
 
-        pack_layer(&self.layer_a, &mut w)?;
-        pack_layer(&self.layer_b, &mut w)?;
+        write_morph(
+            &mut w,
+            14,
+            (self.layer_a.level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.layer_a.level_morph,
+            7,
+            127,
+        )?;
+        write_morph(
+            &mut w,
+            45,
+            (self.layer_b.level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.layer_b.level_morph,
+            7,
+            127,
+        )?;
 
+        pack_piano_layer_block(&mut w, 104, &self.layer_a)?;
+        pack_piano_layer_block(&mut w, 200, &self.layer_b)?;
+
+        out[37..92].copy_from_slice(&self.fx_a.pack()?);
+        out[92..147].copy_from_slice(&self.fx_b.pack()?);
         Ok(out)
     }
 }
 
-/// Decoded single Synth layer configuration (Nord Wave 2 voice architecture).
+/// Decoded single Synth layer configuration (`0x32` Layer + `0x2F` Sound).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SynthLayerDecoded {
     pub enabled: bool,
     pub level: f32,
+    pub level_morph: MorphDeltas,
+    pub pan: f32,
     pub octave: i8,
     pub osc_mode: SynthOscMode,
     pub waveform: VaWaveform,
     pub wave_id: u8,
+    pub osc_bank: u8,
+    pub osc_cat: u8,
+    pub osc_wave_raw: u16,
+    pub sample_id: u32,
     pub detune: f32,
+    pub osc_ctrl_morph: MorphDeltas,
     pub filter_model: FilterModel,
     pub filter_cutoff_hz: f32,
+    pub filter_cutoff_morph: MorphDeltas,
     pub filter_resonance: f32,
+    pub filter_resonance_morph: MorphDeltas,
     pub filter_drive: f32,
+    pub filter_env_amount: f32,
     pub kb_track: u8,
     pub env_attack_ms: f32,
     pub env_decay_ms: f32,
     pub env_release_ms: f32,
     pub lfo_rate_hz: f32,
+    pub lfo_amount: f32,
     pub arp_enabled: bool,
     pub arp_bpm: f32,
 }
@@ -388,32 +1241,49 @@ impl Default for SynthLayerDecoded {
         Self {
             enabled: true,
             level: 0.8,
+            level_morph: MorphDeltas::default(),
+            pan: 0.5,
             octave: 0,
             osc_mode: SynthOscMode::Analog,
             waveform: VaWaveform::Saw,
-            wave_id: 0,
+            wave_id: 2,
+            osc_bank: 0,
+            osc_cat: 0,
+            osc_wave_raw: 2,
+            sample_id: 0,
             detune: 0.0,
+            osc_ctrl_morph: MorphDeltas::default(),
             filter_model: FilterModel::Ladder24,
             filter_cutoff_hz: 4000.0,
+            filter_cutoff_morph: MorphDeltas::default(),
             filter_resonance: 0.2,
+            filter_resonance_morph: MorphDeltas::default(),
             filter_drive: 0.0,
+            filter_env_amount: 0.0,
             kb_track: 2,
             env_attack_ms: 10.0,
             env_decay_ms: 300.0,
             env_release_ms: 250.0,
             lfo_rate_hz: 2.5,
+            lfo_amount: 0.0,
             arp_enabled: false,
             arp_bpm: 120.0,
         }
     }
 }
 
-/// Decoded Synth section configuration across 3 layers (A, B, C).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Decoded Synth section configuration across 3 layers (A, B, C) and 3 FX chains (`0x1E`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SynthPresetDecoded {
     pub layer_a: SynthLayerDecoded,
     pub layer_b: SynthLayerDecoded,
     pub layer_c: SynthLayerDecoded,
+    pub enable_ii_mask: u8,
+    pub fx_a: FxDecoded,
+    pub fx_b: FxDecoded,
+    pub fx_c: FxDecoded,
+    #[serde(skip)]
+    raw_payload: Vec<u8>,
 }
 
 impl Default for SynthPresetDecoded {
@@ -428,12 +1298,281 @@ impl Default for SynthPresetDecoded {
                 enabled: false,
                 ..SynthLayerDecoded::default()
             },
+            enable_ii_mask: 0b001,
+            fx_a: FxDecoded::default(),
+            fx_b: FxDecoded::default(),
+            fx_c: FxDecoded::default(),
+            raw_payload: Vec::new(),
         }
     }
 }
 
+impl PartialEq for SynthPresetDecoded {
+    fn eq(&self, other: &Self) -> bool {
+        self.layer_a == other.layer_a
+            && self.layer_b == other.layer_b
+            && self.layer_c == other.layer_c
+            && self.enable_ii_mask == other.enable_ii_mask
+            && self.fx_a == other.fx_a
+            && self.fx_b == other.fx_b
+            && self.fx_c == other.fx_c
+    }
+}
+
+fn map_osc_mode_and_wave(
+    is_osc_mode: bool,
+    osc_bank: u8,
+    osc_cat: u8,
+    osc_wave: u16,
+) -> (SynthOscMode, VaWaveform) {
+    if !is_osc_mode {
+        return (SynthOscMode::Sample, VaWaveform::Saw);
+    }
+    if osc_cat == 8 {
+        return (SynthOscMode::Fm, VaWaveform::Saw);
+    }
+    if osc_bank == 1 {
+        return (SynthOscMode::Wavetable, VaWaveform::Saw);
+    }
+    let hi3 = (osc_wave >> 7) & 0x07;
+    let lo7 = osc_wave & 0x7F;
+    let waveform = if hi3 == 0 && lo7 == 0 {
+        VaWaveform::Sine
+    } else if hi3 == 0 && lo7 == 1 {
+        VaWaveform::Triangle
+    } else if (hi3 == 5 || hi3 == 6) && lo7 <= 4 {
+        VaWaveform::SuperSaw
+    } else if (hi3 == 3 && lo7 >= 2) || lo7 == 3 {
+        VaWaveform::Pulse
+    } else {
+        VaWaveform::Saw
+    };
+    (SynthOscMode::Analog, waveform)
+}
+
+fn unpack_synth_layer_pair(
+    r: &mut BitReader,
+    layer_base: usize,
+    sound_base: usize,
+    enabled: bool,
+    level: f32,
+    level_morph: MorphDeltas,
+    pan: f32,
+) -> Result<SynthLayerDecoded, CbinError> {
+    // 0x32 Layer block
+    r.set_bit_pos(layer_base + 8)?;
+    let is_osc_mode = r.read_bool()?;
+    r.set_bit_pos(layer_base + 32)?;
+    let sample_id = r.read_bits(32)?;
+    r.set_bit_pos(layer_base + 135)?;
+    let arp_enabled = r.read_bool()?;
+    let (arp_rate_raw, _) = read_morph(r, layer_base + 175, 7, 127)?;
+    let arp_bpm = 30.0 + (arp_rate_raw as f32 / 127.0) * 270.0;
+
+    // 0x2F Sound block
+    r.set_bit_pos(sound_base + 8)?;
+    let osc_bank = r.read_bits(3)? as u8;
+    let osc_cat = r.read_bits(4)? as u8;
+    let osc_wave_raw = r.read_bits(10)? as u16;
+    let (osc_ctrl_raw, osc_ctrl_morph) = read_morph(r, sound_base + 25, 7, 127)?;
+    let (lfo_rate_raw, _) = read_morph(r, sound_base + 133, 7, 127)?;
+    let (lfo_amt_raw, _) = read_morph(r, sound_base + 164, 7, 127)?;
+
+    r.set_bit_pos(sound_base + 195)?;
+    let env_attack_ms = norm7_to_ms(r.read_bits(7)? as f32 / 127.0, 1.0, 5000.0);
+    let dcy_raw = r.read_bits(7)?;
+    let env_decay_ms = if dcy_raw >= 127 {
+        10_000.0
+    } else {
+        norm7_to_ms(dcy_raw as f32 / 127.0, 10.0, 1000.0)
+    };
+    let env_release_ms = norm7_to_ms(r.read_bits(7)? as f32 / 127.0, 2.0, 5000.0);
+
+    r.set_bit_pos(sound_base + 218)?;
+    let filter_model = match r.read_bits(3)? {
+        0 | 3 => FilterModel::Lp12,
+        1 => FilterModel::Lp24,
+        2 => FilterModel::Ladder24,
+        4 => FilterModel::BandPass,
+        _ => FilterModel::HighPass,
+    };
+    let (flt_freq_raw, filter_cutoff_morph) = read_morph(r, sound_base + 221, 7, 127)?;
+    let (flt_res_raw, filter_resonance_morph) = read_morph(r, sound_base + 252, 7, 127)?;
+    r.set_bit_pos(sound_base + 283)?;
+    let kb_track = r.read_bits(2)? as u8;
+    let filter_drive = r.read_bits(2)? as f32 / 3.0;
+    let (flt_env_raw, _) = read_morph(r, sound_base + 287, 7, 127)?;
+
+    let (osc_mode, waveform) = map_osc_mode_and_wave(is_osc_mode, osc_bank, osc_cat, osc_wave_raw);
+
+    Ok(SynthLayerDecoded {
+        enabled,
+        level,
+        level_morph,
+        pan,
+        octave: 0,
+        osc_mode,
+        waveform,
+        wave_id: (osc_wave_raw & 0xFF) as u8,
+        osc_bank,
+        osc_cat,
+        osc_wave_raw,
+        sample_id,
+        detune: (osc_ctrl_raw as f32 / 127.0) * 10.0,
+        osc_ctrl_morph,
+        filter_model,
+        filter_cutoff_hz: cutoff_norm_to_hz(flt_freq_raw as f32 / 127.0),
+        filter_cutoff_morph,
+        filter_resonance: (flt_res_raw as f32 / 127.0) * 0.95,
+        filter_resonance_morph,
+        filter_drive,
+        filter_env_amount: (flt_env_raw as f32 - 64.0) / 64.0,
+        kb_track,
+        env_attack_ms,
+        env_decay_ms,
+        env_release_ms,
+        lfo_rate_hz: 0.1 + (lfo_rate_raw as f32 / 127.0) * 19.9,
+        lfo_amount: lfo_amt_raw as f32 / 127.0,
+        arp_enabled,
+        arp_bpm,
+    })
+}
+
+fn encode_osc_fields(layer: &SynthLayerDecoded) -> (bool, u32, u32, u32) {
+    match layer.osc_mode {
+        SynthOscMode::Sample => (false, 0, 0, u32::from(layer.osc_wave_raw) & 0x03FF),
+        SynthOscMode::Fm => (
+            true,
+            u32::from(layer.osc_bank.min(1)),
+            8,
+            u32::from(layer.wave_id),
+        ),
+        SynthOscMode::Wavetable => (true, 1, 0, u32::from(layer.wave_id)),
+        SynthOscMode::Analog => {
+            let wave = match layer.waveform {
+                VaWaveform::Sine => 0,
+                VaWaveform::Triangle => 1,
+                VaWaveform::Saw => 2,
+                VaWaveform::Pulse => (3 << 7) | 2,
+                VaWaveform::SuperSaw => 6 << 7,
+            };
+            (true, 0, 0, wave)
+        }
+    }
+}
+
+fn pack_synth_layer_pair(
+    w: &mut BitWriter,
+    layer_base: usize,
+    sound_base: usize,
+    layer: &SynthLayerDecoded,
+) -> Result<(), CbinError> {
+    let (is_osc_mode, osc_bank, osc_cat, osc_wave) = encode_osc_fields(layer);
+
+    // 0x32 Layer block
+    w.set_bit_pos(layer_base)?;
+    w.write_bits(0x32, 8)?;
+    w.write_bool(is_osc_mode)?;
+    w.set_bit_pos(layer_base + 32)?;
+    w.write_bits(layer.sample_id, 32)?;
+    w.set_bit_pos(layer_base + 135)?;
+    w.write_bool(layer.arp_enabled)?;
+    let arp_rate = (((layer.arp_bpm - 30.0) / 270.0).clamp(0.0, 1.0) * 127.0).round() as u32;
+    write_morph(
+        w,
+        layer_base + 175,
+        arp_rate,
+        MorphDeltas::default(),
+        7,
+        127,
+    )?;
+
+    // 0x2F Sound block
+    w.set_bit_pos(sound_base)?;
+    w.write_bits(0x2F, 8)?;
+    w.write_bits(osc_bank, 3)?;
+    w.write_bits(osc_cat, 4)?;
+    w.write_bits(osc_wave, 10)?;
+    write_morph(
+        w,
+        sound_base + 25,
+        ((layer.detune / 10.0).clamp(0.0, 1.0) * 127.0).round() as u32,
+        layer.osc_ctrl_morph,
+        7,
+        127,
+    )?;
+    let lfo_rate = (((layer.lfo_rate_hz - 0.1) / 19.9).clamp(0.0, 1.0) * 127.0).round() as u32;
+    write_morph(
+        w,
+        sound_base + 133,
+        lfo_rate,
+        MorphDeltas::default(),
+        7,
+        127,
+    )?;
+    let lfo_amt = (layer.lfo_amount.clamp(0.0, 1.0) * 127.0).round() as u32;
+    write_morph(w, sound_base + 164, lfo_amt, MorphDeltas::default(), 7, 127)?;
+
+    w.set_bit_pos(sound_base + 195)?;
+    w.write_bits(
+        (ms_to_norm7(layer.env_attack_ms, 1.0, 5000.0) * 127.0).round() as u32,
+        7,
+    )?;
+    let dcy_bits = if layer.env_decay_ms >= 9999.0 {
+        127
+    } else {
+        (ms_to_norm7(layer.env_decay_ms, 10.0, 1000.0) * 127.0).round() as u32
+    };
+    w.write_bits(dcy_bits, 7)?;
+    w.write_bits(
+        (ms_to_norm7(layer.env_release_ms, 2.0, 5000.0) * 127.0).round() as u32,
+        7,
+    )?;
+
+    w.set_bit_pos(sound_base + 218)?;
+    let flt_idx = match layer.filter_model {
+        FilterModel::Lp12 => 0,
+        FilterModel::Lp24 => 1,
+        FilterModel::Ladder24 => 2,
+        FilterModel::BandPass => 4,
+        FilterModel::HighPass => 5,
+    };
+    w.write_bits(flt_idx, 3)?;
+    write_morph(
+        w,
+        sound_base + 221,
+        (cutoff_hz_to_norm(layer.filter_cutoff_hz) * 127.0).round() as u32,
+        layer.filter_cutoff_morph,
+        7,
+        127,
+    )?;
+    write_morph(
+        w,
+        sound_base + 252,
+        ((layer.filter_resonance / 0.95).clamp(0.0, 1.0) * 127.0).round() as u32,
+        layer.filter_resonance_morph,
+        7,
+        127,
+    )?;
+    w.set_bit_pos(sound_base + 283)?;
+    w.write_bits(u32::from(layer.kb_track.min(3)), 2)?;
+    w.write_bits((layer.filter_drive.clamp(0.0, 1.0) * 3.0).round() as u32, 2)?;
+    let env_amt_raw = ((64.0 + layer.filter_env_amount.clamp(-1.0, 1.0) * 63.0).round() as i32)
+        .clamp(0, 127) as u32;
+    write_morph(
+        w,
+        sound_base + 287,
+        env_amt_raw,
+        MorphDeltas::default(),
+        7,
+        127,
+    )?;
+
+    Ok(())
+}
+
 impl SynthPresetDecoded {
-    pub const SIGNATURE_PREFIX: [u8; 9] = [0x1E, 0x08, 0x71, 0xBF, 0xBF, 0xBF, 0xD2, 0x7F, 0x7F];
+    pub const BLOCK_TAG: u8 = 0x1E;
     pub const PAYLOAD_LEN: usize = 493;
 
     pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
@@ -443,166 +1582,137 @@ impl SynthPresetDecoded {
                 min: Self::PAYLOAD_LEN,
             });
         }
-        let mut r = BitReader::new(slice);
-        r.set_bit_pos(72)?;
+        let mut r = BitReader::new(&slice[..Self::PAYLOAD_LEN]);
+        r.set_bit_pos(10)?;
+        let enable_i = r.read_bits(3)? as u8;
+        r.set_bit_pos(15)?;
+        let enable_ii_mask = r.read_bits(3)? as u8;
 
-        let unpack_layer = |r: &mut BitReader| -> Result<SynthLayerDecoded, CbinError> {
-            let enabled = r.read_bool()?;
-            let level = r.read_bits(7)? as f32 / 127.0;
-            let octave = (r.read_bits(3)? as i8) - 2;
-            let mode_idx = r.read_bits(2)?;
-            let osc_mode = match mode_idx {
-                0 => SynthOscMode::Analog,
-                1 => SynthOscMode::Wavetable,
-                2 => SynthOscMode::Fm,
-                _ => SynthOscMode::Sample,
-            };
-            let wave_idx = r.read_bits(2)?;
-            let waveform = match wave_idx {
-                0 => VaWaveform::Saw,
-                1 => VaWaveform::Pulse,
-                2 => VaWaveform::Triangle,
-                _ => VaWaveform::Sine,
-            };
-            let wave_id = r.read_bits(8)? as u8;
-            let detune = (r.read_bits(7)? as f32 / 127.0) * 10.0;
+        let (lvl_a, lvl_a_morph) = read_morph(&mut r, 18, 7, 127)?;
+        let (lvl_b, lvl_b_morph) = read_morph(&mut r, 49, 7, 127)?;
+        let (lvl_c, lvl_c_morph) = read_morph(&mut r, 80, 7, 127)?;
+        r.set_bit_pos(111)?;
+        let pan_a = r.read_bits(7)? as f32 / 127.0;
+        r.set_bit_pos(142)?;
+        let pan_b = r.read_bits(7)? as f32 / 127.0;
+        r.set_bit_pos(173)?;
+        let pan_c = r.read_bits(7)? as f32 / 127.0;
 
-            let filter_idx = r.read_bits(3)?;
-            let filter_model = match filter_idx {
-                0 => FilterModel::Lp12,
-                1 => FilterModel::Lp24,
-                2 => FilterModel::Ladder24,
-                3 => FilterModel::BandPass,
-                _ => FilterModel::HighPass,
-            };
-            let cutoff_norm = r.read_bits(7)? as f32 / 127.0;
-            let filter_cutoff_hz = 20.0 * (1000.0f32).powf(cutoff_norm);
-            let filter_resonance = r.read_bits(7)? as f32 / 127.0;
-            let filter_drive = r.read_bits(7)? as f32 / 127.0;
-            let kb_track = (r.read_bits(2)? as u8).min(3);
+        let layer_a = unpack_synth_layer_pair(
+            &mut r,
+            248,
+            1472,
+            (enable_i & 0x01) != 0,
+            lvl_a as f32 / 127.0,
+            lvl_a_morph,
+            pan_a,
+        )?;
+        let layer_b = unpack_synth_layer_pair(
+            &mut r,
+            656,
+            1856,
+            (enable_i & 0x02) != 0,
+            lvl_b as f32 / 127.0,
+            lvl_b_morph,
+            pan_b,
+        )?;
+        let layer_c = unpack_synth_layer_pair(
+            &mut r,
+            1064,
+            2240,
+            (enable_i & 0x04) != 0,
+            lvl_c as f32 / 127.0,
+            lvl_c_morph,
+            pan_c,
+        )?;
 
-            let env_attack_ms = 1.0 + (r.read_bits(7)? as f32 / 127.0) * 4999.0;
-            let env_decay_ms = 10.0 + (r.read_bits(7)? as f32 / 127.0) * 9990.0;
-            let env_release_ms = 10.0 + (r.read_bits(7)? as f32 / 127.0) * 9990.0;
-            let lfo_rate_hz = 0.1 + (r.read_bits(7)? as f32 / 127.0) * 29.9;
-            let arp_enabled = r.read_bool()?;
-            let arp_bpm = 30.0 + (r.read_bits(8)? as f32 / 255.0) * 270.0;
-
-            Ok(SynthLayerDecoded {
-                enabled,
-                level,
-                octave,
-                osc_mode,
-                waveform,
-                wave_id,
-                detune,
-                filter_model,
-                filter_cutoff_hz,
-                filter_resonance,
-                filter_drive,
-                kb_track,
-                env_attack_ms,
-                env_decay_ms,
-                env_release_ms,
-                lfo_rate_hz,
-                arp_enabled,
-                arp_bpm,
-            })
-        };
-
-        let layer_a = unpack_layer(&mut r)?;
-        let layer_b = unpack_layer(&mut r)?;
-        let layer_c = unpack_layer(&mut r)?;
+        let fx_a = FxDecoded::unpack(&slice[328..383])?;
+        let fx_b = FxDecoded::unpack(&slice[383..438])?;
+        let fx_c = FxDecoded::unpack(&slice[438..493])?;
 
         Ok(Self {
             layer_a,
             layer_b,
             layer_c,
+            enable_ii_mask,
+            fx_a,
+            fx_b,
+            fx_c,
+            raw_payload: slice[..Self::PAYLOAD_LEN].to_vec(),
         })
     }
 
     pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
-
+        let mut out = prepare_buffer(&self.raw_payload, Self::PAYLOAD_LEN, Self::BLOCK_TAG);
         let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72)?;
 
-        let pack_layer = |l: &SynthLayerDecoded, w: &mut BitWriter| -> Result<(), CbinError> {
-            w.write_bool(l.enabled)?;
-            w.write_bits((l.level.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
-            w.write_bits((l.octave + 2).clamp(0, 4) as u32, 3)?;
-            let mode_idx = match l.osc_mode {
-                SynthOscMode::Analog => 0,
-                SynthOscMode::Wavetable => 1,
-                SynthOscMode::Fm => 2,
-                SynthOscMode::Sample => 3,
-            };
-            w.write_bits(mode_idx, 2)?;
-            let wave_idx = match l.waveform {
-                VaWaveform::Saw | VaWaveform::SuperSaw => 0,
-                VaWaveform::Pulse => 1,
-                VaWaveform::Triangle => 2,
-                VaWaveform::Sine => 3,
-            };
-            w.write_bits(wave_idx, 2)?;
-            w.write_bits(u32::from(l.wave_id), 8)?;
-            w.write_bits(
-                ((l.detune / 10.0).clamp(0.0, 1.0) * 127.0).round() as u32,
-                7,
-            )?;
+        let enable_i = (u32::from(self.layer_c.enabled) << 2)
+            | (u32::from(self.layer_b.enabled) << 1)
+            | u32::from(self.layer_a.enabled);
+        w.set_bit_pos(10)?;
+        w.write_bits(enable_i, 3)?;
+        w.set_bit_pos(15)?;
+        w.write_bits(u32::from(self.enable_ii_mask & 0x07), 3)?;
 
-            let filter_idx = match l.filter_model {
-                FilterModel::Lp12 => 0,
-                FilterModel::Lp24 => 1,
-                FilterModel::Ladder24 => 2,
-                FilterModel::BandPass => 3,
-                FilterModel::HighPass => 4,
-            };
-            w.write_bits(filter_idx, 3)?;
-            let cutoff_norm = ((l.filter_cutoff_hz.max(20.0) / 20.0).log10() / 3.0).clamp(0.0, 1.0);
-            w.write_bits((cutoff_norm * 127.0).round() as u32, 7)?;
-            w.write_bits(
-                (l.filter_resonance.clamp(0.0, 1.0) * 127.0).round() as u32,
-                7,
-            )?;
-            w.write_bits((l.filter_drive.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
-            w.write_bits(u32::from(l.kb_track.min(3)), 2)?;
+        write_morph(
+            &mut w,
+            18,
+            (self.layer_a.level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.layer_a.level_morph,
+            7,
+            127,
+        )?;
+        write_morph(
+            &mut w,
+            49,
+            (self.layer_b.level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.layer_b.level_morph,
+            7,
+            127,
+        )?;
+        write_morph(
+            &mut w,
+            80,
+            (self.layer_c.level.clamp(0.0, 1.0) * 127.0).round() as u32,
+            self.layer_c.level_morph,
+            7,
+            127,
+        )?;
 
-            let att_norm = ((l.env_attack_ms - 1.0) / 4999.0).clamp(0.0, 1.0);
-            w.write_bits((att_norm * 127.0).round() as u32, 7)?;
-            let dec_norm = ((l.env_decay_ms - 10.0) / 9990.0).clamp(0.0, 1.0);
-            w.write_bits((dec_norm * 127.0).round() as u32, 7)?;
-            let rel_norm = ((l.env_release_ms - 10.0) / 9990.0).clamp(0.0, 1.0);
-            w.write_bits((rel_norm * 127.0).round() as u32, 7)?;
-            let lfo_norm = ((l.lfo_rate_hz - 0.1) / 29.9).clamp(0.0, 1.0);
-            w.write_bits((lfo_norm * 127.0).round() as u32, 7)?;
-            w.write_bool(l.arp_enabled)?;
-            let bpm_norm = ((l.arp_bpm - 30.0) / 270.0).clamp(0.0, 1.0);
-            w.write_bits((bpm_norm * 255.0).round() as u32, 8)?;
+        w.set_bit_pos(111)?;
+        w.write_bits((self.layer_a.pan.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
+        w.set_bit_pos(142)?;
+        w.write_bits((self.layer_b.pan.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
+        w.set_bit_pos(173)?;
+        w.write_bits((self.layer_c.pan.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
 
-            Ok(())
-        };
+        pack_synth_layer_pair(&mut w, 248, 1472, &self.layer_a)?;
+        pack_synth_layer_pair(&mut w, 656, 1856, &self.layer_b)?;
+        pack_synth_layer_pair(&mut w, 1064, 2240, &self.layer_c)?;
 
-        pack_layer(&self.layer_a, &mut w)?;
-        pack_layer(&self.layer_b, &mut w)?;
-        pack_layer(&self.layer_c, &mut w)?;
-
+        out[328..383].copy_from_slice(&self.fx_a.pack()?);
+        out[383..438].copy_from_slice(&self.fx_b.pack()?);
+        out[438..493].copy_from_slice(&self.fx_c.pack()?);
         Ok(out)
     }
 }
 
-/// Decoded global program parameters (Split zones, Layer Scenes, Master Clock, Master Compressor).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Decoded global program parameters (`0x2C`, 45 bytes: Split zones, Section/Scene enables, Master Clock).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalProgramDecoded {
     pub tempo_bpm: f32,
     pub master_compressor: f32,
     pub transpose: i8,
     pub split_enabled: bool,
+    pub split_zone_enabled: [bool; 3],
     pub split_points: [u8; 3],
     pub split_crossfades: [CrossfadeWidth; 3],
+    pub section_enable_i: u8,
+    pub section_enable_ii: u8,
     pub scene_1_mask: u8,
     pub scene_2_mask: u8,
+    #[serde(skip)]
+    raw_payload: Vec<u8>,
 }
 
 impl Default for GlobalProgramDecoded {
@@ -612,19 +1722,40 @@ impl Default for GlobalProgramDecoded {
             master_compressor: 0.0,
             transpose: 0,
             split_enabled: false,
-            split_points: [53, 65, 77], // F3, F4, F5
+            split_zone_enabled: [false, false, false],
+            split_points: [48, 65, 84],
             split_crossfades: [
                 CrossfadeWidth::Off,
                 CrossfadeWidth::Off,
                 CrossfadeWidth::Off,
             ],
-            scene_1_mask: 0b0001_0101, // Organ A, Piano A, Synth A active
-            scene_2_mask: 0b0111_1111, // All 7 layers active in Scene II
+            section_enable_i: 0b111,
+            section_enable_ii: 0b111,
+            scene_1_mask: 0b0001_0101,
+            scene_2_mask: 0b0111_1111,
+            raw_payload: Vec::new(),
         }
     }
 }
 
+impl PartialEq for GlobalProgramDecoded {
+    fn eq(&self, other: &Self) -> bool {
+        self.tempo_bpm == other.tempo_bpm
+            && self.master_compressor == other.master_compressor
+            && self.transpose == other.transpose
+            && self.split_enabled == other.split_enabled
+            && self.split_zone_enabled == other.split_zone_enabled
+            && self.split_points == other.split_points
+            && self.split_crossfades == other.split_crossfades
+            && self.section_enable_i == other.section_enable_i
+            && self.section_enable_ii == other.section_enable_ii
+            && self.scene_1_mask == other.scene_1_mask
+            && self.scene_2_mask == other.scene_2_mask
+    }
+}
+
 impl GlobalProgramDecoded {
+    pub const BLOCK_TAG: u8 = 0x2C;
     pub const PAYLOAD_LEN: usize = 45;
 
     pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
@@ -634,59 +1765,69 @@ impl GlobalProgramDecoded {
                 min: Self::PAYLOAD_LEN,
             });
         }
-        let mut r = BitReader::new(slice);
-        // Byte 0 is 0x2C signature = 8 bits
+        let mut r = BitReader::new(&slice[..Self::PAYLOAD_LEN]);
         r.set_bit_pos(8)?;
 
-        let tempo_bpm = 30.0 + (r.read_bits(9)? as f32 / 511.0) * 270.0;
-        let master_compressor = (r.read_bits(7)? as f32 / 127.0) * 10.0;
-        let transpose = (r.read_bits(4)? as i8) - 6;
         let split_enabled = r.read_bool()?;
-
-        let mut split_points = [0u8; 3];
+        let split_zone_enabled = [r.read_bool()?, r.read_bool()?, r.read_bool()?];
+        let split_points = [
+            split_idx_to_midi(r.read_bits(4)?),
+            split_idx_to_midi(r.read_bits(4)?),
+            split_idx_to_midi(r.read_bits(4)?),
+        ];
         let mut split_crossfades = [CrossfadeWidth::Off; 3];
-        for i in 0..3 {
-            split_points[i] = r.read_bits(7)? as u8;
-            let cf_idx = r.read_bits(2)?;
-            split_crossfades[i] = match cf_idx {
+        for cf in &mut split_crossfades {
+            *cf = match r.read_bits(2)? {
                 0 => CrossfadeWidth::Off,
                 1 => CrossfadeWidth::Small,
                 _ => CrossfadeWidth::Large,
             };
         }
 
-        let scene_1_mask = r.read_bits(7)? as u8;
-        let scene_2_mask = r.read_bits(7)? as u8;
+        r.set_bit_pos(35)?;
+        let tempo_bpm = 30.0 + r.read_bits(8)? as f32;
+
+        r.set_bit_pos(284)?;
+        let section_enable_i = r.read_bits(3)? as u8;
+        let section_enable_ii = r.read_bits(3)? as u8;
+
+        let scene_1_mask = u8::from((section_enable_i & 0x04) != 0)
+            | ((u8::from((section_enable_i & 0x02) != 0)) << 2)
+            | ((u8::from((section_enable_i & 0x01) != 0)) << 4);
+        let scene_2_mask = u8::from((section_enable_ii & 0x04) != 0)
+            | ((u8::from((section_enable_ii & 0x02) != 0)) << 2)
+            | ((u8::from((section_enable_ii & 0x01) != 0)) << 4);
 
         Ok(Self {
             tempo_bpm,
-            master_compressor,
-            transpose,
+            master_compressor: 0.0,
+            transpose: 0,
             split_enabled,
+            split_zone_enabled,
             split_points,
             split_crossfades,
+            section_enable_i,
+            section_enable_ii,
             scene_1_mask,
             scene_2_mask,
+            raw_payload: slice[..Self::PAYLOAD_LEN].to_vec(),
         })
     }
 
     pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[0] = 0x2C;
-
+        let mut out = prepare_buffer(&self.raw_payload, Self::PAYLOAD_LEN, Self::BLOCK_TAG);
         let mut w = BitWriter::new(&mut out);
+
         w.set_bit_pos(8)?;
-
-        let bpm_norm = ((self.tempo_bpm - 30.0) / 270.0).clamp(0.0, 1.0);
-        w.write_bits((bpm_norm * 511.0).round() as u32, 9)?;
-        let comp_norm = (self.master_compressor / 10.0).clamp(0.0, 1.0);
-        w.write_bits((comp_norm * 127.0).round() as u32, 7)?;
-        w.write_bits((self.transpose + 6).clamp(0, 12) as u32, 4)?;
         w.write_bool(self.split_enabled)?;
-
-        for i in 0..3 {
-            w.write_bits(u32::from(self.split_points[i] & 0x7F), 7)?;
-            let cf_idx = match self.split_crossfades[i] {
+        for en in self.split_zone_enabled {
+            w.write_bool(en)?;
+        }
+        for note in self.split_points {
+            w.write_bits(midi_to_split_idx(note), 4)?;
+        }
+        for cf in self.split_crossfades {
+            let cf_idx = match cf {
                 CrossfadeWidth::Off => 0,
                 CrossfadeWidth::Small => 1,
                 CrossfadeWidth::Large => 2,
@@ -694,8 +1835,13 @@ impl GlobalProgramDecoded {
             w.write_bits(cf_idx, 2)?;
         }
 
-        w.write_bits(u32::from(self.scene_1_mask & 0x7F), 7)?;
-        w.write_bits(u32::from(self.scene_2_mask & 0x7F), 7)?;
+        w.set_bit_pos(35)?;
+        let rate = (self.tempo_bpm - 30.0).round().clamp(0.0, 255.0) as u32;
+        w.write_bits(rate, 8)?;
+
+        w.set_bit_pos(284)?;
+        w.write_bits(u32::from(self.section_enable_i & 0x07), 3)?;
+        w.write_bits(u32::from(self.section_enable_ii & 0x07), 3)?;
 
         Ok(out)
     }
@@ -729,6 +1875,25 @@ impl Default for ProgramDecoded {
     }
 }
 
+fn combine_scene_mask(sec_mask: u8, org_layers: u8, pno_layers: u8, syn_layers: u8) -> u8 {
+    let org = if (sec_mask & 0b100) != 0 {
+        org_layers & 0b11
+    } else {
+        0
+    };
+    let pno = if (sec_mask & 0b010) != 0 {
+        pno_layers & 0b11
+    } else {
+        0
+    };
+    let syn = if (sec_mask & 0b001) != 0 {
+        syn_layers & 0b111
+    } else {
+        0
+    };
+    org | (pno << 2) | (syn << 4)
+}
+
 impl ProgramDecoded {
     /// Decodes a Program from a parsed `CbinFile`.
     pub fn from_cbin_file(cbin: &CbinFile) -> Result<Self, CbinError> {
@@ -742,10 +1907,23 @@ impl ProgramDecoded {
             });
         }
 
-        let global = GlobalProgramDecoded::unpack(&cbin.payload[0..45])?;
+        let mut global = GlobalProgramDecoded::unpack(&cbin.payload[0..45])?;
         let organ = OrganPresetDecoded::unpack(&cbin.payload[45..180])?;
         let piano = PianoPresetDecoded::unpack(&cbin.payload[180..327])?;
         let synth = SynthPresetDecoded::unpack(&cbin.payload[327..820])?;
+
+        let org_i = (u8::from(organ.layer_b_enabled) << 1) | u8::from(organ.layer_a_enabled);
+        let pno_i = (u8::from(piano.layer_b.enabled) << 1) | u8::from(piano.layer_a.enabled);
+        let syn_i = (u8::from(synth.layer_c.enabled) << 2)
+            | (u8::from(synth.layer_b.enabled) << 1)
+            | u8::from(synth.layer_a.enabled);
+        global.scene_1_mask = combine_scene_mask(global.section_enable_i, org_i, pno_i, syn_i);
+        global.scene_2_mask = combine_scene_mask(
+            global.section_enable_ii,
+            organ.enable_ii_mask,
+            piano.enable_ii_mask,
+            synth.enable_ii_mask,
+        );
 
         let bank_letter = (b'A' + (cbin.header.bank_index as u8).min(7)) as char;
         let prog_num = (cbin.header.location_index % 48) + 1;
@@ -808,6 +1986,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_fx_bitstream_pack_and_unpack_with_morph() {
+        let original = FxDecoded {
+            mod1_enabled: true,
+            mod1_clock_sync: true,
+            mod1_type_raw: 7, // A-Wah Envelope
+            mod1_rate: 0.35,
+            mod1_amount: 0.72,
+            mod2_enabled: true,
+            mod2_type_raw: 2, // Flanger Stereo
+            mod2_rate: 0.25,
+            mod2_amount: 0.55,
+            amp_enabled: true,
+            eq_treble_db: 4.5,
+            eq_mid_db: -3.0,
+            eq_bass_db: 2.25,
+            amp_drive: 6.0,
+            comp_enabled: true,
+            comp_amount: 0.4,
+            comp_fast: true,
+            delay_enabled: true,
+            delay_rate_norm: 0.5,
+            delay_mix: 0.35,
+            delay_ping_pong: true,
+            delay_feedback: 0.45,
+            reverb_enabled: true,
+            reverb_type_raw: 4, // Hall
+            reverb_color: 2,
+            reverb_amount: 0.42,
+            reverb_amount_morph: MorphDeltas {
+                wheel: 0.25,
+                aftertouch: -0.1,
+                ctrl_pedal: 0.0,
+            },
+            ..Default::default()
+        };
+
+        let packed = original.pack().expect("pack fx");
+        assert_eq!(packed.len(), FxDecoded::PAYLOAD_LEN);
+        assert_eq!(packed[0], FxDecoded::BLOCK_TAG);
+
+        let unpacked = FxDecoded::unpack(&packed).expect("unpack fx");
+        assert_eq!(unpacked.mod1_type(), Mod1Type::Wah);
+        assert_eq!(unpacked.mod2_type(), Mod2Type::Flanger);
+        assert_eq!(unpacked.reverb_model(), ReverbModel::Hall);
+        assert!((unpacked.eq_treble_db - 4.5).abs() < 0.01);
+        assert!((unpacked.eq_mid_db + 3.0).abs() < 0.01);
+        assert!((unpacked.eq_bass_db - 2.25).abs() < 0.01);
+        assert!(unpacked.delay_ping_pong);
+        assert!((unpacked.reverb_amount_morph.wheel - 0.25).abs() < 0.02);
+        assert!((unpacked.reverb_amount_morph.aftertouch + 0.1).abs() < 0.02);
+    }
+
+    #[test]
     fn test_organ_preset_bitstream_pack_and_unpack() {
         let original = OrganPresetDecoded {
             model: OrganModel::Vox,
@@ -817,8 +2048,10 @@ mod tests {
             percussion_third: true,
             vibrato_on: true,
             vibrato_type: 3,
+            rotary_enabled: true,
             rotary_speed: RotarySpeed::Fast,
             rotary_drive: 7.5,
+            layer_a_octave: -1,
             drawbars_a: [8, 4, 2, 0, 1, 3, 5, 7, 8],
             drawbars_b: [0, 1, 2, 3, 4, 5, 6, 7, 8],
             ..Default::default()
@@ -826,10 +2059,11 @@ mod tests {
 
         let packed = original.pack().expect("pack organ");
         assert_eq!(packed.len(), 135);
-        assert_eq!(&packed[..9], &OrganPresetDecoded::SIGNATURE_PREFIX);
+        assert_eq!(packed[0], OrganPresetDecoded::BLOCK_TAG);
 
         let unpacked = OrganPresetDecoded::unpack(&packed).expect("unpack organ");
         assert_eq!(unpacked.model, OrganModel::Vox);
+        assert_eq!(unpacked.scanner_mode(true), ScannerMode::C2);
         assert!(unpacked.percussion_on);
         assert!(unpacked.percussion_soft);
         assert!(!unpacked.percussion_fast);
@@ -838,6 +2072,7 @@ mod tests {
         assert_eq!(unpacked.vibrato_type, 3);
         assert_eq!(unpacked.rotary_speed, RotarySpeed::Fast);
         assert!((unpacked.rotary_drive - 7.5).abs() < 0.1);
+        assert_eq!(unpacked.layer_a_octave, -1);
         assert_eq!(unpacked.drawbars_a, original.drawbars_a);
         assert_eq!(unpacked.drawbars_b, original.drawbars_b);
     }
@@ -847,14 +2082,14 @@ mod tests {
         let original = PianoPresetDecoded {
             layer_a: PianoLayerDecoded {
                 category: PianoCategory::Electric,
-                model_id: 42,
+                model_id: 14,
                 timbre: PianoTimbre::Bright,
                 touch: VelocityTouch::Heavy,
                 string_res: true,
                 pedal_noise: true,
-                soft_release: true,
                 dyn_comp: 2,
                 unison: 3,
+                octave: 1,
                 ..Default::default()
             },
             ..Default::default()
@@ -862,18 +2097,18 @@ mod tests {
 
         let packed = original.pack().expect("pack piano");
         assert_eq!(packed.len(), 147);
-        assert_eq!(&packed[..9], &PianoPresetDecoded::SIGNATURE_PREFIX);
+        assert_eq!(packed[0], PianoPresetDecoded::BLOCK_TAG);
 
         let unpacked = PianoPresetDecoded::unpack(&packed).expect("unpack piano");
         assert_eq!(unpacked.layer_a.category, PianoCategory::Electric);
-        assert_eq!(unpacked.layer_a.model_id, 42);
+        assert_eq!(unpacked.layer_a.model_id, 14);
         assert_eq!(unpacked.layer_a.timbre, PianoTimbre::Bright);
         assert_eq!(unpacked.layer_a.touch, VelocityTouch::Heavy);
         assert!(unpacked.layer_a.string_res);
         assert!(unpacked.layer_a.pedal_noise);
-        assert!(unpacked.layer_a.soft_release);
         assert_eq!(unpacked.layer_a.dyn_comp, 2);
         assert_eq!(unpacked.layer_a.unison, 3);
+        assert_eq!(unpacked.layer_a.octave, 1);
     }
 
     #[test]
@@ -886,8 +2121,13 @@ mod tests {
                 detune: 3.4,
                 filter_model: FilterModel::Lp24,
                 filter_cutoff_hz: 1200.0,
+                filter_cutoff_morph: MorphDeltas {
+                    wheel: 0.3,
+                    aftertouch: 0.0,
+                    ctrl_pedal: 0.0,
+                },
                 filter_resonance: 0.65,
-                filter_drive: 0.45,
+                filter_drive: 0.67,
                 arp_enabled: true,
                 arp_bpm: 135.0,
                 ..Default::default()
@@ -897,7 +2137,7 @@ mod tests {
 
         let packed = original.pack().expect("pack synth");
         assert_eq!(packed.len(), 493);
-        assert_eq!(&packed[..9], &SynthPresetDecoded::SIGNATURE_PREFIX);
+        assert_eq!(packed[0], SynthPresetDecoded::BLOCK_TAG);
 
         let unpacked = SynthPresetDecoded::unpack(&packed).expect("unpack synth");
         assert_eq!(unpacked.layer_a.osc_mode, SynthOscMode::Wavetable);
@@ -905,25 +2145,27 @@ mod tests {
         assert!((unpacked.layer_a.detune - 3.4).abs() < 0.2);
         assert_eq!(unpacked.layer_a.filter_model, FilterModel::Lp24);
         assert!((unpacked.layer_a.filter_cutoff_hz - 1200.0).abs() < 100.0);
+        assert!((unpacked.layer_a.filter_cutoff_morph.wheel - 0.3).abs() < 0.02);
         assert!((unpacked.layer_a.filter_resonance - 0.65).abs() < 0.05);
-        assert!((unpacked.layer_a.filter_drive - 0.45).abs() < 0.05);
+        assert!((unpacked.layer_a.filter_drive - 0.67).abs() < 0.05);
         assert!(unpacked.layer_a.arp_enabled);
-        assert!((unpacked.layer_a.arp_bpm - 135.0).abs() < 2.0);
+        assert!((unpacked.layer_a.arp_bpm - 135.0).abs() < 3.0);
     }
 
     #[test]
-    fn test_program_decoded_roundtrip_cbin_and_json() {
+    fn test_program_decoded_roundtrip_cbin_and_json_and_lossless_preservation() {
         let prog = ProgramDecoded {
             global: GlobalProgramDecoded {
                 tempo_bpm: 132.0,
-                master_compressor: 4.5,
                 split_enabled: true,
-                split_points: [53, 65, 77],
+                split_zone_enabled: [false, true, false],
+                split_points: [48, 65, 84],
                 split_crossfades: [
                     CrossfadeWidth::Small,
                     CrossfadeWidth::Large,
                     CrossfadeWidth::Off,
                 ],
+                section_enable_i: 0b101,
                 ..Default::default()
             },
             organ: OrganPresetDecoded {
@@ -947,7 +2189,6 @@ mod tests {
             ..Default::default()
         };
 
-        // 1. Test JSON conversion
         let json = prog.to_json().expect("to json");
         assert!(json.contains("Init Program"));
         assert!(json.contains("Farfisa"));
@@ -956,7 +2197,6 @@ mod tests {
         assert_eq!(parsed_from_json.organ.model, OrganModel::Farfisa);
         assert_eq!(parsed_from_json.piano.layer_a.timbre, PianoTimbre::Dyno1);
 
-        // 2. Test CBIN packing and decoding
         let cbin_file = prog.to_cbin_file(0, 0).expect("to cbin");
         assert_eq!(cbin_file.header.kind, CbinKind::Program);
         assert_eq!(cbin_file.payload.len(), 820);
@@ -968,8 +2208,21 @@ mod tests {
         assert_eq!(decoded.organ.model, OrganModel::Farfisa);
         assert_eq!(decoded.piano.layer_a.timbre, PianoTimbre::Dyno1);
         assert!(decoded.global.split_enabled);
+        assert_eq!(decoded.global.split_zone_enabled, [false, true, false]);
+        assert_eq!(decoded.global.scene_1_mask, 0b0001_0001); // Organ A + Synth A
         assert_eq!(decoded.global.split_crossfades[0], CrossfadeWidth::Small);
         assert_eq!(decoded.global.split_crossfades[1], CrossfadeWidth::Large);
         assert_eq!(decoded.global.split_crossfades[2], CrossfadeWidth::Off);
+
+        // Lossless preservation of unedited raw payload bytes (e.g. hardware NameHash / flags)
+        let mut synthetic_hw = bytes.clone();
+        // Set untouched reserved bits inside Global (bit 250) and Synth NameHash (byte 327+36)
+        synthetic_hw[48 + 31] = 0xAA;
+        synthetic_hw[48 + 327 + 36] = 0x5A;
+        let hw_cbin = CbinFile::parse(&synthetic_hw).expect("parse synthetic hw");
+        let hw_prog = hw_cbin.decode_program().expect("decode hw");
+        let repacked = hw_prog.to_cbin_file(0, 0).expect("repack hw");
+        assert_eq!(repacked.payload[31], 0xAA);
+        assert_eq!(repacked.payload[327 + 36], 0x5A);
     }
 }

@@ -80,55 +80,62 @@ Every `.ns4p`, `.ns4l`, `.ns4y`, `.ns4n`, `.ns4o`, and `.ns4t` file begins with 
 
 Empirical comparison between `Organ Preset/Bank 1/B3 Basic.ns4o` and `Live/Bank 1/Live 1.ns4l` (and factory `.ns4p` programs) shows that a full `.ns4p` program embeds the exact Organ, Piano, and Synth preset bitstreams:
 
-1. **Global Program Header (`0x30..0x5C`, 45 bytes):**
-   - Master Clock BPM, Vibrato/Transpose, Split Point enables (3 split points: Low, Mid, High) and crossfade widths (`Off`, `Small`, `Large`).
-   - Layer Scene I and Layer Scene II active bitmasks (7 bits each: `Organ A/B`, `Piano A/B`, `Synth A/B/C`).
-   - Global Master Compressor amount and mode.
-2. **Organ Section (`0x5D..0xE3`, 135 bytes):**
+1. **Global Program Header (`0x30..0x5C`, 45 bytes, tag `0x2C`):**
+   - Split Zone enables, split note indices (`0..9 -> [41, 48, 53, 60, 65, 72, 77, 84, 89, 96]`), crossfade widths (`Off`, `Small`, `Large`), and `MasterClockRate` (`30 + u8` BPM).
+   - `SectionEnable_I` (`284..287`, 3b `[Org, Pno, Syn]`) and `SectionEnable_II` (`287..290`, 3b `[Org, Pno, Syn]`) combined with each section's per-layer enables to derive the 7-bit `scene_1_mask` and `scene_2_mask`.
+2. **Organ Section (`0x5D..0xE3`, 135 bytes, tag `0x11`):**
    - Matches the 135-byte payload of `.ns4o` (`0x30..0xB7` of an `.ns4o` file):
-   - Signature header `11 27 fb fb fb ff f7 f7 f7` followed by Organ model (`B3`, `Vox`, `Farf`, `Pipe1`, `Pipe2`), Layer A & Layer B 9-drawbar arrays (nibbles `0..=8`), percussion switches, vibrato/chorus selector, and per-layer Organ FX + Rotary 122 parameters.
-3. **Piano Section (`0xE4..0x176`, 147 bytes):**
-   - Matches the 147-byte structure of `.ns4n` for Piano Layers A and B (piano category, bank/sample hash ID, timbre preset, string resonance enable, pedal noise enable, dynamic compression, and per-layer Piano FX).
-4. **Synth Section (`0x177..0x363`, 493 bytes):**
-   - Matches the 493-byte structure of `.ns4y` across Synth Layers A, B, and C (oscillator category, waveform/wavetable ID, FM/detune, ZDF filter type/cutoff/resonance/kb-track, ADR envelopes, LFOs, arpeggiator, and per-layer Synth FX).
+   - Two `0x03` Organ Layer sub-blocks (bits `144..391` and `392..639`), Organ Level A/B `7b` morph parameters, Rotary 122 (`enabled`, `speed`, `drive`), `VibratoTypeB3` (`0..5 -> V1, C1, V2, C2, V3, C3`), and 1× shared `0x36` Organ FX block (bytes `80..135`).
+3. **Piano Section (`0xE4..0x176`, 147 bytes, tag `0x0C`):**
+   - Matches the 147-byte structure of `.ns4n`: two `0x0B` Piano Layer sub-blocks (bits `104..199` and `200..295`), Level A/B `7b` morphs, and 2× `0x36` Piano FX blocks (bytes `37..92` and `92..147`).
+4. **Synth Section (`0x177..0x363`, 493 bytes, tag `0x1E`):**
+   - Matches the 493-byte structure of `.ns4y`: Level/Pan A/B/C, three `0x32` Synth Layer blocks (bits `248`, `656`, `1064`, stride `408` bits), three `0x2F` Synth Sound blocks (bits `1472`, `1856`, `2240`, stride `384` bits), and 3× `0x36` Synth FX blocks (bytes `328..383`, `383..438`, `438..493`).
 
-### 4.1 Bit-Field Decoding & Mapping Table
+### 4.1 Hardware Bitstream & Morph Encoding (OS v1.66)
 
-Implemented in [`crates/nord-core/src/cbin.rs`](../../crates/nord-core/src/cbin.rs) (`BitReader`, `BitWriter`, `ProgramDecoded`) and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py):
+Implemented in [`crates/nord-core/src/cbin/presets.rs`](../../crates/nord-core/src/cbin/presets.rs) (`BitReader`, `BitWriter`, `ProgramDecoded`) and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py):
 
-#### Organ Payload (`135` Bytes)
-- **Signature (`0..71` bits):** Fixed 9-byte sequence `11 27 FB FB FB FF F7 F7 F7`.
-- **Model (`72..74` bits, 3 bits):** `0 = B3`, `1 = Vox`, `2 = Farfisa`, `3 = Pipe1`, `4 = Pipe2`.
-- **Percussion (`75..78` bits, 4 bits):** `[on: 1b, soft: 1b, fast: 1b, third: 1b]`.
-- **Vibrato/Chorus (`79..82` bits, 4 bits):** `[on: 1b, type: 3b]` (`0..5` -> `V1, V2, V3, C1, C2, C3`).
-- **Rotary 122 (`83..91` bits, 9 bits):** `[speed: 2b]` (`0=Stop, 1=Slow, 2=Fast`) + `[drive: 7b]` (`0..127` -> `0.0..10.0`).
-- **Layer A (`92..138` bits, 47 bits):** `[enabled: 1b, level: 7b, octave: 3b (-2..+2), drawbars: 9 * 4b (0..8)]`.
-- **Layer B (`139..185` bits, 47 bits):** `[enabled: 1b, level: 7b, octave: 3b (-2..+2), drawbars: 9 * 4b (0..8)]`.
+#### `4W+3` Morph Encoding (MSB-first)
+Morphable parameters of bit width `W` occupy `4W + 3` bits:
+- `base: W` bits (`0..=max_val`, where `max_val = (1 << W) - 1` or `8` for drawbars).
+- `wheel_delta: W+1` bits, `aftertouch_delta: W+1` bits, `ctrl_pedal_delta: W+1` bits, each stored biased by `+max_val` (`zero = max_val`, i.e., `8` for `W=4` drawbars, `127` for `W=7`, `16383` for `W=14` Delay Rate; signed normalized delta = `(raw - max_val) / max_val`).
 
-#### Piano Payload (`147` Bytes)
-- **Signature (`0..71` bits):** Fixed 9-byte sequence `0C 27 1B FB FB FD A7 F7 F7`.
-- **Layer A & Layer B (each 37 bits):**
-  - `enabled: 1b`, `level: 7b`, `octave: 3b (-2..+2)`
-  - `category: 3b` (`Grand, Upright, Electric, Clav, Digital, Misc`)
-  - `model_id: 8b`, `timbre: 3b` (`Off, Soft, Mid, Bright, Dyno1, Dyno2`), `touch: 2b` (`Light, Med, Heavy`)
-  - `string_res: 1b`, `pedal_noise: 1b`, `soft_release: 1b`, `dyn_comp: 2b (0..3)`, `unison: 2b (0..3)`.
+#### Global Program Header (`0x2C`, `45` Bytes)
+- `0..8`: block tag `0x2C`.
+- `8`: `split_enabled` (1b); `9..12`: `split_zone_enabled[0..3]` (3×1b).
+- `12..24`: 3×4b split note indices (`[41, 48, 53, 60, 65, 72, 77, 84, 89, 96]`).
+- `24..30`: 3×2b crossfade width (`0=Off, 1=Small, 2=Large`).
+- `35..43`: `MasterClockRate` (8b; BPM = `30 + val`).
+- `284..287`: `SectionEnable_I` (`bit2=Org, bit1=Pno, bit0=Syn`); `287..290`: `SectionEnable_II`.
 
-#### Synth Payload (`493` Bytes)
-- **Signature (`0..71` bits):** Fixed 9-byte sequence `1E 08 71 BF BF BF D2 7F 7F`.
-- **Layer A, B, C (each 83 bits):**
-  - `enabled: 1b`, `level: 7b`, `octave: 3b (-2..+2)`
-  - `osc_mode: 2b` (`Analog, Wavetable, FM, Sample`), `waveform: 2b` (`Saw, Pulse, Triangle, Sine`), `wave_id: 8b`, `detune: 7b` (`0..10.0`)
-  - `filter_model: 3b` (`LP12, LP24, Ladder24, BP, HP`), `cutoff: 7b` (`20 Hz..20 kHz`), `resonance: 7b`, `drive: 7b`, `kb_track: 2b`
-  - `env_attack: 7b` (`1..5000 ms`), `env_decay: 7b` (`10..10000 ms`), `env_release: 7b` (`10..10000 ms`)
-  - `lfo_rate: 7b` (`0.1..30 Hz`), `arp_enabled: 1b`, `arp_bpm: 8b` (`30..300 BPM`).
+#### Organ Block (`0x11`, `135` Bytes = 2×`0x03` + `0x36`)
+- `0..8`: `0x11`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`.
+- `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
+- `80`: `rotary_enabled` (1b); `81..83`: `leslie_speed` (`0|2=Stop, 1=Slow, 3=Fast`); `92..99`: `rotary_drive` (7b); `130..133`: `VibratoTypeB3` (`0..5 -> V1, C1, V2, C2, V3, C3`).
+- `0x03` Layers at bit `144` (A) and `392` (B): `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2`); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
+- Bytes `80..135`: `0x36` Organ FX chain.
 
-#### Global Program Header (`45` Bytes)
-- **Signature (`0..7` bits):** Fixed byte `0x2C`.
-- **Master Tempo (`8..16` bits, 9 bits):** `30..300 BPM`.
-- **Master Compressor (`17..23` bits, 7 bits):** `0.0..10.0`.
-- **Transpose (`24..27` bits, 4 bits):** `-6..+6` semitones.
-- **Split Zones (`28..55` bits, 28 bits):** `split_enabled: 1b`, 3x `[split_note: 7b, crossfade: 2b (Off/Small/Large)]`.
-- **Layer Scenes (`56..69` bits, 14 bits):** `scene_1_mask: 7b`, `scene_2_mask: 7b` (`Organ A/B, Piano A/B, Synth A/B/C`).
+#### Piano Block (`0x0C`, `147` Bytes = 2×`0x0B` + 2×`0x36`)
+- `0..8`: `0x0C`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`; `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
+- `0x0B` Layers at bit `104` (A) and `200` (B): `+12..+16` signed 4b `octave`; `+18..+21` `category` (`0..5`: Grand, Upright, Electric, Clav, Digital, Misc); `+21..+26` `model_id`; `+28..+30` `variation`; `+30..+62` 32b `name_hash`; `+62..+64` `acoustic_level` (string resonance `0..3`); `+64` `pedal_noise`; `+65..+67` `kb_touch` (`0=Light, 1=Medium, 2=Heavy`); `+67..+69` `unison`; `+69..+71` `dyn_comp`; `+71..+74` `timbre` (`0=Off, 1=Soft, 2=Mid, 3=Bright, 4=Dyno1, 5=Dyno2`).
+- Bytes `37..92` & `92..147`: `0x36` Piano FX chains A & B.
+
+#### Synth Block (`0x1E`, `493` Bytes = 3×`0x32` + 3×`0x2F` + 3×`0x36`)
+- `0..8`: `0x1E`; `10..13`: `enable_i[C:B:A]`; `15..18`: `enable_ii[C:B:A]`.
+- `18, 49, 80`: `level_{a,b,c}` (`W=7` morphs); `111, 142, 173`: `pan_{a,b,c}` (7b).
+- `0x32` Layer blocks (`248, 656, 1064`, stride `408`): `+8` `is_osc_mode` (1=Osc, 0=Sample); `+32..+64` 32b `sample_id`; `+135` `arp_run`; `+175..+206` `arp_rate` (`W=7` morph, `30..300 BPM`).
+- `0x2F` Sound blocks (`1472, 1856, 2240`, stride `384`): `+8..+11` `osc_bank`; `+11..+15` `osc_cat` (`8=FM`); `+15..+25` `osc_wave` (10b); `+25..+56` `osc_ctrl` (`W=7` morph); `+133..+164` `lfo_rate` (`W=7` morph); `+164..+195` `lfo_amount` (`W=7` morph); `+195..+216` ADR env (`3×7b`); `+218..+221` `filter_type` (`0|3=LP12, 1=LP24, 2=Ladder24, 4=BP, 5=HP`); `+221..+252` `filter_freq` (`W=7` morph, `80 Hz * 200^norm`); `+252..+283` `filter_res` (`W=7` morph); `+283..+285` `kb_track`; `+285..+287` `filter_drive`; `+287..+318` `filter_env_amt` (`W=7` morph).
+- Bytes `328..383`, `383..438`, `438..493`: `0x36` Synth FX chains A, B, C.
+
+#### Per-Layer FX Block (`0x36`, `55` Bytes = `440` Bits)
+- `0..8`: `0x36`; `8`: `mod1_on`; `9`: `mod1_sync`; `10..41`: `mod1_rate` (`W=7` morph); `41..72`: `mod1_amt` (`W=7` morph); `72..76`: `mod1_type` (`0..11`: AutoPan Soft/Hard, Trem Soft/Hard, RingMod/St, A-Wah Cry/Env, Wah LFO/Pedal, Pump LFO/Pedal).
+- `76`: `mod2_on`; `77..108`: `mod2_rate` (`W=7` morph); `108..139`: `mod2_amt` (`W=7` morph); `139..143`: `mod2_type` (`0..11`: Phaser I/II, Flanger St/Mono, Chorus Analog, Vibe St/Mono, Ensemble St/Mono, Spin Treble/Bass/Both).
+- `143`: `amp_eq_on`; `144..151`, `151..158`, `158..165`: signed 7b EQ Treble/Mid/Bass (`* 0.25` dB, `-15..+15 dB`); `165..196`: `mid_freq` (`W=7` morph); `196..227`: `drive` (`W=7` morph); `408..417`: `amp_type_new`.
+- `231`: `comp_on`; `232..239`: `comp_amt` (7b); `239`: `comp_fast`.
+- `240`: `delay_on`; `241`: `delay_sync`; `242..301`: `delay_rate` (`W=14` morph, `zero=16383`); `301..332`: `delay_mix` (`W=7` morph); `332..334`: `delay_mode`; `334`: `ping_pong`; `335`: `fb_filter`; `336..367`: `delay_fb` (`W=7` morph); `367..371`: `fb_fx_type`.
+- `371`: `reverb_on`; `372..403`: `reverb_amt` (`W=7` morph); `403..405`: `reverb_color`; `405..408`: `reverb_type` (`0..5`: Spring, Booth, Room, Stage, Hall, Cathedral).
+
+> All decoded structs retain their original `raw_payload` bytes when packed back, guaranteeing bit-identical round-tripping for unedited fields and reserved firmware state.
 
 ### 4.2 CLI Patch Conversion & Inspection
 
