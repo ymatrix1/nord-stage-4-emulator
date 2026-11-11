@@ -108,21 +108,45 @@ bx r0
 
 2. **SHARC DSP Partition Layout:**
    - SHARC DSP code images (`DSPO` Organ, `DSPS` Wave 2 Synth, `DSPF` Piano & Effects) are embedded within the unpacked `CODE` segment near runtime offset `0x003CF040`.
+   - Complete partition symbol catalog recovered from container offset `0x003CF040`:
+     - `DSPFxCore1`: Per-layer Effects pipeline (`Delay`, `Reverb`, `Filter`) & String Resonance.
+     - `DSPOrg`: 2-Layer Organ physical modeling (`FullOrgan`, `LeslieHorn`, `Rotary Mic Distance`).
+     - `DSPSyn`: 3-Layer Nord Wave 2 Synth engine (`OSC WAVEFORM`, `WaveTable`, `SAMPLE LIBRARY`).
+     - SPORT bus routing tags: `Fx to Org`, `to Fx`, `Host`.
+     - Domain identifiers: `ORG`, `PNO`, `SMP`, `SY1`, `SYL3`.
+
+3. **Segment Checksum Algorithm (Proven Ground Truth):**
+   - Each segment table entry contains a 32-bit one's-complement byte checksum:
+     $$\text{checksum} = \text{0xFFFFFFFF} - \left( \sum_{i} \text{byte}_i \pmod{2^{32}} \right)$$
+   - Verified 100% bit-exact on AM1705 firmware:
+     - Image 0 `SRAM`: size 64,640 B, byte sum `0x000CE9E6`, checksum `0xFFF31619` (Exact match).
+     - Image 0 `ARM0`: size 748 B, byte sum `0x00017530`, checksum `0xFFFE8ACF` (Exact match).
+     - Image 1 `SRAM`: size 49,496 B, byte sum `0x0012F517`, checksum `0xFFED0AE8` (Exact match).
+     - Image 1 `ARM0`: size 820 B, byte sum `0x0001A075`, checksum `0xFFFE5F8A` (Exact match).
+   - For `CODE` segments, the checksum validates the uncompressed target memory block at `0xC0000000` (Image 0: `0xDE902503`, Image 1: `0xFBB813F8`).
 
 ---
 
 ## 6. Reference Implementation & Tests
 
 Implemented in Rust within `crates/nord-core/src/firmware.rs`:
+- `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
 - `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareSegment::verify_checksum(&self, payload: &[u8]) -> bool`
 - `FirmwareContainer::parse(bytes: &[u8]) -> Result<Self, String>`
+- `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
+- `FirmwareContainer::segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment>`
+- `DspEngineType` & `DspPartition`
 
 ### Test Coverage
 - `test_clavia_lz_roundtrip_synthetic`: lossless bit-exact round-trip.
 - `test_clavia_lz_token_bit_structure`: verifies mathematical bitfield formula.
 - `test_clavia_lz_all_match_lengths_2_through_9`: tests every valid match length.
+- `test_clavia_lz_extended_literal_run`: verifies initial `00 1B` 44-byte reset stub unpacking.
 - `test_clavia_lz_bounds_protection`: validates resistance against distance 0, buffer overrun, and truncated tokens.
+- `test_calculate_checksum_and_verify`: validates one's-complement byte checksum algorithm.
+- `test_dsp_partitions_all_engines`: verifies full DSP partition categorization across Organ, Synth, Effects, Routing, and Core identifiers.
 - `test_extract_payload_code_segment_decompression`: validates segment-level extraction.
-- `test_parse_firmware_container_and_sharc_tags`: validates top-level header and DSP partition discovery.
+- `test_parse_firmware_container_and_sharc_tags`: validates dual-bank container header, segment discovery, and SHARC DSP partition discovery.

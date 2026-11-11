@@ -194,13 +194,26 @@ The `CODE` segments inside OS firmware images are compressed using Clavia's prop
 Stream framing groups up to 8 operations per 1-byte header:
 - **Flag Bit = `1`:** 1 uncompressed literal byte follows.
 - **Flag Bit = `0`:** 1 16-bit match token (2 little-endian bytes) follows.
+- **Initial Extended Literal Run:** At stream start, a `0x00, L` sequence encodes an extended literal run of `17 + L` bytes (e.g. `00 1B` for the 44-byte ARM926EJ-S reset stub).
 - Overlapping runs (where `length > distance`) dynamically repeat bytes in run-length fashion.
 
+#### Checksum Algorithm
+Each segment descriptor stores a 32-bit one's-complement byte checksum:
+```text
+checksum = 0xFFFFFFFF - (sum(segment_bytes) & 0xFFFFFFFF)
+```
+For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file segment payload. For compressed segments (`CODE`), the checksum is computed over the fully decompressed memory image at runtime (`target_address = 0xC0000000`).
+
 #### Rust API (`crates/nord-core/src/firmware.rs`)
+- `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
 - `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareSegment::verify_checksum(&self, payload: &[u8]) -> bool`
 - `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
+- `FirmwareContainer::segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment>`
+- `DspEngineType` (`Organ`, `Synth`, `Effects`, `Routing`, `CoreIdentifier`)
+- `DspPartition` (full partition descriptors with engine categorization)
 
 ### 5.2 Nord Piano (`.npno`) Binary Specification & 4-Bit DPCM Audio Codec
 
