@@ -411,11 +411,9 @@ fn copy_lzo_match(
             "LZO1X match exceeds max_output_size {max_output_size}"
         ));
     }
-    let mut pos = out.len() - distance;
-    for _ in 0..length {
+    for pos in (out.len() - distance..).take(length) {
         let byte = out[pos];
         out.push(byte);
-        pos += 1;
     }
     Ok(())
 }
