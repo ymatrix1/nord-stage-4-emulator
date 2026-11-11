@@ -15,7 +15,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 | **TD-04** | `crates/nord-core::organ` | Low | Simplified key-click transient model instead of physical contact bounce network | Phase 2.2 (`ns4-orgn`) | Open |
 | **TD-05** | `crates/nord-core::engine` | Low | Boxed heap allocations for delay buffers occur during `Stage4Engine::new()` | Maintenance | Accepted (Zero RT allocs) |
 | **TD-06** | `docs/research` | High | `CNSP` compressed sample codec & full LZ firmware framing remain to be decoded | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | In Progress (Planned) |
-| **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Open |
+| **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Resolved (`crates/nord-core/src/synth.rs`) |
 
 ---
 

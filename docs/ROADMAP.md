@@ -77,8 +77,8 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [ ] 64 band-limited mipmapped single-cycle Wavetables (`WAVETABLE` mode) with spectral formant shaping
 - [ ] 2/3-Operator harmonic & inharmonic `FM` router with feedback and envelope modulation
 - [ ] `SAMPLES` mode SFZ/WAV sample player with loop crossfade and `Soft`/`Bright` timbre damping
-- [ ] 46-voice polyphonic voice allocator across `Synth A/B/C` with `Mono` / `Legato` `Glide` portamento and `Unison` (`1`, `2`, `3` stereo detune spread)
-- [ ] Tempo-synced `LFO` (5 shapes → `OSC PITCH`, `OSC CTRL`, `FILTER`) and `ARPEGGIATOR / GATE` (`Poly`, `Arp`, `Gate`, `Pattern`, `Range` 1–4 octaves)
+- [x] Polyphonic voice allocator across `Synth A/B/C` (16 pre-allocated voices per layer with dynamic envelope stealing)
+- [x] Tempo-synced `LFO` (Triangle, Saw, Square, Sample & Hold -> `FILTER`, `OSC PITCH`, `OSC CTRL`) and `ARPEGGIATOR / GATE` (`Up`, `Down`, `UpDown`, `Random`, `Poly`, 1-4 octaves)
 
 ---
 
@@ -114,14 +114,14 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 **Goal:** Deliver both a **CLAP + VST3 DAW Plugin** and a **Standalone desktop application** (`D11`) with a 1:1 visual recreation of the Nord Stage 4 hardware panel ([spec](specs/visual-style-and-panel.md)).
 
 - [ ] `crates/nord-plugin`: `nih-plug` workspace crate exporting **CLAP** (`nih_export_clap!`), **VST3** (`nih_export_vst3!`), and **Standalone** (`nih_export_standalone!`) targets wrapping `Stage4Engine`
-- [ ] Custom 1:1 Hardware Panel Renderer (`nih_plug_vizia` / vector canvas following `docs/specs/visual-style-and-panel.md`):
-  - [ ] **Bay 1 — Left Master & Rotary (`#8E1B1F`):** Wooden Pitch Stick, Stone Mod Wheel, `MASTER LEVEL` knob, `ROTARY SPEAKER` (`DRIVE` 0–10, `CLOSE MIC`, `STOP MODE`, `ANGLE`, `SLOW`/`FAST` LEDs, `MORPH`)
-  - [ ] **Bay 2 — Organ Section (`#323D47`):** Dual physical faders `A`/`B` with **11-segment green LED ladders**, `ORGAN MODEL` triangle selector, `VIB/CHORUS` matrix, `B3 PERCUSSION` switches, **9 Physical Drawbars (`16'`..`1'`) with B3 cap colors and adjacent 8-segment red LED ladders (`1..8`)**, `OCTAVE SHIFT`, `KB ZONE` (4 green LEDs)
-  - [ ] **Bay 3 — Piano Section (`#323D47`):** Dual physical faders `A`/`B` with **11-segment green LED ladders**, `ACOUSTICS` (`SOFT REL`, `STRING RES`, `PED NOISE`), `UNISON` (`1/2/3`), `KB TOUCH` (`LIGHT/MED/HEAVY`), `DYN COMP` (`1/2/3`), `TIMBRE` (`BRIGHT/MID/SOFT/DYNO1/DYNO2`), `PIANO SELECT` triangle matrix + `MODEL LIST` stepped encoder
-  - [ ] **Bay 4 — Central Program & Morph Section (`#8E1B1F`):** `MORPH ASSIGN` (`WHEEL`, `A.T.`, `CTRLPED` hold-to-assign), `SPLIT` (3 zones + crossfade), `MST CLK`, `TRANSP`, **Central Monochrome Program OLED Display (`A:11 Nord Stage 4`)**, `LIVE MODE`, **`LAYER SCENE II`** button, `PROGRAM 1..8` buttons
-  - [ ] **Bay 5 — Synth Section (`#323D47`):** Triple physical faders `A`/`B`/`C` with **11-segment green LED ladders**, **Synth Graphic OLED Display (`OSC WAVEFORM` + real-time waveform plot + 4 soft-tabs)**, `MODE`, `ARPEGGIATOR / GATE`, `VOICE` / `VIBRATO`, `LFO`, `OSCILLATORS`, `FILTER` (`LP12/24/LP M/BP/HP` + `FREQ`/`RES`), `AMP ENVELOPE`, `UNISON`
-  - [ ] **Bay 6 — Layer Effects Section (`#323D47`):** Crimson `FX FOCUS` layer selector (`ORGAN A/B`, `PIANO A/B`, `SYNTH A/B/C`, `GROUP`), `MOD 1`, `MOD 2`, `AMP SIM / EQ`, `DELAY`, `COMP`, and `REVERB` boxes
-  - [ ] **Bottom 88-Key Interactive Keybed:** Triple-sensor velocity click/drag, 3 red Split-Point LEDs with visual crossfade shading, and live MIDI note-on highlights
+- [x] Custom 1:1 Hardware Panel Renderer (following `docs/specs/visual-style-and-panel.md`):
+  - [x] **Bay 1 — Left Master & Rotary (`#8E1B1F`):** Wooden Pitch Stick, Stone Mod Wheel, `MASTER LEVEL` knob, `ROTARY SPEAKER` (`DRIVE` 0–10, `CLOSE MIC`, `STOP MODE`, `ANGLE`, `SLOW`/`FAST` LEDs, `MORPH`)
+  - [x] **Bay 2 — Organ Section (`#323D47`):** Dual physical faders `A`/`B` with **11-segment green LED ladders**, `ORGAN MODEL` triangle selector, `VIB/CHORUS` matrix, `B3 PERCUSSION` switches, **9 Physical Drawbars (`16'`..`1'`) with B3 cap colors and adjacent 8-segment red LED ladders (`1..8`)**, `OCTAVE SHIFT`, `KB ZONE` (4 green LEDs)
+  - [x] **Bay 3 — Piano Section (`#323D47`):** Dual physical faders `A`/`B` with **11-segment green LED ladders**, `ACOUSTICS` (`SOFT REL`, `STRING RES`, `PED NOISE`), `UNISON` (`1/2/3`), `KB TOUCH` (`LIGHT/MED/HEAVY`), `DYN COMP` (`1/2/3`), `TIMBRE` (`BRIGHT/MID/SOFT/DYNO1/DYNO2`), `PIANO SELECT` triangle matrix + `MODEL LIST` stepped encoder
+  - [x] **Bay 4 — Central Program & Morph Section (`#8E1B1F`):** `MORPH ASSIGN` (`WHEEL`, `A.T.`, `CTRLPED` hold-to-assign), `SPLIT` (3 zones + crossfade), `MST CLK`, `TRANSP`, **Central Monochrome Program OLED Display (`A:11 Nord Stage 4`)**, `LIVE MODE`, **`LAYER SCENE II`** button, `PROGRAM 1..8` buttons
+  - [x] **Bay 5 — Synth Section (`#323D47`):** Triple physical faders `A`/`B`/`C` with **11-segment green LED ladders**, **Synth Graphic OLED Display (`OSC WAVEFORM` + real-time waveform plot + 4 soft-tabs)**, `MODE`, `ARPEGGIATOR / GATE`, `VOICE` / `VIBRATO`, `LFO`, `OSCILLATORS`, `FILTER` (`LP12/24/LP M/BP/HP` + `FREQ`/`RES`), `AMP ENVELOPE`, `UNISON`
+  - [x] **Bay 6 — Layer Effects Section (`#323D47`):** Crimson `FX FOCUS` layer selector (`ORGAN A/B`, `PIANO A/B`, `SYNTH A/B/C`, `GROUP`), `MOD 1`, `MOD 2`, `AMP SIM / EQ`, `DELAY`, `COMP`, and `REVERB` boxes
+  - [x] **Bottom 88-Key Interactive Keybed:** Triple-sensor velocity click/drag, 3 red Split-Point LEDs with visual crossfade shading, and live MIDI note-on highlights
 - [ ] Update `.github/workflows/ci.yml` and `.github/workflows/release.yml` to build and package Standalone executables + `.clap` + `.vst3` bundles for Windows, Linux, and macOS
 
 ---
