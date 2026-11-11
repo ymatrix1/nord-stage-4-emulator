@@ -1,4 +1,5 @@
 //! CLAP and VST3 DAW Plugin wrapper for the Nord Stage 4 Emulator.
+#![allow(unknown_lints, semicolon_in_expressions_from_non_local_macros)]
 
 pub mod params;
 

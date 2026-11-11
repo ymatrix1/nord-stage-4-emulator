@@ -55,11 +55,11 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Linux system dependencies (ALSA, X11)
+      - name: Install Linux system dependencies (ALSA, X11, JACK)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxcursor-dev
+          sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxcursor-dev libjack-jackd2-dev pkg-config
 
       - name: Build release binaries
         run: |

@@ -740,7 +740,7 @@ mod tests {
         let res_l = encode_npno_lpc_sequence(&left_s, order, init_l);
         let res_r = encode_npno_lpc_sequence(&right_s, order, init_r);
         let mut interleaved = Vec::with_capacity(nf * 2);
-        for (l, r) in res_l.into_iter().zip(res_r.into_iter()) {
+        for (l, r) in res_l.into_iter().zip(res_r) {
             interleaved.push(l);
             interleaved.push(r);
         }
