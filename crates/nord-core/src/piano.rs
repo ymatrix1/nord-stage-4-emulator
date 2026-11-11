@@ -62,6 +62,8 @@ struct PianoVoice {
     phase: f32,
     amp: f32,
     env: f32,
+    gain: f32,
+    released: bool,
 }
 
 /// 2-pole modal harmonic string resonator for Advanced String Resonance.
@@ -111,6 +113,14 @@ pub struct PianoLayer {
 }
 
 impl PianoLayer {
+    #[cfg(test)]
+    pub(crate) fn voice_excitation_for_test(&self, note: u8) -> Option<(f32, f32)> {
+        self.voices
+            .iter()
+            .find(|v| v.active && v.note == note)
+            .map(|v| (v.amp, v.gain))
+    }
+
     pub fn new(sample_rate: f32) -> Self {
         let fs = sample_rate.max(8000.0);
         let mut resonators = [ModalResonator::default(); NUM_SYMPATHETIC_STRINGS];
@@ -138,6 +148,10 @@ impl PianoLayer {
     }
 
     pub fn note_on(&mut self, note: u8, velocity: u8) {
+        self.note_on_with_gain(note, velocity, 1.0);
+    }
+
+    pub fn note_on_with_gain(&mut self, note: u8, velocity: u8, gain: f32) {
         let amp = self.touch.map_velocity(velocity);
         let freq = 440.0 * 2.0f32.powf((f32::from(note) - 69.0) / 12.0);
         let note_idx = (note as usize).min(127);
@@ -157,6 +171,8 @@ impl PianoLayer {
             phase: 0.0,
             amp,
             env: 1.0,
+            gain: gain.clamp(0.0, 1.0),
+            released: false,
         };
     }
 
@@ -168,7 +184,7 @@ impl PianoLayer {
                 if self.damper_pedal_down {
                     v.sustained = true;
                 } else {
-                    v.active = false;
+                    v.released = true;
                 }
             }
         }
@@ -183,7 +199,7 @@ impl PianoLayer {
             if !down {
                 for v in &mut self.voices {
                     if v.sustained {
-                        v.active = false;
+                        v.released = true;
                         v.sustained = false;
                     }
                 }
@@ -203,10 +219,11 @@ impl PianoLayer {
             let p = v.phase;
             let sig =
                 p.sin() + 0.45 * v.amp * (2.0 * p).sin() + 0.20 * v.amp * v.amp * (3.0 * p).sin();
-            sum += sig * v.amp * v.env * 0.2;
+            sum += sig * v.amp * v.env * v.gain * 0.2;
 
             v.phase = (p + TAU * v.freq * inv_fs) % TAU;
-            v.env *= (-inv_fs / 1.8).exp();
+            let decay_sec = if v.released { 0.12 } else { 1.8 };
+            v.env *= (-inv_fs / decay_sec).exp();
             if v.env < 1e-4 {
                 v.active = false;
             }
@@ -280,6 +297,18 @@ mod tests {
         assert!(energy > 0.005);
 
         piano.set_damper_pedal(false, 64);
+        assert!(piano.voices.iter().any(|v| v.active && v.released));
+    }
+
+    #[test]
+    fn note_off_starts_release_instead_of_cutting_voice() {
+        let mut piano = PianoLayer::new(48_000.0);
+        piano.note_on(60, 100);
+        piano.note_off(60);
+        assert!(piano.voices.iter().any(|v| v.active && v.released));
+        for _ in 0..96_000 {
+            piano.render_frame();
+        }
         assert!(piano.voices.iter().all(|v| !v.active));
     }
 }

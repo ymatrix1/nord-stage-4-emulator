@@ -27,7 +27,11 @@ Maps incoming MIDI velocity $v \in [1, 127]$ to normalized gain/timbre excitatio
 
 ---
 
-## 3. Timbre EQ Presets (`PIANO TIMBRE`)
+## 3. Key Release
+
+Releasing a key starts a 120 ms damping envelope on its voice. With the damper pedal down, the note remains sustained until pedal release, which starts the same damping phase. Note Off does not deactivate a voice immediately.
+
+## 4. Timbre EQ Presets (`PIANO TIMBRE`)
 
 Each Piano layer offers selectable spectral contours modeled via 2nd-order biquad shelving/peaking filters:
 - **`Off`:** Flat response ($0\text{ dB}$).

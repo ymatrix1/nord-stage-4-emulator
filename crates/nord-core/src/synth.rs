@@ -164,6 +164,7 @@ pub struct SynthVoice {
     pub gate: bool,
     pub note: u8,
     pub velocity: f32,
+    pub gain: f32,
     pub freq_hz: f32,
     pub phase: f32,
     pub mod_phase: f32,
@@ -179,6 +180,7 @@ impl Default for SynthVoice {
             gate: false,
             note: 0,
             velocity: 0.8,
+            gain: 1.0,
             freq_hz: 440.0,
             phase: 0.0,
             mod_phase: 0.0,
@@ -223,7 +225,10 @@ pub struct SynthLayer {
     arp_step: usize,
     arp_sample_counter: f32,
     held_keys: [bool; 128],
-    arp_active_note: Option<u8>,
+    held_velocities: [u8; 128],
+    held_gains: [f32; 128],
+    arp_active_notes: [Option<u8>; MAX_SYNTH_VOICES],
+    arp_rng: u32,
 
     // 16 Polyphonic Voices
     voices: [SynthVoice; MAX_SYNTH_VOICES],
@@ -261,7 +266,10 @@ impl SynthLayer {
             arp_step: 0,
             arp_sample_counter: 0.0,
             held_keys: [false; 128],
-            arp_active_note: None,
+            held_velocities: [0; 128],
+            held_gains: [1.0; 128],
+            arp_active_notes: [None; MAX_SYNTH_VOICES],
+            arp_rng: 0xA341_316C,
 
             voices: [SynthVoice::default(); MAX_SYNTH_VOICES],
         }
@@ -269,14 +277,24 @@ impl SynthLayer {
 
     /// Triggers a note on across the polyphonic voice allocator or records in arpeggiator list.
     pub fn note_on(&mut self, note: u8, velocity: u8) {
+        self.note_on_with_gain(note, velocity, 1.0);
+    }
+
+    pub fn note_on_with_gain(&mut self, note: u8, velocity: u8, gain: f32) {
         let note_idx = (note as usize).min(127);
         self.held_keys[note_idx] = true;
+        self.held_velocities[note_idx] = velocity.clamp(1, 127);
+        self.held_gains[note_idx] = gain.clamp(0.0, 1.0);
 
         if self.arp_mode != ArpMode::Off {
             return;
         }
 
-        let vel_norm = (f32::from(velocity.clamp(1, 127))) / 127.0;
+        self.trigger_voice(note, velocity, gain);
+    }
+
+    fn trigger_voice(&mut self, note: u8, velocity: u8, gain: f32) {
+        let vel_norm = f32::from(velocity.clamp(1, 127)) / 127.0;
         let freq = 440.0 * 2.0f32.powf((f32::from(note) - 69.0) / 12.0);
 
         // Find existing note voice to re-trigger, or first inactive voice, or steal oldest/quietest
@@ -304,6 +322,7 @@ impl SynthLayer {
             gate: true,
             note,
             velocity: vel_norm,
+            gain: gain.clamp(0.0, 1.0),
             freq_hz: freq,
             phase: 0.0,
             mod_phase: 0.0,
@@ -345,13 +364,7 @@ impl SynthLayer {
         }
 
         if count == 0 {
-            if let Some(prev) = self.arp_active_note.take() {
-                for v in &mut self.voices {
-                    if v.active && v.note == prev {
-                        v.gate = false;
-                    }
-                }
-            }
+            self.release_arp_notes();
             self.arp_step = 0;
             return;
         }
@@ -364,12 +377,23 @@ impl SynthLayer {
             self.arp_sample_counter -= sixteenth_sec;
 
             // Release previous arp note
-            if let Some(prev) = self.arp_active_note.take() {
-                for v in &mut self.voices {
-                    if v.active && v.note == prev {
-                        v.gate = false;
-                    }
+            self.release_arp_notes();
+
+            if self.arp_mode == ArpMode::Poly {
+                for (slot, &note) in held_list
+                    .iter()
+                    .take(count.min(MAX_SYNTH_VOICES))
+                    .enumerate()
+                {
+                    self.trigger_voice(
+                        note,
+                        self.held_velocities[note as usize],
+                        self.held_gains[note as usize],
+                    );
+                    self.arp_active_notes[slot] = Some(note);
                 }
+                self.arp_step = (self.arp_step + 1) % count.max(1);
+                return;
             }
 
             // Pick next note
@@ -393,29 +417,41 @@ impl SynthLayer {
                     };
                     (n_idx, (step / count) as u8)
                 }
-                ArpMode::Random | ArpMode::Poly | ArpMode::Off => {
-                    ((step * 7) % count, ((step * 3) % oct_range) as u8)
+                ArpMode::Random => {
+                    self.arp_rng = self
+                        .arp_rng
+                        .wrapping_mul(1_664_525)
+                        .wrapping_add(1_013_904_223);
+                    (
+                        (self.arp_rng as usize) % count,
+                        ((self.arp_rng >> 16) as usize % oct_range) as u8,
+                    )
                 }
+                ArpMode::Off | ArpMode::Poly => unreachable!(),
             };
 
             let next_note = (held_list[note_in_chord] + oct_offset * 12).min(127);
-            self.arp_active_note = Some(next_note);
+            self.arp_active_notes[0] = Some(next_note);
             self.arp_step = (self.arp_step + 1) % total_steps;
 
-            // Trigger internal voice
-            let freq = 440.0 * 2.0f32.powf((f32::from(next_note) - 69.0) / 12.0);
-            self.voices[0] = SynthVoice {
-                active: true,
-                gate: true,
-                note: next_note,
-                velocity: 0.9,
-                freq_hz: freq,
-                phase: 0.0,
-                mod_phase: 0.0,
-                supersaw_phases: SUPERSAW_PHASE_INITS,
-                amp_env: 0.05,
-                filter: self.voices[0].filter,
-            };
+            let source_note = held_list[note_in_chord] as usize;
+            self.trigger_voice(
+                next_note,
+                self.held_velocities[source_note],
+                self.held_gains[source_note],
+            );
+        }
+    }
+
+    fn release_arp_notes(&mut self) {
+        for active in &mut self.arp_active_notes {
+            if let Some(note) = active.take() {
+                for voice in &mut self.voices {
+                    if voice.active && voice.note == note {
+                        voice.gate = false;
+                    }
+                }
+            }
         }
     }
 
@@ -544,7 +580,7 @@ impl SynthLayer {
                 self.sample_rate,
             );
 
-            mix += filtered * v.amp_env * v.velocity * 0.25;
+            mix += filtered * v.amp_env * v.velocity * v.gain * 0.25;
         }
 
         [mix, mix]
@@ -622,6 +658,45 @@ mod tests {
         }
         assert!(energy > 0.05, "Arpeggiator must output active sound energy");
         assert!(synth.arp_step > 0, "Arpeggiator step must advance");
+    }
+
+    #[test]
+    fn poly_arpeggiator_triggers_held_chord_simultaneously() {
+        let mut synth = SynthLayer::new(48_000.0);
+        synth.arp_mode = ArpMode::Poly;
+        synth.arp_rate_bpm = 240.0;
+        synth.note_on(60, 70);
+        synth.note_on(64, 90);
+        synth.note_on(67, 110);
+        for _ in 0..3_200 {
+            synth.render_frame();
+        }
+        for note in [60, 64, 67] {
+            assert!(synth
+                .voices
+                .iter()
+                .any(|voice| voice.active && voice.gate && voice.note == note));
+        }
+    }
+
+    #[test]
+    fn arpeggiator_uses_allocator_without_overwriting_an_active_voice() {
+        let mut synth = SynthLayer::new(48_000.0);
+        synth.note_on(40, 100);
+        synth.note_off(40);
+        synth.arp_mode = ArpMode::Up;
+        synth.arp_rate_bpm = 240.0;
+        synth.note_on(60, 100);
+        synth.note_on(64, 100);
+        for _ in 0..3_200 {
+            synth.render_frame();
+        }
+        assert_eq!(synth.voices[0].note, 40);
+        assert!(!synth.voices[0].gate);
+        assert!(synth
+            .voices
+            .iter()
+            .any(|voice| voice.active && voice.gate && voice.note == 60));
     }
 
     #[test]

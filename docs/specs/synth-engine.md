@@ -78,4 +78,4 @@ This resolves the 4-stage feedback loop algebraically on every sample without in
 - **Amp Envelope (ADR / ADSR):** Exponential Attack ($0.5\text{ ms}..10\text{ s}$), Decay/Sustain, and Release ($2\text{ ms}..15\text{ s}$) with velocity sensitivity switch.
 - **Mod / Filter Envelope (ADR):** Dedicated bipolar/unipolar envelope modulating Osc Pitch, Osc Shape/FM, and Filter Cutoff.
 - **LFO:** 5 waveforms (`Triangle`, `Saw`, `InvSaw`, `Square`, `SampleHold`), routable to Pitch (Vibrato), Osc Mod, and Filter Cutoff; lockable to `MasterClock` divisions (`1/1` to `1/32T`).
-- **Arpeggiator:** `Up`, `Down`, `UpDown`, `Random`, `Poly` modes across `1..4` octaves with Gate length and Pattern accent masks.
+- **Arpeggiator:** `Up`, `Down`, `UpDown`, `Random`, `Poly` modes. `Poly` triggers the held chord together; the other modes allocate each step through the regular polyphonic voice allocator. `Random` uses a seeded pseudo-random sequence so rendering is deterministic. The current rate control advances on sixteenth-note steps.

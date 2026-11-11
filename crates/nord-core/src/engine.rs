@@ -28,6 +28,7 @@ pub struct Stage4Engine {
     pub split_router: KeybedSplitRouter,
     pub master_bus: MasterBus,
     pub master_clock: MasterClock,
+    note_recipients: [u8; 128],
 }
 
 impl Stage4Engine {
@@ -51,6 +52,7 @@ impl Stage4Engine {
             split_router: KeybedSplitRouter::default(),
             master_bus: MasterBus::default(),
             master_clock: MasterClock::default(),
+            note_recipients: [0; 128],
         }
     }
 
@@ -58,6 +60,7 @@ impl Stage4Engine {
     pub fn handle_midi(&mut self, event: MidiEvent) {
         match event {
             MidiEvent::NoteOn { note, velocity, .. } => {
+                let mut recipients = 0u8;
                 for layer in LayerId::ALL {
                     if !self.scene.is_layer_active(layer) {
                         continue;
@@ -66,26 +69,35 @@ impl Stage4Engine {
                     if split_g <= 0.0 {
                         continue;
                     }
-                    let eff_vel = ((f32::from(velocity) * split_g).round() as u8).clamp(1, 127);
+                    recipients |= 1 << (layer as u8);
                     match layer {
-                        LayerId::OrganA => self.organ_a.note_on(note),
-                        LayerId::OrganB => self.organ_b.note_on(note),
-                        LayerId::PianoA => self.piano_a.note_on(note, eff_vel),
-                        LayerId::PianoB => self.piano_b.note_on(note, eff_vel),
-                        LayerId::SynthA => self.synth_a.note_on(note, eff_vel),
-                        LayerId::SynthB => self.synth_b.note_on(note, eff_vel),
-                        LayerId::SynthC => self.synth_c.note_on(note, eff_vel),
+                        LayerId::OrganA => self.organ_a.note_on_with_gain(note, split_g),
+                        LayerId::OrganB => self.organ_b.note_on_with_gain(note, split_g),
+                        LayerId::PianoA => self.piano_a.note_on_with_gain(note, velocity, split_g),
+                        LayerId::PianoB => self.piano_b.note_on_with_gain(note, velocity, split_g),
+                        LayerId::SynthA => self.synth_a.note_on_with_gain(note, velocity, split_g),
+                        LayerId::SynthB => self.synth_b.note_on_with_gain(note, velocity, split_g),
+                        LayerId::SynthC => self.synth_c.note_on_with_gain(note, velocity, split_g),
                     }
                 }
+                self.note_recipients[note as usize] = recipients;
             }
             MidiEvent::NoteOff { note, .. } => {
-                self.organ_a.note_off(note);
-                self.organ_b.note_off(note);
-                self.piano_a.note_off(note);
-                self.piano_b.note_off(note);
-                self.synth_a.note_off(note);
-                self.synth_b.note_off(note);
-                self.synth_c.note_off(note);
+                let recipients = std::mem::take(&mut self.note_recipients[note as usize]);
+                for layer in LayerId::ALL {
+                    if recipients & (1 << (layer as u8)) == 0 {
+                        continue;
+                    }
+                    match layer {
+                        LayerId::OrganA => self.organ_a.note_off(note),
+                        LayerId::OrganB => self.organ_b.note_off(note),
+                        LayerId::PianoA => self.piano_a.note_off(note),
+                        LayerId::PianoB => self.piano_b.note_off(note),
+                        LayerId::SynthA => self.synth_a.note_off(note),
+                        LayerId::SynthB => self.synth_b.note_off(note),
+                        LayerId::SynthC => self.synth_c.note_off(note),
+                    }
+                }
             }
             MidiEvent::ControlChange {
                 controller, value, ..
@@ -341,5 +353,46 @@ mod tests {
         assert_eq!(engine.master_clock.bpm, 145.0);
         assert_eq!(engine.piano_a.timbre, crate::piano::PianoTimbre::Bright);
         assert_eq!(engine.synth_a.cutoff_hz, 1500.0);
+    }
+
+    #[test]
+    fn note_off_uses_note_on_recipients_even_after_scene_switch() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 91,
+        });
+        let recipients = engine.note_recipients[60];
+        assert_eq!(
+            recipients,
+            (1 << LayerId::OrganA as u8)
+                | (1 << LayerId::PianoA as u8)
+                | (1 << LayerId::SynthA as u8)
+        );
+        engine.scene.scene_2_active = true;
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(engine.note_recipients[60], 0);
+    }
+
+    #[test]
+    fn split_gain_is_applied_without_reducing_midi_velocity() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.split_router.splits[0].enabled = true;
+        engine.split_router.splits[0].midi_note = 60;
+        engine.split_router.splits[0].crossfade = crate::morph::CrossfadeWidth::Small;
+        engine.split_router.layer_zone_masks[LayerId::PianoA as usize] = 0b0001;
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 91,
+        });
+        let (velocity_response, split_gain) = engine.piano_a.voice_excitation_for_test(60).unwrap();
+        assert_eq!(velocity_response, 91.0 / 127.0);
+        assert_eq!(split_gain, 0.5);
     }
 }
