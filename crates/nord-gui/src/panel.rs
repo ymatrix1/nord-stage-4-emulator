@@ -386,8 +386,8 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(fader_a.center().x, fader_a.bottom() + 10.0),
-        "ORGAN A",
-        9.0,
+        "A",
+        11.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
@@ -413,15 +413,15 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(fader_b.center().x, fader_b.bottom() + 10.0),
-        "ORGAN B",
-        9.0,
+        "B",
+        11.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
 
     // Organ Model Selector (B3, Vox, Farf, Pipe1, Pipe2)
     let model_rect = Rect::from_min_size(
-        pos2(bay2.left() + 90.0, bay2.top() + 30.0),
+        pos2(bay2.left() + 90.0, bay2.top() + 38.0),
         vec2(84.0, 80.0),
     );
     let org_models = [
@@ -448,7 +448,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     }
     label(
         &painter,
-        pos2(model_rect.center().x, model_rect.top() - 6.0),
+        pos2(model_rect.center().x, bay2.top() + 29.0),
         "ORGAN MODEL",
         9.0,
         Color32::from_gray(230),
@@ -457,7 +457,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Vib / Chorus Box
     let vib_rect = Rect::from_min_size(
-        pos2(bay2.left() + 182.0, bay2.top() + 30.0),
+        pos2(bay2.left() + 182.0, bay2.top() + 38.0),
         vec2(84.0, 80.0),
     );
     let sc_modes = [
@@ -485,7 +485,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     }
     label(
         &painter,
-        pos2(vib_rect.center().x, vib_rect.top() - 6.0),
+        pos2(vib_rect.center().x, bay2.top() + 29.0),
         "VIB/CHORUS",
         9.0,
         Color32::from_gray(230),
@@ -494,7 +494,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // B3 Percussion Box
     let perc_rect = Rect::from_min_size(
-        pos2(bay2.left() + 274.0, bay2.top() + 30.0),
+        pos2(bay2.left() + 274.0, bay2.top() + 38.0),
         vec2(84.0, 80.0),
     );
     painter.rect_filled(perc_rect, 3.0, Color32::from_rgb(20, 24, 28));
@@ -506,7 +506,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     );
     label(
         &painter,
-        pos2(perc_rect.center().x, perc_rect.top() - 6.0),
+        pos2(perc_rect.center().x, bay2.top() + 29.0),
         "B3 PERCUSSION",
         9.0,
         Color32::from_gray(230),
@@ -663,8 +663,8 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(pfader_a.center().x, pfader_a.bottom() + 10.0),
-        "PIANO A",
-        9.0,
+        "A",
+        11.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
@@ -690,8 +690,8 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(pfader_b.center().x, pfader_b.bottom() + 10.0),
-        "PIANO B",
-        9.0,
+        "B",
+        11.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );

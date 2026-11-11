@@ -218,21 +218,13 @@ pub fn layer_strip(ui: &mut Ui, rect: Rect, id: &str, level: &mut f32, active: &
         StrokeKind::Inside,
     );
 
-    // ON LED above button
+    // ON LED centered above button
     led(
         p,
-        pos2(btn.left() + 6.0, btn.top() - 7.0),
+        pos2(btn.center().x, btn.top() - 7.0),
         *active,
         LED_GREEN,
         LED_GREEN_DIM,
-    );
-    label(
-        p,
-        pos2(btn.left() + 14.0, btn.top() - 7.0),
-        "ON/OFF",
-        8.5,
-        Color32::from_gray(225),
-        Align2::LEFT_CENTER,
     );
     changed
 }
