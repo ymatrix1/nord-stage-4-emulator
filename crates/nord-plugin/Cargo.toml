@@ -1,0 +1,21 @@
+[package]
+name = "nord-plugin"
+version.workspace = true
+edition.workspace = true
+# Note: Enabling `nih_plug/vst3` statically links Steinberg VST3 SDK bindings (GPL-3.0-or-later);
+# builds using only CLAP + Standalone can omit the `vst3` feature (see docs/OPEN-QUESTIONS.md OQ6).
+license = "GPL-3.0-or-later"
+repository.workspace = true
+authors.workspace = true
+description = "CLAP and VST3 DAW Plugin and Standalone wrapper for the Nord Stage 4 Emulator"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "nord-plugin-standalone"
+path = "src/main.rs"
+
+[dependencies]
+nord-core = { path = "../nord-core" }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["vst3", "standalone"] }

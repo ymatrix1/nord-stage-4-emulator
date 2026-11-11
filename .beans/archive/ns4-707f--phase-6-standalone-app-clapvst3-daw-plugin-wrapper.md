@@ -1,10 +1,10 @@
 ---
 # ns4-707f
 title: 'Phase 6: 1:1 Front-Panel GUI, Standalone App & CLAP/VST3 DAW Plugin (nih-plug)'
-status: in-progress
+status: completed
 type: epic
 created_at: 2026-11-11T00:47:46Z
-updated_at: 2026-11-11T02:55:00Z
+updated_at: 2026-11-11T17:29:00Z
 ---
 
 ## Context
@@ -15,8 +15,8 @@ Deliver dual-target Standalone and CLAP/VST3 DAW plugin (`D11`) wrapping `nord_c
 Allow live gigging and DAW hosting from a single Rust codebase with an authentic hardware control surface.
 
 ## Acceptance Criteria
-- [ ] Add `crates/nord-plugin` with `nih-plug` CLAP + VST3 + Standalone targets
-- [ ] Map 7-layer parameters, drawbars, split zones, Layer Scene II, and Morph matrix to host automation
+- [x] Add `crates/nord-plugin` with `nih-plug` CLAP + VST3 + Standalone targets
+- [x] Map 7-layer parameters, drawbars, split zones, Layer Scene II, and Morph matrix to host automation
 - [x] Implement 1:1 Front-Panel GUI (`docs/specs/visual-style-and-panel.md`):
   - [x] Bay 1: Left Master & Rotary (`#8E1B1F`) with Pitch Stick, Mod Wheel, Rotary Drive & Slow/Fast
   - [x] Bay 2: Organ Section (`#323D47`) with dual faders A/B + 11-LED green ladders & 9 Drawbars + 8-LED red ladders
@@ -27,4 +27,9 @@ Allow live gigging and DAW hosting from a single Rust codebase with an authentic
   - [x] Bottom 88-Key Interactive Keybed with 3 Split-Point LEDs & crossfade zone visualization
 
 ## Out of Scope
-- Proprietary `.npno` audio decryption
+- Proprietary `.npno` audio decryption (tracked in `ns4-trkb` / archived `ns4-cnsp`)
+
+## Summary of Changes
+- Added `crates/nord-plugin` (`Cargo.toml`, `src/lib.rs`, `src/params.rs`, `src/main.rs`) wrapping `Stage4Engine` for CLAP, VST3, and Standalone execution with zero-allocation sample-accurate MIDI processing and host parameter synchronization (`Stage4Params`).
+- Added `crates/xtask` (`nih_plug_xtask`) + `.cargo/config.toml` alias to bundle `.clap` and `.vst3` artifacts across Windows, Linux, and macOS.
+- Updated `.github/workflows/ci.yml` (added `macos-latest` matrix + `cargo xtask bundle nord-plugin`) and `.github/workflows/release.yml` (packaged `nord-plugin-standalone`, `.clap`, and `.vst3` bundles in release archives).

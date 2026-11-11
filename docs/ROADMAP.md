@@ -116,7 +116,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 
 **Goal:** Deliver both a **CLAP + VST3 DAW Plugin** and a **Standalone desktop application** (`D11`) with a 1:1 visual recreation of the Nord Stage 4 hardware panel ([spec](specs/visual-style-and-panel.md)).
 
-- [ ] `crates/nord-plugin`: `nih-plug` workspace crate exporting **CLAP** (`nih_export_clap!`), **VST3** (`nih_export_vst3!`), and **Standalone** (`nih_export_standalone!`) targets wrapping `Stage4Engine`
+- [x] `crates/nord-plugin`: `nih-plug` workspace crate exporting **CLAP** (`nih_export_clap!`), **VST3** (`nih_export_vst3!`), and **Standalone** (`nih_export_standalone!`) targets wrapping `Stage4Engine`
 - [x] Custom 1:1 Hardware Panel Renderer (following `docs/specs/visual-style-and-panel.md`):
   - [x] **Bay 1 — Left Master & Rotary (`#8E1B1F`):** Wooden Pitch Stick, Stone Mod Wheel, `MASTER LEVEL` knob, `ROTARY SPEAKER` (`DRIVE` 0–10, `CLOSE MIC`, `STOP MODE`, `ANGLE`, `SLOW`/`FAST` LEDs, `MORPH`)
   - [x] **Bay 2 — Organ Section (`#323D47`):** Dual physical faders `A`/`B` with **11-segment green LED ladders**, `ORGAN MODEL` triangle selector, `VIB/CHORUS` matrix, `B3 PERCUSSION` switches, **9 Physical Drawbars (`16'`..`1'`) with B3 cap colors and adjacent 8-segment red LED ladders (`1..8`)**, `OCTAVE SHIFT`, `KB ZONE` (4 green LEDs)
@@ -125,7 +125,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
   - [x] **Bay 5 — Synth Section (`#323D47`):** Triple physical faders `A`/`B`/`C` with **11-segment green LED ladders**, **Synth Graphic OLED Display (`OSC WAVEFORM` + real-time waveform plot + 4 soft-tabs)**, `MODE`, `ARPEGGIATOR / GATE`, `VOICE` / `VIBRATO`, `LFO`, `OSCILLATORS`, `FILTER` (`LP12/24/LP M/BP/HP` + `FREQ`/`RES`), `AMP ENVELOPE`, `UNISON`
   - [x] **Bay 6 — Layer Effects Section (`#323D47`):** Crimson `FX FOCUS` layer selector (`ORGAN A/B`, `PIANO A/B`, `SYNTH A/B/C`, `GROUP`), `MOD 1`, `MOD 2`, `AMP SIM / EQ`, `DELAY`, `COMP`, and `REVERB` boxes
   - [x] **Bottom 88-Key Interactive Keybed:** Triple-sensor velocity click/drag, 3 red Split-Point LEDs with visual crossfade shading, and live MIDI note-on highlights
-- [ ] Update `.github/workflows/ci.yml` and `.github/workflows/release.yml` to build and package Standalone executables + `.clap` + `.vst3` bundles for Windows, Linux, and macOS
+- [x] Update `.github/workflows/ci.yml` and `.github/workflows/release.yml` to build and package Standalone executables + `.clap` + `.vst3` bundles for Windows, Linux, and macOS (`crates/xtask` `nih_plug_xtask`)
 
 ---
 
