@@ -93,16 +93,98 @@ pub struct AudioHandle {
 
 impl AudioHandle {
     pub fn new() -> (Self, Receiver<AudioCommand>) {
-        let (tx, rx) = bounded(1024);
+        Self::with_capacity(1024)
+    }
+
+    pub fn with_capacity(capacity: usize) -> (Self, Receiver<AudioCommand>) {
+        let (tx, rx) = bounded(capacity);
         (Self { cmd_sender: tx }, rx)
     }
 
-    pub fn send_midi(&self, event: MidiEvent) {
-        let _ = self.cmd_sender.try_send(AudioCommand::Midi(event));
+    /// Dispatches a MIDI event to the real-time audio thread.
+    ///
+    /// For non-critical events (e.g. continuous ModWheel, CC, NoteOn), if the event queue is full,
+    /// the event is dropped to prevent unbounded latency. For critical note lifecycle events
+    /// (`NoteOff`, `AllNotesOff`, `SustainPedal(0)`), this retries with a short timeout
+    /// to ensure key releases are not silently dropped.
+    pub fn send_midi(&self, event: MidiEvent) -> bool {
+        let is_critical = match event {
+            MidiEvent::NoteOff { .. } => true,
+            MidiEvent::ControlChange {
+                controller, value, ..
+            } => {
+                controller == nord_core::midi::cc::ALL_NOTES_OFF
+                    || controller == nord_core::midi::cc::ALL_SOUND_OFF
+                    || (controller == nord_core::midi::cc::SUSTAIN_PEDAL && value == 0)
+            }
+            _ => false,
+        };
+        let cmd = AudioCommand::Midi(event);
+        match self.cmd_sender.try_send(cmd) {
+            Ok(()) => true,
+            Err(crossbeam_channel::TrySendError::Full(returned_cmd)) => {
+                if is_critical {
+                    self.cmd_sender
+                        .send_timeout(returned_cmd, std::time::Duration::from_millis(25))
+                        .is_ok()
+                } else {
+                    false
+                }
+            }
+            Err(_) => false,
+        }
     }
 
-    pub fn send_command(&self, cmd: AudioCommand) {
-        let _ = self.cmd_sender.try_send(cmd);
+    pub fn send_command(&self, cmd: AudioCommand) -> bool {
+        self.cmd_sender.try_send(cmd).is_ok()
+    }
+}
+
+/// Converts a normalized float [-1.0, 1.0] to a signed 16-bit PCM integer [-32767, 32767].
+#[inline]
+pub fn f32_to_i16(sample: f32) -> i16 {
+    (sample.clamp(-1.0, 1.0) * 32767.0).round() as i16
+}
+
+/// Writes a stereo frame [out_l, out_r] into an F32 audio buffer of `channels` width.
+///
+/// If `channels >= 2`:
+/// - `frame[0] = out_l`
+/// - `frame[1] = out_r`
+/// - All additional channels `frame[2..channels]` are explicitly zeroed.
+///
+/// If `channels == 1`:
+/// - `frame[0] = (out_l + out_r) * 0.5`
+pub fn render_frame_to_f32(channels: usize, out_l: f32, out_r: f32, frame: &mut [f32]) {
+    if channels >= 2 {
+        frame[0] = out_l;
+        frame[1] = out_r;
+        for ch in frame[2..channels].iter_mut() {
+            *ch = 0.0;
+        }
+    } else if channels == 1 && !frame.is_empty() {
+        frame[0] = (out_l + out_r) * 0.5;
+    }
+}
+
+/// Writes a stereo frame [out_l, out_r] into an I16 audio buffer of `channels` width.
+///
+/// If `channels >= 2`:
+/// - `frame[0] = f32_to_i16(out_l)`
+/// - `frame[1] = f32_to_i16(out_r)`
+/// - All additional channels `frame[2..channels]` are explicitly zeroed.
+///
+/// If `channels == 1`:
+/// - `frame[0] = f32_to_i16((out_l + out_r) * 0.5)`
+pub fn render_frame_to_i16(channels: usize, out_l: f32, out_r: f32, frame: &mut [i16]) {
+    if channels >= 2 {
+        frame[0] = f32_to_i16(out_l);
+        frame[1] = f32_to_i16(out_r);
+        for ch in frame[2..channels].iter_mut() {
+            *ch = 0;
+        }
+    } else if channels == 1 && !frame.is_empty() {
+        frame[0] = f32_to_i16((out_l + out_r) * 0.5);
     }
 }
 
@@ -327,21 +409,32 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
 
                 for frame in data.chunks_mut(channels) {
                     let [l, r] = engine.render_frame();
-                    let out_l = l * master_vol;
-                    let out_r = r * master_vol;
-                    if channels >= 2 {
-                        frame[0] = out_l;
-                        frame[1] = out_r;
-                    } else if channels == 1 {
-                        frame[0] = (out_l + out_r) * 0.5;
-                    }
+                    render_frame_to_f32(channels, l * master_vol, r * master_vol, frame);
+                }
+            },
+            err_fn,
+            None,
+        ),
+        cpal::SampleFormat::I16 => device.build_output_stream(
+            &config.into(),
+            move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                while let Ok(cmd) = rx.try_recv() {
+                    apply_audio_command(cmd, &mut engine, &mut master_vol);
+                }
+
+                for frame in data.chunks_mut(channels) {
+                    let [l, r] = engine.render_frame();
+                    render_frame_to_i16(channels, l * master_vol, r * master_vol, frame);
                 }
             },
             err_fn,
             None,
         ),
         _ => {
-            eprintln!("[Audio] Unsupported sample format");
+            eprintln!(
+                "[Audio] Unsupported sample format: {:?}",
+                config.sample_format()
+            );
             return;
         }
     };
@@ -505,5 +598,77 @@ mod tests {
             &mut master,
         );
         assert_eq!(engine.scene.scene_1_mask & 0b10, 0);
+    }
+
+    #[test]
+    fn test_render_frame_to_f32_and_extra_channel_zeroing() {
+        // Multi-channel (4 channels, e.g. surround / quad interface)
+        let mut frame_quad = [1.0f32, 1.0, 1.0, 1.0];
+        render_frame_to_f32(4, 0.75, -0.5, &mut frame_quad);
+        assert_eq!(frame_quad[0], 0.75);
+        assert_eq!(frame_quad[1], -0.5);
+        assert_eq!(frame_quad[2], 0.0);
+        assert_eq!(frame_quad[3], 0.0);
+
+        // Mono channel
+        let mut frame_mono = [0.0f32];
+        render_frame_to_f32(1, 0.4, 0.6, &mut frame_mono);
+        assert!((frame_mono[0] - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_render_frame_to_i16_and_format_conversion() {
+        assert_eq!(f32_to_i16(1.0), 32767);
+        assert_eq!(f32_to_i16(-1.0), -32767);
+        assert_eq!(f32_to_i16(0.0), 0);
+        assert_eq!(f32_to_i16(1.5), 32767); // Clamped
+        assert_eq!(f32_to_i16(-2.0), -32767); // Clamped
+
+        let mut frame_quad = [999i16; 4];
+        render_frame_to_i16(4, 1.0, -1.0, &mut frame_quad);
+        assert_eq!(frame_quad[0], 32767);
+        assert_eq!(frame_quad[1], -32767);
+        assert_eq!(frame_quad[2], 0);
+        assert_eq!(frame_quad[3], 0);
+
+        let mut frame_mono = [0i16];
+        render_frame_to_i16(1, 0.5, 0.5, &mut frame_mono);
+        assert_eq!(frame_mono[0], 16384);
+    }
+
+    #[test]
+    fn test_midi_queue_overflow_policy() {
+        let (handle, rx) = AudioHandle::with_capacity(2);
+
+        let mod_wheel = MidiEvent::ControlChange {
+            channel: 0,
+            controller: nord_core::midi::cc::MOD_WHEEL,
+            value: 64,
+        };
+
+        // Fill queue to capacity with non-critical events
+        assert!(handle.send_midi(mod_wheel));
+        assert!(handle.send_midi(mod_wheel));
+
+        // Non-critical event drops immediately when full
+        assert!(!handle.send_midi(mod_wheel));
+
+        // Spawn a background consumer that drains the queue after 10ms
+        let drain_thread = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            let _ = rx.recv();
+            let _ = rx.recv();
+            rx
+        });
+
+        // Critical lifecycle event (NoteOff) waits for drainage and succeeds!
+        let note_off = MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        };
+        assert!(handle.send_midi(note_off));
+
+        let _rx = drain_thread.join().unwrap();
     }
 }

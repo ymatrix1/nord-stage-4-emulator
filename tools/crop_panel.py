@@ -14,16 +14,40 @@ from PIL import Image
 def calculate_keyboard_bounds(
     im: Image.Image,
     threshold: int = 240,
+    min_density: float = 0.20,
 ) -> Tuple[int, int, int, int]:
-    """Finds the bounding box (xmin, ymin, xmax, ymax) of non-white pixels."""
-    # Convert to grayscale and threshold to find non-white pixels
+    """Finds the bounding box (xmin, ymin, xmax, ymax) of the keyboard chassis.
+
+    Rejects isolated protrusions like music stand brackets by requiring rows/cols
+    to exceed `min_density` of non-white pixels.
+    """
     gray = im.convert("L")
-    # Invert so non-white pixels become bright
-    mask = gray.point(lambda p: 255 if p < threshold else 0, mode="1")
-    bbox = mask.getbbox()
-    if bbox is None:
-        return (0, 0, im.width, im.height)
-    return bbox
+    w, h = gray.size
+
+    # Row density
+    row_counts = [0] * h
+    col_counts = [0] * w
+    for y in range(h):
+        for x in range(w):
+            if gray.getpixel((x, y)) < threshold:
+                row_counts[y] += 1
+                col_counts[x] += 1
+
+    row_thresh = max(1, int(w * min_density))
+    col_thresh = max(1, int(h * min_density))
+
+    valid_rows = [y for y, c in enumerate(row_counts) if c >= row_thresh]
+    valid_cols = [x for x, c in enumerate(col_counts) if c >= col_thresh]
+
+    if not valid_rows or not valid_cols:
+        # Fall back to any non-white pixels
+        mask = gray.point(lambda p: 255 if p < threshold else 0, mode="1")
+        bbox = mask.getbbox()
+        return bbox if bbox is not None else (0, 0, w, h)
+
+    ymin, ymax = valid_rows[0], valid_rows[-1] + 1
+    xmin, xmax = valid_cols[0], valid_cols[-1] + 1
+    return (xmin, ymin, xmax, ymax)
 
 
 def crop_panel_and_keyboard(

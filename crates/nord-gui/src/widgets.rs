@@ -14,12 +14,17 @@ pub fn label(p: &Painter, pos: Pos2, s: &str, size: f32, col: Color32, al: Align
     p.text(pos, al, s, FontId::proportional(size), col);
 }
 
-/// Draws a round indicator LED with a dark bezel.
+/// Draws a round indicator LED with a dark bezel, 3D glint, and realistic bloom.
 pub fn led(p: &Painter, c: Pos2, on: bool, col_on: Color32, col_off: Color32) {
-    p.circle_filled(c, 4.5, Color32::from_rgb(20, 22, 25));
-    p.circle_filled(c, 3.3, if on { col_on } else { col_off });
+    p.circle_filled(c, 4.5, Color32::from_rgb(14, 16, 19));
+    p.circle_filled(c, 3.4, if on { col_on } else { col_off });
     if on {
-        p.circle_stroke(c, 5.5, Stroke::new(1.0_f32, col_on.gamma_multiply(0.35)));
+        // Diffuse outer bloom
+        p.circle_stroke(c, 5.2, Stroke::new(1.5_f32, col_on.gamma_multiply(0.40)));
+        // Specular glint dot (top-left)
+        p.circle_filled(c - vec2(1.1, 1.1), 0.9, Color32::from_white_alpha(200));
+    } else {
+        p.circle_stroke(c, 3.4, Stroke::new(1.0_f32, Color32::from_black_alpha(80)));
     }
 }
 
@@ -70,25 +75,31 @@ pub fn group_frame(p: &Painter, rect: Rect, title: &str) {
     );
 }
 
-/// Recessed pill button with bevel. Returns `true` when clicked.
+/// Recessed 3D pill button with tactile bevel and depression. Returns `true` when clicked.
 pub fn nord_button(ui: &mut Ui, rect: Rect, id: &str, grey: bool) -> bool {
     let resp = ui.interact(rect, ui.id().with(id), Sense::click());
     let p = ui.painter();
-    p.rect_filled(rect.expand(2.0), 3.0, BUTTON_BEZEL);
+    p.rect_filled(rect.expand(2.0), 3.5, BUTTON_BEZEL);
+    let is_down = resp.is_pointer_button_down_on();
     let base = if grey { BUTTON_GREY } else { BUTTON_BLACK };
-    let body = if resp.is_pointer_button_down_on() {
+    let body = if is_down {
         base.gamma_multiply(0.7)
     } else {
         base
     };
-    p.rect_filled(rect, 3.0, body);
-    let pill = rect.shrink2(vec2(rect.width() * 0.16, rect.height() * 0.22));
+    let btn_rect = if is_down {
+        rect.translate(vec2(0.0, 1.0))
+    } else {
+        rect
+    };
+    p.rect_filled(btn_rect, 3.0, body);
+    let pill = btn_rect.shrink2(vec2(btn_rect.width() * 0.16, btn_rect.height() * 0.22));
     let hi = if grey {
         Color32::from_gray(190)
     } else {
-        Color32::from_gray(52)
+        Color32::from_gray(58)
     };
-    p.rect_filled(pill, pill.height() * 0.5, body.gamma_multiply(0.8));
+    p.rect_filled(pill, pill.height() * 0.5, body.gamma_multiply(0.85));
     p.rect_stroke(
         pill,
         pill.height() * 0.5,
@@ -98,7 +109,7 @@ pub fn nord_button(ui: &mut Ui, rect: Rect, id: &str, grey: bool) -> bool {
     resp.clicked()
 }
 
-/// Layer strip: ON/OFF button, vertical fader and 11-segment green ladder.
+/// Layer strip: ON/OFF button, vertical fader with 3D metallic cap and 11-segment VU ladder.
 /// `rect` is ~34 x 150. Returns `true` when level or active changed.
 pub fn layer_strip(ui: &mut Ui, rect: Rect, id: &str, level: &mut f32, active: &mut bool) -> bool {
     let mut changed = false;
@@ -129,29 +140,76 @@ pub fn layer_strip(ui: &mut Ui, rect: Rect, id: &str, level: &mut f32, active: &
 
     let p = ui.painter();
     // Slot
-    p.rect_filled(
-        Rect::from_min_max(
-            pos2(fader.center().x - 2.0, fader.top()),
-            pos2(fader.center().x + 2.0, fader.bottom()),
-        ),
-        1.5,
-        Color32::from_rgb(10, 12, 15),
+    let slot = Rect::from_min_max(
+        pos2(fader.center().x - 2.0, fader.top()),
+        pos2(fader.center().x + 2.0, fader.bottom()),
     );
-    // Ladder
+    p.rect_filled(slot, 1.5, Color32::from_rgb(10, 12, 15));
+    p.rect_stroke(
+        slot,
+        1.5,
+        Stroke::new(1.0_f32, Color32::from_rgb(28, 30, 35)),
+        StrokeKind::Inside,
+    );
+
+    // 11-segment VU Ladder (Green -> Amber -> Red)
     for i in 0..11 {
         let y = fader.bottom() - 6.0 - i as f32 * ((fader.height() - 8.0) / 11.0);
         let r = Rect::from_min_size(pos2(fader.right() + 6.0, y - 5.0), vec2(9.0, 5.0));
         let lit = *active && ((*level * 11.0).round() as usize) > i;
-        p.rect_filled(r, 1.0, if lit { LED_GREEN } else { LED_GREEN_DIM });
+        let col = if i >= 10 {
+            if lit {
+                LED_RED
+            } else {
+                LED_RED_DIM
+            }
+        } else if i >= 8 {
+            if lit {
+                LED_AMBER
+            } else {
+                LED_AMBER_DIM
+            }
+        } else if lit {
+            LED_GREEN
+        } else {
+            LED_GREEN_DIM
+        };
+        p.rect_filled(r, 1.0, col);
+        if lit {
+            p.circle_filled(r.center(), 1.0, Color32::from_white_alpha(180));
+        }
     }
-    // Cap
+
+    // 3D Metallic Fader Cap
     let cy = fader.bottom() - 8.0 - level.clamp(0.0, 1.0) * (fader.height() - 16.0);
     let cap = Rect::from_center_size(pos2(fader.center().x, cy), vec2(24.0, 16.0));
-    p.rect_filled(cap, 3.0, Color32::from_gray(150));
+    // Soft drop shadow
     p.rect_filled(
-        Rect::from_min_size(cap.min, vec2(cap.width(), 4.0)),
+        cap.translate(vec2(0.0, 2.5)),
         3.0,
-        Color32::from_gray(200),
+        Color32::from_black_alpha(100),
+    );
+    // Cap metallic body
+    p.rect_filled(cap, 3.0, Color32::from_gray(160));
+    // Top bevel highlight
+    p.rect_filled(
+        Rect::from_min_size(cap.min, vec2(cap.width(), 3.5)),
+        3.0,
+        Color32::from_gray(220),
+    );
+    // Bottom bevel shadow
+    p.rect_filled(
+        Rect::from_min_size(pos2(cap.left(), cap.bottom() - 3.5), vec2(cap.width(), 3.5)),
+        3.0,
+        Color32::from_gray(115),
+    );
+    // Center grip line
+    p.line_segment(
+        [
+            pos2(cap.left() + 2.0, cap.center().y),
+            pos2(cap.right() - 2.0, cap.center().y),
+        ],
+        Stroke::new(2.0_f32, Color32::from_rgb(25, 28, 32)),
     );
     p.rect_stroke(
         cap,
@@ -159,6 +217,7 @@ pub fn layer_strip(ui: &mut Ui, rect: Rect, id: &str, level: &mut f32, active: &
         Stroke::new(1.0_f32, Color32::from_gray(60)),
         StrokeKind::Inside,
     );
+
     // ON LED above button
     led(
         p,
@@ -178,7 +237,7 @@ pub fn layer_strip(ui: &mut Ui, rect: Rect, id: &str, level: &mut f32, active: &
     changed
 }
 
-/// Organ drawbar (0 = pushed in at top, 8 = pulled out at bottom) with 8-LED ladder.
+/// Organ drawbar (0 = pushed in at top, 8 = pulled out at bottom) with 3D molded handle and 8-LED ladder.
 /// `rect` is ~28 x 150. Returns `true` on change.
 pub fn drawbar(ui: &mut Ui, rect: Rect, id: &str, value: &mut u8, white: bool) -> bool {
     let mut changed = false;
@@ -200,42 +259,56 @@ pub fn drawbar(ui: &mut Ui, rect: Rect, id: &str, value: &mut u8, white: bool) -
     for i in 0..8 {
         let y = rect.top() + 2.0 + i as f32 * 9.0;
         let r = Rect::from_min_size(pos2(rect.left(), y), vec2(7.0, 6.0));
-        p.rect_filled(
-            r,
-            1.0,
-            if (i as u8) < *value {
-                LED_RED
-            } else {
-                LED_RED_DIM
-            },
-        );
+        let lit = (i as u8) < *value;
+        p.rect_filled(r, 1.0, if lit { LED_RED } else { LED_RED_DIM });
+        if lit {
+            p.circle_filled(r.center(), 1.0, Color32::from_rgb(255, 120, 120));
+        }
     }
-    // Slot
+    // Recessed Slot
     let sx = rect.right() - 8.0;
-    p.rect_filled(
-        Rect::from_min_max(pos2(sx - 2.5, top), pos2(sx + 2.5, top + travel + 16.0)),
+    let slot = Rect::from_min_max(pos2(sx - 2.5, top), pos2(sx + 2.5, top + travel + 16.0));
+    p.rect_filled(slot, 1.5, Color32::from_rgb(8, 10, 12));
+    p.rect_stroke(
+        slot,
         1.5,
-        Color32::from_rgb(8, 10, 12),
+        Stroke::new(1.0_f32, Color32::from_rgb(25, 28, 32)),
+        StrokeKind::Inside,
     );
-    // Cap
+
+    // Cap (3D molded handle)
     let cy = top + 8.0 + (*value as f32 / 8.0) * travel;
     let cap = Rect::from_center_size(pos2(sx - 2.0, cy), vec2(26.0, 26.0));
-    let (c, edge) = if white {
-        (DRAWBAR_WHITE, Color32::from_gray(150))
+    // Soft cast shadow
+    p.rect_filled(
+        cap.translate(vec2(0.0, 3.0)),
+        3.0,
+        Color32::from_black_alpha(100),
+    );
+    let (c, edge, hi) = if white {
+        (DRAWBAR_WHITE, Color32::from_gray(140), Color32::WHITE)
     } else {
-        (DRAWBAR_BLACK, Color32::from_gray(70))
+        (
+            DRAWBAR_BLACK,
+            Color32::from_gray(55),
+            Color32::from_gray(75),
+        )
     };
     p.rect_filled(cap, 3.0, c);
+    // Upper bevel highlight
     p.rect_filled(
         Rect::from_min_size(cap.min, vec2(cap.width(), 6.0)),
         3.0,
-        c.gamma_multiply(if white { 0.9 } else { 2.0 }),
+        hi,
     );
+    // Center ergonomic finger grip notch
+    let grip = Rect::from_center_size(cap.center(), vec2(cap.width() - 4.0, 3.0));
+    p.rect_filled(grip, 1.0, c.gamma_multiply(if white { 0.85 } else { 0.6 }));
     p.rect_stroke(cap, 3.0, Stroke::new(1.0_f32, edge), StrokeKind::Inside);
     changed
 }
 
-/// Rotary knob. Drag vertically to change. Returns `true` on change.
+/// Rotary knob with 3D knurled rim, drop shadow, and crisp pointer notch.
 #[allow(clippy::too_many_arguments)]
 pub fn knob(
     ui: &mut Ui,
@@ -262,59 +335,78 @@ pub fn knob(
     let norm = ((*value - min) / (max - min).max(1e-6)).clamp(0.0, 1.0);
     let a0 = 0.75 * std::f32::consts::PI;
     let sweep = 1.5 * std::f32::consts::PI;
-    // Ticks
+
+    // Ticks around knob
     for i in 0..=10 {
         let a = a0 + sweep * (i as f32 / 10.0);
         let r1 = radius + 3.0;
-        let r2 = radius + 6.0;
+        let r2 = radius + 5.5;
         p.line_segment(
             [
                 pos2(center.x + a.cos() * r1, center.y + a.sin() * r1),
                 pos2(center.x + a.cos() * r2, center.y + a.sin() * r2),
             ],
-            Stroke::new(1.0_f32, Color32::from_gray(200)),
+            Stroke::new(1.0_f32, Color32::from_gray(190)),
         );
     }
-    // Body
+
+    // 1. Drop shadow
     p.circle_filled(
-        center + vec2(0.0, 1.5),
-        radius + 1.0,
-        Color32::from_rgb(8, 9, 10),
+        center + vec2(0.0, 2.0),
+        radius + 1.5,
+        Color32::from_black_alpha(100),
     );
-    p.circle_filled(center, radius, Color32::from_rgb(34, 36, 40));
-    p.circle_filled(
-        center - vec2(0.0, 1.0),
-        radius * 0.78,
-        Color32::from_rgb(46, 48, 53),
-    );
+
+    // 2. Outer knurled bezel ring
+    p.circle_filled(center, radius + 0.8, Color32::from_rgb(18, 20, 24));
     p.circle_stroke(
         center,
-        radius,
-        Stroke::new(1.0_f32, Color32::from_rgb(70, 74, 80)),
+        radius + 0.8,
+        Stroke::new(1.0_f32, Color32::from_rgb(52, 56, 64)),
     );
-    // Pointer
+
+    // 3. Dial face body
+    p.circle_filled(center, radius, Color32::from_rgb(32, 35, 40));
+    // Ambient specular sheen (top-left)
+    p.circle_filled(
+        center - vec2(0.6, 0.8),
+        radius * 0.80,
+        Color32::from_rgb(46, 50, 56),
+    );
+    // Center indented cap
+    p.circle_filled(center, radius * 0.68, Color32::from_rgb(24, 26, 30));
+
+    // 4. Pointer notch (beveled white indicator line)
     let a = a0 + sweep * norm;
+    let p_start = pos2(
+        center.x + a.cos() * (radius * 0.22),
+        center.y + a.sin() * (radius * 0.22),
+    );
+    let p_end = pos2(
+        center.x + a.cos() * (radius * 0.88),
+        center.y + a.sin() * (radius * 0.88),
+    );
+    // Subtle shadow behind pointer
     p.line_segment(
-        [
-            pos2(
-                center.x + a.cos() * radius * 0.2,
-                center.y + a.sin() * radius * 0.2,
-            ),
-            pos2(
-                center.x + a.cos() * (radius - 1.5),
-                center.y + a.sin() * (radius - 1.5),
-            ),
-        ],
-        Stroke::new(2.5_f32, Color32::WHITE),
+        [p_start + vec2(0.5, 0.5), p_end + vec2(0.5, 0.5)],
+        Stroke::new(2.8_f32, Color32::from_black_alpha(120)),
     );
-    label(
-        p,
-        pos2(center.x, center.y + radius + 13.0),
-        name,
-        9.5,
-        Color32::from_gray(225),
-        Align2::CENTER_CENTER,
+    // Crisp white pointer
+    p.line_segment(
+        [p_start, p_end],
+        Stroke::new(2.4_f32, Color32::from_rgb(245, 248, 252)),
     );
+
+    if !name.is_empty() {
+        label(
+            p,
+            pos2(center.x, center.y + radius + 13.0),
+            name,
+            9.5,
+            Color32::from_gray(225),
+            Align2::CENTER_CENTER,
+        );
+    }
     changed
 }
 
