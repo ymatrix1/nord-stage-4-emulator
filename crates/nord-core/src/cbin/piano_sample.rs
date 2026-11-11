@@ -1,19 +1,49 @@
-//! Nord Piano Library (`.npno`) Binary Parser and 4-Bit DPCM Audio Decoder.
+//! Nord Piano Library (`.npno`) Binary Parser and `CNSP` Paged Fixed-LPC Decoder.
 //!
-//! Spec: `docs/specs/cbin-and-presets.md` §5.2, `docs/research/nord-piano-npno-and-codec.md`
+//! Spec: `docs/specs/cbin-and-presets.md` §5.2, `docs/research/nsmp4-and-npno-cnsp-codec.md` §3
 
 use super::container::CBIN_HEADER_SIZE;
+use super::sample::fixed_lpc_predict;
 
 /// Size of the 128-note MIDI mapping lookup tables in bytes.
 pub const MIDI_NOTE_TABLE_SIZE: usize = 128;
 
-/// Descriptor for an individual acoustic piano multisample stroke.
+/// Base offset of the `.npno` `CNSP` payload relative to file byte 0.
+pub const NPNO_CNSP_BASE_OFFSET: usize = 0x002C;
+
+/// Storage sample rate (Hz) used by Nord `.npno` piano sample banks.
+pub const NPNO_SAMPLE_RATE_HZ: u32 = 35_000;
+
+/// Byte offset of the 128-entry `[u16 BE; 128]` key stroke count table.
+pub const NPNO_KEY_COUNTS_OFFSET: usize = 0x064E;
+
+/// Byte offset where the stride-`0x76` stroke descriptor table begins.
+pub const NPNO_STROKE_TABLE_OFFSET: usize = 0x0756;
+
+/// Size in bytes of each stroke descriptor record (`0x76` = 118 bytes).
+pub const NPNO_STROKE_RECORD_SIZE: usize = 0x76;
+
+/// Normal sustain stroke kind (`flags_hi == 0`).
+pub const NPNO_STROKE_NORMAL: u8 = 0;
+/// Damper-down / sympathetic resonance stroke kind (`flags_hi == 1`).
+pub const NPNO_STROKE_DAMPER: u8 = 1;
+/// Key-off release stroke kind (`flags_hi == 2`).
+pub const NPNO_STROKE_RELEASE: u8 = 2;
+
+/// Descriptor for an individual acoustic/electric piano multisample stroke.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NpnoStroke {
     pub data_offset: usize,
     pub data_size: usize,
     pub root_key: u8,
     pub sample_rate: u32,
+    pub channels: u16,
+    pub npages: u16,
+    pub total_frames: usize,
+    pub vel_low: u8,
+    pub stroke_kind: u8,
+    pub init_left: [i16; 4],
+    pub init_right: [i16; 4],
     pub loop_start: Option<u32>,
     pub loop_end: Option<u32>,
 }
@@ -23,6 +53,8 @@ pub struct NpnoStroke {
 pub struct NpnoInstrument {
     pub name: String,
     pub long_name: String,
+    /// Audio channel count stored at `0x064A` (`1` = mono, `2` = stereo).
+    pub channels: u16,
     /// 128-entry lookup table mapping MIDI key (0..127) to multisample root key.
     pub key_map: [u8; MIDI_NOTE_TABLE_SIZE],
     /// 128-entry signed micro-cents detuning calibration per key (-128..+127 cents).
@@ -105,33 +137,77 @@ impl NpnoInstrument {
             velocity_tiers.copy_from_slice(&bytes[0x0238..0x02B8]);
         }
 
-        // Parse stroke descriptor entries
+        let mut channels = if bytes.len() >= 0x064C {
+            u16::from_be_bytes([bytes[0x064A], bytes[0x064B]])
+        } else {
+            1
+        };
+        if channels != 1 && channels != 2 {
+            channels = 1;
+        }
+
+        // Parse 0x064E..0x074E key counts and 0x0756.. stride-0x76 stroke descriptor table.
         let mut strokes = Vec::new();
-        // Strokes table begins at 0x0760 when present
-        if bytes.len() >= 0x0760 + 32 {
-            let mut cursor = 0x0760;
-            while cursor + 32 <= bytes.len() && cursor < 0x1F30 {
-                let off =
-                    u32::from_be_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
-                let sz =
-                    u32::from_be_bytes(bytes[cursor + 4..cursor + 8].try_into().unwrap()) as usize;
-                if off > 0 && off < bytes.len() && sz > 0 {
+        if bytes.len() >= NPNO_STROKE_TABLE_OFFSET {
+            let nstrokes = u16::from_be_bytes([bytes[0x064C], bytes[0x064D]]) as usize;
+            let mut key_for_idx = Vec::with_capacity(nstrokes);
+            for key in 0..MIDI_NOTE_TABLE_SIZE {
+                let off = NPNO_KEY_COUNTS_OFFSET + key * 2;
+                let count = u16::from_be_bytes([bytes[off], bytes[off + 1]]) as usize;
+                for _ in 0..count {
+                    key_for_idx.push(key as u8);
+                }
+            }
+
+            let page_bytes = 1022usize * usize::from(channels);
+            for k in 0..nstrokes {
+                let rec_off = NPNO_STROKE_TABLE_OFFSET + k * NPNO_STROKE_RECORD_SIZE;
+                if rec_off + NPNO_STROKE_RECORD_SIZE > bytes.len() {
+                    break;
+                }
+                let rec = &bytes[rec_off..rec_off + NPNO_STROKE_RECORD_SIZE];
+                let rel_off = u32::from_be_bytes([rec[8], rec[9], rec[10], rec[11]]) as usize;
+                let data_offset = NPNO_CNSP_BASE_OFFSET + rel_off;
+                let u0c = u16::from_be_bytes([rec[12], rec[13]]);
+                let stroke_kind = (u0c >> 8) as u8;
+                let vel_low = (u0c & 0xFF) as u8;
+                let total_frames =
+                    u32::from_be_bytes([rec[14], rec[15], rec[16], rec[17]]) as usize;
+                let npages = u16::from_be_bytes([rec[18], rec[19]]);
+                let data_size = usize::from(npages) * page_bytes;
+
+                let mut init_left = [0i16; 4];
+                let mut init_right = [0i16; 4];
+                for i in 0..4 {
+                    init_left[i] = i16::from_be_bytes([rec[0x14 + i * 2], rec[0x15 + i * 2]]);
+                    init_right[i] = i16::from_be_bytes([rec[0x1C + i * 2], rec[0x1D + i * 2]]);
+                }
+
+                let root_key = key_for_idx.get(k).copied().unwrap_or(60);
+                if npages > 0 && data_offset < bytes.len() {
                     strokes.push(NpnoStroke {
-                        data_offset: off,
-                        data_size: sz.min(bytes.len() - off),
-                        root_key: 60, // default Middle C fallback
-                        sample_rate: 44100,
+                        data_offset,
+                        data_size: data_size.min(bytes.len() - data_offset),
+                        root_key,
+                        sample_rate: NPNO_SAMPLE_RATE_HZ,
+                        channels,
+                        npages,
+                        total_frames,
+                        vel_low,
+                        stroke_kind,
+                        init_left,
+                        init_right,
                         loop_start: None,
                         loop_end: None,
                     });
                 }
-                cursor += 32;
             }
         }
 
         Ok(Self {
             name,
             long_name,
+            channels,
             key_map,
             tuning_cents,
             velocity_tiers,
@@ -155,6 +231,144 @@ impl NpnoInstrument {
         let note_idx = (note as usize).min(MIDI_NOTE_TABLE_SIZE - 1);
         self.tuning_cents[note_idx]
     }
+}
+
+/// Decodes a single `.npno` paged `CNSP` fixed-LPC stroke into normalized `f32` PCM (`y / 8192.0`).
+///
+/// Supports both mono (`channels == 1`, 1022-byte pages) and sample-interleaved stereo
+/// (`channels == 2`, 2044-byte pages), handling the 64-frame page overlap continuity window.
+pub fn decode_npno_stroke(
+    stroke: &NpnoStroke,
+    file_bytes: &[u8],
+) -> Result<(Vec<f32>, Option<Vec<f32>>), String> {
+    let ch = usize::from(stroke.channels);
+    if ch != 1 && ch != 2 {
+        return Err(format!("unsupported .npno channel count {ch}"));
+    }
+    let page_bytes = 1022 * ch;
+    let npages = usize::from(stroke.npages);
+    let total_bytes = npages
+        .checked_mul(page_bytes)
+        .ok_or_else(|| "npno stroke size overflow".to_string())?;
+    let end = stroke
+        .data_offset
+        .checked_add(total_bytes)
+        .ok_or_else(|| "npno stroke offset overflow".to_string())?;
+    if end > file_bytes.len() {
+        return Err(format!(
+            "npno stroke truncated: need byte {end}, buffer length {}",
+            file_bytes.len()
+        ));
+    }
+
+    let mut hl: [i64; 4] = stroke.init_left.map(i64::from);
+    let mut hr: [i64; 4] = stroke.init_right.map(i64::from);
+    let mut left_i = Vec::with_capacity(stroke.total_frames);
+    let mut right_i = if ch == 2 {
+        Vec::with_capacity(stroke.total_frames)
+    } else {
+        Vec::new()
+    };
+
+    for page_idx in 0..npages {
+        let p_off = stroke.data_offset + page_idx * page_bytes;
+        let page = &file_bytes[p_off..p_off + page_bytes];
+        let b1 = page[1];
+        let order = b1 >> 5;
+        let nbits = u32::from(b1 & 0x0F);
+        if order > 4 || nbits == 0 {
+            return Err(format!(
+                "invalid .npno page header byte 0x{b1:02x} (order={order}, nbits={nbits})"
+            ));
+        }
+
+        let payload = &page[2..];
+        let nf = ((payload.len() * 8) / ch) / (nbits as usize);
+        let mask = (1u64 << nbits) - 1;
+        let sign_shift = 32 - nbits;
+
+        let mut bit_buf: u64 = 0;
+        let mut bits_avail: u32 = 0;
+        let mut word_idx = 0usize;
+
+        let mut next_res = || -> Result<i32, String> {
+            while bits_avail < nbits {
+                let wi = word_idx * 2;
+                if wi + 1 >= payload.len() {
+                    return Err("unexpected end of .npno page bitstream".to_string());
+                }
+                let word = u16::from_be_bytes([payload[wi], payload[wi + 1]]);
+                bit_buf |= u64::from(word) << bits_avail;
+                bits_avail += 16;
+                word_idx += 1;
+            }
+            let raw = (bit_buf & mask) as u32;
+            bit_buf >>= nbits;
+            bits_avail -= nbits;
+            Ok(((raw << sign_shift) as i32) >> sign_shift)
+        };
+
+        let mut page_l = Vec::with_capacity(nf);
+        let mut page_r = if ch == 2 {
+            Vec::with_capacity(nf)
+        } else {
+            Vec::new()
+        };
+
+        for _ in 0..nf {
+            let res_l = next_res()?;
+            let yl = fixed_lpc_predict(order, &hl) + i64::from(res_l);
+            hl = [hl[1], hl[2], hl[3], yl];
+            page_l.push(yl);
+
+            if ch == 2 {
+                let res_r = next_res()?;
+                let yr = fixed_lpc_predict(order, &hr) + i64::from(res_r);
+                hr = [hr[1], hr[2], hr[3], yr];
+                page_r.push(yr);
+            }
+        }
+
+        let skip = if page_idx == 0 {
+            0
+        } else {
+            64.min(page_l.len())
+        };
+        left_i.extend_from_slice(&page_l[skip..]);
+        if ch == 2 {
+            right_i.extend_from_slice(&page_r[skip..]);
+        }
+
+        // Next page initializes from the 4 samples ending 64 frames before the end of this page.
+        if page_idx + 1 < npages && page_l.len() >= 68 {
+            let tail = page_l.len() - 64;
+            hl = [
+                page_l[tail - 4],
+                page_l[tail - 3],
+                page_l[tail - 2],
+                page_l[tail - 1],
+            ];
+            if ch == 2 {
+                hr = [
+                    page_r[tail - 4],
+                    page_r[tail - 3],
+                    page_r[tail - 2],
+                    page_r[tail - 1],
+                ];
+            }
+        }
+    }
+
+    if stroke.total_frames > 0 {
+        left_i.truncate(stroke.total_frames);
+        if ch == 2 {
+            right_i.truncate(stroke.total_frames);
+        }
+    }
+
+    let left = left_i.into_iter().map(|s| (s as f32) / 8192.0).collect();
+    let right = (ch == 2).then(|| right_i.into_iter().map(|s| (s as f32) / 8192.0).collect());
+    Ok((left, right))
 }
 
 /// Decodes 4-bit signed differential PCM (DPCM) audio bytes into 32-bit floating point samples.
@@ -259,17 +473,15 @@ mod tests {
         // Key map table (0..127) at 0x00B8
         for note in 0..128 {
             let root = match note {
-                0..=24 => 25,
-                25..=29 => 25,
+                0..=29 => 25,
                 30..=34 => 30,
                 35..=39 => 35,
                 40..=44 => 40,
                 45..=49 => 45,
                 50..=54 => 50,
                 55..=59 => 55,
-                60..=64 => 60,
-                108..=127 => 0xFF,
-                _ => 60,
+                60..=107 => 60,
+                _ => 0xFF,
             };
             buf[0x00B8 + note] = root;
         }
@@ -281,9 +493,20 @@ mod tests {
         // Velocity tiers table at 0x0238
         buf[0x0238 + 60] = 64;
 
-        // Stroke entry at 0x0760
-        buf[0x0760..0x0764].copy_from_slice(&0x0000_1000u32.to_be_bytes()); // offset 4096
-        buf[0x0764..0x0768].copy_from_slice(&0x0000_0800u32.to_be_bytes()); // size 2048
+        // Channel count (1) and nstrokes (1)
+        buf[0x064A..0x064C].copy_from_slice(&1u16.to_be_bytes());
+        buf[0x064C..0x064E].copy_from_slice(&1u16.to_be_bytes());
+        buf[NPNO_KEY_COUNTS_OFFSET + 60 * 2..NPNO_KEY_COUNTS_OFFSET + 60 * 2 + 2]
+            .copy_from_slice(&1u16.to_be_bytes());
+
+        // 0x76-byte stroke descriptor at 0x0756 pointing to offset 0x1000 (rel_off = 0x1000 - 0x2C)
+        let rec =
+            &mut buf[NPNO_STROKE_TABLE_OFFSET..NPNO_STROKE_TABLE_OFFSET + NPNO_STROKE_RECORD_SIZE];
+        let rel_off = (0x1000 - NPNO_CNSP_BASE_OFFSET) as u32;
+        rec[8..12].copy_from_slice(&rel_off.to_be_bytes());
+        rec[12..14].copy_from_slice(&0x0001u16.to_be_bytes()); // normal, vel_low = 1
+        rec[14..18].copy_from_slice(&512u32.to_be_bytes()); // total_frames
+        rec[18..20].copy_from_slice(&1u16.to_be_bytes()); // npages = 1
 
         buf
     }
@@ -295,6 +518,7 @@ mod tests {
 
         assert_eq!(npno.name, "Grand Imperial");
         assert_eq!(npno.long_name, "Bosendorfer 290 Grand Imperial");
+        assert_eq!(npno.channels, 1);
         assert_eq!(npno.root_key_for_note(21), Some(25)); // A0 mapped to C#1
         assert_eq!(npno.root_key_for_note(60), Some(60)); // Middle C
         assert_eq!(npno.root_key_for_note(110), None); // Out of physical range
@@ -305,7 +529,10 @@ mod tests {
 
         assert_eq!(npno.strokes.len(), 1);
         assert_eq!(npno.strokes[0].data_offset, 0x1000);
-        assert_eq!(npno.strokes[0].data_size, 0x0800);
+        assert_eq!(npno.strokes[0].data_size, 1022);
+        assert_eq!(npno.strokes[0].root_key, 60);
+        assert_eq!(npno.strokes[0].sample_rate, NPNO_SAMPLE_RATE_HZ);
+        assert_eq!(npno.strokes[0].total_frames, 512);
     }
 
     #[test]
@@ -384,5 +611,178 @@ mod tests {
         for s in pcm {
             assert!((-1.0..=1.0).contains(&s));
         }
+    }
+
+    fn encode_npno_page(
+        residuals: &[i32],
+        channels: usize,
+        b0: u8,
+        order: u8,
+        nbits: u32,
+    ) -> Vec<u8> {
+        let page_bytes = 1022 * channels;
+        let payload_len = page_bytes - 2;
+        let mut page = vec![0u8; page_bytes];
+        page[0] = b0;
+        page[1] = (order << 5) | ((nbits as u8) & 0x0F);
+
+        let mask = (1u64 << nbits) - 1;
+        let mut bit_buf: u64 = 0;
+        let mut bits_used: u32 = 0;
+        let mut word_idx = 0usize;
+
+        for &r in residuals {
+            let masked = (r as u64) & mask;
+            bit_buf |= masked << bits_used;
+            bits_used += nbits;
+            while bits_used >= 16 {
+                let w = (bit_buf & 0xFFFF) as u16;
+                let wi = 2 + word_idx * 2;
+                if wi + 1 < page_bytes {
+                    page[wi..wi + 2].copy_from_slice(&w.to_be_bytes());
+                }
+                bit_buf >>= 16;
+                bits_used -= 16;
+                word_idx += 1;
+            }
+        }
+        if bits_used > 0 {
+            let wi = 2 + word_idx * 2;
+            if wi + 1 < 2 + payload_len {
+                let w = (bit_buf & 0xFFFF) as u16;
+                page[wi..wi + 2].copy_from_slice(&w.to_be_bytes());
+            }
+        }
+        page
+    }
+
+    fn encode_npno_lpc_sequence(samples: &[i32], order: u8, init: [i16; 4]) -> Vec<i32> {
+        let mut hist = init.map(i64::from);
+        let mut out = Vec::with_capacity(samples.len());
+        for &s in samples {
+            let pred = fixed_lpc_predict(order, &hist);
+            out.push((i64::from(s) - pred) as i32);
+            hist = [hist[1], hist[2], hist[3], i64::from(s)];
+        }
+        out
+    }
+
+    #[test]
+    fn test_decode_npno_mono_multipage_overlap_and_truncation() {
+        let nbits = 8u32;
+        let order = 2u8;
+        let nf = (1020 * 8) / (nbits as usize); // 1020 frames/page
+        let total_unique = nf + 300; // span 2 pages, truncated mid-page-1
+        let signal: Vec<i32> = (0..total_unique)
+            .map(|i| (((i as f32) * 0.05).sin() * 1500.0).round() as i32)
+            .collect();
+
+        // Pad page 1 source up to full 64 + (nf - 64) = nf samples
+        let mut padded_signal = signal.clone();
+        while padded_signal.len() < nf + (nf - 64) {
+            let prev = *padded_signal.last().unwrap_or(&0);
+            padded_signal.push(prev.saturating_sub(1).max(-1500));
+        }
+
+        let init = [-40i16, -20, -10, -2];
+        let p0_samples = &padded_signal[0..nf];
+        let p0_res = encode_npno_lpc_sequence(p0_samples, order, init);
+        let p0_bytes = encode_npno_page(&p0_res, 1, 0, order, nbits);
+
+        let p1_init = [
+            p0_samples[nf - 68] as i16,
+            p0_samples[nf - 67] as i16,
+            p0_samples[nf - 66] as i16,
+            p0_samples[nf - 65] as i16,
+        ];
+        let p1_samples = &padded_signal[nf - 64..nf - 64 + nf];
+        let p1_res = encode_npno_lpc_sequence(p1_samples, 4, p1_init);
+        let p1_bytes = encode_npno_page(&p1_res, 1, 3, 4, nbits);
+
+        let mut raw = build_synthetic_npno();
+        let data_off = 0x1000usize;
+        raw.resize(data_off + p0_bytes.len() + p1_bytes.len(), 0);
+        raw[data_off..data_off + p0_bytes.len()].copy_from_slice(&p0_bytes);
+        raw[data_off + p0_bytes.len()..data_off + p0_bytes.len() + p1_bytes.len()]
+            .copy_from_slice(&p1_bytes);
+
+        let rec =
+            &mut raw[NPNO_STROKE_TABLE_OFFSET..NPNO_STROKE_TABLE_OFFSET + NPNO_STROKE_RECORD_SIZE];
+        rec[14..18].copy_from_slice(&(total_unique as u32).to_be_bytes());
+        rec[18..20].copy_from_slice(&2u16.to_be_bytes());
+        for i in 0..4 {
+            rec[0x14 + i * 2..0x16 + i * 2].copy_from_slice(&init[i].to_be_bytes());
+        }
+
+        let inst = NpnoInstrument::parse(&raw).expect("parse mono multipage npno");
+        let (left, right) = decode_npno_stroke(&inst.strokes[0], &raw).expect("decode mono stroke");
+        assert!(right.is_none());
+        assert_eq!(left.len(), total_unique);
+        for (i, (&got, &exp_i)) in left.iter().zip(signal.iter()).enumerate() {
+            let exp = (exp_i as f32) / 8192.0;
+            assert!(
+                (got - exp).abs() < 1e-6,
+                "sample {i}: got {got}, expected {exp}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_decode_npno_stereo_interleaved_and_errors() {
+        let nbits = 8u32;
+        let order = 1u8;
+        let nf = (2042 * 8 / 2) / (nbits as usize); // 1021 frames
+        let total_frames = 600usize;
+        let left_s: Vec<i32> = (0..nf).map(|i| ((i as i32) * 3) % 4000).collect();
+        let right_s: Vec<i32> = (0..nf).map(|i| -(((i as i32) * 5) % 4000)).collect();
+        let init_l = [10i16, 20, 30, 40];
+        let init_r = [-10i16, -20, -30, -40];
+        let res_l = encode_npno_lpc_sequence(&left_s, order, init_l);
+        let res_r = encode_npno_lpc_sequence(&right_s, order, init_r);
+        let mut interleaved = Vec::with_capacity(nf * 2);
+        for (l, r) in res_l.into_iter().zip(res_r.into_iter()) {
+            interleaved.push(l);
+            interleaved.push(r);
+        }
+        let page = encode_npno_page(&interleaved, 2, 1, order, nbits);
+
+        let mut raw = build_synthetic_npno();
+        raw[0x064A..0x064C].copy_from_slice(&2u16.to_be_bytes());
+        let data_off = 0x1000usize;
+        raw.resize(data_off + page.len(), 0);
+        raw[data_off..data_off + page.len()].copy_from_slice(&page);
+
+        let rec =
+            &mut raw[NPNO_STROKE_TABLE_OFFSET..NPNO_STROKE_TABLE_OFFSET + NPNO_STROKE_RECORD_SIZE];
+        rec[12..14].copy_from_slice(&((2u16 << 8) | 30).to_be_bytes()); // release stroke, vel 30
+        rec[14..18].copy_from_slice(&(total_frames as u32).to_be_bytes());
+        rec[18..20].copy_from_slice(&1u16.to_be_bytes());
+        for i in 0..4 {
+            rec[0x14 + i * 2..0x16 + i * 2].copy_from_slice(&init_l[i].to_be_bytes());
+            rec[0x1C + i * 2..0x1E + i * 2].copy_from_slice(&init_r[i].to_be_bytes());
+        }
+
+        let inst = NpnoInstrument::parse(&raw).expect("parse stereo npno");
+        assert_eq!(inst.channels, 2);
+        assert_eq!(inst.strokes[0].stroke_kind, NPNO_STROKE_RELEASE);
+        assert_eq!(inst.strokes[0].vel_low, 30);
+
+        let (l, r_opt) = decode_npno_stroke(&inst.strokes[0], &raw).expect("decode stereo");
+        let r = r_opt.expect("stereo right channel");
+        assert_eq!(l.len(), total_frames);
+        assert_eq!(r.len(), total_frames);
+        for i in 0..total_frames {
+            assert!((l[i] - (left_s[i] as f32) / 8192.0).abs() < 1e-6);
+            assert!((r[i] - (right_s[i] as f32) / 8192.0).abs() < 1e-6);
+        }
+
+        // Error checks: bad order (5), truncated buffer
+        let mut bad_order = inst.strokes[0].clone();
+        bad_order.npages = 1;
+        let mut bad_raw = raw.clone();
+        bad_raw[data_off + 1] = 5 << 5 | 8;
+        assert!(decode_npno_stroke(&bad_order, &bad_raw).is_err());
+
+        assert!(decode_npno_stroke(&inst.strokes[0], &raw[..data_off + 10]).is_err());
     }
 }

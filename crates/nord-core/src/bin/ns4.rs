@@ -103,6 +103,66 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 }
             }
 
+            if cbin.header.kind == CbinKind::PianoSample {
+                let npno = nord_core::cbin::NpnoInstrument::parse(&bytes)?;
+                let mut msg = format!(
+                    "File: {path}\nKind: PianoSample (.npno)\nName: {}\nLong Name: {}\nChannels: {}\nStrokes: {}",
+                    npno.name,
+                    npno.long_name,
+                    npno.channels,
+                    npno.strokes.len()
+                );
+                if args.iter().any(|a| a == "--decode") {
+                    let sound = nord_core::piano::NpnoSound::from_npno_bytes(&bytes)?;
+                    let frames: usize = sound.strokes.iter().map(|s| s.pcm.len()).sum();
+                    let peak = sound
+                        .strokes
+                        .iter()
+                        .flat_map(|s| s.pcm.iter())
+                        .fold(0.0f32, |m, &x| m.max(x.abs()));
+                    msg.push_str(&format!(
+                        "\nDecoded: {} strokes, {} frames, peak={peak:.4}, zones={}",
+                        sound.strokes.len(),
+                        frames,
+                        sound.zones.len()
+                    ));
+                }
+                return Ok(msg);
+            }
+            if cbin.header.kind == CbinKind::SampleLibrary {
+                let nsmp = nord_core::cbin::Nsmp4Instrument::parse(&bytes).map_err(|e| e.to_string())?;
+                let mut msg = format!(
+                    "File: {path}\nKind: SampleLibrary (.nsmp4)\nName: {}\nZones: {}\nStrokes: {}",
+                    nsmp.name,
+                    nsmp.zones.len(),
+                    nsmp.strokes.len()
+                );
+                if args.iter().any(|a| a == "--decode") {
+                    let sound = nord_core::synth::SynthSampleSound::from_nsmp4_bytes(&bytes)
+                        .map_err(|e| e.to_string())?;
+                    let looped = sound
+                        .zones
+                        .iter()
+                        .filter(|z| z.loop_start.is_some())
+                        .count();
+                    let stereo = sound
+                        .zones
+                        .iter()
+                        .filter(|z| z.pcm_right.is_some())
+                        .count();
+                    let peak = sound
+                        .zones
+                        .iter()
+                        .flat_map(|z| z.pcm.iter())
+                        .fold(0.0f32, |m, &x| m.max(x.abs()));
+                    msg.push_str(&format!(
+                        "\nDecoded: {} zones ({looped} looped, {stereo} stereo), peak={peak:.4}",
+                        sound.zones.len()
+                    ));
+                }
+                return Ok(msg);
+            }
+
             Ok(format!(
                 "File: {path}\nKind: {:?}\nBank: {}\nLocation: {}\nCategory: 0x{:02X}\nSchema: 0x{:04X}\nChecksum: 0x{:08X}\nPayload: {} bytes",
                 cbin.header.kind,
@@ -228,8 +288,65 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                  RMS level: {rms:.4}"
             ))
         }
+        "backup" => {
+            let path = args
+                .get(2)
+                .ok_or_else(|| "usage: ns4 backup <file.ns4b> [--list [ext]] [--extract <entry> <out>]".to_string())?;
+            let archive = nord_core::cbin::Ns4BackupArchive::open(path).map_err(|e| e.to_string())?;
+            let mut file = fs::File::open(path).map_err(|e| format!("failed to open {path}: {e}"))?;
+
+            if let Some(pos) = args.iter().position(|a| a == "--extract") {
+                let entry_query = args
+                    .get(pos + 1)
+                    .ok_or_else(|| "missing entry name after --extract".to_string())?;
+                let out_path = args
+                    .get(pos + 2)
+                    .ok_or_else(|| "missing output path after --extract <entry>".to_string())?;
+                let payload = archive
+                    .read_entry(&mut file, entry_query)
+                    .map_err(|e| e.to_string())?;
+                fs::write(out_path, &payload)
+                    .map_err(|e| format!("failed to write {out_path}: {e}"))?;
+                return Ok(format!("Extracted {entry_query} ({} bytes) -> {out_path}", payload.len()));
+            }
+
+            if let Some(pos) = args.iter().position(|a| a == "--list") {
+                let filter = args.get(pos + 1).map(String::as_str).unwrap_or("");
+                let mut lines = Vec::new();
+                for entry in archive.entries() {
+                    if filter.is_empty()
+                        || entry
+                            .name
+                            .to_ascii_lowercase()
+                            .ends_with(&filter.to_ascii_lowercase())
+                    {
+                        lines.push(format!(
+                            "{} ({} B, method={})",
+                            entry.name, entry.uncompressed_size, entry.compression_method
+                        ));
+                    }
+                }
+                return Ok(lines.join("\n"));
+            }
+
+            let manifest = archive.read_manifest(&mut file).ok();
+            let mut out = format!("Backup: {path}\nEntries: {}\n", archive.entries().len());
+            if let Some(m) = manifest {
+                out.push_str(&format!(
+                    "Product ID: {} (version={}, build={}, stage4={})\n",
+                    m.product_id,
+                    m.product_version,
+                    m.product_build,
+                    m.is_nord_stage_4()
+                ));
+            }
+            for ext in [".ns4p", ".npno", ".nsmp4", ".ns4y", ".ns4o", ".ns4n"] {
+                out.push_str(&format!("  {ext}: {}\n", archive.entries_with_ext(ext).len()));
+            }
+            Ok(out)
+        }
         other => Err(format!(
-            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | convert <path> ... | render-demo | render-patch <path>)"
+            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | render-demo | render-patch <path>)"
         )),
     }
 }
@@ -468,5 +585,37 @@ mod tests {
 
         let _ = fs::remove_file(fw_path);
         let _ = fs::remove_dir_all(unpack_dir);
+    }
+
+    #[test]
+    fn test_cli_inspect_nsmp4_and_backup_subcommand() {
+        // Minimal valid .nsmp4 file in temp dir
+        let dir = std::env::temp_dir().join("nord_stage4_nsmp_cli_test");
+        let _ = fs::create_dir_all(&dir);
+        let nsmp_path = dir.join("test_cli.nsmp4");
+        let mut data = vec![0u8; 48];
+        data[0..4].copy_from_slice(b"CBIN");
+        data[4..8].copy_from_slice(&1u32.to_le_bytes());
+        data[8..12].copy_from_slice(b"nsmp");
+        data[0x2c..0x30].copy_from_slice(b"NSMP");
+        data.extend_from_slice(&[0u8; 12]);
+        let mut hdr = vec![0u8; 64];
+        hdr[10..17].copy_from_slice(b"Strings");
+        data.extend_from_slice(b"\0hdr");
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&(hdr.len() as u32).to_be_bytes());
+        data.extend_from_slice(&hdr);
+        fs::write(&nsmp_path, &data).unwrap();
+
+        let out = run_cli(&[
+            "ns4".to_string(),
+            "inspect".to_string(),
+            nsmp_path.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+        assert!(out.contains("SampleLibrary (.nsmp4)"));
+        assert!(out.contains("Strings"));
+
+        let _ = fs::remove_dir_all(dir);
     }
 }

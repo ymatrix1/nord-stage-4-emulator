@@ -139,7 +139,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Parse `.nsmp4` container chunks and expose initial instrument, key-map, zone, and stroke metadata (`crates/nord-core/src/cbin/sample.rs`)
 - [x] Reverse-engineer the `CNSP` 4-bit DPCM audio payload decompression routine and implement `NpnoInstrument` and `decode_4bit_dpcm` in `crates/nord-core/src/cbin/piano_sample.rs`
 - [x] Complete full-stream extraction of Image 1 (`410,321` B -> `798,912` B, `0xFBB813F8`) and Image 0 (`3,509,573` B -> `5,499,504` B, `0xDE902503`) via `ns4 inspect --verify --unpack` (remaining work: map internal `ARM0` / `DSPO` / `DSPS` / `DSPF` symbols)
-- [ ] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup
+- [x] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup (`sample.rs`, `piano_sample.rs`, `backup.rs`)
 
 ---
 

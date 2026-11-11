@@ -2,7 +2,7 @@
 //!
 //! Spec: `docs/specs/piano-engine.md`
 
-use crate::cbin::piano_sample::{decode_4bit_dpcm, NpnoInstrument};
+use crate::cbin::piano_sample::NpnoInstrument;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -63,6 +63,7 @@ pub struct LoadedPianoStroke {
     pub root_key: u8,
     pub sample_rate: f32,
     pub pcm: Arc<[f32]>,
+    pub pcm_right: Option<Arc<[f32]>>,
     pub loop_start: Option<usize>,
     pub loop_end: Option<usize>,
 }
@@ -96,30 +97,60 @@ impl NpnoSound {
     /// Creates a playable `NpnoSound` from parsed `NpnoInstrument` and raw file bytes.
     pub fn from_npno_bytes(bytes: &[u8]) -> Result<Self, String> {
         let inst = NpnoInstrument::parse(bytes)?;
-        let mut strokes = Vec::new();
+        let mut strokes = Vec::with_capacity(inst.strokes.len());
+        let mut meta = Vec::with_capacity(inst.strokes.len());
         for s in &inst.strokes {
-            if s.data_offset + s.data_size <= bytes.len() {
-                let raw_payload = &bytes[s.data_offset..s.data_offset + s.data_size];
-                let pcm = decode_4bit_dpcm(raw_payload, 0.001);
-                strokes.push(LoadedPianoStroke {
-                    root_key: s.root_key,
-                    sample_rate: s.sample_rate as f32,
-                    pcm: pcm.into(),
-                    loop_start: s.loop_start.map(|x| x as usize),
-                    loop_end: s.loop_end.map(|x| x as usize),
-                });
-            }
+            let (left, right) = crate::cbin::decode_npno_stroke(s, bytes)?;
+            let idx = strokes.len();
+            strokes.push(LoadedPianoStroke {
+                root_key: s.root_key,
+                sample_rate: s.sample_rate as f32,
+                pcm: left.into(),
+                pcm_right: right.map(Into::into),
+                loop_start: s.loop_start.map(|x| x as usize),
+                loop_end: s.loop_end.map(|x| x as usize),
+            });
+            meta.push((idx, s.root_key, s.stroke_kind, s.vel_low));
         }
 
         let mut stroke_by_key = [None; 128];
-        for (note, slot) in stroke_by_key.iter_mut().enumerate() {
-            if let Some(root) = inst.root_key_for_note(note as u8) {
-                if let Some(pos) = strokes.iter().position(|st| st.root_key == root) {
-                    *slot = Some(pos);
-                } else if !strokes.is_empty() {
-                    *slot = Some(0);
-                }
+        let mut zones = Vec::new();
+        for note in 0..128u8 {
+            let Some(root) = inst.root_key_for_note(note) else {
+                continue;
+            };
+            let tune_cents = inst.cents_detune_for_note(note);
+            let mut normal: Vec<(usize, u8)> = meta
+                .iter()
+                .filter(|(_, rk, kind, _)| *rk == root && *kind == crate::cbin::NPNO_STROKE_NORMAL)
+                .map(|&(idx, _, _, vel)| (idx, vel))
+                .collect();
+            if normal.is_empty() {
+                normal = meta
+                    .iter()
+                    .filter(|(_, rk, kind, _)| {
+                        *rk == root && *kind == crate::cbin::NPNO_STROKE_DAMPER
+                    })
+                    .map(|&(idx, _, _, vel)| (idx, vel))
+                    .collect();
             }
+            normal.sort_by_key(|&(_, vel)| vel);
+
+            if let Some(&(first_idx, _)) = normal.first() {
+                stroke_by_key[note as usize] = Some(first_idx);
+            } else if !strokes.is_empty() {
+                stroke_by_key[note as usize] = Some(0);
+            }
+
+            Self::push_velocity_zones(&mut zones, note, root, tune_cents, false, &normal);
+
+            let mut release: Vec<(usize, u8)> = meta
+                .iter()
+                .filter(|(_, rk, kind, _)| *rk == root && *kind == crate::cbin::NPNO_STROKE_RELEASE)
+                .map(|&(idx, _, _, vel)| (idx, vel))
+                .collect();
+            release.sort_by_key(|&(_, vel)| vel);
+            Self::push_velocity_zones(&mut zones, note, root, tune_cents, true, &release);
         }
 
         Ok(Self {
@@ -128,8 +159,36 @@ impl NpnoSound {
             tuning_cents: inst.tuning_cents,
             stroke_by_key,
             strokes,
-            zones: Vec::new(),
+            zones,
         })
+    }
+
+    fn push_velocity_zones(
+        zones: &mut Vec<PianoSampleZone>,
+        note: u8,
+        root_key: u8,
+        tune_cents: i8,
+        trigger_release: bool,
+        sorted: &[(usize, u8)],
+    ) {
+        for (i, &(stroke_idx, vel)) in sorted.iter().enumerate() {
+            let vel_low = if i == 0 { 0 } else { vel };
+            let vel_high = if i + 1 < sorted.len() {
+                sorted[i + 1].1.saturating_sub(1).max(vel_low)
+            } else {
+                127
+            };
+            zones.push(PianoSampleZone {
+                key_low: note,
+                key_high: note,
+                vel_low,
+                vel_high,
+                root_key,
+                tune_cents,
+                trigger_release,
+                stroke_idx,
+            });
+        }
     }
 
     /// Creates a synthetic in-memory sound fixture for fast, deterministic testing.
@@ -140,6 +199,7 @@ impl NpnoSound {
             root_key,
             sample_rate,
             pcm: pcm.to_vec().into(),
+            pcm_right: None,
             loop_start: None,
             loop_end: None,
         };
@@ -201,6 +261,7 @@ impl NpnoSound {
                     root_key: reg.root_key,
                     sample_rate,
                     pcm: pcm.into(),
+                    pcm_right: None,
                     loop_start: reg.loop_start,
                     loop_end: reg.loop_end,
                 });
@@ -1005,21 +1066,36 @@ impl PianoLayer {
     }
 
     #[inline]
-    fn sample_stroke_at(stroke: &LoadedPianoStroke, pos: &mut f64, step: f64) -> Option<f32> {
-        let len = stroke.pcm.len();
-        let idx0 = *pos as usize;
+    fn sample_pcm_at(pcm: &[f32], pos: f64) -> Option<f32> {
+        let len = pcm.len();
+        let idx0 = pos as usize;
         if idx0 + 1 < len {
-            let frac = (*pos - idx0 as f64) as f32;
-            let s0 = stroke.pcm[idx0];
-            let s1 = stroke.pcm[idx0 + 1];
-            *pos += step;
+            let frac = (pos - idx0 as f64) as f32;
+            let s0 = pcm[idx0];
+            let s1 = pcm[idx0 + 1];
             Some(s0 + frac * (s1 - s0))
         } else if idx0 < len {
-            *pos += step;
-            Some(stroke.pcm[idx0])
+            Some(pcm[idx0])
         } else {
             None
         }
+    }
+
+    #[inline]
+    fn sample_stroke_stereo_at(
+        stroke: &LoadedPianoStroke,
+        pos: &mut f64,
+        step: f64,
+    ) -> Option<(f32, f32)> {
+        let p = *pos;
+        let l = Self::sample_pcm_at(&stroke.pcm, p)?;
+        let r = stroke
+            .pcm_right
+            .as_deref()
+            .and_then(|rp| Self::sample_pcm_at(rp, p))
+            .unwrap_or(l);
+        *pos = p + step;
+        Some((l, r))
     }
 
     #[inline]
@@ -1088,18 +1164,19 @@ impl PianoLayer {
             }
             let (sig_l, sig_r) = if let (Some(snd), Some(s_idx)) = (&self.sound, v.stroke_idx) {
                 if let Some(stroke) = snd.strokes.get(s_idx) {
-                    let main_s = Self::sample_stroke_at(stroke, &mut v.sample_pos, v.sample_step);
-                    if let Some(m) = main_s {
+                    if let Some((ml, mr)) =
+                        Self::sample_stroke_stereo_at(stroke, &mut v.sample_pos, v.sample_step)
+                    {
                         if unison_on && !v.is_release_sample {
-                            let d = Self::sample_stroke_at(
+                            let (dl, dr) = Self::sample_stroke_stereo_at(
                                 stroke,
                                 &mut v.sample_pos_detune,
                                 v.sample_step_detune,
                             )
-                            .unwrap_or(0.0);
-                            (0.75 * m + 0.25 * d, 0.25 * m + 0.75 * d)
+                            .unwrap_or((ml, mr));
+                            (0.75 * ml + 0.25 * dl, 0.25 * mr + 0.75 * dr)
                         } else {
-                            (m, m)
+                            (ml, mr)
                         }
                     } else {
                         v.active = false;
@@ -1488,5 +1565,68 @@ mod tests {
         // The voice allocator must steal the decaying releasing voice (note 45)
         assert_eq!(piano.voices[idx_releasing].note, 70);
         assert!(!piano.voices[idx_releasing].releasing);
+    }
+
+    #[test]
+    fn test_npno_sound_from_bytes_loads_stereo_velocity_layers_and_renders() {
+        let mut raw = vec![0u8; 0x1800];
+        raw[0..4].copy_from_slice(b"CBIN");
+        raw[4..8].copy_from_slice(&1u32.to_le_bytes());
+        raw[8..12].copy_from_slice(b"npno");
+        raw[0x2C..0x30].copy_from_slice(b"CNSP");
+        raw[0x48..0x55].copy_from_slice(b"White Grand\0\0");
+        raw[0x00B8..0x0138].fill(60);
+        raw[0x064A..0x064C].copy_from_slice(&2u16.to_be_bytes());
+        raw[0x064C..0x064E].copy_from_slice(&2u16.to_be_bytes());
+        raw[0x064E + 60 * 2..0x064E + 60 * 2 + 2].copy_from_slice(&2u16.to_be_bytes());
+
+        // Page 0 at 0x0900 (soft layer): order 0, nbits 16 -> [L=+400, R=-400] * nf
+        let p0_off = 0x0900usize;
+        let p1_off = p0_off + 2044;
+        raw.resize(p1_off + 2044, 0);
+        raw[p0_off + 1] = 15; // order=0, Wait: b1&0xF=16? Max nbits=14 fits in 0x0F -> use 8!
+        raw[p0_off + 1] = 8;
+        for w in (0..2042).step_by(2) {
+            // Two signed 8-bit residuals packed LSB-first per u16 BE: low=+20 (0x14), high=-20 (0xEC)
+            raw[p0_off + 2 + w..p0_off + 4 + w].copy_from_slice(&0xEC14u16.to_be_bytes());
+        }
+        // Page 1 at p1_off (loud layer): L=+80 (0x50), R=-80 (0xB0)
+        raw[p1_off + 1] = 8;
+        for w in (0..2042).step_by(2) {
+            raw[p1_off + 2 + w..p1_off + 4 + w].copy_from_slice(&0xB050u16.to_be_bytes());
+        }
+
+        for (k, (off, vel)) in [(p0_off, 0u16), (p1_off, 80u16)].into_iter().enumerate() {
+            let rec_off =
+                crate::cbin::NPNO_STROKE_TABLE_OFFSET + k * crate::cbin::NPNO_STROKE_RECORD_SIZE;
+            raw[rec_off + 8..rec_off + 12].copy_from_slice(
+                &((off - crate::cbin::NPNO_CNSP_BASE_OFFSET) as u32).to_be_bytes(),
+            );
+            raw[rec_off + 12..rec_off + 14].copy_from_slice(&vel.to_be_bytes());
+            raw[rec_off + 14..rec_off + 18].copy_from_slice(&64u32.to_be_bytes());
+            raw[rec_off + 18..rec_off + 20].copy_from_slice(&1u16.to_be_bytes());
+        }
+
+        let sound = Arc::new(NpnoSound::from_npno_bytes(&raw).expect("parse stereo npno"));
+        assert_eq!(sound.name, "White Grand");
+        assert_eq!(sound.strokes.len(), 2);
+        assert!(sound.strokes[0].pcm_right.is_some());
+        assert_eq!(sound.strokes[0].sample_rate, 35_000.0);
+
+        let soft_zone = sound.select_stroke(60, 40, false).expect("soft zone");
+        let loud_zone = sound.select_stroke(60, 110, false).expect("loud zone");
+        assert_eq!(soft_zone.0, 0);
+        assert_eq!(loud_zone.0, 1);
+
+        let mut layer = PianoLayer::new(48_000.0);
+        layer.timbre = PianoTimbre::Off;
+        layer.set_sound(Some(sound));
+        layer.note_on(60, 110);
+        let [l, r] = layer.render_frame();
+        assert!(l.is_finite() && r.is_finite());
+        assert!(
+            l > 0.0 && r < 0.0,
+            "expected opposite stereo polarity L={l} R={r}"
+        );
     }
 }

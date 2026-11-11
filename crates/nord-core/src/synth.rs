@@ -58,6 +58,7 @@ pub struct LoadedSynthSample {
     pub key_high: u8,
     pub sample_rate: f32,
     pub pcm: Arc<[f32]>,
+    pub pcm_right: Option<Arc<[f32]>>,
     pub loop_start: Option<usize>,
     pub loop_end: Option<usize>,
     pub loop_crossfade: usize,
@@ -92,6 +93,7 @@ impl SynthSampleSound {
                 key_high: 127,
                 sample_rate: sample_rate.max(8000.0),
                 pcm: pcm.to_vec().into(),
+                pcm_right: None,
                 loop_start,
                 loop_end,
                 loop_crossfade,
@@ -105,6 +107,77 @@ impl SynthSampleSound {
             name: name.to_string(),
             zones,
         }
+    }
+
+    /// Parses and decodes a clean-room `.nsmp4` byte slice into a playable `SynthSampleSound`.
+    pub fn from_nsmp4_bytes(bytes: &[u8]) -> Result<Self, crate::cbin::CbinError> {
+        struct DecodedStrokeCache<'a> {
+            id: u32,
+            left: Arc<[f32]>,
+            right: Option<Arc<[f32]>>,
+            meta: &'a crate::cbin::Nsmp4DecodedStroke,
+        }
+
+        let inst = crate::cbin::Nsmp4Instrument::parse(bytes)?;
+        let decoded = inst.decode_strokes(bytes)?;
+        let mut by_id = Vec::with_capacity(decoded.len());
+        for stroke in &decoded {
+            let g = stroke.gain_linear();
+            let left: Vec<f32> = stroke.left.iter().map(|&s| s * g).collect();
+            let right: Option<Arc<[f32]>> = stroke
+                .right
+                .as_ref()
+                .map(|r| r.iter().map(|&s| s * g).collect::<Vec<f32>>().into());
+            by_id.push(DecodedStrokeCache {
+                id: stroke.stroke_id,
+                left: left.into(),
+                right,
+                meta: stroke,
+            });
+        }
+
+        let mut zones = Vec::with_capacity(inst.zones.len());
+        for z in &inst.zones {
+            if let Some(entry) = by_id.iter().find(|e| e.id == z.stroke_id) {
+                let root_key = if z.root_key > 0 {
+                    z.root_key
+                } else {
+                    entry.meta.root_key
+                };
+                zones.push(LoadedSynthSample {
+                    root_key,
+                    key_low: z.key_low,
+                    key_high: z.key_high,
+                    sample_rate: f32::from(entry.meta.sample_rate.max(8000)),
+                    pcm: Arc::clone(&entry.left),
+                    pcm_right: entry.right.clone(),
+                    loop_start: entry.meta.loop_start,
+                    loop_end: entry.meta.loop_end,
+                    loop_crossfade: 0,
+                });
+            }
+        }
+
+        if zones.is_empty() {
+            for entry in &by_id {
+                zones.push(LoadedSynthSample {
+                    root_key: entry.meta.root_key,
+                    key_low: 0,
+                    key_high: 127,
+                    sample_rate: f32::from(entry.meta.sample_rate.max(8000)),
+                    pcm: Arc::clone(&entry.left),
+                    pcm_right: entry.right.clone(),
+                    loop_start: entry.meta.loop_start,
+                    loop_end: entry.meta.loop_end,
+                    loop_crossfade: 0,
+                });
+            }
+        }
+
+        Ok(Self {
+            name: inst.name,
+            zones,
+        })
     }
 
     /// Resolves the best zone index for a given MIDI note (exact range first, nearest root fallback).
@@ -440,10 +513,12 @@ pub struct SynthVoice {
     pub supersaw_phases: [f32; 7],
     pub amp_env: f32,
     pub filter: ZdfFilter,
+    pub filter_right: ZdfFilter,
     pub sample_zone_idx: Option<usize>,
     pub sample_pos: f64,
     pub sample_step: f64,
     pub sample_lp_state: f32,
+    pub sample_lp_state_right: f32,
 }
 
 impl Default for SynthVoice {
@@ -463,10 +538,12 @@ impl Default for SynthVoice {
             supersaw_phases: SUPERSAW_PHASE_INITS,
             amp_env: 0.0,
             filter: ZdfFilter::default(),
+            filter_right: ZdfFilter::default(),
             sample_zone_idx: None,
             sample_pos: 0.0,
             sample_step: 1.0,
             sample_lp_state: 0.0,
+            sample_lp_state_right: 0.0,
         }
     }
 }
@@ -659,10 +736,12 @@ impl SynthLayer {
             supersaw_phases: SUPERSAW_PHASE_INITS,
             amp_env: 0.01,
             filter: self.voices[idx].filter,
+            filter_right: self.voices[idx].filter_right,
             sample_zone_idx,
             sample_pos: 0.0,
             sample_step,
             sample_lp_state: 0.0,
+            sample_lp_state_right: 0.0,
         };
     }
 
@@ -817,7 +896,8 @@ impl SynthLayer {
         self.tick_arpeggiator(inv_fs);
 
         // 3. Render and sum polyphonic voices
-        let mut mix = 0.0f32;
+        let mut mix_l = 0.0f32;
+        let mut mix_r = 0.0f32;
 
         let eff_cutoff = match self.lfo_dest {
             LfoDestination::FilterCutoff => {
@@ -875,23 +955,27 @@ impl SynthLayer {
             let dt = (eff_freq * inv_fs).clamp(1e-5, 0.49);
             let t = v.phase;
 
-            let raw_osc = match self.osc_mode {
-                SynthOscMode::Analog => Self::render_va(
-                    self.waveform,
-                    self.supersaw_detune,
-                    self.pulse_width,
-                    self.lfo_dest,
-                    self.lfo_amount,
-                    lfo_val,
-                    t,
-                    dt,
-                    eff_freq,
-                    inv_fs,
-                    &mut v.supersaw_phases,
+            let (raw_osc_l, raw_osc_r) = match self.osc_mode {
+                SynthOscMode::Analog => (
+                    Self::render_va(
+                        self.waveform,
+                        self.supersaw_detune,
+                        self.pulse_width,
+                        self.lfo_dest,
+                        self.lfo_amount,
+                        lfo_val,
+                        t,
+                        dt,
+                        eff_freq,
+                        inv_fs,
+                        &mut v.supersaw_phases,
+                    ),
+                    None,
                 ),
-                SynthOscMode::Wavetable => {
-                    sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt)
-                }
+                SynthOscMode::Wavetable => (
+                    sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt),
+                    None,
+                ),
                 SynthOscMode::Fm => {
                     let op3 = (TAU * v.op3_phase).sin();
                     let fb = fm_fb_amt * 1.8 * v.mod_feedback_state;
@@ -903,23 +987,35 @@ impl SynthLayer {
                     } else {
                         self.fm_amount.clamp(0.0, 1.0)
                     };
-                    (TAU * t + 4.0 * fm_amt * dyn_env * mod_sig).sin()
+                    ((TAU * t + 4.0 * fm_amt * dyn_env * mod_sig).sin(), None)
                 }
                 SynthOscMode::Sample => {
                     if let Some((sound, z_idx)) = sample_sound.zip(v.sample_zone_idx) {
                         if let Some(zone) = sound.zones.get(z_idx) {
-                            let s = Self::render_sample_zone(
+                            let (sl, sr) = Self::render_sample_zone_stereo(
                                 zone,
                                 &mut v.sample_pos,
                                 v.sample_step * f64::from(pitch_mod),
                                 &mut v.active,
                             );
-                            Self::apply_sample_timbre(self.sample_timbre, s, &mut v.sample_lp_state)
+                            let fl = Self::apply_sample_timbre(
+                                self.sample_timbre,
+                                sl,
+                                &mut v.sample_lp_state,
+                            );
+                            let fr = sr.map(|r| {
+                                Self::apply_sample_timbre(
+                                    self.sample_timbre,
+                                    r,
+                                    &mut v.sample_lp_state_right,
+                                )
+                            });
+                            (fl, fr)
                         } else {
-                            0.0
+                            (0.0, None)
                         }
                     } else {
-                        Self::render_va(
+                        let va = Self::render_va(
                             self.waveform,
                             self.supersaw_detune,
                             self.pulse_width,
@@ -931,7 +1027,8 @@ impl SynthLayer {
                             eff_freq,
                             inv_fs,
                             &mut v.supersaw_phases,
-                        )
+                        );
+                        (va, None)
                     }
                 }
             };
@@ -948,19 +1045,32 @@ impl SynthLayer {
                 eff_cutoff
             };
 
-            let filtered = v.filter.process(
-                raw_osc,
+            let filtered_l = v.filter.process(
+                raw_osc_l,
                 self.filter_model,
                 voice_cutoff,
                 self.resonance,
                 self.filter_drive,
                 self.sample_rate,
             );
-
-            mix += filtered * v.amp_env * v.velocity * v.gain * 0.25;
+            let env_gain = v.amp_env * v.velocity * v.gain * 0.25;
+            mix_l += filtered_l * env_gain;
+            if let Some(osc_r) = raw_osc_r {
+                let filtered_r = v.filter_right.process(
+                    osc_r,
+                    self.filter_model,
+                    voice_cutoff,
+                    self.resonance,
+                    self.filter_drive,
+                    self.sample_rate,
+                );
+                mix_r += filtered_r * env_gain;
+            } else {
+                mix_r += filtered_l * env_gain;
+            }
         }
 
-        [mix, mix]
+        [mix_l, mix_r]
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1007,17 +1117,39 @@ impl SynthLayer {
     }
 
     #[inline]
-    fn render_sample_zone(
+    fn sample_with_loop(
+        pcm: &[f32],
+        wrapped: f64,
+        ls: usize,
+        le_c: usize,
+        crossfade: usize,
+    ) -> f32 {
+        let primary = Self::lerp_pcm(pcm, wrapped);
+        if crossfade > 0 {
+            let xf = crossfade.min((le_c - ls) / 2) as f64;
+            let dist_to_end = le_c as f64 - wrapped;
+            if xf >= 1.0 && dist_to_end < xf && ls as f64 >= dist_to_end {
+                let fade = (xf - dist_to_end) / xf;
+                let pre_loop = Self::lerp_pcm(pcm, ls as f64 - dist_to_end);
+                return primary * (1.0 - fade as f32) + pre_loop * (fade as f32);
+            }
+        }
+        primary
+    }
+
+    #[inline]
+    fn render_sample_zone_stereo(
         zone: &LoadedSynthSample,
         sample_pos: &mut f64,
         step: f64,
         active: &mut bool,
-    ) -> f32 {
+    ) -> (f32, Option<f32>) {
         let len = zone.pcm.len();
         if len < 2 {
             *active = false;
-            return 0.0;
+            return (0.0, None);
         }
+        let pcm_r = zone.pcm_right.as_deref().filter(|r| r.len() >= 2);
         let pos = *sample_pos;
         if let (Some(ls), Some(le)) = (zone.loop_start, zone.loop_end) {
             let le_c = le.min(len);
@@ -1028,37 +1160,34 @@ impl SynthLayer {
                 } else {
                     pos
                 };
-                let primary = Self::lerp_pcm(&zone.pcm, wrapped);
-                let out = if zone.loop_crossfade > 0 {
-                    let xf = zone.loop_crossfade.min((le_c - ls) / 2) as f64;
-                    let dist_to_end = le_c as f64 - wrapped;
-                    if xf >= 1.0 && dist_to_end < xf && ls as f64 >= dist_to_end {
-                        let fade = (xf - dist_to_end) / xf;
-                        let pre_loop = Self::lerp_pcm(&zone.pcm, ls as f64 - dist_to_end);
-                        primary * (1.0 - fade as f32) + pre_loop * (fade as f32)
+                let out_l =
+                    Self::sample_with_loop(&zone.pcm, wrapped, ls, le_c, zone.loop_crossfade);
+                let out_r = pcm_r.map(|r| {
+                    let le_r = le_c.min(r.len());
+                    if le_r > ls {
+                        Self::sample_with_loop(r, wrapped, ls, le_r, zone.loop_crossfade)
                     } else {
-                        primary
+                        Self::lerp_pcm(r, wrapped)
                     }
-                } else {
-                    primary
-                };
+                });
                 let next_pos = wrapped + step;
                 *sample_pos = if next_pos >= le_c as f64 {
                     ls as f64 + (next_pos - le_c as f64) % loop_len
                 } else {
                     next_pos
                 };
-                return out;
+                return (out_l, out_r);
             }
         }
 
         if pos >= (len - 1) as f64 {
             *active = false;
-            return 0.0;
+            return (0.0, None);
         }
-        let out = Self::lerp_pcm(&zone.pcm, pos);
+        let out_l = Self::lerp_pcm(&zone.pcm, pos);
+        let out_r = pcm_r.map(|r| Self::lerp_pcm(r, pos));
         *sample_pos = pos + step;
-        out
+        (out_l, out_r)
     }
 
     #[inline]
@@ -1336,5 +1465,91 @@ mod tests {
             bright_energy > soft_energy,
             "Bright timbre must retain more HF energy than Soft damping"
         );
+    }
+
+    #[test]
+    fn test_from_nsmp4_bytes_loads_and_renders_stereo_looped_sample() {
+        // Build a synthetic .nsmp4 container with one stereo \0stk chunk (order-1 LPC).
+        let mut data = vec![0u8; 48];
+        data[0..4].copy_from_slice(b"CBIN");
+        data[4..8].copy_from_slice(&1u32.to_le_bytes());
+        data[8..12].copy_from_slice(b"nsmp");
+        data[0x2c..0x30].copy_from_slice(b"NSMP");
+        data.extend_from_slice(&[0u8; 12]);
+
+        let mut hdr = vec![0u8; 64];
+        let nm = b"CleanRoom Violin\0";
+        hdr[10..10 + nm.len()].copy_from_slice(nm);
+        data.extend_from_slice(b"\0hdr");
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&(hdr.len() as u32).to_be_bytes());
+        data.extend_from_slice(&hdr);
+
+        let mut map = vec![0u8; 0x524 + 16];
+        let p = 0x524;
+        map[p + 1] = 127;
+        map[p + 2] = 60;
+        map[p + 3] = 72;
+        map[p + 4] = 48;
+        map[p + 10..p + 14].copy_from_slice(&1u32.to_be_bytes());
+        map[p + 15] = 1;
+        data.extend_from_slice(b"\0map");
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&(map.len() as u32).to_be_bytes());
+        data.extend_from_slice(&map);
+
+        // Construct sustained stereo order-0 frame: L positive (+1000), R negative (-500), 8 frames each
+        let mut stk = vec![0u8; 0x44];
+        stk[0..4].copy_from_slice(&1u32.to_be_bytes());
+        stk[0x05] = 60;
+        stk[0x06..0x08].copy_from_slice(&35_002u16.to_be_bytes());
+        stk[0x08] = 2; // stereo
+        let w1: u32 = 100;
+        let w3: u32 = 100 + 1 + 4; // loop starts at frame 2 (1 ctrl + 2*2 interleaved words)
+        stk[0x12..0x16].copy_from_slice(&w1.to_be_bytes());
+        stk[0x24..0x28].copy_from_slice(&w3.to_be_bytes());
+        stk[0x39..0x3D].copy_from_slice(&0.0f32.to_be_bytes());
+
+        // Frame 1: spc=4 (ns=8), order=0, nbits=16 => wpc=2 -> 2 L words + 2 R words interleaved
+        let ctrl1: u32 = 8 | (15 << 19);
+        stk.extend_from_slice(&ctrl1.to_be_bytes());
+        for _ in 0..2 {
+            stk.extend_from_slice(&((1000u32 << 16) | 1000u32).to_be_bytes());
+            stk.extend_from_slice(
+                &((((-500i16) as u16) as u32) << 16 | ((-500i16) as u16) as u32).to_be_bytes(),
+            );
+        }
+        // Frame 2 (loop boundary at w3): spc=4, order=0, nbits=16
+        let ctrl2: u32 = 8 | (1 << 18) | (15 << 19);
+        stk.extend_from_slice(&ctrl2.to_be_bytes());
+        for _ in 0..2 {
+            stk.extend_from_slice(&((1200u32 << 16) | 1200u32).to_be_bytes());
+            stk.extend_from_slice(
+                &((((-600i16) as u16) as u32) << 16 | ((-600i16) as u16) as u32).to_be_bytes(),
+            );
+        }
+        stk.extend_from_slice(&0x0080_0040u32.to_be_bytes());
+
+        data.extend_from_slice(b"\0stk");
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&(stk.len() as u32).to_be_bytes());
+        data.extend_from_slice(&stk);
+
+        let sound = Arc::new(SynthSampleSound::from_nsmp4_bytes(&data).expect("load nsmp4"));
+        assert_eq!(sound.name, "CleanRoom Violin");
+        assert_eq!(sound.zones.len(), 1);
+        assert_eq!(sound.zones[0].loop_start, Some(4));
+        assert_eq!(sound.zones[0].loop_end, Some(8));
+        assert!(sound.zones[0].pcm_right.is_some());
+
+        let mut layer = SynthLayer::new(48_000.0);
+        layer.osc_mode = SynthOscMode::Sample;
+        layer.cutoff_hz = 18_000.0;
+        layer.load_sample(Some(sound));
+        layer.note_on(60, 127);
+
+        let [l, r] = layer.render_frame();
+        assert!(l.is_finite() && r.is_finite());
+        assert!(l > 0.0 && r < 0.0, "stereo polarity L={l} R={r}");
     }
 }

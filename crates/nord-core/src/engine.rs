@@ -225,6 +225,56 @@ impl Stage4Engine {
             })
     }
 
+    /// Loads an `.npno` multi-velocity fixed-LPC piano bank into Piano Layer A (`slot_b = false`) or B (`slot_b = true`).
+    pub fn load_piano_npno_bytes(
+        &mut self,
+        slot_b: bool,
+        bytes: &[u8],
+    ) -> Result<std::sync::Arc<crate::piano::NpnoSound>, String> {
+        let sound = std::sync::Arc::new(crate::piano::NpnoSound::from_npno_bytes(bytes)?);
+        if slot_b {
+            self.piano_b.set_sound(Some(std::sync::Arc::clone(&sound)));
+        } else {
+            self.piano_a.set_sound(Some(std::sync::Arc::clone(&sound)));
+        }
+        Ok(sound)
+    }
+
+    /// Loads an `.nsmp4` multisample instrument into Synth Layer A (`0`), B (`1`), or C (`2`).
+    pub fn load_synth_nsmp4_bytes(
+        &mut self,
+        layer_idx: usize,
+        bytes: &[u8],
+    ) -> Result<std::sync::Arc<crate::synth::SynthSampleSound>, crate::cbin::CbinError> {
+        let sound = std::sync::Arc::new(crate::synth::SynthSampleSound::from_nsmp4_bytes(bytes)?);
+        let layer = match layer_idx {
+            0 => &mut self.synth_a,
+            1 => &mut self.synth_b,
+            2 => &mut self.synth_c,
+            _ => {
+                return Err(crate::cbin::CbinError::BitstreamError(format!(
+                    "invalid synth layer index {layer_idx} (expected 0..=2)"
+                )));
+            }
+        };
+        layer.load_sample(Some(std::sync::Arc::clone(&sound)));
+        Ok(sound)
+    }
+
+    /// Reads an `.ns4p` program entry from an `.ns4b` backup archive and applies it to the engine.
+    pub fn load_program_from_backup<R: std::io::Read + std::io::Seek>(
+        &mut self,
+        archive: &crate::cbin::Ns4BackupArchive,
+        reader: &mut R,
+        entry_query: &str,
+    ) -> Result<crate::cbin::ProgramDecoded, crate::cbin::CbinError> {
+        let bytes = archive.read_entry(reader, entry_query)?;
+        let cbin = crate::cbin::CbinFile::parse(&bytes)?;
+        let prog = cbin.decode_program()?;
+        self.apply_program(&prog);
+        Ok(prog)
+    }
+
     /// Applies a decoded Nord Stage 4 Program to the DSP engine.
     /// Applies all decoded CBIN program settings (layers, scenes, splits, morphs, and 7 FX chains).
     pub fn apply_program(&mut self, prog: &crate::cbin::ProgramDecoded) {
@@ -878,5 +928,33 @@ mod tests {
         assert!((engine.synth_a.fm_feedback - 0.25).abs() < 1e-6);
         assert!((engine.synth_a.fm_sub_amount - 0.35).abs() < 1e-6);
         assert!((engine.synth_a.filter_env_amount - 0.75).abs() < 1e-6);
+    }
+
+    #[test]
+    fn load_synth_nsmp4_and_program_from_backup_helpers() {
+        let mut engine = Stage4Engine::new(48_000.0);
+
+        // Invalid synth layer index rejected cleanly
+        assert!(engine.load_synth_nsmp4_bytes(3, &[]).is_err());
+
+        // Valid minimal .nsmp4 loaded into Synth Layer B (index 1)
+        let mut data = vec![0u8; 48];
+        data[0..4].copy_from_slice(b"CBIN");
+        data[4..8].copy_from_slice(&1u32.to_le_bytes());
+        data[8..12].copy_from_slice(b"nsmp");
+        data[0x2c..0x30].copy_from_slice(b"NSMP");
+        data.extend_from_slice(&[0u8; 12]);
+        let mut hdr = vec![0u8; 64];
+        hdr[10..15].copy_from_slice(b"Pad1\0");
+        data.extend_from_slice(b"\0hdr");
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&(hdr.len() as u32).to_be_bytes());
+        data.extend_from_slice(&hdr);
+
+        let snd = engine
+            .load_synth_nsmp4_bytes(1, &data)
+            .expect("empty-stroke nsmp4 parses");
+        assert_eq!(snd.name, "Pad1");
+        assert_eq!(engine.synth_b.loaded_sample_name(), Some("Pad1"));
     }
 }

@@ -219,45 +219,48 @@ For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file se
 - `DspPartition` (full partition descriptors with engine categorization)
 - CLI: `ns4 inspect <fw_bin> --verify --unpack <out_dir>` verifies every segment's checksum and extracts `bank{0,1}_{SRAM,CODE,ARM0}.bin`.
 
-### 5.2 Nord Piano (`.npno`) Binary Specification & 4-Bit DPCM Audio Codec
+### 5.2 Nord Piano (`.npno`) Binary Specification & `CNSP` Fixed-LPC Audio Codec
 
-Nord Piano files (`.npno`) store high-fidelity multisampled acoustic, electric, and digital pianos inside a 48-byte `CBIN` container header (`kind = "npno"`):
+Nord Piano files (`.npno`) store multisampled acoustic, electric, clavinet, harpsichord, and digital pianos inside a 48-byte `CBIN` container header (`kind = "npno"`), documented in full in [nsmp4-and-npno-cnsp-codec.md](../research/nsmp4-and-npno-cnsp-codec.md).
 
 #### Layout of `.npno` Header & Tables
 - `0x0000..0x0030`: 48-byte `CBIN` container header (`tag = "npno"`).
-- `0x002C`: `CNSP` sub-header signature.
-- `0x0048..0x0068`: Short instrument name (ASCII, 32 bytes).
-- `0x0068..0x0088`: Long instrument name (ASCII, 32 bytes).
-- `0x00B8..0x0138`: 128-byte lookup table mapping every MIDI note (`0..127`) to its multisample root key.
-- `0x01C8..0x0248`: 128-byte lookup table of signed 8-bit integers (`i8`) representing micro-cents fine-tuning calibration per key.
+- `0x002C..0x0030`: `CNSP` sub-header base (`CNSP` offset base = `0x2C`).
+- `0x0048..0x0068`: Short instrument name (ASCII, 32 bytes); `0x0068..0x0088`: Long instrument name (ASCII, 32 bytes).
+- `0x00B8..0x0138`: 128-byte lookup table mapping every MIDI note (`0..127`) to its sampled root key (`0xFF` = out of range).
+- `0x01C8..0x0248`: 128-byte lookup table of signed 8-bit integers (`i8`) encoding fine-tuning calibration (`tuning_cents`).
 - `0x0238..0x02B8`: 128-byte lookup table of velocity tier boundaries per key.
-- `0x0760..`: Multisample stroke descriptor table (`data_offset`, `data_size`, `loop_start`, `loop_end`).
+- `0x064A` (`u16 BE`): channel count (`1` mono, `2` stereo); `0x064C` (`u16 BE`): `nstrokes`.
+- `0x064E..0x074E`: 128 `u16 BE` stroke counts per MIDI key (`sum == nstrokes`), assigning sequential records in the stroke table to their sampled `root_key`.
+- `0x0756..`: `nstrokes` fixed-stride `0x76` (`118`) byte stroke records:
+  - `+0x08..+0x0C` (`u32 BE`): `CNSP`-relative offset (file offset = `0x2C + off`).
+  - `+0x0C..+0x0E` (`u16 BE`): `(flags_hi << 8) | vel_low` (`0` normal, `1` damper-down, `2` release/key-off).
+  - `+0x0E..+0x12` (`u32 BE`): decoded sample frame count `total_frames` (`~35,000 Hz` storage rate).
+  - `+0x12..+0x14` (`u16 BE`): page count (`npages`).
+  - `+0x14..+0x1C` (`4 x i16 BE`) & `+0x1C..+0x24` (`4 x i16 BE`): Page 0 initial fixed-LPC history `(h[-4]..h[-1])` for L and R channels.
 
-#### 4-Bit Differential PCM Audio Codec (`AVCSmpDecode`)
-Audio payloads encode two 4-bit signed delta samples per byte:
-```text
-byte = (sample_hi << 4) | (sample_lo & 0x0F)
-s[n] = s[n-1] + delta * scale
-```
-- `sample_hi`: High nibble (`(byte >> 4) & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
-- `sample_lo`: Low nibble (`byte & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
-- Compression ratio: 4:1 vs 16-bit PCM, 6:1 vs 24-bit PCM.
+#### Paged `1022 * channels`-Byte Fixed-LPC Audio Codec
+- Page header `[b0, b1]`: `b0` tracks encoder attenuation (`0..=47`, unscaled on decode), `order = b1 >> 5` (`0..=4`), `nbits = b1 & 0x0F` (`3..=14`).
+- Payload (`1020 * channels + 2*(channels-1)` bytes = `1020 B` mono / `2042 B` stereo) packs signed `nbits` two's-complement LPC residuals in **LSB-first bit order across `u16 BE` words** (interleaved `[L, R]` when `channels == 2`), using standard FLAC fixed-LPC orders `0..=4`.
+- Pages overlap by **64 frames** (`p > 0` continues with the history 64 frames prior to the end of page `p - 1` and drops the redundant 64 overlap frames).
+- Normalized PCM scales `y as f32 / 8192.0` (`±7782` typical integer peak).
 
 #### Rust API (`crates/nord-core/src/cbin/piano_sample.rs`)
 - `NpnoInstrument::parse(bytes: &[u8]) -> Result<NpnoInstrument, String>`
 - `NpnoInstrument::root_key_for_note(&self, note: u8) -> Option<u8>`
 - `NpnoInstrument::cents_detune_for_note(&self, note: u8) -> i8`
-- `decode_4bit_dpcm(raw_payload: &[u8], scale: f32) -> Vec<f32>`
-- `encode_4bit_dpcm(pcm: &[f32], scale: f32) -> Vec<u8>`
+- `decode_npno_stroke(raw_payload: &[u8], channels: u16, npages: u16, total_frames: usize, init_left: [i16; 4], init_right: [i16; 4]) -> Result<(Vec<f32>, Vec<f32>), String>`
+- `encode_npno_stroke(left: &[f32], right: Option<&[f32]>, nbits: u8, order: u8) -> ([i16; 4], [i16; 4], u16, Vec<u8>)` (synthetic fixture encoder)
 
-### 5.3 NSMP Sample Library Metadata (`.nsmp4`)
+### 5.3 NSMP Sample Library Format & Fixed-LPC Audio Codec (`.nsmp4`)
 
-The `.nsmp4`/`nsmp` assets store the `NSMP` marker at offset `0x2C`, then a 12-byte prefix at `0x30..0x3B`. The current metadata parser starts its tagged chunk stream at `0x3C`. Each chunk has a 4-byte tag, a big-endian `u32` chunk ID, a big-endian `u32` payload length, and that many payload bytes. The parser checks chunk bounds and rejects incomplete trailing headers.
+The `.nsmp4`/`nsmp` assets store the `NSMP` marker at offset `0x2C`, a 12-byte prefix at `0x30..0x3B`, and a big-endian tagged chunk stream starting at `0x3C` (`tag: [u8; 4]`, `chunk_id: u32 BE`, `length: u32 BE`, `payload`). See [nsmp4-and-npno-cnsp-codec.md](../research/nsmp4-and-npno-cnsp-codec.md).
 
-The parser currently recognizes:
+Recognized chunks and layout:
+- `\0hdr`: instrument name at payload offset `10` (up to 32 bytes) and author at `74` (up to 32 bytes).
+- `\0map`: a 128-entry table of 10-byte records starting at offset `6`, followed by 16-byte zone records starting at `0x524` (`vel_max`, `root_key`, `key_high`, `key_low`, `stroke_id`, `vel_min`).
+- `\0stk`: 68-byte header (`stroke_id` at `+0x00`, `root_key` at `+0x05`, `u16 BE` `sample_rate` in Hz at `+0x06`, `channels` (`1`/`2`) at `+0x08`, `u32` flash-word boundaries `w1..w4` at `+0x12/+0x1B/+0x24/+0x2D`, one-shot flags at `+0x29..+0x2B`, gain dB at `+0x39`), zero-word padding to the first non-zero 32-bit BE frame header `w`, and variable-length fixed-LPC frames (`ns = w & 0x3FFF`, `order = (w >> 14) & 7`, `loop_mark = (w >> 18) & 1`, `nbits = ((w >> 19) & 0xF) + 1`, `fl = (w >> 23) & 1`) packing `wpc = (spc * nbits + 31) / 32` MSB-first `u32 BE` words per channel (word-interleaved L/R pairs for stereo). Sustained sounds (`payload[0x29..0x2B] == [0, 0]`) loop seamlessly across `[s3, total_frames]`. See [`cbin::sample`](../../crates/nord-core/src/cbin/sample.rs).
 
-- `\0hdr`: name at payload offset 10 (up to 32 bytes); the parser also attempts to read an author string at offset 74 (up to 32 bytes), which is not yet independently confirmed.
-- `\0map`: a 128-entry table of 10-byte records starting at offset 6, followed by 16-byte zone records starting at `0x524`.
-- `\0stk`: stroke ID in the first four payload bytes; payload audio remains opaque.
+### 5.4 `.ns4b` Backup Archive Reader (`crates/nord-core/src/cbin/backup.rs`)
 
-These offsets are an initial metadata mapping based on the locally inspected `Kalimba_KG 4.1.nsmp4` sample from the factory backup and deterministic synthetic fixtures. They are not a complete NSMP or sample-audio specification. The parser preserves no raw chunk data in its high-level result, and does not decode audio. See [`cbin::sample`](../../crates/nord-core/src/cbin/sample.rs).
+`.ns4b` archives are standard PKZIP files whose entries use method `0` (`ZIP_STORED`). `Ns4BackupArchive` parses ZIP central-directory/local-header records without external runtime dependencies so users can list and load `.npno`, `.nsmp4`, and `.ns4p` entries directly from a legally owned `.ns4b` archive or extracted folder.
