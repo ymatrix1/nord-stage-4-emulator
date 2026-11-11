@@ -4,6 +4,10 @@
 //! multitimbral MIDI handling, sample rate safety, zero-allocation audio callback,
 //! and state persistence.
 
+#![allow(unknown_lints)]
+#![allow(semicolon_in_expressions_from_macros)]
+#![allow(semicolon_in_expressions_from_non_local_macros)]
+
 pub mod midi;
 pub mod params;
 pub mod state;
