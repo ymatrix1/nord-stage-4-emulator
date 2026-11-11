@@ -41,7 +41,8 @@ jobs:
       - name: Install Linux system dependencies (ALSA)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update --fix-missing
+          sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev
 
       - name: cargo fmt

@@ -194,8 +194,29 @@ impl Stage4Engine {
         // Global
         self.master_clock.bpm = prog.global.tempo_bpm;
         self.master_bus.compressor_amount = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
-        self.scene.scene_1_mask = prog.global.scene_1_mask;
-        self.scene.scene_2_mask = prog.global.scene_2_mask;
+
+        // If the patch bitstream has scene_1_mask == 0, activate all layers marked enabled in the patch
+        let default_layer_mask = (prog.organ.layer_a_enabled as u8)
+            | ((prog.organ.layer_b_enabled as u8) << 1)
+            | ((prog.piano.layer_a.enabled as u8) << 2)
+            | ((prog.piano.layer_b.enabled as u8) << 3)
+            | ((prog.synth.layer_a.enabled as u8) << 4)
+            | ((prog.synth.layer_b.enabled as u8) << 5)
+            | ((prog.synth.layer_c.enabled as u8) << 6);
+
+        self.scene.scene_1_mask = if prog.global.scene_1_mask != 0 {
+            prog.global.scene_1_mask
+        } else if default_layer_mask != 0 {
+            default_layer_mask
+        } else {
+            (1 << 0) | (1 << 2) | (1 << 4) // Organ A, Piano A, Synth A fallback
+        };
+        self.scene.scene_2_mask = if prog.global.scene_2_mask != 0 {
+            prog.global.scene_2_mask
+        } else {
+            self.scene.scene_1_mask
+        };
+
         for (i, &pt) in prog.global.split_points.iter().enumerate() {
             self.split_router.splits[i].midi_note = pt;
             self.split_router.splits[i].crossfade = prog.global.split_crossfades[i];
