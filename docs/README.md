@@ -32,7 +32,9 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 |---|---|
 | [research/ns4-backup-and-cbin-teardown.md](research/ns4-backup-and-cbin-teardown.md) | Empirical teardown of `Nord Stage 4 Factory Restore RevK v1.66.ns4b` (`product_id=46`, build `2934`, CBIN header layout, embedded bitstreams) |
 | [research/ns4-firmware-teardown.md](research/ns4-firmware-teardown.md) | Empirical teardown of `Update Nord Stage 4 OS v1.66.exe` (`RCDATA 101`, `ARM0` host MCU vs `DSPO`, `DSPS`, `DSPF` SHARC DSP images) |
+| [research/backup-and-firmware-readability.md](research/backup-and-firmware-readability.md) | .ns4b contents, sample-library format, firmware entropy and readability checks |
 | [research/mainboard-photo-analysis.md](research/mainboard-photo-analysis.md) | Stage 4 mainboard/panel photo identification (AM1705 host, ADI DSPs, board revisions) |
 | [research/hardware-and-dac-analysis.md](research/hardware-and-dac-analysis.md) | Mainboard topology (AM1705 host, ADI DSPs), memory, CS4392 DACs, and LM833/LF353 analog reconstruction filter analysis |
+
 
 
