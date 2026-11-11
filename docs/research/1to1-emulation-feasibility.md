@@ -6,7 +6,7 @@
 
 | Blocker | Result | Status |
 |---|---|---|
-| DSP images encrypted? | Inconclusive (details in section 1) | **Open** |
+| DSP images encrypted? | Evidence now points to **custom compression, not encryption** (section 6) | **Narrowed** |
 | Boot ROMs | Not obtainable without hardware; not in the update package | **Blocked** |
 | Central unknown chip / buses | Not identifiable from the photos; web sources are generic and speculate an FPGA | **Open** |
 | Sample codec (`CNSP`) | Opaque payload, no sub-structure found (section 3) | **Open** |
@@ -40,8 +40,31 @@ Method: signature scan, zlib trial decode at every header hit, entropy map in 64
 
 1:1 low-level emulation is **not currently feasible**: boot ROMs are unavailable, DSP images are unreadable, the sample codec is unknown, and no SHARC simulator exists. None of that is proven impossible, so Track B stays a research option, not a plan. The shipping engine remains the high-level Rust implementation (Track A).
 
+## 6. Deeper analysis of the firmware containers
+
+Both firmware images share one layout (big-endian segment table of `SRAM`, `CODE`, `ARM0`):
+
+| | Image 0 (main OS) | Image 1 (second bank) |
+|---|---|---|
+| `SRAM` segment | file `0x2D4`, `0xFC80` B, target `0x80000000` | file `0x2D4`, `0xC158` B, target `0x80000000` |
+| `CODE` segment | file `0xFF54`, declared size `0x53EA70` (5,499,504 B), target `0xC0000000` | file `0xC42C`, declared size `0xC30C0` (799,936 B), target `0xC0000000` |
+| `CODE` bytes actually in file | 3,510,322 | 411,142 |
+| Expansion implied | about 1.57x | about 1.95x |
+| `ARM0` | entry `0x2EC`, vector base `0xFFFF0020` | entry `0x334`, vector base `0xFFFF0020` |
+
+Findings:
+- The `SRAM` segment is **plain ARM code** (C++-style vtable calls, peripheral register tests); it is mostly zero padding by entropy.
+- `0xC0000000` is the AM1705 external SDRAM base (EMIFB), which matches the chip identified from the photos.
+- The `CODE` segment is declared larger than the bytes present in the file in both images, so it is **expanded at load time**.
+- It starts with a 2-byte prefix and a 44-byte plain ARM reset stub (disable IRQ/FIQ, invalidate caches, enable I-cache, set mode). After that the stream is not valid ARM, but valid ARM instruction fragments appear verbatim inside it (for example `ldr sp,[pc,#0x70]`, `ldr pc,[pc,#0x1c]`, `bx r0`) together with repeating token patterns such as `cd 02 N0 29 4d 00 XX` with `N` counting down. Encryption would not leave instruction fragments in clear, so this is consistent with a **custom byte-oriented compressor or transform**, not encryption. This is an inference, not proven.
+- Per-position entropy at periods 2, 4, 6 and 8 is flat everywhere in the high-entropy range, so it is not raw SHARC (48-bit) code or fixed-width PCM either; it is the compressed stream.
+- Standard decoders (deflate, zlib, gzip, raw LZMA1 with all lc/lp/pb) all fail on the `CODE` stream at the tested offsets.
+
+**Consequence:** the DSP images are most likely inside the expanded `CODE` and are recoverable once the expander is identified. The expander is not in the plain `SRAM` literals (no reference to `0xC0000000` or the declared sizes), so it is probably in the AM1705 boot path or in the Windows updater and flasher helper (`Res 105`, 587,736 B), which is the next place to look.
+
 ## 5. Remaining legitimate steps
 
-1. Read the plain ARM startup code to locate any decompressor routine and identify the scheme.
+1. Find the `CODE` expander: inspect the flasher helper (`Res 105`) and the updater, and the plain `SRAM` code for token-parsing loops (byte loads, shifts, back-reference copies).
 2. Search for a zero-header block structure in `CNSP` payloads (compare two instruments of different lengths).
 3. Obtain a Stage 4 teardown or FCC internal photos for the central chip.
+
