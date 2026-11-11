@@ -344,13 +344,19 @@ impl Stage4Engine {
         synth.osc_mode = dec.osc_mode;
         synth.waveform = dec.waveform;
         synth.fm_amount = ctrl_norm;
+        synth.fm_ratio =
+            crate::synth::FM_RATIOS[(dec.wave_id as usize) % crate::synth::FM_RATIOS.len()];
+        synth.fm_feedback = if (dec.wave_id & 1) != 0 { 0.25 } else { 0.0 };
+        synth.fm_sub_amount = if dec.osc_cat > 0 { 0.35 } else { 0.0 };
         synth.supersaw_detune = ctrl_norm;
         synth.pulse_width = 0.5 - ctrl_norm * 0.45;
+        synth.wavetable_index = dec.wave_id % (crate::synth::NUM_WAVETABLES as u8);
         synth.wavetable_position = ctrl_norm;
         synth.filter_model = dec.filter_model;
         synth.cutoff_hz = dec.filter_cutoff_hz;
         synth.resonance = dec.filter_resonance;
         synth.filter_drive = dec.filter_drive;
+        synth.filter_env_amount = dec.filter_env_amount;
         synth.attack_sec = (dec.env_attack_ms / 1000.0).clamp(0.0005, 10.0);
         synth.decay_sec = (dec.env_decay_ms / 1000.0).clamp(0.005, 15.0);
         synth.sustain_level = if dec.env_decay_ms >= 9999.0 { 1.0 } else { 0.6 };
@@ -801,5 +807,23 @@ mod tests {
             .piano_a
             .voice_excitation_for_test(60)
             .is_some_and(|(_, _, released)| released));
+    }
+
+    #[test]
+    fn apply_synth_layer_forwards_wavetable_fm_and_filter_env() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut prog = crate::cbin::ProgramDecoded::default();
+        prog.synth.layer_a.osc_mode = crate::synth::SynthOscMode::Fm;
+        prog.synth.layer_a.wave_id = 11;
+        prog.synth.layer_a.osc_cat = 2;
+        prog.synth.layer_a.detune = 6.5;
+        prog.synth.layer_a.filter_env_amount = 0.75;
+        engine.apply_program(&prog);
+
+        assert_eq!(engine.synth_a.wavetable_index, 11);
+        assert!((engine.synth_a.fm_ratio - crate::synth::FM_RATIOS[11]).abs() < 1e-6);
+        assert!((engine.synth_a.fm_feedback - 0.25).abs() < 1e-6);
+        assert!((engine.synth_a.fm_sub_amount - 0.35).abs() < 1e-6);
+        assert!((engine.synth_a.filter_env_amount - 0.75).abs() < 1e-6);
     }
 }

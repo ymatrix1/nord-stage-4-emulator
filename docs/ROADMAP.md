@@ -75,9 +75,9 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 
 - [x] `crates/nord-core/src/synth.rs`: Anti-aliased `PolyBLEP` Virtual Analog oscillator (`Saw`, `Pulse/PWM`, `Triangle`, `Sine`), `Wavetable` & `FM` modes, Zero-Delay Feedback (`ZDF`) 12/24 dB Transistor Ladder (`LP M` / `Ladder24`) & SVF (`LP12`, `BP`, `HP`) filters, and ADR envelope
 - [x] Multi-oscillator `ANALOG` configurations: `Super Saw` (7 detuned PolyBLEP saws matching `DETUNE: 3.4` on the Synth OLED), `Sync`, `Bell`, `Sub`, and `Noise`
-- [ ] 64 band-limited mipmapped single-cycle Wavetables (`WAVETABLE` mode) with spectral formant shaping
-- [ ] 2/3-Operator harmonic & inharmonic `FM` router with feedback and envelope modulation
-- [ ] `SAMPLES` mode SFZ/WAV sample player with loop crossfade and `Soft`/`Bright` timbre damping
+- [x] 64 band-limited mipmapped single-cycle Wavetables (`WAVETABLE` mode) with spectral formant shaping
+- [x] 2/3-Operator harmonic & inharmonic `FM` router with feedback and envelope modulation
+- [x] `SAMPLES` mode SFZ/WAV sample player with loop crossfade and `Soft`/`Bright` timbre damping
 - [x] Polyphonic voice allocator across `Synth A/B/C` (16 pre-allocated voices per layer with dynamic envelope stealing)
 - [x] Tempo-synced `LFO` (Triangle, Saw, Square, Sample & Hold -> `FILTER`, `OSC PITCH`, `OSC CTRL`) and `ARPEGGIATOR / GATE` (`Up`, `Down`, `UpDown`, `Random`, `Poly`, 1-4 octaves)
 

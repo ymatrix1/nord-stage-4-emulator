@@ -15,9 +15,9 @@ Each Synth layer selects one of four synthesis paradigms:
 | Mode | Description | Control Parameters |
 |---|---|---|
 | **Analog (VA)** | Anti-aliased Virtual Analog waveforms (`Saw`, `Pulse/Square`, `Triangle`, `Sine`, `SuperSaw`) | Shape/PWM (`0..1`), Osc Config (`Pitch`, `Detune`, `Sync`, `Sub`, `Noise`) |
-| **Wavetable** | 64 single-cycle harmonic wavetables (`WaveTable` in firmware) with mipmap band-limiting | Table index (`0..63`), Spectral tilt / Formant shift |
-| **FM (2/3-Op)** | Phase-modulation synthesis with harmonic & inharmonic carrier:modulator ratios | Harmonic ratio (`0.5x..16.0x`), FM Amount (`0..1`), Feedback |
-| **Sample** | Open SFZ/WAV sample playback with pitch tracking and loop crossfade | Sample bank/ID, Attack skip, Timbre filter (`Soft`/`Bright`) |
+| **Wavetable** | 64 single-cycle harmonic wavetables (`NUM_WAVETABLES = 64`, 8 spectral families) with 8-band octave mipmap anti-aliasing (`MIP_MAX_HARMONICS`) and Lanczos-smoothed Fourier synthesis | Table index (`wavetable_index: 0..63`), Spectral formant/scan (`wavetable_position: 0..1`) |
+| **FM (2/3-Op)** | Phase-modulation synthesis with 2/3-operator cascade (`Op3 -> Op2 -> Op1`), 16 harmonic & inharmonic carrier:modulator ratios (`FM_RATIOS`), anti-hunting modulator self-feedback, and transient decay mod envelope | Harmonic ratio (`fm_ratio`), FM Amount (`fm_amount`), Feedback (`fm_feedback`), Op3 Sub Ratio/Amount, Mod Env Amount |
+| **Sample** | Lock-free zero-allocation multisample playback (`SynthSampleSound` / `LoadedSynthSample`) with root-key pitch tracking, linear loop crossfade, and 1-pole timbre filter (`Off`/`Soft`/`Bright`) | Sample zone bank, Loop crossfade (`loop_crossfade`), Timbre filter (`SampleTimbre`) |
 
 ---
 
