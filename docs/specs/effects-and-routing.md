@@ -47,14 +47,14 @@ Layer Synth/Piano/Organ Output (Stereo)
 
 ### 2.4 Slot 4 — Delay
 
-- **Tempo & Time:** Free millisecond mode ($10\text{ ms}..2000\text{ ms}$) or `MasterClock` subdivision sync (`1/4`, `1/8D`, `1/8`, `1/16`).
-- **Analog Mode:** Smoothly slews read-pointer delay time on tempo changes, producing authentic tape pitch-bend glides.
-- **Feedback Path:** Configurable `Feedback` ($0..95\%$), `Ping-Pong` stereo cross-feed, and 1-pole High-Pass / Low-Pass damping filters in the loop.
+- **Tempo & Time:** Free millisecond mode (`delay_time_ms` $10\text{ ms}..2000\text{ ms}$) or `MasterClock` BPM subdivision sync (`delay_clock_sync` with `DelaySubdivision`: `Quarter`, `DottedEighth`, `Eighth`, `Sixteenth`).
+- **Analog Mode (`delay_analog`):** Smoothly slews read-pointer delay time ($\tau = 80\text{ ms}$) on tempo or rate changes with soft `tanh` tape feedback saturation, producing authentic tape pitch-bend glides.
+- **Feedback Path:** Configurable `Feedback` ($0..95\%$), `delay_ping_pong` stereo cross-feed (mono input into alternating Left/Right taps), `DelayFilterMode` (`Off`, `Hp`, `Lp`, `Bp`) feedback loop filters, and `delay_variation` slow tape flutter/cross-shimmer.
 
 ### 2.5 Slot 5 — Reverb
 
-- **Algorithms:** `Booth` ($T_{60} = 0.4\text{ s}$), `Room` ($0.9\text{ s}$), `Stage` ($1.6\text{ s}$), `Hall` ($2.8\text{ s}$), `Cathedral` ($5.2\text{ s}$), `Spring` (dispersive all-pass tank).
-- **Tone Voicing:** `Bright`, `Normal`, `Dark`, plus `Chorale` (gentle LFO modulation inside the late feedback matrix).
+- **Algorithms (`ReverbModel`):** `Booth`, `Room`, `Stage`, `Spring` (dispersive spring tap ratios), `Hall`, `Cathedral`.
+- **Tone Voicing (`ReverbColor`):** `Normal`, `Bright`, `Dark` high-frequency FDN damping coefficients, plus `Chorale` ($0.75\text{ Hz}$ LFO tap modulation inside the late feedback matrix).
 
 ---
 

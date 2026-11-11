@@ -2,7 +2,7 @@
 //!
 //! Spec: `docs/ARCHITECTURE.md`, `docs/specs/effects-and-routing.md`, `docs/specs/morph-and-zones.md`
 
-use crate::fx::{LayerFxChain, MasterBus, MasterClock};
+use crate::fx::{AmpCabinet, DelayFilterMode, LayerFxChain, MasterBus, MasterClock, ReverbColor};
 use crate::midi::{cc, MidiEvent};
 use crate::morph::{KeybedSplitRouter, LayerId, LayerSceneState, MorphControllers, MorphParameter};
 use crate::organ::{OrganLayer, RotarySpeed};
@@ -281,6 +281,9 @@ impl Stage4Engine {
         // Global
         self.master_clock.bpm = prog.global.tempo_bpm;
         self.master_bus.compressor_amount = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
+        for fx in &mut self.fx_chains {
+            fx.snap_delay_time(self.master_clock.bpm);
+        }
 
         // Scene / section masks (with fallback when synthetic tests leave scene_1_mask == 0)
         let category_mask = match prog.category_id {
@@ -396,18 +399,47 @@ impl Stage4Engine {
             0.0
         };
         if dec.amp_enabled {
+            fx.amp_cabinet = match dec.amp_type_new & 0x07 {
+                0 => AmpCabinet::Off,
+                1 => AmpCabinet::Small,
+                2 => AmpCabinet::Jc,
+                3 => AmpCabinet::Twin,
+                _ => AmpCabinet::British,
+            };
             fx.drive_amount = (dec.amp_drive / 10.0).clamp(0.0, 1.0);
             fx.eq_bass_db = dec.eq_bass_db;
             fx.eq_mid_db = dec.eq_mid_db;
             fx.eq_mid_freq_hz = dec.eq_mid_freq_hz();
             fx.eq_treble_db = dec.eq_treble_db;
         } else {
+            fx.amp_cabinet = AmpCabinet::Off;
             fx.drive_amount = 0.0;
             fx.eq_bass_db = 0.0;
             fx.eq_mid_db = 0.0;
             fx.eq_treble_db = 0.0;
         }
+        fx.comp_enabled = dec.comp_enabled;
+        fx.comp_amount = if dec.comp_enabled {
+            dec.comp_amount.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        fx.comp_fast = dec.comp_fast;
         fx.delay_enabled = dec.delay_enabled;
+        fx.delay_time_ms = dec.delay_time_ms();
+        fx.delay_clock_sync = dec.delay_clock_sync;
+        fx.delay_analog = dec.delay_mode != 0;
+        fx.delay_ping_pong = dec.delay_ping_pong;
+        fx.delay_filter = if !dec.delay_fb_filter {
+            DelayFilterMode::Off
+        } else {
+            match dec.delay_fb_fx_type & 0x03 {
+                0 => DelayFilterMode::Hp,
+                1 => DelayFilterMode::Lp,
+                _ => DelayFilterMode::Bp,
+            }
+        };
+        fx.delay_variation = dec.delay_fb_fx_type >= 4;
         fx.delay_feedback = dec.delay_feedback.clamp(0.0, 0.95);
         fx.delay_mix = if dec.delay_enabled {
             dec.delay_mix.clamp(0.0, 1.0)
@@ -415,6 +447,12 @@ impl Stage4Engine {
             0.0
         };
         fx.reverb_model = dec.reverb_model();
+        fx.reverb_color = match dec.reverb_color {
+            1 => ReverbColor::Bright,
+            2 => ReverbColor::Dark,
+            3 => ReverbColor::Chorale,
+            _ => ReverbColor::Normal,
+        };
         fx.reverb_mix = if dec.reverb_enabled {
             dec.reverb_amount.clamp(0.0, 1.0)
         } else {
@@ -466,7 +504,7 @@ impl Stage4Engine {
         let mut mix_r = 0.0f32;
 
         for (i, raw) in raw_layers.into_iter().enumerate() {
-            let [fx_l, fx_r] = self.fx_chains[i].process_frame(raw);
+            let [fx_l, fx_r] = self.fx_chains[i].process_frame_with_bpm(raw, self.master_clock.bpm);
             let gain = self.layer_levels[i].evaluate(&self.morph_controllers);
             mix_l += fx_l * gain;
             mix_r += fx_r * gain;
