@@ -1,0 +1,13 @@
+[package]
+name = "nord-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core DSP engines (Organ, Piano, Synth, 7-Layer FX, Morphing) and CBIN/.ns4b binary parsers for the Nord Stage 4 Emulator."
+
+[[bin]]
+name = "ns4"
+path = "src/bin/ns4.rs"
+
+[dependencies]

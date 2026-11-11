@@ -1,0 +1,112 @@
+# Continuous Delivery: builds cross-platform release binaries on version tags (v*.*.*)
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to build and publish (e.g. v0.1.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: ns4-linux-x86_64.tar.gz
+            bin: ns4
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: ns4-windows-x86_64.zip
+            bin: ns4.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: ns4-macos-arm64.tar.gz
+            bin: ns4
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }} -p nord-core --bin ns4
+
+      - name: Run release tests
+        run: cargo test --release --locked --target ${{ matrix.target }} --workspace
+
+      - name: Package archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" dist/
+          cp README.md dist/
+          tar -C dist -czf "${{ matrix.archive }}" "${{ matrix.bin }}" README.md
+          shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+
+      - name: Package archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" dist/
+          Copy-Item README.md dist/
+          Compress-Archive -Path "dist/${{ matrix.bin }}", "dist/README.md" -DestinationPath "${{ matrix.archive }}" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 "${{ matrix.archive }}").Hash.ToLower()
+          "$hash  ${{ matrix.archive }}" | Set-Content -Encoding ascii "${{ matrix.archive }}.sha256"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            ${{ matrix.archive }}
+            ${{ matrix.archive }}.sha256
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Combine SHA256SUMS
+        run: |
+          cd artifacts
+          cat *.sha256 > SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/SHA256SUMS.txt

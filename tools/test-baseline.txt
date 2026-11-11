@@ -1,0 +1,2 @@
+# Source files without a unit test (tools/check_tests.py).
+# This list may only shrink. Add a test, then delete the line.

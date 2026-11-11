@@ -1,0 +1,24 @@
+# Local reference dumps (>3 GB .ns4b, firmware installers, PDFs)
+.reference/
+references/
+
+# Rust build artifacts
+target/
+
+# Python environments & caches
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+.coverage
+coverage.xml
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/settings.json
