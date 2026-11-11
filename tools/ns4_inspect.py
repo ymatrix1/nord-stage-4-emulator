@@ -186,6 +186,97 @@ def parse_meta_xml(xml_text: str) -> dict[str, int]:
     return {k: int(v) for k, v in root.attrib.items()}
 
 
+def calculate_checksum(data: bytes) -> int:
+    """Calculates Clavia's 32-bit one's-complement byte checksum: 0xFFFFFFFF - sum(bytes)."""
+    return (0xFFFFFFFF - sum(data)) & 0xFFFFFFFF
+
+
+KNOWN_DSP_TAGS: list[tuple[bytes, str]] = [
+    (b"DSPFxCore1", "SHARC Effects Pipeline & String Resonance DSP (DSPFxCore1)"),
+    (b"DSPOrg", "SHARC Organ Physical Modeling & Rotary 122 DSP (DSPOrg)"),
+    (b"DSPSyn", "SHARC 3-Layer Nord Wave 2 Synth DSP (DSPSyn)"),
+    (b"Fx to Org", "SPORT Bus Routing: Effects to Organ"),
+    (b"to Fx", "SPORT Bus Routing: Inter-core to Effects"),
+    (b"Host", "AM1705 Host Processor Routing"),
+    (b"ORG", "B3 Organ Physical Model Domain Tag"),
+    (b"PNO", "Grand / Upright Piano Acoustic Model Domain Tag"),
+    (b"SMP", "Sample Library Synth Domain Tag"),
+    (b"SY1", "Wave 2 Synth Layer 1 Domain Tag"),
+    (b"SYL3", "Wave 2 Synth Layer 3 Domain Tag"),
+]
+
+
+def extract_firmware_payload(raw: bytes) -> bytes:
+    """Extracts Resource 101 payload from Windows PE executable, or returns raw bytes."""
+    if raw.startswith(b"MZ") and len(raw) > 0x40:
+        (e_lfanew,) = struct.unpack_from("<I", raw, 0x3C)
+        if e_lfanew + 24 <= len(raw) and raw[e_lfanew : e_lfanew + 4] == b"PE\x00\x00":
+            # Search for the 32-byte firmware container header signature:
+            # 00 00 00 20 followed by image0_size and image1_offset
+            for offset in range(0x1000, len(raw) - 0x20, 4):
+                if raw[offset : offset + 4] == b"\x00\x00\x00\x20":
+                    img0_size, img1_off = struct.unpack_from(">II", raw, offset + 4)
+                    if 0x20 + img0_size == img1_off and img1_off < len(raw):
+                        return raw[offset:]
+    return raw
+
+
+def parse_firmware_container(raw: bytes) -> dict:
+    """Parses dual-bank Clavia OS firmware container (Resource 101)."""
+    data = extract_firmware_payload(raw)
+    if len(data) < 32:
+        raise ValueError(f"firmware buffer too short: {len(data)} < 32")
+
+    header_size, img0_size, img1_off, img1_size = struct.unpack_from(">IIII", data, 0)
+    if header_size != 0x20:
+        raise ValueError(f"invalid firmware header size: 0x{header_size:X}")
+    if 0x20 + img0_size != img1_off:
+        raise ValueError(f"image1 offset mismatch: 0x{img1_off:X} != 0x20 + 0x{img0_size:X}")
+
+    def parse_bank_segments(base_off: int) -> list[dict]:
+        if len(data) < base_off + 20:
+            return []
+        (seg_count,) = struct.unpack_from(">I", data, base_off + 0x10)
+        cursor = base_off + 0x14
+        segs = []
+        for _ in range(min(seg_count, 8)):
+            if cursor + 44 > len(data):
+                break
+            entry = data[cursor : cursor + 44]
+            name = entry[:4].decode("latin1", errors="replace").rstrip("\x00")
+            off, size, target, csum = struct.unpack_from(">IIII", entry, 4)
+            seg_info: dict = {
+                "name": name,
+                "data_offset": off,
+                "data_size": size,
+                "target_address": f"0x{target:08X}",
+                "checksum": f"0x{csum:08X}",
+            }
+            if name != "CODE" and base_off + off + size <= len(data):
+                seg_bytes = data[base_off + off : base_off + off + size]
+                calc_csum = calculate_checksum(seg_bytes)
+                seg_info["checksum_valid"] = calc_csum == csum
+            segs.append(seg_info)
+            cursor += 44
+        return segs
+
+    partitions = []
+    for tag, desc in KNOWN_DSP_TAGS:
+        pos = data.find(tag)
+        if pos != -1:
+            partitions.append({"tag": tag.decode("latin1"), "offset": pos, "description": desc})
+
+    return {
+        "header_size": header_size,
+        "image0_size": img0_size,
+        "image1_offset": img1_off,
+        "image1_size": img1_size,
+        "image0_segments": parse_bank_segments(0x20),
+        "image1_segments": parse_bank_segments(img1_off),
+        "dsp_partitions": partitions,
+    }
+
+
 def inspect_ns4b_archive(path: Path) -> BackupSummary:
     """Inspects a .ns4b ZIP archive without extracting large sample banks to disk."""
     with zipfile.ZipFile(path, "r") as zf:
@@ -205,12 +296,20 @@ def inspect_ns4b_archive(path: Path) -> BackupSummary:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Inspect Nord Stage 4 CBIN or .ns4b files.")
-    parser.add_argument("path", type=Path, help="Path to .ns4p/.ns4y/.ns4o/.ns4n/.ns4b file")
+    parser = argparse.ArgumentParser(
+        description="Inspect Nord Stage 4 CBIN presets, backups, or OS firmware."
+    )
+    parser.add_argument("path", type=Path, help="Path to preset, archive, or firmware file")
     parser.add_argument("--decode", action="store_true", help="Decode internal bitstream fields")
+    parser.add_argument(
+        "--firmware", action="store_true", help="Inspect as Clavia OS firmware container"
+    )
     args = parser.parse_args(argv)
 
-    if args.path.suffix.lower() == ".ns4b":
+    if args.firmware or args.path.suffix.lower() in (".exe", ".bin"):
+        raw = args.path.read_bytes()
+        summary = parse_firmware_container(raw)
+    elif args.path.suffix.lower() == ".ns4b":
         summary = asdict(inspect_ns4b_archive(args.path))
     else:
         raw = args.path.read_bytes()

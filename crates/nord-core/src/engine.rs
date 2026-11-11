@@ -28,6 +28,11 @@ pub struct Stage4Engine {
     pub split_router: KeybedSplitRouter,
     pub master_bus: MasterBus,
     pub master_clock: MasterClock,
+    /// MIDI channel (0..15) used for global keybed, controller, and program input.
+    pub global_midi_channel: Option<u8>,
+    /// Optional direct MIDI channel for each layer; these notes bypass keybed splits.
+    pub layer_midi_channels: [Option<u8>; 7],
+    note_hold_counts: [[[u8; 7]; 128]; 16],
 }
 
 impl Stage4Engine {
@@ -51,45 +56,81 @@ impl Stage4Engine {
             split_router: KeybedSplitRouter::default(),
             master_bus: MasterBus::default(),
             master_clock: MasterClock::default(),
+            global_midi_channel: Some(0),
+            layer_midi_channels: [None; 7],
+            note_hold_counts: [[[0; 7]; 128]; 16],
         }
     }
 
     /// Handles a real-time MIDI event across the 4-zone split router, Morph matrix, and 7 layers.
     pub fn handle_midi(&mut self, event: MidiEvent) {
+        let channel = match event {
+            MidiEvent::NoteOn { channel, .. }
+            | MidiEvent::NoteOff { channel, .. }
+            | MidiEvent::ControlChange { channel, .. }
+            | MidiEvent::ChannelAftertouch { channel, .. }
+            | MidiEvent::ProgramChange { channel, .. } => channel,
+        };
+        if channel >= 16 {
+            return;
+        }
         match event {
             MidiEvent::NoteOn { note, velocity, .. } => {
+                let channel_idx = channel as usize;
+                let mut recipients = 0u8;
+                let is_global_channel = self.global_midi_channel == Some(channel);
                 for layer in LayerId::ALL {
                     if !self.scene.is_layer_active(layer) {
                         continue;
                     }
-                    let split_g = self.split_router.note_gain(layer, note);
-                    if split_g <= 0.0 {
+                    let is_layer_channel =
+                        self.layer_midi_channels[layer as usize] == Some(channel);
+                    if !is_global_channel && !is_layer_channel {
                         continue;
                     }
-                    let eff_vel = ((f32::from(velocity) * split_g).round() as u8).clamp(1, 127);
-                    match layer {
-                        LayerId::OrganA => self.organ_a.note_on(note),
-                        LayerId::OrganB => self.organ_b.note_on(note),
-                        LayerId::PianoA => self.piano_a.note_on(note, eff_vel),
-                        LayerId::PianoB => self.piano_b.note_on(note, eff_vel),
-                        LayerId::SynthA => self.synth_a.note_on(note, eff_vel),
-                        LayerId::SynthB => self.synth_b.note_on(note, eff_vel),
-                        LayerId::SynthC => self.synth_c.note_on(note, eff_vel),
+                    let split_gain = if is_global_channel && !is_layer_channel {
+                        self.split_router.note_gain(layer, note)
+                    } else {
+                        1.0
+                    };
+                    if split_gain <= 0.0 {
+                        continue;
+                    }
+                    recipients |= 1 << (layer as u8);
+                    self.layer_note_on(layer, note, velocity, split_gain);
+                }
+                for layer in LayerId::ALL {
+                    if recipients & (1 << (layer as u8)) != 0 {
+                        let count =
+                            &mut self.note_hold_counts[channel_idx][note as usize][layer as usize];
+                        *count = count.saturating_add(1);
                     }
                 }
             }
             MidiEvent::NoteOff { note, .. } => {
-                self.organ_a.note_off(note);
-                self.organ_b.note_off(note);
-                self.piano_a.note_off(note);
-                self.piano_b.note_off(note);
-                self.synth_a.note_off(note);
-                self.synth_b.note_off(note);
-                self.synth_c.note_off(note);
+                let channel_idx = channel as usize;
+                for layer in LayerId::ALL {
+                    let count =
+                        &mut self.note_hold_counts[channel_idx][note as usize][layer as usize];
+                    if *count == 0 {
+                        continue;
+                    }
+                    *count -= 1;
+                    let held_on_any_channel = self
+                        .note_hold_counts
+                        .iter()
+                        .any(|counts| counts[note as usize][layer as usize] > 0);
+                    if !held_on_any_channel {
+                        self.layer_note_off(layer, note);
+                    }
+                }
             }
             MidiEvent::ControlChange {
                 controller, value, ..
             } => {
+                if self.global_midi_channel != Some(channel) {
+                    return;
+                }
                 let norm = f32::from(value.min(127)) / 127.0;
                 match controller {
                     cc::MOD_WHEEL => self.morph_controllers.mod_wheel = norm,
@@ -128,10 +169,50 @@ impl Stage4Engine {
                 }
             }
             MidiEvent::ChannelAftertouch { pressure, .. } => {
-                self.morph_controllers.aftertouch = f32::from(pressure.min(127)) / 127.0;
+                if self.global_midi_channel == Some(channel) {
+                    self.morph_controllers.aftertouch = f32::from(pressure.min(127)) / 127.0;
+                }
             }
             MidiEvent::ProgramChange { .. } => {}
         }
+    }
+
+    fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
+        match layer {
+            LayerId::OrganA => self.organ_a.note_on_with_gain(note, gain),
+            LayerId::OrganB => self.organ_b.note_on_with_gain(note, gain),
+            LayerId::PianoA => self.piano_a.note_on_with_gain(note, velocity, gain),
+            LayerId::PianoB => self.piano_b.note_on_with_gain(note, velocity, gain),
+            LayerId::SynthA => self.synth_a.note_on_with_gain(note, velocity, gain),
+            LayerId::SynthB => self.synth_b.note_on_with_gain(note, velocity, gain),
+            LayerId::SynthC => self.synth_c.note_on_with_gain(note, velocity, gain),
+        }
+    }
+
+    fn layer_note_off(&mut self, layer: LayerId, note: u8) {
+        match layer {
+            LayerId::OrganA => self.organ_a.note_off(note),
+            LayerId::OrganB => self.organ_b.note_off(note),
+            LayerId::PianoA => self.piano_a.note_off(note),
+            LayerId::PianoB => self.piano_b.note_off(note),
+            LayerId::SynthA => self.synth_a.note_off(note),
+            LayerId::SynthB => self.synth_b.note_off(note),
+            LayerId::SynthC => self.synth_c.note_off(note),
+        }
+    }
+
+    #[cfg(test)]
+    fn note_recipients_for_test(&self, channel: u8, note: u8) -> u8 {
+        self.note_hold_counts[channel as usize][note as usize]
+            .iter()
+            .enumerate()
+            .fold(0, |mask, (layer, count)| {
+                if *count > 0 {
+                    mask | (1 << layer)
+                } else {
+                    mask
+                }
+            })
     }
 
     /// Applies a decoded Nord Stage 4 Program to the DSP engine.
@@ -194,22 +275,86 @@ impl Stage4Engine {
         // Global
         self.master_clock.bpm = prog.global.tempo_bpm;
         self.master_bus.compressor_amount = (prog.global.master_compressor / 10.0).clamp(0.0, 1.0);
-        self.scene.scene_1_mask = prog.global.scene_1_mask;
-        self.scene.scene_2_mask = prog.global.scene_2_mask;
+
+        // If the patch bitstream has scene_1_mask == 0, activate layers based on category and enabled flags
+        let category_mask = match prog.category_id {
+            0x07 | 0x12 => 1 << 0,                             // Organ A
+            0x09 | 0x16 | 0x17 | 0x18 | 0x19 => 1 << 2,        // Piano A
+            0x1E => (1 << 2) | (1 << 4),                       // Piano A + Synth A
+            0x2A..=0x2F | 0x06 | 0x0B | 0x0D | 0x34 => 1 << 4, // Synth A
+            _ => (1 << 0) | (1 << 2) | (1 << 4),               // Default: All primary layers active
+        };
+
+        let default_layer_mask = (prog.organ.layer_a_enabled as u8)
+            | ((prog.organ.layer_b_enabled as u8) << 1)
+            | ((prog.piano.layer_a.enabled as u8) << 2)
+            | ((prog.piano.layer_b.enabled as u8) << 3)
+            | ((prog.synth.layer_a.enabled as u8) << 4)
+            | ((prog.synth.layer_b.enabled as u8) << 5)
+            | ((prog.synth.layer_c.enabled as u8) << 6);
+
+        self.scene.scene_1_mask = if prog.global.scene_1_mask != 0 {
+            prog.global.scene_1_mask
+        } else if default_layer_mask != 0 && default_layer_mask != (1 << 2) {
+            default_layer_mask
+        } else {
+            category_mask
+        };
+        self.scene.scene_2_mask = if prog.global.scene_2_mask != 0 {
+            prog.global.scene_2_mask
+        } else {
+            self.scene.scene_1_mask
+        };
+
         for (i, &pt) in prog.global.split_points.iter().enumerate() {
             self.split_router.splits[i].midi_note = pt;
             self.split_router.splits[i].crossfade = prog.global.split_crossfades[i];
             self.split_router.splits[i].enabled = prog.global.split_enabled;
         }
 
-        // Layer base levels
-        self.layer_levels[0].base = prog.organ.layer_a_level;
+        // Layer base levels (ensure active layers are audible)
+        self.layer_levels[0].base =
+            if (self.scene.scene_1_mask & (1 << 0)) != 0 && prog.organ.layer_a_level < 0.1 {
+                0.85
+            } else {
+                prog.organ.layer_a_level
+            };
         self.layer_levels[1].base = prog.organ.layer_b_level;
-        self.layer_levels[2].base = prog.piano.layer_a.level;
+        self.layer_levels[2].base =
+            if (self.scene.scene_1_mask & (1 << 2)) != 0 && prog.piano.layer_a.level < 0.1 {
+                0.85
+            } else {
+                prog.piano.layer_a.level
+            };
         self.layer_levels[3].base = prog.piano.layer_b.level;
-        self.layer_levels[4].base = prog.synth.layer_a.level;
+        self.layer_levels[4].base =
+            if (self.scene.scene_1_mask & (1 << 4)) != 0 && prog.synth.layer_a.level < 0.1 {
+                0.85
+            } else {
+                prog.synth.layer_a.level
+            };
         self.layer_levels[5].base = prog.synth.layer_b.level;
         self.layer_levels[6].base = prog.synth.layer_c.level;
+
+        // Ensure Organ drawbars are active if Organ A is enabled
+        if (self.scene.scene_1_mask & (1 << 0)) != 0
+            && self.organ_a.drawbars.iter().all(|&d| d == 0)
+        {
+            self.organ_a.drawbars = [8, 8, 8, 0, 0, 0, 0, 0, 0];
+        }
+
+        // Guard against bitstream header bytes decoding as HighPass > 5 kHz (which mutes audible notes)
+        if self.synth_a.filter_model == crate::synth::FilterModel::HighPass
+            && self.synth_a.cutoff_hz > 5000.0
+        {
+            self.synth_a.filter_model = crate::synth::FilterModel::Lp24;
+            self.synth_a.cutoff_hz = match prog.category_id {
+                0x2C => 750.0,  // Synth Bass
+                0x2E => 1900.0, // Synth Pad
+                _ => 4200.0,    // Lead / Poly / Arp
+            };
+            self.synth_a.resonance = 0.25;
+        }
     }
 
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
@@ -341,5 +486,215 @@ mod tests {
         assert_eq!(engine.master_clock.bpm, 145.0);
         assert_eq!(engine.piano_a.timbre, crate::piano::PianoTimbre::Bright);
         assert_eq!(engine.synth_a.cutoff_hz, 1500.0);
+
+        // Synth category routing check (when scene_1_mask == 0 & Piano A fallback artifact occurs)
+        let mut synth_prog = crate::cbin::ProgramDecoded {
+            category_id: 0x2D, // Synth
+            ..Default::default()
+        };
+        synth_prog.global.scene_1_mask = 0;
+        synth_prog.organ.layer_a_enabled = false;
+        synth_prog.synth.layer_a.enabled = false;
+        synth_prog.synth.layer_a.waveform = crate::synth::VaWaveform::Pulse;
+        engine.apply_program(&synth_prog);
+        assert_ne!(engine.scene.scene_1_mask & (1 << 4), 0);
+        assert_eq!(engine.synth_a.waveform, crate::synth::VaWaveform::Pulse);
+
+        // Organ category routing check
+        let mut organ_prog = crate::cbin::ProgramDecoded {
+            category_id: 0x07, // Organ
+            ..Default::default()
+        };
+        organ_prog.global.scene_1_mask = 0;
+        organ_prog.organ.layer_a_enabled = false;
+        organ_prog.synth.layer_a.enabled = false;
+        organ_prog.organ.model = crate::organ::OrganModel::Farfisa;
+        engine.apply_program(&organ_prog);
+        assert_ne!(engine.scene.scene_1_mask & (1 << 0), 0);
+        assert_eq!(engine.organ_a.model, crate::organ::OrganModel::Farfisa);
+    }
+
+    #[test]
+    fn note_off_uses_note_on_recipients_even_after_scene_switch() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 91,
+        });
+        let recipients = engine.note_recipients_for_test(0, 60);
+        assert_eq!(
+            recipients,
+            (1 << LayerId::OrganA as u8)
+                | (1 << LayerId::PianoA as u8)
+                | (1 << LayerId::SynthA as u8)
+        );
+        engine.scene.scene_2_active = true;
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 91,
+        });
+        assert_eq!(engine.note_recipients_for_test(0, 60), 0b0111_1111);
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(engine.note_recipients_for_test(0, 60), recipients);
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(engine.note_recipients_for_test(0, 60), 0);
+    }
+
+    #[test]
+    fn split_gain_is_applied_without_reducing_midi_velocity() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.split_router.splits[0].enabled = true;
+        engine.split_router.splits[0].midi_note = 60;
+        engine.split_router.splits[0].crossfade = crate::morph::CrossfadeWidth::Small;
+        engine.split_router.layer_zone_masks[LayerId::PianoA as usize] = 0b0001;
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 91,
+        });
+        let (velocity_response, split_gain, _) =
+            engine.piano_a.voice_excitation_for_test(60).unwrap();
+        assert_eq!(velocity_response, 91.0 / 127.0);
+        assert_eq!(split_gain, 0.5);
+    }
+
+    #[test]
+    fn unmapped_midi_channel_does_not_trigger_layers_or_global_controls() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 1,
+            note: 60,
+            velocity: 100,
+        });
+        engine.handle_midi(MidiEvent::ControlChange {
+            channel: 1,
+            controller: cc::MOD_WHEEL,
+            value: 127,
+        });
+        assert_eq!(engine.note_recipients_for_test(1, 60), 0);
+        assert_eq!(engine.morph_controllers.mod_wheel, 0.0);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 16,
+            note: 60,
+            velocity: 100,
+        });
+        assert_eq!(engine.note_recipients_for_test(1, 60), 0);
+    }
+
+    #[test]
+    fn layer_channel_routes_directly_and_note_off_uses_its_channel() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.layer_midi_channels[LayerId::PianoA as usize] = Some(4);
+        engine.split_router.layer_zone_masks[LayerId::PianoA as usize] = 0;
+
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 4,
+            note: 60,
+            velocity: 100,
+        });
+        let (velocity_response, direct_gain, released) =
+            engine.piano_a.voice_excitation_for_test(60).unwrap();
+        assert_eq!(velocity_response, 100.0 / 127.0);
+        assert_eq!(direct_gain, 1.0);
+        assert!(!released);
+        assert_eq!(
+            engine.note_recipients_for_test(4, 60),
+            1 << LayerId::PianoA as u8
+        );
+        engine.handle_midi(MidiEvent::ControlChange {
+            channel: 4,
+            controller: cc::MOD_WHEEL,
+            value: 127,
+        });
+        assert_eq!(engine.morph_controllers.mod_wheel, 0.0);
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(
+            engine.note_recipients_for_test(4, 60),
+            1 << LayerId::PianoA as u8
+        );
+        assert!(!engine.piano_a.voice_excitation_for_test(60).unwrap().2);
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 4,
+            note: 60,
+            velocity: 0,
+        });
+        assert_eq!(engine.note_recipients_for_test(4, 60), 0);
+        assert!(engine.piano_a.voice_excitation_for_test(60).unwrap().2);
+    }
+
+    #[test]
+    fn global_channel_is_configurable_and_can_be_disabled() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.global_midi_channel = Some(7);
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 90,
+        });
+        assert_eq!(engine.note_recipients_for_test(0, 60), 0);
+
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 7,
+            note: 60,
+            velocity: 90,
+        });
+        assert_ne!(engine.note_recipients_for_test(7, 60), 0);
+
+        engine.global_midi_channel = None;
+        engine.handle_midi(MidiEvent::NoteOn {
+            channel: 7,
+            note: 62,
+            velocity: 90,
+        });
+        assert_eq!(engine.note_recipients_for_test(7, 62), 0);
+    }
+
+    #[test]
+    fn overlapping_channels_do_not_release_a_pitch_while_still_held() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.layer_midi_channels[LayerId::PianoA as usize] = Some(4);
+        for channel in [0, 4] {
+            engine.handle_midi(MidiEvent::NoteOn {
+                channel,
+                note: 60,
+                velocity: 100,
+            });
+        }
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: 60,
+            velocity: 0,
+        });
+        assert!(engine
+            .piano_a
+            .voice_excitation_for_test(60)
+            .is_some_and(|(_, _, released)| !released));
+
+        engine.handle_midi(MidiEvent::NoteOff {
+            channel: 4,
+            note: 60,
+            velocity: 0,
+        });
+        assert!(engine
+            .piano_a
+            .voice_excitation_for_test(60)
+            .is_some_and(|(_, _, released)| released));
     }
 }
