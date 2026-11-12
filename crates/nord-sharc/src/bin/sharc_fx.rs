@@ -276,7 +276,11 @@ mod tests {
     /// Image with `DM(0xB0000 + k)` untouched and code at short-word 0x120000:
     /// `R0 = 5; R1 = R0 + R0; RTS` is not needed, the harness only needs two NOPs and a stop pc.
     fn tiny_image() -> String {
-        let path = std::env::temp_dir().join("nord_sharc_fx_test.bin");
+        // one file per call: the tests run in parallel and must not overwrite each other's image
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("nord_sharc_fx_test_{}_{n}.bin", std::process::id()));
         let mut image = vec![0u8; 0x24_0000 + 64];
         for k in 0..8 {
             image[0x24_0000 + 2 * k..0x24_0000 + 2 * k + 2].copy_from_slice(&1u16.to_le_bytes());
