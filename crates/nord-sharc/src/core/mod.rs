@@ -27,11 +27,36 @@ mod support;
 
 use crate::visa::Insn;
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 
 /// Bytes of the flat SRAM image: index = `address & 0x7FFFFF` (loader address), byte `2 * short`.
 pub const SRAM_BYTES: usize = 0x40_0000;
 /// 32-bit words of the IOP register window (`0x0000_0000..0x0003_FFFF` normal-word addresses).
 const IOP_WORDS: usize = 0x4_0000;
+
+/// Hasher for the device store: addresses are `u32` keys that are not attacker controlled, so a
+/// multiplicative mix is enough and much cheaper than the default SipHash on the poll loops.
+#[derive(Default)]
+struct AddrHasher(u64);
+
+impl Hasher for AddrHasher {
+    fn finish(&self) -> u64 {
+        self.0 ^ (self.0 >> 32)
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 ^ u64::from(b)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+
+    fn write_u32(&mut self, x: u32) {
+        self.0 = u64::from(x).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+}
+
+/// Sparse word store keyed by address.
+type DeviceMap = HashMap<u32, u32, BuildHasherDefault<AddrHasher>>;
 
 /// Why a run stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,9 +123,9 @@ pub struct Core {
     sram: Box<[u8]>,
     iop: Box<[u32]>,
     /// Sparse store for addresses outside the SRAM and IOP windows (peripherals, external bus).
-    device: HashMap<u32, u32>,
+    device: DeviceMap,
     /// Values returned by device reads regardless of earlier writes (scripted status registers).
-    preset: HashMap<u32, u32>,
+    preset: DeviceMap,
     /// Reads and writes that went to the device store (diagnostic counters).
     pub device_reads: u64,
     pub device_writes: u64,
@@ -147,8 +172,8 @@ impl Core {
             steps: 0,
             sram: mem,
             iop: vec![0u32; IOP_WORDS].into_boxed_slice(),
-            device: HashMap::new(),
-            preset: HashMap::new(),
+            device: DeviceMap::default(),
+            preset: DeviceMap::default(),
             device_reads: 0,
             device_writes: 0,
             call_stack: Vec::with_capacity(64),
@@ -258,6 +283,19 @@ mod tests {
         c.lenient = true;
         assert!(c.step().is_ok());
         assert_eq!((c.skipped, c.first_skipped), (1, Some(0)));
+    }
+
+    #[test]
+    fn addr_hasher_spreads_neighbouring_addresses() {
+        use std::hash::BuildHasher;
+        let build = BuildHasherDefault::<AddrHasher>::default();
+        let hashes: std::collections::HashSet<u64> = (0..1024u32)
+            .map(|k| build.hash_one(0x3108_C000 + 4 * k))
+            .collect();
+        assert_eq!(hashes.len(), 1024);
+        let mut h = AddrHasher::default();
+        h.write(&[1, 2, 3]);
+        assert_ne!(h.finish(), 0);
     }
 
     #[test]
