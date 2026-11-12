@@ -655,6 +655,14 @@ ORG Core2, `--lenient --dev 0x282c0380=1 --poke 100000:0xb00e2=1`: the command h
 
 Delayed branches (J bit 26 of Types 8a, 9a, 9b) are implemented: the two following instructions run first, a delayed call returns to the instruction after them. In the ORG image 32 of the 38 `CALL (M8, I8)` sites are the delayed form `I8 = DM(0xc10xx); I0 = ...; CALL (M8, I8) (DB)` with `M8 = 0`: `I8` is a function pointer loaded from a table at `DM(0xc10b8..)` (VERIFIED by reading the listing around `0x24f4f2`). The 6 non-delayed sites, including the one at `0x12730e` where the run stops, get `I8` from a caller that the executed path did not visit, which is why the lenient run still ends in a call to address 0.
 
+### 5.26 The mailbox is a trigger, and the function-pointer table is in the image
+
+`sharc-run` now prints the call stack (return addresses, outermost first) when it stops. ORG Core2, `--lenient --dev 0x282c0380=1 --poke 100000:0xb00e2=VALUE`:
+
+- Every non-zero mailbox value (tested 1 to 12, 16, 32, 0x100, 0x1000, 0xffff) takes the identical path (495,339 steps, same stop). Only zero keeps the poll loop spinning. So `DM(0xB00E2)` is a start trigger for one processing pass, not a command code (VERIFIED by the runs); what to process comes from memory.
+- At the stop the call stack holds one entry (`0x127310`, the return address of the failing `CALL (M8, I8)`): the handler reaches the processing code by jumps, not calls.
+- The pointer table read by the delayed `CALL (M8, I8)` sites, `DM(0xC10B8..)`, is initialised in the image (ORG: `0x120bf7, 0x120bf7, 0x120300, 0x120300, 0, 0, 0, 0`, code addresses in the VISA window; `python` over `core2_sram.bin` at byte `4 * 0xC10B8`). It does not need to be written by the ARM. The non-delayed call at `0x12730e` still has `I8 = 0` because the executed path never loads it; which caller sets it is open.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications

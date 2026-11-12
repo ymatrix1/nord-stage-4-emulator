@@ -107,6 +107,18 @@ fn run(args: &[String]) -> Result<String, String> {
             core.first_skipped.unwrap_or(0)
         ));
     }
+    if !core.return_addresses().is_empty() {
+        let stack: Vec<String> = core
+            .return_addresses()
+            .iter()
+            .map(|a| format!("{a:x}"))
+            .collect();
+        out.push_str(&format!(
+            "call stack (outermost first): {}
+",
+            stack.join(" ")
+        ));
+    }
     if trace > 0 {
         let list: Vec<String> = recent.iter().map(|p| format!("{p:x}")).collect();
         out.push_str(&format!(

@@ -87,6 +87,11 @@ impl Core {
         }
     }
 
+    /// Return addresses of the active calls, outermost first.
+    pub fn return_addresses(&self) -> &[u32] {
+        &self.call_stack
+    }
+
     /// End-of-step bookkeeping: loop back-edge of the innermost `DO` loop, then the countdown of
     /// a delayed branch. Returns the pc of the next instruction.
     #[inline]
@@ -189,6 +194,15 @@ mod tests {
         assert_eq!(c.run(3), None);
         assert_eq!(c.pc, 0x40);
         assert!(c.call_stack.is_empty());
+    }
+
+    #[test]
+    fn return_addresses_list_the_active_calls() {
+        // CALL 0x10 then, at 0x10, CALL 0x20: two nested calls
+        let mut c = core_at_zero(&[0x06be, 0x0000, 0x0010]);
+        load(&mut c, 0x10, &[0x06be, 0x0000, 0x0020]);
+        assert_eq!(c.run(2), None);
+        assert_eq!(c.return_addresses(), &[3, 0x13]);
     }
 
     #[test]
