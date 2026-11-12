@@ -8,6 +8,7 @@
 #![allow(semicolon_in_expressions_from_macros)]
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
+pub mod fx_params;
 pub mod midi;
 pub mod morph_assign;
 pub mod params;

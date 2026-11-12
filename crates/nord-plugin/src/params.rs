@@ -74,6 +74,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "morph", group = "Morph Assign")]
     pub morph_assign: crate::morph_assign::MorphAssignParams,
 
+    /// Per-layer FX controls (Amp/EQ, Comp, Delay, Reverb mix).
+    #[nested(id_prefix = "fx", group = "Layer FX")]
+    pub layer_fx: crate::fx_params::LayerFxBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -287,6 +291,7 @@ impl Default for Stage4Params {
             )
             .with_step_size(0.01),
             morph_assign: crate::morph_assign::MorphAssignParams::default(),
+            layer_fx: crate::fx_params::LayerFxBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -546,6 +551,7 @@ impl Stage4Params {
 
         // Morph assignments (depths only; base values are written below)
         self.morph_assign.sync_to_engine(engine);
+        self.layer_fx.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();
@@ -733,5 +739,6 @@ mod tests {
         assert_eq!(sorted.len(), ids.len(), "duplicate host parameter IDs");
         assert!(ids.contains(&"morph_level_wheel_1".to_string()));
         assert!(ids.contains(&"morph_cutoff_at_3".to_string()));
+        assert!(ids.contains(&"fx_delay_mix_7".to_string()));
     }
 }
