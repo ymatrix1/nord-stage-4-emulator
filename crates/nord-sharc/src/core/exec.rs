@@ -26,7 +26,7 @@ impl Core {
     /// Fetches the instruction at `pc`.
     #[inline]
     pub(super) fn fetch(&self, pc: u32) -> Decoded {
-        if self.isa_mode() {
+        if self.isa_at(pc) {
             return self.fetch_isa(pc);
         }
         let p0 = self.parcel(pc);
@@ -89,7 +89,7 @@ impl Core {
             return Ok(()); // the core slept in IDLE for this step
         }
         let d = self.fetch(self.pc);
-        let mut next = d.pc.wrapping_add(if self.isa_mode() {
+        let mut next = d.pc.wrapping_add(if self.isa_at(d.pc) {
             1
         } else {
             d.insn.len as u32
