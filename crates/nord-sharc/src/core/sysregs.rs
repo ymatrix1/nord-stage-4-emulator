@@ -118,13 +118,14 @@ impl Core {
     fn stky(&self, y: usize) -> u32 {
         let mut v = self.sys.stky[y] & (STKY_WRITABLE | SSOV | LSOV);
         if y == 1 {
-            return v & 0x3E7;
+            v &= 0x3E7;
         }
         let depth = self.pc_depth();
         v |= if depth == 0 { PCEM } else { 0 };
         v |= if depth >= PC_STACK_DEPTH { PCFL } else { 0 };
         v |= if self.sys.status.is_empty() { SSEM } else { 0 };
         v |= if self.loops.is_empty() { LSEM } else { 0 };
+        // VERIFIED (census diff, `census_diff.py`): STKYy shows the same stack status bits as STKYx
         v
     }
 

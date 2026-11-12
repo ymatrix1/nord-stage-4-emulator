@@ -1,6 +1,6 @@
 """Turns the probe part of an ADSP-21489 .dxe into a text fixture the Rust oracle tests can run.
 
-usage: python dxe2fixture.py <x.dxe> <out.txt> --code START END --data START END --entry ADDR --exit ADDR --out ADDR N [--fill WORD]
+usage: python dxe2fixture.py <x.dxe> <out.txt> --code START END --data START END --entry ADDR --exit ADDR --out ADDR N [--fill WORD] [--sym NAME ADDR]...
 Addresses are hex (short-word addresses for code, DM addresses for data). Only the bytes inside the
 ranges are written, so the C runtime of the build is not part of the fixture.
 """
@@ -25,8 +25,12 @@ def main(argv):
     k = 0
     while k < len(args):
         name = args[k]
-        n = {'--code': 2, '--data': 2, '--entry': 1, '--exit': 1, '--out': 2, '--fill': 1}[name]
-        opt[name] = [int(a, 16) if name != '--out' or j == 0 else int(a) for j, a in enumerate(args[k + 1:k + 1 + n])]
+        n = {'--code': 2, '--data': 2, '--entry': 1, '--exit': 1, '--out': 2, '--fill': 1, '--sym': 2}[name]
+        vals = args[k + 1:k + 1 + n]
+        if name == '--sym':   # NAME HEXADDR, repeatable
+            opt.setdefault('syms', []).append((vals[0], int(vals[1], 16)))
+        else:
+            opt[name] = [int(a, 16) if name != '--out' or j == 0 else int(a) for j, a in enumerate(vals)]
         k += 1 + n
     code = {}
     data = {}
@@ -55,6 +59,7 @@ def main(argv):
         start, run = a, [code[a]]
     if run:
         lines.append('code %x %s' % (start, ''.join(run)))
+    lines += ['sym %s %x' % (n, a) for n, a in opt.get('syms', [])]
     lines += ['dm %x %x' % (a, data[a]) for a in sorted(data) if data[a]]
     open(out, 'w').write('\n'.join(lines) + '\n')
     print(len(code), 'parcels', len(data), 'words')

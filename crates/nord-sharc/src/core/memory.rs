@@ -117,7 +117,11 @@ impl Core {
             1 => self.i[n] = v,
             2 => self.m[n] = v,
             3 => self.l[n] = v,
-            4 => self.b[n] = v,
+            // VERIFIED (census diff): loading Bx also loads Ix with the same value
+            4 => {
+                self.b[n] = v;
+                self.i[n] = v;
+            }
             5 => {
                 self.s[n] = v;
                 self.fx_y.clear(n);

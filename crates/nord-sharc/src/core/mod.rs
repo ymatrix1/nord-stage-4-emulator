@@ -55,8 +55,8 @@ mod multifunction;
 mod multiplier;
 mod pcstack;
 pub mod periph;
-#[cfg(test)]
-mod probe_fixture;
+pub mod census;
+pub mod probe_fixture;
 mod shifter;
 #[cfg(test)]
 mod stack_measured;
