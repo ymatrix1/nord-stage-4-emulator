@@ -80,6 +80,7 @@ nord-stage-4-emulator/
 │           ├── fx.rs           # Per-layer 5-slot FX pipeline + Master Compressor & Clock
 │           ├── midi.rs         # Nord Stage 4 MIDI CC map & message router
 │           ├── engine.rs       # 7-layer multitimbral Stage4Engine coordinator
+│           ├── render.rs       # Offline MIDI-timeline renderer + 32-bit float WAV writer (A/B benchmark loop)
 │           └── bin/
 │               └── ns4.rs      # CLI binary for preset/backup inspection & offline render
 ├── tools/

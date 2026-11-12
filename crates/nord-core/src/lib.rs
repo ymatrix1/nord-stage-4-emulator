@@ -7,4 +7,5 @@ pub mod midi;
 pub mod morph;
 pub mod organ;
 pub mod piano;
+pub mod render;
 pub mod synth;
