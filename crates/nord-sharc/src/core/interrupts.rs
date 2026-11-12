@@ -187,9 +187,15 @@ impl Core {
             vector: v,
             status_pushed,
         });
-        let vector_pc = self.irq.ivt_base + VECTOR_PARCELS * v as u32;
-        self.irq.window_lo = vector_pc;
-        self.irq.window_len = VECTOR_PARCELS;
+        let vector_pc = if self.isa_mode() {
+            // ISA mode: four 48-bit words per vector from the table at the start of block 0
+            super::isa::ISA_BASE + 4 * v as u32
+        } else {
+            let pc = self.irq.ivt_base + VECTOR_PARCELS * v as u32;
+            self.irq.window_lo = pc;
+            self.irq.window_len = VECTOR_PARCELS;
+            pc
+        };
         self.pc = vector_pc;
         self.irq.stall += ENTRY_STALL + u64::from(self.irq.idle);
         self.irq.idle = false;
@@ -209,6 +215,9 @@ impl Core {
 
     /// `IDLE`: the core sleeps until an interrupt is taken.
     pub(super) fn enter_idle(&mut self) {
+        if self.periph.is_some() {
+            self.periph_boot_wait(); // a sleeping core lets the host DMA finish
+        }
         self.irq.idle = true;
         self.poke_irq();
     }
@@ -287,6 +296,9 @@ impl Core {
                 retry = true;
             } else {
                 retry = true; // inside the delay slots of a branch: try again next step
+                              // an IDLE in a delay slot ends as soon as an interrupt is pending (the boot
+                              // kernel's `JUMP (DB)` + `IDLE`); the interrupt is taken after the branch
+                self.irq.idle = false;
             }
         }
         let wake = self

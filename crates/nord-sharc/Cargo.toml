@@ -22,4 +22,8 @@ path = "src/bin/sharc_bank.rs"
 name = "sharc-org"
 path = "src/bin/sharc_org.rs"
 
+[[bin]]
+name = "sharc-fx"
+path = "src/bin/sharc_fx.rs"
+
 [dependencies]

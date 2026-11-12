@@ -92,8 +92,8 @@ When a pre-decoded `.npno` or open SFZ/WAV (`NpnoSound::from_sfz_str` / `from_sf
    $$
    r = 2^{\frac{(n - n_{\text{root}}) + \frac{c}{100}}{12}}, \qquad \text{sample\_step} = r \cdot \frac{f_{\text{s, stroke}}}{f_{\text{s, engine}}}
    $$
-3. **4-Point Cubic Catmull-Rom Sample Interpolation:**
-   All fractional sample lookups (including `35 kHz -> 48 kHz` `.npno` hardware sample-rate conversion and semitone transposition) evaluate a zero-allocation 4-point Catmull-Rom cubic spline across `[p_{k-1}, p_k, p_{k+1}, p_{k+2}]` to avoid linear-interpolation high-frequency roll-off and imaging.
+3. **SMP 6-Tap Q31 Sample Interpolation (`SampleInterp::SmpQ31`, default):**
+   All fractional sample lookups (including `35 kHz -> 48 kHz` `.npno` hardware sample-rate conversion and semitone transposition) use the kernel the SMP DSP image applies (`crates/nord-core/src/piano/q31_kernel.rs`; see "SMP sample interpolation" below). `SampleInterp::Cubic` selects the earlier zero-allocation 4-point Catmull-Rom spline over `[p_{k-1}, p_k, p_{k+1}, p_{k+2}]` (`PianoLayer::sample_interp`).
 4. **Resilient Fallback:**
    If no sample is loaded, or if the note is outside the mapped multisample zones, the engine smoothly falls back to the mathematical harmonic oscillator bank.
 
@@ -109,3 +109,25 @@ When note-on events exceed the pre-allocated voice capacity (`MAX_PIANO_VOICES =
    \text{score} = \begin{cases} v_{\text{env}} \cdot 0.1 & \text{if } v_{\text{releasing}} \\ v_{\text{env}} & \text{otherwise} \end{cases}
    $$
    The voice with the lowest score (decaying released notes first, then quietest sustaining notes) is recycled, preserving loud bass roots and active top melody notes without audible voice drops.
+
+---
+
+## 9. SMP sample interpolation (hardware parity)
+
+Source: [smp-kernel-fit](../research/smp-kernel-fit.md) (VERIFIED, `tools/ns4_smp_kernel_fit.py`, 0 mismatches over the 1,536 words at SMP `DM(0xE3400)`). Code: `piano/q31_kernel.rs` (kernel and interpolator), `piano/smp_unpack.rs` (unpacker and predictor model).
+
+| Item | Definition |
+|---|---|
+| Position | `pos = n + frac`; `phase p = floor(frac * 256)` (hardware: `frac >> 24`, truncation) |
+| Taps | tap `t = 0..5` weighs sample `n - 2 + t`; samples past either end repeat the edge sample (ASSUMED) |
+| Offset | `d = (2 - t) + p / 256` |
+| Kernel | `u(d) = sinc(d) * (0.54 + 0.46 cos(pi d / 3))`; `h[t][p] = u + (1 - sum_t u) / 6` |
+| Word | `min(round(h * 2^23), 2^23 - 1) << 8` (Q31, low byte zero; the peak saturates to `0x7FFFFF00`) |
+| Output | `y = sum_t h[t][p] * x[n - 2 + t]`; the integer model `mac_q31` rounds the upper 32 bits of `2 * sum a w` to nearest (ties up, ASSUMED) |
+| Properties | `h[t][p] = h[5-t][256-p]` exactly; phase 0 is a pass-through; per-phase tap sum 1 (+- 2 LSB of 23 bits) |
+
+The table is built once (`SmpKernel::shared()`, called in `PianoLayer::new`); `render_frame` only reads a `&'static` table (6 MACs per channel, no allocation, no lock).
+
+`PianoLayer::sample_interp` selects the path: `SmpQ31` (default, hardware parity) or `Cubic` (Catmull-Rom). Measured worst-case error of interpolating a sine at fractional positions (kernel vs Catmull-Rom, Python model in the research note): 0.05 fs -71 / -66 dB, 0.10 fs -55 / -47 dB, 0.15 fs -50 / -35 dB, 0.20 fs -55 / -27 dB, 0.25 fs -36 / -19 dB, 0.30 fs -22 / -14 dB. The unit test `test_sine_tone_error_against_ideal_and_cubic` pins the kernel below the cubic error at 0.2 fs. Like the hardware, the kernel is a fixed interpolator with no anti-alias filtering for upward transposition.
+
+`piano/smp_unpack.rs` models the voice-loop residual unpacker (LSB-first, 16 payload bits per 32-bit word, `FEXT`/`FDEP (SE)`, widths 1..16) and the 4-tap integer predictor; tests prove it equals `cbin::sample` decoding of the same synthetic residuals for widths 1..16 and orders 0..4.
