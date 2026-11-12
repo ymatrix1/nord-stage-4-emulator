@@ -52,6 +52,12 @@ The filter fix removed the dead treble, but this clip is still **not a clean EQ 
 - Hardware has *less* sub than our EQ-flat render (render with `--program-file` of the same program with bass/mid/treble set to 0), although the program boosts bass +15 dB. The source mismatch (detected low-register notes are unreliable; MIDI 28..40 are partly ghosts) outweighs the EQ effect, so the EQ cannot be separated from the source with one clip.
 - Width stays 0.13 with and without EQ and for single notes at C3/C4/C5, so it is not an EQ effect. The hardware program also enables Mod 1, Mod 2 and Delay; stereo spread from those or from the stereo sample (`Jazz Guitar_ST`) is the open question (synth/FX, not amp).
 
+## FX decode corpus check
+
+Mapping the Jazz Guitar II width gap led to a decode audit. Against `ns4decode` over all 384 factory programs, 5 sections of FX blocks each (organ 1, piano 2, synth 3): the nine enum fields now match 17,280/17,280 (`tools/ns4_fx_crosscheck.py`). Before the fix, Reverb type (SPRING mapped to Booth, variation bit dropped), Reverb DARK/BRIGHT, Mod 2 (raw 5/7), Delay Analog/Ping-Pong/filter type were wrong. The name order of every table is also present, in the same order, in the firmware UI strings (`0x2cc4e4..0x2cc918`).
+
+Jazz Guitar II after these fixes: width 0.16 (was 0.13; hardware 0.96), presence -6.6 dB, brilliance -11.3 dB, sub +8.0 dB: the width gap is not explained by the FX decode.
+
 ## Caveats found while working
 
 - The player touches knobs, sliders and the mod wheel during clips (OLED pop-ups such as `Filter Frequency 5.6 kHz`, `Level Synth A Off`). Renders with fixed controls therefore differ from hardware in those windows. Follow-up: detect OLED pop-ups (`scenes --rows 0,1`) and the wheel position to drive CC events.
