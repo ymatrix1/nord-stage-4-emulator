@@ -515,8 +515,11 @@ def decode(parcels: tuple[int, ...]) -> str:
         # shift fields of the 0x02 form plus a post-modify data move (docs 5.36)
         bank = 8 if bits(w, 32, 32) else 0
         move = _dual_half(
-            "PM" if bank else "DM", bits(w, 31, 31), bits(w, 43, 41) + bank,
-            bits(w, 40, 38) + bank, bits(w, 26, 23),
+            "PM" if bank else "DM",
+            bits(w, 31, 31),
+            bits(w, 43, 41) + bank,
+            bits(w, 40, 38) + bank,
+            bits(w, 26, 23),
         )
         return f"{iff}{shift_imm_text(w)}, {move}"
     if name == "6n":
