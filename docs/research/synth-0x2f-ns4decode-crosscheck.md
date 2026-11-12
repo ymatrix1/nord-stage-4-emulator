@@ -277,3 +277,13 @@ Method: 2048-point FFT every 100 ms; strongest peak above 300 Hz (resonance peak
 Applied: `FILTER_ENV_OCTAVES = 8` (was inherited ASSUMED 3), `FILTER_ENV_DECAY_TAU_FRACTION = 0.18`; test `filter_envelope_decay_follows_the_measured_time_constant`. Caveats: one clip and decay value; peak snaps to harmonics of 392 Hz; resonance peak is near, not exactly at, cutoff; release not measured (unchanged); the 49 s note of the same clip agrees roughly (3516 -> 773 Hz over 0.8 s) but overlaps other audio.
 
 Follow-ups: second Amt/Decay pair to confirm linearity in both; check whether the amp envelope decay uses the same 0.18 factor.
+
+## Firmware cross-check of the clip-measured scales (checked 2026-11-12)
+
+Question: can `bank0_CODE.bin` confirm vibrato 92 cents, filter-env 8 octaves, decay tau 0.18 x display?
+
+Scan (f32 words, `target/fw_unpacked/bank0_CODE.bin`): 1/ln256 = 0.1803 (decay display = time to fall to 1/256 would give tau 0.18 x): 5 hits but all inside smooth value tables (e.g. `0x2f8e1c..0x2f8e40`: 0.18033, 0.18025, ... 0.17993), not an isolated constant. Ratio for 92 cents (1.0546): 1 hit at `0x48f040`; 0.92: 2 hits; 8.0: 2 hits; 256.0: 3 hits. None sits next to code or a table that is attributable to vibrato, filter or envelopes.
+
+Result: no firmware confirmation. Expected, since envelope and filter maths most likely run on the DSPs, whose code is not in the unpacked ARM image (see the DSP-boot notes above). The hits are chance matches among 1.4 M words; do not cite them as evidence. The scales stay EMPIRICAL (hardware clips only). The 0.18 factor is consistent with a "falls to 1/256 in the displayed time" law (tau = t/ln 256 = 0.180 t), which is a hypothesis, not a finding.
+
+Also applied: the 0.18 factor now covers the oscillator envelope decay (pitch-blip clip: tau 16-27 ms at displayed 100 ms). Amp envelope untouched (no decay setting in the clips).

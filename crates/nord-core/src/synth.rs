@@ -163,12 +163,15 @@ pub(crate) const UNISON_START_PHASES: [f32; 4] = [0.0, 0.31, 0.57, 0.83];
 /// the 392 Hz note, onset time uncertain). Replaces an inherited ASSUMED 3 octaves.
 const FILTER_ENV_OCTAVES: f32 = 8.0;
 
-/// Ratio of the audible filter-envelope decay time constant to the displayed Decay time.
+/// Ratio of the audible filter and oscillator envelope decay time constant to the displayed Decay.
 ///
-/// EMPIRICAL: same clip; the resonance peak, in octaves above the base cutoff, falls by a factor
+/// EMPIRICAL: filter envelope, same clip as above; the resonance peak, in octaves above the base cutoff, falls by a factor
 /// 0.77 per 0.1 s (tau 0.38 s) while the display reads 2.07 s, so tau = 0.18 x display. One decay
-/// value only; the shape (exponential in octaves) fits the nine tracked points within 10 %.
-const FILTER_ENV_DECAY_TAU_FRACTION: f32 = 0.18;
+/// value only; the shape (exponential in octaves) fits the nine tracked points within 10 %. The
+/// oscillator envelope agrees: Audible Genius pitch-blip clip, displayed Decay 100 ms, pitch falls
+/// x0.88..0.93 per 2 ms (tau 16-27 ms, predicted 18 ms). The amp envelope is NOT covered (its clip
+/// settings had no decay); it keeps tau = displayed Decay.
+const ENV_DECAY_TAU_FRACTION: f32 = 0.18;
 
 /// Seconds the Delay-mode vibrato takes to fade from zero to full depth after its delay.
 ///
@@ -596,7 +599,7 @@ impl SynthLayer {
                         v.oenv_attack_done = true;
                     }
                 } else if self.osc_env_decay_sec < 44.0 {
-                    let dec = self.osc_env_decay_sec.max(0.003);
+                    let dec = (self.osc_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
                     v.oenv -= v.oenv * (inv_fs / dec).min(1.0);
                 }
             } else {
@@ -649,8 +652,7 @@ impl SynthLayer {
                             v.fenv_attack_done = true;
                         }
                     } else if self.filter_env_decay_sec < 44.0 {
-                        let dec =
-                            (self.filter_env_decay_sec * FILTER_ENV_DECAY_TAU_FRACTION).max(0.003);
+                        let dec = (self.filter_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
                         v.fenv -= v.fenv * (inv_fs / dec).min(1.0);
                     }
                 } else {
@@ -992,7 +994,7 @@ mod tests {
         s.note_on(67, 127);
         render_n(&mut s, 48_000 / 2);
         let fenv = s.voices.iter().find(|v| v.active).unwrap().fenv;
-        let want = (-(0.5 - 0.0005) / (2.07 * FILTER_ENV_DECAY_TAU_FRACTION)).exp();
+        let want = (-(0.5 - 0.0005) / (2.07 * ENV_DECAY_TAU_FRACTION)).exp();
         assert!((fenv - want).abs() < 0.03, "fenv {fenv} want {want}");
         // 7.4 on the panel is a ~5.9 octave sweep at its start.
         let octaves = 0.74 * FILTER_ENV_OCTAVES;
@@ -1058,6 +1060,24 @@ mod tests {
         assert_ne!(run(1.0, true), run(0.0, true));
         assert_ne!(run(1.0, false), run(0.0, false));
         assert!(run(-1.0, true).iter().all(|f| f[0].is_finite()));
+    }
+
+    #[test]
+    fn osc_envelope_decay_uses_the_same_time_constant_fraction() {
+        // Pitch-blip clip: displayed Decay 100 ms, audible tau about 18 ms.
+        let mut s = SynthLayer::new(48_000.0);
+        s.osc_env_to_pitch = true;
+        s.osc_env_amount = 1.0;
+        s.osc_env_attack_sec = 0.0005;
+        s.osc_env_decay_sec = 0.1;
+        s.note_on(60, 100);
+        render_n(&mut s, 480); // attack done (~10 ms)
+        let at_start = s.voices.iter().find(|v| v.active).unwrap().oenv;
+        render_n(&mut s, 864); // 18 ms more
+        let after_18ms = s.voices.iter().find(|v| v.active).unwrap().oenv;
+        let ratio = after_18ms / at_start;
+        let want = (-0.018f32 / (0.1 * ENV_DECAY_TAU_FRACTION)).exp();
+        assert!((ratio - want).abs() < 0.03, "ratio {ratio} want {want}");
     }
 
     #[test]
