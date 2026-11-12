@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--lenient] [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--lenient] [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -17,10 +17,25 @@ fn parse_number(s: &str) -> Option<u64> {
     }
 }
 
+/// Universal register code of a name such as `R3`, `I8`, `M0`, `L5` or `B2`.
+fn register_code(name: &str) -> Option<u8> {
+    let group = match name.get(..1)? {
+        "R" => 0,
+        "I" => 1,
+        "M" => 2,
+        "L" => 3,
+        "B" => 4,
+        _ => return None,
+    };
+    let n: u8 = name.get(1..)?.parse().ok().filter(|n| *n < 16)?;
+    Some((group << 4) | n)
+}
+
 fn run(args: &[String]) -> Result<String, String> {
     let mut positional = Vec::new();
     let mut devices = Vec::new();
     let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
+    let mut registers: Vec<(u8, u32)> = Vec::new();
     let mut trace = 0usize;
     let mut lenient = false;
     let mut it = args.iter();
@@ -45,6 +60,14 @@ fn run(args: &[String]) -> Result<String, String> {
                 ));
             }
             "--lenient" => lenient = true,
+            "--set" => {
+                let spec = it.next().ok_or("--set needs REG=VALUE")?;
+                let (name, value) = spec.split_once('=').ok_or("--set needs REG=VALUE")?;
+                registers.push((
+                    register_code(name).ok_or("bad --set register (R I M L B 0-15)")?,
+                    parse_number(value).ok_or("bad --set value")? as u32,
+                ));
+            }
             "--trace" => {
                 trace = parse_number(it.next().ok_or("--trace needs N")?).ok_or("bad --trace")?
                     as usize;
@@ -54,7 +77,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--lenient] [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--lenient] [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -63,6 +86,9 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut core = Core::new(&data);
     core.lenient = lenient;
     core.pc = entry;
+    for (code, value) in registers {
+        core.write_ureg(code, value);
+    }
     for (addr, value) in devices {
         core.preset_device(addr, value);
     }
@@ -216,6 +242,27 @@ mod tests {
         ])
         .unwrap();
         assert!(poked.contains("steps 1 pc"), "{poked}");
+        assert_eq!(register_code("I8"), Some(0x18));
+        assert_eq!(register_code("R15"), Some(0x0F));
+        assert_eq!(register_code("X1"), None);
+        assert_eq!(register_code("R16"), None);
+        let set = run(&[
+            p.clone(),
+            "0x120000".into(),
+            "1".into(),
+            "--set".into(),
+            "R3=7".into(),
+        ])
+        .unwrap();
+        assert!(set.contains("steps 1"), "{set}");
+        assert!(run(&[
+            p.clone(),
+            "0".into(),
+            "1".into(),
+            "--set".into(),
+            "Q1=2".into()
+        ])
+        .is_err());
         let len = run(&[p.clone(), "0x120000".into(), "1".into(), "--lenient".into()]).unwrap();
         assert!(len.contains("steps 1"), "{len}");
         assert!(run(&[p, "0".into(), "1".into(), "--poke".into(), "x".into()]).is_err());
