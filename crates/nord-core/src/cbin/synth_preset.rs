@@ -102,8 +102,11 @@ pub struct SynthLayerDecoded {
     pub vibrato_mode: u8,
     /// Vibrato delay, seconds (`0.1 + 2.9 * raw / 29`).
     pub vibrato_delay_sec: f32,
+    /// Vibrato rate in Hz. EMPIRICAL: range `2.0..8.0 Hz` from NS4 manual p.37 (Vibrato Menu); the linear
+    /// 128-step mapping `2 + 6 * raw / 127` is ASSUMED (ns4decode notes a 0.1 Hz display anomaly).
     pub vibrato_rate_hz: f32,
     /// Vibrato amount `0..10`.
+    /// EMPIRICAL: panel range `0..10` from NS4 manual p.37; depth in cents is ASSUMED (`synth_params.rs`).
     pub vibrato_amount: f32,
 }
 
