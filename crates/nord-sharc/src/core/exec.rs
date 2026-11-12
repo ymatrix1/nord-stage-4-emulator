@@ -26,6 +26,9 @@ impl Core {
     /// Fetches the instruction at `pc`.
     #[inline]
     fn fetch(&self, pc: u32) -> Decoded {
+        if self.isa_mode() {
+            return self.fetch_isa(pc);
+        }
         let p0 = self.parcel(pc);
         let p1 = self.parcel(pc.wrapping_add(1));
         let (kind, len) = classify(p0, Some(p1));
@@ -78,10 +81,16 @@ impl Core {
     /// Executes one instruction. Returns `Ok(())` or the reason it could not.
     pub fn step(&mut self) -> Result<(), Fault> {
         let d = self.fetch(self.pc);
-        let mut next = d.pc.wrapping_add(d.insn.len as u32);
+        let mut next = d.pc.wrapping_add(if self.isa_mode() {
+            1
+        } else {
+            d.insn.len as u32
+        });
         match d.kind() {
             Kind::T21c if d.insn.parcels[0] == 0x0001 => {}
             Kind::T21 if d.w == 0 => {}
+            // FLUSH CACHE: the instruction cache is not modelled, so there is nothing to flush
+            Kind::T20a => {}
             Kind::T2a | Kind::T2b | Kind::T2c => self.exec_compute(&d)?,
             Kind::T6n => self.exec_shift_imm(&d)?,
             Kind::T1a | Kind::T1b => self.exec_dual_move(&d)?,
@@ -96,6 +105,7 @@ impl Core {
             | Kind::T16a
             | Kind::T16b
             | Kind::T18a
+            | Kind::T19a
             | Kind::T5a
             | Kind::T5b
             | Kind::T3a

@@ -76,12 +76,16 @@ fn dual_half(space: &str, write: bool, i: u64, m: u64, reg: u64) -> String {
 
 pub(super) fn type_only(kind: Kind) -> Option<&'static str> {
     Some(match kind {
-        Kind::T6a => "shift immediate",
         Kind::T9a => "indirect/rel branch + compute",
         Kind::T9b => "indirect/rel branch",
         Kind::T10a => "jump + dual move + compute",
         _ => return None,
     })
+}
+
+/// A 24-bit two's complement field as a 32-bit value (how ADI prints relative offsets).
+fn sign_extend_24(v: u64) -> u32 {
+    (((v as u32) << 8) as i32 >> 8) as u32
 }
 
 pub(super) fn raw_hex(parcels: &[u16]) -> String {
@@ -215,6 +219,25 @@ pub fn decode_text(insn: &Insn) -> String {
             }
         }
         Kind::T6n => format!("{iff}{}", shift_imm_text(w)),
+        Kind::T6a => {
+            // shift immediate with a DM/PM move, fields VERIFIED on 10 ADI samples of the SMP/SY1SY2
+            // images: post-modify only, PM bit 32, write bit 31, data register bits 26..23
+            let pm = bits(w, 32, 32) == 1;
+            let bank = if pm { 8 } else { 0 };
+            let ea = format!(
+                "{}(I{}, M{})",
+                if pm { "PM" } else { "DM" },
+                bits(w, 43, 41) + bank,
+                bits(w, 40, 38) + bank
+            );
+            let reg = bits(w, 26, 23);
+            let mv = if bits(w, 31, 31) == 1 {
+                format!("{ea} = R{reg}")
+            } else {
+                format!("R{reg} = {ea}")
+            };
+            format!("{iff}{}, {mv}", shift_imm_text(w))
+        }
         Kind::T19a => {
             let g = if bits(w, 38, 38) == 1 { 8 } else { 0 };
             let src = bits(w, 34, 32) + g;
@@ -242,20 +265,47 @@ pub fn decode_text(insn: &Insn) -> String {
         }
         Kind::T8a => {
             let kind_s = if bits(w, 39, 39) == 1 { "CALL" } else { "JUMP" };
-            let rel = if bits(w, 40, 40) == 1 {
-                " (PC,rel)"
+            // a PC-relative jump prints its offset as ADI does: `(PC, 0)`, else a 32-bit hex value
+            let target = if bits(w, 40, 40) == 1 {
+                let off = sign_extend_24(bits(w, 23, 0));
+                if off == 0 {
+                    "(PC, 0)".to_string()
+                } else {
+                    format!("(PC, 0x{off:x})")
+                }
             } else {
-                ""
+                format!("0x{:x}", bits(w, 23, 0))
             };
-            format!("{iff}{kind_s}{rel} 0x{:x}", bits(w, 23, 0))
+            // flags VERIFIED on ADI output: DB = bit 26 (delayed), LA = bit 38 (loop abort, jump)
+            let (db, la) = (
+                bits(w, 26, 26) == 1,
+                bits(w, 38, 38) == 1 && bits(w, 39, 39) == 0,
+            );
+            let db = match (db, la) {
+                (true, true) => " (DB,LA)",
+                (true, false) => " (DB)",
+                (false, true) => " (LA)",
+                _ => "",
+            };
+            let la = "";
+            format!("{iff}{kind_s} {target}{db}{la}")
         }
         Kind::T2a => format!("{iff}{}", compute_text(bits(w, 22, 0))),
+        Kind::T21c if parcels[0] == 0x00FF => "IDLE".to_string(),
         Kind::T21c => "NOP".to_string(),
         Kind::T21 if w == 0 => "NOP".to_string(),
+        Kind::T21 if w == 0x0080_0000_0000 => "IDLE".to_string(),
+        Kind::T20a => "FLUSH CACHE".to_string(),
         Kind::T11a | Kind::T11c => {
             let delayed = if bits(w, 38, 38) == 1 { " (DB)" } else { "" };
+            // Type 11a may carry a compute in parallel (`IF GT RTS, R2 = MRF - R3 * R14 (UUI)`)
+            let tail = if kind == Kind::T11a && bits(w, 22, 0) != 0 {
+                format!(", {}", compute_text(bits(w, 22, 0)))
+            } else {
+                String::new()
+            };
             format!(
-                "{iff}{}{delayed}",
+                "{iff}{}{delayed}{tail}",
                 if bits(w, 40, 40) == 1 { "RTI" } else { "RTS" }
             )
         }
@@ -350,6 +400,23 @@ mod tests {
         assert_eq!(dec(&[0x023E, 0x1012, 0x9614]), "R1 = FEXT R4 BY 22:10 (SE)");
         assert_eq!(dec(&[0x023E, 0x7801, 0xFF11]), "R1 = ASHIFT R1 BY -1");
         assert_eq!(dec(&[0x023E, 0x0032, 0x0044]), "R4 = BTGL R4 BY 0");
+        // shift immediate with a data move (Type 6a), ADI elfdump ground truth (SMP image)
+        assert_eq!(
+            dec(&[0x827E, 0x0280, 0x0188]),
+            "R8 = LSHIFT R8 BY 1, R5 = DM(I1, M1)"
+        );
+        assert_eq!(
+            dec(&[0x8AFE, 0xF900, 0xE811]),
+            "R1 = LSHIFT R1 BY -24, DM(I5, M3) = R2"
+        );
+        assert_eq!(
+            dec(&[0x8ABE, 0x0008, 0x1823]),
+            "R2 = R2 OR LSHIFT R3 BY 24, R0 = DM(I5, M2)"
+        );
+        assert_eq!(
+            dec(&[0x893B, 0x3E9B, 0x893B]),
+            "IF NOT_TF R3 = R3 OR FDEP R11 BY 9:30 (SE), R13 = PM(I12, M12)"
+        );
         // dual moves, immediate stores and index modify, ADI elfdump ground truth (docs 5.34)
         assert_eq!(
             dec(&[0x2C40, 0x9211, 0x4000]),

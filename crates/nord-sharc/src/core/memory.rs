@@ -80,6 +80,7 @@ impl Core {
                 2 => self.mode1,
                 3 => self.mmask,
                 4 => self.mode2,
+                5 => self.flags_reg | self.flag_pins,
                 11 => self.imask,
                 14 | 15 => self.ustat[n - 12],
                 _ => 0,
@@ -103,6 +104,7 @@ impl Core {
                 2 => self.mode1 = v,
                 3 => self.mmask = v,
                 4 => self.mode2 = v,
+                5 => self.flags_reg = v,
                 11 => self.imask = v,
                 14 | 15 => self.ustat[n - 12] = v,
                 _ => {}
@@ -161,7 +163,11 @@ mod tests {
             (77, 77),
             "S registers are group 5"
         );
-        c.write_ureg(0x75, 1);
-        assert_eq!(c.read_ureg(0x75), 0, "unlisted system registers read as 0");
+        c.write_ureg(0x79, 1);
+        assert_eq!(c.read_ureg(0x79), 0, "unlisted system registers read as 0");
+        // FLAGS keeps what the program writes and shows the scripted input pins on top
+        c.write_ureg(0x75, 0x8000);
+        c.flag_pins = 0x0100_0000;
+        assert_eq!(c.read_ureg(0x75), 0x0100_8000);
     }
 }

@@ -462,7 +462,7 @@ Several endpoints are exactly round in dB (`-60.000`, `0.000`, `+2.000`, `+33.00
 
 ### 5.17 Image format: an ADI-style loader block stream with two core sections
 
-Tool: `tools/ns4_dsp_ldr.py` (tests in `tools/tests/test_ns4_dsp_ldr.py`). Applies to the FX, PNO and ORG images; SY1SY2 and SMP have no such header (they start with data or zeros).
+Tool: `tools/ns4_dsp_ldr.py` (tests in `tools/tests/test_ns4_dsp_ldr.py`). Applies to the FX, PNO and ORG images; SY1SY2 and SMP have no such header (they start with data or zeros). Their layout (ISA boot kernel plus a 12-byte-header block stream) is in [sharc-sy1sy2-smp.md](sharc-sy1sy2-smp.md).
 
 ```bash
 python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DIR

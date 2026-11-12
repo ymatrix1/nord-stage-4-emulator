@@ -155,6 +155,23 @@ def test_shift_immediate_matches_the_adi_disassembly():
     assert v.decode((0x023E, 0x1012, 0x9614)) == "R1 = FEXT R4 BY 22:10 (SE)"
     assert v.decode((0x023E, 0x7801, 0xFF11)) == "R1 = ASHIFT R1 BY -1"
     assert v.decode((0x023E, 0x0032, 0x0044)) == "R4 = BTGL R4 BY 0"
+    # jump flags: delayed (bit 26) and loop abort (bit 38)
+    assert v.decode((0x063E, 0x0408, 0xC003)) == "JUMP 0x8c003 (DB)"
+    assert v.decode((0x067E, 0x001C, 0x0B8B)) == "JUMP 0x1c0b8b (LA)"
+    assert v.decode((0x0644, 0x041C, 0x11E3)) == "IF LE JUMP 0x1c11e3 (DB,LA)"
+    # ISA-mode kernel words (ADI: `jump (pc, 0)`, `flush cache`, `idle`, 16-bit `idle`)
+    assert v.decode((0x073E, 0x0000, 0x0000)) == "JUMP (PC, 0)"
+    assert v.decode((0x071A, 0x00FF, 0xFFE0)) == "IF TF JUMP (PC, 0xffffffe0)"
+    assert v.decode((0x1702, 0x0000, 0x0000)) == "FLUSH CACHE"
+    assert v.decode((0x0080, 0x0000, 0x0000)) == "IDLE"
+    assert v.decode((0x00FF,)) == "IDLE"
+    assert v.ureg_name(0x7D) == "LIRPTL"
+    # Type 11a carries a parallel compute (ADI: `if gt rts, r2=MRF-r3*r14(uui)`)
+    assert v.decode((0x0A24, 0x001C, 0x023E)).startswith("IF GT RTS, ")
+    # Type 6a: shift immediate with a DM/PM move (ADI elfdump ground truth, SMP image)
+    assert v.decode((0x827E, 0x0280, 0x0188)) == "R8 = LSHIFT R8 BY 1, R5 = DM(I1, M1)"
+    assert v.decode((0x8AFE, 0xF900, 0xE811)) == "R1 = LSHIFT R1 BY -24, DM(I5, M3) = R2"
+    assert v.decode((0x893B, 0x3E9B, 0x893B)).endswith("R13 = PM(I12, M12)")
     assert v.decode((0x023E, 0x0033, 0x0005)) == "BTST R5 BY 0"
 
 

@@ -113,7 +113,7 @@ _SYS6 = (
     "FADDR DADDR ? PC PCSTK PCSTKP LADDR CURLCNTR LCNTR EMUCLK EMUCLK2 PX PX1 PX2 TPERIOD TCOUNT"
 )
 _SYS7 = (
-    "USTAT1 USTAT2 MODE1 MMASK MODE2 FLAGS ASTATx ASTATy STKYx STKYy IRPTL IMASK IMASKP LRPTL "
+    "USTAT1 USTAT2 MODE1 MMASK MODE2 FLAGS ASTATx ASTATy STKYx STKYy IRPTL IMASK IMASKP LIRPTL "
     "USTAT3 USTAT4"
 )
 _UREG_GROUPS = ["R", "I", "M", "L", "B", "S"]
@@ -418,7 +418,6 @@ def _mem_move(w: int, name: str, iff: str) -> str:
 
 # Instruction forms whose type is known from the diagrams but whose operand fields are not decoded.
 TYPE_ONLY = {
-    "6a": "shift immediate",
     "10a": "jump + dual move + compute",
 }
 
@@ -502,6 +501,14 @@ def decode(parcels: tuple[int, ...]) -> str:
         return text
     if name == "6n":
         return f"{iff}{shift_imm_text(w)}"
+    if name == "6a":
+        # shift immediate + DM/PM move (VERIFIED on 10 ADI samples of the SMP/SY1SY2 images):
+        # post-modify only, PM bit 32, write bit 31, data register bits 26..23
+        bank = 8 if bits(w, 32, 32) else 0
+        ea = f"{'PM' if bank else 'DM'}(I{bits(w, 43, 41) + bank}, M{bits(w, 40, 38) + bank})"
+        reg = f"R{bits(w, 26, 23)}"
+        move = f"{ea} = {reg}" if bits(w, 31, 31) else f"{reg} = {ea}"
+        return f"{iff}{shift_imm_text(w)}, {move}"
     if name == "19a":
         g = 8 if bits(w, 38, 38) else 0
         src = bits(w, 34, 32) + g
@@ -510,6 +517,10 @@ def decode(parcels: tuple[int, ...]) -> str:
         return f"I{dst} = {op}(I{src}, 0x{bits(w, 31, 0):x})"
     if name in TYPE_ONLY:
         return f"{TYPE_ONLY[name]} (operands raw) " + " ".join(f"{x:04x}" for x in parcels)
+    if (name == "21c" and parcels[0] == 0x00FF) or (name == "21/22" and w == 0x0080_0000_0000):
+        return "IDLE"
+    if name == "20a":
+        return "FLUSH CACHE"
     if name == "21c" or (name == "21/22" and w == 0):
         return "NOP"
     if name == "17a":
@@ -523,13 +534,22 @@ def decode(parcels: tuple[int, ...]) -> str:
         return f"BIT {BOP.get(bits(w, 39, 37), '?')} {sreg} 0x{bits(w, 31, 0):x}"
     if name == "8a":
         kind = "CALL" if bits(w, 39, 39) else "JUMP"
-        rel = " (PC,rel)" if bits(w, 40, 40) else ""
-        return f"{iff}{kind}{rel} 0x{bits(w, 23, 0):x}"
+        if bits(w, 40, 40):  # ADI prints `(pc, 0)` or a 32-bit hex offset
+            off = (bits(w, 23, 0) ^ 0x800000) - 0x800000 & 0xFFFFFFFF
+            target = "(PC, 0)" if off == 0 else f"(PC, 0x{off:x})"
+        else:
+            target = f"0x{bits(w, 23, 0):x}"
+        # flags VERIFIED on ADI output: DB = bit 26 (delayed), LA = bit 38 (loop abort, jump)
+        loop_abort = bits(w, 38, 38) and not bits(w, 39, 39)
+        flags = [f for f, on in (("DB", bits(w, 26, 26)), ("LA", loop_abort)) if on]
+        tag = f" ({','.join(flags)})" if flags else ""
+        return f"{iff}{kind} {target}{tag}"
     if name == "2a":
         return f"{iff}{compute_text(bits(w, 22, 0))}"
     if name in ("11a", "11c"):
         delayed = " (DB)" if bits(w, 38, 38) else ""
-        return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}{delayed}"
+        tail = f", {compute_text(bits(w, 22, 0))}" if name == "11a" and bits(w, 22, 0) else ""
+        return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}{delayed}{tail}"
     if name in ("9a", "9b"):
         # delayed flag bit 26, call bit 39, indirect target Ic + Md on DAG2 (docs 5.34)
         op = "CALL" if bits(w, 39, 39) else "JUMP"

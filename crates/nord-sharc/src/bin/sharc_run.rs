@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--pins MASK] [--irq STEP:VECTOR]... [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -7,7 +7,7 @@
 //! by `python tools/ns4_dsp_ldr.py IMG --sram DIR` and the section entry value (for example
 //! `0x1211E3` for the FX image).
 use nord_sharc::core::{Core, Fault};
-use nord_sharc::visa::{classify, decode_text, Insn};
+use nord_sharc::visa::{classify, classify_isa, decode_text, Insn};
 use std::process::ExitCode;
 
 fn parse_number(s: &str) -> Option<u64> {
@@ -60,11 +60,20 @@ fn register_dump(core: &Core) -> String {
 fn skip_histogram(core: &Core) -> String {
     let mut counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     for &pc in &core.skipped_pcs {
-        let (kind, len) = classify(core.parcel_at(pc), Some(core.parcel_at(pc + 1)));
-        let mut parcels = [0u16; 3];
-        for (k, p) in parcels.iter_mut().enumerate().take(len.min(3)) {
-            *p = core.parcel_at(pc + k as u32);
-        }
+        let (kind, parcels, len) = match core.isa_word(pc) {
+            Some(w) => {
+                let parcels = [(w >> 32) as u16, (w >> 16) as u16, w as u16];
+                (classify_isa(parcels[0]), parcels, 3)
+            }
+            None => {
+                let (kind, len) = classify(core.parcel_at(pc), Some(core.parcel_at(pc + 1)));
+                let mut parcels = [0u16; 3];
+                for (k, p) in parcels.iter_mut().enumerate().take(len.min(3)) {
+                    *p = core.parcel_at(pc + k as u32);
+                }
+                (kind, parcels, len)
+            }
+        };
         let text = decode_text(&Insn { kind, parcels, len });
         *counts.entry(format!("{} {text}", kind.name())).or_insert(0) += 1;
     }
@@ -94,6 +103,9 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut histogram = false;
     let mut trace = 0usize;
     let mut lenient = false;
+    let mut isa = false;
+    let mut pins = 0u32;
+    let mut irqs: Vec<(u64, u32)> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -116,6 +128,19 @@ fn run(args: &[String]) -> Result<String, String> {
                 ));
             }
             "--lenient" => lenient = true,
+            "--isa" => isa = true,
+            "--irq" => {
+                let spec = it.next().ok_or("--irq needs STEP:VECTOR")?;
+                let (step, vector) = spec.split_once(':').ok_or("--irq needs STEP:VECTOR")?;
+                irqs.push((
+                    parse_number(step).ok_or("bad --irq step")?,
+                    parse_number(vector).ok_or("bad --irq vector")? as u32,
+                ));
+            }
+            "--pins" => {
+                pins =
+                    parse_number(it.next().ok_or("--pins needs MASK")?).ok_or("bad --pins")? as u32;
+            }
             "--skips" => histogram = true,
             "--regs" => show_regs = true,
             "--watch" => {
@@ -147,14 +172,22 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--pins MASK] [--irq STEP:VECTOR]... [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
     let entry = parse_number(entry).ok_or("bad ENTRY")? as u32;
     let max_steps = parse_number(max_steps).ok_or("bad MAX_STEPS")?;
-    let mut core = Core::new(&data);
+    let mut core = if isa {
+        // raw ISA-mode image (SY1SY2/SMP): 48-bit words from 0x8C000, ENTRY is a word address
+        let mut c = Core::new(&[]);
+        c.load_isa(&data);
+        c
+    } else {
+        Core::new(&data)
+    };
     core.lenient = lenient;
+    core.flag_pins = pins;
     core.watch = watch;
     core.pc = entry;
     for (code, value) in registers {
@@ -164,6 +197,8 @@ fn run(args: &[String]) -> Result<String, String> {
         core.preset_device(addr, value);
     }
     pokes.sort_by_key(|p| p.0);
+    irqs.sort_by_key(|p| p.0);
+    let mut next_irq = 0;
     let mut recent = std::collections::VecDeque::with_capacity(trace + 1);
     let mut fault = None;
     let mut next_poke = 0;
@@ -174,6 +209,10 @@ fn run(args: &[String]) -> Result<String, String> {
                 .map_err(|a| format!("bad poke address 0x{a:x}"))?;
             next_poke += 1;
         }
+        while next_irq < irqs.len() && irqs[next_irq].0 <= core.steps {
+            core.interrupt(irqs[next_irq].1);
+            next_irq += 1;
+        }
         if trace > 0 {
             recent.push_back(core.pc);
             if recent.len() > trace {
@@ -183,7 +222,8 @@ fn run(args: &[String]) -> Result<String, String> {
         // run in one go until the next poke step to keep the hot loop tight
         let until = pokes
             .get(next_poke)
-            .map_or(max_steps, |p| p.0.min(max_steps));
+            .map_or(max_steps, |p| p.0.min(max_steps))
+            .min(irqs.get(next_irq).map_or(max_steps, |q| q.0));
         if trace == 0 {
             let n = until.saturating_sub(core.steps).max(1);
             fault = core.run(n);
@@ -250,7 +290,11 @@ fn run(args: &[String]) -> Result<String, String> {
     match fault {
         None => out.push_str("stopped at the step limit"),
         Some(Fault::Unimplemented { pc, parcels }) => {
-            let (kind, len) = classify(parcels[0], Some(parcels[1]));
+            let (kind, len) = if isa {
+                (classify_isa(parcels[0]), 3)
+            } else {
+                classify(parcels[0], Some(parcels[1]))
+            };
             let insn = Insn { kind, parcels, len };
             out.push_str(&format!(
                 "unimplemented at 0x{pc:x}: {} {}",
@@ -336,6 +380,31 @@ mod tests {
         ])
         .unwrap();
         assert!(poked.contains("steps 1 pc"), "{poked}");
+        // --irq enters a handler after the given step; --pins scripts the FLAG inputs
+        let irq = run(&[
+            p.clone(),
+            "0x120000".into(),
+            "5".into(),
+            "--irq".into(),
+            "1:0x120000".into(),
+            "--pins".into(),
+            "0x1000000".into(),
+        ])
+        .unwrap();
+        assert!(irq.contains("steps 2 pc 0x120001"), "{irq}");
+        assert!(
+            irq.contains("call stack (outermost first): 120001"),
+            "{irq}"
+        );
+        assert!(run(&[
+            p.clone(),
+            "0".into(),
+            "1".into(),
+            "--irq".into(),
+            "x".into()
+        ])
+        .is_err());
+        assert!(run(&[p.clone(), "0".into(), "1".into(), "--pins".into()]).is_err());
         assert_eq!(register_code("I8"), Some(0x18));
         assert_eq!(register_code("R15"), Some(0x0F));
         assert_eq!(register_code("X1"), None);
@@ -380,5 +449,30 @@ mod tests {
         assert!(skipped.contains("skipped operations by text:"), "{skipped}");
         assert!(skipped.contains("FPACK"), "{skipped}");
         std::fs::remove_file(skip_path).ok();
+        // ISA mode: NOP, then `IF TRUE F1 = FPACK F2` as a 48-bit word (stored 6 bytes each, LS first)
+        let isa_path = std::env::temp_dir().join("nord_sharc_run_isa_test.bin");
+        let mut image = Vec::new();
+        for w in [[0u16; 3], [0x013e, 0x0029, 0x0112]] {
+            for p in [w[2], w[1], w[0]] {
+                image.extend_from_slice(&p.to_le_bytes());
+            }
+        }
+        std::fs::write(&isa_path, &image).unwrap();
+        let ip = isa_path.to_string_lossy().to_string();
+        let text = run(&[ip.clone(), "0x8c000".into(), "10".into(), "--isa".into()]).unwrap();
+        assert!(text.contains("steps 1 pc 0x8c001"), "{text}");
+        assert!(text.contains("unimplemented at 0x8c001: 2a"), "{text}");
+        let lenient = run(&[
+            ip,
+            "0x8c000".into(),
+            "10".into(),
+            "--isa".into(),
+            "--lenient".into(),
+            "--skips".into(),
+        ])
+        .unwrap();
+        assert!(lenient.contains("FPACK"), "{lenient}");
+        assert!(lenient.contains("unimplemented at 0x8c002"), "{lenient}");
+        std::fs::remove_file(isa_path).ok();
     }
 }

@@ -6,7 +6,7 @@ The Analog Devices disassembler is the ground truth for the instruction layouts 
 ELF relocatable object (one code section `seg_pmco`, ADSP-21469 attributes), runs
 `elfdump -ns seg_pmco` and parses the listing.
 
-    python tools/adi_dis.py IMAGE BYTE_START BYTE_END [--cces DIR]
+    python tools/adi_dis.py IMAGE BYTE_START BYTE_END [--cces DIR] [--isa]
 
 `IMAGE` is a flat SRAM image (`tools/ns4_dsp_ldr.py --sram`, 16-bit little-endian parcels);
 the output has one line per instruction: `short_word_address  parcels  text`. The CCES folder
@@ -39,14 +39,14 @@ ALIGN_RECORD = bytes.fromhex("0000000000000000c0001000")
 LINE = re.compile(r"^([0-9a-f]{8})\s{3}((?:[0-9a-f]{4} ?|[0-9a-f]{12} ?)+)\s{2,}(.*?);?\s*$")
 
 
-def build_elf(parcels: list[int]) -> bytes:
+def build_elf(parcels: list[int], visa: bool = True) -> bytes:
     """A relocatable ELF32 object whose `seg_pmco` section holds `parcels` (big-endian parcels,
     first parcel most significant, which is how the ADI tools store VISA code).
 
     Besides the code, `elfdump` needs the `.align.seg_pmco` record (it marks the section as VISA
     code, so addresses count parcels and instructions are 16, 32 or 48 bits wide) and the
     `.adi.attributes` block (it selects the processor). Without the align record it decodes
-    fixed 48-bit ISA words.
+    fixed 48-bit ISA words (`visa=False` omits the record, for ISA-mode images such as SY1SY2/SMP).
     """
     code = b"".join(struct.pack(">H", p) for p in parcels)
     names = [".strtab", ".symtab", "seg_pmco", ".align.seg_pmco", ".adi.attributes"]
@@ -64,6 +64,8 @@ def build_elf(parcels: list[int]) -> bytes:
         (".align.seg_pmco", SHT_ADI_ALIGN, 0, ALIGN_RECORD, 2, 3, 1, 12),
         (".adi.attributes", SHT_ADI_ATTR, 0, ADI_ATTRIBUTES, 0, 0, 1, 0),
     ]
+    if not visa:
+        blobs = [b for b in blobs if b[0] != ".align.seg_pmco"]
     ehsize, shentsize = 52, 40
     body = bytearray()
     sections = [(0,) * 10]
@@ -112,12 +114,14 @@ def parse_listing(text: str) -> dict[int, tuple[list[int], str]]:
     return result
 
 
-def disassemble(parcels: list[int], cces: str | None = None) -> dict[int, tuple[list[int], str]]:
+def disassemble(
+    parcels: list[int], cces: str | None = None, visa: bool = True
+) -> dict[int, tuple[list[int], str]]:
     """Disassemble `parcels` with ADI's `elfdump`; addresses count parcels from 0."""
     folder = Path(cces or os.environ.get("NS4_CCES") or DEFAULT_CCES)
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "code.doj"
-        path.write_bytes(build_elf(parcels))
+        path.write_bytes(build_elf(parcels, visa))
         run = subprocess.run(
             [str(folder / "elfdump.exe"), "-ns", "seg_pmco", str(path)],
             capture_output=True,
@@ -133,15 +137,30 @@ def image_parcels(image: bytes, start: int, end: int) -> list[int]:
     return list(struct.unpack(f"<{len(raw) // 2}H", raw[: len(raw) // 2 * 2]))
 
 
+def isa_parcels(image: bytes, start: int, end: int) -> list[int]:
+    """Parcels of ISA-mode words (6 bytes each, least significant parcel first in the file),
+    reordered most significant first as `build_elf` expects."""
+    out: list[int] = []
+    for o in range(start, end - 5, 6):
+        lo, mid, hi = struct.unpack_from("<3H", image, o)
+        out += [hi, mid, lo]
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("image")
     ap.add_argument("start", type=lambda s: int(s, 0))
     ap.add_argument("end", type=lambda s: int(s, 0))
     ap.add_argument("--cces", default=None)
+    ap.add_argument("--isa", action="store_true", help="48-bit ISA words (SY1SY2/SMP kernel)")
     args = ap.parse_args()
-    parcels = image_parcels(Path(args.image).read_bytes(), args.start, args.end)
-    for addr, (par, text) in sorted(disassemble(parcels, args.cces).items()):
+    data = Path(args.image).read_bytes()
+    if args.isa:
+        listing = disassemble(isa_parcels(data, args.start, args.end), args.cces, visa=False)
+    else:
+        listing = disassemble(image_parcels(data, args.start, args.end), args.cces)
+    for addr, (par, text) in sorted(listing.items()):
         print(f"{addr:08x}  {' '.join(f'{p:04x}' for p in par)}  {text}")
     return 0
 

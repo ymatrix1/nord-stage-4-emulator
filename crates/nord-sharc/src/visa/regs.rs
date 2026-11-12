@@ -41,7 +41,7 @@ pub(super) const SYS6: [&str; 16] = [
 ];
 pub(super) const SYS7: [&str; 16] = [
     "USTAT1", "USTAT2", "MODE1", "MMASK", "MODE2", "FLAGS", "ASTATx", "ASTATy", "STKYx", "STKYy",
-    "IRPTL", "IMASK", "IMASKP", "LRPTL", "USTAT3", "USTAT4",
+    "IRPTL", "IMASK", "IMASKP", "LIRPTL", "USTAT3", "USTAT4",
 ];
 pub(super) const UREG_GROUPS: [&str; 6] = ["R", "I", "M", "L", "B", "S"];
 

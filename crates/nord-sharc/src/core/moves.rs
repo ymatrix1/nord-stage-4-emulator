@@ -157,6 +157,19 @@ impl Core {
                 self.mem_transfer(d, addr, bits(w, 35, 32) as u8, write_bit(37))?;
                 self.i[ii] = next_i;
             }
+            Kind::T19a => {
+                // Id = MODIFY(Is, <imm32>) honouring L/B; bit 39 selects BITREV (not modelled).
+                // Fields VERIFIED by the ADI text on 4 samples of the SMP image: G bit 38,
+                // source bits 34..32, destination = source XOR bits 37..35, immediate 31..0.
+                if write_bit(39) {
+                    return Err(self.fault(d.pc, &d.insn));
+                }
+                let bank = Self::dag_bank(bits(w, 38, 38));
+                let src = bits(w, 34, 32) as usize + bank;
+                let dst = (bits(w, 37, 35) ^ bits(w, 34, 32)) as usize + bank;
+                let imm = bits(w, 31, 0) as u32;
+                self.i[dst] = Self::dag_next(self.i[src], imm, self.l[src], self.b[src]);
+            }
             Kind::T7a | Kind::T7b if d.cond_ok => {
                 // [IF cond] [compute,] [Id =] MODIFY(Is, M): G bit 38 selects DAG2, the
                 // destination is Is XOR bits 26..24 (stays in the bank), the modify always
@@ -354,5 +367,29 @@ mod tests {
         (c.r[1], c.s[1]) = (11, 22);
         assert_eq!(c.run(2), None);
         assert_eq!((c.m[6], c.m[7]), (11, 22));
+    }
+
+    #[test]
+    fn type_19a_modifies_an_index_by_an_immediate_with_circular_wrap() {
+        // ADI (SY1SY2 image): `1603 0000 0310` is `i3 = modify(i3, 0x310)`
+        let mut c = core_at_zero(&[0x1603, 0x0000, 0x0310]);
+        c.i[3] = 0x1000;
+        assert!(c.step().is_ok());
+        assert_eq!((c.i[3], c.pc), (0x1310, 3));
+        // circular buffer base 0x100 length 4: 0x103 + 1 wraps to 0x100
+        let mut c = core_at_zero(&[0x1603, 0x0000, 0x0001]);
+        (c.i[3], c.l[3], c.b[3]) = (0x103, 4, 0x100);
+        assert!(c.step().is_ok());
+        assert_eq!(c.i[3], 0x100);
+        // BITREV (bit 39) is not modelled and faults
+        assert!(core_at_zero(&[0x1683, 0x0000, 0x0001]).step().is_err());
+    }
+
+    #[test]
+    fn flush_cache_is_a_no_op() {
+        // ADI: `1702 0000 0000` is `flush cache`
+        let mut c = core_at_zero(&[0x1702, 0x0000, 0x0000]);
+        assert!(c.step().is_ok());
+        assert_eq!(c.pc, 3);
     }
 }

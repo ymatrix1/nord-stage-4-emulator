@@ -20,6 +20,7 @@ mod branch;
 mod dag;
 mod dualmove;
 mod exec;
+mod isa;
 mod memory;
 mod moves;
 mod multifunction;
@@ -134,6 +135,11 @@ pub struct Core {
     pub watch: u32,
     /// Writes to the watched address as `(step, pc, value)`, at most [`WATCH_LIMIT`].
     pub watch_hits: Vec<(u64, u32, u32)>,
+    /// Value of the FLAGS register as written by the program (bit set/clear/write).
+    pub flags_reg: u32,
+    /// Level of the FLAG0..3 input pins (FLAGS bits 24..27), scripted by the harness; OR-ed into
+    /// every read of FLAGS. ASSUMED bit positions: the SY1SY2/SMP start-up polls bit 24.
+    pub flag_pins: u32,
     pub imask: u32,
     pub mmask: u32,
     pub flags: Flags,
@@ -154,6 +160,9 @@ pub struct Core {
     call_stack: Vec<u32>,
     loops: Vec<LoopFrame>,
     pending: Option<Pending>,
+    /// ISA-mode program memory ([`isa`]): 3 parcels (most significant first) per 48-bit word.
+    /// Empty = VISA mode, where `pc` addresses the flat SRAM image in parcels.
+    isa_code: Vec<u16>,
 }
 
 #[inline]
@@ -191,6 +200,8 @@ impl Core {
             skipped_pcs: Vec::new(),
             watch: u32::MAX,
             watch_hits: Vec::new(),
+            flags_reg: 0,
+            flag_pins: 0,
             imask: 0,
             mmask: 0,
             flags: Flags::default(),
@@ -206,6 +217,7 @@ impl Core {
             call_stack: Vec::with_capacity(64),
             loops: Vec::with_capacity(8),
             pending: None,
+            isa_code: Vec::new(),
         }
     }
 
