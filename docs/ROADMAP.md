@@ -141,6 +141,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Complete full-stream extraction of Image 1 (`410,321` B -> `798,912` B, `0xFBB813F8`) and Image 0 (`3,509,573` B -> `5,499,504` B, `0xDE902503`) via `ns4 inspect --verify --unpack`
 - [x] Reverse-engineer `ARM0` preset MurmurHash2 (`0x0a5a44`), fix `.ns4p` `0x0B` / `0x32` hash bit offsets, and wire 1-click `.npno` / `.nsmp4` auto-resolution into `nord-core` & `nord-gui`; extract and calibrate the 5×128 OS v1.66 Synth/Env/Filter/LFO tables (`0x53abe4..0x53b5e4`) and Rotary `800 Hz` / Bass-Horn constants (`ns4-dspf`, [research](research/sharc-dsp-and-preset-hash-teardown.md))
 - [x] Implement a clean-room, zero-allocation `CNSP` decoder in `crates/nord-core` enabling users to load their own legally owned `.npno` and `.nsmp4` files directly from a local `.ns4b` backup (`sample.rs`, `piano_sample.rs`, `backup.rs`)
+- [x] Direct A/B benchmark loop: `ns4 render-patch <entry> --backup <.ns4b> --wav out.wav [--notes 60,64,67] [--velocity V] [--hold F] [--sustain] [--cc ctrl:val@frame]` renders any factory `.ns4p` with its `.npno`/`.nsmp4` offline; compare via `tools/video_ref.py compare <hw.wav> <out.wav>` (`ns4-uenj`)
 
 ---
 

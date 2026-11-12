@@ -4,8 +4,12 @@ use nord_core::cbin::{CbinFile, CbinKind, ProgramDecoded};
 use nord_core::engine::Stage4Engine;
 use nord_core::firmware::FirmwareContainer;
 use nord_core::midi::MidiEvent;
+use nord_core::render;
 use std::env;
 use std::fs;
+
+const SAMPLE_RATE: f32 = 48_000.0;
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b>] [--wav <out.wav>] [--note N | --notes 60,64,67] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
@@ -234,59 +238,112 @@ fn run_cli(args: &[String]) -> Result<String, String> {
             Ok(format!("Rendered 4096 stereo frames @ 48 kHz — peak amplitude: {peak:.4}"))
         }
         "render-patch" => {
-            let path = args
-                .get(2)
-                .ok_or_else(|| "usage: ns4 render-patch <file.ns4p> [--note N] [--frames F]".to_string())?;
-            let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;
-            let cbin = CbinFile::parse(&bytes).map_err(|e| e.to_string())?;
-            let prog = cbin.decode_program().map_err(|e| e.to_string())?;
+            let path = args.get(2).ok_or_else(|| RENDER_USAGE.to_string())?;
+            let flag = |name: &str| -> Option<&String> {
+                args.iter()
+                    .position(|a| a == name)
+                    .and_then(|idx| args.get(idx + 1))
+            };
+            let mut engine = Stage4Engine::new(SAMPLE_RATE);
 
-            let mut engine = Stage4Engine::new(48_000.0);
-            engine.apply_program(&prog);
+            if let Some(backup_path) = flag("--backup") {
+                let archive = nord_core::cbin::Ns4BackupArchive::open(backup_path)
+                    .map_err(|e| e.to_string())?;
+                let mut file = fs::File::open(backup_path)
+                    .map_err(|e| format!("failed to open {backup_path}: {e}"))?;
+                engine
+                    .load_program_with_sounds_from_backup(&archive, &mut file, path)
+                    .map_err(|e| e.to_string())?;
+            } else {
+                let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;
+                let cbin = CbinFile::parse(&bytes).map_err(|e| e.to_string())?;
+                let prog = cbin.decode_program().map_err(|e| e.to_string())?;
+                engine.apply_program(&prog);
+            }
 
-            let note = args
-                .iter()
-                .position(|a| a == "--note")
-                .and_then(|idx| args.get(idx + 1))
-                .and_then(|val| val.parse::<u8>().ok())
-                .unwrap_or(60);
-
-            let frames = args
-                .iter()
-                .position(|a| a == "--frames")
-                .and_then(|idx| args.get(idx + 1))
-                .and_then(|val| val.parse::<usize>().ok())
+            let notes = match flag("--notes") {
+                Some(v) => render::parse_notes(v)?,
+                None => vec![flag("--note")
+                    .and_then(|v| v.parse::<u8>().ok())
+                    .unwrap_or(60)],
+            };
+            let velocity = flag("--velocity")
+                .map(|v| v.parse::<u8>().map_err(|_| format!("invalid --velocity '{v}'")))
+                .transpose()?
+                .unwrap_or(100)
+                .min(127);
+            let frames = flag("--frames")
+                .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(4096);
+            let hold = flag("--hold")
+                .map(|v| v.parse::<usize>().map_err(|_| format!("invalid --hold '{v}'")))
+                .transpose()?;
 
-            engine.handle_midi(MidiEvent::NoteOn {
-                channel: 0,
-                note,
-                velocity: 100,
-            });
+            let mut events = Vec::new();
+            for (i, a) in args.iter().enumerate() {
+                if a == "--cc" {
+                    let spec = args
+                        .get(i + 1)
+                        .ok_or_else(|| "missing value after --cc".to_string())?;
+                    let (controller, value, frame) = render::parse_cc_spec(spec)?;
+                    events.push(render::TimedEvent {
+                        frame,
+                        event: MidiEvent::ControlChange {
+                            channel: 0,
+                            controller,
+                            value,
+                        },
+                    });
+                }
+            }
+            if args.iter().any(|a| a == "--sustain") {
+                events.push(render::TimedEvent {
+                    frame: 0,
+                    event: MidiEvent::ControlChange {
+                        channel: 0,
+                        controller: nord_core::midi::cc::SUSTAIN_PEDAL,
+                        value: 127,
+                    },
+                });
+            }
+            for &note in &notes {
+                events.push(render::TimedEvent {
+                    frame: 0,
+                    event: MidiEvent::NoteOn {
+                        channel: 0,
+                        note,
+                        velocity,
+                    },
+                });
+                if let Some(h) = hold {
+                    events.push(render::TimedEvent {
+                        frame: h,
+                        event: MidiEvent::NoteOff {
+                            channel: 0,
+                            note,
+                            velocity: 0,
+                        },
+                    });
+                }
+            }
 
-            let mut left = vec![0.0f32; frames];
-            let mut right = vec![0.0f32; frames];
-            engine.process_block(&mut left, &mut right);
+            let (left, right) = render::render_timeline(&mut engine, &events, frames);
+            let (peak, rms) = render::peak_rms(&left, &right);
 
-            let peak = left
-                .iter()
-                .chain(right.iter())
-                .fold(0.0f32, |acc, &x| acc.max(x.abs()));
-
-            let rms = (left
-                .iter()
-                .chain(right.iter())
-                .map(|&x| x * x)
-                .sum::<f32>()
-                / (frames * 2) as f32)
-                .sqrt();
-
-            Ok(format!(
-                "Applied program: {path}\n\
-                 Rendered {frames} stereo frames @ 48 kHz (Note: {note})\n\
-                 Peak amplitude: {peak:.4}\n\
+            let mut out = format!(
+                "Applied program: {path}
+                 Rendered {frames} stereo frames @ 48 kHz (Notes: {notes:?}, velocity {velocity})
+                 Peak amplitude: {peak:.4}
                  RMS level: {rms:.4}"
-            ))
+            );
+            if let Some(wav_path) = flag("--wav") {
+                let wav = render::encode_wav_f32_stereo(SAMPLE_RATE as u32, &left, &right);
+                fs::write(wav_path, &wav)
+                    .map_err(|e| format!("failed to write {wav_path}: {e}"))?;
+                out.push_str(&format!("
+Wrote {wav_path} ({} bytes, 32-bit float stereo)", wav.len()));
+            }
+            Ok(out)
         }
         "backup" => {
             let path = args
@@ -446,6 +503,120 @@ mod tests {
         assert!(res.contains("RMS level"));
 
         let _ = fs::remove_file(ns4p_path);
+    }
+
+    #[test]
+    fn test_cli_render_patch_wav_chord_and_pedal() {
+        let prog = ProgramDecoded::default();
+        let raw = prog.to_cbin_file(0, 1).unwrap().to_bytes();
+        let dir = env::temp_dir();
+        let ns4p = dir.join("ns4_rp_chord.ns4p");
+        let wav = dir.join("ns4_rp_chord.wav");
+        fs::write(&ns4p, &raw).unwrap();
+        let s = |x: &str| x.to_string();
+
+        let out = run_cli(&[
+            s("ns4"),
+            s("render-patch"),
+            ns4p.to_string_lossy().to_string(),
+            s("--notes"),
+            s("60,64,67"),
+            s("--velocity"),
+            s("90"),
+            s("--frames"),
+            s("6000"),
+            s("--hold"),
+            s("3000"),
+            s("--cc"),
+            s("64:127@0"),
+            s("--wav"),
+            wav.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+        assert!(out.contains("[60, 64, 67]"));
+        assert!(out.contains("Rendered 6000 stereo frames"));
+        let bytes = fs::read(&wav).unwrap();
+        assert_eq!(&bytes[0..4], b"RIFF");
+        assert_eq!(bytes.len(), 44 + 6000 * 8);
+
+        assert!(run_cli(&[s("ns4"), s("render-patch")]).is_err());
+        assert!(run_cli(&[
+            s("ns4"),
+            s("render-patch"),
+            ns4p.to_string_lossy().to_string(),
+            s("--cc"),
+            s("bogus"),
+        ])
+        .is_err());
+
+        let _ = fs::remove_file(ns4p);
+        let _ = fs::remove_file(wav);
+    }
+
+    #[test]
+    fn test_cli_render_patch_from_backup_entry() {
+        let prog = ProgramDecoded {
+            name: "FromBackup".to_string(),
+            ..Default::default()
+        };
+        let ns4p = prog.to_cbin_file(0, 0).unwrap().to_bytes();
+        let name = b"Program/From Backup.ns4p";
+        let sz = ns4p.len() as u32;
+        let mut zip = Vec::new();
+        zip.extend_from_slice(b"PK");
+        zip.extend_from_slice(&20u16.to_le_bytes());
+        zip.extend_from_slice(&[0u8; 12]);
+        zip.extend_from_slice(&sz.to_le_bytes());
+        zip.extend_from_slice(&sz.to_le_bytes());
+        zip.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        zip.extend_from_slice(&0u16.to_le_bytes());
+        zip.extend_from_slice(name);
+        zip.extend_from_slice(&ns4p);
+        let mut cd = Vec::new();
+        cd.extend_from_slice(b"PK");
+        cd.extend_from_slice(&20u16.to_le_bytes());
+        cd.extend_from_slice(&20u16.to_le_bytes());
+        cd.extend_from_slice(&[0u8; 12]);
+        cd.extend_from_slice(&sz.to_le_bytes());
+        cd.extend_from_slice(&sz.to_le_bytes());
+        cd.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        cd.extend_from_slice(&[0u8; 12]);
+        cd.extend_from_slice(&0u32.to_le_bytes());
+        cd.extend_from_slice(name);
+        let cd_off = zip.len() as u32;
+        let cd_sz = cd.len() as u32;
+        zip.extend_from_slice(&cd);
+        zip.extend_from_slice(b"PK    ");
+        zip.extend_from_slice(&1u16.to_le_bytes());
+        zip.extend_from_slice(&1u16.to_le_bytes());
+        zip.extend_from_slice(&cd_sz.to_le_bytes());
+        zip.extend_from_slice(&cd_off.to_le_bytes());
+        zip.extend_from_slice(&0u16.to_le_bytes());
+
+        let path = env::temp_dir().join("ns4_rp_backup.ns4b");
+        fs::write(&path, &zip).unwrap();
+        let out = run_cli(&[
+            "ns4".to_string(),
+            "render-patch".to_string(),
+            "From Backup.ns4p".to_string(),
+            "--backup".to_string(),
+            path.to_string_lossy().to_string(),
+            "--frames".to_string(),
+            "1024".to_string(),
+        ])
+        .unwrap();
+        assert!(out.contains("Applied program: From Backup.ns4p"));
+        assert!(out.contains("Rendered 1024 stereo frames"));
+
+        let missing = run_cli(&[
+            "ns4".to_string(),
+            "render-patch".to_string(),
+            "Nope.ns4p".to_string(),
+            "--backup".to_string(),
+            path.to_string_lossy().to_string(),
+        ]);
+        assert!(missing.is_err());
+        let _ = fs::remove_file(path);
     }
 
     #[test]
