@@ -135,7 +135,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 
 ## Phase 6b: 1:1 Hardware Parity & 2.5D Panel (`ns4-xc5n`)
 
-**Goal:** Every front-panel control in the Nord Stage 4 manual (ch. 3-9) exists in the emulator with a layout rect, a renderer and a binding (`Bound(param_id)`, `UiOnly(reason)` or `Unsupported(bean)`), drawn as one 2.5D panel (`crates/nord-panel`) shared by the standalone app and the plugin editor ([control inventory](specs/control-inventory.md), [D15](DECISIONS.md#d15-hybrid-baked-sprite--egui-painter-25d-rendering), OQ8-OQ14 in [OPEN-QUESTIONS](OPEN-QUESTIONS.md)). Host parameter IDs already shipped are a stable contract: additive changes only.
+**Goal:** Every front-panel control in the Nord Stage 4 manual (ch. 3-9) exists in the emulator with a layout rect, a renderer and a binding (`Bound(param_id)`, `UiOnly(reason)` or `Unsupported(bean)`), drawn as one 2.5D panel (`crates/nord-panel`) shared by the standalone app and the plugin editor ([control inventory](specs/control-inventory.md), [D15](DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering), [D16](DECISIONS.md#d16-phase-6b-scope-original-art-functional-or-stub-controls-ha88-first-additive-host-ids), OQ13 in [OPEN-QUESTIONS](OPEN-QUESTIONS.md)). Host parameter IDs already shipped are a stable contract: additive changes only.
 
 - [ ] **B1** Docs correction: reopen Phase 6 bays, control-inventory spec, visual-spec discrepancies, D15 (`ns4-7ky2`)
 - [ ] **B2** Control inventory data: every control from manual ch. 3-9 with page and provenance; counts match manual and photo (`ns4-3n0d`, after B1)
