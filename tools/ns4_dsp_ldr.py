@@ -15,6 +15,13 @@ Each image holds two core sections (Core1, Core2). SY1SY2 and SMP have no such h
     python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin
     python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --blocks
     python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --out dir   # data segments (do not commit)
+    python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --sram dir  # flat SRAM image per core
+
+Address mapping (docs 5.18, VERIFIED on all 24 core sections of FX, PNO, ORG): internal blocks have
+top byte 0x28; `short-word address = (address & 0x7FFFFF) / 2` in the ADSP-21489 short-word space,
+and bit 23 of the address is the chip (0 for Core1, 1 for Core2). The section entry value is a
+short-word address. The flat SRAM image is indexed by `address & 0x7FFFFF`, so a byte offset
+`2 * short_word_address` addresses it directly (usable with `tools/sharc_visa.py`).
 """
 
 from __future__ import annotations
@@ -117,6 +124,34 @@ def address_range(core: list[Block], top: int) -> tuple[int, int]:
     return min(a for a, _ in spans), max(e for _, e in spans)
 
 
+INTERNAL_TOP = 0x28
+SRAM_BYTES = 0x400000  # address & 0x7FFFFF stays below 0x3A0000 in v1.66
+
+
+def chip_of(address: int) -> int:
+    """Chip index encoded in bit 23 of a loader address (0 = Core1, 1 = Core2)."""
+    return (address >> 23) & 1
+
+
+def short_word_range(address: int, count: int) -> tuple[int, int]:
+    """First and last short-word address (inclusive) of `count` bytes at `address`."""
+    start = address & 0x7FFFFF
+    return start // 2, (start + count) // 2 - 1
+
+
+def sram_image(img: bytes, core: list[Block]) -> bytearray:
+    """Flat memory image of the internal blocks (top byte 0x28) of one core, zeros elsewhere.
+
+    Index = `address & 0x7FFFFF`; the short-word address of byte `i` is `i // 2`.
+    """
+    mem = bytearray(SRAM_BYTES)
+    for b in core:
+        if b.kind == DATA and b.address >> 24 == INTERNAL_TOP:
+            lo = b.address & 0x7FFFFF
+            mem[lo : lo + b.count] = img[b.offset + HEADER : b.offset + HEADER + b.count]
+    return mem
+
+
 def segments(img: bytes, core: list[Block]) -> list[tuple[int, bytes]]:
     """`(address, bytes)` for every data block of a core, in stream order."""
     return [
@@ -131,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("image", type=Path)
     p.add_argument("--blocks", action="store_true", help="list every block")
     p.add_argument("--out", type=Path, help="write each core's data segments here")
+    p.add_argument("--sram", type=Path, help="write a flat SRAM image per core here")
     args = p.parse_args(argv)
     img = args.image.read_bytes()
     blocks, end = parse_blocks(img)
@@ -161,6 +197,9 @@ def main(argv: list[str] | None = None) -> int:
                     f"    0x{b.offset:06x} {KIND_NAMES[b.kind]:7s} "
                     f"addr 0x{b.address:08x} count {b.count}"
                 )
+        if args.sram:
+            args.sram.mkdir(parents=True, exist_ok=True)
+            (args.sram / f"core{ci}_sram.bin").write_bytes(sram_image(img, core))
         if args.out:
             args.out.mkdir(parents=True, exist_ok=True)
             for i, (addr, data) in enumerate(segments(img, core)):

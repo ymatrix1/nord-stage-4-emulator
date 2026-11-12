@@ -500,6 +500,32 @@ Reading:
 
 Consequence: the load map needed by an emulator is complete in structure (what is loaded where, how much is zeroed). What is missing is the translation from these loader addresses to the SHARC address space (the code uses addresses such as `I5 = 0xC03D8` in the `0x80000..0xFFFFF` internal RAM range) and the core entry semantics.
 
+### 5.18 Loader address to SHARC address mapping
+
+Question left open by 5.17: how do the loader addresses (`0x2824xxxx`, `0x28A4xxxx`, `0x2000xxxx`) relate to the SHARC memory map? Method: map every internal block (top byte `0x28`) with `short-word address = (address & 0x7FFFFF) / 2` and compare with Table 5 of the ADSP-21489 datasheet (`.reference/sharc/adsp-21483_21486_21487_21488_21489.pdf`, internal memory, short-word column).
+
+Result (**VERIFIED**): all internal blocks of all 24 core sections (FX, PNO and ORG, two cores each; 0 exceptions) fall inside the four SRAM blocks of the short-word space:
+
+| SRAM block | Short-word range (datasheet) | Loader blocks fall in |
+|---|---|---|
+| Block 0 | `0x124000..0x13BFFF` (plus the reserved lead-in `0x120000..0x123FFF`, where the interrupt vectors sit) | `0x120000..0x13FFFF` |
+| Block 1 | `0x164000..0x17BFFF` | `0x160000..0x17FFFF` |
+| Block 2 | `0x180000..0x18FFFF` | yes |
+| Block 3 | `0x1C0000..0x1CFFFF` | yes |
+
+So the loader streams describe the whole internal SRAM of one chip as a byte image in short-word units: byte `i` of the image is short word `i / 2`, and normal-word address `w` is the same memory as short-word address `2w` (for example block 2: normal `0xC0000` is short `0x180000`, consistent with the `I5 = 0xC03D8` style loads seen in the code). **Bit 23 of the loader address is the chip**: 0 for Core1 sections, 1 for Core2 sections (`0x28A4xxxx` is `0x2824xxxx` on the second chip). So each image drives two DSP chips with their own SRAM contents, not two cores of one chip.
+
+**Entry values.** The section entry (`0x1211E3` FX, `0x121007` PNO Core1, `0x125C88` the organ program) is a short-word address inside block 0. Disassembling at that address in the flat SRAM image shows start-up code: both FX Core1 and ORG Core1 begin with `BIT CLR MODE1 0x1000`.
+
+Tool support: `tools/ns4_dsp_ldr.py --sram DIR` writes `core1_sram.bin` and `core2_sram.bin` (4 MiB flat images indexed by `address & 0x7FFFFF`); the disassembler reads them with byte offset `2 * short_word_address`:
+
+```bash
+python tools/ns4_dsp_ldr.py DIR/dsp_image_0_FX.bin --sram SRAM
+python tools/sharc_visa.py SRAM/core1_sram.bin 0x2423c6 0x2423f0   # entry 0x1211E3 * 2 = 0x2423C6
+```
+
+The external window (`0x20xxxxxx`) is not mapped yet. Candidates are the SDRAM address space of the datasheet (Table 6/7, bank 0 starts at `0x00200000`); the zero-fill blocks of 409,600 B (FX), 240,000 B (ORG) and 655,360 B (PNO Core1) are delay or work RAM there.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
