@@ -133,6 +133,10 @@ Next: segment by waveform edges per channel and compare each segment's harmonic 
 
 Conclusion: the 46 WAVE waveforms (`Bells/Tines ... Keys`) are not in the ARM `CODE` images we unpack, in int16 or float32 form. They are most likely stored with the DSP data (SPI flash, loaded to the SHARC) or inside the unrecognised part of the container, so the wavetable bank stays ASSUMED. Remaining unchecked formats: int8 / 24-bit / compressed tables, and additive (harmonic amplitude) tables stored as small integers.
 
+### Factory `.nsmp4` samples are not the WAVE waves (2026-11-12)
+
+The factory backup `Nord Stage 4 Factory Restore RevK v1.66.ns4b` has 195 `.nsmp4` files under `Samp Lib/<category>/`: `Accordion_Harm`, `Bass`, `Brass Ensemble/Solo`, `Choir`, `Guitar_Plucked`, `Mellotron`, `Orchestral`, `Organ`, `Percussion Tuned`, `Strings Analog/Ensemble/Solo`, `Wind Ensemble/Solo`. They are the multisampled **Sample Library** used by the `Samples` oscillator mode (layer `+8 is_osc_mode = 0`, `sample_id` = name hash), 87 KB to tens of MB each (smallest `Kalimba_KG 4.1` at 86,960 B, typical 1-10 MB). Their names do not match the 46 WAVE-type items (`Bar 1`, `Bar 2`, `Tines`, `2nd Spectra`, `Saw NoFund`, `Ice 1`, `Triplets`, `Squabble`, `EPiano 1`, `DX 1`, `Clavinet 1` ...): only generic words coincide (`Bells`, `Marimba`, `Tubular Bells`, `Flute`, `Clarinet`, `Principal`). No file is small enough to be a single-cycle or short wave. The WAVE waves therefore are in neither the ARM `CODE` images nor the factory backup; they remain with the DSP-side data (see the DSP-code section) and our wavetable bank stays ASSUMED.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
