@@ -96,6 +96,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Velocity-sensitive **Dynamic Pedal Noise** (`PED NOISE`) for Damper (`CC64`), Sostenuto (`CC66`), and Una Corda (`CC67`)
 - [x] Piano `UNISON` (`1`, `2`, `3` subtle hammer-detune width) and `DYN COMP` (`1`, `2`, `3` dynamic range compression)
 - [x] Polyphony steal priority algorithm (recycling decaying released voices and quietest sustaining voices before active sounding notes)
+- [x] Hardware-parity sampler interpolation: exact SMP 6-tap x 256-phase Q31 kernel (`piano/q31_kernel.rs`, Hamming-windowed sinc, bit-exact closed form) behind `SampleInterp`, plus the SMP unpacker/predictor model (`piano/smp_unpack.rs`)
 
 ---
 
