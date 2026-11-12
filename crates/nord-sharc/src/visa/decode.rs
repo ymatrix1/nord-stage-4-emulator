@@ -3,6 +3,11 @@ use super::classify::{bits, word48};
 use super::compute::{compute_text, short_compute_text};
 use super::regs::{ureg_name, COND};
 use super::types::{Insn, Kind};
+/// A 7-bit two's-complement field as a signed number.
+fn sign_extend7(v: u64) -> i64 {
+    ((v << 57) as i64) >> 57
+}
+
 fn bop(code: u64) -> &'static str {
     match code {
         0 => "SET",
@@ -131,8 +136,10 @@ pub fn decode_text(insn: &Insn) -> String {
             }
         }
         Kind::T15b => {
-            let ea = format!("DM({}, I{})", bits(w, 29, 23), bits(w, 43, 41));
-            let u = ureg_name(bits(w, 22, 16) as u8);
+            // I 43..41, D 40, UREG 29..23, signed DATA7 22..16 (VERIFIED, docs 5.28)
+            let data = sign_extend7(bits(w, 22, 16));
+            let ea = format!("DM({data}, I{})", bits(w, 43, 41));
+            let u = ureg_name(bits(w, 29, 23) as u8);
             if bits(w, 40, 40) == 1 {
                 format!("{ea} = {u}")
             } else {
@@ -260,6 +267,10 @@ mod tests {
             "R12 = DM(0, I5), F8 = PASS F8"
         );
         assert_eq!(dec(&[0x687E, 0x143F]), "R8 = DM(2, I4)");
+        // Type 15b: UREG bits 29..23, signed DATA7 bits 22..16
+        assert_eq!(dec(&[0x9E08, 0x0C00]), "I8 = DM(0, I7)");
+        assert_eq!(dec(&[0x9208, 0x007A]), "R0 = DM(-6, I1)");
+        assert_eq!(dec(&[0x9908, 0x0014]), "DM(20, I4) = R0");
         assert_eq!(dec(&[0x1000, 0x0001, 0x06BE]), "R0 = DM(0x106be)");
         assert_eq!(dec(&[0x1103, 0x000C, 0x02C0]), "DM(0xc02c0) = R3");
         assert_eq!(dec(&[0xC000 | 0x0F34]), "F3 = F3 * F4");
