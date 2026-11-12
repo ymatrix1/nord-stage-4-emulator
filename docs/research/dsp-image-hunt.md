@@ -255,6 +255,23 @@ Sender: `DSP Comm` (`0x6CA48`) has more than 1,000 `bl` call sites across `bank0
 
 The `21/22` rows sit where the tiling sees `000 00000` first bytes with non-zero low bits (for example `0001 76be 803f`); the likely reading is data words inside the blocks, not instructions.
 
+### 5.10 Blocks D, E, F compared as instruction streams
+
+Method: tile each block with `tools/sharc_visa.py` (v1.64: D `0x491800..0x4A2400`, E `0x4B5800..0x4C6000`, F `0x4DA000..0x4EA800`) and align the instruction sequences with `difflib.SequenceMatcher` (a positional parcel diff is misleading, the copies are shifted by insertions).
+
+| Pair | Instructions | Identical after alignment | Differing hunks |
+|---|---|---|---|
+| D vs E | 14,551 / 14,376 | 14,274 (98.1%) | 34 (mostly one instruction) |
+| E vs F | 14,376 / 14,352 | 14,222 (98.9%) | 26 |
+
+The differences are structured constants, not code changes:
+
+- `USTAT1 = 0x200c0000` (D, F) vs `USTAT1 = 0x20080000` (E), and `USTAT1 = 0x200fa984` vs `0x200ba984`: one bit (bit 18) of a user-status value differs. D and F agree, E differs.
+- Memory addresses with bit 7 flipped: `DM(0xb97c28a4, I5) = M4` (D) vs `M3 = DM(0xb97c2824, I6)` (E); `PM(0x28a40070, I12) = B0` vs `PM(0x28240070, I12) = B0`; `MODE2 = PM(0x28a4002c, I13)` vs `...2824002c...`. The index register changes with it (`I5` vs `I6`).
+- A 50-instruction hunk in each pair (same size) that I did not decode further.
+
+Reading (ASSUMED): D, E and F are one program assembled for different instances (core or bank variants) with a few per-instance constants. That fits the bank 1 table, which lists a Core1 and a Core2 image per DSP. It does not yet say which of Fx, Organ or Synth a given copy belongs to. The tidy single-bit differences are also evidence that the decoder reads the fields correctly (a wrong field split would not produce clean one-bit deltas).
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
