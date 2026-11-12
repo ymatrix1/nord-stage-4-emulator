@@ -240,3 +240,13 @@ Engine: `crates/nord-core/src/synth_tables.rs` now holds `UNISON_VOICES` (ratios
 - Locate the `ARM0` code that serialises `Buffer_kSynSnd` and its glide / vibrato / osc-env scale tables (OQ7). Capstone is available; the name tables sit at `0x2d70b8` and `0x2d751c`, referenced from the buffer descriptor tables near `0x190300`.
 - Record hardware sweeps for unison cents and glide time.
 - Hardware route for the remaining ASSUMED scales: `docs/research/synth-hardware-sweep-plan.md` (analysis tool `tools/sweep_analyze.py`).
+
+## Audible Genius clips: vibrato and osc-envelope pitch (checked 2026-11-12)
+
+Sources: Audible Genius "Nord Stage 4 Lesson Pack" clips (real hardware, panel visible), kept local in `.reference/`.
+Question: scales for vibrato depth/delay ramp and Osc Env -> pitch depth.
+
+- Vibrato (f0 tracking, 4 runs at Amount 5.0): peak 44.4 / 45.6 / 46 / 47.0 cents, displayed Rate is real Hz (5.4 -> 5.44, 4.5 -> 4.56, 5.0 -> 5.05). DLY 0.7 s: onset 0.74 s, full depth 1.15 s (ramp ~0.45 s). Engine: `VIBRATO_MAX_CENTS=92`, `VIBRATO_DELAY_RAMP_SEC=0.45`, EMPIRICAL.
+- Pitch blip (Env Amt +5.5, Env To Pitch): onset peaks 5-7 semitones after correcting for the 5 ms onset-detector lag (predicted 6.6 for 12 st at full). Consistent with the existing +/-12 st scale; tag moved ASSUMED -> EMPIRICAL (+/-1 st accuracy). The measured pitch fall (~0.3 st/ms) is faster than the displayed 100 ms osc-env decay: follow-up to check the curve shape.
+
+Implications: one Amount value only for vibrato, so linearity is assumed. Follow-ups: second Amount value; pitch-fall curve vs displayed decay.

@@ -155,6 +155,12 @@ impl ZdfFilter {
 /// ASSUMED: start phases of the four unison voices; they only decorrelate the voices.
 pub(crate) const UNISON_START_PHASES: [f32; 4] = [0.0, 0.31, 0.57, 0.83];
 
+/// Seconds the Delay-mode vibrato takes to fade from zero to full depth after its delay.
+///
+/// EMPIRICAL: 0.40..0.45 s measured on a real Stage 4 (Audible Genius "Delayed vibrato" clip,
+/// Delay 0.7 s, f0 tracking); see `docs/research/synth-0x2f-ns4decode-crosscheck.md`.
+const VIBRATO_DELAY_RAMP_SEC: f32 = 0.45;
+
 /// Roland/Nord 7-saw detune spread coefficients relative to fundamental.
 const SUPERSAW_DETUNES: [f32; 7] = [
     -0.11002313,
@@ -593,7 +599,9 @@ impl SynthLayer {
             } else {
                 osc_env_mod
             };
-            // ASSUMED: +/-12 semitones of pitch at full Env Amt (Env To Pitch) and +/-0.5 of Osc Ctrl range.
+            // EMPIRICAL: +/-12 semitones of pitch at full Env Amt (Env To Pitch); Audible Genius "pitch
+            // blip" clip, Env Amt +5.5 shows ~6-7 semitone onset peaks (+6.6 predicted), accuracy
+            // limited to ~1 semitone by 5 ms onset detection. ASSUMED: +/-0.5 of Osc Ctrl range.
             let env_pitch = if self.osc_env_to_pitch {
                 2.0f32.powf(osc_env_mod)
             } else {
@@ -603,7 +611,11 @@ impl SynthLayer {
             let vib_amount = match self.vibrato_mode {
                 VibratoMode::Off => 0.0,
                 VibratoMode::On => 1.0,
-                VibratoMode::Delay => ((v.age_sec - self.vibrato_delay_sec) / 0.5).clamp(0.0, 1.0),
+                // EMPIRICAL: onset at the displayed delay, full depth ~0.45 s later (hardware clip,
+                // Delay 0.7 s: onset 0.74 s, full depth 1.15 s).
+                VibratoMode::Delay => {
+                    ((v.age_sec - self.vibrato_delay_sec) / VIBRATO_DELAY_RAMP_SEC).clamp(0.0, 1.0)
+                }
                 VibratoMode::Wheel | VibratoMode::Aftertouch | VibratoMode::Pedal => {
                     self.vibrato_ctrl.clamp(0.0, 1.0)
                 }
