@@ -38,11 +38,15 @@ Layer Synth/Piano/Organ Output (Stereo)
 
 ### 2.3 Slot 3 — Amp Simulation, Drive & 3-Band Semi-Parametric EQ
 
-- **Amp Cabinet Models:** `Off` (clean tube drive only), `Small` (combo speaker bandpass), `JC` (solid-state bright stereo), `Twin` (mid-scoop American cabinet), `British` (warm mid-forward stack).
+- **Amp Sim / EQ modes (`amp_type_new & 0x0F`):** `0` Off, `1` Twin, `2` Twin II, `3` JC, `4` JC II, `5` Small Speaker, `6` Very Small Speaker, `7` To Rotary, `8` LP24, `9` HP24.
+  - Names and order: **VERIFIED** from UI strings at `0x2cc6cc` in OS v1.66 `bank0_CODE.bin` (`Twin Type I/II`, `JC Type I/II`, `Small Speaker`, `Very Small Speaker`, `To Rotary`, `LP24`, `HP24`).
+  - Numeric index: **EMPIRICAL**, identical to third-party `ns4decode` (MIT, Randy 2024) on 10 factory programs covering modes 0..9.
+  - `Twin` / `JC` / `Small` cabinet voicings (HP/LP/mid-peak Hz and dB): **ASSUMED**, inherited from the earlier 1-pole code. `II` variants are stored (`amp_variation`) but not modelled. `To Rotary` is a pass-through here (routing into the rotary is not implemented). The old `British` model does not exist on hardware and was removed.
+  - `LP24` / `HP24`: cutoff = EQ Mid Freq knob, resonance `0..10` = Mid knob (`10 * (60 + 4 * mid_db) / 120`, from `ns4decode`); implemented as two cascaded 2nd-order sections (Butterworth-4 Q `0.5412` / `1.3066`, resonance scales the 2nd Q): topology **ASSUMED**.
 - **Overdrive (`Drive`):** Soft-clipping asymmetric saturation stage (`1.0..20.0x` pre-gain with makeup compensation).
 - **3-Band EQ:**
   - `Bass`: Low-shelf @ $100\text{ Hz}$ ($\pm 15\text{ dB}$)
-  - `Mid`: Peaking bell with sweepable frequency ($200\text{ Hz}..8\text{ kHz}$, $\pm 15\text{ dB}$, $Q = 1.0$)
+  - `Mid`: Peaking bell with sweepable frequency (128 steps, $200\text{ Hz}..8\text{ kHz}$, table `EQ_FREQ_HZ`; EMPIRICAL from `ns4decode`/OLED readings, e.g. idx 64 = 999 Hz, not geometric), $\pm 15\text{ dB}$ in 0.25 dB steps, $Q$ ASSUMED $\approx 1$
   - `Treble`: High-shelf @ $4\text{ kHz}$ ($\pm 15\text{ dB}$)
   - **Implementation:** RBJ 2nd-order biquads (transposed DF-II, per channel, stereo preserved; coefficients computed in `f64`, redesigned only when a parameter changes). Shelf `Q = 1/sqrt(2)`; Mid `Q = firmware_q(64) = 1.018`. Cabinet voicings use 2nd-order Butterworth HP/LP plus a peaking mid band.
   - **Resonance scale (`firmware_q`):** `Q(idx) = 0.1 * 100^(idx/127)`, `idx 0..127`; matches the 128 `f32` entries at `0x2f970c` in OS v1.66 `bank0_CODE.bin` (max rel. error 6.4e-8).

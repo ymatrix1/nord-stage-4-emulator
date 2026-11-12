@@ -160,6 +160,32 @@ const EQ_SHELF_Q: f32 = std::f32::consts::FRAC_1_SQRT_2;
 /// Mid peak `Q` index. ASSUMED: scale is VERIFIED (`firmware_q`), but index 64 (`Q~1.02`) is chosen to match the spec's `Q = 1.0`, not read from firmware.
 const EQ_MID_Q_IDX: usize = 64;
 
+/// EQ Mid / Amp-filter frequency steps (`0..=127`, Hz).
+///
+/// EMPIRICAL: values as displayed by the hardware (OLED) and transcribed in third-party `ns4decode`
+/// (`ns4decode.py::interpretEQfreq`, MIT, Randy 2024); precision is the display rounding (~1 to 5 %).
+/// Not found as a numeric table in OS v1.66 `bank0_CODE.bin` (searched f32/i32/i16), so not firmware-verified.
+pub const EQ_FREQ_HZ: [f32; 128] = [
+    200.0, 205.0, 210.0, 215.0, 221.0, 226.0, 232.0, 238.0, 244.0, 250.0, 257.0, 263.0, 270.0,
+    277.0, 284.0, 291.0, 299.0, 306.0, 314.0, 322.0, 330.0, 339.0, 347.0, 356.0, 365.0, 375.0,
+    384.0, 394.0, 404.0, 414.0, 425.0, 436.0, 447.0, 458.0, 470.0, 482.0, 494.0, 507.0, 520.0,
+    533.0, 546.0, 560.0, 575.0, 589.0, 604.0, 620.0, 635.0, 652.0, 668.0, 685.0, 703.0, 721.0,
+    739.0, 758.0, 777.0, 797.0, 817.0, 838.0, 859.0, 881.0, 904.0, 927.0, 950.0, 975.0, 999.0,
+    1000.0, 1000.0, 1100.0, 1100.0, 1200.0, 1200.0, 1300.0, 1300.0, 1400.0, 1400.0, 1500.0, 1500.0,
+    1600.0, 1600.0, 1700.0, 1700.0, 1800.0, 1800.0, 1900.0, 1900.0, 2000.0, 2100.0, 2100.0, 2200.0,
+    2300.0, 2400.0, 2400.0, 2500.0, 2600.0, 2700.0, 2800.0, 2900.0, 3000.0, 3100.0, 3200.0, 3300.0,
+    3400.0, 3500.0, 3600.0, 3700.0, 3900.0, 4000.0, 4100.0, 4300.0, 4400.0, 4600.0, 4700.0, 4900.0,
+    5000.0, 5200.0, 5400.0, 5600.0, 5800.0, 5900.0, 6100.0, 6300.0, 6600.0, 6800.0, 7000.0, 7200.0,
+    7500.0, 7700.0, 8000.0,
+];
+
+/// Maps a normalized `0.0..=1.0` knob/morph position to the nearest [`EQ_FREQ_HZ`] step.
+#[inline]
+pub fn eq_freq_hz_from_norm(norm: f32) -> f32 {
+    let idx = (norm.clamp(0.0, 1.0) * 127.0).round() as usize;
+    EQ_FREQ_HZ[idx.min(127)]
+}
+
 /// Reads a linearly interpolated delayed sample from a circular buffer.
 #[inline]
 fn read_ring_interpolated(buf: &[f32], write_idx: usize, delay_samples: f32) -> f32 {
@@ -192,7 +218,12 @@ pub enum Mod2Type {
     Vibe,
 }
 
-/// Amp simulation cabinet coloration models (`Amp Sim / EQ`).
+/// Amp simulation modes (`Amp Sim / EQ`).
+///
+/// VERIFIED (names/order): UI strings at `0x2cc6cc` in OS v1.66 `bank0_CODE.bin` read
+/// `Twin Type I/II`, `JC Type I/II`, `Small Speaker`, `Very Small Speaker`, `To Rotary`, `LP24`, `HP24`.
+/// EMPIRICAL (numeric index 0..9 = off, Twin, Twin II, JC, JC II, Small, Small II, To Rotary, LP, HP):
+/// third-party `ns4decode` (MIT, Randy 2024) `ns4names.AmpEQmode`, cross-checked on factory programs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AmpCabinet {
     #[default]
@@ -200,7 +231,9 @@ pub enum AmpCabinet {
     Small,
     Jc,
     Twin,
-    British,
+    ToRotary,
+    LpFilter,
+    HpFilter,
 }
 
 /// Feedback loop filter voicings for `Delay`.
@@ -330,6 +363,10 @@ pub struct LayerFxChain {
     pub mod2_rate_hz: f32,
     pub mod2_amount: f32,
     pub amp_cabinet: AmpCabinet,
+    /// `Type II` / `Very Small Speaker` variation flag (stored; not yet modelled, ASSUMED no DSP difference).
+    pub amp_variation: bool,
+    /// Resonance (`0.0..=10.0`) of the `LP24` / `HP24` modes (replaces the Mid gain knob).
+    pub eq_filter_res: f32,
     pub drive_amount: f32,
     pub eq_bass_db: f32,
     pub eq_mid_db: f32,
@@ -366,6 +403,10 @@ pub struct LayerFxChain {
     cab_hp: Biquad,
     cab_mid: Biquad,
     cab_cache: Option<AmpCabinet>,
+    flt_a: Biquad,
+    flt_b: Biquad,
+    /// Last designed `[mode, freq_hz, res]` for LP24/HP24 (`NaN` forces first design).
+    flt_cache: [f32; 3],
     eq_bass: Biquad,
     eq_mid: Biquad,
     eq_treble: Biquad,
@@ -400,6 +441,8 @@ impl LayerFxChain {
             mod2_rate_hz: 0.8,
             mod2_amount: 0.35,
             amp_cabinet: AmpCabinet::Off,
+            amp_variation: false,
+            eq_filter_res: 0.0,
             drive_amount: 0.0,
             eq_bass_db: 0.0,
             eq_mid_db: 0.0,
@@ -436,6 +479,9 @@ impl LayerFxChain {
             cab_hp: Biquad::identity(),
             cab_mid: Biquad::identity(),
             cab_cache: None,
+            flt_a: Biquad::identity(),
+            flt_b: Biquad::identity(),
+            flt_cache: [f32::NAN; 3],
             eq_bass: Biquad::identity(),
             eq_mid: Biquad::identity(),
             eq_treble: Biquad::identity(),
@@ -475,7 +521,7 @@ impl LayerFxChain {
             self.mod2_amount = m.mod2_amount.evaluate(ctrl);
         }
         if morph_active(&m.eq_mid_freq) {
-            self.eq_mid_freq_hz = 200.0 * 40.0f32.powf(m.eq_mid_freq.evaluate(ctrl));
+            self.eq_mid_freq_hz = eq_freq_hz_from_norm(m.eq_mid_freq.evaluate(ctrl));
         }
         if morph_active(&m.amp_drive) {
             self.drive_amount = m.amp_drive.evaluate(ctrl);
@@ -610,14 +656,16 @@ impl LayerFxChain {
 
         // Cabinet voicing: 2nd-order Butterworth HP + LP and a peaking mid band.
         // ASSUMED: all cabinet Hz/gain values below are inherited from the old 1-pole code (no firmware/recording source).
-        if self.amp_cabinet != AmpCabinet::Off {
+        let cab = matches!(
+            self.amp_cabinet,
+            AmpCabinet::Small | AmpCabinet::Jc | AmpCabinet::Twin
+        );
+        if cab {
             if self.cab_cache != Some(self.amp_cabinet) {
                 let (lp_hz, hp_hz, mid_hz, mid_gain) = match self.amp_cabinet {
-                    AmpCabinet::Off => (20_000.0, 20.0, 1000.0, 0.0f32),
-                    AmpCabinet::Small => (3400.0, 140.0, 900.0, 0.45),
+                    AmpCabinet::Small => (3400.0, 140.0, 900.0, 0.45f32),
                     AmpCabinet::Jc => (6500.0, 70.0, 2800.0, 0.35),
-                    AmpCabinet::Twin => (5200.0, 65.0, 650.0, -0.30),
-                    AmpCabinet::British => (4200.0, 95.0, 1600.0, 0.40),
+                    _ => (5200.0, 65.0, 650.0, -0.30),
                 };
                 let fs = self.sample_rate;
                 self.cab_hp
@@ -635,6 +683,39 @@ impl LayerFxChain {
             }
         } else {
             self.cab_cache = None;
+        }
+
+        // `LP24` / `HP24`: 24 dB/oct (2 cascaded 2nd-order sections), cutoff = EQ Mid Freq knob,
+        // resonance = Mid knob. VERIFIED: names `LP24`/`HP24` (0x2cc6cc). ASSUMED: Butterworth-4 section Q
+        // (0.5412 / 1.3066) with resonance scaling the second section's Q; real topology unknown.
+        if matches!(
+            self.amp_cabinet,
+            AmpCabinet::LpFilter | AmpCabinet::HpFilter
+        ) {
+            let mode = if self.amp_cabinet == AmpCabinet::LpFilter {
+                0.0
+            } else {
+                1.0
+            };
+            let now = [mode, self.eq_mid_freq_hz, self.eq_filter_res];
+            if now != self.flt_cache {
+                let kind = if mode == 0.0 {
+                    BiquadKind::LowPass
+                } else {
+                    BiquadKind::HighPass
+                };
+                let res = (self.eq_filter_res / 10.0).clamp(0.0, 1.0);
+                let q2 = (1.3066 * (1.0 + 2.0 * res)).min(10.0);
+                self.flt_a
+                    .set(kind, self.eq_mid_freq_hz, self.sample_rate, 0.5412, 0.0);
+                self.flt_b
+                    .set(kind, self.eq_mid_freq_hz, self.sample_rate, q2, 0.0);
+                self.flt_cache = now;
+            }
+            for (ch, sig) in [&mut l, &mut r].into_iter().enumerate() {
+                let x = self.flt_a.process(ch, *sig);
+                *sig = self.flt_b.process(ch, x);
+            }
         }
 
         // 3-band EQ: bass low shelf, sweepable mid peak (200 Hz .. 8 kHz), treble high shelf.
@@ -675,7 +756,11 @@ impl LayerFxChain {
             l = self.eq_bass.process(0, l);
             r = self.eq_bass.process(1, r);
         }
-        if self.eq_mid_db.abs() > 0.1 {
+        let mid_is_res = matches!(
+            self.amp_cabinet,
+            AmpCabinet::LpFilter | AmpCabinet::HpFilter
+        );
+        if !mid_is_res && self.eq_mid_db.abs() > 0.1 {
             l = self.eq_mid.process(0, l);
             r = self.eq_mid.process(1, r);
         }
@@ -963,7 +1048,7 @@ mod tests {
         fx.mod1_type = Mod1Type::AutoPan;
         fx.mod2_type = Mod2Type::Chorus;
         fx.drive_amount = 0.5;
-        fx.amp_cabinet = AmpCabinet::British;
+        fx.amp_cabinet = AmpCabinet::Jc;
         fx.comp_enabled = true;
         fx.comp_amount = 0.4;
         fx.delay_enabled = true;
@@ -1222,11 +1307,11 @@ mod tests {
         let ctrl = MorphControllers {
             mod_wheel: 1.0,
             control_pedal: 0.0,
-            aftertouch: 0.5,
+            aftertouch: 64.0 / 127.0,
         };
         fx.apply_morph(&ctrl);
         assert!((fx.reverb_mix - 0.7).abs() < 1e-5);
-        assert!((fx.eq_mid_freq_hz - 200.0 * 40.0f32.powf(0.5)).abs() < 0.5);
+        assert!((fx.eq_mid_freq_hz - EQ_FREQ_HZ[64]).abs() < 1e-3);
         assert!(
             (fx.delay_mix - 0.2).abs() < 1e-6,
             "un-morphed param untouched"
@@ -1246,5 +1331,58 @@ mod tests {
         });
         let moved = tone_gain_db(&mut fx, 200.0);
         assert!(low > 8.0 && moved < 2.0, "low={low} moved={moved}");
+    }
+
+    #[test]
+    fn test_eq_freq_table_hardware_steps() {
+        assert_eq!(EQ_FREQ_HZ[0], 200.0);
+        assert_eq!(EQ_FREQ_HZ[64], 999.0);
+        assert_eq!(EQ_FREQ_HZ[127], 8000.0);
+        assert!(EQ_FREQ_HZ.windows(2).all(|w| w[1] >= w[0]));
+        assert_eq!(eq_freq_hz_from_norm(0.0), 200.0);
+        assert_eq!(eq_freq_hz_from_norm(64.0 / 127.0), 999.0);
+        assert_eq!(eq_freq_hz_from_norm(2.0), 8000.0);
+    }
+
+    fn filter_chain(mode: AmpCabinet, hz: f32, res: f32) -> LayerFxChain {
+        let mut fx = LayerFxChain::new(48_000.0);
+        fx.reverb_model = ReverbModel::Off;
+        fx.amp_cabinet = mode;
+        fx.eq_mid_freq_hz = hz;
+        fx.eq_filter_res = res;
+        fx
+    }
+
+    #[test]
+    fn test_lp24_hp24_slope_and_passband() {
+        // LP24 @ 1 kHz: passband ~flat, 2 kHz (1 oct) < -18 dB, 4 kHz (2 oct) < -36 dB
+        let mut fx = filter_chain(AmpCabinet::LpFilter, 1000.0, 0.0);
+        assert!(tone_gain_db(&mut fx, 100.0).abs() < 1.0);
+        let mut fx = filter_chain(AmpCabinet::LpFilter, 1000.0, 0.0);
+        assert!(tone_gain_db(&mut fx, 2000.0) < -18.0);
+        let mut fx = filter_chain(AmpCabinet::LpFilter, 1000.0, 0.0);
+        assert!(tone_gain_db(&mut fx, 4000.0) < -36.0);
+        // HP24 mirror image
+        let mut fx = filter_chain(AmpCabinet::HpFilter, 1000.0, 0.0);
+        assert!(tone_gain_db(&mut fx, 10_000.0).abs() < 1.0);
+        let mut fx = filter_chain(AmpCabinet::HpFilter, 1000.0, 0.0);
+        assert!(tone_gain_db(&mut fx, 250.0) < -36.0);
+        // Resonance raises the level near cutoff
+        let mut flat = filter_chain(AmpCabinet::LpFilter, 1000.0, 0.0);
+        let mut res = filter_chain(AmpCabinet::LpFilter, 1000.0, 10.0);
+        assert!(tone_gain_db(&mut res, 1000.0) > tone_gain_db(&mut flat, 1000.0) + 3.0);
+    }
+
+    #[test]
+    fn test_filter_mode_ignores_mid_gain_peak() {
+        let mut a = filter_chain(AmpCabinet::LpFilter, 8000.0, 0.0);
+        a.eq_mid_db = 12.0;
+        let mut b = filter_chain(AmpCabinet::LpFilter, 8000.0, 0.0);
+        let ga = tone_gain_db(&mut a, 1000.0);
+        let gb = tone_gain_db(&mut b, 1000.0);
+        assert!(
+            (ga - gb).abs() < 0.1,
+            "mid knob is resonance here, not a peak"
+        );
     }
 }

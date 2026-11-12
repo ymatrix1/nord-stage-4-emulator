@@ -451,9 +451,22 @@ impl FxDecoded {
         }
     }
 
-    /// Computes EQ Mid center frequency in Hz (`200..8000 Hz`).
+    /// Computes EQ Mid center frequency in Hz (`200..8000 Hz`) from the 128-step hardware table.
     pub fn eq_mid_freq_hz(&self) -> f32 {
-        200.0 * 40.0f32.powf(self.eq_mid_freq_norm.clamp(0.0, 1.0))
+        crate::fx::eq_freq_hz_from_norm(self.eq_mid_freq_norm)
+    }
+
+    /// Amp Sim / EQ mode (`0..=9`): off, Twin, Twin II, JC, JC II, Small, Small II, To Rotary, LP24, HP24.
+    ///
+    /// EMPIRICAL: the mode is the low 4 bits of `amp_type_new` (bits 413..=416 of the block); identical to
+    /// third-party `ns4decode` `FX amp sim/EQ mode` on 10 factory programs covering modes 0..=9.
+    pub fn amp_mode(&self) -> u8 {
+        (self.amp_type_new & 0x0F) as u8
+    }
+
+    /// `LP24`/`HP24` resonance `0.0..=10.0` carried by the Mid knob (`ns4decode`: `10 * (60 + signed) / 120`).
+    pub fn amp_filter_res(&self) -> f32 {
+        (10.0 * (60.0 + self.eq_mid_db * 4.0) / 120.0).clamp(0.0, 10.0)
     }
 
     /// Computes Delay time in milliseconds (`20..2000 ms`).

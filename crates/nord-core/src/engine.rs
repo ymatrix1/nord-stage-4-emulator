@@ -513,13 +513,18 @@ impl Stage4Engine {
             0.0
         };
         if dec.amp_enabled {
-            fx.amp_cabinet = match dec.amp_type_new & 0x07 {
-                0 => AmpCabinet::Off,
-                1 => AmpCabinet::Small,
-                2 => AmpCabinet::Jc,
-                3 => AmpCabinet::Twin,
-                _ => AmpCabinet::British,
+            let mode = dec.amp_mode();
+            fx.amp_cabinet = match mode {
+                1 | 2 => AmpCabinet::Twin,
+                3 | 4 => AmpCabinet::Jc,
+                5 | 6 => AmpCabinet::Small,
+                7 => AmpCabinet::ToRotary,
+                8 => AmpCabinet::LpFilter,
+                9 => AmpCabinet::HpFilter,
+                _ => AmpCabinet::Off,
             };
+            fx.amp_variation = matches!(mode, 2 | 4 | 6);
+            fx.eq_filter_res = dec.amp_filter_res();
             fx.drive_amount = (dec.amp_drive / 10.0).clamp(0.0, 1.0);
             fx.eq_bass_db = dec.eq_bass_db;
             fx.eq_mid_db = dec.eq_mid_db;
@@ -1199,5 +1204,31 @@ mod tests {
             engine.fx_chains[0].delay_mix.abs() < 1e-6,
             "disabled slot must not be morphed"
         );
+    }
+
+    #[test]
+    fn test_amp_mode_mapping_from_program() {
+        use crate::fx::AmpCabinet;
+        let cases: [(u16, AmpCabinet, bool); 10] = [
+            (0, AmpCabinet::Off, false),
+            (33, AmpCabinet::Twin, false),      // 0b00100001: mode 1
+            (50, AmpCabinet::Twin, true),       // mode 2
+            (67, AmpCabinet::Jc, false),        // mode 3
+            (340, AmpCabinet::Jc, true),        // mode 4
+            (101, AmpCabinet::Small, false),    // mode 5
+            (118, AmpCabinet::Small, true),     // mode 6
+            (135, AmpCabinet::ToRotary, false), // mode 7
+            (168, AmpCabinet::LpFilter, false), // mode 8
+            (201, AmpCabinet::HpFilter, false), // mode 9
+        ];
+        for (raw, cab, var) in cases {
+            let mut prog = crate::cbin::ProgramDecoded::default();
+            prog.organ.fx.amp_enabled = true;
+            prog.organ.fx.amp_type_new = raw;
+            let mut engine = Stage4Engine::new(48_000.0);
+            engine.apply_program(&prog);
+            assert_eq!(engine.fx_chains[0].amp_cabinet, cab, "raw {raw}");
+            assert_eq!(engine.fx_chains[0].amp_variation, var, "raw {raw}");
+        }
     }
 }
