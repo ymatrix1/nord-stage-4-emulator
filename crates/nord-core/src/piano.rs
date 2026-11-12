@@ -137,7 +137,7 @@ impl NpnoSound {
             }
             // `.npno` stroke byte `0x0D` (`vel_low`) encodes attenuation/softness (`0` = loudest `fff`, larger = softer `ppp`).
             // Sort descending (softest first -> loudest `0` last) before computing ascending MIDI velocity ranges.
-            normal.sort_by(|a, b| b.1.cmp(&a.1));
+            normal.sort_by_key(|a| std::cmp::Reverse(a.1));
 
             if let Some(&(mid_idx, _)) = normal.get(normal.len() / 2) {
                 stroke_by_key[note as usize] = Some(mid_idx);
@@ -152,7 +152,7 @@ impl NpnoSound {
                 .filter(|(_, rk, kind, _)| *rk == root && *kind == crate::cbin::NPNO_STROKE_DAMPER)
                 .map(|&(idx, _, _, vel)| (idx, vel))
                 .collect();
-            damper.sort_by(|a, b| b.1.cmp(&a.1));
+            damper.sort_by_key(|a| std::cmp::Reverse(a.1));
             Self::push_velocity_zones(&mut zones, note, root, tune_cents, false, true, &damper);
 
             let mut release: Vec<(usize, u8)> = meta
@@ -160,7 +160,7 @@ impl NpnoSound {
                 .filter(|(_, rk, kind, _)| *rk == root && *kind == crate::cbin::NPNO_STROKE_RELEASE)
                 .map(|&(idx, _, _, vel)| (idx, vel))
                 .collect();
-            release.sort_by(|a, b| b.1.cmp(&a.1));
+            release.sort_by_key(|a| std::cmp::Reverse(a.1));
             Self::push_velocity_zones(&mut zones, note, root, tune_cents, true, false, &release);
         }
 
