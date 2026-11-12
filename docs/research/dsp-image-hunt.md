@@ -376,6 +376,34 @@ Changes between consecutive releases, against the vendor update history:
 
 Not proven: that the synth DSP is idx3 (it is the only image that never changes, which is odd given the synth fixes in v1.52 and v1.60; those may have been ARM-side), and the Core1/Core2 split inside each image.
 
+### 5.14 Lookup tables inside the five images
+
+Tool: `tools/ns4_dsp_tables.py` (tests in `tools/tests/test_ns4_dsp_tables.py`) lists runs of smooth little-endian float32 values in an exported image. Heuristic (ASSUMED): at least 48 finite floats, a run is cut where the step jumps to more than six times the median of the previous nine steps or where zero padding starts; each table is labelled `linear`, `exponential` (constant ratio) or `curve`.
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DIR
+python tools/ns4_dsp_tables.py DIR/dsp_image_0_FX.bin
+```
+
+Results on the v1.66 images:
+
+| Image | Tables (>= 48 floats) | Floats in tables | Share of image | Duplicate tables (>= 100 entries) and offset between the copies |
+|---|---|---|---|---|
+| FX | 34 (18 curve, 14 exponential, 2 linear) | 8,472 | 21% | 15; delta `0x136AC` (13 tables) |
+| PNO | 71 | 24,089 | 33% | 6; deltas `0x1D1E0`, `0x1C1DC` |
+| ORG | 82 | 15,472 | 21% | 33; delta `0x23BEC` (all 33) |
+| SY1SY2 | 66 (64 curve) | 18,356 | 60% | 2; delta `0x3000` |
+| SMP | 0 | 0 | 0% | none |
+
+Findings:
+
+- **Two copies of the tables per image.** In FX and ORG nearly every large table appears twice at one fixed distance (FX `0x136AC` = 79,532, ORG `0x23BEC` = 146,412), i.e. each image holds a per-core copy of its data for the two cores (matching the `Core1`/`Core2` pairs of the bank 1 table). The images carry no second header; the image header field at byte 12 (`0x14D44` FX, `0x22C08` PNO, `0x24AC4` ORG) is not equal to the copy distance and is still unexplained.
+- **A shared table library.** 43 tables of at least 100 entries occur in two or more images with identical length, first and last value (for example the 1,025-entry table `-0.9985 .. 0.9451` in ORG and PNO, the 512-entry pairs `-1 .. -0.0031` and `0.0031 .. 0.3125` in FX, ORG and PNO, the 255-entry curve `8.702 .. 3.394` in FX and PNO). These are common DSP library tables, not engine specific.
+- **Table shapes.** The FX table block at image offset `0xC5C0` is not one curve: it is thirteen sub-tables, among them eight 129-point curves (128 intervals, typical of interpolated lookups) in pairs, one of which is an exact octave (`2.016 .. 4.032`, constant ratio `2^(1/128)`), and four 255-point curves between `8.7022` and `3.3938` (and their negatives).
+- **SY1SY2 is mostly data.** 60% of the synth image is float tables; it holds one run of 18,432 smooth floats (`-0.18 .. 1.0`) at image offset `0x76A8`, plausibly oscillator or wave material. SMP has no float tables (integer data or code only).
+
+Use for Track A: the 129-point exponential tables (time and rate curves), the 512-entry pairs, the 255-point curves and the filter-related tables are candidates for VERIFIED constants once their role is identified (for example by matching them against the verified `bank0_CODE` curves of `ns4-firmware-teardown.md`). Not done here.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
