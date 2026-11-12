@@ -1,0 +1,26 @@
+# SY1SY2 Stage B (0x1C10EE): periodic sines resampled at ratio 1.5 with the fc = 1.10 kernel.
+#
+# 5/128 and 13/128 cycles per frame fit the 128-frame ring exactly, so the circular wrap is
+# seamless and the oracle output is a sampled sine of 7.5/128 and 19.5/128 cycles per output frame.
+# Gain 0.5 exercises the output multiply. 360 frames wrap the ring more than twice.
+# Run:  sharc-ref sy_sram.bin tools/oracle_scenarios/sy_stage_b_sine.scn --out target/oracle/sine
+meta rate 48000
+meta ref.mode resample
+meta ref.kernel 0
+meta ref.gain 0.5
+meta ref.ratio 1.5
+meta ref.pos_frames 0.0
+meta ref.ring 128
+warmup 0x1c0b2d 100000 flag12=1
+fill 0xC0000 128 sine stride=2 freq=0.0390625 amp=0.8
+fill 0xC0001 128 sine stride=2 freq=0.1015625 amp=0.6
+capture srcL 0xC0000 128 stride=2
+capture srcR 0xC0001 128 stride=2
+voice 0 stage_b=on kernel=0 gain=0.5 ratio=1.5 pos_frames=0.0
+loop 360
+poke 0x932ca 0
+poke 0x932cb 0
+run 0x1c0758 100000
+capture L 0x932ca 1
+capture R 0x932cb 1
+end

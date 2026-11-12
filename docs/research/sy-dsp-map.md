@@ -132,7 +132,7 @@ Not in the image (VERIFIED by census): biquad filters (0 `fA=fB*fY, fA+1=fB+1*fY
 
 ## Follow-ups
 
-1. Run Stage B (`0x1C10EE`) under `sharc-run --enter` with a planted voice record, sample buffer and phase, and compare the stereo output against a Python 12-tap model with the verified kernel (and decide the second-position role).
+1. ~~Run Stage B under the oracle with a planted voice record, sample buffer and phase and compare against a 12-tap model.~~ Done in [oracle-vs-engine.md](oracle-vs-engine.md): record layout, position word and bit-exact agreement with `SincKernelSet` arithmetic rules. The role of the second read position (mask words at frame `+0x28`) is still open.
 2. Decode the ARM-side voice parameter writes: the 28-bit address field against `0x92400 + 0x38 k + field` and the kernel pointer write.
 3. Wire the Kaiser window into `crates/nord-core/src/sinc.rs` (separate change; this lane touches docs and tools only).
 4. Identify the 16-bit residual unpacker (or confirm the encoder never emits width 16 for synth material).
