@@ -1,8 +1,9 @@
 //! Command line of `sharc-org`: option parsing into [`Options`].
 use crate::audio::{parse_spec, BufSpec};
+use crate::msg::{parse_msg, parse_rx_irq, parse_script, Msg, STRIP_BASE};
 use crate::pass::PassConfig;
 
-fn parse_number(s: &str) -> Option<u32> {
+pub fn parse_number(s: &str) -> Option<u32> {
     match s.strip_prefix("0x") {
         Some(hex) => u32::from_str_radix(hex, 16).ok(),
         None => s.parse().ok(),
@@ -10,7 +11,7 @@ fn parse_number(s: &str) -> Option<u32> {
 }
 
 /// A data value: number, `0x` hex or `f<float>` (float bit pattern).
-fn parse_value(s: &str) -> Option<u32> {
+pub fn parse_value(s: &str) -> Option<u32> {
     match s.strip_prefix('f') {
         Some(f) => f.parse::<f32>().ok().map(f32::to_bits),
         None => parse_number(s),
@@ -65,6 +66,8 @@ pub struct Options {
     pub boot_stores: bool,
     pub coverage: bool,
     pub flags: Vec<(u8, bool)>,
+    pub msgs: Vec<Msg>,
+    pub msg_base: u32,
 }
 
 pub fn parse_args(args: &[String]) -> Result<Options, String> {
@@ -73,12 +76,14 @@ pub fn parse_args(args: &[String]) -> Result<Options, String> {
         boot: 100_000,
         passes: 1,
         rate: 48_000,
+        msg_base: STRIP_BASE,
         ..Options::default()
     };
     let mut cfg = PassConfig {
         trigger: 0xB_00E2,
         idle_pc: 0x12_5DDF,
         max_steps: 200_000,
+        irq: None,
     };
     let mut it = args.iter().peekable();
     let need = |it: &mut std::iter::Peekable<std::slice::Iter<String>>, what: &str| {
@@ -103,6 +108,14 @@ pub fn parse_args(args: &[String]) -> Result<Options, String> {
                 let (addr, v) = parse_assign(rest)?;
                 o.pokes.push((num(p.to_string(), "--poke pass")?, addr, v));
             }
+            "--msg" => o.msgs.push(parse_msg(&need(&mut it, a)?)?),
+            "--msg-script" => {
+                let f = need(&mut it, a)?;
+                let text = std::fs::read_to_string(&f).map_err(|e| format!("{f}: {e}"))?;
+                o.msgs.extend(parse_script(&text)?);
+            }
+            "--msg-base" => o.msg_base = num(need(&mut it, a)?, a)?,
+            "--rx-irq" => cfg.irq = Some(parse_rx_irq(&need(&mut it, a)?)?),
             "--lenient" => o.lenient = true,
             "--diff" => {
                 // optional LO:HI range as the next argument
@@ -220,6 +233,8 @@ mod tests {
             &["img", "--poke", "1"][..],
             &["img", "--dump", "5"],
             &["img", "--flag", "16=1"],
+            &["img", "--msg", "5"],
+            &["img", "--rx-irq", "P4I"],
             &["img", "--buf", "zz"],
             &["img", "--watch", "5"],
             &["img", "--diff", "5"],

@@ -19,6 +19,10 @@
 //! --boot-stores      with --watch, also list the store sites of the boot phase
 //! --coverage         list the program-counter ranges each pass executed
 //! --dump ADDR:COUNT   print data words after the last pass
+//! --msg [PASS:]W1=W2  ARM message before pass PASS: DM(msg-base + W1) = W2   (repeatable)
+//! --msg-script FILE   messages from a file, lines `PASS W1 W2` (`#` comments)
+//! --msg-base ADDR     base of word 1 (default 0xE0000, the channel strips)
+//! --rx-irq VEC:ST     start every pass by raising VEC (P4I on Core1) with SEC source id ST
 //! ```
 //! Used with the images of `python tools/ns4_dsp_ldr.py IMG --sram DIR`; see
 //! `docs/research/org-dsp-map.md`.
@@ -26,6 +30,8 @@
 mod args;
 #[path = "sharc_org/audio.rs"]
 mod audio;
+#[path = "sharc_org/msg.rs"]
+mod msg;
 #[path = "sharc_org/pass.rs"]
 mod pass;
 
@@ -85,6 +91,14 @@ fn run(args: &[String]) -> Result<String, String> {
         for &(_, a, v) in o.pokes.iter().filter(|q| q.0 == p) {
             core.dm_write(a, v)
                 .map_err(|a| format!("bad --poke address 0x{a:x}"))?;
+        }
+        for m in o.msgs.iter().filter(|m| m.pass == p) {
+            let a = msg::deliver(&mut core, o.msg_base, m)?;
+            let _ = writeln!(
+                out,
+                "msg before pass {p}: 0x{:x}=0x{:x} -> DM(0x{a:x}) = 0x{:x}",
+                m.word1, m.word2, m.word2
+            );
         }
         let r = run_pass(&mut core, &cfg);
         let end = match &r.end {
@@ -237,6 +251,39 @@ mod tests {
         std::fs::remove_file(img).ok();
         std::fs::remove_file(wav).ok();
         std::fs::remove_file(csv).ok();
+    }
+
+    #[test]
+    fn a_message_is_stored_before_its_pass_and_reported() {
+        let img = tiny_image("nord_sharc_org_msg_test.bin");
+        let text = run(&args(&[
+            &img,
+            "--entry",
+            "0x120000",
+            "--boot",
+            "0",
+            "--idle-pc",
+            "0x120002",
+            "--passes",
+            "2",
+            "--max-pass-steps",
+            "10",
+            "--set",
+            "I0=0xB00E2",
+            "--msg",
+            "1:3=0x8012082f",
+            "--msg-base",
+            "0xB0010",
+            "--dump",
+            "0xB0010:5",
+        ]))
+        .unwrap();
+        assert!(
+            text.contains("msg before pass 1: 0x3=0x8012082f -> DM(0xb0013) = 0x8012082f"),
+            "{text}"
+        );
+        assert!(text.contains("DM(0xb0010..): 0 0 0 8012082f 0"), "{text}");
+        std::fs::remove_file(img).ok();
     }
 
     #[test]
