@@ -43,11 +43,15 @@ mod interrupts;
 #[cfg(test)]
 mod irq_scenarios;
 mod isa;
+#[cfg(test)]
+mod loops_measured;
 mod memory;
 mod moves;
 mod multifunction;
 mod multiplier;
 mod pcstack;
+#[cfg(test)]
+mod probe_fixture;
 mod shifter;
 mod stacks;
 #[cfg(test)]
@@ -137,6 +141,9 @@ struct LoopFrame {
     check: u32,
     /// Instructions an arithmetic loop still runs after its condition held (0 = not leaving).
     exit_in: u8,
+    /// The instruction after the loop is skipped (a one instruction loop ended by the sample
+    /// of the `DO` itself).
+    skip_after: bool,
     /// Return addresses below this loop's top-of-loop entry on the shared PC stack (`pcstack`).
     cs_depth: usize,
     /// The top-of-loop address is not on the PC stack (`POP PCSTK` or a fresh `PUSH LOOP`).
