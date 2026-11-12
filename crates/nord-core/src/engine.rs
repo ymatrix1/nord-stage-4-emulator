@@ -512,18 +512,17 @@ impl Stage4Engine {
         fx.delay_enabled = dec.delay_enabled;
         fx.delay_time_ms = dec.delay_time_ms();
         fx.delay_clock_sync = dec.delay_clock_sync;
-        fx.delay_analog = dec.delay_mode != 0;
-        fx.delay_ping_pong = dec.delay_ping_pong;
-        fx.delay_filter = if !dec.delay_fb_filter {
-            DelayFilterMode::Off
-        } else {
-            match dec.delay_fb_fx_type & 0x03 {
-                0 => DelayFilterMode::Hp,
-                1 => DelayFilterMode::Lp,
-                _ => DelayFilterMode::Bp,
-            }
+        fx.delay_analog = dec.delay_analog_on();
+        fx.delay_ping_pong = dec.delay_ping_pong_on();
+        fx.delay_filter = match dec.delay_filter_type() {
+            1 => DelayFilterMode::Lp,
+            2 => DelayFilterMode::Hp,
+            3 => DelayFilterMode::Bp,
+            _ => DelayFilterMode::Off,
         };
-        fx.delay_variation = dec.delay_fb_fx_type >= 4;
+        // `Delay Feedback Effect`: 0/1 none, 2/3 ENS, 4/5 VIBE, 6/7 CHOR, 8/9 FLAM, 10/11 SPACE.
+        // ASSUMED: any effect other than Bypass maps to the single modulated-feedback mode.
+        fx.delay_variation = dec.delay_fb_fx_type >= 2;
         fx.delay_feedback = dec.delay_feedback.clamp(0.0, 0.95);
         fx.delay_mix = if dec.delay_enabled {
             dec.delay_mix.clamp(0.0, 1.0)
@@ -531,10 +530,12 @@ impl Stage4Engine {
             0.0
         };
         fx.reverb_model = dec.reverb_model();
+        // Reverb Color: 0 none, 1 DARK, 2 BRIGHT (EMPIRICAL, `ns4decode`; the string `Dark` is in the
+        // firmware at 0x2cc938). The variation of Stage/Hall/Cathedral is `Chorale` (VERIFIED names).
         fx.reverb_color = match dec.reverb_color {
-            1 => ReverbColor::Bright,
-            2 => ReverbColor::Dark,
-            3 => ReverbColor::Chorale,
+            1 => ReverbColor::Dark,
+            2 => ReverbColor::Bright,
+            _ if dec.reverb_variation() && dec.reverb_type4() >= 6 => ReverbColor::Chorale,
             _ => ReverbColor::Normal,
         };
         fx.reverb_mix = if dec.reverb_enabled {

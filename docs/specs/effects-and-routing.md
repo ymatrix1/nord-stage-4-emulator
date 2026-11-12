@@ -65,6 +65,23 @@ Layer Synth/Piano/Organ Output (Stereo)
 
 ---
 
+### 2.6 FX enum decoding (VERIFIED order, EMPIRICAL bit layout)
+
+Name order is **VERIFIED** from UI strings in OS v1.66 `bank0_CODE.bin` (`0x2cc4e4..0x2cc918`). Bit positions and numeric indices are **EMPIRICAL** (third-party `ns4decode`, MIT, Randy 2024) and were cross-checked on all 384 factory programs: 9 fields x 1,920 FX blocks = 17,280 comparisons, 0 mismatches (`tools/ns4_fx_crosscheck.py`).
+
+| Field | Bits (block offset) | Values (odd = variation) |
+|---|---|---|
+| Mod 1 mode | 72..=75 | `0/1` A-PAN, `2/3` TREM, `4/5` RM, `6/7` A-WAH, `8/9` WAH, `10/11` PUMP |
+| Mod 2 mode | 139..=142 | `0/1` PHAS, `2/3` FLANG, `4/5` CHOR, `6/7` VIBE, `8/9` ENS, `10/11` SPIN |
+| Amp mode | 413..=416 | `0` off, `1/2` TWIN, `3/4` JC, `5/6` SMALL, `7` TO ROTARY, `8` LP24, `9` HP24 |
+| Delay `Analog` / `Ping Pong` | 332 / 333 | the 2-bit `delay_mode` field is `[analog, ping-pong]` |
+| Delay filter type | 334..=335 | `0` Bypass, `1` LP, `2` HP, `3` BP (stored in the bits decoded as `delay_ping_pong`, `delay_fb_filter`) |
+| Delay feedback effect | 367..=370 | `0/1` none, `2/3` ENS, `4/5` VIBE, `6/7` CHOR, `8/9` FLAM (20/40 ms), `10/11` SPACE (50/100 wet) |
+| Reverb color | 403..=404 | `0` none, `1` DARK, `2` BRIGHT |
+| Reverb type | 405..=408 | `0/1` SPRING (Spring2), `2/3` BOOTH (Predelay), `4/5` ROOM (Predelay), `6/7` STAGE (Chorale), `8/9` HALL (Chorale), `10/11` CATHEDRAL (Chorale); bit 408 is the top bit of the 9-bit `amp_type_new` field |
+
+Earlier decoding bugs fixed with this table: Reverb `SPRING` rendered as Booth, Reverb DARK/BRIGHT swapped, Mod 2 `CHOR variation`/`VIBE variation` swapped (raw 5 and 7), Delay Analog/Ping-Pong/filter type read from the wrong bits. `Ensemble` is rendered as Chorus, `Spin` as Vibe, and every Delay feedback effect as one modulated-feedback mode: **ASSUMED** (no dedicated DSP).
+
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
 After summing all 7 active layers:
