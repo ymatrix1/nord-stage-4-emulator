@@ -72,9 +72,9 @@ impl Sec {
     pub fn write(&mut self, addr: u32, value: u32) {
         let off = addr - BASE;
         if off == END {
-            for core in 0..2 {
-                if self.active[core] == Some(value) {
-                    self.active[core] = None;
+            for slot in &mut self.active {
+                if *slot == Some(value) {
+                    *slot = None;
                 }
             }
         } else if off == 0x08 {
