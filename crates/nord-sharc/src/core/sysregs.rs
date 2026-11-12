@@ -138,7 +138,8 @@ impl Core {
                 5 if self.sys.pc_overflow => 31,
                 5 => self.pc_depth() as u32,
                 6 => self.laddr(),
-                7 | 8 => self.loops.last().map_or(0, |f| f.remaining),
+                // VERIFIED: LADDR and CURLCNTR read all ones while the loop stack is empty
+                7 | 8 => self.loops.last().map_or(u32::MAX, |f| f.remaining),
                 9 => self.cycles() as u32,
                 10 => (self.cycles() >> 32) as u32,
                 11 | 12 => self.sys.px as u32,
