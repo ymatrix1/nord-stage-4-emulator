@@ -298,7 +298,46 @@ python tools/sharc_visa.py target/fw_unpacked/bank1_CODE.bin 0 0xC30C0 --sweep
 - **Relation to the bank 0 blocks (32-byte windows found in each block).** Blob 4: 40% in block A, about 15% in D/E/F. Blobs 2 and 3: about 18 to 20% in A and 25 to 28% in D/E/F. Blobs 0 and 1: 9 to 16% in G/H, about 0 elsewhere. So the bank 1 test programs and the bank 0 blocks share routines but are not copies.
 - **What this settles.** The OS images do carry SHARC programs, and bank 1 shows how an image is handed to a DSP: pointer, length and index passed to the DSP driver. The bank 0 equivalent has not been found: no literal pool in `bank0_CODE` holds pointers to the A to H blocks (section 5.7), so bank 0 probably reaches them through an array of offsets or a generated table.
 
-Follow-up: find the bank 0 caller of the same driver method (the virtual call with a pointer and a length) by searching for the matching call pattern, and read the driver's `Boot` method to see whether it wraps the blob in loader headers.
+Follow-up (done in 5.12): the bank 0 caller is `bank0_CODE@0x241C58`. Still open: the driver method behind the virtual call.
+
+### 5.12 The bank 0 caller: five DSP images, exact boundaries
+
+The bank 0 counterpart of the bank 1 download routine is the function at `bank0_CODE@0x241C58`. It makes the same virtual driver call five times, `r0 = driver object`, `r1 = index`, `r2 = pointer`, `r3 = length`, via `ldr r2,[r4]; ldr r5,[r2]; blx r5`, and on a non-zero status (at most 6) maps the code through an error table at `0xC0444CA0 + 0x234 + 4 * code`. Found by searching `bank0_CODE` for pointer and length pairs where `pointer + length` equals another pointer value in the file (24 chains; the four relevant ones sit in the literal pool at `0x241DAC..0x241DD4`):
+
+```bash
+python - <<'PY'   # chain search used (bank0_CODE.bin, base 0xC0000000)
+import struct, collections
+d = open("target/fw_unpacked/bank0_CODE.bin", "rb").read(); B = 0xC0000000
+W = [struct.unpack_from("<I", d, o)[0] for o in range(0, len(d) - 3, 4)]
+P = collections.defaultdict(list)
+for i, w in enumerate(W):
+    if B + 0x1000 <= w < B + len(d): P[w - B].append(i)
+for p, locs in P.items():
+    for i in locs:
+        for j in range(max(0, i - 4), min(len(W), i + 5)):
+            if j != i and 0x400 <= W[j] <= 0x40000 and (p + W[j]) in P: print(hex(p), hex(W[j]))
+PY
+```
+
+| Index | Pointer (`bank0_CODE`) | Length | End | DSP name (see below) | Code blocks inside |
+|---|---|---|---|---|---|
+| 0 | `0x44667C` | `0x28410` (164,880) | `0x46EA8C` | FX | A, B |
+| 1 | `0x46EA8C` | `0x46824` (288,804) | `0x4B52B0` | PNO | C, D |
+| 2 | `0x4B52B0` | `0x486D0` (296,656) | `0x4FD980` | ORG | E, F |
+| 3 | `0x4FD980` | `0x1DBF4` (121,844) | `0x51B574` | SY1SY2 | G |
+| 4 | `0x51B574` | `0x0AE34` (44,596) | `0x5263A8` | SMP | H |
+
+The five images chain exactly (each end equals the next pointer) from `0x44667C` to `0x5263A8`, 916,780 bytes in total; `0x5263A8` is where the UI string area starts (`Layer Level Adjust`). The index order here is the one in the bank 1 jump table (`bank1_CODE@0x481AC`: index 0 to `0x9D50C`, 1 to `0x9B8C0`, 2 to `0x99AC0`, 3 to `0x95FAC`, 4 to `0x924F8`), so bank 1's small test programs (section 5.11) are the same five slots; their overlap with the bank 0 blocks agrees with the index mapping (index 0 blob: 40% of block A; indices 1 and 2: 25 to 28% of D/E/F; indices 3 and 4: 9 to 16% of G/H).
+
+**DSP names (ASSUMED).** The name array at `bank1_CODE@0x5D78` is `[FXFX, PNO, ORG, SY1SY2, SMP]` (the test prints `%s (%d)` with name and id), so the five slots are the FX, piano, organ, synth and sample DSPs, in that order. That the download index equals this id is likely (the same index selects the blob and the name in the test) but not proven.
+
+**Image structure.** Images 0 to 2 start with a header (words, little endian): `0350 17AC`, `E311 1200`, `0`, `0001 4D44`, `0300 80AC`, `0040 0020` for FX; the first word, second word and fourth word differ for PNO (`0350 DCAC`, `0712 0012`... fourth `0002 2C08`) and ORG (`0350 B5AC`, `885C 1200`, fourth `0002 4AC4`); the fourth word grows with image size. Images 3 and 4 start with zeros. Header fields are not decoded.
+
+Consequences:
+
+- The five images are the complete SHARC programs plus data (about 917 KB); the earlier A to H blocks are the code parts inside them. D, E and F (near-identical code) sit in the PNO, ORG images (D in PNO, E and F in ORG), i.e. shared engine code, not one DSP's cores.
+- Mapping `DSPFxCore*` / `DSPOrgCore*` / `DSPSynCore*` names (bank 1 table) to code is still open: ORG holds two copies (E, F) which fits Core1/Core2.
+- The driver method (virtual slot 0 of the object passed in `r0`) is the remaining unknown: it decides whether the images are sent as they are or wrapped in loader headers. Its address has not been found yet.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
