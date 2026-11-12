@@ -18,6 +18,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 | **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Resolved (`crates/nord-core/src/synth.rs`) |
 | **TD-08** | `crates/nord-core::synth` | Low | `SAMPLES` oscillator interpolates with 4-point Catmull-Rom; the hardware uses a 12-tap Kaiser-windowed sinc polyphase kernel (`crates/nord-core/src/sinc.rs`, exact, not wired into voices) | Phase 3.x (`ns4-synt`) | Open (kernel exact; wiring and selector open) |
 | **TD-09** | `crates/nord-core` (`piano.rs` 1,848 lines, `fx.rs` 1,771, `synth.rs` 1,236, `engine.rs` 1,214, `firmware.rs` 1,035), `tools/video_ref.py` (1,556) | Low | Files far above the 400-line guideline of `.agents/rules/code-structure.md`; `crates/nord-sharc` already follows it (`core/`, `visa/`) | Split opportunistically when touched, behaviour-preserving with tests per module | Open |
+| **TD-10** | `crates/nord-core/src/fx.rs`, `cbin/fx_preset.rs`, `engine.rs`, `organ.rs` | Low | Preset-to-gain conversions are not tied to the firmware DSP tables: EQ gain uses 0.25 dB per count (table: 2^(1/24), 0.25086 dB), layer level is linear, drawbar law differs between spec (-3 dB per notch) and code (`level / 8`) | When the ARM-side preset writer is identified ([preset-dsp-map](research/preset-dsp-map.md)) | Open |
 
 ---
 
@@ -70,3 +71,8 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 - **Context:** `.agents/rules/code-structure.md` asks for focused modules under about 400 lines. `crates/nord-sharc` was split into `core/` and `visa/` submodules; the older files listed in the summary table were not.
 - **Debt:** Large files mix several concerns (voice state, DSP blocks, parameter tables, tests), which slows review and invites duplicated helpers.
 - **Remediation Plan:** When a change touches one of these files, first split it into a directory module with unchanged public API and tests per submodule, proving identical output (golden render hashes) before and after.
+
+### TD-10: Preset Conversion Curves Not Tied to Firmware Tables
+- **Context:** `docs/research/preset-dsp-map.md` finds exact closed forms in the DSP images: a tangent prewarp `tan(2.19924e-5 * 2^(k/12))` (`DM 0xB0A63`) and a gain ladder `2^((j-353)/24)` then `16^(k/127)` (`DM 0xB05EB`). The ARM path from a preset field to these tables is not yet decoded.
+- **Debt:** EQ gain counts use 0.25 dB per step (firmware ladder: 0.25086 dB), layer levels are linear `raw/127`, drawbars use `level/8` while `docs/specs/organ-engine.md` says -3 dB per notch.
+- **Remediation Plan:** Identify the ARM writer of the strips and packed words, confirm which table each field indexes, then replace the constants in `fx.rs`, `fx_preset.rs`, `engine.rs` and `organ.rs` with the tables and add golden tests. Until then every mapping stays `ASSUMED`.
