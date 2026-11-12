@@ -186,6 +186,62 @@ pub fn eq_freq_hz_from_norm(norm: f32) -> f32 {
     EQ_FREQ_HZ[idx.min(127)]
 }
 
+/// Delay time steps (`0..=127`, ms) of the `Delay Time` knob when not locked to the master clock.
+///
+/// EMPIRICAL: hardware display values transcribed in third-party `ns4decode`
+/// (`ns4decode.py::interpretDelayTempo`, MIT, Randy 2024; hand-crafted curve, ~1 % display rounding).
+/// The index decode (top 7 bits of the 14-bit field at block bit 242) matches `ns4decode` on all 1,920
+/// FX blocks of the 384 factory programs. Not found as a numeric table in `bank0_CODE.bin`.
+pub const DELAY_TIME_MS: [f32; 128] = [
+    1500.0, 1420.0, 1360.0, 1300.0, 1250.0, 1200.0, 1150.0, 1110.0, 1070.0, 1030.0, 1000.0, 952.0,
+    909.0, 870.0, 833.0, 790.0, 750.0, 732.0, 714.0, 698.0, 682.0, 667.0, 652.0, 638.0, 625.0,
+    612.0, 600.0, 588.0, 577.0, 566.0, 556.0, 546.0, 541.0, 536.0, 531.0, 526.0, 522.0, 517.0,
+    513.0, 508.0, 504.0, 500.0, 496.0, 492.0, 488.0, 484.0, 480.0, 476.0, 472.0, 469.0, 465.0,
+    462.0, 458.0, 455.0, 451.0, 448.0, 444.0, 441.0, 438.0, 435.0, 432.0, 428.0, 423.0, 417.0,
+    411.0, 405.0, 400.0, 395.0, 390.0, 385.0, 380.0, 375.0, 366.0, 357.0, 349.0, 341.0, 333.0,
+    326.0, 319.0, 313.0, 306.0, 300.0, 289.0, 278.0, 268.0, 259.0, 250.0, 238.0, 227.0, 217.0,
+    198.0, 188.0, 179.0, 170.0, 163.0, 156.0, 150.0, 144.0, 139.0, 134.0, 129.0, 125.0, 119.0,
+    114.0, 109.0, 104.0, 99.0, 94.0, 83.0, 75.0, 68.0, 63.0, 58.0, 54.0, 50.0, 47.0, 44.0, 42.0,
+    40.0, 37.0, 34.0, 31.0, 30.0, 28.0, 26.0, 24.0, 22.0, 20.0,
+];
+
+/// Beats (quarter note = 1) for the 17 `Delay Time` steps when locked to the master clock:
+/// `1/2, 1/4D, 1/2T, 1/4S, 1/4, 1/8D, 1/4T, 1/8S, 1/8, 1/16D, 1/8T, 1/16S, 1/16, 1/16T, 1/32, 1/32T, 1/64`.
+///
+/// EMPIRICAL (labels and order): `ns4decode` `DelayTempoFracs`. `D` = dotted (x1.5), `T` = triplet (x2/3).
+/// ASSUMED: `S` = septuplet (x8/7), inferred only because it sorts between the neighbouring entries.
+pub const DELAY_SYNC_BEATS: [f32; 17] = [
+    2.0,
+    1.5,
+    4.0 / 3.0,
+    8.0 / 7.0,
+    1.0,
+    0.75,
+    2.0 / 3.0,
+    4.0 / 7.0,
+    0.5,
+    0.375,
+    1.0 / 3.0,
+    2.0 / 7.0,
+    0.25,
+    1.0 / 6.0,
+    0.125,
+    1.0 / 12.0,
+    0.0625,
+];
+
+/// Delay time in ms for a hardware step index (`0..=127`, clamped).
+#[inline]
+pub fn delay_time_ms_from_index(idx: usize) -> f32 {
+    DELAY_TIME_MS[idx.min(127)]
+}
+
+/// Beats for a hardware step index (`0..=127`) when the delay is locked to the master clock.
+#[inline]
+pub fn delay_sync_beats_from_index(idx: usize) -> f32 {
+    DELAY_SYNC_BEATS[(idx.min(127) * 17 / 128).min(16)]
+}
+
 /// Reads a linearly interpolated delayed sample from a circular buffer.
 #[inline]
 fn read_ring_interpolated(buf: &[f32], write_idx: usize, delay_samples: f32) -> f32 {
@@ -379,6 +435,8 @@ pub struct LayerFxChain {
     pub delay_time_ms: f32,
     pub delay_clock_sync: bool,
     pub delay_subdivision: DelaySubdivision,
+    /// Hardware master-clock fraction in beats; overrides `delay_subdivision` when `Some`.
+    pub delay_sync_beats: Option<f32>,
     pub delay_analog: bool,
     pub delay_ping_pong: bool,
     pub delay_filter: DelayFilterMode,
@@ -455,6 +513,7 @@ impl LayerFxChain {
             delay_time_ms: default_delay_ms,
             delay_clock_sync: false,
             delay_subdivision: DelaySubdivision::DottedEighth,
+            delay_sync_beats: None,
             delay_analog: false,
             delay_ping_pong: false,
             delay_filter: DelayFilterMode::Off,
@@ -796,7 +855,11 @@ impl LayerFxChain {
     fn target_delay_samples(&self, bpm: f32) -> f32 {
         let target_ms = if self.delay_clock_sync {
             let beat_ms = 60_000.0 / bpm.clamp(30.0, 300.0);
-            (beat_ms * self.delay_subdivision.beats()).clamp(10.0, 2000.0)
+            (beat_ms
+                * self
+                    .delay_sync_beats
+                    .unwrap_or_else(|| self.delay_subdivision.beats()))
+            .clamp(10.0, 2000.0)
         } else {
             self.delay_time_ms.clamp(10.0, 2000.0)
         };
@@ -1384,5 +1447,25 @@ mod tests {
             (ga - gb).abs() < 0.1,
             "mid knob is resonance here, not a peak"
         );
+    }
+
+    #[test]
+    fn test_delay_time_table_and_sync_fractions() {
+        assert_eq!(DELAY_TIME_MS[0], 1500.0);
+        assert_eq!(DELAY_TIME_MS[127], 20.0);
+        assert!(DELAY_TIME_MS.windows(2).all(|w| w[1] <= w[0]));
+        assert_eq!(delay_time_ms_from_index(500), 20.0);
+        assert_eq!(delay_sync_beats_from_index(0), 2.0);
+        assert_eq!(delay_sync_beats_from_index(127), 0.0625);
+        assert!(DELAY_SYNC_BEATS.windows(2).all(|w| w[1] < w[0]));
+        // 120 BPM, 1/8D = 0.375 beats = 187.5 ms
+        let mut fx = LayerFxChain::new(48_000.0);
+        fx.delay_clock_sync = true;
+        fx.delay_sync_beats = Some(0.375);
+        let samples = fx.target_delay_samples(120.0);
+        assert!((samples - 0.1875 * 48_000.0).abs() < 1.0, "{samples}");
+        fx.delay_sync_beats = None;
+        fx.delay_subdivision = DelaySubdivision::Quarter;
+        assert!((fx.target_delay_samples(120.0) - 0.5 * 48_000.0).abs() < 1.0);
     }
 }

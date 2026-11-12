@@ -263,9 +263,21 @@ impl FxDecoded {
         (10.0 * (60.0 + self.eq_mid_db * 4.0) / 120.0).clamp(0.0, 10.0)
     }
 
-    /// Computes Delay time in milliseconds (`20..2000 ms`).
+    /// Delay time step `0..=127`: the top 7 bits of the 14-bit `Delay Time` field.
+    ///
+    /// EMPIRICAL: identical to `ns4decode` (7-bit field at bit 242) on 1,920 factory FX blocks.
+    pub fn delay_time_index(&self) -> usize {
+        (((self.delay_rate_norm.clamp(0.0, 1.0) * 16383.0).round() as u32) >> 7).min(127) as usize
+    }
+
+    /// Delay time in milliseconds from the 128-step hardware table (`1500 ms .. 20 ms`).
     pub fn delay_time_ms(&self) -> f32 {
-        20.0 + self.delay_rate_norm.clamp(0.0, 1.0) * 1980.0
+        crate::fx::delay_time_ms_from_index(self.delay_time_index())
+    }
+
+    /// Master-clock fraction in beats (`1/2 .. 1/64`) when `delay_clock_sync` is on.
+    pub fn delay_sync_beats(&self) -> f32 {
+        crate::fx::delay_sync_beats_from_index(self.delay_time_index())
     }
 
     pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {

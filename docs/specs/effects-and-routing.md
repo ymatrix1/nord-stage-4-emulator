@@ -54,7 +54,7 @@ Layer Synth/Piano/Organ Output (Stereo)
 
 ### 2.4 Slot 4 — Delay
 
-- **Tempo & Time:** Free millisecond mode (`delay_time_ms` $10\text{ ms}..2000\text{ ms}$) or `MasterClock` BPM subdivision sync (`delay_clock_sync` with `DelaySubdivision`: `Quarter`, `DottedEighth`, `Eighth`, `Sixteenth`).
+- **Tempo & Time:** the `Delay Time` knob is a 128-step hand-crafted curve `DELAY_TIME_MS` (`1500 ms` at step 0 down to `20 ms` at step 127; EMPIRICAL, `ns4decode`; step = top 7 bits of the 14-bit field at block bit 242, matched on all 1,920 factory FX blocks). With `MST CLK` on the same knob selects one of 17 fractions (`DELAY_SYNC_BEATS`: `1/2, 1/4D, 1/2T, 1/4S, 1/4, 1/8D, 1/4T, 1/8S, 1/8, 1/16D, 1/8T, 1/16S, 1/16, 1/16T, 1/32, 1/32T, 1/64`; `S` = septuplet is ASSUMED) applied to `MasterClock` BPM (`delay_sync_beats`, overriding `delay_subdivision`).
 - **Analog Mode (`delay_analog`):** Smoothly slews read-pointer delay time ($\tau = 80\text{ ms}$) on tempo or rate changes with soft `tanh` tape feedback saturation, producing authentic tape pitch-bend glides.
 - **Feedback Path:** Configurable `Feedback` ($0..95\%$), `delay_ping_pong` stereo cross-feed (mono input into alternating Left/Right taps), `DelayFilterMode` (`Off`, `Hp`, `Lp`, `Bp`) feedback loop filters, and `delay_variation` slow tape flutter/cross-shimmer.
 
@@ -81,6 +81,8 @@ Name order is **VERIFIED** from UI strings in OS v1.66 `bank0_CODE.bin` (`0x2cc4
 | Reverb type | 405..=408 | `0/1` SPRING (Spring2), `2/3` BOOTH (Predelay), `4/5` ROOM (Predelay), `6/7` STAGE (Chorale), `8/9` HALL (Chorale), `10/11` CATHEDRAL (Chorale); bit 408 is the top bit of the 9-bit `amp_type_new` field |
 
 Earlier decoding bugs fixed with this table: Reverb `SPRING` rendered as Booth, Reverb DARK/BRIGHT swapped, Mod 2 `CHOR variation`/`VIBE variation` swapped (raw 5 and 7), Delay Analog/Ping-Pong/filter type read from the wrong bits. `Ensemble` is rendered as Chorus, `Spin` as Vibe, and every Delay feedback effect as one modulated-feedback mode: **ASSUMED** (no dedicated DSP).
+
+**Ensemble, Spin and the Delay feedback effects (what the firmware says).** The DSP algorithms are SHARC code that is not in the `ARM0` firmware image (scans of `bank0_CODE`/`bank1_CODE`, see `docs/OPEN-QUESTIONS.md`), so they cannot be taken from it. The UI strings only carry names and a few parameters: `Ensemble Stereo/Mono` and `Ensemble Deep` (0x2cc63c..0x2cc790), `Spin Treble` / `Spin Bass` (0x2cc65c, 0x2cc668; rotary-speaker style), `Flam 20 ms` / `Flam 40 ms` (delay feedback effect FLAM: a 20 or 40 ms flam tap), `Space 50 Wet` / `Space 100 Wet` (feedback effect SPACE: reverb in the loop at 50 or 100 % wet). These names are VERIFIED; the algorithms behind them are not, so the implementations stay approximations (`ASSUMED`).
 
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
