@@ -6,7 +6,7 @@
 
 ## Method
 
-1. **Program to timestamp:** `video_ref.py scenes <video> --storyboard out.png` compares the OLED title rows against each segment's reference frame (changed-pixel fraction, persistence check, NVDEC decode in 4 parallel chunks, ~2 min for the 41 min video) and finds every program change; names are read from the storyboard tiles. Result: `docs/research/data/video_part_a_programs.json` (72 entries, A:11 .. A:88) and the raw segments in `video_part_a_scenes.json`. An earlier 15 s sampling missed programs shown for less than 15 s and the last minute.
+1. **Program to timestamp:** `video_ref.py scenes <video> --storyboard out.png` compares the OLED title rows against each segment's reference frame (changed-pixel fraction, persistence check, NVDEC decode in 4 parallel chunks, ~2 min for the 41 min video) and finds every program change; names are read from the storyboard tiles. Result: `docs/research/data/video_part_a_programs.json` (67 entries, A:11 .. A:88) and the raw segments in `video_part_a_scenes.json`. An earlier 15 s sampling missed programs shown for less than 15 s and the last minute.
 2. **Played notes:** `video_ref.py notes <video> --at 10:05 --duration 20 --events-out ev.json`.
    - Audio: Hann STFT (8192/2048), harmonic-sum salience over MIDI 28..100, iterative pick-and-suppress (max 8 notes/frame), temporal smoothing into events. EMPIRICAL/heuristic; validated only on synthetic tones (`tools/tests/test_audio_notes.py`).
    - Video: skin mask on the cropped keyboard strip, fingertip = local minimum of topmost skin pixel per column, mapped to the 73-key geometry (E1..E7). Geometry constants measured by eye on one frame (+-1 key).
@@ -25,6 +25,22 @@
 | brilliance 3..8 kHz | +9.38 dB | +5.50 dB | +4.54 dB |
 
 The audio detector reports many notes at MIDI 28 and 29; the video footprint (left hand over keys 29..36, right hand over 54..64) agrees that the left hand plays in that low region.
+
+## Single-layer organ programs (detected, video-confirmed notes; emulator minus hardware)
+
+| Program (amp mode) | Clip | mid 0.4..1.5k | presence 1.5..3k | brilliance 3..8k | air 8..20k | centroid |
+|---|---|---|---|---|---|---|
+| A:64 Tiny Transistor (organ, Small II) | 30:17, 25 s | -0.37 dB | 0.00 dB | +3.30 dB | +6.17 dB | +27 Hz |
+| A:84 Vintage Vox J3 (organ, Twin) | 39:31, 12 s | +3.11 dB | +0.23 dB | +5.48 dB | -8.37 dB | +28 Hz |
+| A:78 Jazz Guitar II (synth, Twin) | 37:35, 20 s | invalid | invalid | invalid | invalid | -271 Hz |
+
+- **Jazz Guitar II is not a valid FX test:** the emulator render is almost mono (width 0.12 vs 0.96) and silent above 1.5 kHz (-46 dB), i.e. the sample voice (`Jazz Gtr Amped`) is not producing the hardware sound. This is a sound-loading/synth issue, not an amp issue.
+- Level difference is large (emulator +6 to +8 dB RMS on the organ clips); organ drawbar levels are not calibrated here.
+
+## Caveats found while working
+
+- The player touches knobs, sliders and the mod wheel during clips (OLED pop-ups such as `Filter Frequency 5.6 kHz`, `Level Synth A Off`). Renders with fixed controls therefore differ from hardware in those windows. Follow-up: detect OLED pop-ups (`scenes --rows 0,1`) and the wheel position to drive CC events.
+- Across three different clips and amp modes the emulator is consistently 3 to 5.5 dB brighter than hardware above 3 kHz. Common to LP24, Twin and Small II programs, so a shared stage (master/cabinet/DAC low-pass) is the first suspect, not one voicing. Three clips is not enough to tune constants.
 
 ## Implications
 
