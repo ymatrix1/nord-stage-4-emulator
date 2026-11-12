@@ -25,7 +25,7 @@ impl Decoded {
 impl Core {
     /// Fetches the instruction at `pc`.
     #[inline]
-    fn fetch(&self, pc: u32) -> Decoded {
+    pub(super) fn fetch(&self, pc: u32) -> Decoded {
         if self.isa_mode() {
             return self.fetch_isa(pc);
         }
@@ -98,10 +98,14 @@ impl Core {
             Kind::T21c if d.insn.parcels[0] == 0x0001 => {}
             // IDLE (0x0081 and 0x0091 both print as `idle` in ADI's elfdump)
             Kind::T21c if d.insn.parcels[0] | 0x10 == 0x0091 => self.enter_idle(),
+            // the 48-bit ISA form of IDLE (`0080 0000 0000`, the boot kernel's last word)
+            Kind::T21 if d.w & !(1 << 36) == 0x0080_0000_0000 => self.enter_idle(),
             Kind::T19a => self.exec_modify_imm(&d),
             Kind::T21 if d.w == 0 => {}
-            // FLUSH CACHE: the instruction cache is not modelled, so there is nothing to flush
-            Kind::T20a => {}
+            // PUSH/POP LOOP, STS, PCSTK; FLUSH CACHE (not modelled) needs nothing
+            Kind::T20a => self.exec_stack_op(&d),
+            Kind::T13a => self.exec_do_until(&d, next)?,
+            Kind::T25 => next = self.exec_type25(&d, next)?,
             Kind::T2a | Kind::T2b | Kind::T2c => self.exec_compute(&d)?,
             Kind::T6n => self.exec_shift_imm(&d)?,
             Kind::T6a => self.exec_shift_move(&d)?,
@@ -130,6 +134,9 @@ impl Core {
         }
         self.pc = self.finish_step(&d, next);
         self.steps += 1;
+        if self.cb_wrap.get() != 0 {
+            self.latch_cb_overflow();
+        }
         if self.irq.window_len != 0 {
             self.close_window_if_left();
         }
