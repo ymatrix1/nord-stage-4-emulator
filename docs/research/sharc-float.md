@@ -16,8 +16,8 @@ Question: how exactly do the SHARC float ALU and multiplier round, flush and fla
 | MODE1 `TRUNC` (bit 15), `RND32` (bit 16), `ALUSAT` (bit 13) | ignored | honoured by add/sub/avg/mul/FLOAT/FIX/RND/SCALB/LOGB |
 | Denormal inputs and results | host f32 semantics | inputs flushed to zero, results below 2^-126 give zero with AZ |
 | NaN, infinity | host f32 semantics | NaN gives all ones with AI; inf-inf is invalid |
-| Flags | AZ, AN (and AV for fixed add) | AZ, AN, AV, AC (cleared), AS, AI per op; sticky bits (STKY) not modelled |
-| Multiplier flags MN, MV, MU, MI | not modelled | still not modelled |
+| Flags | AZ, AN (and AV for fixed add) | AZ, AN, AV, AC (cleared), AS, AI per op, VERIFIED; STKY AUS/AVS/AIS/MVS/MUS/MIS latched |
+| Multiplier flags MN, MV, MU, MI | not modelled | modelled, VERIFIED (simulator) |
 | `FPACK`, `FUNPACK` | unmodelled | still unmodelled (shifter lane, not touched) |
 | ASTAT register image | no ASTAT register | unchanged: flags live in `Flags` only |
 
@@ -56,16 +56,28 @@ Checked: 2026-11-12. Source: same CCES 2.12.1 ADSP-21489 simulator; probe `docs/
 
 Test: `float_measured.rs::model_matches_every_measured_round_row` runs the model's `to_int`, `add`, `mul`, `from_int`, `rnd` over every CSV row, bit for bit and ASTAT included; `register_move_keeps_the_extension` covers the move fix.
 
+## Special values, flags, multiplier and sticky bits: measured
+
+Checked: 2026-11-12. Source: same CCES 2.12.1 ADSP-21489 simulator; probe `docs/research/sharc-flags/` (generator `gen_flags_probe.py`, four builds), result `flags_measured.csv` (13 956 rows).
+
+* Procedure: `python gen_flags_probe.py <i>` then `cc21k -proc ADSP-21489 -si-revision any -g -O0 -o flags.dxe flags_probe_m<i>.asm flags_probe_m<i>.c`, run in the simulator, Memory Browser > Dump Memory of `_out` (11 492 words incl. the done flag), once per MODE1 setting (clear, TRUNC, RND32, ALUSAT). Per setting: all 256 pairs of 16 special values (+-0, +-1, 3, min normal, +-denormal, smallest denormal, +-max, +-inf, NaN, 1 + 2^-23, 2^127) through add, subtract, multiply, `(a+b)/2`, MIN, MAX, COPYSIGN, CLIP, COMP, with ASTAT and STKY read after each (STKY cleared before); the unary operations (negate, ABS, PASS, MANT, LOGB, RND, SCALB by 3, -3, 200, -200) on the 16 values; 256 random pairs through add, sub, mul, avg with the 40-bit residual `r - RND(r)`; swaps and moves through the S register file.
+* The ALU flags AZ, AV, AN, AS, AI of every non-multiply operation (add, sub, avg, MIN, MAX, COPYSIGN, CLIP, COMP, PASS, neg, ABS, MANT, LOGB, RND, SCALB) matched the earlier model except two cases, now fixed: a NaN input gives all ones with **AI only, no AN** (also for LOGB); `MANT` of an infinity is **0x80000000** (not all ones). AC is never set by a float operation. The 40-bit residuals of all 1 024 random results matched.
+* **Multiplier**: a multiply leaves AZ/AV/AN/AS/AI unchanged and sets only MN (ASTAT bit 6), MV (7), MU (8), MI (9): MN is the sign of the result (also for a zero or a flushed underflow, not for an invalid result); MV an overflow (result infinity, or the largest normal under TRUNC); MU a normal-by-normal product that flushes to zero (a zero or denormal operand gives a plain zero, no MU); MI an invalid operation (NaN operand, infinity times zero or denormal). The invalid result is 0x7FFFFFFF, but infinity times zero takes the sign of the product (0xFFFFFFFF when negative). This replaces the earlier model, which set the ALU flags and returned all ones. Moved into `float_mul.rs`.
+* **STKY** (read after clearing): AV sets AVS (bit 1), AI sets AIS (bit 5), a nonzero result flushed to zero by an ALU operation sets AUS (bit 0; an exact zero result does not); for the multiplier MV, MU, MI set MVS (bit 7), MUS (8), MIS (9). The model now latches these through `note_arith_exception` after every float operation (so the FLTUI/FLTOI/FLTII interrupts latch as on hardware).
+* **Extension through the S file**: `Rx <-> Sy` swaps (twice and once), `Sy = Rx` and `Rx = Sy` all keep the 40-bit extension (with RND32 set there is no extension to keep). The model dropped it; fixed in `swap_rs` / `move_ureg`.
+* ASTAT bits 24..31 (CACC) change with the compares executed before the read; they are not modelled and were not decoded. FIX/TRUNC STKY (AOS) was not read.
+
+Test: `float_flags.rs::model_matches_every_measured_flag_row` runs the model over every non-swap row (value, flags, STKY, residual); `float_ops.rs::swaps_and_moves_through_the_s_file_keep_the_extension` replays the swap rows on a `Core`; `float_mul.rs` covers the multiplier rules.
+
 ## What the firmware uses
 
 Census of the ADI `elfdump` listings (these are linear listings of whole images, so data words decode as junk and the counts are upper bounds): `RECIPS` 6 to 58 per image, `RSQRTS` 1 to 5, `COPYSIGN` up to 114, `(Fx+Fy)/2` up to 97, `CLIP Fx BY Fy` up to 338, `TRUNC` up to 23, one `MANT` and one `LOGB` in the FX and PNO core1 images. `MODE1` is changed by `BIT SET/CLR MODE1` with masks 0x2000 (ALUSAT, 48 times), 0x200000 (PEYEN), 0x1000, 0x800, 0x4F8, 0x1C04000 and others; no static write touches TRUNC (0x8000) or RND32 (0x10000), so the firmware runs in the reset mode: round to nearest, 40-bit. This is why the 40-bit extension matters more than `RND32`. Smoke check: `sharc-run` on the ORG Core2 image (`--lenient`, 3 000 000 steps) skips no operation.
 
 ## Implications
 
-* Float results are now bit exact for the single-rounding operations under the stated rules, in the firmware's 40-bit mode, and the seed ROMs are measured. Open: the sticky flags (STKY), multiplier flags MN/MV/MU/MI, CACC, and the flag columns marked ASSUMED (the PDF text extraction scrambles several flag tables, so AZ/AN/AV/AS/AI were assigned in the order the reference lists them).
-* Register-to-register moves between data registers keep the extension (VERIFIED, see below); swaps `Rx <-> Sy` still drop it (not measured).
+* Float results are now bit exact for the single-rounding operations under the stated rules, in the firmware's 40-bit mode, and the seed ROMs are measured. Open: CACC (ASTAT 24..31), the STKY effect of FIX/TRUNC overflow, FPACK/FUNPACK, and the SIMD (PEy) flags.
+* Register-to-register moves between data registers, and swaps with the S file, keep the extension (VERIFIED, see below).
 
 ## Follow-ups
 
-* Compare a few thousand random operand pairs per op against the simulator to settle ties, zero signs and flags.
-* Model MN/MV/MU/MI and the STKY register once the interrupt lane adds ASTAT/STKY.
+* Decode CACC (ASTAT 24..31) and read STKY after FIX/TRUNC overflow on the simulator.

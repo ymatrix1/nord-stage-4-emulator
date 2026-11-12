@@ -24,11 +24,6 @@ impl ExtFile {
         self.lo[n] = 0;
     }
 
-    /// Register `to` receives the 32-bit value of `from`; it keeps the extension if `from` has one.
-    fn copy(&mut self, from: usize, to: usize) {
-        (self.tag[to], self.lo[to]) = (self.tag[from], self.lo[from]);
-    }
-
     /// Takes the extension of register `n` from another snapshot of the file.
     pub fn take(&mut self, from: &ExtFile, n: usize) {
         (self.tag[n], self.lo[n]) = (from.tag[n], from.lo[n]);
@@ -46,13 +41,44 @@ impl Core {
         (u64::from(self.r[n]) << 8) | u64::from(lo)
     }
 
-    /// `Ureg = Ureg` transfer. VERIFIED on the simulator (`docs/research/sharc-round/`): a move
-    /// between data registers keeps the 40-bit extension; any other destination drops it.
+    /// Extension of the data register (R: code 0..15, S: code 0x50..0x5F) `code`, if it is one.
+    fn ext_slot(&self, code: u8) -> Option<(u32, u8)> {
+        let n = usize::from(code & 15);
+        match code >> 4 {
+            0 => Some((self.fx.tag[n], self.fx.lo[n])),
+            5 => Some((self.fx_y.tag[n], self.fx_y.lo[n])),
+            _ => None,
+        }
+    }
+
+    fn put_ext_slot(&mut self, code: u8, slot: (u32, u8)) {
+        let n = usize::from(code & 15);
+        match code >> 4 {
+            0 => (self.fx.tag[n], self.fx.lo[n]) = slot,
+            5 => (self.fx_y.tag[n], self.fx_y.lo[n]) = slot,
+            _ => {}
+        }
+    }
+
+    /// `Ureg = Ureg` transfer. VERIFIED on the simulator (`docs/research/sharc-round/`,
+    /// `sharc-flags/`): a move between data registers, R or S, keeps the 40-bit extension; any other
+    /// destination drops it.
     pub(super) fn move_ureg(&mut self, dst: u8, src: u8) {
         let v = self.read_ureg(src);
+        let ext = self.ext_slot(src);
         self.write_ureg(dst, v);
-        if src < 16 && dst < 16 {
-            self.fx.copy(usize::from(src), usize::from(dst));
+        if let (Some(e), true) = (ext, self.ext_slot(dst).is_some()) {
+            self.put_ext_slot(dst, e);
+        }
+    }
+
+    /// `Rx <-> Sy`: swaps the registers with their extensions (VERIFIED: the extension survives).
+    pub(super) fn swap_rs(&mut self, r: usize, s: usize) {
+        let (er, es) = (self.ext_slot(r as u8), self.ext_slot(0x50 | s as u8));
+        std::mem::swap(&mut self.r[r], &mut self.s[s]);
+        if let (Some(er), Some(es)) = (er, es) {
+            self.put_ext_slot(r as u8, es);
+            self.put_ext_slot(0x50 | s as u8, er);
         }
     }
 
@@ -65,6 +91,14 @@ impl Core {
     fn apply(&mut self, o: Out) {
         let f = &mut self.flags;
         (f.az, f.an, f.av, f.ac, f.as_, f.ai) = (o.az, o.an, o.av, false, o.as_, o.ai);
+        // VERIFIED (simulator): AV, AI and a flushed underflow set STKY AVS (bit 1), AIS (5), AUS (0)
+        self.note_float_exceptions(u32::from(o.au) | u32::from(o.av) << 1 | u32::from(o.ai) << 5);
+    }
+
+    fn note_float_exceptions(&mut self, sticky: u32) {
+        if sticky != 0 {
+            self.note_arith_exception(false, sticky);
+        }
     }
 
     fn float_result(&mut self, n: usize, o: Out) {
@@ -82,7 +116,17 @@ impl Core {
     pub(super) fn float_mul(&mut self, n: usize, x: usize, y: usize) {
         let mode = Mode::from_mode1(self.mode1);
         let o = float::mul(self.f40(x), self.f40(y), mode);
-        self.float_result(n, o);
+        self.set_f40(n, o.v);
+        // VERIFIED (simulator): the multiplier sets MN, MV, MU, MI (ASTAT bits 6..9) and leaves
+        // the ALU flags alone.
+        let mult =
+            u32::from(o.mn) | u32::from(o.mv) << 1 | u32::from(o.mu) << 2 | u32::from(o.mi) << 3;
+        let extra = &mut self.sys.astat_extra[0];
+        *extra = *extra & !(0xF << 6) | mult << 6;
+        // MV, MU, MI set STKY MVS (bit 7), MUS (8), MIS (9)
+        self.note_float_exceptions(
+            u32::from(o.mv) << 7 | u32::from(o.mu) << 8 | u32::from(o.mi) << 9,
+        );
     }
 
     /// Floating-point ALU operations (`op >= 0x80`). Returns false for an opcode that is not one.
@@ -169,6 +213,33 @@ mod tests {
         c.mode1 = MODE1_RND32;
         assert!(c.compute(word(0x81, 3, 1, 2)));
         assert_eq!(c.f40(3) & 0xFF, 0);
+    }
+
+    #[test]
+    fn swaps_and_moves_through_the_s_file_keep_the_extension() {
+        // VERIFIED rows: docs/research/sharc-flags/flags_measured.csv, kind `swap`
+        const CSV: &str = include_str!("../../../../docs/research/sharc-flags/flags_measured.csv");
+        for line in CSV.lines().filter(|l| l.starts_with("swap")) {
+            let f: Vec<&str> = line.split(',').collect();
+            let hex = |s: &str| u32::from_str_radix(s, 16).unwrap_or(0);
+            let mut c = Core::new(&[]);
+            c.mode1 = hex(f[1]);
+            setf(&mut c, 1, 1.0);
+            setf(&mut c, 2, f32::from_bits(0x3080_0000)); // 2^-30
+            assert!(c.compute(word(0x81, 5, 1, 2))); // F5 = F1 + F2
+            c.swap_rs(5, 2);
+            c.swap_rs(5, 2);
+            assert!(c.compute(word(0x82, 3, 5, 1)));
+            let a = c.r[3];
+            c.move_ureg(0x53, 5); // S3 = R5
+            c.swap_rs(6, 3); // R6 <-> S3
+            assert!(c.compute(word(0x82, 3, 6, 1)));
+            let b = c.r[3];
+            c.move_ureg(0x53, 5);
+            c.move_ureg(9, 0x53); // R9 = S3
+            assert!(c.compute(word(0x82, 3, 9, 1)));
+            assert_eq!([a, b, c.r[3]], [hex(f[5]), hex(f[6]), hex(f[7])], "{line}");
+        }
     }
 
     #[test]
