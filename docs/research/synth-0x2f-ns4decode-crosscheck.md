@@ -250,3 +250,20 @@ Question: scales for vibrato depth/delay ramp and Osc Env -> pitch depth.
 - Pitch blip (Env Amt +5.5, Env To Pitch): onset peaks 5-7 semitones after correcting for the 5 ms onset-detector lag (predicted 6.6 for 12 st at full). Consistent with the existing +/-12 st scale; tag moved ASSUMED -> EMPIRICAL (+/-1 st accuracy). The measured pitch fall (~0.3 st/ms) is faster than the displayed 100 ms osc-env decay: follow-up to check the curve shape.
 
 Implications: one Amount value only for vibrato, so linearity is assumed. Follow-ups: second Amount value; pitch-fall curve vs displayed decay.
+
+## Audible Genius "What detune does to a Super Saw" (checked 2026-11-12)
+
+Source: Audible Genius clip (hardware, panel shows Detune 0.0 / 1.2 / 2.9 / 3.0 / 5.8 / 6.0 / 10.0, G4 ~392 Hz notes, 48 kHz). Question: Super Saw Detune knob -> outer-voice detune in cents.
+
+Method: 2^17-point FFT per 1 s window on steady G4 windows, -20 dB span of the 2nd harmonic cluster, half-span in cents (resolution floor ~3-4 cents; the knob is moved during the clip).
+
+| Displayed Detune | Outer voice, cents (approx) | Engine now (`0.11 * d/10 * 0.08`) |
+|---|---|---|
+| 0.0 | 3-4 (floor) | 0 |
+| ~1.2 | ~6 (about 2-3 net) | 1.5 |
+| 3.0 | 25-28 (about 23 net) | 4.6 |
+| 10.0 | >=57 (window capped) | 15 |
+
+Finding: the engine spread is several times too small, and the hardware curve looks non-linear (1.2 -> 3.0 grows ~9x in cents for 2.5x in knob). Not applied: the data are too coarse (moving knob, -20 dB edge bias, one note). SUPERSAW constants stay ASSUMED.
+
+Follow-ups: steady-note recordings at 5+ knob values (or the unmoved 3.0 / 6.0 / 10.0 spans in the clip with a longer window) to fit the curve, then change `SUPERSAW_DETUNES` scaling in `synth.rs`.
