@@ -121,6 +121,18 @@ Not established: what the data is (WAVE-type oscillator tables, sample-rate-conv
 
 Next: segment by waveform edges per channel and compare each segment's harmonic content with the manual's wave descriptions; look for the loader that DMA-copies `0x300000..` to the DSP (a `{src, length}` word pair in ARM code).
 
+### Other audio-like regions and float arrays (2026-11-12): no WAVE waves found
+
+| Where | What it is | WAVE waves? |
+|---|---|---|
+| `bank0_CODE.bin @0x2b3000..0x2b6000` (12 KiB int16) | repeated exponential "charge" ramps rising `0 -> 32767` (about 520 samples each) plus one linear ramp (about 1000); looks like curve / shape lookup tables | no |
+| `bank0_CODE.bin @0x529000..0x53a000` (68 KiB) | 16-bit values that jump between 0 and a few fixed levels (`~+30000`, `-22000`, `-16000`), odd/even interleave; bitmap- or font-like data, not audio | no |
+| `0x300000..0x420000` | noise-like tables, see above | no |
+| 68 smooth `f32` runs of 128+ values in `0x2f7000..0x516000` (e.g. `0x489bc0`, `0x48e4b4`, `0x4a6da4`, `0x4ab72c` x3 identical copies, `0x505028`, `0x50dc30`, `0x514284`) | plotted: S-curve and pulse-shaped coefficient / interpolation curves in `[-1, 1]` (some copies per DSP core), consistent with the filter coefficient and polyphase FIR tables already documented | no |
+| `bank1_CODE.bin` | only 3 short float runs (under 260 values) and no int16 audio region | no |
+
+Conclusion: the 46 WAVE waveforms (`Bells/Tines ... Keys`) are not in the ARM `CODE` images we unpack, in int16 or float32 form. They are most likely stored with the DSP data (SPI flash, loaded to the SHARC) or inside the unrecognised part of the container, so the wavetable bank stays ASSUMED. Remaining unchecked formats: int8 / 24-bit / compressed tables, and additive (harmonic amplitude) tables stored as small integers.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
