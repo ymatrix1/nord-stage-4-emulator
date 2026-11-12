@@ -45,7 +45,23 @@ Method: signature scan, zlib trial decode at every header hit, entropy map in 64
 
 ## 4. Verdict
 
-1:1 low-level emulation is **not currently feasible**: boot ROMs are unavailable, SHARC code is in the update as VISA inside `bank0_CODE` but not yet disassembled or mapped to the three DSPs (see [dsp-image-hunt.md](dsp-image-hunt.md) 5.5), the sample codec is unknown, and no SHARC simulator exists. None of that is proven impossible, so Track B stays a research option, not a plan. The shipping engine remains the high-level Rust implementation (Track A).
+**Updated 2026-11-12** (evidence: [dsp-image-hunt.md](dsp-image-hunt.md) 5.5 to 5.13).
+
+1:1 low-level emulation is **still not a plan, but it is no longer blocked on missing DSP code.** What changed:
+
+| Blocker | Before | Now |
+|---|---|---|
+| DSP images | assumed on the board SPI flash, unreadable | **Present** in the OS update: five SHARC images (FX, PNO, ORG, SY1SY2, SMP), 916,780 bytes in v1.64 to v1.66, exact boundaries and a tool that finds them in every release v1.44 to v1.66 (`tools/ns4_dsp_images.py`) |
+| Instruction set | unknown | ADSP-214xx VISA, decoded by `tools/sharc_visa.py` (type known for 98.7% of the instructions in the large blocks, operands for 95.4%) |
+| Proof the images are the real programs | none | Every sound release note matches a change in the expected image, and no-change releases leave all five images identical (5.13) |
+| Download path | unknown | ARM calls a DSP driver method with (index, pointer, length); bank 0 caller `0x241C58`, bank 1 test caller `0x480E0` |
+| SHARC simulator | none open source | **Still none** |
+| Boot ROMs / board bring-up | not obtainable | **Still unknown**: the driver method (headers or raw copy), the image header and record tables, and the ARM-to-DSP bus protocol are undecoded |
+| Sample and piano data, `CNSP` codec | unknown | **Unchanged**: sample and piano data live in flash outside the update |
+
+**What a Track B would still need**, in order: (1) decode the image header and the record tables at the start of each image; (2) a ADSP-214xx core model (VISA, SIMD, DAGs, circular buffers) written from the Programming Reference, plus DAI/SPORT/DMA stubs; (3) the driver method and the ARM-to-DSP message protocol, to feed parameters the way the OS does; (4) the sample and piano data, which the update does not contain. Items 1 and 3 are bounded reverse-engineering; item 2 is the large cost.
+
+**Recommendation.** Keep the high-level Rust engine as the shipping path ([D2](../DECISIONS.md)). Use the DSP images as a *reference oracle* and a source of verified constants: coefficient tables, reverb and delay line lengths, DAG strides, algorithm structure. Reading the FX image for the reverb and the effect racks is the highest-value next step because it feeds Track A directly. Treat a full SHARC emulator as optional research.
 
 ## 6. Deeper analysis of the firmware containers
 
