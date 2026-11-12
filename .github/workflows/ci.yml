@@ -46,7 +46,7 @@ jobs:
           for i in 1 2 3 4 5; do
             echo "Attempt $i: Updating apt and installing dependencies..."
             if sudo apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=20 && \
-               sudo apt-get install -y --no-install-recommends -o Acquire::Retries=5 libasound2-dev libudev-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev libxi-dev libgl-dev libjack-jackd2-dev pkg-config; then
+               sudo apt-get install -y --no-install-recommends -o Acquire::Retries=5 libasound2-dev libudev-dev libx11-dev libx11-xcb-dev libxcursor-dev libxext-dev libxrandr-dev libxi-dev libgl-dev libjack-jackd2-dev pkg-config; then
               echo "Dependencies installed successfully."
               break
             fi

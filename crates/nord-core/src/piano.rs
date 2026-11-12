@@ -9,8 +9,8 @@ use std::f32::consts::TAU;
 use std::path::Path;
 use std::sync::Arc;
 
-/// Maximum simultaneous polyphonic voices per Piano layer (`24` pre-allocated in core; scalable to 120).
-pub const MAX_PIANO_VOICES: usize = 24;
+/// Maximum simultaneous polyphonic voices per Piano layer (`64` pre-allocated in core; scalable to 120).
+pub const MAX_PIANO_VOICES: usize = 64;
 
 /// Number of chromatic resonant sympathetic strings (12 octave-distributed strings across the keyboard).
 pub const NUM_SYMPATHETIC_STRINGS: usize = 12;
@@ -135,10 +135,12 @@ impl NpnoSound {
                     .map(|&(idx, _, _, vel)| (idx, vel))
                     .collect();
             }
-            normal.sort_by_key(|&(_, vel)| vel);
+            // `.npno` stroke byte `0x0D` (`vel_low`) encodes attenuation/softness (`0` = loudest `fff`, larger = softer `ppp`).
+            // Sort descending (softest first -> loudest `0` last) before computing ascending MIDI velocity ranges.
+            normal.sort_by(|a, b| b.1.cmp(&a.1));
 
-            if let Some(&(first_idx, _)) = normal.first() {
-                stroke_by_key[note as usize] = Some(first_idx);
+            if let Some(&(mid_idx, _)) = normal.get(normal.len() / 2) {
+                stroke_by_key[note as usize] = Some(mid_idx);
             } else if !strokes.is_empty() {
                 stroke_by_key[note as usize] = Some(0);
             }
@@ -150,7 +152,7 @@ impl NpnoSound {
                 .filter(|(_, rk, kind, _)| *rk == root && *kind == crate::cbin::NPNO_STROKE_DAMPER)
                 .map(|&(idx, _, _, vel)| (idx, vel))
                 .collect();
-            damper.sort_by_key(|&(_, vel)| vel);
+            damper.sort_by(|a, b| b.1.cmp(&a.1));
             Self::push_velocity_zones(&mut zones, note, root, tune_cents, false, true, &damper);
 
             let mut release: Vec<(usize, u8)> = meta
@@ -158,7 +160,7 @@ impl NpnoSound {
                 .filter(|(_, rk, kind, _)| *rk == root && *kind == crate::cbin::NPNO_STROKE_RELEASE)
                 .map(|&(idx, _, _, vel)| (idx, vel))
                 .collect();
-            release.sort_by_key(|&(_, vel)| vel);
+            release.sort_by(|a, b| b.1.cmp(&a.1));
             Self::push_velocity_zones(&mut zones, note, root, tune_cents, true, false, &release);
         }
 
@@ -179,15 +181,38 @@ impl NpnoSound {
         tune_cents: i8,
         trigger_release: bool,
         damper_down: bool,
-        sorted: &[(usize, u8)],
+        sorted_soft_to_loud: &[(usize, u8)],
     ) {
-        for (i, &(stroke_idx, vel)) in sorted.iter().enumerate() {
-            let vel_low = if i == 0 { 0 } else { vel };
-            let vel_high = if i + 1 < sorted.len() {
-                sorted[i + 1].1.saturating_sub(1).max(vel_low)
+        let count = sorted_soft_to_loud.len();
+        if count == 0 {
+            return;
+        }
+        let max_att = sorted_soft_to_loud
+            .iter()
+            .map(|&(_, a)| a)
+            .max()
+            .unwrap_or(0)
+            .max(1);
+        let center_vel = |att: u8| -> u8 {
+            let scaled = (f32::from(max_att.saturating_sub(att)) / f32::from(max_att)) * 127.0;
+            scaled.round().clamp(0.0, 127.0) as u8
+        };
+
+        let mut prev_high = 0u8;
+        for (i, &(stroke_idx, att)) in sorted_soft_to_loud.iter().enumerate() {
+            let vel_low = if i == 0 {
+                0
             } else {
-                127
+                prev_high.saturating_add(1).min(127)
             };
+            let vel_high = if i + 1 >= count {
+                127
+            } else {
+                let c0 = u16::from(center_vel(att));
+                let c1 = u16::from(center_vel(sorted_soft_to_loud[i + 1].1));
+                (((c0 + c1) / 2) as u8).max(vel_low).min(126)
+            };
+            prev_high = vel_high;
             zones.push(PianoSampleZone {
                 key_low: note,
                 key_high: note,
@@ -789,7 +814,12 @@ impl PianoLayer {
     pub(crate) fn voice_excitation_for_test(&self, note: u8) -> Option<(f32, f32, bool)> {
         self.voices
             .iter()
-            .find(|v| v.active && !v.is_release_sample && v.note == note)
+            .find(|v| v.active && !v.is_release_sample && !v.releasing && v.note == note)
+            .or_else(|| {
+                self.voices
+                    .iter()
+                    .find(|v| v.active && !v.is_release_sample && v.note == note)
+            })
             .map(|v| (v.amp, v.gain, v.releasing))
     }
 
@@ -931,6 +961,16 @@ impl PianoLayer {
             (None, 0.0, false)
         };
 
+        // Smoothly damp any previous sustaining instance of the same note rather than hard-cutting mid-wave
+        for v in &mut self.voices {
+            if v.active && !v.is_release_sample && v.note == note && !v.releasing {
+                v.releasing = true;
+                v.soft_release = false;
+                v.sustained = false;
+                v.sostenuto_held = false;
+            }
+        }
+
         let base_amp = self.touch.map_velocity(velocity);
         let compressed_amp = match self.dyn_comp {
             1 => base_amp.powf(0.82),
@@ -938,16 +978,16 @@ impl PianoLayer {
             3 => base_amp.powf(0.55),
             _ => base_amp,
         };
-        // Multisample .npno velocity strokes already encode natural pp..ff hammer dynamics; avoid double-attenuating soft tiers.
+        // Multisample .npno strokes already encode ~6 dB of hammer dynamics; add natural acoustic expression on top.
         let shaped_amp = if has_multi_vel {
-            0.42 + 0.58 * compressed_amp
+            0.22 + 0.78 * compressed_amp.powf(0.9)
         } else {
             compressed_amp
         };
         let una_corda_scale = if self.soft_pedal_down { 0.76 } else { 1.0 };
         let amp = (shaped_amp * una_corda_scale).clamp(0.0, 1.0);
 
-        let idx = self.allocate_voice_slot(Some(note));
+        let idx = self.allocate_voice_slot(None);
         self.voices[idx] = PianoVoice {
             active: true,
             sustained: false,
@@ -1301,19 +1341,19 @@ impl PianoLayer {
             }
         }
 
-        // Dynamic pedal thump + felt brush transient (CC64/CC66/CC67)
+        // Dynamic pedal thump + felt brush transient (CC64/CC66/CC67) without FM pitch chirp
         let mut brush_excite = 0.0f32;
         if self.pedal_noise_env > 1e-5 || self.pedal_brush_env > 1e-5 {
             let noise = self.next_noise();
-            let raw_thump = (self.pedal_noise_env * 280.0).sin() * self.pedal_noise_env
-                + noise * self.pedal_brush_env;
+            let raw_thump = self.pedal_noise_env * (0.55 + 0.45 * noise) * 0.30
+                + noise * self.pedal_brush_env * 0.25;
             let lp_a = (TAU * self.pedal_cutoff_hz * inv_fs).clamp(0.005, 0.35);
             self.pedal_lp_state += lp_a * (raw_thump - self.pedal_lp_state);
             sum_l += self.pedal_lp_state;
             sum_r += self.pedal_lp_state;
-            brush_excite = self.pedal_brush_env * 0.25 * noise;
-            self.pedal_noise_env *= (-inv_fs / 0.055).exp();
-            self.pedal_brush_env *= (-inv_fs / 0.035).exp();
+            brush_excite = self.pedal_brush_env * 0.18 * noise;
+            self.pedal_noise_env *= (-inv_fs / 0.045).exp();
+            self.pedal_brush_env *= (-inv_fs / 0.030).exp();
         }
 
         // Timbre spectral contour (Soft, Mid, Bright, Dyno1, Dyno2)
@@ -1346,26 +1386,46 @@ impl PianoLayer {
             shaped_r *= comp_gain;
         }
 
-        // Sympathetic string resonance: fires either across all 12 strings when damper pedal is down,
-        // or specifically across undamped held keys (Nord Advanced String Resonance Gen 2)
+        // Sympathetic string resonance: fires across all 12 harp strings when damper pedal is down,
+        // or across matching undamped pitch classes when keys are silently held.
         let shaped_mono = 0.5 * (shaped_l + shaped_r) + brush_excite;
-        let mut res_sum = 0.0f32;
+        let mut res_l = 0.0f32;
+        let mut res_r = 0.0f32;
         if self.string_resonance_enabled {
             if self.damper_pedal_down {
-                for r in &mut self.resonators {
-                    res_sum += r.process(shaped_mono * 0.008);
+                for (i, r) in self.resonators.iter_mut().enumerate() {
+                    let y = r.process(shaped_mono * 0.0045);
+                    if i % 2 == 0 {
+                        res_l += y * 0.72;
+                        res_r += y * 0.28;
+                    } else {
+                        res_l += y * 0.28;
+                        res_r += y * 0.72;
+                    }
                 }
             } else {
                 for (i, r) in self.resonators.iter_mut().enumerate() {
                     let midi_note = 24 + i * 7;
-                    if midi_note < 128 && self.undamped_keys[midi_note] {
-                        res_sum += r.process(shaped_mono * 0.015);
+                    let pc = midi_note % 12;
+                    let held = (24..108).step_by(12).any(|oct_base| {
+                        let k = oct_base + pc;
+                        k < 128 && self.undamped_keys[k]
+                    });
+                    if held {
+                        let y = r.process(shaped_mono * 0.009);
+                        if i % 2 == 0 {
+                            res_l += y * 0.72;
+                            res_r += y * 0.28;
+                        } else {
+                            res_l += y * 0.28;
+                            res_r += y * 0.72;
+                        }
                     }
                 }
             }
         }
 
-        [shaped_l + res_sum, shaped_r - res_sum * 0.5]
+        [shaped_l + res_l, shaped_r + res_r]
     }
 }
 
@@ -1614,8 +1674,8 @@ mod tests {
     fn test_piano_voice_stealing_priority() {
         let mut piano = PianoLayer::new(48_000.0);
 
-        // Fill all 24 polyphonic voices with active notes
-        for note in 40..64u8 {
+        // Fill all MAX_PIANO_VOICES polyphonic voices with active notes
+        for note in 20..(20 + MAX_PIANO_VOICES as u8) {
             piano.note_on(note, 90);
         }
         assert!(piano.voices.iter().all(|v| v.active));
@@ -1630,11 +1690,11 @@ mod tests {
             piano.render_frame();
         }
 
-        // Trigger note 70 (25th voice, exceeding MAX_PIANO_VOICES = 24)
-        piano.note_on(70, 100);
+        // Trigger note 95 (exceeding MAX_PIANO_VOICES)
+        piano.note_on(95, 100);
 
         // The voice allocator must steal the decaying releasing voice (note 45)
-        assert_eq!(piano.voices[idx_releasing].note, 70);
+        assert_eq!(piano.voices[idx_releasing].note, 95);
         assert!(!piano.voices[idx_releasing].releasing);
     }
 
@@ -1667,13 +1727,15 @@ mod tests {
             raw[p1_off + 2 + w..p1_off + 4 + w].copy_from_slice(&0xB050u16.to_be_bytes());
         }
 
-        for (k, (off, vel)) in [(p0_off, 0u16), (p1_off, 80u16)].into_iter().enumerate() {
+        // Note `.npno` encodes softness attenuation (`0 = fff` loudest, `80 = pp` softest):
+        // so p0 (+20 soft) carries att=80 and p1 (+80 loud) carries att=0.
+        for (k, (off, att)) in [(p0_off, 80u16), (p1_off, 0u16)].into_iter().enumerate() {
             let rec_off =
                 crate::cbin::NPNO_STROKE_TABLE_OFFSET + k * crate::cbin::NPNO_STROKE_RECORD_SIZE;
             raw[rec_off + 8..rec_off + 12].copy_from_slice(
                 &((off - crate::cbin::NPNO_CNSP_BASE_OFFSET) as u32).to_be_bytes(),
             );
-            raw[rec_off + 12..rec_off + 14].copy_from_slice(&vel.to_be_bytes());
+            raw[rec_off + 12..rec_off + 14].copy_from_slice(&att.to_be_bytes());
             raw[rec_off + 14..rec_off + 18].copy_from_slice(&64u32.to_be_bytes());
             raw[rec_off + 18..rec_off + 20].copy_from_slice(&1u16.to_be_bytes());
         }

@@ -13,11 +13,14 @@ const MOD2_LINE_LEN: usize = 2048;
 /// Number of delay lines in the stereo Feedback Delay Network (FDN) Reverb.
 const FDN_SIZE: usize = 4;
 
-/// Prime sample delay lengths for the 4 FDN delay lines (at 48 kHz).
-const FDN_DELAYS: [usize; FDN_SIZE] = [1087, 1283, 1531, 1789];
+/// Fixed FDN circular buffer capacity (8192 samples ≈ 170 ms at 48 kHz; zero runtime allocs).
+const FDN_BUF_LEN: usize = 8192;
+
+/// Base prime sample delay lengths for the 4 FDN delay lines (calibrated for Room @ 48 kHz).
+const FDN_DELAYS: [usize; FDN_SIZE] = [1399, 1747, 2113, 2551];
 
 /// Prime stereo input-diffuser allpass lengths (`[L0, L1, R0, R1]`) to eliminate metallic slapback.
-const REV_AP_DELAYS: [usize; FDN_SIZE] = [113, 257, 149, 311];
+const REV_AP_DELAYS: [usize; FDN_SIZE] = [149, 331, 179, 389];
 
 /// Reads a linearly interpolated delayed sample from a circular buffer.
 #[inline]
@@ -196,7 +199,7 @@ pub struct LayerFxChain {
     delay_var_phase: f32,
     delay_lp_state: [f32; 2],
     delay_hp_state: [f32; 2],
-    fdn_bufs: Box<[[f32; 2048]; FDN_SIZE]>,
+    fdn_bufs: Box<[[f32; FDN_BUF_LEN]; FDN_SIZE]>,
     fdn_write_indices: [usize; FDN_SIZE],
     fdn_lp_states: [f32; FDN_SIZE],
     rev_ap_bufs: Box<[[f32; 512]; FDN_SIZE]>,
@@ -262,7 +265,7 @@ impl LayerFxChain {
             delay_var_phase: 0.0,
             delay_lp_state: [0.0; 2],
             delay_hp_state: [0.0; 2],
-            fdn_bufs: Box::new([[0.0; 2048]; FDN_SIZE]),
+            fdn_bufs: Box::new([[0.0; FDN_BUF_LEN]; FDN_SIZE]),
             fdn_write_indices: [0; FDN_SIZE],
             fdn_lp_states: [0.0; FDN_SIZE],
             rev_ap_bufs: Box::new([[0.0; 512]; FDN_SIZE]),
@@ -561,38 +564,41 @@ impl LayerFxChain {
         if self.reverb_model == ReverbModel::Off || self.reverb_mix <= 0.0 {
             return [l, r];
         }
-        let decay_gain = match self.reverb_model {
-            ReverbModel::Off => 0.0,
-            ReverbModel::Booth => 0.55,
-            ReverbModel::Room => 0.72,
-            ReverbModel::Stage => 0.82,
-            ReverbModel::Spring => 0.78,
-            ReverbModel::Hall => 0.89,
-            ReverbModel::Cathedral => 0.94,
+        let (decay_gain, room_scale) = match self.reverb_model {
+            ReverbModel::Off => (0.0, 1.0),
+            ReverbModel::Booth => (0.52, 0.58),
+            ReverbModel::Room => (0.72, 1.00),
+            ReverbModel::Stage => (0.83, 1.48),
+            ReverbModel::Spring => (0.77, 0.72),
+            ReverbModel::Hall => (0.89, 2.05),
+            ReverbModel::Cathedral => (0.935, 2.65),
         };
         let damp = match self.reverb_color {
-            ReverbColor::Normal => 0.45,
-            ReverbColor::Bright => 0.72,
-            ReverbColor::Dark => 0.22,
-            ReverbColor::Chorale => 0.52,
+            ReverbColor::Normal => 0.42,
+            ReverbColor::Bright => 0.68,
+            ReverbColor::Dark => 0.20,
+            ReverbColor::Chorale => 0.48,
         };
-        let mod_offset = if self.reverb_color == ReverbColor::Chorale {
-            self.reverb_chorale_phase = (self.reverb_chorale_phase + TAU * 0.75 * inv_fs) % TAU;
-            (self.reverb_chorale_phase.sin() * 6.0).round() as isize
+        let (mod_rate_hz, mod_depth) = if self.reverb_color == ReverbColor::Chorale {
+            (0.75, 8.0)
         } else {
-            0
+            (0.42, 1.5)
         };
+        self.reverb_chorale_phase = (self.reverb_chorale_phase + TAU * mod_rate_hz * inv_fs) % TAU;
+        let mod_offset = (self.reverb_chorale_phase.sin() * mod_depth).round() as isize;
+        let fs_scale = (self.sample_rate / 48_000.0).clamp(0.4, 4.0);
 
         let mut tap_outs = [0.0f32; FDN_SIZE];
         for (i, out) in tap_outs.iter_mut().enumerate() {
-            let base_delay = if self.reverb_model == ReverbModel::Spring {
-                FDN_DELAYS[i] / 2 + 127
+            let base_f = if self.reverb_model == ReverbModel::Spring {
+                (FDN_DELAYS[i] as f32) * 0.52 + (127.0 + i as f32 * 43.0)
             } else {
-                FDN_DELAYS[i]
+                (FDN_DELAYS[i] as f32) * room_scale
             };
-            let delay = (base_delay as isize + if i % 2 == 0 { mod_offset } else { -mod_offset })
-                .clamp(64, 2000) as usize;
-            let r_idx = (self.fdn_write_indices[i] + 2048 - delay) % 2048;
+            let base_delay = (base_f * fs_scale).round() as isize;
+            let sign = if i % 2 == 0 { mod_offset } else { -mod_offset };
+            let delay = (base_delay + sign).clamp(64, (FDN_BUF_LEN - 8) as isize) as usize;
+            let r_idx = (self.fdn_write_indices[i] + FDN_BUF_LEN - delay) % FDN_BUF_LEN;
             *out = self.fdn_bufs[i][r_idx];
         }
 
@@ -604,7 +610,7 @@ impl LayerFxChain {
         let hadamard = [0.5 * s0, 0.5 * s1, 0.5 * s2, 0.5 * s3];
 
         // Two-stage stereo input allpass diffusion prevents transient flutter/metallic ringing
-        const AP_G: f32 = 0.52;
+        const AP_G: f32 = 0.55;
         let mut dif_l = l;
         for (stage, &ap_delay) in REV_AP_DELAYS.iter().enumerate().take(2) {
             let w = self.rev_ap_indices[stage];
@@ -627,24 +633,25 @@ impl LayerFxChain {
         }
 
         let stereo_in = [
-            dif_l,
-            dif_r,
-            0.75 * dif_l + 0.25 * dif_r,
-            0.25 * dif_l + 0.75 * dif_r,
+            0.70 * dif_l + 0.30 * dif_r,
+            0.30 * dif_l + 0.70 * dif_r,
+            0.85 * dif_l - 0.15 * dif_r,
+            -0.15 * dif_l + 0.85 * dif_r,
         ];
         for (i, &had_val) in hadamard.iter().enumerate().take(FDN_SIZE) {
             let fb = had_val * decay_gain;
             self.fdn_lp_states[i] += damp * (fb - self.fdn_lp_states[i]);
-            self.fdn_bufs[i][self.fdn_write_indices[i]] = stereo_in[i] + self.fdn_lp_states[i];
-            self.fdn_write_indices[i] = (self.fdn_write_indices[i] + 1) % 2048;
+            self.fdn_bufs[i][self.fdn_write_indices[i]] =
+                stereo_in[i] * 0.55 + self.fdn_lp_states[i];
+            self.fdn_write_indices[i] = (self.fdn_write_indices[i] + 1) % FDN_BUF_LEN;
         }
 
-        let rev_l = 0.45 * (tap_outs[0] + 0.8 * tap_outs[2] + 0.2 * tap_outs[3]);
-        let rev_r = 0.45 * (tap_outs[1] + 0.8 * tap_outs[3] + 0.2 * tap_outs[2]);
+        let rev_l = 0.42 * (tap_outs[0] + 0.75 * tap_outs[2] + 0.25 * tap_outs[3]);
+        let rev_r = 0.42 * (tap_outs[1] + 0.75 * tap_outs[3] + 0.25 * tap_outs[2]);
         let mix = self.reverb_mix.clamp(0.0, 1.0);
         [
-            l * (1.0 - 0.25 * mix) + rev_l * mix,
-            r * (1.0 - 0.25 * mix) + rev_r * mix,
+            l * (1.0 - 0.22 * mix) + rev_l * mix,
+            r * (1.0 - 0.22 * mix) + rev_r * mix,
         ]
     }
 

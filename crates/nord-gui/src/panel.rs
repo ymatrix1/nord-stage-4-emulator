@@ -188,7 +188,7 @@ impl Default for Stage4PanelState {
             reverb_mix: 0.20,
             master_comp: 0.25,
 
-            sync_knobs_on_program_load: true,
+            sync_knobs_on_program_load: false,
             mouse_held_note: None,
             midi_active_keys: [false; 128],
         }
@@ -201,6 +201,12 @@ impl Stage4PanelState {
         if !prog.name.is_empty() {
             self.prog_title = prog.name.clone();
         }
+        let bank_ch = (b'A' + (prog.bank_index as u8).min(7)) as char;
+        let slot_idx = prog.location_index & 63;
+        let page = (slot_idx / 8) + 1;
+        let btn = (slot_idx % 8) + 1;
+        self.prog_id = format!("{bank_ch}:{page}{btn}");
+        self.active_program_idx = btn as u8;
 
         let cat_mask = match prog.category_id {
             0x07 | 0x12 => 1 << 0,                             // Organ A
@@ -232,6 +238,8 @@ impl Stage4PanelState {
         self.piano_cat = prog.piano.layer_a.category;
         self.piano_timbre = prog.piano.layer_a.timbre;
         self.piano_touch = prog.piano.layer_a.touch;
+        self.string_res = prog.piano.layer_a.string_res;
+        self.pedal_noise = prog.piano.layer_a.pedal_noise;
 
         // Synth section
         self.synth_a_active = (scene_mask & (1 << 4)) != 0;
@@ -1852,13 +1860,19 @@ mod tests {
     #[test]
     fn test_panel_state_apply_program() {
         let mut state = Stage4PanelState::default();
+        assert!(!state.sync_knobs_on_program_load);
+        state.sync_knobs_on_program_load = true;
         let mut prog = nord_core::cbin::ProgramDecoded {
             name: "Funk Solo".to_string(),
+            bank_index: 0,
+            location_index: 8,
             ..Default::default()
         };
         prog.organ.layer_a_enabled = true;
         prog.organ.layer_a_level = 0.77;
         prog.organ.drawbars_a = [8, 8, 8, 8, 0, 0, 0, 0, 0];
+        prog.piano.layer_a.string_res = true;
+        prog.piano.layer_a.pedal_noise = false;
         prog.synth.layer_a.enabled = true;
         prog.synth.layer_a.filter_cutoff_hz = 3200.0;
         prog.global.master_compressor = 4.0;
@@ -1866,6 +1880,10 @@ mod tests {
         state.apply_program(&prog);
 
         assert_eq!(state.prog_title, "Funk Solo");
+        assert_eq!(state.prog_id, "A:21");
+        assert_eq!(state.active_program_idx, 1);
+        assert!(state.string_res);
+        assert!(!state.pedal_noise);
         assert!(state.organ_a_active);
         assert!((state.organ_a_level - 0.77).abs() < 1e-5);
         assert_eq!(state.organ_drawbars, [8, 8, 8, 8, 0, 0, 0, 0, 0]);
@@ -1877,16 +1895,23 @@ mod tests {
         state.sync_knobs_on_program_load = false;
         let mut piano_prog = nord_core::cbin::ProgramDecoded {
             name: "White Grand".to_string(),
+            bank_index: 0,
+            location_index: 8,
             category_id: 0x09,
             ..Default::default()
         };
         piano_prog.global.scene_1_mask = 1 << 2;
         piano_prog.piano.layer_a.level = 0.91;
+        piano_prog.piano.layer_a.string_res = true;
+        piano_prog.piano.layer_a.pedal_noise = true;
         piano_prog.synth.layer_a.filter_cutoff_hz = 650.0;
         piano_prog.global.master_compressor = 8.0;
         state.apply_program(&piano_prog);
 
         assert_eq!(state.prog_title, "White Grand");
+        assert_eq!(state.prog_id, "A:21");
+        assert!(state.string_res);
+        assert!(state.pedal_noise);
         assert_eq!(state.fx_focus, 1);
         assert!((state.piano_a_level - 0.91).abs() < 1e-5);
         assert!((state.synth_cutoff - 3200.0).abs() < 1e-5);

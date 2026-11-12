@@ -1162,22 +1162,24 @@ fn unpack_piano_layer_block(
     let name_hash = r.read_bits(32)?;
     let variation = r.read_bits(2)? as u8;
     let acoustic_level = r.read_bits(2)? as u8;
-    let string_res = acoustic_level > 0;
+    let string_res = (acoustic_level & 0x02) != 0;
+    let soft_release = (acoustic_level & 0x01) != 0;
     let pedal_noise = r.read_bool()?;
-    let touch = match r.read_bits(2)? {
-        0 => VelocityTouch::Light,
-        1 => VelocityTouch::Medium,
-        _ => VelocityTouch::Heavy,
-    };
     let unison = r.read_bits(2)? as u8;
     let dyn_comp = r.read_bits(2)? as u8;
+    let _reserved_pad = r.read_bool()?;
     let timbre = match r.read_bits(3)? {
         0 => PianoTimbre::Off,
         1 => PianoTimbre::Soft,
         2 => PianoTimbre::Mid,
-        3 => PianoTimbre::Bright,
+        3 | 6 | 7 => PianoTimbre::Bright, // 6/7 = Clav Treble+Brill / Soft+Treble+Brill
         4 => PianoTimbre::Dyno1,
         _ => PianoTimbre::Dyno2,
+    };
+    let touch = match r.read_bits(2)? {
+        1 => VelocityTouch::Light,
+        2 => VelocityTouch::Heavy,
+        _ => VelocityTouch::Medium, // Factory v1.66 leaves bits 73..75 = 0 (`MED` default LED)
     };
 
     Ok(PianoLayerDecoded {
@@ -1194,7 +1196,7 @@ fn unpack_piano_layer_block(
         string_res,
         acoustic_level,
         pedal_noise,
-        soft_release: acoustic_level > 0,
+        soft_release,
         dyn_comp,
         unison,
     })
@@ -1223,21 +1225,12 @@ fn pack_piano_layer_block(
     w.set_bit_pos(base + 28)?;
     w.write_bits(layer.name_hash, 32)?;
     w.write_bits(u32::from(layer.variation & 0x03), 2)?;
-    let acoustic = if layer.string_res {
-        layer.acoustic_level.clamp(1, 3)
-    } else {
-        0
-    };
-    w.write_bits(u32::from(acoustic), 2)?;
+    let acoustic = (u32::from(layer.string_res) << 1) | u32::from(layer.soft_release);
+    w.write_bits(acoustic, 2)?;
     w.write_bool(layer.pedal_noise)?;
-    let touch_idx = match layer.touch {
-        VelocityTouch::Light => 0,
-        VelocityTouch::Medium => 1,
-        VelocityTouch::Heavy => 2,
-    };
-    w.write_bits(touch_idx, 2)?;
     w.write_bits(u32::from(layer.unison.min(3)), 2)?;
     w.write_bits(u32::from(layer.dyn_comp.min(3)), 2)?;
+    w.write_bool(false)?;
     let timbre_idx = match layer.timbre {
         PianoTimbre::Off => 0,
         PianoTimbre::Soft => 1,
@@ -1247,6 +1240,12 @@ fn pack_piano_layer_block(
         PianoTimbre::Dyno2 => 5,
     };
     w.write_bits(timbre_idx, 3)?;
+    let touch_idx = match layer.touch {
+        VelocityTouch::Medium => 0,
+        VelocityTouch::Light => 1,
+        VelocityTouch::Heavy => 2,
+    };
+    w.write_bits(touch_idx, 2)?;
     Ok(())
 }
 
@@ -2397,5 +2396,42 @@ mod tests {
         assert_eq!(cutoff_norm_to_hz(1.0), 32000.0);
         assert!((cutoff_norm_to_hz(cutoff_hz_to_norm(440.0)) - 440.0).abs() < 1e-2);
         assert!((cutoff_norm_to_hz(cutoff_hz_to_norm(3500.0)) - 3500.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_revk_v166_piano_layer_0x0b_flags_and_timbre() {
+        // Replicate exact RevK v1.66 `White Grand.ns4p` (`var=1, ac=2 StringRes only, ped=1, uni=0, dyn=0, timbre=0 Off`)
+        let mut wg = [0u8; 147];
+        wg[0] = PianoPresetDecoded::BLOCK_TAG;
+        wg[13..25].copy_from_slice(&[
+            0x0b, 0x60, 0x40, 0x04, 0x81, 0x42, 0x54, 0xf6, 0x80, 0x00, 0x00, 0x00,
+        ]);
+        let dec_wg = PianoPresetDecoded::unpack(&wg).expect("unpack white grand fixture");
+        assert!(dec_wg.layer_a.string_res);
+        assert!(!dec_wg.layer_a.soft_release);
+        assert!(dec_wg.layer_a.pedal_noise);
+        assert_eq!(dec_wg.layer_a.variation, 1);
+        assert_eq!(dec_wg.layer_a.unison, 0);
+        assert_eq!(dec_wg.layer_a.dyn_comp, 0);
+        assert_eq!(dec_wg.layer_a.timbre, PianoTimbre::Off);
+        assert_eq!(dec_wg.layer_a.touch, VelocityTouch::Medium);
+        assert_eq!(&dec_wg.pack().unwrap()[13..25], &wg[13..25]);
+
+        // Replicate `Horizon Whl.ns4p` (`var=1, ac=2 (string_res=true), ped=0, uni=0, dyn=3, timbre=1 Soft`)
+        let mut hw = [0u8; 147];
+        hw[0] = PianoPresetDecoded::BLOCK_TAG;
+        hw[13..25].copy_from_slice(&[
+            0x0b, 0x90, 0x40, 0x04, 0x81, 0x42, 0x54, 0xf6, 0x18, 0x80, 0x00, 0x00,
+        ]);
+        let dec_hw = PianoPresetDecoded::unpack(&hw).expect("unpack horizon whl fixture");
+        assert!(dec_hw.layer_a.string_res);
+        assert!(!dec_hw.layer_a.soft_release);
+        assert!(!dec_hw.layer_a.pedal_noise);
+        assert_eq!(dec_hw.layer_a.variation, 1);
+        assert_eq!(dec_hw.layer_a.dyn_comp, 3);
+        assert_eq!(dec_hw.layer_a.unison, 0);
+        assert_eq!(dec_hw.layer_a.timbre, PianoTimbre::Soft);
+        assert_eq!(dec_hw.layer_a.touch, VelocityTouch::Medium);
+        assert_eq!(&dec_hw.pack().unwrap()[13..25], &hw[13..25]);
     }
 }

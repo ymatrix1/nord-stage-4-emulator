@@ -83,7 +83,7 @@ Each record `rec[k]` (`118` bytes):
 - `+0x08..+0x0C` (`u32 BE`): offset relative to `0x002C` (`CNSP` base). Exact file byte offset = **`0x2C + u32_be(rec + 8)`**.
 - `+0x0C..+0x0E` (`u16 BE`): stroke type & velocity threshold:
   - `flags_hi = u0c >> 8`: `0` = normal sustain stroke, `1` = damper-down/sympathetic variant, `2` = release / key-off stroke.
-  - `vel_low = u0c & 0xFF` (ascending per velocity layer within a key group).
+  - `vel_low = u0c & 0xFF`: **descending attenuation / softness byte** (`0 = fff` loudest & brightest strike, up to `max_att` for `ppp` softest & warmest strike; verified via FFT/RMS across factory `White Grand XL`, `Amber Upright XL`, `EP9 Stockholm XL`, `Wurlitzer 1`, and `Clavinet D6` `.npno` banks and matched against `white_grand_hw.wav`).
 - `+0x0E..+0x12` (`u32 BE`): exact decoded sample frame count `total_frames` (`mono` samples or `stereo` sample pairs).
 - `+0x12..+0x14` (`u16 BE`): `npages` (`page_bytes = 1022 * channels`; next offset - offset == `npages * page_bytes`).
 - **`+0x14..+0x1C` (`4 x i16 BE`)**: **Left channel initial LPC history `(h[-4], h[-3], h[-2], h[-1])`** for Page `0`.

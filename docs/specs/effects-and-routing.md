@@ -54,7 +54,7 @@ Layer Synth/Piano/Organ Output (Stereo)
 ### 2.5 Slot 5 — Reverb
 
 - **Algorithms (`ReverbModel`):** `Booth`, `Room`, `Stage`, `Spring` (dispersive spring tap ratios), `Hall`, `Cathedral`.
-- **Tone Voicing (`ReverbColor`):** `Normal`, `Bright`, `Dark` high-frequency FDN damping coefficients, plus `Chorale` ($0.75\text{ Hz}$ LFO tap modulation inside the late feedback matrix). A 2-stage stereo allpass input diffuser (`[113, 257]` L, `[149, 311]` R) feeds stereo-decorrelated excitation into the $4\times 4$ Hadamard FDN to eliminate metallic transient slapback.
+- **Tone Voicing (`ReverbColor`):** `Normal`, `Bright`, `Dark` high-frequency FDN damping coefficients, plus `Chorale` ($0.75\text{ Hz}$ LFO tap modulation inside the late feedback matrix). A 2-stage stereo allpass input diffuser (`[113, 257]` L, `[149, 311]` R) feeds stereo-decorrelated excitation into an `8192`-sample $4\times 4$ Hadamard FDN with room-model and sample-rate scaled prime tap delays (`Booth..Cathedral`), subtle shimmer modulation, and balanced stereo decorrelation (`0.70 / 0.30`, `0.85 / -0.15`) to eliminate metallic slapback and boxy reflections.
 
 ---
 

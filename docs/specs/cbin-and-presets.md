@@ -117,7 +117,7 @@ Morphable parameters of bit width `W` occupy `4W + 3` bits:
 
 #### Piano Block (`0x0C`, `147` Bytes = 2×`0x0B` + 2×`0x36`)
 - `0..8`: `0x0C`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`; `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
-- `0x0B` Layers at bit `104` (A) and `200` (B): `+12..+16` signed 4b `octave`; `+18..+21` `category` (`0..5`: Grand, Upright, Electric, Clav, Digital, Misc); `+21..+26` `model_id`; `+28..+60` 32b `name_hash` (OS v1.66 `ARM0 @ 0x0a5a44` big-endian-chunk MurmurHash2 over the `.npno` stem); `+60..+62` `variation`; `+62..+64` `acoustic_level` (string resonance `0..3`); `+64` `pedal_noise`; `+65..+67` `kb_touch` (`0=Light, 1=Medium, 2=Heavy`); `+67..+69` `unison`; `+69..+71` `dyn_comp`; `+71..+74` `timbre` (`0=Off, 1=Soft, 2=Mid, 3=Bright, 4=Dyno1, 5=Dyno2`).
+- `0x0B` Layers at bit `104` (A) and `200` (B): `+12..+16` signed 4b `octave`; `+18..+21` `category` (`0..5`: Grand, Upright, Electric, Clav, Digital, Misc); `+21..+26` `model_id`; `+28..+60` 32b `name_hash` (OS v1.66 `ARM0 @ 0x0a5a44` big-endian-chunk MurmurHash2 over the `.npno` stem); `+60..+62` `variation`; `+62..+64` `acoustic_level` bitmask (`bit 1 = string_res`, `bit 0 = soft_release`); `+64` `pedal_noise`; `+65..+67` `unison`; `+67..+69` `dyn_comp`; `+69` reserved pad bit; `+70..+73` `timbre` (`0=Off, 1=Soft, 2=Mid, 3|6|7=Bright, 4=Dyno1, 5=Dyno2`); `+73..+75` `kb_touch` (`0=Medium`, `1=Light`, `2=Heavy`, factory `MED` default `0` verified against OS v1.66 `.ns4p` files & 4K hardware LED captures).
 - Bytes `37..92` & `92..147`: `0x36` Piano FX chains A & B.
 
 #### Synth Block (`0x1E`, `493` Bytes = 3×`0x32` + 3×`0x2F` + 3×`0x36`)

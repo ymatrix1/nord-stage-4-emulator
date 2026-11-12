@@ -49,6 +49,7 @@ enum LibraryLoadOutcome {
 /// Manages `.ns4b` archive browsing, cached `.npno`/`.nsmp4` decoding, and RT-safe `Arc` lifetimes.
 pub struct BackupLibraryState {
     pub drawer_open: bool,
+    pub auto_close_on_load: bool,
     pub path_input: String,
     pub backup_path: Option<PathBuf>,
     pub archive: Option<Arc<Ns4BackupArchive>>,
@@ -85,6 +86,7 @@ impl BackupLibraryState {
             .unwrap_or_default();
         Self {
             drawer_open: false,
+            auto_close_on_load: true,
             path_input: default_path,
             backup_path: None,
             archive: None,
@@ -269,6 +271,9 @@ impl BackupLibraryState {
                 } else {
                     format!("Program: {stem}")
                 };
+                if self.auto_close_on_load {
+                    self.drawer_open = false;
+                }
             }
             Err(err) => {
                 self.error_message = Some(format!("Failed to load '{entry_name}': {err}"));
@@ -279,6 +284,9 @@ impl BackupLibraryState {
     /// Schedules decoding of a `.npno` entry from the opened `.ns4b` archive (or serves from cache).
     pub fn request_piano_entry(&mut self, entry_name: &str) {
         self.schedule_piano_entry(entry_name, self.piano_slot_b, false);
+        if self.auto_close_on_load {
+            self.drawer_open = false;
+        }
     }
 
     fn schedule_piano_entry(&mut self, entry_name: &str, slot_b: bool, from_program: bool) {
@@ -333,6 +341,9 @@ impl BackupLibraryState {
     /// Schedules decoding of a `.nsmp4` entry from the opened `.ns4b` archive (or serves from cache).
     pub fn request_sample_entry(&mut self, entry_name: &str) {
         self.schedule_sample_entry(entry_name, self.synth_layer_idx.min(2), false);
+        if self.auto_close_on_load {
+            self.drawer_open = false;
+        }
     }
 
     fn schedule_sample_entry(&mut self, entry_name: &str, layer_idx: usize, from_program: bool) {
@@ -669,6 +680,8 @@ impl BackupLibraryState {
                         if ui.small_button("X").on_hover_text("Close Library").clicked() {
                             self.drawer_open = false;
                         }
+                        ui.checkbox(&mut self.auto_close_on_load, "Auto-close")
+                            .on_hover_text("Close library panel after selecting a preset or sample");
                     });
                 });
                 ui.separator();
@@ -988,12 +1001,28 @@ mod tests {
 
         let (audio_handle, rx) = AudioHandle::new();
         let mut panel = Stage4PanelState::default();
+        lib.drawer_open = true;
         lib.load_program_entry(
             "Program/Bank A/Auto Resolve.ns4p",
             &mut panel,
             &audio_handle,
         );
         assert!(lib.status_message.contains("+2 resolved sample banks"));
+        assert!(
+            !lib.drawer_open,
+            "drawer should auto-close after loading a program by default"
+        );
+        lib.drawer_open = true;
+        lib.auto_close_on_load = false;
+        lib.load_program_entry(
+            "Program/Bank A/Auto Resolve.ns4p",
+            &mut panel,
+            &audio_handle,
+        );
+        assert!(
+            lib.drawer_open,
+            "drawer should remain open when auto_close_on_load is disabled"
+        );
 
         lib.poll_results(&mut panel, &audio_handle);
         assert_eq!(panel.loaded_piano_name.as_deref(), Some(piano_stem));
