@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 
 const SAMPLE_RATE: f32 = 48_000.0;
-const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b>] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame]...";
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
@@ -252,9 +252,16 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                     .map_err(|e| e.to_string())?;
                 let mut file = fs::File::open(backup_path)
                     .map_err(|e| format!("failed to open {backup_path}: {e}"))?;
-                let (_, refs) = engine
-                    .load_program_with_sounds_from_backup(&archive, &mut file, path)
-                    .map_err(|e| e.to_string())?;
+                let (_, refs) = if let Some(pf) = flag("--program-file") {
+                    let bytes = fs::read(pf).map_err(|e| format!("failed to read {pf}: {e}"))?;
+                    engine
+                        .load_program_bytes_with_sounds_from_backup(&archive, &mut file, &bytes)
+                        .map_err(|e| e.to_string())?
+                } else {
+                    engine
+                        .load_program_with_sounds_from_backup(&archive, &mut file, path)
+                        .map_err(|e| e.to_string())?
+                };
                 sound_refs = Some(refs);
             } else {
                 let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;

@@ -37,6 +37,21 @@ The audio detector reports many notes at MIDI 28 and 29; the video footprint (le
 - **Jazz Guitar II is not a valid FX test:** the emulator render is almost mono (width 0.12 vs 0.96) and silent above 1.5 kHz (-46 dB). Cause found: the sample resolves correctly (`Samp Lib/Guitar_Plucked/Jazz Guitar_ST 4.1.nsmp4`, shown by `render-patch`), but layer A has `filter on/off = off` (third-party `ns4decode` output; cutoff 554 Hz is stored but bypassed) and this branch's engine applies the 554 Hz LP24 anyway. The decode and wiring of the filter on/off flag (`filter_on`) exists on `claude/synth-params-dsps-0x2f-b7b76d` (not yet in `main`). Re-run this comparison after that branch merges.
 - Level difference is large (emulator +6 to +8 dB RMS on the organ clips); organ drawbar levels are not calibrated here.
 
+## Jazz Guitar II re-run after the synth filter-on fix (main @ 5e944e4)
+
+| Band | Before (filter always on) | After |
+|---|---|---|
+| presence 1.5..3 kHz (emu - hw) | -46.4 dB | -5.9 dB |
+| brilliance 3..8 kHz | -41.4 dB | -10.9 dB |
+| sub 20..120 Hz | +8.8 dB | +7.8 dB |
+| centroid | -271 Hz | -173 Hz |
+| width (hw 0.96) | 0.12 | 0.13 |
+
+The filter fix removed the dead treble, but this clip is still **not a clean EQ test**:
+
+- Hardware has *less* sub than our EQ-flat render (render with `--program-file` of the same program with bass/mid/treble set to 0), although the program boosts bass +15 dB. The source mismatch (detected low-register notes are unreliable; MIDI 28..40 are partly ghosts) outweighs the EQ effect, so the EQ cannot be separated from the source with one clip.
+- Width stays 0.13 with and without EQ and for single notes at C3/C4/C5, so it is not an EQ effect. The hardware program also enables Mod 1, Mod 2 and Delay; stereo spread from those or from the stereo sample (`Jazz Guitar_ST`) is the open question (synth/FX, not amp).
+
 ## Caveats found while working
 
 - The player touches knobs, sliders and the mod wheel during clips (OLED pop-ups such as `Filter Frequency 5.6 kHz`, `Level Synth A Off`). Renders with fixed controls therefore differ from hardware in those windows. Follow-up: detect OLED pop-ups (`scenes --rows 0,1`) and the wheel position to drive CC events.

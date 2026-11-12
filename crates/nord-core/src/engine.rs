@@ -283,7 +283,19 @@ impl Stage4Engine {
     ) -> Result<(crate::cbin::ProgramDecoded, crate::cbin::ProgramSoundRefs), crate::cbin::CbinError>
     {
         let bytes = archive.read_entry(reader, entry_query)?;
-        let cbin = crate::cbin::CbinFile::parse(&bytes)?;
+        self.load_program_bytes_with_sounds_from_backup(archive, reader, &bytes)
+    }
+
+    /// Like [`Self::load_program_with_sounds_from_backup`] but takes the `.ns4p` bytes directly
+    /// (e.g. an edited copy of a factory program) while still resolving sounds from the backup.
+    pub fn load_program_bytes_with_sounds_from_backup<R: std::io::Read + std::io::Seek>(
+        &mut self,
+        archive: &crate::cbin::Ns4BackupArchive,
+        reader: &mut R,
+        bytes: &[u8],
+    ) -> Result<(crate::cbin::ProgramDecoded, crate::cbin::ProgramSoundRefs), crate::cbin::CbinError>
+    {
+        let cbin = crate::cbin::CbinFile::parse(bytes)?;
         let prog = cbin.decode_program()?;
         self.apply_program(&prog);
 
