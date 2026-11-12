@@ -65,6 +65,18 @@ Jazz Guitar II after these fixes: width 0.16 (was 0.13; hardware 0.96), presence
 - Band-wise (Hann STFT 16384): hardware width 0.38 / 0.84 / **1.89** / 0.94 / 0.58 / 0.31 at 40-120, 120-400, 400-1000, 1000-2000, 2000-4000, 4000-8000 Hz with inter-channel coherence 0.93 / 0.30 / 0.57 / **0.06** / 0.50 / 0.84; emulator 0.13 to 0.20 flat with coherence 0.92 to 0.97. Side energy above mid at 400..1000 Hz means strongly decorrelated or anti-phase content, characteristic of a wide chorus/vibrato, not of reverb.
 - The manual (section 2.7 of the effects spec) says Mod 2 VIBE variation is mono, so the delay feedback effect `CHOR variation` (stereo widening) and reverb are the candidates; our delay feedback effect is a single modulated-feedback mode, not a stereo chorus. Next step: implement the delay-path chorus as a stereo decorrelating chorus and compare band-wise width.
 
+### Width experiments that did not explain the gap (Jazz Guitar II, 20 s at 37:35)
+
+| Change (emulator) | overall width (hw 0.96) | coherence at 1..2 kHz (hw 0.06) |
+|---|---|---|
+| baseline after FX decode fixes | 0.159 | 0.92 |
+| delay feedback effect implemented per manual (Chorus variation, mix 14 %) | 0.165 | 0.92 |
+| reverb L/R fed from disjoint FDN line pairs (reverted: no evidence, no effect) | 0.168 | 0.91 |
+| reverb amount 60 % / 100 % | 0.24 | 0.80 / 0.59 |
+| reverb wet gain x1 / x2 / x4 with a true dry/wet crossfade (temporary) | 0.17 / 0.27 / 0.45 | 0.90 / 0.78 / 0.52 |
+
+Even a four times louder, fully crossfaded reverb gives a flat width profile (0.4..0.6) while the hardware peaks at 400..1000 Hz with width above 1 (anti-phase content) and stays mono below 120 Hz. Remaining hypotheses: an effect stage that inverts one channel in the mid band (stereo Mod 1 variation, wide Chorus pedal at high mix), the Jazz layer routing (Layers B/C are off in the program), or post-processing in the video. One clip cannot separate these. Separate, manual-documented discrepancy found on the way: the manual (p.52) says the reverb Dry/Wet knob is fully wet at its maximum, while our `process_reverb` keeps 78 % dry at maximum (`1 - 0.22 * mix`).
+
 ## Caveats found while working
 
 - The player touches knobs, sliders and the mod wheel during clips (OLED pop-ups such as `Filter Frequency 5.6 kHz`, `Level Synth A Off`). Renders with fixed controls therefore differ from hardware in those windows. Follow-up: detect OLED pop-ups (`scenes --rows 0,1`) and the wheel position to drive CC events.

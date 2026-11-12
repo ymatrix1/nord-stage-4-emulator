@@ -304,6 +304,30 @@ pub enum DelayFilterMode {
     Bp,
 }
 
+/// Delay feedback effect (`Delay Feedback Effect`): `Off` = Bypass.
+///
+/// VERIFIED (names, order): UI strings `Ensemble Deep`, `Vibe`, `Flam 20 ms`, `Flam 40 ms`,
+/// `Space 50 Wet`, `Space 100 Wet` at `0x2cc790..0x2cc7e0` of OS v1.66 `bank0_CODE.bin`.
+/// VERIFIED (behaviour, vendor manual v1.6X pp. 50-51): ENS/VIBE/CHOR are the Mod 2 counterparts;
+/// FLAM = ping-pong with offset L/R channels (variation: 40 ms instead of 20 ms); SPACE = reverb-like
+/// diffusion, 50 % mixed (variation: 100 % wet). The DSP behind them is not in the firmware image, so all
+/// numeric parameters below are ASSUMED.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DelayFeedbackFx {
+    #[default]
+    Off,
+    Ensemble,
+    Vibe,
+    Chorus,
+    Flam,
+    Space,
+}
+
+/// Length of the short modulation / offset buffers of the delay feedback effect (samples).
+const DFX_BUF_LEN: usize = 4096;
+/// Schroeder all-pass lengths for `Space` (`[L0, L1, R0, R1]`, primes).
+const DFX_AP_LENGTHS: [usize; 4] = [151, 233, 173, 257];
+
 /// Tempo-synced rhythmic subdivisions for `Delay` when `delay_clock_sync` is active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DelaySubdivision {
@@ -442,7 +466,9 @@ pub struct LayerFxChain {
     pub delay_analog: bool,
     pub delay_ping_pong: bool,
     pub delay_filter: DelayFilterMode,
-    pub delay_variation: bool,
+    pub delay_fx: DelayFeedbackFx,
+    /// Variation of the feedback effect (mono Ensemble/Vibe, wide Chorus, 40 ms Flam, 100 % wet Space).
+    pub delay_fx_variation: bool,
     pub delay_feedback: f32,
     pub delay_mix: f32,
     pub reverb_model: ReverbModel,
@@ -477,7 +503,12 @@ pub struct LayerFxChain {
     delay_buf_r: Box<[f32]>,
     delay_write_idx: usize,
     delay_smoothed_samples: f32,
-    delay_var_phase: f32,
+    dfx_phase: f32,
+    dfx_buf_l: Box<[f32]>,
+    dfx_buf_r: Box<[f32]>,
+    dfx_idx: usize,
+    dfx_ap: Box<[[f32; 512]; 4]>,
+    dfx_ap_idx: [usize; 4],
     delay_lp_state: [f32; 2],
     delay_hp_state: [f32; 2],
     fdn_bufs: Box<[[f32; FDN_BUF_LEN]; FDN_SIZE]>,
@@ -519,7 +550,8 @@ impl LayerFxChain {
             delay_analog: false,
             delay_ping_pong: false,
             delay_filter: DelayFilterMode::Off,
-            delay_variation: false,
+            delay_fx: DelayFeedbackFx::Off,
+            delay_fx_variation: false,
             delay_feedback: 0.35,
             delay_mix: 0.25,
             reverb_model: ReverbModel::Stage,
@@ -552,7 +584,12 @@ impl LayerFxChain {
             delay_buf_r: vec![0.0; DELAY_LINE_LEN].into_boxed_slice(),
             delay_write_idx: 0,
             delay_smoothed_samples: default_delay_ms * 0.001 * fs,
-            delay_var_phase: 0.0,
+            dfx_phase: 0.0,
+            dfx_buf_l: vec![0.0; DFX_BUF_LEN].into_boxed_slice(),
+            dfx_buf_r: vec![0.0; DFX_BUF_LEN].into_boxed_slice(),
+            dfx_idx: 0,
+            dfx_ap: Box::new([[0.0; 512]; 4]),
+            dfx_ap_idx: [0; 4],
             delay_lp_state: [0.0; 2],
             delay_hp_state: [0.0; 2],
             fdn_bufs: Box::new([[0.0; FDN_BUF_LEN]; FDN_SIZE]),
@@ -873,6 +910,110 @@ impl LayerFxChain {
         self.delay_smoothed_samples = self.target_delay_samples(bpm);
     }
 
+    /// Delay feedback effect on one repeat (`l`, `r`): Ensemble / Vibe / Chorus / Flam / Space.
+    ///
+    /// Structure VERIFIED by the vendor manual (see [`DelayFeedbackFx`]); every rate, depth, delay time
+    /// and mix below is ASSUMED (no firmware or recording source yet).
+    fn process_delay_fx(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {
+        if self.delay_fx == DelayFeedbackFx::Off {
+            return [l, r];
+        }
+        let fs = self.sample_rate;
+        let var = self.delay_fx_variation;
+        let w = self.dfx_idx;
+        self.dfx_buf_l[w] = l;
+        self.dfx_buf_r[w] = r;
+        let mono = 0.5 * (l + r);
+        let out = match self.delay_fx {
+            DelayFeedbackFx::Off => [l, r],
+            DelayFeedbackFx::Chorus | DelayFeedbackFx::Vibe | DelayFeedbackFx::Ensemble => {
+                let (rate, base_ms, depth_ms) = match (self.delay_fx, var) {
+                    (DelayFeedbackFx::Chorus, false) => (0.8, 12.0, 3.5),
+                    (DelayFeedbackFx::Chorus, true) => (1.1, 14.0, 7.0),
+                    (DelayFeedbackFx::Vibe, _) => (3.2, 4.0, 2.5),
+                    _ => (0.55, 9.0, 3.0),
+                };
+                self.dfx_phase = (self.dfx_phase + TAU * rate * inv_fs) % TAU;
+                let ph = self.dfx_phase;
+                let tap = |buf: &[f32], phase: f32| {
+                    let d = (base_ms + depth_ms * phase.sin()) * 0.001 * fs;
+                    read_ring_interpolated(buf, w, d)
+                };
+                match self.delay_fx {
+                    DelayFeedbackFx::Chorus => {
+                        // opposite LFO polarity per channel widens a mono source; the variation is
+                        // deeper and also blends the cross channel
+                        let wl = tap(&self.dfx_buf_l, ph);
+                        let wr = tap(&self.dfx_buf_r, ph + std::f32::consts::PI);
+                        let (cl, cr) = if var {
+                            (0.5 * (wl + 0.3 * wr), 0.5 * (wr + 0.3 * wl))
+                        } else {
+                            (0.5 * wl, 0.5 * wr)
+                        };
+                        [0.5 * l + cl * 1.2, 0.5 * r + cr * 1.2]
+                    }
+                    DelayFeedbackFx::Vibe => {
+                        // 100 % wet pitch/phase wobble; variation = mono version
+                        if var {
+                            let m = tap(&self.dfx_buf_l, ph);
+                            let m2 = tap(&self.dfx_buf_r, ph);
+                            let v = 0.5 * (m + m2);
+                            [v, v]
+                        } else {
+                            [
+                                tap(&self.dfx_buf_l, ph),
+                                tap(&self.dfx_buf_r, ph + std::f32::consts::FRAC_PI_2),
+                            ]
+                        }
+                    }
+                    _ => {
+                        // three cross-connected modulated lines 120 degrees apart (read from the mono sum)
+                        self.dfx_buf_l[w] = mono;
+                        let t0 = tap(&self.dfx_buf_l, ph);
+                        let t1 = tap(&self.dfx_buf_l, ph + TAU / 3.0);
+                        let t2 = tap(&self.dfx_buf_l, ph + 2.0 * TAU / 3.0);
+                        self.dfx_buf_l[w] = l;
+                        if var {
+                            let v = (t0 + t1 + t2) / 3.0;
+                            [0.4 * mono + 0.6 * v, 0.4 * mono + 0.6 * v]
+                        } else {
+                            [
+                                0.4 * mono + 0.6 * (0.6 * t0 + 0.4 * t1),
+                                0.4 * mono + 0.6 * (0.6 * t2 + 0.4 * t1),
+                            ]
+                        }
+                    }
+                }
+            }
+            DelayFeedbackFx::Flam => {
+                // ping-pong style offset between the channels: 20 ms (variation 40 ms) on the right
+                let shift = if var { 0.040 } else { 0.020 } * fs;
+                [l, read_ring_interpolated(&self.dfx_buf_r, w, shift)]
+            }
+            DelayFeedbackFx::Space => {
+                // Schroeder all-pass diffusion; 50 % wet (variation 100 % wet)
+                let g = 0.55;
+                let mut y = [l, r];
+                for (ch, sig) in y.iter_mut().enumerate() {
+                    for stage in 0..2 {
+                        let k = ch * 2 + stage;
+                        let len = DFX_AP_LENGTHS[k];
+                        let i = self.dfx_ap_idx[k] % len;
+                        let delayed = self.dfx_ap[k][i];
+                        let out = -g * *sig + delayed;
+                        self.dfx_ap[k][i] = *sig + g * out;
+                        self.dfx_ap_idx[k] = (i + 1) % len;
+                        *sig = out;
+                    }
+                }
+                let wet = if var { 1.0 } else { 0.5 };
+                [l * (1.0 - wet) + y[0] * wet, r * (1.0 - wet) + y[1] * wet]
+            }
+        };
+        self.dfx_idx = (w + 1) % DFX_BUF_LEN;
+        out
+    }
+
     fn process_delay(&mut self, l: f32, r: f32, bpm: f32, inv_fs: f32) -> [f32; 2] {
         if !self.delay_enabled {
             return [l, r];
@@ -887,17 +1028,13 @@ impl LayerFxChain {
             self.delay_smoothed_samples = target_samples;
         }
 
-        let flutter = if self.delay_variation {
-            self.delay_var_phase = (self.delay_var_phase + TAU * 0.65 * inv_fs) % TAU;
-            self.delay_var_phase.sin() * 0.0012 * self.sample_rate
-        } else {
-            0.0
-        };
-
-        let read_delay =
-            (self.delay_smoothed_samples + flutter).clamp(1.0, (DELAY_LINE_LEN - 4) as f32);
-        let dl = read_ring_interpolated(&self.delay_buf_l, self.delay_write_idx, read_delay);
-        let dr = read_ring_interpolated(&self.delay_buf_r, self.delay_write_idx, read_delay);
+        let read_delay = self
+            .delay_smoothed_samples
+            .clamp(1.0, (DELAY_LINE_LEN - 4) as f32);
+        let tap_l = read_ring_interpolated(&self.delay_buf_l, self.delay_write_idx, read_delay);
+        let tap_r = read_ring_interpolated(&self.delay_buf_r, self.delay_write_idx, read_delay);
+        // Feedback effect acts on every repeat (heard in the output and fed back)
+        let [dl, dr] = self.process_delay_fx(tap_l, tap_r, inv_fs);
 
         // Feedback loop HP / LP / BP filters
         let (mut fb_l, mut fb_r) = (dl, dr);
@@ -924,11 +1061,6 @@ impl LayerFxChain {
         if self.delay_analog {
             fb_l = (fb_l * 1.15).tanh();
             fb_r = (fb_r * 1.15).tanh();
-        }
-        if self.delay_variation {
-            let cross = 0.12 * (fb_l - fb_r);
-            fb_l -= cross;
-            fb_r += cross;
         }
 
         let fb = self.delay_feedback.clamp(0.0, 0.95);
@@ -1202,7 +1334,6 @@ mod tests {
 
         let mut d_lp = d_off.clone();
         d_lp.delay_filter = DelayFilterMode::Lp;
-        d_lp.delay_variation = true;
 
         let mut rms_off = 0.0f32;
         let mut rms_lp = 0.0f32;
@@ -1469,5 +1600,114 @@ mod tests {
         fx.delay_sync_beats = None;
         fx.delay_subdivision = DelaySubdivision::Quarter;
         assert!((fx.target_delay_samples(120.0) - 0.5 * 48_000.0).abs() < 1.0);
+    }
+
+    fn corr_after_delay_fx(fx_kind: DelayFeedbackFx, var: bool, mono_in: bool) -> (f32, f32, f32) {
+        let mut fx = LayerFxChain::new(48_000.0);
+        fx.reverb_model = ReverbModel::Off;
+        fx.delay_enabled = true;
+        fx.delay_time_ms = 30.0;
+        fx.delay_feedback = 0.0;
+        fx.delay_mix = 1.0;
+        fx.delay_fx = fx_kind;
+        fx.delay_fx_variation = var;
+        let (mut ll, mut rr, mut lr) = (0.0f64, 0.0f64, 0.0f64);
+        for i in 0..48_000 {
+            let t = i as f32 / 48_000.0;
+            let a = 0.3 * (TAU * 440.0 * t).sin() + 0.2 * (TAU * 1250.0 * t).sin();
+            let b = if mono_in {
+                a
+            } else {
+                0.3 * (TAU * 330.0 * t).sin() + 0.2 * (TAU * 900.0 * t).sin()
+            };
+            let [l, r] = fx.process_frame([a, b]);
+            assert!(l.is_finite() && r.is_finite());
+            if i > 12_000 {
+                let (l, r) = (f64::from(l), f64::from(r));
+                ll += l * l;
+                rr += r * r;
+                lr += l * r;
+            }
+        }
+        let corr = (lr / (ll.sqrt() * rr.sqrt()).max(1e-12)) as f32;
+        (corr, ll as f32, rr as f32)
+    }
+
+    #[test]
+    fn test_delay_fx_stereo_and_mono_variants() {
+        // Baseline: mono source, no effect, no ping-pong -> identical channels
+        let (base, _, _) = corr_after_delay_fx(DelayFeedbackFx::Off, false, true);
+        assert!(base > 0.9999, "baseline must be mono, got {base}");
+        // Chorus decorrelates a mono source (widening), variation at least as wide
+        let (chor, _, _) = corr_after_delay_fx(DelayFeedbackFx::Chorus, false, true);
+        let (chor_v, _, _) = corr_after_delay_fx(DelayFeedbackFx::Chorus, true, true);
+        assert!(chor < 0.95, "chorus must widen: {chor}");
+        assert!(chor_v < 0.95, "chorus variation must widen: {chor_v}");
+        // Vibe: stereo version decorrelates, variation (mono) does not
+        let (vibe, _, _) = corr_after_delay_fx(DelayFeedbackFx::Vibe, false, true);
+        let (vibe_m, _, _) = corr_after_delay_fx(DelayFeedbackFx::Vibe, true, true);
+        assert!(vibe < 0.95, "vibe stereo: {vibe}");
+        assert!(vibe_m > 0.9999, "vibe variation is mono: {vibe_m}");
+        // Ensemble: stereo version decorrelates, variation (mono) does not
+        let (ens, _, _) = corr_after_delay_fx(DelayFeedbackFx::Ensemble, false, true);
+        let (ens_m, _, _) = corr_after_delay_fx(DelayFeedbackFx::Ensemble, true, true);
+        assert!(ens < 0.97, "ensemble stereo: {ens}");
+        assert!(ens_m > 0.9999, "ensemble variation is mono: {ens_m}");
+    }
+
+    #[test]
+    fn test_delay_flam_offsets_right_channel_by_20_and_40_ms() {
+        for (var, ms) in [(false, 20.0f32), (true, 40.0)] {
+            let mut fx = LayerFxChain::new(48_000.0);
+            fx.reverb_model = ReverbModel::Off;
+            fx.delay_enabled = true;
+            fx.delay_time_ms = 20.0; // first repeat at 960 samples
+            fx.delay_feedback = 0.0;
+            fx.delay_mix = 1.0;
+            fx.delay_fx = DelayFeedbackFx::Flam;
+            fx.delay_fx_variation = var;
+            let (mut first_l, mut first_r) = (None, None);
+            for i in 0..6000usize {
+                let x = if i == 0 { 1.0 } else { 0.0 };
+                let [l, r] = fx.process_frame([x, x]);
+                if i > 100 && first_l.is_none() && l.abs() > 0.2 {
+                    first_l = Some(i);
+                }
+                if i > 100 && first_r.is_none() && r.abs() > 0.2 {
+                    first_r = Some(i);
+                }
+            }
+            let shift = (first_r.unwrap() as f32 - first_l.unwrap() as f32) / 48.0;
+            assert!((shift - ms).abs() < 1.0, "flam shift {shift} ms, want {ms}");
+        }
+    }
+
+    #[test]
+    fn test_delay_space_is_stable_and_diffuses() {
+        for var in [false, true] {
+            let (corr, ll, rr) = corr_after_delay_fx(DelayFeedbackFx::Space, var, false);
+            assert!(ll > 0.0 && rr > 0.0 && corr.abs() <= 1.0);
+        }
+        // impulse smears over time: more than one non-zero sample burst after the first repeat
+        let mut fx = LayerFxChain::new(48_000.0);
+        fx.reverb_model = ReverbModel::Off;
+        fx.delay_enabled = true;
+        fx.delay_time_ms = 20.0;
+        fx.delay_feedback = 0.0;
+        fx.delay_mix = 1.0;
+        fx.delay_fx = DelayFeedbackFx::Space;
+        fx.delay_fx_variation = true;
+        let mut nonzero = 0;
+        for i in 0..4000usize {
+            let x = if i == 0 { 1.0 } else { 0.0 };
+            let [l, _] = fx.process_frame([x, x]);
+            if i > 900 && l.abs() > 1e-4 {
+                nonzero += 1;
+            }
+        }
+        assert!(
+            nonzero > 20,
+            "diffusion must smear the repeat, got {nonzero}"
+        );
     }
 }
