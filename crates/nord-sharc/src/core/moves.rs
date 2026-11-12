@@ -81,14 +81,16 @@ impl Core {
                 )?;
             }
             Kind::T15a => {
-                let i = self.i[bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 44, 44))];
-                let addr = i.wrapping_add(bits(w, 31, 0) as u32);
+                let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 44, 44));
+                let addr = self.dag_out(ii, self.i[ii].wrapping_add(bits(w, 31, 0) as u32));
                 self.mem_transfer(d, addr, bits(w, 38, 32) as u8, write_bit(40))?;
             }
             Kind::T15b => {
                 // UREG 29..23, signed DATA7 22..16 (VERIFIED, docs 5.28)
                 let offset = sign_extend(bits(w, 22, 16) as u32, 7);
-                let addr = self.i[bits(w, 43, 41) as usize].wrapping_add(offset);
+                // G bit 37 selects program memory with the DAG2 index (ADI `i5=pm(0x8,i9)`)
+                let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 37, 37));
+                let addr = self.dag_out(ii, self.i[ii].wrapping_add(offset));
                 self.mem_transfer(d, addr, bits(w, 29, 23) as u8, write_bit(40))?;
             }
             Kind::T16a => {
@@ -96,7 +98,7 @@ impl Core {
                 let bank = Self::dag_bank(bits(w, 37, 37));
                 let ii = bits(w, 43, 41) as usize + bank;
                 let mi = bits(w, 40, 38) as usize + bank;
-                let addr = self.i[ii];
+                let addr = self.dag_out(ii, self.i[ii]);
                 let next_i = self.modified(ii, mi);
                 self.dm_write(addr, bits(w, 31, 0) as u32)
                     .map_err(|address| Fault::BadAddress { pc: d.pc, address })?;
@@ -107,7 +109,7 @@ impl Core {
                 let bank = Self::dag_bank(bits(w, 37, 37));
                 let ii = bits(w, 43, 41) as usize + bank;
                 let mi = bits(w, 40, 38) as usize + bank;
-                let addr = self.i[ii];
+                let addr = self.dag_out(ii, self.i[ii]);
                 let next_i = self.modified(ii, mi);
                 let value = sign_extend(bits(w, 31, 16) as u32, 16);
                 self.dm_write(addr, value)
@@ -137,9 +139,9 @@ impl Core {
                 let modified = self.modified(ii, mi);
                 // post-modify: access at I and update it; pre-modify: access at I + M
                 let (addr, update) = if bits(w, 44, 44) == 1 {
-                    (self.i[ii], Some(modified))
+                    (self.dag_out(ii, self.i[ii]), Some(modified))
                 } else {
-                    (modified, None)
+                    (self.dag_out(ii, modified), None)
                 };
                 let ureg = bits(w, 29, 23) as u8;
                 let captured = self.capture(ureg);
@@ -152,23 +154,10 @@ impl Core {
             Kind::T3c => {
                 // DM(Ii, Mm) <-> Rn, post-modify, DAG1 (bits 43..41 I, 40..38 M, 37 D, 35..32 Rn)
                 let (ii, mi) = (bits(w, 43, 41) as usize, bits(w, 40, 38) as usize);
-                let addr = self.i[ii];
+                let addr = self.dag_out(ii, self.i[ii]);
                 let next_i = self.modified(ii, mi);
                 self.mem_transfer(d, addr, bits(w, 35, 32) as u8, write_bit(37))?;
                 self.i[ii] = next_i;
-            }
-            Kind::T19a => {
-                // Id = MODIFY(Is, <imm32>) honouring L/B; bit 39 selects BITREV (not modelled).
-                // Fields VERIFIED by the ADI text on 4 samples of the SMP image: G bit 38,
-                // source bits 34..32, destination = source XOR bits 37..35, immediate 31..0.
-                if write_bit(39) {
-                    return Err(self.fault(d.pc, &d.insn));
-                }
-                let bank = Self::dag_bank(bits(w, 38, 38));
-                let src = bits(w, 34, 32) as usize + bank;
-                let dst = (bits(w, 37, 35) ^ bits(w, 34, 32)) as usize + bank;
-                let imm = bits(w, 31, 0) as u32;
-                self.i[dst] = Self::dag_next(self.i[src], imm, self.l[src], self.b[src]);
             }
             Kind::T7a | Kind::T7b if d.cond_ok => {
                 // [IF cond] [compute,] [Id =] MODIFY(Is, M): G bit 38 selects DAG2, the
@@ -179,7 +168,7 @@ impl Core {
                 let mi = bits(w, 29, 27) as usize + bank;
                 let dst = src ^ bits(w, 26, 24) as usize;
                 self.run_move_compute(d, with_compute)?;
-                self.i[dst] = self.modified(src, mi);
+                self.i[dst] = self.modified_always(src, self.m[mi]);
             }
             Kind::T4a | Kind::T4b if d.cond_ok => {
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 40, 40));
@@ -188,10 +177,12 @@ impl Core {
                 // `dm(2,i6)` (VERIFIED against ADI elfdump, 220 post and 1,576 pre samples, docs 5.34)
                 let data = sign_extend(bits(w, 32, 27) as u32, 6);
                 let (addr, update) = if bits(w, 38, 38) == 1 {
-                    let (i, l, b) = (self.i[ii], self.l[ii], self.b[ii]);
-                    (i, Some(Self::dag_next(i, data, l, b)))
+                    (
+                        self.dag_out(ii, self.i[ii]),
+                        Some(self.modified_by(ii, data)),
+                    )
                 } else {
-                    (self.i[ii].wrapping_add(data), None)
+                    (self.dag_out(ii, self.i[ii].wrapping_add(data)), None)
                 };
                 let ureg = bits(w, 26, 23) as u8;
                 let captured = self.capture(ureg);
@@ -254,9 +245,12 @@ mod tests {
             0x0001,
         ]);
         assert_eq!(c.run(5), None);
-        assert_eq!(c.i[0], 0xC_0430);
-        assert_eq!(c.m[1], 1);
         assert_eq!(c.mode1, 0x4F0);
+        // BIT SET MODE1 0x4F8 selected the secondary sets (banks.rs): the registers written
+        // before it are in the hidden primary set
+        assert_eq!((c.i[0], c.m[1]), (0, 0));
+        c.write_ureg(0x72, 0);
+        assert_eq!((c.i[0], c.m[1]), (0xC_0430, 1));
         assert_eq!(c.steps, 5);
     }
 
@@ -314,6 +308,16 @@ mod tests {
         c.dm_write(0x9_0011, 22).unwrap();
         assert!(c.step().is_ok());
         assert_eq!((c.r[4], c.s[4]), (11, 22));
+    }
+
+    /// ADI: `9228 0a88` is `i5=pm(0x8,i9)`: G bit 37 selects PM and the DAG2 index.
+    #[test]
+    fn type_15b_program_memory_form_uses_the_dag2_index() {
+        let mut c = core_at_zero(&[0x9228, 0x0a88]);
+        (c.i[1], c.i[9]) = (0x9_0000, 0x9_0200);
+        c.dm_write(0x9_0208, 0x1234).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!(c.i[5], 0x1234);
     }
 
     #[test]
@@ -381,8 +385,6 @@ mod tests {
         (c.i[3], c.l[3], c.b[3]) = (0x103, 4, 0x100);
         assert!(c.step().is_ok());
         assert_eq!(c.i[3], 0x100);
-        // BITREV (bit 39) is not modelled and faults
-        assert!(core_at_zero(&[0x1683, 0x0000, 0x0001]).step().is_err());
     }
 
     #[test]

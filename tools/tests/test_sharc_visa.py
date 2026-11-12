@@ -175,6 +175,24 @@ def test_shift_immediate_matches_the_adi_disassembly():
     assert v.decode((0x023E, 0x0033, 0x0005)) == "BTST R5 BY 0"
 
 
+def test_bit_fifo_forms_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs/research/sharc-bitfifo.md; register forms
+    # read Ry (bits 3..0) for BITEXT and BFFWRP, immediates keep DATA12[5:0] / DATA12[6:0]
+    assert v.compute_text(0x250312) == "R3 = BITEXT R2"
+    assert v.compute_text(0x258312) == "R3 = BITEXT R2 (NU)"
+    assert v.compute_text(0x270312) == "R3 = BFFWRP"
+    assert v.compute_text(0x274312) == "BITDEP R1 BY R2"
+    assert v.compute_text(0x27C312) == "BFFWRP = R2"
+    assert v.decode((0x023E, 0x0014, 0x7F35)) == "R3 = BITEXT 63"
+    assert v.decode((0x023E, 0x7816, 0xFF35)) == "R3 = BITEXT 63 (NU)"
+    assert v.decode((0x023E, 0x081D, 0x23AC)) == "BITDEP R12 BY 35"
+    assert v.decode((0x023E, 0x001D, 0x8035)) == "BITDEP R5 BY 0"
+    assert v.decode((0x023E, 0x781F, 0xFF35)) == "BFFWRP = 127"
+    assert v.decode((0x023E, 0x401F, 0x0035)) == "BFFWRP = 0"
+    assert v.decode((0x013E, 0x0025, 0x0312)) == "R3 = BITEXT R2"
+    assert v.decode((0x013E, 0x0027, 0xC312)) == "BFFWRP = R2"
+
+
 def test_register_moves_and_swaps_match_the_adi_disassembly():
     # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
     assert v.decode((0x703E, 0x933F)) == "M6 = R1"
@@ -200,6 +218,25 @@ def test_dual_moves_immediate_stores_and_modify_match_the_adi_disassembly():
     assert v.decode((0x9BC4, 0x3E9D)) == "DM(I5, M7) = 0x3e9d"
     assert v.decode((0x043E, 0x583F)) == "I1 = MODIFY(I1, M3)"
     assert v.decode((0x043F, 0xD808, 0x1BAE)) == "I7 = MODIFY(I7, M3), F11 = F10 + F14"
+
+
+def test_type_15b_program_memory_form_matches_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1): `i5=pm(0x8,i9)`
+    assert v.decode((0x9228, 0x0A88)) == "I5 = PM(8, I9)"
+
+
+def test_shift_immediate_with_a_data_move_matches_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.36
+    assert v.decode((0x8B7E, 0x3011, 0x4650)) == "R5 = FDEP R0 BY 6:25, R0 = DM(I5, M5)"
+
+
+def test_multiplier_result_register_transfers_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.36
+    assert v.decode((0x5EBE, 0x8440, 0x1100)) == "DM(I7, M2) = R8, R1 = MR1F"
+    assert v.decode((0x5CBE, 0x0440, 0x0000)) == "R8 = DM(I6, M2), R0 = MR0F"
+    assert v.mr_transfer_text(0x11, 3) == "MR1F = R3"
+    assert v.mr_transfer_text(0x15, 3) == "MR1B = R3"
+    assert v.mr_transfer_text(0x03, 3) is None
 
 
 def test_post_modify_modify_bank_and_loop_counts_match_the_adi_disassembly():

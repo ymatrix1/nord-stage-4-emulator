@@ -31,13 +31,18 @@ impl Core {
         }
         let p0 = self.parcel(pc);
         let p1 = self.parcel(pc.wrapping_add(1));
-        let (kind, len) = classify(p0, Some(p1));
+        let (mut kind, mut len) = classify(p0, Some(p1));
         let mut parcels = [p0, 0, 0];
         if len > 1 {
             parcels[1] = p1;
         }
         if len > 2 {
             parcels[2] = self.parcel(pc.wrapping_add(2));
+        }
+        if let Some(isa) = self.isa_window_parcels(pc) {
+            // interrupt vector slot: 48-bit ISA words, least significant parcel first
+            parcels = isa;
+            (kind, len) = (classify(isa[0], Some(isa[1])).0, 3);
         }
         let w = word48(&parcels[..len]);
         Decoded {
@@ -80,6 +85,9 @@ impl Core {
 
     /// Executes one instruction. Returns `Ok(())` or the reason it could not.
     pub fn step(&mut self) -> Result<(), Fault> {
+        if self.steps >= self.irq.due && self.sequencer_event() {
+            return Ok(()); // the core slept in IDLE for this step
+        }
         let d = self.fetch(self.pc);
         let mut next = d.pc.wrapping_add(if self.isa_mode() {
             1
@@ -88,11 +96,15 @@ impl Core {
         });
         match d.kind() {
             Kind::T21c if d.insn.parcels[0] == 0x0001 => {}
+            // IDLE (0x0081 and 0x0091 both print as `idle` in ADI's elfdump)
+            Kind::T21c if d.insn.parcels[0] | 0x10 == 0x0091 => self.enter_idle(),
+            Kind::T19a => self.exec_modify_imm(&d),
             Kind::T21 if d.w == 0 => {}
             // FLUSH CACHE: the instruction cache is not modelled, so there is nothing to flush
             Kind::T20a => {}
             Kind::T2a | Kind::T2b | Kind::T2c => self.exec_compute(&d)?,
             Kind::T6n => self.exec_shift_imm(&d)?,
+            Kind::T6a => self.exec_shift_move(&d)?,
             Kind::T1a | Kind::T1b => self.exec_dual_move(&d)?,
             Kind::T8a | Kind::T9a | Kind::T9b | Kind::T11a | Kind::T11c | Kind::T12a => {
                 next = self.exec_flow(&d, next)?;
@@ -105,7 +117,6 @@ impl Core {
             | Kind::T16a
             | Kind::T16b
             | Kind::T18a
-            | Kind::T19a
             | Kind::T5a
             | Kind::T5b
             | Kind::T3a
@@ -119,6 +130,9 @@ impl Core {
         }
         self.pc = self.finish_step(&d, next);
         self.steps += 1;
+        if self.irq.window_len != 0 {
+            self.close_window_if_left();
+        }
         Ok(())
     }
 
@@ -197,7 +211,7 @@ mod tests {
 
     #[test]
     fn faulting_step_leaves_state_untouched() {
-        let mut c = core_with(&[0x8000, 0x0000, 0x0000]);
+        let mut c = core_with(&[0xd70a, 0x3c23, 0xd70a]);
         let before = (c.pc, c.steps);
         assert!(c.step().is_err());
         assert_eq!((c.pc, c.steps), before);

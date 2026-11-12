@@ -18,7 +18,10 @@ impl Core {
         let (pmi, pmm) = (bits(w, 32, 30) as usize + 8, bits(w, 29, 27) as usize + 8);
         let (dm_reg, pm_reg) = (bits(w, 36, 33) as u8, bits(w, 26, 23) as u8);
         let (dm_write, pm_write) = (bits(w, 44, 44) == 1, bits(w, 37, 37) == 1);
-        let (dm_addr, pm_addr) = (self.i[dmi], self.i[pmi]);
+        let (dm_addr, pm_addr) = (
+            self.dag_out(dmi, self.i[dmi]),
+            self.dag_out(pmi, self.i[pmi]),
+        );
         let (dm_next, pm_next) = (self.modified(dmi, dmm), self.modified(pmi, pmm));
         let dm_captured = self.capture(dm_reg);
         let pm_captured = self.capture(pm_reg);

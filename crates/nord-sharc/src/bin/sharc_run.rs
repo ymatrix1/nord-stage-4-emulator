@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--pins MASK] [--irq STEP:VECTOR]... [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--enter STEP:PC]... [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -6,7 +6,7 @@
 //! early, the faulting instruction in the listing format of `sharc-disasm`. Use the images written
 //! by `python tools/ns4_dsp_ldr.py IMG --sram DIR` and the section entry value (for example
 //! `0x1211E3` for the FX image).
-use nord_sharc::core::{Core, Fault};
+use nord_sharc::core::{vector_by_name, Core, Fault};
 use nord_sharc::visa::{classify, classify_isa, decode_text, Insn};
 use std::process::ExitCode;
 
@@ -96,6 +96,8 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut positional = Vec::new();
     let mut devices = Vec::new();
     let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
+    let mut irqs: Vec<(u64, u8)> = Vec::new();
+    let mut flags: Vec<(u8, bool)> = Vec::new();
     let mut registers: Vec<(u8, u32)> = Vec::new();
     let mut dumps: Vec<(u32, u32)> = Vec::new();
     let mut watch = u32::MAX;
@@ -104,8 +106,7 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut trace = 0usize;
     let mut lenient = false;
     let mut isa = false;
-    let mut pins = 0u32;
-    let mut irqs: Vec<(u64, u32)> = Vec::new();
+    let mut enters: Vec<(u64, u32)> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -127,19 +128,36 @@ fn run(args: &[String]) -> Result<String, String> {
                     parse_number(value).ok_or("bad --poke value")? as u32,
                 ));
             }
-            "--lenient" => lenient = true,
-            "--isa" => isa = true,
             "--irq" => {
-                let spec = it.next().ok_or("--irq needs STEP:VECTOR")?;
-                let (step, vector) = spec.split_once(':').ok_or("--irq needs STEP:VECTOR")?;
+                // N@STEP: raise interrupt vector N (number or name such as P4I) at core cycle STEP
+                let spec = it.next().ok_or("--irq needs N@STEP")?;
+                let (n, step) = spec.split_once('@').ok_or("--irq needs N@STEP")?;
                 irqs.push((
                     parse_number(step).ok_or("bad --irq step")?,
-                    parse_number(vector).ok_or("bad --irq vector")? as u32,
+                    vector_by_name(n).ok_or("bad --irq vector (0-41 or a name such as P4I)")?,
                 ));
             }
-            "--pins" => {
-                pins =
-                    parse_number(it.next().ok_or("--pins needs MASK")?).ok_or("bad --pins")? as u32;
+            "--flag" => {
+                // N=LEVEL: drive the FLAGn pin (an input flag reads this level)
+                let spec = it.next().ok_or("--flag needs N=LEVEL")?;
+                let (n, level) = spec.split_once('=').ok_or("--flag needs N=LEVEL")?;
+                flags.push((
+                    parse_number(n)
+                        .filter(|n| *n < 16)
+                        .ok_or("bad --flag number")? as u8,
+                    parse_number(level).ok_or("bad --flag level")? != 0,
+                ));
+            }
+            "--lenient" => lenient = true,
+            "--isa" => isa = true,
+            "--enter" => {
+                // STEP:PC enters a handler body directly (no IRPTL/IMASK model); see `--irq`
+                let spec = it.next().ok_or("--enter needs STEP:PC")?;
+                let (step, pc) = spec.split_once(':').ok_or("--enter needs STEP:PC")?;
+                enters.push((
+                    parse_number(step).ok_or("bad --enter step")?,
+                    parse_number(pc).ok_or("bad --enter pc")? as u32,
+                ));
             }
             "--skips" => histogram = true,
             "--regs" => show_regs = true,
@@ -172,7 +190,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--pins MASK] [--irq STEP:VECTOR]... [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--enter STEP:PC]... [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -187,7 +205,6 @@ fn run(args: &[String]) -> Result<String, String> {
         Core::new(&data)
     };
     core.lenient = lenient;
-    core.flag_pins = pins;
     core.watch = watch;
     core.pc = entry;
     for (code, value) in registers {
@@ -196,22 +213,31 @@ fn run(args: &[String]) -> Result<String, String> {
     for (addr, value) in devices {
         core.preset_device(addr, value);
     }
+    for (n, high) in flags {
+        core.set_flag_input(n, high);
+    }
+    for (step, vector) in irqs {
+        core.schedule_interrupt(step, vector);
+    }
     pokes.sort_by_key(|p| p.0);
-    irqs.sort_by_key(|p| p.0);
-    let mut next_irq = 0;
+    enters.sort_by_key(|p| p.0);
+    let mut next_enter = 0;
     let mut recent = std::collections::VecDeque::with_capacity(trace + 1);
     let mut fault = None;
     let mut next_poke = 0;
     while core.steps < max_steps && fault.is_none() {
+        if core.is_idle() && !core.can_wake() && next_poke >= pokes.len() {
+            break; // IDLE with nothing left that could end it
+        }
         while next_poke < pokes.len() && pokes[next_poke].0 <= core.steps {
             let (_, addr, value) = pokes[next_poke];
             core.dm_write(addr, value)
                 .map_err(|a| format!("bad poke address 0x{a:x}"))?;
             next_poke += 1;
         }
-        while next_irq < irqs.len() && irqs[next_irq].0 <= core.steps {
-            core.interrupt(irqs[next_irq].1);
-            next_irq += 1;
+        while next_enter < enters.len() && enters[next_enter].0 <= core.steps {
+            core.enter_handler(enters[next_enter].1);
+            next_enter += 1;
         }
         if trace > 0 {
             recent.push_back(core.pc);
@@ -223,7 +249,7 @@ fn run(args: &[String]) -> Result<String, String> {
         let until = pokes
             .get(next_poke)
             .map_or(max_steps, |p| p.0.min(max_steps))
-            .min(irqs.get(next_irq).map_or(max_steps, |q| q.0));
+            .min(enters.get(next_enter).map_or(max_steps, |q| q.0));
         if trace == 0 {
             let n = until.saturating_sub(core.steps).max(1);
             fault = core.run(n);
@@ -236,6 +262,23 @@ fn run(args: &[String]) -> Result<String, String> {
 ",
         core.steps, core.pc, core.device_reads, core.device_writes
     );
+    if core.interrupts_taken() > 0 || core.is_idle() {
+        out.push_str(&format!(
+            "interrupts taken {}, cycles {}{}
+",
+            core.interrupts_taken(),
+            core.cycles(),
+            if core.is_idle() {
+                if core.can_wake() {
+                    ", sleeping in IDLE"
+                } else {
+                    ", halted in IDLE (nothing can wake it)"
+                }
+            } else {
+                ""
+            }
+        ));
+    }
     if core.skipped > 0 {
         out.push_str(&format!(
             "skipped {} unmodelled compute ops, first at 0x{:x}
@@ -331,8 +374,8 @@ mod tests {
     fn runs_a_tiny_image_and_reports_the_stop_reason() {
         let path = std::env::temp_dir().join("nord_sharc_run_test.bin");
         let mut image = vec![0u8; 0x24_0000 + 16];
-        // at short-word 0x120000 (byte 0x240000): NOP, then an unimplemented Type 6a word
-        for (k, p) in [0x0001u16, 0x8000, 0x0000, 0x0000].iter().enumerate() {
+        // at short-word 0x120000 (byte 0x240000): NOP, then an unimplemented Type 10a word
+        for (k, p) in [0x0001u16, 0xd70a, 0x3c23, 0xd70a].iter().enumerate() {
             image[0x24_0000 + 2 * k..0x24_0000 + 2 * k + 2].copy_from_slice(&p.to_le_bytes());
         }
         std::fs::write(&path, &image).unwrap();
@@ -380,15 +423,13 @@ mod tests {
         ])
         .unwrap();
         assert!(poked.contains("steps 1 pc"), "{poked}");
-        // --irq enters a handler after the given step; --pins scripts the FLAG inputs
+        // --enter goes into a handler body after the given step
         let irq = run(&[
             p.clone(),
             "0x120000".into(),
             "5".into(),
-            "--irq".into(),
+            "--enter".into(),
             "1:0x120000".into(),
-            "--pins".into(),
-            "0x1000000".into(),
         ])
         .unwrap();
         assert!(irq.contains("steps 2 pc 0x120001"), "{irq}");
@@ -400,11 +441,10 @@ mod tests {
             p.clone(),
             "0".into(),
             "1".into(),
-            "--irq".into(),
+            "--enter".into(),
             "x".into()
         ])
         .is_err());
-        assert!(run(&[p.clone(), "0".into(), "1".into(), "--pins".into()]).is_err());
         assert_eq!(register_code("I8"), Some(0x18));
         assert_eq!(register_code("R15"), Some(0x0F));
         assert_eq!(register_code("X1"), None);
@@ -430,10 +470,10 @@ mod tests {
         assert!(len.contains("steps 1"), "{len}");
         assert!(run(&[p, "0".into(), "1".into(), "--poke".into(), "x".into()]).is_err());
         std::fs::remove_file(&path).ok();
-        // a lenient run lists the skipped operation: `IF TRUE F1 = FPACK F2` is not modelled
+        // a lenient run lists the skipped operation: an MR3 transfer (compute 0x403000) does not exist
         let skip_path = std::env::temp_dir().join("nord_sharc_run_skip_test.bin");
         let mut image = vec![0u8; 0x24_0000 + 16];
-        for (k, p) in [0x013eu16, 0x0029, 0x0112, 0x0001].iter().enumerate() {
+        for (k, p) in [0x013eu16, 0x0040, 0x3000, 0x0001].iter().enumerate() {
             image[0x24_0000 + 2 * k..0x24_0000 + 2 * k + 2].copy_from_slice(&p.to_le_bytes());
         }
         std::fs::write(&skip_path, &image).unwrap();
@@ -447,32 +487,48 @@ mod tests {
         ])
         .unwrap();
         assert!(skipped.contains("skipped operations by text:"), "{skipped}");
-        assert!(skipped.contains("FPACK"), "{skipped}");
+        assert!(skipped.contains("MULTI?op=03"), "{skipped}");
         std::fs::remove_file(skip_path).ok();
-        // ISA mode: NOP, then `IF TRUE F1 = FPACK F2` as a 48-bit word (stored 6 bytes each, LS first)
+        // ISA mode: NOP, then a Type 10a word (jump + dual move, not executed) as 48-bit words
         let isa_path = std::env::temp_dir().join("nord_sharc_run_isa_test.bin");
         let mut image = Vec::new();
-        for w in [[0u16; 3], [0x013e, 0x0029, 0x0112]] {
+        for w in [[0u16; 3], [0xC13E, 0x0000, 0x0000]] {
             for p in [w[2], w[1], w[0]] {
                 image.extend_from_slice(&p.to_le_bytes());
             }
         }
         std::fs::write(&isa_path, &image).unwrap();
         let ip = isa_path.to_string_lossy().to_string();
-        let text = run(&[ip.clone(), "0x8c000".into(), "10".into(), "--isa".into()]).unwrap();
+        let text = run(&[ip, "0x8c000".into(), "10".into(), "--isa".into()]).unwrap();
         assert!(text.contains("steps 1 pc 0x8c001"), "{text}");
-        assert!(text.contains("unimplemented at 0x8c001: 2a"), "{text}");
-        let lenient = run(&[
-            ip,
-            "0x8c000".into(),
-            "10".into(),
-            "--isa".into(),
-            "--lenient".into(),
-            "--skips".into(),
-        ])
-        .unwrap();
-        assert!(lenient.contains("FPACK"), "{lenient}");
-        assert!(lenient.contains("unimplemented at 0x8c002"), "{lenient}");
+        assert!(text.contains("unimplemented at 0x8c001: 10a"), "{text}");
         std::fs::remove_file(isa_path).ok();
+    }
+
+    #[test]
+    fn irq_flag_and_idle_options() {
+        let path = std::env::temp_dir().join("nord_sharc_run_idle_test.bin");
+        let mut image = vec![0u8; 0x24_0000 + 0x400];
+        // IDLE (16-bit 0x0091) at short-word 0x120100
+        image[0x24_0200..0x24_0202].copy_from_slice(&0x0091u16.to_le_bytes());
+        std::fs::write(&path, &image).unwrap();
+        let p = path.to_string_lossy().to_string();
+        let args = |extra: &[&str]| {
+            let mut v = vec![p.clone(), "0x120100".into(), "5000".into()];
+            v.extend(extra.iter().map(|s| s.to_string()));
+            v
+        };
+        // an interrupt that is masked cannot end the IDLE: the run reports it and stops early
+        let text = run(&args(&["--irq", "P0I@500", "--flag", "1=1"])).unwrap();
+        assert!(text.contains("halted in IDLE"), "{text}");
+        assert!(text.contains("interrupts taken 0"), "{text}");
+        // while an interrupt is still scheduled the core sleeps and the run reaches the limit
+        let mut short = args(&["--irq", "P0I@900000"]);
+        short[2] = "2".into();
+        let text = run(&short).unwrap();
+        assert!(text.contains("sleeping in IDLE"), "{text}");
+        assert!(run(&args(&["--irq", "99@5"])).is_err());
+        assert!(run(&args(&["--irq", "P0I"])).is_err());
+        assert!(run(&args(&["--flag", "16=1"])).is_err());
     }
 }

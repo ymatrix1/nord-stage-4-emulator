@@ -22,7 +22,7 @@ impl Core {
             return next;
         }
         if call {
-            self.call_stack.push(next);
+            self.push_return(next);
         }
         target
     }
@@ -67,6 +67,9 @@ impl Core {
                     .call_stack
                     .pop()
                     .ok_or_else(|| self.fault(pc, &d.insn))?;
+                if bits(w, 40, 40) == 1 {
+                    self.return_from_interrupt(); // RTI: ends the service of the interrupt
+                }
                 if bits(w, 38, 38) == 1 {
                     self.pending = Some(Pending {
                         slots: DELAY_SLOTS + 1,
@@ -93,7 +96,7 @@ impl Core {
                 if count == 0 {
                     return Err(self.fault(pc, &d.insn));
                 }
-                self.loops.push(LoopFrame {
+                self.push_loop(LoopFrame {
                     start: next,
                     end,
                     remaining: count,
@@ -108,7 +111,7 @@ impl Core {
     /// Enters an interrupt service routine at `vector`: the current pc becomes the return
     /// address of the `RTI`. A harness stand-in for interrupt dispatch (no IRPTL/IMASK/priority
     /// model, no delay-slot or loop-end handling), used to run ISR bodies in isolation.
-    pub fn interrupt(&mut self, vector: u32) {
+    pub fn enter_handler(&mut self, vector: u32) {
         self.call_stack.push(self.pc);
         self.pc = vector;
     }
@@ -141,7 +144,7 @@ impl Core {
             } else {
                 self.pending = None;
                 if p.call {
-                    self.call_stack.push(next);
+                    self.push_return(next);
                 }
                 next = p.target;
             }
@@ -175,12 +178,12 @@ mod tests {
     }
 
     #[test]
-    fn interrupt_pushes_the_pc_and_rti_returns_to_it() {
+    fn enter_handler_pushes_the_pc_and_rti_returns_to_it() {
         // vector at 0x10: RTI (type 11c, 0abe is RTS; RTI is 0b3e in the 48-bit form)
         let mut c = core_at_zero(&[0x0001, 0x0001]);
         super::super::support::load(&mut c, 0x10, &[0x0B3E, 0x0000, 0x0000]);
         c.pc = 1;
-        c.interrupt(0x10);
+        c.enter_handler(0x10);
         assert_eq!((c.pc, c.return_addresses().to_vec()), (0x10, vec![1]));
         assert!(c.step().is_ok());
         assert_eq!(c.pc, 1, "RTI resumes where the interrupt hit");

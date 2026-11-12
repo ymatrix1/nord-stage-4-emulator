@@ -7,31 +7,46 @@
 //!
 //! Provenance of the modelled semantics: instruction layouts are the ones verified in
 //! `visa.rs`; behaviour follows the SHARC Processor Programming Reference rev 2.4. Float results
-//! use IEEE single precision with round to nearest (ASSUMED: the hardware default 40-bit extended
-//! precision is not modelled yet, see the spec's risk list).
+//! use the 40-bit extended format with the MODE1 TRUNC / RND32 rounding modes (`float.rs`).
 //!
 //! Layout: this file holds the state and the small shared helpers; `memory` the data memory and
 //! register files, `dag` address generation, `alu` and `multiplier` the compute units, `moves`
 //! the data and register transfers, `branch` jumps, calls, loops and delay slots, and `exec` the
-//! single-step decoder that dispatches to them.
+//! single-step decoder that dispatches to them. The sequencer system (`interrupts` controller and
+//! IVT dispatch, `timer` and cycle clock, `sysregs` system registers and stacks, `banks` secondary
+//! register sets) is described in `docs/research/sharc-sequencer.md`.
 
 mod alu;
+mod banks;
+mod bitfifo;
 mod branch;
 mod dag;
 mod dualmove;
 mod exec;
+mod float;
+mod float_conv;
+mod float_misc;
+mod float_ops;
+mod interrupts;
+#[cfg(test)]
+mod irq_scenarios;
 mod isa;
 mod memory;
 mod moves;
 mod multifunction;
 mod multiplier;
 mod shifter;
+mod stacks;
 #[cfg(test)]
 mod support;
+mod sysregs;
+mod timer;
+mod vectors;
 
 use crate::visa::Insn;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
+pub use vectors::{vector_by_name, VECTOR_COUNT};
 
 /// Bytes of the flat SRAM image: index = `address & 0x7FFFFF` (loader address), byte `2 * short`.
 pub const SRAM_BYTES: usize = 0x40_0000;
@@ -84,11 +99,16 @@ pub struct Flags {
     pub an: bool,
     pub av: bool,
     pub ac: bool,
+    /// Float invalid-operation flag (AI) and the sign flag of ABS/MANT (AS).
+    pub ai: bool,
+    pub as_: bool,
     pub tf: bool,
     /// Shifter flags: zero result, overflow and sign.
     pub sz: bool,
     pub sv: bool,
     pub ss: bool,
+    /// Shifter bit FIFO of this processing element (`SF` is derived from its write pointer).
+    pub fifo: bitfifo::BitFifo,
 }
 
 /// Loop stack entry of `DO ... UNTIL LCE`.
@@ -135,17 +155,15 @@ pub struct Core {
     pub watch: u32,
     /// Writes to the watched address as `(step, pc, value)`, at most [`WATCH_LIMIT`].
     pub watch_hits: Vec<(u64, u32, u32)>,
-    /// Value of the FLAGS register as written by the program (bit set/clear/write).
-    pub flags_reg: u32,
-    /// Level of the FLAG0..3 input pins (FLAGS bits 24..27), scripted by the harness; OR-ed into
-    /// every read of FLAGS. ASSUMED bit positions: the SY1SY2/SMP start-up polls bit 24.
-    pub flag_pins: u32,
     pub imask: u32,
     pub mmask: u32,
     pub flags: Flags,
     /// PEy condition flags and multiplier result registers (used in SIMD mode).
     pub flags_y: Flags,
     pub mr_y: [i128; 2],
+    /// Low 8 bits of the 40-bit float registers of PEx and PEy (see `float_ops`).
+    fx: float_ops::ExtFile,
+    fx_y: float_ops::ExtFile,
     /// Number of instructions executed.
     pub steps: u64,
     sram: Box<[u8]>,
@@ -160,14 +178,13 @@ pub struct Core {
     call_stack: Vec<u32>,
     loops: Vec<LoopFrame>,
     pending: Option<Pending>,
+    irq: interrupts::IrqState,
+    timer: timer::TimerState,
+    sys: sysregs::SysState,
+    banks: banks::Banks,
     /// ISA-mode program memory ([`isa`]): 3 parcels (most significant first) per 48-bit word.
     /// Empty = VISA mode, where `pc` addresses the flat SRAM image in parcels.
     isa_code: Vec<u16>,
-}
-
-#[inline]
-fn f32_of(x: u32) -> f32 {
-    f32::from_bits(x)
 }
 
 #[inline]
@@ -200,13 +217,13 @@ impl Core {
             skipped_pcs: Vec::new(),
             watch: u32::MAX,
             watch_hits: Vec::new(),
-            flags_reg: 0,
-            flag_pins: 0,
             imask: 0,
-            mmask: 0,
+            mmask: sysregs::MMASK_RESET,
             flags: Flags::default(),
             flags_y: Flags::default(),
             mr_y: [0; 2],
+            fx: float_ops::ExtFile::default(),
+            fx_y: float_ops::ExtFile::default(),
             steps: 0,
             sram: mem,
             iop: vec![0u32; IOP_WORDS].into_boxed_slice(),
@@ -217,6 +234,10 @@ impl Core {
             call_stack: Vec::with_capacity(64),
             loops: Vec::with_capacity(8),
             pending: None,
+            irq: interrupts::IrqState::new(),
+            timer: timer::TimerState::default(),
+            sys: sysregs::SysState::new(),
+            banks: banks::Banks::default(),
             isa_code: Vec::new(),
         }
     }
@@ -247,6 +268,7 @@ impl Core {
         std::mem::swap(&mut self.r, &mut self.s);
         std::mem::swap(&mut self.flags, &mut self.flags_y);
         std::mem::swap(&mut self.mr, &mut self.mr_y);
+        std::mem::swap(&mut self.fx, &mut self.fx_y);
     }
 
     /// Whether condition code `c` (0..32, `31` = TRUE) holds for PEx.
@@ -265,6 +287,8 @@ impl Core {
             4 => f.av,
             7 => f.sv,
             8 => f.sz,
+            // BM on ADSP-2136x/2146x; on the ADSP-214xx the same code selects SF (table 10-4)
+            14 => f.fifo.sf(),
             13 => f.tf,
             15 => !lce,
             _ => false,
@@ -329,7 +353,7 @@ mod tests {
 
     #[test]
     fn unimplemented_instruction_is_reported_not_guessed() {
-        let mut c = core_with(&[0x8000, 0x0000, 0x0000]);
+        let mut c = core_with(&[0xd70a, 0x3c23, 0xd70a]);
         assert!(matches!(
             c.step(),
             Err(Fault::Unimplemented { pc: 0x12_0000, .. })
@@ -342,8 +366,8 @@ mod tests {
 
     #[test]
     fn lenient_mode_skips_unmodelled_compute_and_counts_it() {
-        // type 2a word `IF TRUE F1 = FPACK F2` (shifter op 0x90, not modelled) at short-word 0
-        let parcels = [0x013eu16, 0x0029, 0x0112, 0x0000];
+        // type 2a word `IF TRUE` with compute 0x40_3000: an MR transfer of MR3, which does not exist
+        let parcels = [0x013eu16, 0x0040, 0x3000, 0x0000];
         let mut strict = core_at_zero(&parcels);
         assert!(strict.step().is_err());
         let mut c = core_at_zero(&parcels);

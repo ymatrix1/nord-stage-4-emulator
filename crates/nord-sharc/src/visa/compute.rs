@@ -78,10 +78,13 @@ pub(super) fn shift_template(opcode: u64) -> Option<&'static str> {
         0x8C => "R{n} = LEFTO R{x}",
         0x90 => "R{n} = FPACK F{x}",
         0x94 => "F{n} = FUNPACK R{x}",
+        // bit FIFO, VERIFIED against ADI's elfdump (docs/research/sharc-bitfifo.md): the operand
+        // register of BITEXT and BFFWRP is Ry (bits 3..0), not Rx
         0x74 => "BITDEP R{x} BY R{y}",
-        0x50 => "R{n} = BITEXT R{x}",
-        0x58 => "R{n} = BITEXT R{x} (NU)",
-        0x70 => "R{n} = BFFWRP1",
+        0x50 => "R{n} = BITEXT R{y}",
+        0x58 => "R{n} = BITEXT R{y} (NU)",
+        0x70 => "R{n} = BFFWRP",
+        0x7C => "BFFWRP = R{y}",
         _ => return None,
     })
 }
@@ -109,16 +112,30 @@ pub fn shift_imm_text(w: u64) -> String {
         19 => format!("R{n} = FDEP R{x} BY {field} (SE)"),
         25 => format!("R{n} = R{n} OR FDEP R{x} BY {field}"),
         27 => format!("R{n} = R{n} OR FDEP R{x} BY {field} (SE)"),
-        20 => format!("R{n} = BITEXT {data}"),
-        22 => format!("R{n} = BITEXT {data} (NU)"),
-        29 => format!("BITDEP R{x} BY {data}"),
-        31 => format!("BFFWRP = {data}"),
+        // bit FIFO immediates keep DATA12[5:0] (length) or DATA12[6:0] (pointer), as ADI prints them
+        20 => format!("R{n} = BITEXT {}", data & 63),
+        22 => format!("R{n} = BITEXT {} (NU)", data & 63),
+        29 => format!("BITDEP R{x} BY {}", data & 63),
+        31 => format!("BFFWRP = {}", data & 127),
         48 => format!("R{n} = BSET R{x} BY {data}"),
         49 => format!("R{n} = BCLR R{x} BY {data}"),
         50 => format!("R{n} = BTGL R{x} BY {data}"),
         51 => format!("BTST R{x} BY {data}"),
         _ => format!("SHIFTIMM?op={op} n={n} x={x} data={data}"),
     }
+}
+
+/// `Rn = MR1F` / `MR1F = Rn` and friends (operation code bits 19..12, register bits 11..8).
+fn mr_transfer_text(op: u64, n: u64) -> Option<String> {
+    if op & 3 == 3 || op & !0x17 != 0 {
+        return None;
+    }
+    let mr = format!("MR{}{}", op & 3, if (op >> 2) & 1 == 1 { 'B' } else { 'F' });
+    Some(if (op >> 4) & 1 == 1 {
+        format!("{mr} = R{n}")
+    } else {
+        format!("R{n} = {mr}")
+    })
 }
 
 pub(super) fn mulalu_template(opcode: u64) -> Option<&'static str> {
@@ -259,6 +276,9 @@ pub fn multi_text(c: u64) -> Option<String> {
     if bits(c, 22, 22) == 0 {
         return None;
     }
+    if bits(c, 21, 17) == 0 {
+        return mr_transfer_text(bits(c, 19, 12), bits(c, 11, 8));
+    }
     let xm = bits(c, 7, 6);
     let ym = 4 + bits(c, 5, 4);
     let xa = 8 + bits(c, 3, 2);
@@ -365,5 +385,31 @@ mod tests {
         );
         assert_eq!(mult_text(0x10, 0, 1, 2), None);
         assert_eq!(short_compute_text(0x0804), "F0 = F0 + F4");
+    }
+
+    /// ADI `elfdump` texts (`docs/research/sharc-bitfifo.md`) for the bit FIFO compute fields:
+    /// `r3=bitext r2`, `r3=bitext r2 (nu)`, `r3=bffwrp`, `bitdep r1 by r2`, `bffwrp=r2` with
+    /// `Rn = 3`, `Rx = 1`, `Ry = 2`.
+    #[test]
+    fn bit_fifo_register_forms_match_adi() {
+        assert_eq!(compute_text(0x250312), "R3 = BITEXT R2");
+        assert_eq!(compute_text(0x258312), "R3 = BITEXT R2 (NU)");
+        assert_eq!(compute_text(0x270312), "R3 = BFFWRP");
+        assert_eq!(compute_text(0x274312), "BITDEP R1 BY R2");
+        assert_eq!(compute_text(0x27C312), "BFFWRP = R2");
+    }
+
+    /// ADI texts of the shift-immediate bit FIFO words: `023e 0014 7f35` is `r3=bitext 0x3f`,
+    /// `023e 7816 ff35` is `r3=bitext 0x3f (nu)`, `023e 081d 23ac` is `bitdep r12 by 0x23`,
+    /// `023e 001d 8035` is `bitdep r5 by 0`, `023e 781f ff35` is `bffwrp=0x7f`.
+    #[test]
+    fn bit_fifo_immediate_forms_match_adi() {
+        let w = |p1: u64, p2: u64| (0x023e << 32) | (p1 << 16) | p2;
+        assert_eq!(shift_imm_text(w(0x0014, 0x7f35)), "R3 = BITEXT 63");
+        assert_eq!(shift_imm_text(w(0x7816, 0xff35)), "R3 = BITEXT 63 (NU)");
+        assert_eq!(shift_imm_text(w(0x081d, 0x23ac)), "BITDEP R12 BY 35");
+        assert_eq!(shift_imm_text(w(0x001d, 0x8035)), "BITDEP R5 BY 0");
+        assert_eq!(shift_imm_text(w(0x781f, 0xff35)), "BFFWRP = 127");
+        assert_eq!(shift_imm_text(w(0x401f, 0x0035)), "BFFWRP = 0");
     }
 }

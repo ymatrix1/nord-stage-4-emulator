@@ -20,25 +20,33 @@ impl Core {
     /// Runs `alu` (a compute word writing `Ra`) and `mult` (a closure) from the same original
     /// register values. Returns false, with the state restored, when either half is not modelled.
     fn parallel(&mut self, ra: usize, alu: u64, mult: impl Fn(&mut Core) -> bool) -> bool {
-        let (orig, flags) = (self.r, self.flags);
+        let (orig, flags, fx) = (self.r, self.flags, self.fx);
         let alu_ok = self.compute(alu);
-        let (alu_value, alu_flags) = (self.r[ra], self.flags);
+        let (alu_value, alu_flags, alu_fx) = (self.r[ra], self.flags, self.fx);
         self.r = orig;
+        self.fx = fx;
         self.flags = flags;
         let mr = self.mr;
         if !alu_ok || !mult(self) {
             self.r = orig;
+            self.fx = fx;
             self.flags = flags;
             self.mr = mr;
             return false;
         }
         self.r[ra] = alu_value;
+        self.fx.take(&alu_fx, ra);
         self.flags = alu_flags;
         true
     }
 
     /// Multiplier plus ALU forms (compute bit 22 set), Tables 12-12 and 12-13.
     pub(super) fn multifunction(&mut self, c: u64) -> bool {
+        // multifunction op6 0 or 1 (bits 21..17 clear; no multiplier+ALU form uses them): the
+        // multiplier result register transfers `Rn = MRxF`, `MRxF = Rn`
+        if bits(c, 21, 17) == 0 {
+            return self.mr_transfer(bits(c, 19, 12), bits(c, 11, 8) as usize);
+        }
         let (xm, ym) = (bits(c, 7, 6) as usize, 4 + bits(c, 5, 4) as usize);
         let (xa, ya) = (8 + bits(c, 3, 2), 12 + bits(c, 1, 0));
         let (rm, ra) = (bits(c, 15, 12) as usize, bits(c, 11, 8));
@@ -48,13 +56,15 @@ impl Core {
             let float = bits(c, 20, 20) == 1;
             let rs = bits(c, 19, 16);
             let (add, sub) = if float { (0x81, 0x82) } else { (0x01, 0x02) };
-            let (orig, flags) = (self.r, self.flags);
+            let (orig, flags, fx) = (self.r, self.flags, self.fx);
             let ok_add = self.compute(alu_word(add, ra));
-            let sum = self.r[ra as usize];
+            let (sum, sum_fx) = (self.r[ra as usize], self.fx);
             self.r = orig;
+            self.fx = fx;
             let ok_sub = self.compute(alu_word(sub, rs));
-            let diff = self.r[rs as usize];
+            let (diff, diff_fx) = (self.r[rs as usize], self.fx);
             self.r = orig;
+            self.fx = fx;
             let mult_ok = if float {
                 self.compute(
                     (1 << 20) | (0x30 << 12) | ((rm as u64) << 8) | ((xm as u64) << 4) | ym as u64,
@@ -64,11 +74,14 @@ impl Core {
             };
             if !(ok_add && ok_sub && mult_ok) {
                 self.r = orig;
+                self.fx = fx;
                 self.flags = flags;
                 return false;
             }
             self.r[ra as usize] = sum;
             self.r[rs as usize] = diff;
+            self.fx.take(&sum_fx, ra as usize);
+            self.fx.take(&diff_fx, rs as usize);
             return true;
         }
         let op6 = bits(c, 21, 16);
@@ -101,19 +114,23 @@ impl Core {
         let (x, y) = (bits(c, 7, 4), bits(c, 3, 0));
         let (add, sub) = if float { (0x81, 0x82) } else { (0x01, 0x02) };
         let word = |op: u64, n: u64| (op << 12) | (n << 8) | (x << 4) | y;
-        let (orig, flags) = (self.r, self.flags);
+        let (orig, flags, fx) = (self.r, self.flags, self.fx);
         let ok = self.compute(word(add, ra));
-        let (sum, sum_flags) = (self.r[ra as usize], self.flags);
+        let (sum, sum_flags, sum_fx) = (self.r[ra as usize], self.flags, self.fx);
         self.r = orig;
+        self.fx = fx;
         let ok = ok && self.compute(word(sub, rs));
-        let diff = self.r[rs as usize];
+        let (diff, diff_fx) = (self.r[rs as usize], self.fx);
         self.r = orig;
+        self.fx = fx;
         if !ok {
             self.flags = flags;
             return false;
         }
         self.r[ra as usize] = sum;
         self.r[rs as usize] = diff;
+        self.fx.take(&sum_fx, ra as usize);
+        self.fx.take(&diff_fx, rs as usize);
         self.flags = sum_flags;
         true
     }
@@ -168,7 +185,10 @@ mod tests {
         assert!(c.compute(word(0b000101, 1, 2, 0, 0, 0, 0)));
         assert_eq!((c.r[1], c.r[2]), (0x2000_0000, (5u32).wrapping_sub(6)));
         // opcode groups that do not exist are not modelled
-        assert!(!c.compute(word(0b000000, 1, 2, 0, 0, 0, 0)));
+        assert!(
+            !c.compute(word(0b000000, 3, 2, 0, 0, 0, 0)),
+            "op8 3 is no MR transfer"
+        );
     }
 
     #[test]

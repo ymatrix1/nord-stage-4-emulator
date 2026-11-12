@@ -25,14 +25,14 @@ Per-core table (strict runs, no `--lenient`, `sharc-run`; the numbers are reprod
 | Image | Entry | First unmodelled instruction | Reached by |
 |---|---|---|---|
 | Boot kernel (both) | ISA `0x8C005` | Type 13a `DO 0xffff81 UNTIL EQ` at `0x8C083` (a `DO ... UNTIL cond`, not `UNTIL LCE`), after 171,814 steps | the strict run itself |
-| SY1SY2 program | `0x1C0B2D` | none in start-up; idle loop reached (needs FLAG0 input high, section 4) | the strict run itself |
-| SY1SY2 ISR at `0x1C05B9` (IVT vector 17) | `--irq 20000:0x1c05b9` | `F0 = RECIPS F12` (Type 4a) at `0x1C0692`; lenient run skips 114 operations (58 `RECIPS`, 56 `FUNPACK`) and returns to the idle loop | interrupt stand-in |
+| SY1SY2 program | `0x1C0B2D` | none in start-up; idle loop reached (needs FLAG12 input high, section 4) | the strict run itself |
+| SY1SY2 ISR at `0x1C05B9` (IVT vector 17) | `--enter 20000:0x1c05b9` | on the pre-merge core: `F0 = RECIPS F12` (Type 4a) at `0x1C0692`, 114 skipped operations (58 `RECIPS`, 56 `FUNPACK`). With the float lane merged (main) the strict run is clean and returns to the idle loop | interrupt stand-in |
 | SY1SY2 ISRs at `0x1C03FD`, `0x1C058C` | | none (return to the idle loop with empty buffers) | interrupt stand-in |
-| SMP program | `0x1C11E0` | none in start-up; idle loop reached (needs FLAG0 input high) | the strict run itself |
+| SMP program | `0x1C11E0` | none in start-up; idle loop reached (needs FLAG12 input high) | the strict run itself |
 | SMP ISRs at `0x1C0EE0`, `0x1C03FD`, `0x1C0A71` | | none (return to the idle loop) | interrupt stand-in |
 | SMP ISR at `0x1C058C` | | none unmodelled, but the run leaves the code: `IF NE CALL (M8, I8)` takes `I8` from a function-pointer table `DM(I1, M5)` that nothing has initialised yet (state missing, not an instruction gap) | interrupt stand-in |
 
-Two gaps surfaced and were fixed with this research (both with unit tests): Type 19a `Id = MODIFY(Is, <imm32>)` (first fault of SY1SY2 vector 17 and SMP vector 17) and `FLUSH CACHE` (first fault of SMP vector 12). What the other lanes still need from these two images: `RECIPS` and `FUNPACK` (SY1SY2), Type 6a (shift immediate with a DM/PM move, decoded but not executed: 8 instructions in SY1SY2, 7 in SMP, none reached by the probes), `IDLE`, `DO ... UNTIL cond` (Type 13a), interrupt dispatch, the FLAG pins. A static census of the code blocks (`tools/sharc_visa.py` text) finds `RECIPS` 2, `FUNPACK` 1, `BITEXT` 8, `BITDEP` 9 and `BFFWRP` 7 in SY1SY2, and `BITEXT` 2, `BITDEP` 3, `BFFWRP` 1 in SMP (EMPIRICAL: counts of decoder text, not of executed operations).
+Two gaps surfaced and were fixed with this research (unit tests): Type 19a (main now has its own `exec_modify_imm`, which this branch uses) and `FLUSH CACHE` (no-op). Remaining for the other lanes after the merge of main: `DO ... UNTIL cond` (Type 13a, boot kernel only) and the SMP function-pointer state. Type 6a (8 instructions in SY1SY2, 7 in SMP) is executed by main and not reached by the probes. A static census of the code blocks (`tools/sharc_visa.py` text) finds `RECIPS` 2, `FUNPACK` 1, `BITEXT` 8, `BITDEP` 9 and `BFFWRP` 7 in SY1SY2, and `BITEXT` 2, `BITDEP` 3, `BFFWRP` 1 in SMP (EMPIRICAL: counts of decoder text, not of executed operations).
 
 ## 2. Container format (VERIFIED)
 
@@ -73,7 +73,7 @@ What it does (from the ADI listing; function names are mine):
 
 ## 4. The programs
 
-Start-up (`sharc-run` on the flat image from the reset target, strict): the entry code runs `CALL 0x1C0528`, `CALL 0x1C0CA8` (SY1SY2; `0x1C0528..0x1C0588` are the helper blocks shared by both images) and ends in `JUMP (PC, 0)`. Both programs finish their set-up in under 9,000 steps and then **idle in a jump-to-self**: the work is done in interrupt service routines. Before that, each polls `BIT TST FLAGS 0x1000000` (FLAGS bit 24, ASSUMED to be the FLAG0 input pin; SY1SY2 loop at `0x1C10DD`, SMP at `0x1C1572`) until it is high: an external start signal, the counterpart of the `DM(0xB00E2)` mailbox in the ORG image (5.22, 5.26) but a pin, not a data word. The core now has `Core::flag_pins` (OR-ed into FLAGS reads) and `sharc-run --pins 0x1000000`.
+Start-up (`sharc-run` on the flat image from the reset target, strict): the entry code runs `CALL 0x1C0528`, `CALL 0x1C0CA8` (SY1SY2; `0x1C0528..0x1C0588` are the helper blocks shared by both images) and ends in `JUMP (PC, 0)`. Both programs finish their set-up in under 9,000 steps and then **idle in a jump-to-self**: the work is done in interrupt service routines. Before that, each polls `BIT TST FLAGS 0x1000000` (FLAGS bit 24 = FLAG12 input;  SY1SY2 loop at `0x1C10DD`, SMP at `0x1C1572`) until it is high: an external start signal, the counterpart of the `DM(0xB00E2)` mailbox in the ORG image (5.22, 5.26) but a pin, not a data word. `sharc-run --flag 12=1` drives it (FLGx is FLAGS bit 2x, so bit 24 is FLAG12).
 
 Vector table (VERIFIED by ADI's ISA listing of the tail; word numbers; the unused slots are `jump (pc, 0)` or `rti`):
 
@@ -105,9 +105,9 @@ export NS4_CCES="C:/Analog Devices/CrossCore Embedded Studio 2.12.1"
 python tools/adi_dis.py DIR/dsp_image_3_SY1SY2.bin 0 0x600 --isa              # the boot kernel
 python tools/adi_compare.py DIR/dsp_image_4_SMP.bin 0x8660 0xac20             # code blocks
 sharc-run DIR/dsp_image_3_SY1SY2.bin 0x8c005 300000 --isa                     # kernel, strict
-sharc-run sy.bin 0x1c0b2d 100000 --pins 0x1000000 --trace 6                   # SY1SY2 start-up
-sharc-run smp.bin 0x1c11e0 100000 --pins 0x1000000 --trace 6                  # SMP start-up
-sharc-run sy.bin 0x1c0b2d 400000 --pins 0x1000000 --irq 20000:0x1c05b9 --lenient --skips
+sharc-run sy.bin 0x1c0b2d 100000 --flag 12=1 --trace 6                   # SY1SY2 start-up
+sharc-run smp.bin 0x1c11e0 100000 --flag 12=1 --trace 6                  # SMP start-up
+sharc-run sy.bin 0x1c0b2d 400000 --flag 12=1 --enter 20000:0x1c05b9 --lenient --skips
 ```
 
 ## 7. Decoder and core changes made with this research (each with a test)
@@ -121,20 +121,20 @@ sharc-run sy.bin 0x1c0b2d 400000 --pins 0x1000000 --irq 20000:0x1c05b9 --lenient
 | System register name `LIRPTL` (was `LRPTL`) | `bit set lirptl 0x2400` | `visa/regs.rs`, `tools/sharc_visa.py` |
 | ISA classification (`classify_isa`: no 16/32-bit forms) | kernel listing, 256/256 identical | `visa/classify.rs` |
 | ISA-mode execution (`Core::load_isa`, `sharc-run --isa`) | kernel runs 171,814 steps | `core/isa.rs` |
-| Type 19a execution (`MODIFY` with L/B wrap; `BITREV` faults), `FLUSH CACHE` as a no-op | first faults of SY1SY2/SMP ISRs | `core/moves.rs`, `core/exec.rs` |
-| FLAGS register storage and scripted input pins; `Core::interrupt`, `sharc-run --irq`, `--pins` | idle-loop polls `BIT TST FLAGS 0x1000000` | `core/memory.rs`, `core/branch.rs`, `bin/sharc_run.rs` |
+| `FLUSH CACHE` as a no-op; Type 19a test cases (execution is main's) | first faults of SY1SY2/SMP ISRs | `core/exec.rs`, `core/moves.rs` tests |
+| `Core::enter_handler`, `sharc-run --enter STEP:PC` (direct handler entry; FLAG pins and `--irq` come from main's sequencer) | idle-loop polls `BIT TST FLAGS 0x1000000` | `core/branch.rs`, `bin/sharc_run.rs` |
 | `adi_dis.py` ISA mode (`--isa`, `build_elf(visa=False)`) | | `tools/adi_dis.py` |
 | Raw image parser and SRAM writer | | `tools/ns4_dsp_raw.py` |
 
 ## Implications
 
-- The synth and sample DSPs run small programs (16 KB and 9 KB of code) that idle in a jump-to-self and work in interrupt routines. The oracle therefore needs interrupt dispatch (IRPTL/IMASK/vector priorities) to run any real work; `sharc-run --irq STEP:PC` is a stand-in that enters a handler body directly.
-- The start trigger of both is a FLAG0 input, not a mailbox word, so the ARM-to-DSP message path (the three `DM(0x92003..5)` words of the kernel, then the record dispatcher at `0x1C058C`) is where parameters will enter, as in the ORG image.
-- For milestone M3 the two images now run to their idle loops (`docs/specs/sharc-core.md`); the next gaps are `RECIPS`, `FUNPACK`, Type 6a execution, `IDLE` and `DO UNTIL cond`.
+- The synth and sample DSPs run small programs (16 KB and 9 KB of code) that idle in a jump-to-self and work in interrupt routines. The oracle therefore needs interrupt dispatch (IRPTL/IMASK/vector priorities) to run any real work; `sharc-run --enter STEP:PC` is a stand-in that enters a handler body directly.
+- The start trigger of both is a FLAG12 input, not a mailbox word, so the ARM-to-DSP message path (the three `DM(0x92003..5)` words of the kernel, then the record dispatcher at `0x1C058C`) is where parameters will enter, as in the ORG image.
+- For milestone M3 the two images now run to their idle loops (`docs/specs/sharc-core.md`); the remaining gap seen is `DO UNTIL cond` in the boot kernel.
 
 ## Follow-ups
 
-- Run SY1SY2 vector 17 with real inputs (`RECIPS`/`FUNPACK` implemented): find what buffer it reads (its `I7` frame, offsets `-32` and `-26`) and compare an oscillator step against the 18,432-float kernels.
+- Run SY1SY2 vector 17 with real inputs: find what buffer it reads (its `I7` frame, offsets `-32` and `-26`) and compare an oscillator step against the 18,432-float kernels.
 - Initialise the SMP function-pointer table `DM(I1, M5)` the way the program does (find the writer; it is not in start-up) to run the dispatcher.
 - Identify the 12-byte tail header and the first block `{3, 0x134, 0x1C0300}` (the code at `0x1C0300..0x1C0434` is the shared start-up helper code).
 - Decide the SF/BM condition-code naming against ADI output on a real conditional compute.
