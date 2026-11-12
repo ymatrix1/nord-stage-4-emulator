@@ -272,6 +272,34 @@ The differences are structured constants, not code changes:
 
 Reading (ASSUMED): D, E and F are one program assembled for different instances (core or bank variants) with a few per-instance constants. That fits the bank 1 table, which lists a Core1 and a Core2 image per DSP. It does not yet say which of Fx, Organ or Synth a given copy belongs to. The tidy single-bit differences are also evidence that the decoder reads the fields correctly (a wrong field split would not produce clean one-bit deltas).
 
+### 5.11 Bank 1 carries five SHARC programs and the ARM routine that downloads them
+
+Method: sweep with `tools/sharc_visa.py` on `bank1_CODE`, then read the ARM code that uses the pointers found in the span (capstone, ARM mode).
+
+```bash
+python tools/sharc_visa.py target/fw_unpacked/bank1_CODE.bin 0 0xC30C0 --sweep
+# 0x092c00..0x09f800 size 0xcc00 index-register loads in SHARC RAM: 66   (bank0 sweep outside 0x440000..0x528000: none)
+```
+
+- **SHARC code in bank 1.** `bank1_CODE@0x92C00..0x9F800` (about 52 KB) decodes as VISA with SHARC RAM addresses (`I0 = 0x92196`, `I4 = 0xC0725`, `I1 = 0xC072F`).
+- **Download routine (VERIFIED by disassembly).** The function starting at `bank1_CODE@0x480E0` is the bank 1 DSP self-test (the `DSP Quick/Total` entries of the test menu at `0x68B88`; strings `%s (%d) Boot`, `Err:%s Reset`, `Err:%s Mem %s`, `L1 bl.N` block names). A jump table (`ldrls pc, [pc, r5, lsl #2]` at `0x481A4`) selects one of five blobs; each case loads a pointer and a length from the literal pool (`0x486FC..0x48764`) and then calls a virtual method of the DSP driver object with the index, the pointer and the length (`blx` at `0x48718`), checking the status (`cmp r0, #6`). So the code copy is a driver call, not an inline loop.
+
+| Case | Pointer | Length | End |
+|---|---|---|---|
+| 3 | `0xC00924F8` | `0x3AB4` | `0x95FAC` |
+| 4 | `0xC0095FAC` | `0x3B14` | `0x99AC0` |
+| 1 | `0xC0099AC0` | `0x1E00` | `0x9B8C0` |
+| 2 | `0xC009B8C0` | `0x1C4C` | `0x9D50C` |
+| 0 | `0xC009D50C` | `0x23F8` | `0x9F904` |
+
+(Case numbers are the order of the code at `0x486FC..0x48760`; they are not checked against the jump table order.) The five blobs chain back-to-back, `0x924F8..0x9F904` (54,284 bytes), with no gaps; this is strong evidence that the pointer and length pairs are the image boundaries.
+
+- **Decode quality.** Blobs 2 to 4 tile as VISA with 73 to 86% of instructions typed and start with `IF LT PM(I8, M8) = S8, ...` style code; blobs 0 and 1 begin with zero padding and tile less well (46 to 55% typed; data mixed in).
+- **Relation to the bank 0 blocks (32-byte windows found in each block).** Blob 4: 40% in block A, about 15% in D/E/F. Blobs 2 and 3: about 18 to 20% in A and 25 to 28% in D/E/F. Blobs 0 and 1: 9 to 16% in G/H, about 0 elsewhere. So the bank 1 test programs and the bank 0 blocks share routines but are not copies.
+- **What this settles.** The OS images do carry SHARC programs, and bank 1 shows how an image is handed to a DSP: pointer, length and index passed to the DSP driver. The bank 0 equivalent has not been found: no literal pool in `bank0_CODE` holds pointers to the A to H blocks (section 5.7), so bank 0 probably reaches them through an array of offsets or a generated table.
+
+Follow-up: find the bank 0 caller of the same driver method (the virtual call with a pointer and a length) by searching for the matching call pattern, and read the driver's `Boot` method to see whether it wraps the blob in loader headers.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
