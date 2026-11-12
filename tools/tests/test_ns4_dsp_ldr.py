@@ -96,3 +96,18 @@ def test_main_writes_sram_images(tmp_path):
     f.write_bytes(image())
     assert ldr.main([str(f), "--sram", str(tmp_path / "s")]) == 0
     assert (tmp_path / "s" / "core1_sram.bin").stat().st_size == ldr.SRAM_BYTES
+
+
+def test_l2_image_places_blocks_by_offset(tmp_path):
+    payload = bytes([1, 2, 3, 4])
+    c1 = core(0x1211E3, [block(ldr.DATA, 0x20004160, 4, payload=payload)])
+    img = c1 + core(0x1211E3, [block(ldr.DATA, 0x28A40000, 4, payload=bytes(4))])
+    blocks, _ = ldr.parse_blocks(img)
+    cores = ldr.split_cores(blocks)
+    mem = ldr.l2_image(img, cores[0])
+    assert len(mem) == ldr.L2_BYTES and bytes(mem[0x4160:0x4164]) == payload
+    assert not any(ldr.l2_image(img, cores[1]))  # core 2 has no L2 block
+    f = tmp_path / "img.bin"
+    f.write_bytes(img)
+    assert ldr.main([str(f), "--sram", str(tmp_path / "s")]) == 0
+    assert (tmp_path / "s" / "core1_l2.bin").stat().st_size == ldr.L2_BYTES

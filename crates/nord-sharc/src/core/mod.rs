@@ -22,10 +22,14 @@ mod banks;
 mod bitfifo;
 mod branch;
 mod branch_ext;
+#[cfg(test)]
+mod compute_adi;
 mod dag;
 mod dag_modes;
 mod dualmove;
 mod exec;
+#[cfg(test)]
+mod fixed2_measured;
 mod fixed_alu;
 #[cfg(test)]
 mod fixed_measured;
@@ -48,6 +52,7 @@ mod moves;
 mod multifunction;
 mod multiplier;
 mod pcstack;
+pub mod periph;
 mod shifter;
 mod stacks;
 #[cfg(test)]
@@ -218,6 +223,8 @@ pub struct Core {
     /// ISA-mode program memory ([`isa`]): 3 parcels (most significant first) per 48-bit word.
     /// Empty = VISA mode, where `pc` addresses the flat SRAM image in parcels.
     isa_code: Vec<u16>,
+    /// Optional peripheral models ([`periph`]); `None` keeps the plain device store.
+    periph: Option<Box<periph::Periph>>,
 }
 
 #[inline]
@@ -276,6 +283,7 @@ impl Core {
             banks: banks::Banks::default(),
             cb_wrap: std::cell::Cell::new(0),
             isa_code: Vec::new(),
+            periph: None,
         }
     }
 
