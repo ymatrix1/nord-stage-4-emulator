@@ -60,7 +60,8 @@ impl Core {
         self.preset.insert(addr, value);
     }
 
-    /// Value of a 7-bit universal register code (Table 10-2, PEx view).
+    /// Value of a 7-bit universal register code (Table 10-2, PEx view); groups 6 and 7 are the
+    /// system registers of `sysregs.rs`.
     pub fn read_ureg(&self, code: u8) -> u32 {
         let n = (code & 15) as usize;
         match (code >> 4) & 7 {
@@ -70,20 +71,8 @@ impl Core {
             3 => self.l[n],
             4 => self.b[n],
             5 => self.s[n],
-            6 => match n {
-                3 => self.pc,
-                7 | 8 => self.loops.last().map_or(0, |f| f.remaining),
-                _ => 0,
-            },
-            7 => match n {
-                0 | 1 => self.ustat[n],
-                2 => self.mode1,
-                3 => self.mmask,
-                4 => self.mode2,
-                11 => self.imask,
-                14 | 15 => self.ustat[n - 12],
-                _ => 0,
-            },
+            7 if n < 2 => self.ustat[n], // USTAT1/2: hot in the firmware's polling loops
+            6 | 7 => self.read_sys(code),
             _ => 0,
         }
     }
@@ -104,15 +93,8 @@ impl Core {
                 self.s[n] = v;
                 self.fx_y.clear(n);
             }
-            7 => match n {
-                0 | 1 => self.ustat[n] = v,
-                2 => self.mode1 = v,
-                3 => self.mmask = v,
-                4 => self.mode2 = v,
-                11 => self.imask = v,
-                14 | 15 => self.ustat[n - 12] = v,
-                _ => {}
-            },
+            7 if n < 2 => self.ustat[n] = v,
+            6 | 7 => self.write_sys(code, v),
             _ => {}
         }
     }
@@ -167,7 +149,7 @@ mod tests {
             (77, 77),
             "S registers are group 5"
         );
-        c.write_ureg(0x75, 1);
-        assert_eq!(c.read_ureg(0x75), 0, "unlisted system registers read as 0");
+        c.write_ureg(0x7C, 1);
+        assert_eq!(c.read_ureg(0x7C), 0, "unlisted system registers read as 0");
     }
 }

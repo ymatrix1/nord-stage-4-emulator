@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -6,7 +6,7 @@
 //! early, the faulting instruction in the listing format of `sharc-disasm`. Use the images written
 //! by `python tools/ns4_dsp_ldr.py IMG --sram DIR` and the section entry value (for example
 //! `0x1211E3` for the FX image).
-use nord_sharc::core::{Core, Fault};
+use nord_sharc::core::{vector_by_name, Core, Fault};
 use nord_sharc::visa::{classify, decode_text, Insn};
 use std::process::ExitCode;
 
@@ -87,6 +87,8 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut positional = Vec::new();
     let mut devices = Vec::new();
     let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
+    let mut irqs: Vec<(u64, u8)> = Vec::new();
+    let mut flags: Vec<(u8, bool)> = Vec::new();
     let mut registers: Vec<(u8, u32)> = Vec::new();
     let mut dumps: Vec<(u32, u32)> = Vec::new();
     let mut watch = u32::MAX;
@@ -113,6 +115,26 @@ fn run(args: &[String]) -> Result<String, String> {
                     parse_number(step).ok_or("bad --poke step")?,
                     parse_number(addr).ok_or("bad --poke address")? as u32,
                     parse_number(value).ok_or("bad --poke value")? as u32,
+                ));
+            }
+            "--irq" => {
+                // N@STEP: raise interrupt vector N (number or name such as P4I) at core cycle STEP
+                let spec = it.next().ok_or("--irq needs N@STEP")?;
+                let (n, step) = spec.split_once('@').ok_or("--irq needs N@STEP")?;
+                irqs.push((
+                    parse_number(step).ok_or("bad --irq step")?,
+                    vector_by_name(n).ok_or("bad --irq vector (0-41 or a name such as P4I)")?,
+                ));
+            }
+            "--flag" => {
+                // N=LEVEL: drive the FLAGn pin (an input flag reads this level)
+                let spec = it.next().ok_or("--flag needs N=LEVEL")?;
+                let (n, level) = spec.split_once('=').ok_or("--flag needs N=LEVEL")?;
+                flags.push((
+                    parse_number(n)
+                        .filter(|n| *n < 16)
+                        .ok_or("bad --flag number")? as u8,
+                    parse_number(level).ok_or("bad --flag level")? != 0,
                 ));
             }
             "--lenient" => lenient = true,
@@ -147,7 +169,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -163,11 +185,20 @@ fn run(args: &[String]) -> Result<String, String> {
     for (addr, value) in devices {
         core.preset_device(addr, value);
     }
+    for (n, high) in flags {
+        core.set_flag_input(n, high);
+    }
+    for (step, vector) in irqs {
+        core.schedule_interrupt(step, vector);
+    }
     pokes.sort_by_key(|p| p.0);
     let mut recent = std::collections::VecDeque::with_capacity(trace + 1);
     let mut fault = None;
     let mut next_poke = 0;
     while core.steps < max_steps && fault.is_none() {
+        if core.is_idle() && !core.can_wake() && next_poke >= pokes.len() {
+            break; // IDLE with nothing left that could end it
+        }
         while next_poke < pokes.len() && pokes[next_poke].0 <= core.steps {
             let (_, addr, value) = pokes[next_poke];
             core.dm_write(addr, value)
@@ -196,6 +227,23 @@ fn run(args: &[String]) -> Result<String, String> {
 ",
         core.steps, core.pc, core.device_reads, core.device_writes
     );
+    if core.interrupts_taken() > 0 || core.is_idle() {
+        out.push_str(&format!(
+            "interrupts taken {}, cycles {}{}
+",
+            core.interrupts_taken(),
+            core.cycles(),
+            if core.is_idle() {
+                if core.can_wake() {
+                    ", sleeping in IDLE"
+                } else {
+                    ", halted in IDLE (nothing can wake it)"
+                }
+            } else {
+                ""
+            }
+        ));
+    }
     if core.skipped > 0 {
         out.push_str(&format!(
             "skipped {} unmodelled compute ops, first at 0x{:x}
@@ -380,5 +428,32 @@ mod tests {
         assert!(skipped.contains("skipped operations by text:"), "{skipped}");
         assert!(skipped.contains("MULTI?op=03"), "{skipped}");
         std::fs::remove_file(skip_path).ok();
+    }
+
+    #[test]
+    fn irq_flag_and_idle_options() {
+        let path = std::env::temp_dir().join("nord_sharc_run_idle_test.bin");
+        let mut image = vec![0u8; 0x24_0000 + 0x400];
+        // IDLE (16-bit 0x0091) at short-word 0x120100
+        image[0x24_0200..0x24_0202].copy_from_slice(&0x0091u16.to_le_bytes());
+        std::fs::write(&path, &image).unwrap();
+        let p = path.to_string_lossy().to_string();
+        let args = |extra: &[&str]| {
+            let mut v = vec![p.clone(), "0x120100".into(), "5000".into()];
+            v.extend(extra.iter().map(|s| s.to_string()));
+            v
+        };
+        // an interrupt that is masked cannot end the IDLE: the run reports it and stops early
+        let text = run(&args(&["--irq", "P0I@500", "--flag", "1=1"])).unwrap();
+        assert!(text.contains("halted in IDLE"), "{text}");
+        assert!(text.contains("interrupts taken 0"), "{text}");
+        // while an interrupt is still scheduled the core sleeps and the run reaches the limit
+        let mut short = args(&["--irq", "P0I@900000"]);
+        short[2] = "2".into();
+        let text = run(&short).unwrap();
+        assert!(text.contains("sleeping in IDLE"), "{text}");
+        assert!(run(&args(&["--irq", "99@5"])).is_err());
+        assert!(run(&args(&["--irq", "P0I"])).is_err());
+        assert!(run(&args(&["--flag", "16=1"])).is_err());
     }
 }
