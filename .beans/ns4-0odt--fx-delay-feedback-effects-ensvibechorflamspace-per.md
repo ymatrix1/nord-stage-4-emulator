@@ -3,8 +3,9 @@
 title: 'FX: delay feedback effects (ENS/VIBE/CHOR/FLAM/SPACE) per manual; stereo chorus in delay path'
 status: todo
 type: task
+priority: normal
 created_at: 2026-11-12T03:26:33Z
-updated_at: 2026-11-12T03:26:33Z
+updated_at: 2026-11-12T03:38:51Z
 parent: ns4-trkb
 ---
 
@@ -19,3 +20,6 @@ Manual p.50-51: feedback effects ENS/VIBE/CHOR = Mod 2 counterparts (CHOR variat
 
 ## Out of Scope
 Exact SHARC algorithms (not in the firmware image).
+
+
+- [x] Delay feedback effects implemented per manual (structure); parameters ASSUMED. Width gap NOT explained by them (see research doc).

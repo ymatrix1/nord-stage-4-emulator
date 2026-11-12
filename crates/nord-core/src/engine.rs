@@ -521,9 +521,16 @@ impl Stage4Engine {
             3 => DelayFilterMode::Bp,
             _ => DelayFilterMode::Off,
         };
-        // `Delay Feedback Effect`: 0/1 none, 2/3 ENS, 4/5 VIBE, 6/7 CHOR, 8/9 FLAM, 10/11 SPACE.
-        // ASSUMED: any effect other than Bypass maps to the single modulated-feedback mode.
-        fx.delay_variation = dec.delay_fb_fx_type >= 2;
+        // `Delay Feedback Effect`: 0/1 none, 2/3 ENS, 4/5 VIBE, 6/7 CHOR, 8/9 FLAM, 10/11 SPACE (odd = variation).
+        fx.delay_fx = match dec.delay_fb_fx_type {
+            2 | 3 => crate::fx::DelayFeedbackFx::Ensemble,
+            4 | 5 => crate::fx::DelayFeedbackFx::Vibe,
+            6 | 7 => crate::fx::DelayFeedbackFx::Chorus,
+            8 | 9 => crate::fx::DelayFeedbackFx::Flam,
+            10 | 11 => crate::fx::DelayFeedbackFx::Space,
+            _ => crate::fx::DelayFeedbackFx::Off,
+        };
+        fx.delay_fx_variation = dec.delay_fb_fx_type >= 2 && (dec.delay_fb_fx_type & 1) == 1;
         fx.delay_feedback = dec.delay_feedback.clamp(0.0, 0.95);
         fx.delay_mix = if dec.delay_enabled {
             dec.delay_mix.clamp(0.0, 1.0)
