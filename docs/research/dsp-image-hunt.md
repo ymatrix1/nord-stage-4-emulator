@@ -751,7 +751,27 @@ What the oracle corrected (each with a golden test taken from the ADI output):
 | Type 4 offset (`DM(<data6>, Ii)`) | unsigned | **signed**: `dm(0xffffffe4,i5)` is `DM(-28, I5)`. The core addressed these accesses 64 words too far for offsets 32..63 |
 | Type 15b | (fixed in 5.28) | confirmed: UREG 29..23, signed DATA7 22..16 |
 
-Open items the first full comparison of ORG Core2 shows (65,139 instructions): types `10a` (conditional jump with a dual move and compute in the else branch, 918 in ORG Core2), `1a`/`1b` (dual DM/PM moves with compute, 563), `19a`, `6a` (shift immediate with a data move), `16a`/`16b` (immediate stores), `7a`/`7b`/`9a`/`9b` operand text, and `14a` long-word access (`(LW)` suffix) are not decoded or not executed yet; the remaining differences are formatting. They are the next work items.
+Further results of the comparison are in 5.35.
+
+### 5.35 The comparison drives the core: dual moves, update bits, loop counts, delay slots
+
+Running `tools/adi_compare.py` on the real code regions and fixing what it flagged (every fix has golden tests from the ADI output):
+
+| Finding | Evidence | Fix |
+|---|---|---|
+| Type 4 has an **update bit** (38): `dm(i6,0x2)` = access at I6 then `I6 += 2`; `dm(0x2,i6)` = pre-modify offset | 220 post and 1,576 pre samples, fits bit 38 exactly | the core now post-modifies (it never updated the index), decoders print `DM(I6, 2)` vs `DM(2, I6)` |
+| `MODIFY` (7a/7b): bank bit **38**, destination = source XOR bits **26..24** | 51 samples (`i4=modify(i3,m4)` was `I13`) | core and decoders |
+| `DO UNTIL` end field is always **PC-relative** (bit 23 is not an absolute flag); opcode `0x0D` takes `LCNTR` from a register (`lcntr=r5`) | ADI prints `(pc, ..)` for all, `lcntr=r5` for 66 FX loops | core and decoders |
+| `RTS`/`RTI (DB)` (bit 38): the two instructions after a delayed return run first | `0afe` = `rts (db)` | pending-branch mechanism now also for returns |
+| Stores read their register **before** the same instruction's compute | the compute and the access are parallel | `capture`d values in 3a/4a/1a |
+| Types **1a/1b** dual DM/PM moves: DM direction 44, DM index 43..41, DM modify 40..38, PM direction 37, DM reg 36..33, PM index 32..30 (+8), PM modify 29..27 (+8), PM reg 26..23, compute 22..0; no condition field | 587 samples | new `core/dualmove.rs`, decoders |
+| Types **16a/16b** immediate stores, 7a/7b `MODIFY`, 9a/9b indirect branch text, `NOP` forms, sign-extended 17b text | | decoders (16b executed) |
+
+`10a` ("jump + dual move + compute", 918 in ORG Core2) and most `1a` instructions (557) are **not code**: the ADI listing shows them only in the data regions (from byte `0x254000` on: float coefficient tables such as `3f05 b1aa 3f27` = `0.52...`). Genuine `1a` words are the 22 fixed-point dot-product steps around `0x249170` (`MRF=MRF+r0*r4(ssf), r0=dm(i6,m3), r4=pm(i10,m10)`), so `10a` need not be implemented.
+
+Results with the fixes: ORG Core2 code region (`0x24A718..0x252000`): **0 differences** against ADI over 6,800 instructions (every type "same"); FX Core1 and Core2 keep only the `FPACK`/`FUNPACK` operand naming (ADI prints `r1=funpack f7`, an operation not modelled yet). The strict ORG Core2 run (no skipped operations) with `--poke 100000:0xb00e2=1 --dev 0x282c0380=1` now **finishes the whole pass in under 10,000 instructions and returns to the mailbox poll loop** (`pc 0x125DDF`), with the module records intact (`DM(0xC13CE) = 0x12538C 0x1267`); the corruption of 5.30 and the wild call of 5.24 were consequences of the Type 4 update bit, the `MODIFY` destination and the delay-slot semantics. A second trigger runs a second pass (it reads and writes device registers: 69 reads, 22 writes).
+
+Loader entry values (`tools/ns4_dsp_ldr.py`): FX both sections `0x1211E3`; PNO core 1 `0x121007`, PNO core 2 `0x125C88`; ORG both sections `0x125C88`. So the organ program runs from two ORG sections and from PNO's second section, the piano program from PNO's first section.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 

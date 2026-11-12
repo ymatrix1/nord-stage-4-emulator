@@ -408,7 +408,9 @@ def _mem_move(w: int, name: str, iff: str) -> str:
         i = bits(w, 43, 41) + (8 if pm else 0)
         data = bits(w, 32, 27)
         data -= 64 if data & 32 else 0  # DATA6 is signed (VERIFIED against ADI elfdump, docs 5.34)
-        ea = f"{'PM' if pm else 'DM'}({data}, I{i})"
+        # bit 38 = U: DM(I6, 2) post-modifies I6 by 2, DM(2, I6) is a pre-modify offset
+        operands = f"I{i}, {data}" if bits(w, 38, 38) else f"{data}, I{i}"
+        ea = f"{'PM' if pm else 'DM'}({operands})"
         reg = f"R{bits(w, 26, 23)}"
         write = bits(w, 39, 39)
     return f"{iff}{ea} = {reg}{tail}" if write else f"{iff}{reg} = {ea}{tail}"
@@ -416,17 +418,15 @@ def _mem_move(w: int, name: str, iff: str) -> str:
 
 # Instruction forms whose type is known from the diagrams but whose operand fields are not decoded.
 TYPE_ONLY = {
-    "1a": "dual DM/PM move + compute",
-    "1b": "dual DM/PM move",
     "6a": "shift immediate",
-    "7a": "index modify + compute",
-    "7b": "index modify",
-    "9a": "indirect/rel branch + compute",
-    "9b": "indirect/rel branch",
     "10a": "jump + dual move + compute",
-    "16a": "immediate store",
-    "16b": "immediate store (16-bit)",
 }
+
+
+def _dual_half(space: str, write: int, i: int, m: int, reg: int) -> str:
+    if write:
+        return f"{space}(I{i}, M{m}) = R{reg}"
+    return f"R{reg} = {space}(I{i}, M{m})"
 
 
 def decode(parcels: tuple[int, ...]) -> str:
@@ -440,7 +440,7 @@ def decode(parcels: tuple[int, ...]) -> str:
     if name in ("5a", "5b"):
         # VERIFIED against ADI elfdump (docs 5.34): source bits 42..38 and 32..31, destination
         # bits 29..23; swap "Rx <-> Sy" with Rx bits 26..23 and Sy bits 41..38.
-        tail = f", {compute_text(bits(w, 22, 0))}" if name == "5a" else ""
+        tail = f", {compute_text(bits(w, 22, 0))}" if name == "5a" and bits(w, 22, 0) else ""
         if bits(w, 43, 43):
             return f"{iff}R{bits(w, 26, 23)} <-> S{bits(w, 41, 38)}{tail}"
         src = (bits(w, 42, 38) << 2) | bits(w, 32, 31)
@@ -473,6 +473,33 @@ def decode(parcels: tuple[int, ...]) -> str:
         return compute_text(bits(w, 38, 16))
     if name == "2c":
         return short_compute_text(bits(w, 43, 32))
+    if name in ("1a", "1b"):
+        # layout VERIFIED against ADI elfdump on 587 instructions (docs 5.34)
+        dm = _dual_half("DM", bits(w, 44, 44), bits(w, 43, 41), bits(w, 40, 38), bits(w, 36, 33))
+        pm = _dual_half(
+            "PM", bits(w, 37, 37), bits(w, 32, 30) + 8, bits(w, 29, 27) + 8, bits(w, 26, 23)
+        )
+        if name == "1a" and bits(w, 22, 0):
+            return f"{dm}, {pm}, {compute_text(bits(w, 22, 0))}"
+        return f"{dm}, {pm}"
+    if name in ("16a", "16b"):
+        bank = 8 if bits(w, 37, 37) else 0
+        space = "PM" if bank else "DM"
+        if name == "16a":
+            value = bits(w, 31, 0)
+        else:
+            value = bits(w, 31, 16)
+            value = (value - 0x10000 if value & 0x8000 else value) & 0xFFFFFFFF
+        # no condition field in this type
+        return f"{space}(I{bits(w, 43, 41) + bank}, M{bits(w, 40, 38) + bank}) = 0x{value:x}"
+    if name in ("7a", "7b"):
+        bank = 8 if bits(w, 38, 38) else 0
+        src = bits(w, 32, 30) + bank
+        dst = src ^ bits(w, 26, 24)
+        text = f"{iff}I{dst} = MODIFY(I{src}, M{bits(w, 29, 27) + bank})"
+        if name == "7a" and bits(w, 22, 0):
+            text += f", {compute_text(bits(w, 22, 0))}"
+        return text
     if name == "6n":
         return f"{iff}{shift_imm_text(w)}"
     if name == "19a":
@@ -483,14 +510,14 @@ def decode(parcels: tuple[int, ...]) -> str:
         return f"I{dst} = {op}(I{src}, 0x{bits(w, 31, 0):x})"
     if name in TYPE_ONLY:
         return f"{TYPE_ONLY[name]} (operands raw) " + " ".join(f"{x:04x}" for x in parcels)
-    if name == "21c":
-        return (
-            "NOP" if parcels[0] == 0x0001 else "21c? raw " + " ".join(f"{x:04x}" for x in parcels)
-        )
+    if name == "21c" or (name == "21/22" and w == 0):
+        return "NOP"
     if name == "17a":
         return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 0):x}"
     if name == "17b":
-        return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 16):x}"
+        value = bits(w, 31, 16)
+        value = (value - 0x10000 if value & 0x8000 else value) & 0xFFFFFFFF  # sign extended
+        return f"{ureg_name(bits(w, 38, 32))} = 0x{value:x}"
     if name == "18a":
         sreg = ureg_name(0x70 | bits(w, 35, 32))
         return f"BIT {BOP.get(bits(w, 39, 37), '?')} {sreg} 0x{bits(w, 31, 0):x}"
@@ -501,9 +528,25 @@ def decode(parcels: tuple[int, ...]) -> str:
     if name == "2a":
         return f"{iff}{compute_text(bits(w, 22, 0))}"
     if name in ("11a", "11c"):
-        return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}"
+        delayed = " (DB)" if bits(w, 38, 38) else ""
+        return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}{delayed}"
+    if name in ("9a", "9b"):
+        # delayed flag bit 26, call bit 39, indirect target Ic + Md on DAG2 (docs 5.34)
+        op = "CALL" if bits(w, 39, 39) else "JUMP"
+        delayed = " (DB)" if bits(w, 26, 26) else ""
+        if bits(w, 40, 40):
+            rel = bits(w, 32, 27)
+            target = f"(PC, {rel - 64 if rel & 32 else rel})"
+        else:
+            target = f"(M{bits(w, 29, 27) + 8}, I{bits(w, 32, 30) + 8})"
+        tail = f", {compute_text(bits(w, 22, 0))}" if name == "9a" and bits(w, 22, 0) else ""
+        return f"{iff}{op} {target}{delayed}{tail}"
     if name == "12a":
-        return f"DO 0x{bits(w, 23, 0):x} UNTIL LCE, LCNTR = {bits(w, 39, 24)}"
+        # opcode 0x0D (bit 40) counts with a universal register, 0x0C with a 16-bit immediate
+        count = ureg_name(bits(w, 38, 32)) if bits(w, 40, 40) else bits(w, 39, 24)
+        offset = bits(w, 22, 0)
+        offset -= 1 << 23 if offset & (1 << 22) else 0
+        return f"DO (PC, {offset}) UNTIL LCE, LCNTR = {count}"
     if name == "13a":
         return f"DO 0x{bits(w, 23, 0):x} UNTIL {COND[bits(w, 37, 33)]}"
     return f"{name}? raw " + " ".join(f"{x:04x}" for x in parcels)

@@ -38,7 +38,7 @@ def test_split_parts_keeps_commas_inside_parentheses():
 
 def test_long_word_marker_and_not_conditions_are_normalised():
     assert c.canonical("i0=dm(0xc1386) (LW)") == c.canonical("I0 = DM(0xc1386)")
-    assert c.canonical("if not_ac") == c.canonical("if notac")
+    assert c.canonical("if not_ac r1=r2") == c.canonical("IF NOT AC r1 = r2")
 
 
 def test_our_listing_tiles_and_decodes_parcels():
@@ -59,3 +59,17 @@ def test_compare_counts_same_different_and_tiling_mismatches():
     assert stats["6n"] == [1, 0, 0]
     assert stats["21c"][1] == 1 and examples["21c"][0][2] == "r1=r2"
     assert stats["(tiling)"][2] == 1
+
+
+def test_the_condition_prefix_applies_to_the_whole_instruction():
+    adi = "if lt comp(r0,r13), r4=dm(0xffffffe6,i1)"
+    ours = "IF LT R4 = DM(-26, I1), COMP(R0, R13)"
+    assert c.canonical(adi) == c.canonical(ours)
+    assert c.canonical("if eq r1=r2") != c.canonical("if ne r1=r2")
+    assert c.canonical("if not sv r1=r2") == c.canonical("IF NOT_SV R1 = R2")
+
+
+def test_loop_setup_compares_by_shape_not_by_the_raw_end_field():
+    adi = "lcntr=0x64, do (pc,0xff800003) until lce"
+    ours = "DO 0x800003 UNTIL LCE, LCNTR = 100"
+    assert c.canonical(adi) == c.canonical(ours)

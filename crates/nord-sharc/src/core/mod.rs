@@ -18,6 +18,7 @@
 mod alu;
 mod branch;
 mod dag;
+mod dualmove;
 mod exec;
 mod memory;
 mod moves;

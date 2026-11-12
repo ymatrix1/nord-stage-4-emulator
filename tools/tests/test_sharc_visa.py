@@ -52,7 +52,7 @@ def test_decode_known_instructions():
     assert d((0x0F15, 0x000C, 0x0440)) == "I5 = 0xc0440"
     assert d((0x1486, 0x0000, 0x0020)) == "BIT TST ASTATx 0x20"
     assert d((0x6A3E, 0x060A, 0x1880)) == "R12 = DM(0, I5), F8 = PASS F8"
-    assert d((0x687E, 0x143F)) == "R8 = DM(2, I4)"
+    assert d((0x687E, 0x143F)) == "R8 = DM(I4, 2)"
 
 
 def test_names_and_fields():
@@ -171,3 +171,36 @@ def test_type_4_signed_offset_and_empty_compute():
     # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
     assert v.decode((0x6A3F, 0x218D, 0xA00F)) == "R3 = DM(-28, I5), F0 = FLOAT R0 BY R15"
     assert v.decode((0x507E, 0x8000, 0x0000)) == "DM(I0, M1) = R0"
+
+
+def test_dual_moves_immediate_stores_and_modify_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
+    assert v.decode((0x2C40, 0x9211, 0x4000)) == "R0 = DM(I6, M1), R4 = PM(I10, M10), MRF = 0"
+    assert v.decode((0x2CC0, 0x921B, 0xC004)).startswith("R0 = DM(I6, M3), R4 = PM(I10, M10), MRF")
+    assert v.decode((0x3D89, 0xC83F)) == "DM(I6, M6) = R4, R0 = PM(I15, M9)"
+    assert v.decode((0x9040, 0x0000, 0x0000)) == "DM(I0, M1) = 0x0"
+    assert v.decode((0x92C3, 0x3D0B, 0x22A7)) == "DM(I1, M3) = 0x3d0b22a7"
+    assert v.decode((0x9BC4, 0x3E9D)) == "DM(I5, M7) = 0x3e9d"
+    assert v.decode((0x043E, 0x583F)) == "I1 = MODIFY(I1, M3)"
+    assert v.decode((0x043F, 0xD808, 0x1BAE)) == "I7 = MODIFY(I7, M3), F11 = F10 + F14"
+
+
+def test_post_modify_modify_bank_and_loop_counts_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
+    assert v.decode((0x6C7E, 0x10BF)) == "R1 = DM(I6, 2)"
+    assert v.decode((0x6CFE, 0x1008, 0x122E)) == "DM(I6, 2) = R0, F2 = F2 + F14"
+    assert v.decode((0x043E, 0xE73F)) == "I4 = MODIFY(I3, M4)"
+    assert v.decode((0x0D05, 0x0080, 0x0006)) == "DO (PC, 6) UNTIL LCE, LCNTR = R5"
+    assert v.decode((0x0C00, 0x6480, 0x0003)) == "DO (PC, 3) UNTIL LCE, LCNTR = 100"
+    assert v.decode((0x783E, 0x0080, 0x0000)) == "R1 <-> S0"
+
+
+def test_nop_branch_return_and_immediate_forms_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
+    assert v.decode((0x0000, 0x0000, 0x0000)) == "NOP"
+    assert v.decode((0x0003,)) == "NOP"
+    assert v.decode((0x08BE, 0x003F)) == "CALL (M8, I8)"
+    assert v.decode((0x083E, 0x043F)) == "JUMP (M8, I8) (DB)"
+    assert v.decode((0x0AFE,)) == "RTS (DB)"
+    assert v.decode((0x0ABE,)) == "RTS"
+    assert v.decode((0x0F8F, 0xFFE1)) == "R15 = 0xffffffe1"

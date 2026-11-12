@@ -45,15 +45,26 @@ def split_parts(text: str) -> list[str]:
     return parts
 
 
+COND_PREFIX = re.compile(r"^if (not[ _])?([a-z0-9_]+)[ ,]+")
+
+
 def canonical(text: str) -> str:
     """Canonical form of an instruction text (ADI or this project's)."""
     t = text.lower().strip().rstrip(";")
+    cond = ""
+    m = COND_PREFIX.match(t)
+    if m:  # the condition applies to the whole instruction whatever order its parts come in
+        cond = f"if{'not' if m.group(1) else ''}{m.group(2)}:"
+        t = t[m.end() :]
     t = NUMBER.sub(_number, t)  # before the spaces go: `by 0x18` must not look like a name
     t = re.sub(r"\s+", "", t)
     # a pre-modify access is written `dm(i6,m6)[pre-mod]` here and `dm(m6,i6)` by ADI
     t = re.sub(r"(dm|pm)\((i\d+),(m\d+)\)\[pre-mod\]", r"\1(\3,\2)", t)
-    t = t.replace("not_", "not").replace("(lw)", "")
-    return ",".join(sorted(p for p in split_parts(t) if p))
+    t = t.replace("(lw)", "")
+    # a loop end is printed as a raw field by ADI and as the address here: compare the shape only
+    t = re.sub(r"do\(pc,-?\d+\)until", "do:until", t)
+    t = re.sub(r"do-?\d+until", "do:until", t)
+    return cond + ",".join(sorted(p for p in split_parts(t) if p))
 
 
 def our_listing(parcels: list[int]) -> dict[int, tuple[str, list[int], str]]:

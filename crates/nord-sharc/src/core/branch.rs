@@ -62,16 +62,34 @@ impl Core {
                 Ok(self.branch(d, target, next))
             }
             Kind::T11a | Kind::T11c if d.cond_ok => {
-                self.call_stack.pop().ok_or_else(|| self.fault(pc, &d.insn))
+                // RTS/RTI [(DB)]: a delayed return (bit 38) runs the two following instructions first
+                let ret = self
+                    .call_stack
+                    .pop()
+                    .ok_or_else(|| self.fault(pc, &d.insn))?;
+                if bits(w, 38, 38) == 1 {
+                    self.pending = Some(Pending {
+                        slots: DELAY_SLOTS + 1,
+                        target: ret,
+                        call: false,
+                    });
+                    Ok(next)
+                } else {
+                    Ok(ret)
+                }
             }
             Kind::T12a => {
+                // The end field is always PC-relative (ADI prints no absolute form; bit 23 is not
+                // part of the offset: `0x800003` and `0x000003` both end 3 parcels on). Opcode
+                // `0x0D` (bit 40) takes the loop count from a universal register (bits 38..32)
+                // instead of the 16-bit immediate (bits 39..24).
                 let raw = bits(w, 23, 0) as u32;
-                let end = if raw & 0x80_0000 != 0 {
-                    pc.wrapping_add(sign_extend(raw & 0x7F_FFFF, 23))
+                let end = pc.wrapping_add(sign_extend(raw & 0x7F_FFFF, 23));
+                let count = if bits(w, 40, 40) == 1 {
+                    self.read_ureg(bits(w, 38, 32) as u8)
                 } else {
-                    raw
+                    bits(w, 39, 24) as u32
                 };
-                let count = bits(w, 39, 24) as u32;
                 if count == 0 {
                     return Err(self.fault(pc, &d.insn));
                 }
@@ -203,6 +221,39 @@ mod tests {
         load(&mut c, 0x10, &[0x06be, 0x0000, 0x0020]);
         assert_eq!(c.run(2), None);
         assert_eq!(c.return_addresses(), &[3, 0x13]);
+    }
+
+    /// ADI: `0d05 0080 0006` is `lcntr=r5, do (pc,..) until lce`: the count comes from R5 and the
+    /// loop body ends 6 parcels on; `0d00 0000 0003` has bit 23 clear and is relative as well.
+    #[test]
+    fn do_until_takes_its_count_from_a_register_and_is_pc_relative() {
+        // DO (pc,3) until lce, lcntr=r0 ; body: R1 = R1 + 1 (type 2c, 1 parcel? use 3a NOP-like word)
+        let mut c = core_at_zero(&[0x0d00, 0x0000, 0x0003, 0x0001, 0x0001]);
+        c.r[0] = 3;
+        // the body is the single 16-bit NOP at parcel 3: ends at pc + 3
+        assert_eq!(c.run(1 + 3), None);
+        assert_eq!(
+            c.pc, 4,
+            "three passes of the body, then the code after the loop"
+        );
+        assert!(c.loops.is_empty());
+    }
+
+    /// ADI: `0afe` is `rts (db)`; the two instructions after it run before the return.
+    #[test]
+    fn delayed_return_runs_two_slots_then_returns() {
+        let mut c = core_at_zero(&[0x06be, 0x0000, 0x0010, 0x0001]);
+        load(&mut c, 0x10, &[0x0afe, 0x0001, 0x0001, 0x0001]);
+        assert_eq!(c.run(2), None);
+        assert_eq!(c.pc, 0x11, "first delay slot after RTS (DB)");
+        assert_eq!(c.run(2), None);
+        assert_eq!(c.pc, 3, "returns to the instruction after the call");
+        assert!(c.return_addresses().is_empty());
+        // the non-delayed form `0abe` returns at once
+        let mut c = core_at_zero(&[0x06be, 0x0000, 0x0010, 0x0001]);
+        load(&mut c, 0x10, &[0x0abe, 0x0001]);
+        assert_eq!(c.run(2), None);
+        assert_eq!(c.pc, 3);
     }
 
     #[test]

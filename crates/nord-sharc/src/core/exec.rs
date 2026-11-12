@@ -84,6 +84,7 @@ impl Core {
             Kind::T21 if d.w == 0 => {}
             Kind::T2a | Kind::T2b | Kind::T2c => self.exec_compute(&d)?,
             Kind::T6n => self.exec_shift_imm(&d)?,
+            Kind::T1a | Kind::T1b => self.exec_dual_move(&d)?,
             Kind::T8a | Kind::T9a | Kind::T9b | Kind::T11a | Kind::T11c | Kind::T12a => {
                 next = self.exec_flow(&d, next)?;
             }
@@ -93,6 +94,7 @@ impl Core {
             | Kind::T15a
             | Kind::T15b
             | Kind::T16a
+            | Kind::T16b
             | Kind::T18a
             | Kind::T5a
             | Kind::T5b

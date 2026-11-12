@@ -5,17 +5,42 @@ use super::{sign_extend, Core, Fault};
 use crate::visa::{bits, ureg_load, Kind};
 
 impl Core {
+    /// The values a store of `ureg` writes (PEx, and PEy for a data register), read before the
+    /// instruction's compute runs: all halves of one instruction read the old registers.
+    pub(super) fn capture(&self, ureg: u8) -> (u32, u32) {
+        let y = if ureg < 16 { self.s[ureg as usize] } else { 0 };
+        (self.read_ureg(ureg), y)
+    }
+
     /// Moves universal register `ureg` to or from data memory at `addr`. In SIMD mode a data
     /// register transfer also moves the PEy register to or from `addr + 1` (ASSUMED from the
     /// duplicated word pairs of the image data and the SIMD description of the reference).
-    fn mem_transfer(&mut self, d: &Decoded, addr: u32, ureg: u8, write: bool) -> Result<(), Fault> {
+    pub(super) fn mem_transfer(
+        &mut self,
+        d: &Decoded,
+        addr: u32,
+        ureg: u8,
+        write: bool,
+    ) -> Result<(), Fault> {
+        let captured = self.capture(ureg);
+        self.mem_transfer_with(d, addr, ureg, write, captured)
+    }
+
+    /// [`Core::mem_transfer`] storing the values captured before a parallel compute.
+    pub(super) fn mem_transfer_with(
+        &mut self,
+        d: &Decoded,
+        addr: u32,
+        ureg: u8,
+        write: bool,
+        captured: (u32, u32),
+    ) -> Result<(), Fault> {
         let bad = |address| Fault::BadAddress { pc: d.pc, address };
         let pair = self.simd() && ureg < 16;
         if write {
-            let v = self.read_ureg(ureg);
-            self.dm_write(addr, v).map_err(bad)?;
+            self.dm_write(addr, captured.0).map_err(bad)?;
             if pair {
-                self.dm_write(addr.wrapping_add(1), self.s[ureg as usize])
+                self.dm_write(addr.wrapping_add(1), captured.1)
                     .map_err(bad)?;
             }
         } else {
@@ -77,6 +102,18 @@ impl Core {
                     .map_err(|address| Fault::BadAddress { pc: d.pc, address })?;
                 self.i[ii] = next_i;
             }
+            Kind::T16b => {
+                // DM/PM(Ii, Mm) = <data16> (sign extended like Type 17b), post-modify
+                let bank = Self::dag_bank(bits(w, 37, 37));
+                let ii = bits(w, 43, 41) as usize + bank;
+                let mi = bits(w, 40, 38) as usize + bank;
+                let addr = self.i[ii];
+                let next_i = self.modified(ii, mi);
+                let value = sign_extend(bits(w, 31, 16) as u32, 16);
+                self.dm_write(addr, value)
+                    .map_err(|address| Fault::BadAddress { pc: d.pc, address })?;
+                self.i[ii] = next_i;
+            }
             Kind::T18a => self.bit_op(d)?,
             Kind::T5a | Kind::T5b if d.cond_ok => {
                 if bits(w, 43, 43) == 1 {
@@ -104,8 +141,10 @@ impl Core {
                 } else {
                     (modified, None)
                 };
+                let ureg = bits(w, 29, 23) as u8;
+                let captured = self.capture(ureg);
                 self.run_move_compute(d, with_compute)?;
-                self.mem_transfer(d, addr, bits(w, 29, 23) as u8, write_bit(31))?;
+                self.mem_transfer_with(d, addr, ureg, write_bit(31), captured)?;
                 if let Some(u) = update {
                     self.i[ii] = u;
                 }
@@ -119,22 +158,35 @@ impl Core {
                 self.i[ii] = next_i;
             }
             Kind::T7a | Kind::T7b if d.cond_ok => {
-                // [IF cond] [compute,] [Id =] MODIFY(Is, M): G bit 39 selects DAG2, the
-                // destination register is Is XOR IdIs (Table 10-1), the modify always honours
-                // L/B (circular).
-                let bank = Self::dag_bank(bits(w, 39, 39));
+                // [IF cond] [compute,] [Id =] MODIFY(Is, M): G bit 38 selects DAG2, the
+                // destination is Is XOR bits 26..24 (stays in the bank), the modify always
+                // honours L/B (circular). VERIFIED against ADI elfdump on 51 samples (docs 5.34).
+                let bank = Self::dag_bank(bits(w, 38, 38));
                 let src = bits(w, 32, 30) as usize + bank;
                 let mi = bits(w, 29, 27) as usize + bank;
-                let dst = (src ^ bits(w, 26, 23) as usize) & 15;
+                let dst = src ^ bits(w, 26, 24) as usize;
                 self.run_move_compute(d, with_compute)?;
                 self.i[dst] = self.modified(src, mi);
             }
             Kind::T4a | Kind::T4b if d.cond_ok => {
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 40, 40));
-                // DATA6 is a signed offset (VERIFIED against ADI elfdump, docs 5.34)
-                let addr = self.i[ii].wrapping_add(sign_extend(bits(w, 32, 27) as u32, 6));
+                // DATA6 is a signed offset; the U bit (38) selects post-modify with update
+                // (`dm(i6,2)`: access at I, then I += DATA6) instead of the pre-modify offset
+                // `dm(2,i6)` (VERIFIED against ADI elfdump, 220 post and 1,576 pre samples, docs 5.34)
+                let data = sign_extend(bits(w, 32, 27) as u32, 6);
+                let (addr, update) = if bits(w, 38, 38) == 1 {
+                    let (i, l, b) = (self.i[ii], self.l[ii], self.b[ii]);
+                    (i, Some(Self::dag_next(i, data, l, b)))
+                } else {
+                    (self.i[ii].wrapping_add(data), None)
+                };
+                let ureg = bits(w, 26, 23) as u8;
+                let captured = self.capture(ureg);
                 self.run_move_compute(d, with_compute)?;
-                self.mem_transfer(d, addr, bits(w, 26, 23) as u8, write_bit(39))?;
+                self.mem_transfer_with(d, addr, ureg, write_bit(39), captured)?;
+                if let Some(u) = update {
+                    self.i[ii] = u;
+                }
             }
             // a conditional form whose condition failed does nothing
             Kind::T5a
@@ -261,6 +313,32 @@ mod tests {
         assert!(c.step().is_ok());
         assert_eq!(c.r[3], 77);
         assert_eq!(f32::from_bits(c.r[0]), 3.0);
+    }
+
+    /// ADI: `6c7e 10bf` is `r1=dm(i6,0x2)`: post-modify, the access is at I6 and I6 moves by 2.
+    #[test]
+    fn type_4_post_modify_updates_the_index() {
+        let mut c = core_at_zero(&[0x6c7e, 0x10bf]);
+        c.i[6] = 0x9_0100;
+        c.dm_write(0x9_0100, 5).unwrap();
+        c.dm_write(0x9_0102, 6).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!((c.r[1], c.i[6]), (5, 0x9_0102));
+        // the pre-modify offset form `dm(0x2,i6)` leaves the index alone: 6c3e = bit 38 clear
+        let mut c = core_at_zero(&[0x6c3e, 0x10bf]);
+        c.i[6] = 0x9_0100;
+        c.dm_write(0x9_0102, 6).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!((c.r[1], c.i[6]), (6, 0x9_0100));
+    }
+
+    /// ADI: `043e e73f` is `i4=modify(i3,m4)`: the destination is the source XOR bits 26..24.
+    #[test]
+    fn modify_destination_is_source_xor_the_field() {
+        let mut c = core_at_zero(&[0x043e, 0xe73f]);
+        (c.i[3], c.m[4]) = (100, 7);
+        assert!(c.step().is_ok());
+        assert_eq!((c.i[4], c.i[3]), (107, 100));
     }
 
     #[test]
