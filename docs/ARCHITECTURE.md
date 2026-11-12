@@ -84,7 +84,9 @@ nord-stage-4-emulator/
 │               └── ns4.rs      # CLI binary for preset/backup inspection & offline render
 ├── tools/
 │   ├── check_tests.py          # CI ratchet ensuring every source file has unit tests
+│   ├── crop_panel.py           # Panel & keybed texture cropper from reference photos
 │   ├── ns4_inspect.py          # Python CBIN / .ns4b / firmware analysis toolkit
+│   ├── video_ref.py            # YouTube/local hardware video ROI, WAV & spectral comparator
 │   ├── test-baseline.txt       # Ratchet baseline (0 uncovered files)
 │   └── tests/                  # Pytest suite covering all Python tools
 └── docs/
