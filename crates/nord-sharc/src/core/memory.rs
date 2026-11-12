@@ -4,6 +4,12 @@ use super::{Core, IOP_WORDS, SRAM_BYTES};
 /// Normal-word addresses backed by the flat SRAM image (blocks 1 to 3 of the ADSP-21489).
 const SRAM_WORDS: std::ops::Range<u32> = 0x9_0000..0x10_0000;
 
+/// Short-word (16-bit) data addresses backed by the flat SRAM image: a data access in this range
+/// moves one 16-bit word (zero-extended on reads, low half on writes) at byte `2 * addr`.
+/// VERIFIED: the SY1SY2/SMP boot kernel reads the received word `DM(0x92003)` as the shorts
+/// `DM(0x124006)` and `DM(0x124007)` (`tools/adi_dis.py --isa`, ISA words `0x8C0ED`, `0x8C0F0`).
+const SHORT_WORDS: std::ops::Range<u32> = 0x10_0000..0x20_0000;
+
 /// Byte offset of normal-word address `addr` in the flat SRAM image, if it is backed by SRAM.
 #[inline]
 fn sram_offset(addr: u32) -> Option<usize> {
@@ -18,6 +24,11 @@ impl Core {
     /// device store (ASSUMED: peripherals and the external bus behave like plain memory until
     /// they are modelled, `device_reads` counts these accesses).
     pub fn dm_read(&mut self, addr: u32) -> Result<u32, u32> {
+        if self.periph.is_some() {
+            if let Some(v) = self.periph_read(addr) {
+                return Ok(v);
+            }
+        }
         if (addr as usize) < IOP_WORDS {
             return Ok(self.iop[addr as usize]);
         }
@@ -29,6 +40,13 @@ impl Core {
                 self.sram[o + 3],
             ];
             return Ok(u32::from_le_bytes(w));
+        }
+        if SHORT_WORDS.contains(&addr) && !self.preset.contains_key(&addr) {
+            let o = addr as usize * 2;
+            return Ok(u32::from(u16::from_le_bytes([
+                self.sram[o],
+                self.sram[o + 1],
+            ])));
         }
         self.device_reads += 1;
         if let Some(v) = self.preset.get(&addr) {
@@ -45,12 +63,20 @@ impl Core {
             self.watch_hits.push((self.steps, self.pc, value));
             self.watch_addrs.push(addr);
         }
+        if self.periph.is_some() && self.periph_write(addr, value) {
+            return Ok(());
+        }
         if (addr as usize) < IOP_WORDS {
             self.iop[addr as usize] = value;
             return Ok(());
         }
         if let Some(o) = sram_offset(addr) {
             self.sram[o..o + 4].copy_from_slice(&value.to_le_bytes());
+            return Ok(());
+        }
+        if SHORT_WORDS.contains(&addr) {
+            let o = addr as usize * 2;
+            self.sram[o..o + 2].copy_from_slice(&(value as u16).to_le_bytes());
             return Ok(());
         }
         self.device_writes += 1;
@@ -123,6 +149,21 @@ mod tests {
         c.preset_device(0x3108_D008, 5);
         c.dm_write(0x3108_D008, 9).unwrap();
         assert_eq!(c.dm_read(0x3108_D008), Ok(5));
+    }
+
+    #[test]
+    fn short_word_window_is_the_same_memory_as_normal_words() {
+        let mut c = Core::new(&[]);
+        c.dm_write(0x9_2003, 0x1234_5678).unwrap();
+        assert_eq!(c.dm_read(0x12_4006), Ok(0x5678));
+        assert_eq!(c.dm_read(0x12_4007), Ok(0x1234));
+        c.dm_write(0x12_4006, 0xFFFF_ABCD).unwrap();
+        assert_eq!(
+            c.dm_read(0x9_2003),
+            Ok(0x1234_ABCD),
+            "only the low 16 bits are stored"
+        );
+        assert_eq!((c.device_reads, c.device_writes), (0, 0));
     }
 
     #[test]

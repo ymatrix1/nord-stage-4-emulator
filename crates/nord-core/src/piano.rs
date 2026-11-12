@@ -9,6 +9,14 @@ use std::f32::consts::TAU;
 use std::path::Path;
 use std::sync::Arc;
 
+pub mod q31_kernel;
+pub mod smp_unpack;
+
+#[cfg(test)]
+mod interp_switch;
+
+pub use q31_kernel::{SampleInterp, SmpKernel};
+
 /// Maximum simultaneous polyphonic voices per Piano layer (`64` pre-allocated in core; scalable to 120).
 pub const MAX_PIANO_VOICES: usize = 64;
 
@@ -795,6 +803,9 @@ pub struct PianoLayer {
     pub sostenuto_pedal_down: bool,
     pub soft_pedal_down: bool,
     pub sound: Option<Arc<NpnoSound>>,
+    /// Sample interpolation: hardware-parity SMP kernel (default) or the older cubic.
+    pub sample_interp: SampleInterp,
+    kernel: &'static SmpKernel,
     voices: [PianoVoice; MAX_PIANO_VOICES],
     resonators: [ModalResonator; NUM_SYMPATHETIC_STRINGS],
     undamped_keys: [bool; 128],
@@ -868,6 +879,8 @@ impl PianoLayer {
             sostenuto_pedal_down: false,
             soft_pedal_down: false,
             sound,
+            sample_interp: SampleInterp::default(),
+            kernel: SmpKernel::shared(),
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
             resonators,
             undamped_keys: [false; 128],
@@ -1200,14 +1213,16 @@ impl PianoLayer {
         stroke: &LoadedPianoStroke,
         pos: &mut f64,
         step: f64,
+        interp: SampleInterp,
+        kernel: &SmpKernel,
     ) -> Option<(f32, f32)> {
         let p = *pos;
-        let l = Self::sample_pcm_at(&stroke.pcm, p)?;
-        let r = stroke
-            .pcm_right
-            .as_deref()
-            .and_then(|rp| Self::sample_pcm_at(rp, p))
-            .unwrap_or(l);
+        let at = |pcm: &[f32]| match interp {
+            SampleInterp::Cubic => Self::sample_pcm_at(pcm, p),
+            SampleInterp::SmpQ31 => kernel.interpolate(pcm, p),
+        };
+        let l = at(&stroke.pcm)?;
+        let r = stroke.pcm_right.as_deref().and_then(at).unwrap_or(l);
         *pos = p + step;
         Some((l, r))
     }
@@ -1278,14 +1293,20 @@ impl PianoLayer {
             }
             let (sig_l, sig_r) = if let (Some(snd), Some(s_idx)) = (&self.sound, v.stroke_idx) {
                 if let Some(stroke) = snd.strokes.get(s_idx) {
-                    if let Some((ml, mr)) =
-                        Self::sample_stroke_stereo_at(stroke, &mut v.sample_pos, v.sample_step)
-                    {
+                    if let Some((ml, mr)) = Self::sample_stroke_stereo_at(
+                        stroke,
+                        &mut v.sample_pos,
+                        v.sample_step,
+                        self.sample_interp,
+                        self.kernel,
+                    ) {
                         if unison_on && !v.is_release_sample {
                             let (dl, dr) = Self::sample_stroke_stereo_at(
                                 stroke,
                                 &mut v.sample_pos_detune,
                                 v.sample_step_detune,
+                                self.sample_interp,
+                                self.kernel,
                             )
                             .unwrap_or((ml, mr));
                             (0.75 * ml + 0.25 * dl, 0.25 * mr + 0.75 * dr)

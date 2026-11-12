@@ -1,0 +1,2048 @@
+000312	
+001312	r3=r1+r2
+002312	r3=r1-r2
+003312	
+004312	
+005312	r3=r1+r2+CI
+006312	r3=r1-r2+CI-1
+007312	
+008312	
+009312	r3=(r1+r2)/2
+00a312	comp(r1,r2)
+00b312	compu(r1,r2)
+00c312	
+00d312	
+00e312	
+00f312	
+010312	
+011312	
+012312	
+013312	
+014312	
+015312	
+016312	
+017312	
+018312	
+019312	
+01a312	
+01b312	
+01c312	
+01d312	
+01e312	
+01f312	
+020312	
+021312	r3=pass r1
+022312	r3=-r1
+023312	
+024312	
+025312	r3=r1+CI
+026312	r3=r1+CI-1
+027312	
+028312	
+029312	r3=r1+1
+02a312	r3=r1-1
+02b312	
+02c312	
+02d312	
+02e312	
+02f312	
+030312	r3=abs r1
+031312	
+032312	
+033312	
+034312	
+035312	
+036312	
+037312	
+038312	
+039312	
+03a312	
+03b312	
+03c312	
+03d312	
+03e312	
+03f312	
+040312	r3=r1 and r2
+041312	r3=r1 or r2
+042312	r3=r1 xor r2
+043312	r3= not r1
+044312	
+045312	
+046312	
+047312	
+048312	
+049312	
+04a312	
+04b312	
+04c312	
+04d312	
+04e312	
+04f312	
+050312	
+051312	
+052312	
+053312	
+054312	
+055312	
+056312	
+057312	
+058312	
+059312	
+05a312	
+05b312	
+05c312	
+05d312	
+05e312	
+05f312	
+060312	
+061312	r3=min(r1,r2)
+062312	r3=max(r1,r2)
+063312	r3=clip r1 by r2
+064312	
+065312	
+066312	
+067312	
+068312	
+069312	
+06a312	
+06b312	
+06c312	
+06d312	
+06e312	
+06f312	
+070312	r3=r1+r2, r0=r1-r2
+071312	r3=r1+r2, r1=r1-r2
+072312	r3=r1+r2, r2=r1-r2
+073312	r3=r1+r2, r3=r1-r2
+074312	r3=r1+r2, r4=r1-r2
+075312	r3=r1+r2, r5=r1-r2
+076312	r3=r1+r2, r6=r1-r2
+077312	r3=r1+r2, r7=r1-r2
+078312	r3=r1+r2, r8=r1-r2
+079312	r3=r1+r2, r9=r1-r2
+07a312	r3=r1+r2, r10=r1-r2
+07b312	r3=r1+r2, r11=r1-r2
+07c312	r3=r1+r2, r12=r1-r2
+07d312	r3=r1+r2, r13=r1-r2
+07e312	r3=r1+r2, r14=r1-r2
+07f312	r3=r1+r2, r15=r1-r2
+080312	
+081312	f3=f1+f2
+082312	f3=f1-f2
+083312	
+084312	
+085312	
+086312	
+087312	
+088312	
+089312	f3=(f1+f2)/2
+08a312	comp(f1,f2)
+08b312	
+08c312	
+08d312	
+08e312	
+08f312	
+090312	
+091312	f3=abs(f1+f2)
+092312	f3=abs(f1-f2)
+093312	
+094312	
+095312	
+096312	
+097312	
+098312	
+099312	
+09a312	
+09b312	
+09c312	
+09d312	
+09e312	
+09f312	
+0a0312	
+0a1312	f3=pass f1
+0a2312	f3=-f1
+0a3312	
+0a4312	
+0a5312	f3=rnd f1
+0a6312	
+0a7312	
+0a8312	
+0a9312	
+0aa312	
+0ab312	
+0ac312	
+0ad312	r3=mant f1
+0ae312	
+0af312	
+0b0312	f3=abs f1
+0b1312	
+0b2312	
+0b3312	
+0b4312	
+0b5312	
+0b6312	
+0b7312	
+0b8312	
+0b9312	
+0ba312	
+0bb312	
+0bc312	
+0bd312	f3=scalb f1 by r2
+0be312	
+0bf312	
+0c0312	
+0c1312	r3=logb f1
+0c2312	
+0c3312	
+0c4312	f3=recips f1
+0c5312	f3=rsqrts f1
+0c6312	
+0c7312	
+0c8312	
+0c9312	r3=fix f1
+0ca312	f3=float r1
+0cb312	
+0cc312	
+0cd312	r3=trunc f1
+0ce312	
+0cf312	
+0d0312	
+0d1312	
+0d2312	
+0d3312	
+0d4312	
+0d5312	
+0d6312	
+0d7312	
+0d8312	
+0d9312	r3=fix f1 by r2
+0da312	f3=float r1 by r2
+0db312	
+0dc312	
+0dd312	r3=trunc f1 by r2
+0de312	
+0df312	
+0e0312	f3=f1 copysign f2
+0e1312	f3=min(f1,f2)
+0e2312	f3=max(f1,f2)
+0e3312	f3=clip f1 by f2
+0e4312	
+0e5312	
+0e6312	
+0e7312	
+0e8312	
+0e9312	
+0ea312	
+0eb312	
+0ec312	
+0ed312	
+0ee312	
+0ef312	
+0f0312	f3=f1+f2, f0=f1-f2
+0f1312	f3=f1+f2, f1=f1-f2
+0f2312	f3=f1+f2, f2=f1-f2
+0f3312	f3=f1+f2, f3=f1-f2
+0f4312	f3=f1+f2, f4=f1-f2
+0f5312	f3=f1+f2, f5=f1-f2
+0f6312	f3=f1+f2, f6=f1-f2
+0f7312	f3=f1+f2, f7=f1-f2
+0f8312	f3=f1+f2, f8=f1-f2
+0f9312	f3=f1+f2, f9=f1-f2
+0fa312	f3=f1+f2, f10=f1-f2
+0fb312	f3=f1+f2, f11=f1-f2
+0fc312	f3=f1+f2, f12=f1-f2
+0fd312	f3=f1+f2, f13=f1-f2
+0fe312	f3=f1+f2, f14=f1-f2
+0ff312	f3=f1+f2, f15=f1-f2
+100312	r3=sat MRF(ui)
+101312	r3=sat MRF(si)
+102312	r3=sat MRB(ui)
+103312	r3=sat MRB(si)
+104312	MRF=sat MRF(ui)
+105312	MRF=sat MRF(si)
+106312	MRB=sat MRB(ui)
+107312	MRB=sat MRB(si)
+108312	r3=sat MRF(uf)
+109312	r3=sat MRF(sf)
+10a312	r3=sat MRB(uf)
+10b312	r3=sat MRB(sf)
+10c312	MRF=sat MRF(uf)
+10d312	MRF=sat MRF(sf)
+10e312	MRB=sat MRB(uf)
+10f312	MRB=sat MRB(sf)
+110312	
+111312	
+112312	
+113312	
+114312	MRF=0
+115312	
+116312	MRB=0
+117312	
+118312	r3=rnd MRF(uf)
+119312	r3=rnd MRF(sf)
+11a312	r3=rnd MRB(uf)
+11b312	r3=rnd MRB(sf)
+11c312	MRF=rnd MRF(uf)
+11d312	MRF=rnd MRF(sf)
+11e312	MRB=rnd MRB(uf)
+11f312	MRB=rnd MRB(sf)
+120312	
+121312	
+122312	
+123312	
+124312	
+125312	
+126312	
+127312	
+128312	
+129312	
+12a312	
+12b312	
+12c312	
+12d312	
+12e312	
+12f312	
+130312	f3=f1*f2
+131312	
+132312	
+133312	
+134312	
+135312	
+136312	
+137312	
+138312	
+139312	
+13a312	
+13b312	
+13c312	
+13d312	
+13e312	
+13f312	
+140312	r3=r1*r2(uui)
+141312	r3=r1*r2(uuir)
+142312	r3=r1*r2(uui)
+143312	r3=r1*r2(uuir)
+144312	MRF=r1*r2(uui)
+145312	MRF=r1*r2(uuir)
+146312	MRB=r1*r2(uui)
+147312	MRB=r1*r2(uuir)
+148312	r3=r1*r2(uuf)
+149312	r3=r1*r2(uufr)
+14a312	r3=r1*r2(uuf)
+14b312	r3=r1*r2(uufr)
+14c312	MRF=r1*r2(uuf)
+14d312	MRF=r1*r2(uufr)
+14e312	MRB=r1*r2(uuf)
+14f312	MRB=r1*r2(uufr)
+150312	r3=r1*r2(sui)
+151312	r3=r1*r2(suir)
+152312	r3=r1*r2(sui)
+153312	r3=r1*r2(suir)
+154312	MRF=r1*r2(sui)
+155312	MRF=r1*r2(suir)
+156312	MRB=r1*r2(sui)
+157312	MRB=r1*r2(suir)
+158312	r3=r1*r2(suf)
+159312	r3=r1*r2(sufr)
+15a312	r3=r1*r2(suf)
+15b312	r3=r1*r2(sufr)
+15c312	MRF=r1*r2(suf)
+15d312	MRF=r1*r2(sufr)
+15e312	MRB=r1*r2(suf)
+15f312	MRB=r1*r2(sufr)
+160312	r3=r1*r2(usi)
+161312	r3=r1*r2(usir)
+162312	r3=r1*r2(usi)
+163312	r3=r1*r2(usir)
+164312	MRF=r1*r2(usi)
+165312	MRF=r1*r2(usir)
+166312	MRB=r1*r2(usi)
+167312	MRB=r1*r2(usir)
+168312	r3=r1*r2(usf)
+169312	r3=r1*r2(usfr)
+16a312	r3=r1*r2(usf)
+16b312	r3=r1*r2(usfr)
+16c312	MRF=r1*r2(usf)
+16d312	MRF=r1*r2(usfr)
+16e312	MRB=r1*r2(usf)
+16f312	MRB=r1*r2(usfr)
+170312	r3=r1*r2(ssi)
+171312	r3=r1*r2(ssir)
+172312	r3=r1*r2(ssi)
+173312	r3=r1*r2(ssir)
+174312	MRF=r1*r2(ssi)
+175312	MRF=r1*r2(ssir)
+176312	MRB=r1*r2(ssi)
+177312	MRB=r1*r2(ssir)
+178312	r3=r1*r2(ssf)
+179312	r3=r1*r2(ssfr)
+17a312	r3=r1*r2(ssf)
+17b312	r3=r1*r2(ssfr)
+17c312	MRF=r1*r2(ssf)
+17d312	MRF=r1*r2(ssfr)
+17e312	MRB=r1*r2(ssf)
+17f312	MRB=r1*r2(ssfr)
+180312	r3=MRF+r1*r2(uui)
+181312	r3=MRF+r1*r2(uuir)
+182312	r3=MRB+r1*r2(uui)
+183312	r3=MRB+r1*r2(uuir)
+184312	MRF=MRF+r1*r2(uui)
+185312	MRF=MRF+r1*r2(uuir)
+186312	MRB=MRB+r1*r2(uui)
+187312	MRB=MRB+r1*r2(uuir)
+188312	r3=MRF+r1*r2(uuf)
+189312	r3=MRF+r1*r2(uufr)
+18a312	r3=MRB+r1*r2(uuf)
+18b312	r3=MRB+r1*r2(uufr)
+18c312	MRF=MRF+r1*r2(uuf)
+18d312	MRF=MRF+r1*r2(uufr)
+18e312	MRB=MRB+r1*r2(uuf)
+18f312	MRB=MRB+r1*r2(uufr)
+190312	r3=MRF+r1*r2(sui)
+191312	r3=MRF+r1*r2(suir)
+192312	r3=MRB+r1*r2(sui)
+193312	r3=MRB+r1*r2(suir)
+194312	MRF=MRF+r1*r2(sui)
+195312	MRF=MRF+r1*r2(suir)
+196312	MRB=MRB+r1*r2(sui)
+197312	MRB=MRB+r1*r2(suir)
+198312	r3=MRF+r1*r2(suf)
+199312	r3=MRF+r1*r2(sufr)
+19a312	r3=MRB+r1*r2(suf)
+19b312	r3=MRB+r1*r2(sufr)
+19c312	MRF=MRF+r1*r2(suf)
+19d312	MRF=MRF+r1*r2(sufr)
+19e312	MRB=MRB+r1*r2(suf)
+19f312	MRB=MRB+r1*r2(sufr)
+1a0312	r3=MRF+r1*r2(usi)
+1a1312	r3=MRF+r1*r2(usir)
+1a2312	r3=MRB+r1*r2(usi)
+1a3312	r3=MRB+r1*r2(usir)
+1a4312	MRF=MRF+r1*r2(usi)
+1a5312	MRF=MRF+r1*r2(usir)
+1a6312	MRB=MRB+r1*r2(usi)
+1a7312	MRB=MRB+r1*r2(usir)
+1a8312	r3=MRF+r1*r2(usf)
+1a9312	r3=MRF+r1*r2(usfr)
+1aa312	r3=MRB+r1*r2(usf)
+1ab312	r3=MRB+r1*r2(usfr)
+1ac312	MRF=MRF+r1*r2(usf)
+1ad312	MRF=MRF+r1*r2(usfr)
+1ae312	MRB=MRB+r1*r2(usf)
+1af312	MRB=MRB+r1*r2(usfr)
+1b0312	r3=MRF+r1*r2(ssi)
+1b1312	r3=MRF+r1*r2(ssir)
+1b2312	r3=MRB+r1*r2(ssi)
+1b3312	r3=MRB+r1*r2(ssir)
+1b4312	MRF=MRF+r1*r2(ssi)
+1b5312	MRF=MRF+r1*r2(ssir)
+1b6312	MRB=MRB+r1*r2(ssi)
+1b7312	MRB=MRB+r1*r2(ssir)
+1b8312	r3=MRF+r1*r2(ssf)
+1b9312	r3=MRF+r1*r2(ssfr)
+1ba312	r3=MRB+r1*r2(ssf)
+1bb312	r3=MRB+r1*r2(ssfr)
+1bc312	MRF=MRF+r1*r2(ssf)
+1bd312	MRF=MRF+r1*r2(ssfr)
+1be312	MRB=MRB+r1*r2(ssf)
+1bf312	MRB=MRB+r1*r2(ssfr)
+1c0312	r3=MRF-r1*r2(uui)
+1c1312	r3=MRF-r1*r2(uuir)
+1c2312	r3=MRB-r1*r2(uui)
+1c3312	r3=MRB-r1*r2(uuir)
+1c4312	MRF=MRF-r1*r2(uui)
+1c5312	MRF=MRF-r1*r2(uuir)
+1c6312	MRB=MRB-r1*r2(uui)
+1c7312	MRB=MRB-r1*r2(uuir)
+1c8312	r3=MRF-r1*r2(uuf)
+1c9312	r3=MRF-r1*r2(uufr)
+1ca312	r3=MRB-r1*r2(uuf)
+1cb312	r3=MRB-r1*r2(uufr)
+1cc312	MRF=MRF-r1*r2(uuf)
+1cd312	MRF=MRF-r1*r2(uufr)
+1ce312	MRB=MRB-r1*r2(uuf)
+1cf312	MRB=MRB-r1*r2(uufr)
+1d0312	r3=MRF-r1*r2(sui)
+1d1312	r3=MRF-r1*r2(suir)
+1d2312	r3=MRB-r1*r2(sui)
+1d3312	r3=MRB-r1*r2(suir)
+1d4312	MRF=MRF-r1*r2(sui)
+1d5312	MRF=MRF-r1*r2(suir)
+1d6312	MRB=MRB-r1*r2(sui)
+1d7312	MRB=MRB-r1*r2(suir)
+1d8312	r3=MRF-r1*r2(suf)
+1d9312	r3=MRF-r1*r2(sufr)
+1da312	r3=MRB-r1*r2(suf)
+1db312	r3=MRB-r1*r2(sufr)
+1dc312	MRF=MRF-r1*r2(suf)
+1dd312	MRF=MRF-r1*r2(sufr)
+1de312	MRB=MRB-r1*r2(suf)
+1df312	MRB=MRB-r1*r2(sufr)
+1e0312	r3=MRF-r1*r2(usi)
+1e1312	r3=MRF-r1*r2(usir)
+1e2312	r3=MRB-r1*r2(usi)
+1e3312	r3=MRB-r1*r2(usir)
+1e4312	MRF=MRF-r1*r2(usi)
+1e5312	MRF=MRF-r1*r2(usir)
+1e6312	MRB=MRB-r1*r2(usi)
+1e7312	MRB=MRB-r1*r2(usir)
+1e8312	r3=MRF-r1*r2(usf)
+1e9312	r3=MRF-r1*r2(usfr)
+1ea312	r3=MRB-r1*r2(usf)
+1eb312	r3=MRB-r1*r2(usfr)
+1ec312	MRF=MRF-r1*r2(usf)
+1ed312	MRF=MRF-r1*r2(usfr)
+1ee312	MRB=MRB-r1*r2(usf)
+1ef312	MRB=MRB-r1*r2(usfr)
+1f0312	r3=MRF-r1*r2(ssi)
+1f1312	r3=MRF-r1*r2(ssir)
+1f2312	r3=MRB-r1*r2(ssi)
+1f3312	r3=MRB-r1*r2(ssir)
+1f4312	MRF=MRF-r1*r2(ssi)
+1f5312	MRF=MRF-r1*r2(ssir)
+1f6312	MRB=MRB-r1*r2(ssi)
+1f7312	MRB=MRB-r1*r2(ssir)
+1f8312	r3=MRF-r1*r2(ssf)
+1f9312	r3=MRF-r1*r2(ssfr)
+1fa312	r3=MRB-r1*r2(ssf)
+1fb312	r3=MRB-r1*r2(ssfr)
+1fc312	MRF=MRF-r1*r2(ssf)
+1fd312	MRF=MRF-r1*r2(ssfr)
+1fe312	MRB=MRB-r1*r2(ssf)
+1ff312	MRB=MRB-r1*r2(ssfr)
+200312	r3=lshift r1 by r2
+201312	
+202312	
+203312	
+204312	r3=ashift r1 by r2
+205312	
+206312	
+207312	
+208312	r3=rot r1 by r2
+209312	
+20a312	
+20b312	
+20c312	
+20d312	
+20e312	
+20f312	
+210312	
+211312	
+212312	
+213312	
+214312	
+215312	
+216312	
+217312	
+218312	
+219312	
+21a312	
+21b312	
+21c312	
+21d312	
+21e312	
+21f312	
+220312	r3=r3 or lshift r1 by r2
+221312	
+222312	
+223312	
+224312	r3=r3 or ashift r1 by r2
+225312	
+226312	
+227312	
+228312	
+229312	
+22a312	
+22b312	
+22c312	
+22d312	
+22e312	
+22f312	
+230312	
+231312	
+232312	
+233312	
+234312	
+235312	
+236312	
+237312	
+238312	
+239312	
+23a312	
+23b312	
+23c312	
+23d312	
+23e312	
+23f312	
+240312	r3=fext r1 by r2
+241312	
+242312	
+243312	
+244312	r3=fdep r1 by r2
+245312	
+246312	
+247312	
+248312	r3=fext r1 by r2 (se)
+249312	
+24a312	
+24b312	
+24c312	r3=fdep r1 by r2 (se)
+24d312	
+24e312	
+24f312	
+250312	r3=bitext r2
+251312	
+252312	
+253312	
+254312	
+255312	
+256312	
+257312	
+258312	r3=bitext r2 (nu)
+259312	
+25a312	
+25b312	
+25c312	
+25d312	
+25e312	
+25f312	
+260312	
+261312	
+262312	
+263312	
+264312	r3=r3 or fdep r1 by r2
+265312	
+266312	
+267312	
+268312	
+269312	
+26a312	
+26b312	
+26c312	r3=r3 or fdep r1 by r2 (se)
+26d312	
+26e312	
+26f312	
+270312	r3=bffwrp
+271312	
+272312	
+273312	
+274312	bitdep r1 by r2
+275312	
+276312	
+277312	
+278312	
+279312	
+27a312	
+27b312	
+27c312	bffwrp=r2
+27d312	
+27e312	
+27f312	
+280312	r3=exp r1
+281312	
+282312	
+283312	
+284312	r3=exp r1 (ex)
+285312	
+286312	
+287312	
+288312	r3=leftz r1
+289312	
+28a312	
+28b312	
+28c312	r3=lefto r1
+28d312	
+28e312	
+28f312	
+290312	r3=fpack f1
+291312	
+292312	
+293312	
+294312	r3=funpack f1
+295312	
+296312	
+297312	
+298312	
+299312	
+29a312	
+29b312	
+29c312	
+29d312	
+29e312	
+29f312	
+2a0312	
+2a1312	
+2a2312	
+2a3312	
+2a4312	
+2a5312	
+2a6312	
+2a7312	
+2a8312	
+2a9312	
+2aa312	
+2ab312	
+2ac312	
+2ad312	
+2ae312	
+2af312	
+2b0312	
+2b1312	
+2b2312	
+2b3312	
+2b4312	
+2b5312	
+2b6312	
+2b7312	
+2b8312	
+2b9312	
+2ba312	
+2bb312	
+2bc312	
+2bd312	
+2be312	
+2bf312	
+2c0312	r3=bset r1 by r2
+2c1312	
+2c2312	
+2c3312	
+2c4312	r3=bclr r1 by r2
+2c5312	
+2c6312	
+2c7312	
+2c8312	r3=btgl r1 by r2
+2c9312	
+2ca312	
+2cb312	
+2cc312	btst r1 by r2
+2cd312	
+2ce312	
+2cf312	
+2d0312	
+2d1312	
+2d2312	
+2d3312	
+2d4312	
+2d5312	
+2d6312	
+2d7312	
+2d8312	
+2d9312	
+2da312	
+2db312	
+2dc312	
+2dd312	
+2de312	
+2df312	
+2e0312	
+2e1312	
+2e2312	
+2e3312	
+2e4312	
+2e5312	
+2e6312	
+2e7312	
+2e8312	
+2e9312	
+2ea312	
+2eb312	
+2ec312	
+2ed312	
+2ee312	
+2ef312	
+2f0312	
+2f1312	
+2f2312	
+2f3312	
+2f4312	
+2f5312	
+2f6312	
+2f7312	
+2f8312	
+2f9312	
+2fa312	
+2fb312	
+2fc312	
+2fd312	
+2fe312	
+2ff312	
+300312	
+301312	
+302312	
+303312	
+304312	
+305312	
+306312	
+307312	
+308312	
+309312	
+30a312	
+30b312	
+30c312	
+30d312	
+30e312	
+30f312	
+310312	
+311312	
+312312	
+313312	
+314312	
+315312	
+316312	
+317312	
+318312	
+319312	
+31a312	
+31b312	
+31c312	
+31d312	
+31e312	
+31f312	
+320312	
+321312	
+322312	
+323312	
+324312	
+325312	
+326312	
+327312	
+328312	
+329312	
+32a312	
+32b312	
+32c312	
+32d312	
+32e312	
+32f312	
+330312	
+331312	
+332312	
+333312	
+334312	
+335312	
+336312	
+337312	
+338312	
+339312	
+33a312	
+33b312	
+33c312	
+33d312	
+33e312	
+33f312	
+340312	
+341312	
+342312	
+343312	
+344312	
+345312	
+346312	
+347312	
+348312	
+349312	
+34a312	
+34b312	
+34c312	
+34d312	
+34e312	
+34f312	
+350312	
+351312	
+352312	
+353312	
+354312	
+355312	
+356312	
+357312	
+358312	
+359312	
+35a312	
+35b312	
+35c312	
+35d312	
+35e312	
+35f312	
+360312	
+361312	
+362312	
+363312	
+364312	
+365312	
+366312	
+367312	
+368312	
+369312	
+36a312	
+36b312	
+36c312	
+36d312	
+36e312	
+36f312	
+370312	
+371312	
+372312	
+373312	
+374312	
+375312	
+376312	
+377312	
+378312	
+379312	
+37a312	
+37b312	
+37c312	
+37d312	
+37e312	
+37f312	
+380312	
+381312	
+382312	
+383312	
+384312	
+385312	
+386312	
+387312	
+388312	
+389312	
+38a312	
+38b312	
+38c312	
+38d312	
+38e312	
+38f312	
+390312	
+391312	
+392312	
+393312	
+394312	
+395312	
+396312	
+397312	
+398312	
+399312	
+39a312	
+39b312	
+39c312	
+39d312	
+39e312	
+39f312	
+3a0312	
+3a1312	
+3a2312	
+3a3312	
+3a4312	
+3a5312	
+3a6312	
+3a7312	
+3a8312	
+3a9312	
+3aa312	
+3ab312	
+3ac312	
+3ad312	
+3ae312	
+3af312	
+3b0312	
+3b1312	
+3b2312	
+3b3312	
+3b4312	
+3b5312	
+3b6312	
+3b7312	
+3b8312	
+3b9312	
+3ba312	
+3bb312	
+3bc312	
+3bd312	
+3be312	
+3bf312	
+3c0312	
+3c1312	
+3c2312	
+3c3312	
+3c4312	
+3c5312	
+3c6312	
+3c7312	
+3c8312	
+3c9312	
+3ca312	
+3cb312	
+3cc312	
+3cd312	
+3ce312	
+3cf312	
+3d0312	
+3d1312	
+3d2312	
+3d3312	
+3d4312	
+3d5312	
+3d6312	
+3d7312	
+3d8312	
+3d9312	
+3da312	
+3db312	
+3dc312	
+3dd312	
+3de312	
+3df312	
+3e0312	
+3e1312	
+3e2312	
+3e3312	
+3e4312	
+3e5312	
+3e6312	
+3e7312	
+3e8312	
+3e9312	
+3ea312	
+3eb312	
+3ec312	
+3ed312	
+3ee312	
+3ef312	
+3f0312	
+3f1312	
+3f2312	
+3f3312	
+3f4312	
+3f5312	
+3f6312	
+3f7312	
+3f8312	
+3f9312	
+3fa312	
+3fb312	
+3fc312	
+3fd312	
+3fe312	
+3ff312	
+400312	r3=mr0f
+401312	r3=mr1f
+402312	r3=mr2f
+403312	r3=
+404312	r3=mr0b
+405312	r3=mr1b
+406312	r3=mr2b
+407312	r3=
+408312	r3=shp
+409312	r3=shf
+40a312	r3=
+40b312	r3=
+40c312	r3=fta
+40d312	r3=ftb
+40e312	r3=ftc
+40f312	r3=fr
+410312	mr0f=r3
+411312	mr1f=r3
+412312	mr2f=r3
+413312	=r3
+414312	mr0b=r3
+415312	mr1b=r3
+416312	mr2b=r3
+417312	=r3
+418312	shp=r3
+419312	shf=r3
+41a312	=r3
+41b312	=r3
+41c312	fta=r3
+41d312	ftb=r3
+41e312	ftc=r3
+41f312	fr=r3
+420312	
+421312	
+422312	
+423312	
+424312	
+425312	
+426312	
+427312	
+428312	
+429312	
+42a312	
+42b312	
+42c312	
+42d312	
+42e312	
+42f312	
+430312	
+431312	
+432312	
+433312	
+434312	
+435312	
+436312	
+437312	
+438312	
+439312	
+43a312	
+43b312	
+43c312	
+43d312	
+43e312	
+43f312	
+440312	r0=r0*r5 (ssfr), r3=r8+r14
+441312	r1=r0*r5 (ssfr), r3=r8+r14
+442312	r2=r0*r5 (ssfr), r3=r8+r14
+443312	r3=r0*r5 (ssfr), r3=r8+r14
+444312	r4=r0*r5 (ssfr), r3=r8+r14
+445312	r5=r0*r5 (ssfr), r3=r8+r14
+446312	r6=r0*r5 (ssfr), r3=r8+r14
+447312	r7=r0*r5 (ssfr), r3=r8+r14
+448312	r8=r0*r5 (ssfr), r3=r8+r14
+449312	r9=r0*r5 (ssfr), r3=r8+r14
+44a312	r10=r0*r5 (ssfr), r3=r8+r14
+44b312	r11=r0*r5 (ssfr), r3=r8+r14
+44c312	r12=r0*r5 (ssfr), r3=r8+r14
+44d312	r13=r0*r5 (ssfr), r3=r8+r14
+44e312	r14=r0*r5 (ssfr), r3=r8+r14
+44f312	r15=r0*r5 (ssfr), r3=r8+r14
+450312	r0=r0*r5 (ssfr), r3=r8-r14
+451312	r1=r0*r5 (ssfr), r3=r8-r14
+452312	r2=r0*r5 (ssfr), r3=r8-r14
+453312	r3=r0*r5 (ssfr), r3=r8-r14
+454312	r4=r0*r5 (ssfr), r3=r8-r14
+455312	r5=r0*r5 (ssfr), r3=r8-r14
+456312	r6=r0*r5 (ssfr), r3=r8-r14
+457312	r7=r0*r5 (ssfr), r3=r8-r14
+458312	r8=r0*r5 (ssfr), r3=r8-r14
+459312	r9=r0*r5 (ssfr), r3=r8-r14
+45a312	r10=r0*r5 (ssfr), r3=r8-r14
+45b312	r11=r0*r5 (ssfr), r3=r8-r14
+45c312	r12=r0*r5 (ssfr), r3=r8-r14
+45d312	r13=r0*r5 (ssfr), r3=r8-r14
+45e312	r14=r0*r5 (ssfr), r3=r8-r14
+45f312	r15=r0*r5 (ssfr), r3=r8-r14
+460312	r0=r0*r5 (ssfr), r3=(r8+r14)/2
+461312	r1=r0*r5 (ssfr), r3=(r8+r14)/2
+462312	r2=r0*r5 (ssfr), r3=(r8+r14)/2
+463312	r3=r0*r5 (ssfr), r3=(r8+r14)/2
+464312	r4=r0*r5 (ssfr), r3=(r8+r14)/2
+465312	r5=r0*r5 (ssfr), r3=(r8+r14)/2
+466312	r6=r0*r5 (ssfr), r3=(r8+r14)/2
+467312	r7=r0*r5 (ssfr), r3=(r8+r14)/2
+468312	r8=r0*r5 (ssfr), r3=(r8+r14)/2
+469312	r9=r0*r5 (ssfr), r3=(r8+r14)/2
+46a312	r10=r0*r5 (ssfr), r3=(r8+r14)/2
+46b312	r11=r0*r5 (ssfr), r3=(r8+r14)/2
+46c312	r12=r0*r5 (ssfr), r3=(r8+r14)/2
+46d312	r13=r0*r5 (ssfr), r3=(r8+r14)/2
+46e312	r14=r0*r5 (ssfr), r3=(r8+r14)/2
+46f312	r15=r0*r5 (ssfr), r3=(r8+r14)/2
+470312	
+471312	
+472312	
+473312	
+474312	
+475312	
+476312	
+477312	
+478312	
+479312	
+47a312	
+47b312	
+47c312	
+47d312	
+47e312	
+47f312	
+480312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+481312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+482312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+483312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+484312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+485312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+486312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+487312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+488312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+489312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+48a312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+48b312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+48c312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+48d312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+48e312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+48f312	MRF=MRF+r0*r5 (ssf), r3=r8+r14
+490312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+491312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+492312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+493312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+494312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+495312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+496312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+497312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+498312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+499312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+49a312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+49b312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+49c312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+49d312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+49e312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+49f312	MRF=MRF+r0*r5 (ssf),  r3=r8-r14
+4a0312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a1312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a2312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a3312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a4312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a5312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a6312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a7312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a8312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4a9312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4aa312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4ab312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4ac312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4ad312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4ae312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4af312	MRF=MRF+r0*r5 (ssf), r3=(r8+r14)/2
+4b0312	
+4b1312	
+4b2312	
+4b3312	
+4b4312	
+4b5312	
+4b6312	
+4b7312	
+4b8312	
+4b9312	
+4ba312	
+4bb312	
+4bc312	
+4bd312	
+4be312	
+4bf312	
+4c0312	r0=MRF+r0*r5 (ssfr), r3=r8+r14
+4c1312	r1=MRF+r0*r5 (ssfr), r3=r8+r14
+4c2312	r2=MRF+r0*r5 (ssfr), r3=r8+r14
+4c3312	r3=MRF+r0*r5 (ssfr), r3=r8+r14
+4c4312	r4=MRF+r0*r5 (ssfr), r3=r8+r14
+4c5312	r5=MRF+r0*r5 (ssfr), r3=r8+r14
+4c6312	r6=MRF+r0*r5 (ssfr), r3=r8+r14
+4c7312	r7=MRF+r0*r5 (ssfr), r3=r8+r14
+4c8312	r8=MRF+r0*r5 (ssfr), r3=r8+r14
+4c9312	r9=MRF+r0*r5 (ssfr), r3=r8+r14
+4ca312	r10=MRF+r0*r5 (ssfr), r3=r8+r14
+4cb312	r11=MRF+r0*r5 (ssfr), r3=r8+r14
+4cc312	r12=MRF+r0*r5 (ssfr), r3=r8+r14
+4cd312	r13=MRF+r0*r5 (ssfr), r3=r8+r14
+4ce312	r14=MRF+r0*r5 (ssfr), r3=r8+r14
+4cf312	r15=MRF+r0*r5 (ssfr), r3=r8+r14
+4d0312	r0=MRF+r0*r5 (ssfr), r3=r8-r14
+4d1312	r1=MRF+r0*r5 (ssfr), r3=r8-r14
+4d2312	r2=MRF+r0*r5 (ssfr), r3=r8-r14
+4d3312	r3=MRF+r0*r5 (ssfr), r3=r8-r14
+4d4312	r4=MRF+r0*r5 (ssfr), r3=r8-r14
+4d5312	r5=MRF+r0*r5 (ssfr), r3=r8-r14
+4d6312	r6=MRF+r0*r5 (ssfr), r3=r8-r14
+4d7312	r7=MRF+r0*r5 (ssfr), r3=r8-r14
+4d8312	r8=MRF+r0*r5 (ssfr), r3=r8-r14
+4d9312	r9=MRF+r0*r5 (ssfr), r3=r8-r14
+4da312	r10=MRF+r0*r5 (ssfr), r3=r8-r14
+4db312	r11=MRF+r0*r5 (ssfr), r3=r8-r14
+4dc312	r12=MRF+r0*r5 (ssfr), r3=r8-r14
+4dd312	r13=MRF+r0*r5 (ssfr), r3=r8-r14
+4de312	r14=MRF+r0*r5 (ssfr), r3=r8-r14
+4df312	r15=MRF+r0*r5 (ssfr), r3=r8-r14
+4e0312	r0=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e1312	r1=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e2312	r2=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e3312	r3=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e4312	r4=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e5312	r5=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e6312	r6=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e7312	r7=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e8312	r8=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4e9312	r9=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4ea312	r10=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4eb312	r11=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4ec312	r12=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4ed312	r13=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4ee312	r14=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4ef312	r15=MRF+r0*r5 (ssfr), r3=(r8+r14)/2
+4f0312	
+4f1312	
+4f2312	
+4f3312	
+4f4312	
+4f5312	
+4f6312	
+4f7312	
+4f8312	
+4f9312	
+4fa312	
+4fb312	
+4fc312	
+4fd312	
+4fe312	
+4ff312	
+500312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+501312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+502312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+503312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+504312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+505312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+506312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+507312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+508312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+509312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+50a312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+50b312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+50c312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+50d312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+50e312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+50f312	MRF=MRF-r0*r5 (ssf), r3=r8+r14
+510312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+511312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+512312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+513312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+514312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+515312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+516312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+517312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+518312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+519312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+51a312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+51b312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+51c312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+51d312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+51e312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+51f312	MRF=MRF-r0*r5 (ssf), r3=r8-r14
+520312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+521312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+522312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+523312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+524312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+525312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+526312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+527312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+528312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+529312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+52a312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+52b312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+52c312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+52d312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+52e312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+52f312	MRF=MRF-r0*r5 (ssf), r3=(r8+r14)/2
+530312	
+531312	
+532312	
+533312	
+534312	
+535312	
+536312	
+537312	
+538312	
+539312	
+53a312	
+53b312	
+53c312	
+53d312	
+53e312	
+53f312	
+540312	r0=MRF-r0*r5 (ssfr), r3=r8+r14
+541312	r1=MRF-r0*r5 (ssfr), r3=r8+r14
+542312	r2=MRF-r0*r5 (ssfr), r3=r8+r14
+543312	r3=MRF-r0*r5 (ssfr), r3=r8+r14
+544312	r4=MRF-r0*r5 (ssfr), r3=r8+r14
+545312	r5=MRF-r0*r5 (ssfr), r3=r8+r14
+546312	r6=MRF-r0*r5 (ssfr), r3=r8+r14
+547312	r7=MRF-r0*r5 (ssfr), r3=r8+r14
+548312	r8=MRF-r0*r5 (ssfr), r3=r8+r14
+549312	r9=MRF-r0*r5 (ssfr), r3=r8+r14
+54a312	r10=MRF-r0*r5 (ssfr), r3=r8+r14
+54b312	r11=MRF-r0*r5 (ssfr), r3=r8+r14
+54c312	r12=MRF-r0*r5 (ssfr), r3=r8+r14
+54d312	r13=MRF-r0*r5 (ssfr), r3=r8+r14
+54e312	r14=MRF-r0*r5 (ssfr), r3=r8+r14
+54f312	r15=MRF-r0*r5 (ssfr), r3=r8+r14
+550312	r0=MRF-r0*r5 (ssfr), r3=r8-r14
+551312	r1=MRF-r0*r5 (ssfr), r3=r8-r14
+552312	r2=MRF-r0*r5 (ssfr), r3=r8-r14
+553312	r3=MRF-r0*r5 (ssfr), r3=r8-r14
+554312	r4=MRF-r0*r5 (ssfr), r3=r8-r14
+555312	r5=MRF-r0*r5 (ssfr), r3=r8-r14
+556312	r6=MRF-r0*r5 (ssfr), r3=r8-r14
+557312	r7=MRF-r0*r5 (ssfr), r3=r8-r14
+558312	r8=MRF-r0*r5 (ssfr), r3=r8-r14
+559312	r9=MRF-r0*r5 (ssfr), r3=r8-r14
+55a312	r10=MRF-r0*r5 (ssfr), r3=r8-r14
+55b312	r11=MRF-r0*r5 (ssfr), r3=r8-r14
+55c312	r12=MRF-r0*r5 (ssfr), r3=r8-r14
+55d312	r13=MRF-r0*r5 (ssfr), r3=r8-r14
+55e312	r14=MRF-r0*r5 (ssfr), r3=r8-r14
+55f312	r15=MRF-r0*r5 (ssfr), r3=r8-r14
+560312	r0=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+561312	r1=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+562312	r2=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+563312	r3=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+564312	r4=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+565312	r5=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+566312	r6=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+567312	r7=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+568312	r8=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+569312	r9=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+56a312	r10=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+56b312	r11=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+56c312	r12=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+56d312	r13=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+56e312	r14=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+56f312	r15=MRF-r0*r5 (ssfr), r3=(r8+r14)/2
+570312	
+571312	
+572312	
+573312	
+574312	
+575312	
+576312	
+577312	
+578312	
+579312	
+57a312	
+57b312	
+57c312	
+57d312	
+57e312	
+57f312	
+580312	f0=f0*f5, f3=f8+f14
+581312	f1=f0*f5, f3=f8+f14
+582312	f2=f0*f5, f3=f8+f14
+583312	f3=f0*f5, f3=f8+f14
+584312	f4=f0*f5, f3=f8+f14
+585312	f5=f0*f5, f3=f8+f14
+586312	f6=f0*f5, f3=f8+f14
+587312	f7=f0*f5, f3=f8+f14
+588312	f8=f0*f5, f3=f8+f14
+589312	f9=f0*f5, f3=f8+f14
+58a312	f10=f0*f5, f3=f8+f14
+58b312	f11=f0*f5, f3=f8+f14
+58c312	f12=f0*f5, f3=f8+f14
+58d312	f13=f0*f5, f3=f8+f14
+58e312	f14=f0*f5, f3=f8+f14
+58f312	f15=f0*f5, f3=f8+f14
+590312	f0=f0*f5, f3=f8-f14
+591312	f1=f0*f5, f3=f8-f14
+592312	f2=f0*f5, f3=f8-f14
+593312	f3=f0*f5, f3=f8-f14
+594312	f4=f0*f5, f3=f8-f14
+595312	f5=f0*f5, f3=f8-f14
+596312	f6=f0*f5, f3=f8-f14
+597312	f7=f0*f5, f3=f8-f14
+598312	f8=f0*f5, f3=f8-f14
+599312	f9=f0*f5, f3=f8-f14
+59a312	f10=f0*f5, f3=f8-f14
+59b312	f11=f0*f5, f3=f8-f14
+59c312	f12=f0*f5, f3=f8-f14
+59d312	f13=f0*f5, f3=f8-f14
+59e312	f14=f0*f5, f3=f8-f14
+59f312	f15=f0*f5, f3=f8-f14
+5a0312	f0=f0*f5, f3=float f8 by f14
+5a1312	f1=f0*f5, f3=float f8 by f14
+5a2312	f2=f0*f5, f3=float f8 by f14
+5a3312	f3=f0*f5, f3=float f8 by f14
+5a4312	f4=f0*f5, f3=float f8 by f14
+5a5312	f5=f0*f5, f3=float f8 by f14
+5a6312	f6=f0*f5, f3=float f8 by f14
+5a7312	f7=f0*f5, f3=float f8 by f14
+5a8312	f8=f0*f5, f3=float f8 by f14
+5a9312	f9=f0*f5, f3=float f8 by f14
+5aa312	f10=f0*f5, f3=float f8 by f14
+5ab312	f11=f0*f5, f3=float f8 by f14
+5ac312	f12=f0*f5, f3=float f8 by f14
+5ad312	f13=f0*f5, f3=float f8 by f14
+5ae312	f14=f0*f5, f3=float f8 by f14
+5af312	f15=f0*f5, f3=float f8 by f14
+5b0312	f0=f0*f5, f3=fix f8 by f14
+5b1312	f1=f0*f5, f3=fix f8 by f14
+5b2312	f2=f0*f5, f3=fix f8 by f14
+5b3312	f3=f0*f5, f3=fix f8 by f14
+5b4312	f4=f0*f5, f3=fix f8 by f14
+5b5312	f5=f0*f5, f3=fix f8 by f14
+5b6312	f6=f0*f5, f3=fix f8 by f14
+5b7312	f7=f0*f5, f3=fix f8 by f14
+5b8312	f8=f0*f5, f3=fix f8 by f14
+5b9312	f9=f0*f5, f3=fix f8 by f14
+5ba312	f10=f0*f5, f3=fix f8 by f14
+5bb312	f11=f0*f5, f3=fix f8 by f14
+5bc312	f12=f0*f5, f3=fix f8 by f14
+5bd312	f13=f0*f5, f3=fix f8 by f14
+5be312	f14=f0*f5, f3=fix f8 by f14
+5bf312	f15=f0*f5, f3=fix f8 by f14
+5c0312	f0=f0*f5, f3=(f8+f14)/2
+5c1312	f1=f0*f5, f3=(f8+f14)/2
+5c2312	f2=f0*f5, f3=(f8+f14)/2
+5c3312	f3=f0*f5, f3=(f8+f14)/2
+5c4312	f4=f0*f5, f3=(f8+f14)/2
+5c5312	f5=f0*f5, f3=(f8+f14)/2
+5c6312	f6=f0*f5, f3=(f8+f14)/2
+5c7312	f7=f0*f5, f3=(f8+f14)/2
+5c8312	f8=f0*f5, f3=(f8+f14)/2
+5c9312	f9=f0*f5, f3=(f8+f14)/2
+5ca312	f10=f0*f5, f3=(f8+f14)/2
+5cb312	f11=f0*f5, f3=(f8+f14)/2
+5cc312	f12=f0*f5, f3=(f8+f14)/2
+5cd312	f13=f0*f5, f3=(f8+f14)/2
+5ce312	f14=f0*f5, f3=(f8+f14)/2
+5cf312	f15=f0*f5, f3=(f8+f14)/2
+5d0312	f0=f0*f5, f3=abs f8
+5d1312	f1=f0*f5, f3=abs f8
+5d2312	f2=f0*f5, f3=abs f8
+5d3312	f3=f0*f5, f3=abs f8
+5d4312	f4=f0*f5, f3=abs f8
+5d5312	f5=f0*f5, f3=abs f8
+5d6312	f6=f0*f5, f3=abs f8
+5d7312	f7=f0*f5, f3=abs f8
+5d8312	f8=f0*f5, f3=abs f8
+5d9312	f9=f0*f5, f3=abs f8
+5da312	f10=f0*f5, f3=abs f8
+5db312	f11=f0*f5, f3=abs f8
+5dc312	f12=f0*f5, f3=abs f8
+5dd312	f13=f0*f5, f3=abs f8
+5de312	f14=f0*f5, f3=abs f8
+5df312	f15=f0*f5, f3=abs f8
+5e0312	f0=f0*f5, f3=max(f8,f14)
+5e1312	f1=f0*f5, f3=max(f8,f14)
+5e2312	f2=f0*f5, f3=max(f8,f14)
+5e3312	f3=f0*f5, f3=max(f8,f14)
+5e4312	f4=f0*f5, f3=max(f8,f14)
+5e5312	f5=f0*f5, f3=max(f8,f14)
+5e6312	f6=f0*f5, f3=max(f8,f14)
+5e7312	f7=f0*f5, f3=max(f8,f14)
+5e8312	f8=f0*f5, f3=max(f8,f14)
+5e9312	f9=f0*f5, f3=max(f8,f14)
+5ea312	f10=f0*f5, f3=max(f8,f14)
+5eb312	f11=f0*f5, f3=max(f8,f14)
+5ec312	f12=f0*f5, f3=max(f8,f14)
+5ed312	f13=f0*f5, f3=max(f8,f14)
+5ee312	f14=f0*f5, f3=max(f8,f14)
+5ef312	f15=f0*f5, f3=max(f8,f14)
+5f0312	f0=f0*f5, f3=min(f8,f14)
+5f1312	f1=f0*f5, f3=min(f8,f14)
+5f2312	f2=f0*f5, f3=min(f8,f14)
+5f3312	f3=f0*f5, f3=min(f8,f14)
+5f4312	f4=f0*f5, f3=min(f8,f14)
+5f5312	f5=f0*f5, f3=min(f8,f14)
+5f6312	f6=f0*f5, f3=min(f8,f14)
+5f7312	f7=f0*f5, f3=min(f8,f14)
+5f8312	f8=f0*f5, f3=min(f8,f14)
+5f9312	f9=f0*f5, f3=min(f8,f14)
+5fa312	f10=f0*f5, f3=min(f8,f14)
+5fb312	f11=f0*f5, f3=min(f8,f14)
+5fc312	f12=f0*f5, f3=min(f8,f14)
+5fd312	f13=f0*f5, f3=min(f8,f14)
+5fe312	f14=f0*f5, f3=min(f8,f14)
+5ff312	f15=f0*f5, f3=min(f8,f14)
+600312	r0=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+601312	r1=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+602312	r2=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+603312	r3=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+604312	r4=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+605312	r5=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+606312	r6=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+607312	r7=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+608312	r8=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+609312	r9=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+60a312	r10=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+60b312	r11=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+60c312	r12=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+60d312	r13=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+60e312	r14=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+60f312	r15=r0*r5(ssfr), r3=r8+r14, r0=r8-r14
+610312	r0=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+611312	r1=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+612312	r2=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+613312	r3=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+614312	r4=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+615312	r5=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+616312	r6=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+617312	r7=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+618312	r8=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+619312	r9=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+61a312	r10=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+61b312	r11=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+61c312	r12=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+61d312	r13=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+61e312	r14=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+61f312	r15=r0*r5(ssfr), r3=r8+r14, r1=r8-r14
+620312	r0=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+621312	r1=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+622312	r2=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+623312	r3=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+624312	r4=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+625312	r5=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+626312	r6=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+627312	r7=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+628312	r8=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+629312	r9=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+62a312	r10=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+62b312	r11=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+62c312	r12=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+62d312	r13=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+62e312	r14=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+62f312	r15=r0*r5(ssfr), r3=r8+r14, r2=r8-r14
+630312	r0=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+631312	r1=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+632312	r2=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+633312	r3=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+634312	r4=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+635312	r5=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+636312	r6=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+637312	r7=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+638312	r8=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+639312	r9=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+63a312	r10=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+63b312	r11=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+63c312	r12=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+63d312	r13=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+63e312	r14=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+63f312	r15=r0*r5(ssfr), r3=r8+r14, r3=r8-r14
+640312	r0=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+641312	r1=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+642312	r2=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+643312	r3=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+644312	r4=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+645312	r5=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+646312	r6=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+647312	r7=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+648312	r8=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+649312	r9=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+64a312	r10=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+64b312	r11=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+64c312	r12=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+64d312	r13=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+64e312	r14=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+64f312	r15=r0*r5(ssfr), r3=r8+r14, r4=r8-r14
+650312	r0=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+651312	r1=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+652312	r2=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+653312	r3=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+654312	r4=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+655312	r5=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+656312	r6=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+657312	r7=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+658312	r8=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+659312	r9=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+65a312	r10=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+65b312	r11=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+65c312	r12=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+65d312	r13=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+65e312	r14=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+65f312	r15=r0*r5(ssfr), r3=r8+r14, r5=r8-r14
+660312	r0=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+661312	r1=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+662312	r2=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+663312	r3=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+664312	r4=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+665312	r5=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+666312	r6=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+667312	r7=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+668312	r8=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+669312	r9=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+66a312	r10=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+66b312	r11=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+66c312	r12=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+66d312	r13=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+66e312	r14=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+66f312	r15=r0*r5(ssfr), r3=r8+r14, r6=r8-r14
+670312	r0=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+671312	r1=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+672312	r2=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+673312	r3=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+674312	r4=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+675312	r5=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+676312	r6=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+677312	r7=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+678312	r8=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+679312	r9=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+67a312	r10=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+67b312	r11=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+67c312	r12=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+67d312	r13=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+67e312	r14=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+67f312	r15=r0*r5(ssfr), r3=r8+r14, r7=r8-r14
+680312	r0=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+681312	r1=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+682312	r2=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+683312	r3=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+684312	r4=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+685312	r5=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+686312	r6=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+687312	r7=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+688312	r8=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+689312	r9=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+68a312	r10=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+68b312	r11=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+68c312	r12=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+68d312	r13=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+68e312	r14=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+68f312	r15=r0*r5(ssfr), r3=r8+r14, r8=r8-r14
+690312	r0=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+691312	r1=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+692312	r2=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+693312	r3=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+694312	r4=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+695312	r5=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+696312	r6=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+697312	r7=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+698312	r8=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+699312	r9=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+69a312	r10=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+69b312	r11=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+69c312	r12=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+69d312	r13=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+69e312	r14=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+69f312	r15=r0*r5(ssfr), r3=r8+r14, r9=r8-r14
+6a0312	r0=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a1312	r1=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a2312	r2=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a3312	r3=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a4312	r4=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a5312	r5=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a6312	r6=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a7312	r7=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a8312	r8=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6a9312	r9=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6aa312	r10=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6ab312	r11=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6ac312	r12=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6ad312	r13=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6ae312	r14=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6af312	r15=r0*r5(ssfr), r3=r8+r14, r10=r8-r14
+6b0312	r0=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b1312	r1=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b2312	r2=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b3312	r3=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b4312	r4=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b5312	r5=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b6312	r6=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b7312	r7=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b8312	r8=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6b9312	r9=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6ba312	r10=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6bb312	r11=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6bc312	r12=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6bd312	r13=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6be312	r14=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6bf312	r15=r0*r5(ssfr), r3=r8+r14, r11=r8-r14
+6c0312	r0=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c1312	r1=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c2312	r2=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c3312	r3=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c4312	r4=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c5312	r5=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c6312	r6=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c7312	r7=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c8312	r8=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6c9312	r9=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6ca312	r10=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6cb312	r11=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6cc312	r12=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6cd312	r13=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6ce312	r14=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6cf312	r15=r0*r5(ssfr), r3=r8+r14, r12=r8-r14
+6d0312	r0=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d1312	r1=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d2312	r2=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d3312	r3=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d4312	r4=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d5312	r5=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d6312	r6=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d7312	r7=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d8312	r8=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6d9312	r9=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6da312	r10=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6db312	r11=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6dc312	r12=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6dd312	r13=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6de312	r14=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6df312	r15=r0*r5(ssfr), r3=r8+r14, r13=r8-r14
+6e0312	r0=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e1312	r1=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e2312	r2=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e3312	r3=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e4312	r4=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e5312	r5=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e6312	r6=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e7312	r7=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e8312	r8=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6e9312	r9=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6ea312	r10=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6eb312	r11=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6ec312	r12=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6ed312	r13=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6ee312	r14=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6ef312	r15=r0*r5(ssfr), r3=r8+r14, r14=r8-r14
+6f0312	r0=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f1312	r1=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f2312	r2=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f3312	r3=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f4312	r4=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f5312	r5=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f6312	r6=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f7312	r7=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f8312	r8=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6f9312	r9=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6fa312	r10=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6fb312	r11=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6fc312	r12=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6fd312	r13=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6fe312	r14=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+6ff312	r15=r0*r5(ssfr), r3=r8+r14, r15=r8-r14
+700312	f0=f0*f5, f3=f8+f14, f0=f8-f14
+701312	f1=f0*f5, f3=f8+f14, f0=f8-f14
+702312	f2=f0*f5, f3=f8+f14, f0=f8-f14
+703312	f3=f0*f5, f3=f8+f14, f0=f8-f14
+704312	f4=f0*f5, f3=f8+f14, f0=f8-f14
+705312	f5=f0*f5, f3=f8+f14, f0=f8-f14
+706312	f6=f0*f5, f3=f8+f14, f0=f8-f14
+707312	f7=f0*f5, f3=f8+f14, f0=f8-f14
+708312	f8=f0*f5, f3=f8+f14, f0=f8-f14
+709312	f9=f0*f5, f3=f8+f14, f0=f8-f14
+70a312	f10=f0*f5, f3=f8+f14, f0=f8-f14
+70b312	f11=f0*f5, f3=f8+f14, f0=f8-f14
+70c312	f12=f0*f5, f3=f8+f14, f0=f8-f14
+70d312	f13=f0*f5, f3=f8+f14, f0=f8-f14
+70e312	f14=f0*f5, f3=f8+f14, f0=f8-f14
+70f312	f15=f0*f5, f3=f8+f14, f0=f8-f14
+710312	f0=f0*f5, f3=f8+f14, f1=f8-f14
+711312	f1=f0*f5, f3=f8+f14, f1=f8-f14
+712312	f2=f0*f5, f3=f8+f14, f1=f8-f14
+713312	f3=f0*f5, f3=f8+f14, f1=f8-f14
+714312	f4=f0*f5, f3=f8+f14, f1=f8-f14
+715312	f5=f0*f5, f3=f8+f14, f1=f8-f14
+716312	f6=f0*f5, f3=f8+f14, f1=f8-f14
+717312	f7=f0*f5, f3=f8+f14, f1=f8-f14
+718312	f8=f0*f5, f3=f8+f14, f1=f8-f14
+719312	f9=f0*f5, f3=f8+f14, f1=f8-f14
+71a312	f10=f0*f5, f3=f8+f14, f1=f8-f14
+71b312	f11=f0*f5, f3=f8+f14, f1=f8-f14
+71c312	f12=f0*f5, f3=f8+f14, f1=f8-f14
+71d312	f13=f0*f5, f3=f8+f14, f1=f8-f14
+71e312	f14=f0*f5, f3=f8+f14, f1=f8-f14
+71f312	f15=f0*f5, f3=f8+f14, f1=f8-f14
+720312	f0=f0*f5, f3=f8+f14, f2=f8-f14
+721312	f1=f0*f5, f3=f8+f14, f2=f8-f14
+722312	f2=f0*f5, f3=f8+f14, f2=f8-f14
+723312	f3=f0*f5, f3=f8+f14, f2=f8-f14
+724312	f4=f0*f5, f3=f8+f14, f2=f8-f14
+725312	f5=f0*f5, f3=f8+f14, f2=f8-f14
+726312	f6=f0*f5, f3=f8+f14, f2=f8-f14
+727312	f7=f0*f5, f3=f8+f14, f2=f8-f14
+728312	f8=f0*f5, f3=f8+f14, f2=f8-f14
+729312	f9=f0*f5, f3=f8+f14, f2=f8-f14
+72a312	f10=f0*f5, f3=f8+f14, f2=f8-f14
+72b312	f11=f0*f5, f3=f8+f14, f2=f8-f14
+72c312	f12=f0*f5, f3=f8+f14, f2=f8-f14
+72d312	f13=f0*f5, f3=f8+f14, f2=f8-f14
+72e312	f14=f0*f5, f3=f8+f14, f2=f8-f14
+72f312	f15=f0*f5, f3=f8+f14, f2=f8-f14
+730312	f0=f0*f5, f3=f8+f14, f3=f8-f14
+731312	f1=f0*f5, f3=f8+f14, f3=f8-f14
+732312	f2=f0*f5, f3=f8+f14, f3=f8-f14
+733312	f3=f0*f5, f3=f8+f14, f3=f8-f14
+734312	f4=f0*f5, f3=f8+f14, f3=f8-f14
+735312	f5=f0*f5, f3=f8+f14, f3=f8-f14
+736312	f6=f0*f5, f3=f8+f14, f3=f8-f14
+737312	f7=f0*f5, f3=f8+f14, f3=f8-f14
+738312	f8=f0*f5, f3=f8+f14, f3=f8-f14
+739312	f9=f0*f5, f3=f8+f14, f3=f8-f14
+73a312	f10=f0*f5, f3=f8+f14, f3=f8-f14
+73b312	f11=f0*f5, f3=f8+f14, f3=f8-f14
+73c312	f12=f0*f5, f3=f8+f14, f3=f8-f14
+73d312	f13=f0*f5, f3=f8+f14, f3=f8-f14
+73e312	f14=f0*f5, f3=f8+f14, f3=f8-f14
+73f312	f15=f0*f5, f3=f8+f14, f3=f8-f14
+740312	f0=f0*f5, f3=f8+f14, f4=f8-f14
+741312	f1=f0*f5, f3=f8+f14, f4=f8-f14
+742312	f2=f0*f5, f3=f8+f14, f4=f8-f14
+743312	f3=f0*f5, f3=f8+f14, f4=f8-f14
+744312	f4=f0*f5, f3=f8+f14, f4=f8-f14
+745312	f5=f0*f5, f3=f8+f14, f4=f8-f14
+746312	f6=f0*f5, f3=f8+f14, f4=f8-f14
+747312	f7=f0*f5, f3=f8+f14, f4=f8-f14
+748312	f8=f0*f5, f3=f8+f14, f4=f8-f14
+749312	f9=f0*f5, f3=f8+f14, f4=f8-f14
+74a312	f10=f0*f5, f3=f8+f14, f4=f8-f14
+74b312	f11=f0*f5, f3=f8+f14, f4=f8-f14
+74c312	f12=f0*f5, f3=f8+f14, f4=f8-f14
+74d312	f13=f0*f5, f3=f8+f14, f4=f8-f14
+74e312	f14=f0*f5, f3=f8+f14, f4=f8-f14
+74f312	f15=f0*f5, f3=f8+f14, f4=f8-f14
+750312	f0=f0*f5, f3=f8+f14, f5=f8-f14
+751312	f1=f0*f5, f3=f8+f14, f5=f8-f14
+752312	f2=f0*f5, f3=f8+f14, f5=f8-f14
+753312	f3=f0*f5, f3=f8+f14, f5=f8-f14
+754312	f4=f0*f5, f3=f8+f14, f5=f8-f14
+755312	f5=f0*f5, f3=f8+f14, f5=f8-f14
+756312	f6=f0*f5, f3=f8+f14, f5=f8-f14
+757312	f7=f0*f5, f3=f8+f14, f5=f8-f14
+758312	f8=f0*f5, f3=f8+f14, f5=f8-f14
+759312	f9=f0*f5, f3=f8+f14, f5=f8-f14
+75a312	f10=f0*f5, f3=f8+f14, f5=f8-f14
+75b312	f11=f0*f5, f3=f8+f14, f5=f8-f14
+75c312	f12=f0*f5, f3=f8+f14, f5=f8-f14
+75d312	f13=f0*f5, f3=f8+f14, f5=f8-f14
+75e312	f14=f0*f5, f3=f8+f14, f5=f8-f14
+75f312	f15=f0*f5, f3=f8+f14, f5=f8-f14
+760312	f0=f0*f5, f3=f8+f14, f6=f8-f14
+761312	f1=f0*f5, f3=f8+f14, f6=f8-f14
+762312	f2=f0*f5, f3=f8+f14, f6=f8-f14
+763312	f3=f0*f5, f3=f8+f14, f6=f8-f14
+764312	f4=f0*f5, f3=f8+f14, f6=f8-f14
+765312	f5=f0*f5, f3=f8+f14, f6=f8-f14
+766312	f6=f0*f5, f3=f8+f14, f6=f8-f14
+767312	f7=f0*f5, f3=f8+f14, f6=f8-f14
+768312	f8=f0*f5, f3=f8+f14, f6=f8-f14
+769312	f9=f0*f5, f3=f8+f14, f6=f8-f14
+76a312	f10=f0*f5, f3=f8+f14, f6=f8-f14
+76b312	f11=f0*f5, f3=f8+f14, f6=f8-f14
+76c312	f12=f0*f5, f3=f8+f14, f6=f8-f14
+76d312	f13=f0*f5, f3=f8+f14, f6=f8-f14
+76e312	f14=f0*f5, f3=f8+f14, f6=f8-f14
+76f312	f15=f0*f5, f3=f8+f14, f6=f8-f14
+770312	f0=f0*f5, f3=f8+f14, f7=f8-f14
+771312	f1=f0*f5, f3=f8+f14, f7=f8-f14
+772312	f2=f0*f5, f3=f8+f14, f7=f8-f14
+773312	f3=f0*f5, f3=f8+f14, f7=f8-f14
+774312	f4=f0*f5, f3=f8+f14, f7=f8-f14
+775312	f5=f0*f5, f3=f8+f14, f7=f8-f14
+776312	f6=f0*f5, f3=f8+f14, f7=f8-f14
+777312	f7=f0*f5, f3=f8+f14, f7=f8-f14
+778312	f8=f0*f5, f3=f8+f14, f7=f8-f14
+779312	f9=f0*f5, f3=f8+f14, f7=f8-f14
+77a312	f10=f0*f5, f3=f8+f14, f7=f8-f14
+77b312	f11=f0*f5, f3=f8+f14, f7=f8-f14
+77c312	f12=f0*f5, f3=f8+f14, f7=f8-f14
+77d312	f13=f0*f5, f3=f8+f14, f7=f8-f14
+77e312	f14=f0*f5, f3=f8+f14, f7=f8-f14
+77f312	f15=f0*f5, f3=f8+f14, f7=f8-f14
+780312	f0=f0*f5, f3=f8+f14, f8=f8-f14
+781312	f1=f0*f5, f3=f8+f14, f8=f8-f14
+782312	f2=f0*f5, f3=f8+f14, f8=f8-f14
+783312	f3=f0*f5, f3=f8+f14, f8=f8-f14
+784312	f4=f0*f5, f3=f8+f14, f8=f8-f14
+785312	f5=f0*f5, f3=f8+f14, f8=f8-f14
+786312	f6=f0*f5, f3=f8+f14, f8=f8-f14
+787312	f7=f0*f5, f3=f8+f14, f8=f8-f14
+788312	f8=f0*f5, f3=f8+f14, f8=f8-f14
+789312	f9=f0*f5, f3=f8+f14, f8=f8-f14
+78a312	f10=f0*f5, f3=f8+f14, f8=f8-f14
+78b312	f11=f0*f5, f3=f8+f14, f8=f8-f14
+78c312	f12=f0*f5, f3=f8+f14, f8=f8-f14
+78d312	f13=f0*f5, f3=f8+f14, f8=f8-f14
+78e312	f14=f0*f5, f3=f8+f14, f8=f8-f14
+78f312	f15=f0*f5, f3=f8+f14, f8=f8-f14
+790312	f0=f0*f5, f3=f8+f14, f9=f8-f14
+791312	f1=f0*f5, f3=f8+f14, f9=f8-f14
+792312	f2=f0*f5, f3=f8+f14, f9=f8-f14
+793312	f3=f0*f5, f3=f8+f14, f9=f8-f14
+794312	f4=f0*f5, f3=f8+f14, f9=f8-f14
+795312	f5=f0*f5, f3=f8+f14, f9=f8-f14
+796312	f6=f0*f5, f3=f8+f14, f9=f8-f14
+797312	f7=f0*f5, f3=f8+f14, f9=f8-f14
+798312	f8=f0*f5, f3=f8+f14, f9=f8-f14
+799312	f9=f0*f5, f3=f8+f14, f9=f8-f14
+79a312	f10=f0*f5, f3=f8+f14, f9=f8-f14
+79b312	f11=f0*f5, f3=f8+f14, f9=f8-f14
+79c312	f12=f0*f5, f3=f8+f14, f9=f8-f14
+79d312	f13=f0*f5, f3=f8+f14, f9=f8-f14
+79e312	f14=f0*f5, f3=f8+f14, f9=f8-f14
+79f312	f15=f0*f5, f3=f8+f14, f9=f8-f14
+7a0312	f0=f0*f5, f3=f8+f14, f10=f8-f14
+7a1312	f1=f0*f5, f3=f8+f14, f10=f8-f14
+7a2312	f2=f0*f5, f3=f8+f14, f10=f8-f14
+7a3312	f3=f0*f5, f3=f8+f14, f10=f8-f14
+7a4312	f4=f0*f5, f3=f8+f14, f10=f8-f14
+7a5312	f5=f0*f5, f3=f8+f14, f10=f8-f14
+7a6312	f6=f0*f5, f3=f8+f14, f10=f8-f14
+7a7312	f7=f0*f5, f3=f8+f14, f10=f8-f14
+7a8312	f8=f0*f5, f3=f8+f14, f10=f8-f14
+7a9312	f9=f0*f5, f3=f8+f14, f10=f8-f14
+7aa312	f10=f0*f5, f3=f8+f14, f10=f8-f14
+7ab312	f11=f0*f5, f3=f8+f14, f10=f8-f14
+7ac312	f12=f0*f5, f3=f8+f14, f10=f8-f14
+7ad312	f13=f0*f5, f3=f8+f14, f10=f8-f14
+7ae312	f14=f0*f5, f3=f8+f14, f10=f8-f14
+7af312	f15=f0*f5, f3=f8+f14, f10=f8-f14
+7b0312	f0=f0*f5, f3=f8+f14, f11=f8-f14
+7b1312	f1=f0*f5, f3=f8+f14, f11=f8-f14
+7b2312	f2=f0*f5, f3=f8+f14, f11=f8-f14
+7b3312	f3=f0*f5, f3=f8+f14, f11=f8-f14
+7b4312	f4=f0*f5, f3=f8+f14, f11=f8-f14
+7b5312	f5=f0*f5, f3=f8+f14, f11=f8-f14
+7b6312	f6=f0*f5, f3=f8+f14, f11=f8-f14
+7b7312	f7=f0*f5, f3=f8+f14, f11=f8-f14
+7b8312	f8=f0*f5, f3=f8+f14, f11=f8-f14
+7b9312	f9=f0*f5, f3=f8+f14, f11=f8-f14
+7ba312	f10=f0*f5, f3=f8+f14, f11=f8-f14
+7bb312	f11=f0*f5, f3=f8+f14, f11=f8-f14
+7bc312	f12=f0*f5, f3=f8+f14, f11=f8-f14
+7bd312	f13=f0*f5, f3=f8+f14, f11=f8-f14
+7be312	f14=f0*f5, f3=f8+f14, f11=f8-f14
+7bf312	f15=f0*f5, f3=f8+f14, f11=f8-f14
+7c0312	f0=f0*f5, f3=f8+f14, f12=f8-f14
+7c1312	f1=f0*f5, f3=f8+f14, f12=f8-f14
+7c2312	f2=f0*f5, f3=f8+f14, f12=f8-f14
+7c3312	f3=f0*f5, f3=f8+f14, f12=f8-f14
+7c4312	f4=f0*f5, f3=f8+f14, f12=f8-f14
+7c5312	f5=f0*f5, f3=f8+f14, f12=f8-f14
+7c6312	f6=f0*f5, f3=f8+f14, f12=f8-f14
+7c7312	f7=f0*f5, f3=f8+f14, f12=f8-f14
+7c8312	f8=f0*f5, f3=f8+f14, f12=f8-f14
+7c9312	f9=f0*f5, f3=f8+f14, f12=f8-f14
+7ca312	f10=f0*f5, f3=f8+f14, f12=f8-f14
+7cb312	f11=f0*f5, f3=f8+f14, f12=f8-f14
+7cc312	f12=f0*f5, f3=f8+f14, f12=f8-f14
+7cd312	f13=f0*f5, f3=f8+f14, f12=f8-f14
+7ce312	f14=f0*f5, f3=f8+f14, f12=f8-f14
+7cf312	f15=f0*f5, f3=f8+f14, f12=f8-f14
+7d0312	f0=f0*f5, f3=f8+f14, f13=f8-f14
+7d1312	f1=f0*f5, f3=f8+f14, f13=f8-f14
+7d2312	f2=f0*f5, f3=f8+f14, f13=f8-f14
+7d3312	f3=f0*f5, f3=f8+f14, f13=f8-f14
+7d4312	f4=f0*f5, f3=f8+f14, f13=f8-f14
+7d5312	f5=f0*f5, f3=f8+f14, f13=f8-f14
+7d6312	f6=f0*f5, f3=f8+f14, f13=f8-f14
+7d7312	f7=f0*f5, f3=f8+f14, f13=f8-f14
+7d8312	f8=f0*f5, f3=f8+f14, f13=f8-f14
+7d9312	f9=f0*f5, f3=f8+f14, f13=f8-f14
+7da312	f10=f0*f5, f3=f8+f14, f13=f8-f14
+7db312	f11=f0*f5, f3=f8+f14, f13=f8-f14
+7dc312	f12=f0*f5, f3=f8+f14, f13=f8-f14
+7dd312	f13=f0*f5, f3=f8+f14, f13=f8-f14
+7de312	f14=f0*f5, f3=f8+f14, f13=f8-f14
+7df312	f15=f0*f5, f3=f8+f14, f13=f8-f14
+7e0312	f0=f0*f5, f3=f8+f14, f14=f8-f14
+7e1312	f1=f0*f5, f3=f8+f14, f14=f8-f14
+7e2312	f2=f0*f5, f3=f8+f14, f14=f8-f14
+7e3312	f3=f0*f5, f3=f8+f14, f14=f8-f14
+7e4312	f4=f0*f5, f3=f8+f14, f14=f8-f14
+7e5312	f5=f0*f5, f3=f8+f14, f14=f8-f14
+7e6312	f6=f0*f5, f3=f8+f14, f14=f8-f14
+7e7312	f7=f0*f5, f3=f8+f14, f14=f8-f14
+7e8312	f8=f0*f5, f3=f8+f14, f14=f8-f14
+7e9312	f9=f0*f5, f3=f8+f14, f14=f8-f14
+7ea312	f10=f0*f5, f3=f8+f14, f14=f8-f14
+7eb312	f11=f0*f5, f3=f8+f14, f14=f8-f14
+7ec312	f12=f0*f5, f3=f8+f14, f14=f8-f14
+7ed312	f13=f0*f5, f3=f8+f14, f14=f8-f14
+7ee312	f14=f0*f5, f3=f8+f14, f14=f8-f14
+7ef312	f15=f0*f5, f3=f8+f14, f14=f8-f14
+7f0312	f0=f0*f5, f3=f8+f14, f15=f8-f14
+7f1312	f1=f0*f5, f3=f8+f14, f15=f8-f14
+7f2312	f2=f0*f5, f3=f8+f14, f15=f8-f14
+7f3312	f3=f0*f5, f3=f8+f14, f15=f8-f14
+7f4312	f4=f0*f5, f3=f8+f14, f15=f8-f14
+7f5312	f5=f0*f5, f3=f8+f14, f15=f8-f14
+7f6312	f6=f0*f5, f3=f8+f14, f15=f8-f14
+7f7312	f7=f0*f5, f3=f8+f14, f15=f8-f14
+7f8312	f8=f0*f5, f3=f8+f14, f15=f8-f14
+7f9312	f9=f0*f5, f3=f8+f14, f15=f8-f14
+7fa312	f10=f0*f5, f3=f8+f14, f15=f8-f14
+7fb312	f11=f0*f5, f3=f8+f14, f15=f8-f14
+7fc312	f12=f0*f5, f3=f8+f14, f15=f8-f14
+7fd312	f13=f0*f5, f3=f8+f14, f15=f8-f14
+7fe312	f14=f0*f5, f3=f8+f14, f15=f8-f14
+7ff312	f15=f0*f5, f3=f8+f14, f15=f8-f14

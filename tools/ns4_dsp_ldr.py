@@ -15,7 +15,7 @@ Each image holds two core sections (Core1, Core2). SY1SY2 and SMP have no such h
     python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin
     python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --blocks
     python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --out dir   # data segments (do not commit)
-    python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --sram dir  # flat SRAM image per core
+    python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --sram dir  # flat SRAM + L2 image per core
 
 Address mapping (docs 5.18, VERIFIED on all 24 core sections of FX, PNO, ORG): internal blocks have
 top byte 0x28; `short-word address = (address & 0x7FFFFF) / 2` in the ADSP-21489 short-word space,
@@ -152,6 +152,19 @@ def sram_image(img: bytes, core: list[Block]) -> bytearray:
     return mem
 
 
+L2_TOP, L2_BASE, L2_BYTES = 0x20, 0x20000000, 0x100000  # 1 MiB L2 of the ADSP-2157x
+
+
+def l2_image(img: bytes, core: list[Block]) -> bytearray:
+    """Flat 1 MiB image of the L2 data blocks (top byte 0x20), indexed `address - 0x20000000`."""
+    mem = bytearray(L2_BYTES)
+    for b in core:
+        if b.kind == DATA and b.address >> 24 == L2_TOP:
+            lo = b.address - L2_BASE
+            mem[lo : lo + b.count] = img[b.offset + HEADER : b.offset + HEADER + b.count]
+    return mem
+
+
 def segments(img: bytes, core: list[Block]) -> list[tuple[int, bytes]]:
     """`(address, bytes)` for every data block of a core, in stream order."""
     return [
@@ -200,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.sram:
             args.sram.mkdir(parents=True, exist_ok=True)
             (args.sram / f"core{ci}_sram.bin").write_bytes(sram_image(img, core))
+            (args.sram / f"core{ci}_l2.bin").write_bytes(l2_image(img, core))
         if args.out:
             args.out.mkdir(parents=True, exist_ok=True)
             for i, (addr, data) in enumerate(segments(img, core)):

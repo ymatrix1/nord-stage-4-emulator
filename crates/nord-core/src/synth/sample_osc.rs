@@ -1,23 +1,56 @@
-//! `SAMPLES` oscillator: looped multisample playback, cubic interpolation and timbre damping.
+//! `SAMPLES` oscillator: looped multisample playback, sinc interpolation and timbre damping.
+//!
+//! Interpolation is selected by [`SAMPLE_INTERPOLATION`]: the firmware's 12-tap x 256-phase
+//! Kaiser(8.5) sinc ([`crate::sinc`], kernel chosen per playback ratio) or the legacy 4-point
+//! Catmull-Rom (`cubic_pcm`). Kernels are built once (see [`shared_sinc_kernels`]); the render
+//! path only reads them.
 
 use super::*;
+use crate::sinc::{SincKernel, SincKernelSet};
+use std::sync::OnceLock;
+
+/// Interpolator used by the `SAMPLES` oscillator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SampleInterpolation {
+    /// Legacy 4-point Catmull-Rom (4 taps, no anti-alias at ratios above 1).
+    Cubic,
+    /// Firmware 12-tap Kaiser(8.5) sinc, kernel picked by `SincKernelSet::for_ratio`.
+    Sinc,
+}
+
+/// Active `SAMPLES` interpolator (TD-08).
+///
+/// ASSUMED: the hardware reads these kernels in the SY1SY2 resampler (kernel values VERIFIED in
+/// `crate::sinc`), but which kernel the ARM selects for a pitch is not decoded
+/// (`SincKernelSet::select`, ASSUMED nearest `fc` to `min(1, 1/ratio)`). Flip to
+/// `SampleInterpolation::Cubic` to restore the previous behaviour; no other code changes.
+pub const SAMPLE_INTERPOLATION: SampleInterpolation = SampleInterpolation::Sinc;
+
+/// Process-wide kernel set, built on first use (always at `SynthLayer::new`, never in render).
+pub(super) fn shared_sinc_kernels() -> Arc<SincKernelSet> {
+    static KERNELS: OnceLock<Arc<SincKernelSet>> = OnceLock::new();
+    KERNELS
+        .get_or_init(|| Arc::new(SincKernelSet::new()))
+        .clone()
+}
 
 impl SynthLayer {
     #[inline]
     pub(super) fn sample_with_loop(
+        kernel: &SincKernel,
         pcm: &[f32],
         wrapped: f64,
         ls: usize,
         le_c: usize,
         crossfade: usize,
     ) -> f32 {
-        let primary = Self::cubic_pcm(pcm, wrapped);
+        let primary = Self::interp_pcm(kernel, pcm, wrapped);
         if crossfade > 0 {
             let xf = crossfade.min((le_c - ls) / 2) as f64;
             let dist_to_end = le_c as f64 - wrapped;
             if xf >= 1.0 && dist_to_end < xf && ls as f64 >= dist_to_end {
                 let fade = (xf - dist_to_end) / xf;
-                let pre_loop = Self::cubic_pcm(pcm, ls as f64 - dist_to_end);
+                let pre_loop = Self::interp_pcm(kernel, pcm, ls as f64 - dist_to_end);
                 return primary * (1.0 - fade as f32) + pre_loop * (fade as f32);
             }
         }
@@ -26,11 +59,13 @@ impl SynthLayer {
 
     #[inline]
     pub(super) fn render_sample_zone_stereo(
+        kernels: &SincKernelSet,
         zone: &LoadedSynthSample,
         sample_pos: &mut f64,
         step: f64,
         active: &mut bool,
     ) -> (f32, Option<f32>) {
+        let kernel = kernels.for_ratio(step as f32);
         let len = zone.pcm.len();
         if len < 2 {
             *active = false;
@@ -47,14 +82,20 @@ impl SynthLayer {
                 } else {
                     pos
                 };
-                let out_l =
-                    Self::sample_with_loop(&zone.pcm, wrapped, ls, le_c, zone.loop_crossfade);
+                let out_l = Self::sample_with_loop(
+                    kernel,
+                    &zone.pcm,
+                    wrapped,
+                    ls,
+                    le_c,
+                    zone.loop_crossfade,
+                );
                 let out_r = pcm_r.map(|r| {
                     let le_r = le_c.min(r.len());
                     if le_r > ls {
-                        Self::sample_with_loop(r, wrapped, ls, le_r, zone.loop_crossfade)
+                        Self::sample_with_loop(kernel, r, wrapped, ls, le_r, zone.loop_crossfade)
                     } else {
-                        Self::cubic_pcm(r, wrapped)
+                        Self::interp_pcm(kernel, r, wrapped)
                     }
                 });
                 let next_pos = wrapped + step;
@@ -71,10 +112,19 @@ impl SynthLayer {
             *active = false;
             return (0.0, None);
         }
-        let out_l = Self::cubic_pcm(&zone.pcm, pos);
-        let out_r = pcm_r.map(|r| Self::cubic_pcm(r, pos));
+        let out_l = Self::interp_pcm(kernel, &zone.pcm, pos);
+        let out_r = pcm_r.map(|r| Self::interp_pcm(kernel, r, pos));
         *sample_pos = pos + step;
         (out_l, out_r)
+    }
+
+    /// Interpolates `pcm` at `pos` with the interpolator named by [`SAMPLE_INTERPOLATION`].
+    #[inline]
+    pub(super) fn interp_pcm(kernel: &SincKernel, pcm: &[f32], pos: f64) -> f32 {
+        match SAMPLE_INTERPOLATION {
+            SampleInterpolation::Sinc => kernel.interpolate(pcm, pos),
+            SampleInterpolation::Cubic => Self::cubic_pcm(pcm, pos),
+        }
     }
 
     #[inline]
@@ -122,6 +172,47 @@ impl SynthLayer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sinc_is_the_default_and_beats_cubic_on_a_fractional_sine() {
+        assert_eq!(SAMPLE_INTERPOLATION, SampleInterpolation::Sinc);
+        let w = 0.3 * TAU as f64; // 0.3 fs, where Catmull-Rom is weakest
+        let pcm: Vec<f32> = (0..256).map(|i| (w * i as f64).sin() as f32).collect();
+        let kernels = SincKernelSet::new();
+        let kernel = kernels.for_ratio(1.0);
+        let (mut e_sinc, mut e_cubic) = (0.0f64, 0.0f64);
+        for i in 0..400 {
+            let pos = 20.0 + i as f64 * 0.449;
+            let truth = (w * pos).sin();
+            let a = f64::from(SynthLayer::interp_pcm(kernel, &pcm, pos)) - truth;
+            let b = f64::from(SynthLayer::cubic_pcm(&pcm, pos)) - truth;
+            e_sinc = e_sinc.max(a.abs());
+            e_cubic = e_cubic.max(b.abs());
+        }
+        assert!(e_sinc * 5.0 < e_cubic, "sinc {e_sinc} vs cubic {e_cubic}");
+    }
+
+    #[test]
+    fn zone_renderer_picks_a_lower_cutoff_kernel_when_pitched_up() {
+        assert!(SincKernelSet::select(2.0) > SincKernelSet::select(1.0));
+        let kernels = shared_sinc_kernels();
+        assert!(
+            Arc::ptr_eq(&kernels, &shared_sinc_kernels()),
+            "one shared set"
+        );
+        let pcm: Vec<f32> = (0..64).map(|i| (i as f32 * 0.1).sin()).collect();
+        let sound = SynthSampleSound::new_synthetic("Z", 60, &pcm, 48_000.0, None, 0);
+        let (mut pos, mut active) = (3.25f64, true);
+        let (l, r) = SynthLayer::render_sample_zone_stereo(
+            &kernels,
+            &sound.zones[0],
+            &mut pos,
+            2.0,
+            &mut active,
+        );
+        assert!(active && r.is_none() && l.is_finite());
+        assert!((pos - 5.25).abs() < 1e-12);
+    }
 
     #[test]
     fn test_sample_mode_zone_playback_loop_crossfade_and_timbre() {

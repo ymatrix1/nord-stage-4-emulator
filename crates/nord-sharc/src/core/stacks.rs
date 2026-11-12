@@ -5,8 +5,9 @@ use super::{Core, LoopFrame};
 pub(super) const PC_STACK_DEPTH: usize = 30;
 pub(super) const STATUS_STACK_DEPTH: usize = 15;
 const LOOP_STACK_DEPTH: usize = 6;
-/// Value of PCSTK while the PC stack is empty (PRM 4-13).
-pub(super) const PCSTK_EMPTY: u32 = 0x3FF_FFFF;
+/// Value of PCSTK while the PC stack is empty. VERIFIED on the simulator (`stack_measured.rs`):
+/// 24 bits of ones (the PRM text suggests 26).
+pub(super) const PCSTK_EMPTY: u32 = 0xFF_FFFF;
 
 /// STKY read-only sticky stack bits: status stack overflow (23) and loop stack overflow (25).
 pub(super) const SSOV: u32 = 1 << 23;
@@ -146,7 +147,11 @@ mod tests {
     #[test]
     fn laddr_encodes_end_address_and_loop_length() {
         let mut c = Core::new(&[]);
-        assert_eq!(c.read_ureg(0x66), 0);
+        assert_eq!(
+            c.read_ureg(0x66),
+            u32::MAX,
+            "all ones while the loop stack is empty"
+        );
         // three 16-bit NOPs at 0x10..0x12: a counter loop of length 3
         c.push_loop(LoopFrame {
             start: 0x10,
