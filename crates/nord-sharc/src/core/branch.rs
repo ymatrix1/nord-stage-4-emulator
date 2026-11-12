@@ -108,6 +108,14 @@ impl Core {
         }
     }
 
+    /// Enters an interrupt service routine at `vector`: the current pc becomes the return
+    /// address of the `RTI`. A harness stand-in for interrupt dispatch (no IRPTL/IMASK/priority
+    /// model, no delay-slot or loop-end handling), used to run ISR bodies in isolation.
+    pub fn enter_handler(&mut self, vector: u32) {
+        self.call_stack.push(self.pc);
+        self.pc = vector;
+    }
+
     /// Return addresses of the active calls, outermost first.
     pub fn return_addresses(&self) -> &[u32] {
         &self.call_stack
@@ -167,6 +175,18 @@ mod tests {
         assert_eq!(c.dm_read(0xC_0434).unwrap(), 0xDEAD_BEEF);
         assert_eq!(c.i[0], 0xC_0434);
         assert!(c.loops.is_empty());
+    }
+
+    #[test]
+    fn enter_handler_pushes_the_pc_and_rti_returns_to_it() {
+        // vector at 0x10: RTI (type 11c, 0abe is RTS; RTI is 0b3e in the 48-bit form)
+        let mut c = core_at_zero(&[0x0001, 0x0001]);
+        super::super::support::load(&mut c, 0x10, &[0x0B3E, 0x0000, 0x0000]);
+        c.pc = 1;
+        c.enter_handler(0x10);
+        assert_eq!((c.pc, c.return_addresses().to_vec()), (0x10, vec![1]));
+        assert!(c.step().is_ok());
+        assert_eq!(c.pc, 1, "RTI resumes where the interrupt hit");
     }
 
     #[test]

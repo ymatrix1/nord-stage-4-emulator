@@ -114,3 +114,33 @@ def test_main_prints_one_line_per_instruction(monkeypatch, tmp_path, capsys):
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "00000000  023e 1010 1810  r1=fext r0 by 0x18:0x8"
     assert lines[-1] == "00000005  0001  nop"
+
+
+def test_isa_objects_omit_the_visa_align_record():
+    """`visa=False` builds the object ADI decodes as fixed 48-bit ISA words (SY1SY2/SMP kernel)."""
+    s = sections(a.build_elf(PARCELS, visa=False))
+    assert set(s) == {".strtab", ".symtab", "seg_pmco", ".adi.attributes"}
+    assert s["seg_pmco"][1] == sections(a.build_elf(PARCELS))["seg_pmco"][1]
+
+
+def test_isa_parcels_put_the_most_significant_parcel_first():
+    # `call 0x8c091 (db)` = 06be 0408 c091, stored least significant parcel first
+    stored = bytes.fromhex("91c00804be06")
+    assert a.isa_parcels(stored, 0, 6) == [0x06BE, 0x0408, 0xC091]
+    assert a.isa_parcels(stored, 0, 5) == []
+
+
+def test_main_isa_flag_uses_the_isa_object(monkeypatch, tmp_path, capsys):
+    image = tmp_path / "k.bin"
+    image.write_bytes(bytes.fromhex("91c00804be06"))
+    seen = {}
+
+    def fake(parcels, cces=None, visa=True):
+        seen.update(parcels=parcels, visa=visa)
+        return {0: (parcels, "call 0x8c091 (db)")}
+
+    monkeypatch.setattr(a, "disassemble", fake)
+    monkeypatch.setattr(sys, "argv", ["adi_dis.py", str(image), "0", "6", "--isa"])
+    assert a.main() == 0
+    assert seen == {"parcels": [0x06BE, 0x0408, 0xC091], "visa": False}
+    assert "call 0x8c091 (db)" in capsys.readouterr().out

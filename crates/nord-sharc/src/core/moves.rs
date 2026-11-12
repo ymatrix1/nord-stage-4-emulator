@@ -372,4 +372,26 @@ mod tests {
         assert_eq!(c.run(2), None);
         assert_eq!((c.m[6], c.m[7]), (11, 22));
     }
+
+    #[test]
+    fn type_19a_modifies_an_index_by_an_immediate_with_circular_wrap() {
+        // ADI (SY1SY2 image): `1603 0000 0310` is `i3 = modify(i3, 0x310)`
+        let mut c = core_at_zero(&[0x1603, 0x0000, 0x0310]);
+        c.i[3] = 0x1000;
+        assert!(c.step().is_ok());
+        assert_eq!((c.i[3], c.pc), (0x1310, 3));
+        // circular buffer base 0x100 length 4: 0x103 + 1 wraps to 0x100
+        let mut c = core_at_zero(&[0x1603, 0x0000, 0x0001]);
+        (c.i[3], c.l[3], c.b[3]) = (0x103, 4, 0x100);
+        assert!(c.step().is_ok());
+        assert_eq!(c.i[3], 0x100);
+    }
+
+    #[test]
+    fn flush_cache_is_a_no_op() {
+        // ADI: `1702 0000 0000` is `flush cache`
+        let mut c = core_at_zero(&[0x1702, 0x0000, 0x0000]);
+        assert!(c.step().is_ok());
+        assert_eq!(c.pc, 3);
+    }
 }
