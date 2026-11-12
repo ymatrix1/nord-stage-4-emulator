@@ -4,6 +4,7 @@
 //! extraction scrambles the column order of several tables, so the AZ/AN/AV/AS/AI assignment is
 //! ASSUMED where the table is not as clear as the one of `Fn = Fx + Fy`).
 use super::float::{unpack, Class, Mode, Out, Un, ALL_ONES};
+use super::float_seeds::{recip_seed, rsqrt_seed};
 
 fn out(v: u64, an: bool) -> Out {
     Out {
@@ -148,19 +149,14 @@ pub fn logb(a: u64, mode: Mode) -> Out {
     }
 }
 
-/// Seed of `1/x`: 7 fraction bits index a table of 9-bit mantissas.
-///
-/// ASSUMED: the real ROM is not published. Each entry is the reciprocal at the harmonic centre
-/// of its input interval (minimum relative error), quantised to 9 fraction bits (a 7-bit index limits the error to 2^-8 at the bin edges); the
-/// reference only promises "8-bit accurate". Confirm with an ADI simulator run (see
-/// `docs/research/sharc-float.md`).
-pub fn recip_seed_mantissa(index: u32) -> u32 {
-    let (lo, hi) = (
-        1.0 + f64::from(index) / 128.0,
-        1.0 + f64::from(index + 1) / 128.0,
-    );
-    let centre = 2.0 / (1.0 / lo + 1.0 / hi);
-    ((2.0 / centre * 512.0).round() as u32).clamp(512, 1023) - 512
+/// NaN input of `RECIPS`/`RSQRTS`: all ones with AI only (VERIFIED: ASTAT 0x...20 in
+/// `docs/research/sharc-seeds/seeds_specials_flags.csv`; the other ops' `invalid()` also sets AN).
+fn nan_seed() -> Out {
+    Out {
+        v: ALL_ONES,
+        ai: true,
+        ..Out::default()
+    }
 }
 
 /// `Fn = RECIPS Fx`. Exponent `-e - 1`, sign of the input; zero gives infinity with AV; an
@@ -173,7 +169,7 @@ pub fn recips(a: u64, mode: Mode) -> Out {
         ..Out::default()
     };
     match x.class {
-        Class::Nan => Out::invalid(),
+        Class::Nan => nan_seed(),
         Class::Zero => Out {
             v: sign | (0xFF << 31),
             av: true,
@@ -193,25 +189,11 @@ pub fn recips(a: u64, mode: Mode) -> Out {
             let idx = ((x.man >> 24) & 0x7F) as u32;
             let biased = (-x.exp - 1 + 127) as u64;
             Out {
-                v: sign | (biased << 31) | (u64::from(recip_seed_mantissa(idx)) << 22),
+                v: sign | (biased << 31) | (u64::from(recip_seed(idx)) << 23),
                 ..base
             }
         }
     }
-}
-
-/// Seed of `1/sqrt(x)`: the exponent parity and 6 fraction bits index a table of 4-bit mantissas.
-///
-/// ASSUMED like [`recip_seed_mantissa`]: centre of the interval (mean of the endpoint values),
-/// quantised to 4 fraction bits; the reference promises "4-bit accurate".
-pub fn rsqrt_seed_mantissa(odd: bool, index: u32) -> u32 {
-    let (lo, hi) = (
-        1.0 + f64::from(index) / 64.0,
-        1.0 + f64::from(index + 1) / 64.0,
-    );
-    let avg = (1.0 / lo.sqrt() + 1.0 / hi.sqrt()) / 2.0;
-    let scale = if odd { std::f64::consts::SQRT_2 } else { 2.0 };
-    ((scale * avg * 16.0).round() as u32).clamp(16, 31) - 16
 }
 
 /// `Fn = RSQRTS Fx`. Exponent `-floor(e/2) - 1`; zero gives infinity with AV, +infinity gives
@@ -220,7 +202,7 @@ pub fn rsqrts(a: u64, mode: Mode) -> Out {
     let x = unpack(a, mode.r32);
     let sign = u64::from(x.neg) << 39;
     match x.class {
-        Class::Nan => Out::invalid(),
+        Class::Nan => nan_seed(),
         Class::Zero => Out {
             v: sign | (0xFF << 31),
             an: x.neg,
@@ -229,7 +211,6 @@ pub fn rsqrts(a: u64, mode: Mode) -> Out {
         },
         _ if x.neg => Out {
             v: ALL_ONES,
-            an: true,
             ai: true,
             ..Out::default()
         },
@@ -242,7 +223,7 @@ pub fn rsqrts(a: u64, mode: Mode) -> Out {
             let idx = ((x.man >> 25) & 0x3F) as u32;
             let biased = (-k - 1 + 127) as u64;
             Out {
-                v: (biased << 31) | (u64::from(rsqrt_seed_mantissa(odd, idx)) << 27),
+                v: (biased << 31) | (u64::from(rsqrt_seed(odd, idx)) << 23),
                 ..Out::default()
             }
         }
@@ -327,11 +308,8 @@ mod tests {
                 worst = worst.max((seed * f64::from(x) - 1.0).abs());
             }
         }
-        // a 7-bit index forces (hi-lo)/(hi+lo) = 2^-8 at the bin edges; the 9-bit mantissa adds <= 2^-10
-        assert!(
-            worst <= 1.0 / 256.0 + 1.0 / 1024.0,
-            "seed error {worst} exceeds 2^-8 + 2^-10"
-        );
+        // measured ROM: worst relative error 0.00745 (< 2^-7) over these inputs
+        assert!(worst <= 1.0 / 128.0, "seed error {worst} exceeds 2^-7");
         assert!(worst > 1.0 / 2048.0, "the model is not suspiciously exact");
         // exponent rule: x = 1.0 (e = 0) gives exponent -1
         let o = recips(f(1.0), M);

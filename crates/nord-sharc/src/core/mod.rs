@@ -24,6 +24,7 @@ mod float;
 mod float_conv;
 mod float_misc;
 mod float_ops;
+mod float_seeds;
 mod memory;
 mod moves;
 mod multifunction;
