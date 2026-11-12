@@ -30,7 +30,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 
 - [x] Dissect `Nord Stage 4 Factory Restore RevK v1.66.ns4b` archive (`meta.xml`, `product_id=46`, build `2934`, 1,171 files census) ([research](research/ns4-backup-and-cbin-teardown.md))
 - [x] Reverse-engineer the 48-byte `CBIN` v1 header and bitstream embedding across `.ns4p` (868 B), `.ns4y` (541 B), `.ns4o` (183 B), `.ns4n` (195 B), `.ns4l` (868 B), `.ns4t` (124 B) ([spec](specs/cbin-and-presets.md))
-- [x] Extract and map the OS v1.66 firmware payload (`RCDATA 101`, 4,037,080 B) into `ARM0` host MCU and `DSPO` / `DSPS` / `DSPF` SHARC DSP partitions ([research](research/ns4-firmware-teardown.md))
+- [x] Extract and map the OS v1.66 firmware payload (`RCDATA 101`, 4,037,080 B) into `ARM0` host MCU and `DSPO` / `DSPS` / `DSPF` SHARC DSP partitions (correction: the `DSP*` names are region labels; SHARC VISA code is in `bank0_CODE@0x440000..0x52FFFF`, see [dsp-image-hunt](research/dsp-image-hunt.md)); [research](research/ns4-firmware-teardown.md)
 - [x] Document Stage 4 mainboard (AM1705 host + 4 ADI DSPs, `.reference/mainboard/`), Stage 3-family reference boards (`11870-Lg.jpg`, `12916-Lg.jpg`), and `CS4392` + `LM833`/`LF353` DAC output stage ([research](research/hardware-and-dac-analysis.md))
 - [x] Document 1:1 front-panel visual design from `foto.jpg`, `NS4-Panel-organ.max-2000x2000.format-png.png`, and `Screenshot20at2015.jpg` ([spec](specs/visual-style-and-panel.md))
 - [x] Author complete subsystem specifications in `docs/specs/*.md` (`cbin-and-presets`, `organ-engine`, `synth-engine`, `piano-engine`, `effects-and-routing`, `morph-and-zones`, `midi-and-control`, `visual-style-and-panel`, `verification`)

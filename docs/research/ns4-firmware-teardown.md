@@ -41,7 +41,9 @@ Both Image 0 (`0x00000020`) and Image 1 (`0x00368FA6`) contain a 20-byte sub-hea
 
 ## 3. SHARC DSP Core Partitions (`DSPF`, `DSPO`, `DSPS`)
 
-At offset `0x003CF040` inside the firmware image, the host-to-DSP loader table names the three specialized SHARC DSP images and their inter-core audio links:
+> **Correction (2026-11-12, see [dsp-image-hunt.md](dsp-image-hunt.md)):** `0x003CF040` is an offset in the *packed* container (image 1 `CODE`, LZ literals), which unpacks to `bank1_CODE@0x8CB7C`. The names below are SHARC memory-region and inter-DSP link labels used by the bank 1 flash/test tool, not DSP image names. The SHARC code itself is VISA code inside `bank0_CODE@0x440000..0x52FFFF` (about 270 KB, not yet mapped to the three DSPs).
+
+At offset `0x003CF040` inside the firmware image, the host-to-DSP table lists the SHARC memory regions and inter-core audio links:
 
 | Offset | Tag | Full Firmware Identifier | Role |
 |---|---|---|---|
