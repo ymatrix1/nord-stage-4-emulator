@@ -737,6 +737,22 @@ I7 = 0xC13CE            ; next record
 
 So the record addresses are baked into the code (the list pointer `DM(0xC1386)` is only used by the preamble), and each pass needs real per-record state. The image holds the initial values; the preamble can replace a record's code pointer with the slot default `0x7FFFFFFF`, which is where the oracle's run leaves the code (5.30). The remaining open question is the input state the ARM provides (the region `DM(0xE0000..)` and the records), which needs the ARM side of the protocol.
 
+### 5.34 ADI's disassembler as ground truth (CCES 2.12.1)
+
+With CrossCore Embedded Studio 2.12.1 installed (`C:\Analog Devices\CrossCore Embedded Studio 2.12.1`, the SHARC tools `easm21k`, `elfdump`, `cldp`, `cc21k` and the libraries for the ADSP-21469/21479/21489 families), `elfdump -ns` **disassembles VISA code without a licence** (the assembler needs one; it is not activated). `tools/adi_dis.py` wraps parcels in a minimal ELF (`seg_pmco` section, the `.align.seg_pmco` record that marks it as VISA code, ADSP-21469 attributes) and parses the listing: 65,000 instructions in under two seconds. `tools/adi_compare.py IMAGE START END` reduces both listings (ADI's and this project's decoder) to a canonical form and reports agreement per instruction type; both tools have unit tests (`tools/tests/test_adi_dis.py`, `test_adi_compare.py`) that need no CCES (ELF structure, listing parser, the `elfdump` call with a stubbed subprocess, canonicalisation). Environment: `NS4_CCES` selects another install folder.
+
+What the oracle corrected (each with a golden test taken from the ADI output):
+
+| Item | Before | ADI ground truth (fitted on the images' own instructions) |
+|---|---|---|
+| Opcode `0x02` ("2x", 834 instructions) | undocumented compute with "extra bits" | **shift immediate**: `[IF cond] Rn = <op> Rx BY <imm>`; `SHIFTOP` bits 21..16 (all 64 codes read from the disassembler: `lshift 0`, `ashift 1`, `rot 2`, `or` forms 8/9, `fext 16`, `fdep 17`, `(se)` 18/19, `bitext 20/22`, `fdep or` 25/27, `bitdep 29`, `bffwrp 31`, `bset 48`, `bclr 49`, `btgl 50`, `btst 51`), `DATA12` = bits 30..27 (high) and 15..8 (low), `Rn` 7..4, `Rx` 3..0, `bit6 = DATA12[5:0]`, `len6 = DATA12[11:6]`. 5.31's skipped `2x` operations were these |
+| Register moves 5a/5b | destination bits 30..24 | destination bits **29..23** (fits 1,242 and 1,748 of 1,242 and 1,748 samples; the old split fit 46) |
+| `Dreg <-> CDreg` swap | `R4 <-> S4`, fields 42..39 and 27..24 | `Rx <-> Sy` with **Rx bits 26..23, Sy bits 41..38** (1,087 samples); `7a3e 04bf` is `r9<->s8`; S registers are code group 5 (`S0..S15` = `0x50..0x5F`) |
+| Type 4 offset (`DM(<data6>, Ii)`) | unsigned | **signed**: `dm(0xffffffe4,i5)` is `DM(-28, I5)`. The core addressed these accesses 64 words too far for offsets 32..63 |
+| Type 15b | (fixed in 5.28) | confirmed: UREG 29..23, signed DATA7 22..16 |
+
+Open items the first full comparison of ORG Core2 shows (65,139 instructions): types `10a` (conditional jump with a dual move and compute in the else branch, 918 in ORG Core2), `1a`/`1b` (dual DM/PM moves with compute, 563), `19a`, `6a` (shift immediate with a data move), `16a`/`16b` (immediate stores), `7a`/`7b`/`9a`/`9b` operand text, and `14a` long-word access (`(LW)` suffix) are not decoded or not executed yet; the remaining differences are formatting. They are the next work items.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications

@@ -80,16 +80,16 @@ impl Core {
             Kind::T18a => self.bit_op(d)?,
             Kind::T5a | Kind::T5b if d.cond_ok => {
                 if bits(w, 43, 43) == 1 {
-                    // Dreg <-> CDreg swap [, compute]. ASSUMED field positions: CDREG bits 42..39,
-                    // DREG bits 27..24 (one data point, `7a3e 0480 1001` = R4 <-> S4 with
-                    // R0 = R0 + R1).
-                    let (c, dreg) = (bits(w, 42, 39) as usize, bits(w, 27, 24) as usize);
+                    // `Rx <-> Sy` [, compute]: Rx bits 26..23, Sy bits 41..38 (VERIFIED against
+                    // ADI elfdump on 1,087 swaps, docs 5.34). In SIMD mode the swap is the same
+                    // exchange (the PEy file is the S file).
+                    let (s, r) = (bits(w, 41, 38) as usize, bits(w, 26, 23) as usize);
                     self.run_move_compute(d, with_compute)?;
-                    std::mem::swap(&mut self.r[dreg], &mut self.s[c]);
+                    std::mem::swap(&mut self.r[r], &mut self.s[s]);
                 } else {
                     let src = ((bits(w, 42, 38) << 2) | bits(w, 32, 31)) as u8;
                     let v = self.read_ureg(src);
-                    self.write_ureg(bits(w, 30, 24) as u8, v);
+                    self.write_ureg(bits(w, 29, 23) as u8, v);
                     self.run_move_compute(d, with_compute)?;
                 }
             }
@@ -131,7 +131,8 @@ impl Core {
             }
             Kind::T4a | Kind::T4b if d.cond_ok => {
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 40, 40));
-                let addr = self.i[ii].wrapping_add(bits(w, 32, 27) as u32);
+                // DATA6 is a signed offset (VERIFIED against ADI elfdump, docs 5.34)
+                let addr = self.i[ii].wrapping_add(sign_extend(bits(w, 32, 27) as u32, 6));
                 self.run_move_compute(d, with_compute)?;
                 self.mem_transfer(d, addr, bits(w, 26, 23) as u8, write_bit(39))?;
             }
@@ -251,12 +252,29 @@ mod tests {
     }
 
     #[test]
-    fn type_5a_swaps_a_data_register_with_its_pey_register() {
-        // IF TRUE R0 = R0 + R1 with swap R4 <-> S4: parcels 7a3e 0480 1001
-        let mut c = core_at_zero(&[0x7a3e, 0x0480, 0x1001]);
-        (c.r[4], c.s[4], c.r[0], c.r[1]) = (7, 9, 1, 2);
+    fn type_4_offset_is_signed() {
+        // ADI: `6a3f 218d a00f` is `f0=float r0 by r15, r3=dm(0xffffffe4,i5)` (offset -28)
+        let mut c = core_at_zero(&[0x6a3f, 0x218d, 0xa00f]);
+        c.i[5] = 0x9_0100;
+        c.r[0] = 3;
+        c.dm_write(0x9_0100 - 28, 77).unwrap();
         assert!(c.step().is_ok());
-        assert_eq!((c.r[4], c.s[4], c.r[0]), (9, 7, 3));
+        assert_eq!(c.r[3], 77);
+        assert_eq!(f32::from_bits(c.r[0]), 3.0);
+    }
+
+    #[test]
+    fn type_5a_swaps_a_data_register_with_its_pey_register() {
+        // ADI: `7a3e 0480 1001` is `r0=r0+r1, r9<->s8`
+        let mut c = core_at_zero(&[0x7a3e, 0x0480, 0x1001]);
+        (c.r[9], c.s[8], c.r[0], c.r[1]) = (7, 9, 1, 2);
+        assert!(c.step().is_ok());
+        assert_eq!((c.r[9], c.s[8], c.r[0]), (9, 7, 3));
         assert_eq!(c.pc, 3);
+        // `703e 933f` is `m6=r1`, `753e 93bf` is `m7=s1`
+        let mut c = core_at_zero(&[0x703e, 0x933f, 0x753e, 0x93bf]);
+        (c.r[1], c.s[1]) = (11, 22);
+        assert_eq!(c.run(2), None);
+        assert_eq!((c.m[6], c.m[7]), (11, 22));
     }
 }

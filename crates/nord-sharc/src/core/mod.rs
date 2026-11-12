@@ -321,8 +321,8 @@ mod tests {
 
     #[test]
     fn lenient_mode_skips_unmodelled_compute_and_counts_it() {
-        // 2x word with ALU opcode 0x10 (undocumented, not modelled) at short-word 0
-        let parcels = [0x023eu16, 0x0001, 0x0211, 0x0000];
+        // type 2a word `IF TRUE F1 = FPACK F2` (shifter op 0x90, not modelled) at short-word 0
+        let parcels = [0x013eu16, 0x0029, 0x0112, 0x0000];
         let mut strict = core_at_zero(&parcels);
         assert!(strict.step().is_err());
         let mut c = core_at_zero(&parcels);

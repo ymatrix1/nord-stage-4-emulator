@@ -51,7 +51,7 @@ def classify(p0: int, p1: int | None) -> tuple[str, int]:
     short = (p0 >> 7) & 1
     table = {
         0x01: ("2b", 2) if short else ("2a", 3),
-        0x02: ("2x", 3),
+        0x02: ("6n", 3),
         0x04: ("7b", 2) if marker else ("7a", 3),
         0x06: ("8a", 3),
         0x07: ("8a", 3),
@@ -210,6 +210,42 @@ SHORT_OPS = [
 ]
 
 
+def shift_imm_text(w: int) -> str:
+    """Text of a shift-immediate word (opcode 0x02, no data move).
+
+    VERIFIED against ADI's elfdump on 834 instructions of the DSP images (docs 5.34): SHIFTOP bits
+    21..16, DATA12 = bits 30..27 (high four) and 15..8 (low eight), Rn 7..4, Rx 3..0;
+    bit6 = DATA12[5:0], len6 = DATA12[11:6].
+    """
+    op = bits(w, 21, 16)
+    data = (bits(w, 30, 27) << 8) | bits(w, 15, 8)
+    n, x = bits(w, 7, 4), bits(w, 3, 0)
+    amount = data - 4096 if data & 0x800 else data
+    field = f"{data & 63}:{data >> 6}"
+    table = {
+        0: f"R{n} = LSHIFT R{x} BY {amount}",
+        1: f"R{n} = ASHIFT R{x} BY {amount}",
+        2: f"R{n} = ROT R{x} BY {amount}",
+        8: f"R{n} = R{n} OR LSHIFT R{x} BY {amount}",
+        9: f"R{n} = R{n} OR ASHIFT R{x} BY {amount}",
+        16: f"R{n} = FEXT R{x} BY {field}",
+        17: f"R{n} = FDEP R{x} BY {field}",
+        18: f"R{n} = FEXT R{x} BY {field} (SE)",
+        19: f"R{n} = FDEP R{x} BY {field} (SE)",
+        25: f"R{n} = R{n} OR FDEP R{x} BY {field}",
+        27: f"R{n} = R{n} OR FDEP R{x} BY {field} (SE)",
+        20: f"R{n} = BITEXT {data}",
+        22: f"R{n} = BITEXT {data} (NU)",
+        29: f"BITDEP R{x} BY {data}",
+        31: f"BFFWRP = {data}",
+        48: f"R{n} = BSET R{x} BY {data}",
+        49: f"R{n} = BCLR R{x} BY {data}",
+        50: f"R{n} = BTGL R{x} BY {data}",
+        51: f"BTST R{x} BY {data}",
+    }
+    return table.get(op, f"SHIFTIMM?op={op} n={n} x={x} data={data}")
+
+
 def short_compute_text(c: int) -> str:
     """Type 2c 12-bit short compute: OP in bits 11..8, Rn in 7..4, Rx in 3..0 (Table, ch. 12)."""
     return SHORT_OPS[bits(c, 11, 8)].format(n=bits(c, 7, 4), x=bits(c, 3, 0))
@@ -359,7 +395,7 @@ def compute_text(c: int) -> str:
 
 def _mem_move(w: int, name: str, iff: str) -> str:
     """Types 3a/3b (Ureg <-> DM/PM(Im, Mn)) and 4a/4b (Dreg <-> DM/PM(data6, Ii))."""
-    tail = f", {compute_text(bits(w, 22, 0))}" if name.endswith("a") else ""
+    tail = f", {compute_text(bits(w, 22, 0))}" if name.endswith("a") and bits(w, 22, 0) else ""
     if name.startswith("3"):
         pm = bits(w, 32, 32)
         base = 8 if pm else 0
@@ -370,7 +406,9 @@ def _mem_move(w: int, name: str, iff: str) -> str:
     else:
         pm = bits(w, 40, 40)
         i = bits(w, 43, 41) + (8 if pm else 0)
-        ea = f"{'PM' if pm else 'DM'}({bits(w, 32, 27)}, I{i})"
+        data = bits(w, 32, 27)
+        data -= 64 if data & 32 else 0  # DATA6 is signed (VERIFIED against ADI elfdump, docs 5.34)
+        ea = f"{'PM' if pm else 'DM'}({data}, I{i})"
         reg = f"R{bits(w, 26, 23)}"
         write = bits(w, 39, 39)
     return f"{iff}{ea} = {reg}{tail}" if write else f"{iff}{reg} = {ea}{tail}"
@@ -400,11 +438,13 @@ def decode(parcels: tuple[int, ...]) -> str:
     if name in ("3a", "3b", "4a", "4b"):
         return _mem_move(w, name, iff)
     if name in ("5a", "5b"):
-        if bits(w, 43, 43):
-            return f"{iff}Dreg <-> CDreg swap (raw {w >> (48 - 16 * len(parcels)):x})"
-        src = (bits(w, 42, 38) << 2) | bits(w, 32, 31)
+        # VERIFIED against ADI elfdump (docs 5.34): source bits 42..38 and 32..31, destination
+        # bits 29..23; swap "Rx <-> Sy" with Rx bits 26..23 and Sy bits 41..38.
         tail = f", {compute_text(bits(w, 22, 0))}" if name == "5a" else ""
-        return f"{iff}{ureg_name(bits(w, 30, 24))} = {ureg_name(src)}{tail}"
+        if bits(w, 43, 43):
+            return f"{iff}R{bits(w, 26, 23)} <-> S{bits(w, 41, 38)}{tail}"
+        src = (bits(w, 42, 38) << 2) | bits(w, 32, 31)
+        return f"{iff}{ureg_name(bits(w, 29, 23))} = {ureg_name(src)}{tail}"
     if name in ("14a", "15a"):
         pm = bits(w, 41, 41) if name == "14a" else bits(w, 44, 44)
         mem = "PM" if pm else "DM"
@@ -433,10 +473,8 @@ def decode(parcels: tuple[int, ...]) -> str:
         return compute_text(bits(w, 38, 16))
     if name == "2c":
         return short_compute_text(bits(w, 43, 32))
-    if name == "2x":
-        extra = bits(w, 31, 23)
-        tail = f"  [extra bits 31..23 = 0x{extra:x}]" if extra else ""
-        return f"{iff}{compute_text(bits(w, 22, 0))}{tail}"
+    if name == "6n":
+        return f"{iff}{shift_imm_text(w)}"
     if name == "19a":
         g = 8 if bits(w, 38, 38) else 0
         src = bits(w, 34, 32) + g

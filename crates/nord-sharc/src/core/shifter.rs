@@ -4,7 +4,9 @@
 //!
 //! Operands are the 32-bit fixed-point fields only (the 8-bit extension field is not modelled).
 //! Not modelled: `FPACK`/`FUNPACK` and the bit FIFO operations (`BITDEP`, `BITEXT`, `BFFWRP`).
-use super::Core;
+use super::exec::Decoded;
+use super::{sign_extend, Core, Fault};
+use crate::visa::bits;
 
 /// Mask of the low `len` bits (`len` of 32 or more selects all 32).
 #[inline]
@@ -64,7 +66,50 @@ fn extract(x: u32, len: u32, pos: u32, sign_extend: bool) -> (u32, bool) {
     (v, len + pos > 32)
 }
 
+/// Register-form shifter opcode of a shift-immediate operation code (bits 21..16 of the `0x02`
+/// word), VERIFIED against ADI's disassembler for all 64 codes (docs 5.34); `bitext`, `bitdep`
+/// and `bffwrp` (bit FIFO) are not modelled.
+fn immediate_to_register_op(op6: u64) -> Option<u64> {
+    Some(match op6 {
+        0 => 0x00,
+        1 => 0x04,
+        2 => 0x08,
+        8 => 0x20,
+        9 => 0x24,
+        16 => 0x40,
+        17 => 0x44,
+        18 => 0x48,
+        19 => 0x4C,
+        25 => 0x64,
+        27 => 0x6C,
+        48 => 0xC0,
+        49 => 0xC4,
+        50 => 0xC8,
+        51 => 0xCC,
+        _ => return None,
+    })
+}
+
 impl Core {
+    /// Opcode `0x02`: `[IF cond] Rn = <shifter op> Rx BY <immediate>`. The 12-bit immediate is the
+    /// signed shift amount, the bit position, or `len6:bit6` packed exactly like the register form.
+    pub(super) fn exec_shift_imm(&mut self, d: &Decoded) -> Result<(), Fault> {
+        let w = d.w;
+        let data = ((bits(w, 30, 27) << 8) | bits(w, 15, 8)) as u32;
+        let (n, x) = (bits(w, 7, 4) as usize, bits(w, 3, 0) as usize);
+        let Some(op) = immediate_to_register_op(bits(w, 21, 16)) else {
+            return self.unmodelled(d.pc, &d.insn);
+        };
+        let ry = if matches!(op, 0x00 | 0x04 | 0x08 | 0x20 | 0x24) {
+            sign_extend(data, 12)
+        } else {
+            data
+        };
+        self.on_each_pe(d, d.cond_ok, d.cond_y, |core| {
+            core.shifter_op(op, n, core.r[x], ry)
+        })
+    }
+
     fn set_shifter_flags(&mut self, sz: bool, sv: bool, ss: bool) {
         self.flags.sz = sz;
         self.flags.sv = sv;
@@ -74,7 +119,11 @@ impl Core {
     /// Executes a shifter operation (compute unit 2, Table 12-11 opcodes). Returns false for the
     /// forms not modelled, leaving the state unchanged.
     pub(super) fn shifter(&mut self, op: u64, n: usize, x: usize, y: usize) -> bool {
-        let (rx, ry) = (self.r[x], self.r[y]);
+        self.shifter_op(op, n, self.r[x], self.r[y])
+    }
+
+    /// [`Core::shifter`] with the operand values given (register or immediate form).
+    fn shifter_op(&mut self, op: u64, n: usize, rx: u32, ry: u32) -> bool {
         let old = self.r[n];
         let (len, pos) = ((ry >> 6) & 63, ry & 63);
         let bit = ry as i32;
@@ -227,6 +276,36 @@ mod tests {
             "0xF8 sign-extends"
         );
         assert!(run(0x40, 0xFFFF_FFFF, (16 << 6) | 20, 0).0.flags.sv);
+    }
+
+    /// ADI `elfdump` ground truth: `023e 1010 1810` is `r1=fext r0 by 0x18:0x8`, `023e 3011 0700`
+    /// is `r0=fdep r0 by 0x7:0x18`, `023e 7801 ff11` is `r1=ashift r1 by 0xffffffff`.
+    #[test]
+    fn shift_immediate_words_match_the_adi_disassembly() {
+        use super::super::support::core_at_zero;
+        // r1 = fext r0 by 0x18:0x8: top byte of R0
+        let mut c = core_at_zero(&[0x023e, 0x1010, 0x1810]);
+        c.r[0] = 0xAB12_3456;
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!((c.r[1], c.pc), (0xAB, 3));
+        // r0 = fdep r0 by 0x7:0x18: 24 bits of R0 deposited at bit 7
+        let mut c = core_at_zero(&[0x023e, 0x3011, 0x0700]);
+        c.r[0] = 0x00AB_CDEF;
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!(c.r[0], 0x00AB_CDEF << 7);
+        // r1 = ashift r1 by -1 (data12 = 0xfff)
+        let mut c = core_at_zero(&[0x023e, 0x7801, 0xff11]);
+        c.r[1] = 0x8000_0002;
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!(c.r[1], 0xC000_0001);
+        // r4 = btgl r4 by 0
+        let mut c = core_at_zero(&[0x023e, 0x0032, 0x0044]);
+        c.r[4] = 0x10;
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!(c.r[4], 0x11);
+        // bit FIFO forms are not modelled
+        let mut c = core_at_zero(&[0x023e, 0x001d, 0x0502]);
+        assert!(c.step().is_err());
     }
 
     #[test]

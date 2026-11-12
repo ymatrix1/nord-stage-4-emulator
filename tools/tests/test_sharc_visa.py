@@ -107,11 +107,11 @@ def test_shifter_and_multifunction_compute():
     assert v.multi_text(0x0) is None  # bit 22 clear: not a multifunction field
 
 
-def test_undocumented_0x02_form_and_type_only_forms():
-    # First byte 0x02: 48-bit "IF cond compute" with extra bits 31..23 (see docs 5.9).
-    assert v.classify(0x023E, 0x2019) == ("2x", 3)
-    assert v.decode((0x023E, 0x2019, 0x1002)).startswith("R0 = MRF + R0 * R2 (SUIR)")
-    assert "extra bits" in v.decode((0x023E, 0x4019, 0x1002))
+def test_shift_immediate_form_and_type_only_forms():
+    # First byte 0x02: 48-bit "IF cond shift immediate" (identified with ADI elfdump, docs 5.34).
+    assert v.classify(0x023E, 0x2019) == ("6n", 3)
+    assert v.decode((0x023E, 0x2019, 0x1002)) == "R0 = R0 OR FDEP R2 BY 16:16"
+    assert v.decode((0x023E, 0x4019, 0x1002)).startswith("R0 = R0 OR FDEP R2 BY ")
     assert v.decode((0x1629, 0x0000, 0x0012)) == "I4 = MODIFY(I1, 0x12)"
 
 
@@ -146,3 +146,28 @@ def test_type_15b_register_and_signed_offset_fields():
     assert v.decode((0x9E08, 0x0C00)) == "I8 = DM(0, I7)"
     assert v.decode((0x9208, 0x007A)) == "R0 = DM(-6, I1)"
     assert v.decode((0x9908, 0x0014)) == "DM(20, I4) = R0"
+
+
+def test_shift_immediate_matches_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
+    assert v.decode((0x023E, 0x1010, 0x1810)) == "R1 = FEXT R0 BY 24:8"
+    assert v.decode((0x023E, 0x3011, 0x0700)) == "R0 = FDEP R0 BY 7:24"
+    assert v.decode((0x023E, 0x1012, 0x9614)) == "R1 = FEXT R4 BY 22:10 (SE)"
+    assert v.decode((0x023E, 0x7801, 0xFF11)) == "R1 = ASHIFT R1 BY -1"
+    assert v.decode((0x023E, 0x0032, 0x0044)) == "R4 = BTGL R4 BY 0"
+    assert v.decode((0x023E, 0x0033, 0x0005)) == "BTST R5 BY 0"
+
+
+def test_register_moves_and_swaps_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
+    assert v.decode((0x703E, 0x933F)) == "M6 = R1"
+    assert v.decode((0x753E, 0x93BF)) == "M7 = S1"
+    assert v.decode((0x7A3E, 0x04BF)) == "R9 <-> S8"
+    assert v.decode((0x72BE, 0x0188, 0x1C00)) == "R3 = M8, F12 = F0 + F0"
+    assert v.decode((0x7A3E, 0x0480, 0x1001)) == "R9 <-> S8, R0 = R0 + R1"
+
+
+def test_type_4_signed_offset_and_empty_compute():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
+    assert v.decode((0x6A3F, 0x218D, 0xA00F)) == "R3 = DM(-28, I5), F0 = FLOAT R0 BY R15"
+    assert v.decode((0x507E, 0x8000, 0x0000)) == "DM(I0, M1) = R0"

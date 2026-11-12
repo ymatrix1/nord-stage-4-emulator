@@ -9,7 +9,8 @@ pub enum Kind {
     T2b,
     T2c,
     /// First byte `0x02`: undocumented 48-bit conditional compute (ASSUMED), see docs 5.9.
-    T2x,
+    /// Opcode `0x02`: conditional shift immediate (`Rn = FEXT Rx BY bit6:len6`, ...), no data move.
+    T6n,
     T3a,
     T3b,
     T3c,
@@ -56,7 +57,7 @@ impl Kind {
             T2a => "2a",
             T2b => "2b",
             T2c => "2c",
-            T2x => "2x",
+            T6n => "6n",
             T3a => "3a",
             T3b => "3b",
             T3c => "3c",

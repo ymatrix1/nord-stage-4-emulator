@@ -82,7 +82,8 @@ impl Core {
         match d.kind() {
             Kind::T21c if d.insn.parcels[0] == 0x0001 => {}
             Kind::T21 if d.w == 0 => {}
-            Kind::T2a | Kind::T2b | Kind::T2x | Kind::T2c => self.exec_compute(&d)?,
+            Kind::T2a | Kind::T2b | Kind::T2c => self.exec_compute(&d)?,
+            Kind::T6n => self.exec_shift_imm(&d)?,
             Kind::T8a | Kind::T9a | Kind::T9b | Kind::T11a | Kind::T11c | Kind::T12a => {
                 next = self.exec_flow(&d, next)?;
             }
@@ -109,7 +110,7 @@ impl Core {
         Ok(())
     }
 
-    /// Types 2a/2b/2x (23-bit compute) and 2c (short compute).
+    /// Types 2a/2b (23-bit compute) and 2c (short compute).
     fn exec_compute(&mut self, d: &Decoded) -> Result<(), Fault> {
         match d.kind() {
             Kind::T2b => {

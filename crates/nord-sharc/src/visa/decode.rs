@@ -1,11 +1,12 @@
 //! Instruction text: the operand decoding of every type and the listing line format.
 use super::classify::{bits, word48};
-use super::compute::{compute_text, short_compute_text};
+use super::compute::{compute_text, shift_imm_text, short_compute_text};
 use super::regs::{ureg_name, COND};
 use super::types::{Insn, Kind};
-/// A 7-bit two's-complement field as a signed number.
-fn sign_extend7(v: u64) -> i64 {
-    ((v << 57) as i64) >> 57
+/// A `width`-bit two's-complement field as a signed number.
+fn signed_field(v: u64, width: u32) -> i64 {
+    let shift = 64 - width;
+    ((v << shift) as i64) >> shift
 }
 
 fn bop(code: u64) -> &'static str {
@@ -20,7 +21,7 @@ fn bop(code: u64) -> &'static str {
 }
 
 pub(super) fn mem_move(w: u64, kind: Kind, iff: &str) -> String {
-    let has_compute = matches!(kind, Kind::T3a | Kind::T4a);
+    let has_compute = matches!(kind, Kind::T3a | Kind::T4a) && bits(w, 22, 0) != 0;
     let tail = if has_compute {
         format!(", {}", compute_text(bits(w, 22, 0)))
     } else {
@@ -48,7 +49,7 @@ pub(super) fn mem_move(w: u64, kind: Kind, iff: &str) -> String {
             format!(
                 "{}({}, I{i})",
                 if pm { "PM" } else { "DM" },
-                bits(w, 32, 27)
+                signed_field(bits(w, 32, 27), 6)
             ),
             format!("R{}", bits(w, 26, 23)),
             bits(w, 39, 39) == 1,
@@ -99,19 +100,22 @@ pub fn decode_text(insn: &Insn) -> String {
     match kind {
         Kind::T3a | Kind::T3b | Kind::T4a | Kind::T4b => mem_move(w, kind, &iff),
         Kind::T5a | Kind::T5b => {
-            if bits(w, 43, 43) == 1 {
-                let raw = w >> (48 - 16 * parcels.len());
-                return format!("{iff}Dreg <-> CDreg swap (raw {raw:x})");
-            }
-            let src = (bits(w, 42, 38) << 2) | bits(w, 32, 31);
+            // Fields VERIFIED against ADI elfdump on 1,242 (5b) and 1,748 (5a) register moves and
+            // 1,087 swaps (docs 5.34): source (bits 42..38, 32..31), destination bits 29..23;
+            // swap `Rx <-> Sy` with Rx bits 26..23 and Sy bits 41..38.
+            let swap = bits(w, 43, 43) == 1;
             let tail = if kind == Kind::T5a {
                 format!(", {}", compute_text(bits(w, 22, 0)))
             } else {
                 String::new()
             };
+            if swap {
+                return format!("{iff}R{} <-> S{}{tail}", bits(w, 26, 23), bits(w, 41, 38));
+            }
+            let src = (bits(w, 42, 38) << 2) | bits(w, 32, 31);
             format!(
                 "{iff}{} = {}{tail}",
-                ureg_name(bits(w, 30, 24) as u8),
+                ureg_name(bits(w, 29, 23) as u8),
                 ureg_name(src as u8)
             )
         }
@@ -137,7 +141,7 @@ pub fn decode_text(insn: &Insn) -> String {
         }
         Kind::T15b => {
             // I 43..41, D 40, UREG 29..23, signed DATA7 22..16 (VERIFIED, docs 5.28)
-            let data = sign_extend7(bits(w, 22, 16));
+            let data = signed_field(bits(w, 22, 16), 7);
             let ea = format!("DM({data}, I{})", bits(w, 43, 41));
             let u = ureg_name(bits(w, 29, 23) as u8);
             if bits(w, 40, 40) == 1 {
@@ -157,15 +161,7 @@ pub fn decode_text(insn: &Insn) -> String {
         }
         Kind::T2b => compute_text(bits(w, 38, 16)),
         Kind::T2c => short_compute_text(bits(w, 43, 32)),
-        Kind::T2x => {
-            let extra = bits(w, 31, 23);
-            let tail = if extra != 0 {
-                format!("  [extra bits 31..23 = 0x{extra:x}]")
-            } else {
-                String::new()
-            };
-            format!("{iff}{}{tail}", compute_text(bits(w, 22, 0)))
-        }
+        Kind::T6n => format!("{iff}{}", shift_imm_text(w)),
         Kind::T19a => {
             let g = if bits(w, 38, 38) == 1 { 8 } else { 0 };
             let src = bits(w, 34, 32) + g;
@@ -267,6 +263,23 @@ mod tests {
             "R12 = DM(0, I5), F8 = PASS F8"
         );
         assert_eq!(dec(&[0x687E, 0x143F]), "R8 = DM(2, I4)");
+        // Type 4: DATA6 is a signed offset; a zero compute field prints no NOP (ADI ground truth)
+        assert_eq!(
+            dec(&[0x6A3F, 0x218D, 0xA00F]),
+            "R3 = DM(-28, I5), F0 = FLOAT R0 BY R15"
+        );
+        assert_eq!(dec(&[0x507E, 0x8000, 0x0000]), "DM(I0, M1) = R0");
+        // shift immediate (opcode 0x02), ADI elfdump ground truth
+        assert_eq!(dec(&[0x023E, 0x1010, 0x1810]), "R1 = FEXT R0 BY 24:8");
+        assert_eq!(dec(&[0x023E, 0x3011, 0x0700]), "R0 = FDEP R0 BY 7:24");
+        assert_eq!(dec(&[0x023E, 0x1012, 0x9614]), "R1 = FEXT R4 BY 22:10 (SE)");
+        assert_eq!(dec(&[0x023E, 0x7801, 0xFF11]), "R1 = ASHIFT R1 BY -1");
+        assert_eq!(dec(&[0x023E, 0x0032, 0x0044]), "R4 = BTGL R4 BY 0");
+        // register moves and swaps, ADI elfdump ground truth (docs 5.34)
+        assert_eq!(dec(&[0x703E, 0x933F]), "M6 = R1");
+        assert_eq!(dec(&[0x753E, 0x93BF]), "M7 = S1");
+        assert_eq!(dec(&[0x7A3E, 0x04BF]), "R9 <-> S8");
+        assert_eq!(dec(&[0x72BE, 0x0188, 0x1C00]), "R3 = M8, F12 = F0 + F0");
         // Type 15b: UREG bits 29..23, signed DATA7 bits 22..16
         assert_eq!(dec(&[0x9E08, 0x0C00]), "I8 = DM(0, I7)");
         assert_eq!(dec(&[0x9208, 0x007A]), "R0 = DM(-6, I1)");
@@ -277,7 +290,7 @@ mod tests {
         assert_eq!(dec(&[0x1629, 0x0000, 0x0012]), "I4 = MODIFY(I1, 0x12)");
         assert_eq!(
             dec(&[0x023E, 0x2019, 0x1002]),
-            "R0 = MRF + R0 * R2 (SUIR)  [extra bits 31..23 = 0x40]"
+            "R0 = R0 OR FDEP R2 BY 16:16"
         );
     }
 
