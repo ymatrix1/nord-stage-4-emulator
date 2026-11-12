@@ -322,3 +322,19 @@ impl MasterBus {
         [self.recon_lp_l, self.recon_lp_r]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_chain_and_master_bus_pass_finite_audio() {
+        let mut fx = LayerFxChain::new(48_000.0);
+        let mut bus = MasterBus::default();
+        for n in 0..512 {
+            let x = (n as f32 * 0.03).sin() * 0.5;
+            let [l, r] = bus.process_frame(fx.process_frame([x, x]));
+            assert!(l.is_finite() && r.is_finite());
+        }
+    }
+}

@@ -158,3 +158,15 @@ impl FirmwareContainer {
         seg.extract_payload(&raw[base..])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checksum_is_ones_complement_of_the_byte_sum() {
+        assert_eq!(calculate_checksum(&[]), 0xFFFF_FFFF);
+        assert_eq!(calculate_checksum(&[1, 2, 3]), 0xFFFF_FFF9);
+        assert_eq!(FIRMWARE_TOP_HEADER_SIZE, 32);
+    }
+}
