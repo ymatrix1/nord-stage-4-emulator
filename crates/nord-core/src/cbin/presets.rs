@@ -1333,7 +1333,13 @@ impl PianoPresetDecoded {
 }
 
 /// Decoded single Synth layer configuration (`0x32` Layer + `0x2F` Sound).
+///
+/// The trailing "engine-side" fields (dedicated filter ADR, velocity-to-filter,
+/// LFO shape/destination, unison, mono/legato/glide) have no verified bit offsets
+/// yet: they are not read from or written to the bitstream (unpack yields defaults,
+/// the raw payload preserves the original bits) but drive the DSP via the engine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SynthLayerDecoded {
     pub enabled: bool,
     pub level: f32,
@@ -1364,6 +1370,20 @@ pub struct SynthLayerDecoded {
     pub lfo_amount: f32,
     pub arp_enabled: bool,
     pub arp_bpm: f32,
+    /// `false` = filter envelope mirrors the amp envelope decay.
+    pub filter_env_dedicated: bool,
+    pub filter_env_attack_ms: f32,
+    pub filter_env_decay_ms: f32,
+    pub filter_env_release_ms: f32,
+    /// Velocity -> filter envelope depth, `0..1`.
+    pub filter_env_vel_amount: f32,
+    pub lfo_shape: crate::synth::LfoShape,
+    pub lfo_dest: crate::synth::LfoDestination,
+    /// `0` = off, `1`/`2`/`3` = stereo detune width.
+    pub unison: u8,
+    pub mono: bool,
+    pub legato: bool,
+    pub glide_ms: f32,
 }
 
 impl Default for SynthLayerDecoded {
@@ -1398,6 +1418,17 @@ impl Default for SynthLayerDecoded {
             lfo_amount: 0.0,
             arp_enabled: false,
             arp_bpm: 120.0,
+            filter_env_dedicated: false,
+            filter_env_attack_ms: 10.0,
+            filter_env_decay_ms: 300.0,
+            filter_env_release_ms: 250.0,
+            filter_env_vel_amount: 0.0,
+            lfo_shape: crate::synth::LfoShape::Triangle,
+            lfo_dest: crate::synth::LfoDestination::FilterCutoff,
+            unison: 0,
+            mono: false,
+            legato: false,
+            glide_ms: 0.0,
         }
     }
 }
@@ -1561,6 +1592,7 @@ fn unpack_synth_layer_pair(
         lfo_amount: lfo_amt_raw as f32 / 127.0,
         arp_enabled,
         arp_bpm,
+        ..SynthLayerDecoded::default()
     })
 }
 

@@ -475,11 +475,24 @@ impl Stage4Engine {
         synth.kb_track = dec.kb_track.min(3);
         synth.attack_sec = (dec.env_attack_ms / 1000.0).clamp(0.0005, 45.0);
         synth.decay_sec = (dec.env_decay_ms / 1000.0).clamp(0.003, 45.0);
+        // ADR amp envelope: decay falls to silence while held; `Hold` (>= 44 s) sustains at full.
         synth.sustain_level = if dec.env_decay_ms >= 44_000.0 || !dec.env_decay_ms.is_finite() {
             1.0
         } else {
-            0.6
+            0.0
         };
+        synth.filter_env_dedicated = dec.filter_env_dedicated;
+        synth.filter_env_attack_sec = (dec.filter_env_attack_ms / 1000.0).clamp(0.0005, 45.0);
+        synth.filter_env_decay_sec = (dec.filter_env_decay_ms / 1000.0).clamp(0.003, 45.0);
+        synth.filter_env_release_sec = (dec.filter_env_release_ms / 1000.0).clamp(0.003, 45.0);
+        synth.filter_env_vel_amount = dec.filter_env_vel_amount.clamp(0.0, 1.0);
+        synth.lfo_shape = dec.lfo_shape;
+        synth.lfo_dest = dec.lfo_dest;
+        synth.unison = dec.unison.min(3);
+        synth.mono = dec.mono;
+        synth.legato = dec.legato;
+        synth.glide_sec = (dec.glide_ms / 1000.0).clamp(0.0, 10.0);
+        synth.octave_offset = dec.octave.clamp(-3, 3);
         synth.release_sec = (dec.env_release_ms / 1000.0).clamp(0.003, 45.0);
         synth.lfo_rate_hz = dec.lfo_rate_hz;
         synth.lfo_amount = dec.lfo_amount;
@@ -964,6 +977,45 @@ mod tests {
             .piano_a
             .voice_excitation_for_test(60)
             .is_some_and(|(_, _, released)| released));
+    }
+
+    #[test]
+    fn apply_synth_layer_forwards_voice_lfo_and_filter_adr() {
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut prog = crate::cbin::ProgramDecoded::default();
+        let l = &mut prog.synth.layer_a;
+        l.filter_env_dedicated = true;
+        l.filter_env_attack_ms = 20.0;
+        l.filter_env_decay_ms = 500.0;
+        l.filter_env_release_ms = 800.0;
+        l.filter_env_vel_amount = 0.5;
+        l.lfo_shape = crate::synth::LfoShape::Square;
+        l.lfo_dest = crate::synth::LfoDestination::OscPitch;
+        l.unison = 2;
+        l.mono = true;
+        l.legato = true;
+        l.glide_ms = 120.0;
+        l.octave = 1;
+        l.env_decay_ms = 300.0;
+        engine.apply_program(&prog);
+
+        let s = &engine.synth_a;
+        assert!(s.filter_env_dedicated);
+        assert!((s.filter_env_attack_sec - 0.02).abs() < 1e-6);
+        assert!((s.filter_env_decay_sec - 0.5).abs() < 1e-6);
+        assert!((s.filter_env_release_sec - 0.8).abs() < 1e-6);
+        assert!((s.filter_env_vel_amount - 0.5).abs() < 1e-6);
+        assert_eq!(s.lfo_shape, crate::synth::LfoShape::Square);
+        assert_eq!(s.lfo_dest, crate::synth::LfoDestination::OscPitch);
+        assert_eq!(s.unison, 2);
+        assert!(s.mono && s.legato);
+        assert!((s.glide_sec - 0.12).abs() < 1e-6);
+        assert_eq!(s.octave_offset, 1);
+        // ADR amp: finite decay falls to silence, Hold sustains.
+        assert_eq!(s.sustain_level, 0.0);
+        prog.synth.layer_a.env_decay_ms = 44_000.0;
+        engine.apply_program(&prog);
+        assert_eq!(engine.synth_a.sustain_level, 1.0);
     }
 
     #[test]

@@ -510,6 +510,14 @@ pub struct SynthVoice {
     pub op3_phase: f32,
     pub mod_feedback_state: f32,
     pub mod_env: f32,
+    /// Target pitch for glide; `freq_hz` slews toward it.
+    pub target_freq_hz: f32,
+    /// Dedicated filter envelope level (`0..1`).
+    pub fenv: f32,
+    pub fenv_attack_done: bool,
+    /// Unison detuned oscillator phases (low, high).
+    pub uni_phase: [f32; 2],
+    pub uni_supersaw: [[f32; 7]; 2],
     pub supersaw_phases: [f32; 7],
     pub amp_env: f32,
     pub filter: ZdfFilter,
@@ -535,6 +543,11 @@ impl Default for SynthVoice {
             op3_phase: 0.0,
             mod_feedback_state: 0.0,
             mod_env: 0.0,
+            target_freq_hz: 440.0,
+            fenv: 0.0,
+            fenv_attack_done: false,
+            uni_phase: [0.0, 0.31],
+            uni_supersaw: [SUPERSAW_PHASE_INITS; 2],
             supersaw_phases: SUPERSAW_PHASE_INITS,
             amp_env: 0.0,
             filter: ZdfFilter::default(),
@@ -576,6 +589,26 @@ pub struct SynthLayer {
     pub decay_sec: f32,
     pub sustain_level: f32,
     pub release_sec: f32,
+
+    // Dedicated filter envelope (ADR). When `filter_env_dedicated` is false the
+    // filter envelope mirrors the amp decay (legacy behaviour).
+    pub filter_env_dedicated: bool,
+    pub filter_env_attack_sec: f32,
+    pub filter_env_decay_sec: f32,
+    pub filter_env_release_sec: f32,
+    /// Velocity -> filter envelope depth (`0..1`; `0` = velocity ignored).
+    pub filter_env_vel_amount: f32,
+
+    // Voice mode
+    /// Stereo unison width: `0` = off, `1`/`2`/`3` = 3.5 / 7.0 / 11.5 cents.
+    pub unison: u8,
+    pub mono: bool,
+    pub legato: bool,
+    /// Glide (portamento) time constant in seconds; `0` = off.
+    pub glide_sec: f32,
+    /// Octave offset in octaves (`-3..=3`).
+    pub octave_offset: i8,
+    last_freq_hz: f32,
 
     // LFO Modulation
     pub lfo_shape: LfoShape,
@@ -633,6 +666,19 @@ impl SynthLayer {
             decay_sec: 0.3,
             sustain_level: 0.7,
             release_sec: 0.25,
+
+            filter_env_dedicated: false,
+            filter_env_attack_sec: 0.005,
+            filter_env_decay_sec: 0.3,
+            filter_env_release_sec: 0.25,
+            filter_env_vel_amount: 0.0,
+
+            unison: 0,
+            mono: false,
+            legato: false,
+            glide_sec: 0.0,
+            octave_offset: 0,
+            last_freq_hz: 0.0,
 
             lfo_shape: LfoShape::Triangle,
             lfo_dest: LfoDestination::FilterCutoff,
@@ -692,13 +738,50 @@ impl SynthLayer {
 
     fn trigger_voice(&mut self, note: u8, velocity: u8, gain: f32) {
         let vel_norm = f32::from(velocity.clamp(1, 127)) / 127.0;
-        let freq = 440.0 * 2.0f32.powf((f32::from(note) - 69.0) / 12.0);
+        let oct = f32::from(self.octave_offset.clamp(-3, 3));
+        let freq = 440.0 * 2.0f32.powf((f32::from(note) - 69.0) / 12.0 + oct);
+
+        // Mono: one voice; others are released. Legato keeps envelopes running.
+        let mut legato_hit = false;
+        let mono_idx = if self.mono {
+            let keep = self
+                .voices
+                .iter()
+                .position(|v| v.active && v.gate)
+                .or_else(|| self.voices.iter().position(|v| v.active));
+            for (i, v) in self.voices.iter_mut().enumerate() {
+                if Some(i) != keep && v.active {
+                    v.gate = false;
+                }
+            }
+            legato_hit = self.legato && keep.is_some_and(|i| self.voices[i].gate);
+            keep
+        } else {
+            None
+        };
+
+        let glide_from = if self.glide_sec > 0.0 && self.last_freq_hz > 0.0 {
+            self.last_freq_hz
+        } else {
+            freq
+        };
+        self.last_freq_hz = freq;
+
+        if legato_hit {
+            if let Some(i) = mono_idx {
+                let v = &mut self.voices[i];
+                v.note = note;
+                v.target_freq_hz = freq;
+                if self.glide_sec <= 0.0 {
+                    v.freq_hz = freq;
+                }
+                return;
+            }
+        }
 
         // Find existing note voice to re-trigger, or first inactive voice, or steal oldest/quietest
-        let idx = self
-            .voices
-            .iter()
-            .position(|v| v.active && v.note == note)
+        let idx = mono_idx
+            .or_else(|| self.voices.iter().position(|v| v.active && v.note == note))
             .or_else(|| self.voices.iter().position(|v| !v.active))
             .unwrap_or_else(|| {
                 // Steal voice with lowest amp envelope
@@ -733,7 +816,12 @@ impl SynthLayer {
             note,
             velocity: vel_norm,
             gain: gain.clamp(0.0, 1.0),
-            freq_hz: freq,
+            freq_hz: glide_from,
+            target_freq_hz: freq,
+            fenv: 0.0,
+            fenv_attack_done: false,
+            uni_phase: [0.0, 0.31],
+            uni_supersaw: [SUPERSAW_PHASE_INITS; 2],
             phase: 0.0,
             mod_phase: 0.0,
             op3_phase: 0.0,
@@ -758,6 +846,21 @@ impl SynthLayer {
 
         if self.arp_mode != ArpMode::Off {
             return;
+        }
+
+        if self.mono {
+            // Highest-remaining-key priority: fall back when the sounding key is released.
+            let fallback = (0..128usize).rev().find(|&n| self.held_keys[n]);
+            if let Some(n) = fallback {
+                if self
+                    .voices
+                    .iter()
+                    .any(|v| v.active && v.gate && v.note == note)
+                {
+                    self.trigger_voice(n as u8, self.held_velocities[n], self.held_gains[n]);
+                }
+                return;
+            }
         }
 
         for v in &mut self.voices {
@@ -931,6 +1034,18 @@ impl SynthLayer {
         let fm_env_amt = self.fm_env_amount.clamp(0.0, 1.0);
         let mod_decay_tau = self.decay_sec.max(0.015);
         let mod_decay_coeff = (-inv_fs / mod_decay_tau).exp();
+        let glide_coeff = if self.glide_sec > 0.0 {
+            1.0 - (-inv_fs / self.glide_sec.max(0.001)).exp()
+        } else {
+            0.0
+        };
+        let uni_cents = match self.unison {
+            0 => 0.0,
+            1 => 3.5,
+            2 => 7.0,
+            _ => 11.5,
+        };
+        let uni_ratio = 2.0f32.powf(uni_cents / 1200.0);
 
         for v in &mut self.voices {
             if !v.active {
@@ -957,13 +1072,43 @@ impl SynthLayer {
             }
             v.mod_env *= mod_decay_coeff;
 
+            if glide_coeff > 0.0 {
+                v.freq_hz += (v.target_freq_hz - v.freq_hz) * glide_coeff;
+            } else {
+                v.freq_hz = v.target_freq_hz;
+            }
+
+            // Filter envelope: dedicated ADR, or mirror the amp decay (legacy).
+            let fenv_peak = 1.0 - self.filter_env_vel_amount.clamp(0.0, 1.0) * (1.0 - v.velocity);
+            let filter_env_level = if self.filter_env_dedicated {
+                if v.gate {
+                    if !v.fenv_attack_done {
+                        let atk = self.filter_env_attack_sec.max(0.0005);
+                        v.fenv += (1.0 - v.fenv) * (inv_fs / atk).min(1.0);
+                        if v.fenv >= 0.999 {
+                            v.fenv = 1.0;
+                            v.fenv_attack_done = true;
+                        }
+                    } else if self.filter_env_decay_sec < 44.0 {
+                        let dec = self.filter_env_decay_sec.max(0.003);
+                        v.fenv -= v.fenv * (inv_fs / dec).min(1.0);
+                    }
+                } else {
+                    let rel = self.filter_env_release_sec.max(0.003);
+                    v.fenv *= (-inv_fs / rel).exp();
+                }
+                v.fenv * fenv_peak
+            } else {
+                v.mod_env * fenv_peak
+            };
+
             let eff_freq = v.freq_hz * pitch_mod;
             let dt = (eff_freq * inv_fs).clamp(1e-5, 0.49);
             let t = v.phase;
 
             let (raw_osc_l, raw_osc_r) = match self.osc_mode {
-                SynthOscMode::Analog => (
-                    Self::render_va(
+                SynthOscMode::Analog => {
+                    let c = Self::render_va(
                         self.waveform,
                         self.supersaw_detune,
                         self.pulse_width,
@@ -975,13 +1120,49 @@ impl SynthLayer {
                         eff_freq,
                         inv_fs,
                         &mut v.supersaw_phases,
-                    ),
-                    None,
-                ),
-                SynthOscMode::Wavetable => (
-                    sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt),
-                    None,
-                ),
+                    );
+                    if self.unison > 0 {
+                        let mut side = [0.0f32; 2];
+                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
+                            let f_k = eff_freq * ratio;
+                            let dt_k = (f_k * inv_fs).clamp(1e-5, 0.49);
+                            let t_k = v.uni_phase[k];
+                            side[k] = Self::render_va(
+                                self.waveform,
+                                self.supersaw_detune,
+                                self.pulse_width,
+                                self.lfo_dest,
+                                self.lfo_amount,
+                                lfo_val,
+                                t_k,
+                                dt_k,
+                                f_k,
+                                inv_fs,
+                                &mut v.uni_supersaw[k],
+                            );
+                            v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                        }
+                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                    } else {
+                        (c, None)
+                    }
+                }
+                SynthOscMode::Wavetable => {
+                    let c = sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt);
+                    if self.unison > 0 {
+                        let mut side = [0.0f32; 2];
+                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
+                            let dt_k = (eff_freq * ratio * inv_fs).clamp(1e-5, 0.49);
+                            let t_k = v.uni_phase[k];
+                            side[k] =
+                                sample_wavetable(bank, self.wavetable_index, wt_pos, t_k, dt_k);
+                            v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                        }
+                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                    } else {
+                        (c, None)
+                    }
+                }
                 SynthOscMode::Fm => {
                     let op3 = (TAU * v.op3_phase).sin();
                     let fb = fm_fb_amt * 1.8 * v.mod_feedback_state;
@@ -1050,7 +1231,7 @@ impl SynthLayer {
                 1.0
             };
             let env_scale = if self.filter_env_amount.abs() > 1e-4 {
-                2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * v.mod_env)
+                2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * filter_env_level)
             } else {
                 1.0
             };
@@ -1293,6 +1474,90 @@ mod tests {
         synth.note_off(60);
         assert!(!synth.voices.iter().find(|v| v.note == 60).unwrap().gate);
         assert!(synth.voices.iter().find(|v| v.note == 64).unwrap().gate);
+    }
+
+    fn render_n(synth: &mut SynthLayer, n: usize) -> Vec<[f32; 2]> {
+        (0..n).map(|_| synth.render_frame()).collect()
+    }
+
+    #[test]
+    fn unison_decorrelates_stereo_and_off_is_mono_identical() {
+        let mut off = SynthLayer::new(48_000.0);
+        off.note_on(60, 100);
+        let frames = render_n(&mut off, 4000);
+        assert!(frames.iter().all(|f| (f[0] - f[1]).abs() < 1e-6));
+
+        let mut uni = SynthLayer::new(48_000.0);
+        uni.unison = 3;
+        uni.note_on(60, 100);
+        let frames = render_n(&mut uni, 4000);
+        let diff: f32 = frames.iter().map(|f| (f[0] - f[1]).abs()).sum();
+        assert!(diff > 1.0, "unison L/R should differ, diff={diff}");
+        assert!(frames.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
+    }
+
+    #[test]
+    fn mono_legato_keeps_single_voice_and_glide_slews_pitch() {
+        let mut s = SynthLayer::new(48_000.0);
+        s.mono = true;
+        s.legato = true;
+        s.glide_sec = 0.05;
+        s.note_on(60, 100);
+        render_n(&mut s, 100);
+        s.note_on(72, 100);
+        assert_eq!(s.voices.iter().filter(|v| v.active).count(), 1);
+        let v = s.voices.iter().find(|v| v.active).unwrap();
+        assert_eq!(v.note, 72);
+        let start = v.freq_hz;
+        render_n(&mut s, 12_000);
+        let v = s.voices.iter().find(|v| v.active).unwrap();
+        let target = 440.0 * 2.0f32.powf(3.0 / 12.0);
+        assert!(start < target * 0.6, "glide must start near old pitch");
+        assert!((v.freq_hz - target).abs() < target * 0.01);
+    }
+
+    #[test]
+    fn mono_note_off_falls_back_to_held_key() {
+        let mut s = SynthLayer::new(48_000.0);
+        s.mono = true;
+        s.note_on(60, 100);
+        s.note_on(64, 100);
+        s.note_off(64);
+        let v = s.voices.iter().find(|v| v.active && v.gate).unwrap();
+        assert_eq!(v.note, 60);
+    }
+
+    #[test]
+    fn octave_offset_shifts_frequency() {
+        let mut s = SynthLayer::new(48_000.0);
+        s.octave_offset = -1;
+        s.note_on(69, 100);
+        let v = s.voices.iter().find(|v| v.active).unwrap();
+        assert!((v.target_freq_hz - 220.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn dedicated_filter_envelope_uses_adr_and_velocity() {
+        let mut s = SynthLayer::new(48_000.0);
+        s.filter_env_dedicated = true;
+        s.filter_env_amount = 1.0;
+        s.filter_env_attack_sec = 0.001;
+        s.filter_env_decay_sec = 0.01;
+        s.filter_env_vel_amount = 1.0;
+        s.note_on(60, 127);
+        render_n(&mut s, 4800);
+        let hi = s.voices.iter().find(|v| v.active).unwrap();
+        assert!(hi.fenv_attack_done);
+        assert!(
+            hi.fenv < 0.05,
+            "decay should fall toward 0, got {}",
+            hi.fenv
+        );
+        s.note_off(60);
+        let before = s.voices.iter().find(|v| v.active).unwrap().fenv;
+        render_n(&mut s, 100);
+        let after = s.voices.iter().find(|v| v.active).unwrap().fenv;
+        assert!(after <= before);
     }
 
     #[test]
