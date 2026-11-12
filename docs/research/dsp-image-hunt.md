@@ -553,6 +553,31 @@ Observations that matter for a core model:
 - **Float is the dominant data type**; integer work is address and bit manipulation plus `FIX`/`FLOAT`. The rounding mode (`RND32`, MODE1 bit 16) and the 40-bit extended precision matter for bit-exactness and have to be taken from the Programming Reference when the core is written.
 - **Status words are written constantly** (`BIT SET USTAT1`, `MMASK` stores); they probably signal the ARM or the other DSPs through memory. No interrupt or DMA set-up is visible in the instruction mix.
 
+### 5.20 Interrupt vectors, start-up code and the 16-bit NOP
+
+Found while tracing the entry code of FX Core1 in the flat SRAM image (`tools/ns4_dsp_ldr.py --sram`, byte offset = 2 x short-word address).
+
+**Decoder fix (16-bit NOP).** The parcel `0x0001` right after the entry instruction is a 16-bit NOP (Type 21c: first byte `0x00`, last bit 1), not the start of a 48-bit `21/22` word. Classifying first byte `0x00` with bit 0 set as a one-parcel instruction re-tiles about 1,900 instructions: of 65,343 instructions in the code spans, 3,056 (4.7%) keep raw operands (was 4,933 of 66,305); `21c` NOPs are now 721. `tools/sharc_visa.py` and `crates/nord-sharc/src/visa.rs` carry the same fix and still produce identical listings (0 differing lines on FX Core1 and ORG Core2).
+
+**Interrupt vector table.** Short-word `0x120000` (byte `0x240000`) holds the vector table in ISA form: 48-bit words stored with the least significant parcel first (opposite to the VISA code, where the first parcel is the most significant). Entries are `0000 0000 073e`, read as the word `0x073E_0000_0000`: Type 8a PC-relative jump (`000 00111`, condition `TRUE`) with offset 0, a jump to itself for unused vectors. The slot at byte `0x24001E` is `11e3 0012 063e`, the word `0x063E_0012_11E3`: a direct `JUMP 0x1211E3`, which is the section entry value of the loader stream, so the entry value is the reset vector's target.
+
+**Start-up code of FX Core1** (short-word `0x1211E3`, VERIFIED by the exact tiling and by the call targets landing on the first code block loaded at `0x28240A50`):
+
+```text
+BIT CLR MODE1 0x1000        ; interrupts off (MODE1 bit 12, IRPTEN)
+NOP                         ; 16-bit NOP
+CALL 0x120528               ; start of the first code block (loader 0x28240A50)
+CALL 0x1205A0
+R0 = 0x0
+I0 = 0xC0430                ; block-2 data RAM
+DO 0x800003 UNTIL LCE, LCNTR = 16    ; loop: DM(I0, M1) = R0   (zero the area)
+...
+```
+
+Reading: reset jumps to the entry, interrupts are disabled, two initialisation routines are called, then data RAM is cleared in loops. That is the program a core model must run first (milestone M3 in `docs/specs/sharc-core.md`).
+
+Both the loop target `0x800003` and similar `DO`/jump operands show that the 24-bit address field of `DO`/`JUMP` can be PC-relative or flagged; the decoder prints the raw field for `DO`.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications

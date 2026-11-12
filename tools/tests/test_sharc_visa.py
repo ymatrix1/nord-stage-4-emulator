@@ -120,3 +120,22 @@ def test_multiplier_register_ops():
     assert v.mult_text(0x14, 0, 0, 0) == "MRF = 0"
     assert v.mult_text(0x16, 0, 0, 0) == "MRB = 0"
     assert v.mult_text(0x1C, 2, 0, 0) == "MRF = RND MRF (SF)"
+
+
+def test_16_bit_nop_and_entry_code_shape():
+    assert v.classify(0x0001, 0x06BE) == ("21c", 1)
+    assert v.decode((0x0001,)) == "NOP"
+    assert v.classify(0x0000, 0x0000) == ("21/22", 3)  # 48-bit form stays
+    # entry code of the FX Core1 section: BIT CLR; NOP; CALL; CALL; R0 = 0; I0 = 0xc0430
+    stream = [0x1422, 0x0000, 0x1000, 0x0001, 0x06BE, 0x0012, 0x0528, 0x06BE, 0x0012, 0x05A0]
+    stream += [0x0F80, 0x0000, 0x0F10, 0x000C, 0x0430]
+    insns, exact = v.tile(stream)
+    assert exact
+    assert [v.decode(ps) for _, ps in insns] == [
+        "BIT CLR MODE1 0x1000",
+        "NOP",
+        "CALL 0x120528",
+        "CALL 0x1205a0",
+        "R0 = 0x0",
+        "I0 = 0xc0430",
+    ]

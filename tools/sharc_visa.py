@@ -71,7 +71,9 @@ def classify(p0: int, p1: int | None) -> tuple[str, int]:
         return table[code]
     if 0x10 <= code <= 0x13:
         return "14a", 3
-    return ("21/22", 3) if code == 0 else ("??", 3)
+    if code == 0:
+        return ("21c", 1) if p0 & 1 else ("21/22", 3)  # 16-bit NOP/IDLE forms end in a 1 bit
+    return "??", 3
 
 
 def tile(parcels: tuple[int, ...] | list[int]) -> tuple[list[tuple[str, tuple[int, ...]]], bool]:
@@ -438,6 +440,10 @@ def decode(parcels: tuple[int, ...]) -> str:
         return f"I{dst} = {op}(I{src}, 0x{bits(w, 31, 0):x})"
     if name in TYPE_ONLY:
         return f"{TYPE_ONLY[name]} (operands raw) " + " ".join(f"{x:04x}" for x in parcels)
+    if name == "21c":
+        return (
+            "NOP" if parcels[0] == 0x0001 else "21c? raw " + " ".join(f"{x:04x}" for x in parcels)
+        )
     if name == "17a":
         return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 0):x}"
     if name == "17b":
