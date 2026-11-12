@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--skips] [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -31,12 +31,40 @@ fn register_code(name: &str) -> Option<u8> {
     Some((group << 4) | n)
 }
 
+/// The skipped operations of a lenient run, grouped by instruction text, most frequent first.
+fn skip_histogram(core: &Core) -> String {
+    let mut counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for &pc in &core.skipped_pcs {
+        let (kind, len) = classify(core.parcel_at(pc), Some(core.parcel_at(pc + 1)));
+        let mut parcels = [0u16; 3];
+        for (k, p) in parcels.iter_mut().enumerate().take(len.min(3)) {
+            *p = core.parcel_at(pc + k as u32);
+        }
+        let text = decode_text(&Insn { kind, parcels, len });
+        *counts.entry(format!("{} {text}", kind.name())).or_insert(0) += 1;
+    }
+    let mut rows: Vec<_> = counts.into_iter().collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut out = String::from(
+        "skipped operations by text:
+",
+    );
+    for (text, n) in rows.iter().take(40) {
+        out.push_str(&format!(
+            "{n:>7}  {text}
+"
+        ));
+    }
+    out
+}
+
 fn run(args: &[String]) -> Result<String, String> {
     let mut positional = Vec::new();
     let mut devices = Vec::new();
     let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
     let mut registers: Vec<(u8, u32)> = Vec::new();
     let mut dumps: Vec<(u32, u32)> = Vec::new();
+    let mut histogram = false;
     let mut trace = 0usize;
     let mut lenient = false;
     let mut it = args.iter();
@@ -61,6 +89,7 @@ fn run(args: &[String]) -> Result<String, String> {
                 ));
             }
             "--lenient" => lenient = true,
+            "--skips" => histogram = true,
             "--dump" => {
                 let spec = it.next().ok_or("--dump needs ADDR:COUNT")?;
                 let (addr, count) = spec.split_once(':').ok_or("--dump needs ADDR:COUNT")?;
@@ -86,7 +115,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--skips] [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -141,6 +170,9 @@ fn run(args: &[String]) -> Result<String, String> {
             core.skipped,
             core.first_skipped.unwrap_or(0)
         ));
+    }
+    if histogram {
+        out.push_str(&skip_histogram(&core));
     }
     for (addr, count) in dumps {
         let words: Vec<String> = (0..count)

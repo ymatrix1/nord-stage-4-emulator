@@ -5,18 +5,27 @@ use super::{sign_extend, Core, Fault};
 use crate::visa::{bits, ureg_load, Kind};
 
 impl Core {
-    /// Moves universal register `ureg` to or from data memory at `addr`.
-    #[inline]
+    /// Moves universal register `ureg` to or from data memory at `addr`. In SIMD mode a data
+    /// register transfer also moves the PEy register to or from `addr + 1` (ASSUMED from the
+    /// duplicated word pairs of the image data and the SIMD description of the reference).
     fn mem_transfer(&mut self, d: &Decoded, addr: u32, ureg: u8, write: bool) -> Result<(), Fault> {
         let bad = |address| Fault::BadAddress { pc: d.pc, address };
+        let pair = self.simd() && ureg < 16;
         if write {
             let v = self.read_ureg(ureg);
-            self.dm_write(addr, v).map_err(bad)
+            self.dm_write(addr, v).map_err(bad)?;
+            if pair {
+                self.dm_write(addr.wrapping_add(1), self.s[ureg as usize])
+                    .map_err(bad)?;
+            }
         } else {
             let v = self.dm_read(addr).map_err(bad)?;
             self.write_ureg(ureg, v);
-            Ok(())
+            if pair {
+                self.s[ureg as usize] = self.dm_read(addr.wrapping_add(1)).map_err(bad)?;
+            }
         }
+        Ok(())
     }
 
     /// Executes the move and modify types: 3a/3b/3c, 4a/4b, 5a/5b, 7a/7b, 14a, 15a/15b, 16a,
@@ -34,6 +43,9 @@ impl Core {
                     imm
                 };
                 self.write_ureg(code, value);
+                if self.simd() && code < 16 {
+                    self.s[code as usize] = value; // broadcast to PEy
+                }
             }
             Kind::T14a => {
                 self.mem_transfer(
@@ -223,6 +235,19 @@ mod tests {
         c.dm_write(0x9_0200 - 6, 0xFFFE).unwrap();
         assert!(c.step().is_ok());
         assert_eq!(c.r[0], 0xFFFE);
+    }
+
+    #[test]
+    fn simd_transfers_move_the_pey_register_to_the_next_word() {
+        // R4 = DM(0, I2) in SIMD mode: 3c 16-bit word, DMI=2 DMM=2 D=0
+        let p: u16 = (0b1001 << 12) | (2 << 9) | (2 << 6) | (1 << 4) | 4;
+        let mut c = core_at_zero(&[p]);
+        c.mode1 = 1 << 21;
+        c.i[2] = 0x9_0010;
+        c.dm_write(0x9_0010, 11).unwrap();
+        c.dm_write(0x9_0011, 22).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!((c.r[4], c.s[4]), (11, 22));
     }
 
     #[test]

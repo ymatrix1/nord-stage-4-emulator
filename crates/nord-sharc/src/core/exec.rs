@@ -11,6 +11,8 @@ pub(super) struct Decoded {
     pub w: u64,
     /// Whether the `IF cond` field (bits 37..33) holds; unconditional types read it as true.
     pub cond_ok: bool,
+    /// The same condition for PEy (only meaningful in SIMD mode, false otherwise).
+    pub cond_y: bool,
 }
 
 impl Decoded {
@@ -40,18 +42,37 @@ impl Core {
             insn: Insn { kind, parcels, len },
             w,
             cond_ok: self.cond(bits(w, 37, 33)),
+            cond_y: self.simd() && self.cond_for(self.flags_y, bits(w, 37, 33)),
         }
     }
 
-    /// Runs the compute field `c` of `d`; an unmodelled operation faults (or is skipped in
-    /// lenient mode).
-    #[inline]
-    pub(super) fn run_compute(&mut self, d: &Decoded, c: u64) -> Result<(), Fault> {
-        if self.compute(c) {
-            Ok(())
-        } else {
-            self.unmodelled(d.pc, &d.insn)
+    /// Runs `op` on PEx when `x_ok` and, in SIMD mode, on PEy when `y_ok`. An operation that is
+    /// not modelled faults (or is skipped in lenient mode).
+    pub(super) fn on_each_pe(
+        &mut self,
+        d: &Decoded,
+        x_ok: bool,
+        y_ok: bool,
+        op: impl Fn(&mut Core) -> bool,
+    ) -> Result<(), Fault> {
+        if x_ok && !op(self) {
+            self.unmodelled(d.pc, &d.insn)?;
         }
+        if y_ok && self.simd() {
+            self.swap_pe();
+            let ok = op(self);
+            self.swap_pe();
+            if !ok {
+                self.unmodelled(d.pc, &d.insn)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Runs the compute field `c` of a conditional instruction on each enabled element, each
+    /// with its own condition.
+    pub(super) fn run_compute(&mut self, d: &Decoded, c: u64) -> Result<(), Fault> {
+        self.on_each_pe(d, d.cond_ok, d.cond_y, |core| core.compute(c))
     }
 
     /// Executes one instruction. Returns `Ok(())` or the reason it could not.
@@ -89,19 +110,17 @@ impl Core {
     }
 
     /// Types 2a/2b/2x (23-bit compute) and 2c (short compute).
-    #[inline]
     fn exec_compute(&mut self, d: &Decoded) -> Result<(), Fault> {
         match d.kind() {
-            Kind::T2b => self.run_compute(d, bits(d.w, 38, 16)),
-            Kind::T2c => {
-                if self.short_compute(bits(d.w, 43, 32)) {
-                    Ok(())
-                } else {
-                    self.unmodelled(d.pc, &d.insn)
-                }
+            Kind::T2b => {
+                let c = bits(d.w, 38, 16);
+                self.on_each_pe(d, true, true, |core| core.compute(c))
             }
-            _ if d.cond_ok => self.run_compute(d, bits(d.w, 22, 0)),
-            _ => Ok(()),
+            Kind::T2c => {
+                let c = bits(d.w, 43, 32);
+                self.on_each_pe(d, true, true, |core| core.short_compute(c))
+            }
+            _ => self.run_compute(d, bits(d.w, 22, 0)),
         }
     }
 }
@@ -132,6 +151,35 @@ mod tests {
         (skipped.r[1], skipped.r[2], skipped.flags.az) = (4, 5, true);
         assert_eq!(skipped.step(), Ok(()));
         assert_eq!(skipped.r[3], 0);
+    }
+
+    #[test]
+    fn simd_compute_runs_on_both_elements_with_their_own_flags() {
+        // R3 = R1 + R2 (type 2a, unconditional TRUE = cond 31): parcels 013e 0000 1312
+        let program = [0x013eu16, 0x0000, 0x1312];
+        let mut c = core_with(&program);
+        c.mode1 = 1 << 21;
+        (c.r[1], c.r[2], c.s[1], c.s[2]) = (4, 5, 10, 20);
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!((c.r[3], c.s[3]), (9, 30));
+        assert_eq!((c.flags.az, c.flags_y.az), (false, false));
+        // without SIMD only PEx runs
+        let mut x_only = core_with(&program);
+        (x_only.r[1], x_only.r[2], x_only.s[1], x_only.s[2]) = (4, 5, 10, 20);
+        assert_eq!(x_only.step(), Ok(()));
+        assert_eq!((x_only.r[3], x_only.s[3]), (9, 0));
+    }
+
+    #[test]
+    fn simd_conditions_are_evaluated_per_element() {
+        // IF EQ R3 = R1 + R2 where only PEy has AZ set
+        let program = [0x0100u16, 0x0000, 0x1312];
+        let mut c = core_with(&program);
+        c.mode1 = 1 << 21;
+        (c.r[1], c.r[2], c.s[1], c.s[2]) = (4, 5, 10, 20);
+        c.flags_y.az = true;
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!((c.r[3], c.s[3]), (0, 30), "only PEy meets the condition");
     }
 
     #[test]

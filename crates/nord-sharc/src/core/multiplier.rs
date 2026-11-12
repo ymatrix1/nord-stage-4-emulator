@@ -11,12 +11,17 @@ impl Core {
     pub(super) fn fixed_mult(&mut self, op: u64, n: usize, x: usize, y: usize) -> bool {
         let cls = op >> 6;
         if cls == 0 {
-            match op {
-                0x14 => self.mr[0] = 0,
-                0x16 => self.mr[1] = 0,
-                _ => return false,
-            }
-            return true;
+            return match op {
+                0x14 => {
+                    self.mr[0] = 0;
+                    true
+                }
+                0x16 => {
+                    self.mr[1] = 0;
+                    true
+                }
+                _ => self.saturate_or_round_mr(op, n),
+            };
         }
         let (sy, sx) = ((op >> 5) & 1 == 1, (op >> 4) & 1 == 1);
         let (frac, sel, round) = ((op >> 3) & 1 == 1, (op >> 1) & 3, op & 1 == 1);
@@ -55,6 +60,61 @@ impl Core {
             self.mr[reg] = v;
         }
         true
+    }
+}
+
+impl Core {
+    /// `Rn|MRx = SAT MRx (SI|UI|SF|UF)` and `Rn|MRx = RND MRx (SF|UF)` (opcode class 0).
+    ///
+    /// ASSUMED: the saturated 80-bit maxima are the usual ones (fractional positive
+    /// `0000:7FFFFFFF:FFFFFFFF`, negative `FFFF:80000000:00000000`; integer positive
+    /// `0000:00000000:7FFFFFFF`, negative `FFFF:FFFFFFFF:80000000`; unsigned all ones in the
+    /// 32 or 64 bit field), since the table of the reference is garbled in the text extraction.
+    fn saturate_or_round_mr(&mut self, op: u64, n: usize) -> bool {
+        let (sel, unsigned, frac) = ((op >> 1) & 3, op & 1 == 1, (op >> 3) & 1 == 1);
+        let reg = usize::from(sel == 1 || sel == 3);
+        let mut v = self.mr[reg];
+        match op >> 4 {
+            0 => v = saturate_mr(v, frac, !unsigned),
+            1 if frac => {
+                let low = v & 0xFFFF_FFFF;
+                v += 0x8000_0000;
+                if low == 0x8000_0000 {
+                    v &= !(1i128 << 32);
+                }
+                v &= !0xFFFF_FFFF;
+                v = (v << 48) >> 48;
+            }
+            _ => return false,
+        }
+        if sel < 2 {
+            self.set_fixed(n, saturate_to_register(v, frac, !unsigned));
+        } else {
+            self.mr[reg] = v;
+        }
+        true
+    }
+}
+
+/// An 80-bit accumulator value saturated to the maximum of its format when it overflows.
+fn saturate_mr(v: i128, frac: bool, signed: bool) -> i128 {
+    let fits = match (frac, signed) {
+        (true, true) => (v >> 63) == 0 || (v >> 63) == -1,
+        (false, true) => (v >> 31) == 0 || (v >> 31) == -1,
+        (true, false) => (0..1i128 << 64).contains(&v),
+        (false, false) => (0..1i128 << 32).contains(&v),
+    };
+    if fits {
+        return v;
+    }
+    match (frac, signed, v < 0) {
+        (true, true, false) => 0x7FFF_FFFF_FFFF_FFFF,
+        (true, true, true) => -(1i128 << 63),
+        (false, true, false) => 0x7FFF_FFFF,
+        (false, true, true) => -(1i128 << 31),
+        (true, false, false) => (1i128 << 64) - 1,
+        (false, false, false) => (1i128 << 32) - 1,
+        (_, false, true) => 0,
     }
 }
 
@@ -115,6 +175,30 @@ mod tests {
         assert!(
             !c.compute(mult_word(0x71, 3, 1, 2)),
             "integer rounding is not modelled"
+        );
+    }
+
+    #[test]
+    fn saturate_and_round_the_accumulator() {
+        let mut c = Core::new(&[]);
+        // overflowing fractional signed value: R3 = SAT MRF (SF) -> 0x7FFFFFFF
+        c.mr[0] = 1i128 << 70;
+        assert!(c.compute(mult_word(0x08, 3, 0, 0)));
+        assert_eq!(c.r[3], 0x7FFF_FFFF);
+        // MRF = SAT MRF (SF) stores the saturated maximum
+        assert!(c.compute(mult_word(0x08 | 4, 0, 0, 0)));
+        assert_eq!(c.mr[0], 0x7FFF_FFFF_FFFF_FFFF);
+        // in range: unchanged, integer view in the register
+        c.mr[0] = 0x1234;
+        assert!(c.compute(mult_word(0x00, 4, 0, 0)));
+        assert_eq!(c.r[4], 0x1234);
+        // R5 = RND MRF (SF): half rounds to even at bit 32
+        c.mr[0] = 0x3 << 31; // 1.5 in MR1
+        assert!(c.compute(mult_word(0x18 | 8, 5, 0, 0)));
+        assert_eq!(c.r[5], 2);
+        assert!(
+            !c.compute(mult_word(0x12, 5, 0, 0)),
+            "integer RND is not an operation"
         );
     }
 

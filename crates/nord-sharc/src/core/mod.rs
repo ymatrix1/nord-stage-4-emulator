@@ -21,7 +21,9 @@ mod dag;
 mod exec;
 mod memory;
 mod moves;
+mod multifunction;
 mod multiplier;
+mod shifter;
 #[cfg(test)]
 mod support;
 
@@ -33,6 +35,10 @@ use std::hash::{BuildHasherDefault, Hasher};
 pub const SRAM_BYTES: usize = 0x40_0000;
 /// 32-bit words of the IOP register window (`0x0000_0000..0x0003_FFFF` normal-word addresses).
 const IOP_WORDS: usize = 0x4_0000;
+/// Most skipped operations whose pc is logged in lenient mode.
+pub const SKIP_LOG_LIMIT: usize = 100_000;
+/// MODE1 bit 21: processing element Y enabled (SIMD mode).
+const MODE1_PEYEN: u32 = 1 << 21;
 
 /// Hasher for the device store: addresses are `u32` keys that are not attacker controlled, so a
 /// multiplicative mix is enough and much cheaper than the default SipHash on the poll loops.
@@ -75,6 +81,10 @@ pub struct Flags {
     pub av: bool,
     pub ac: bool,
     pub tf: bool,
+    /// Shifter flags: zero result, overflow and sign.
+    pub sz: bool,
+    pub sv: bool,
+    pub ss: bool,
 }
 
 /// Loop stack entry of `DO ... UNTIL LCE`.
@@ -115,9 +125,14 @@ pub struct Core {
     /// Number of skipped unmodelled compute operations and the pc of the first one.
     pub skipped: u64,
     pub first_skipped: Option<u32>,
+    /// Program counters of skipped operations (first [`SKIP_LOG_LIMIT`]), for histograms.
+    pub skipped_pcs: Vec<u32>,
     pub imask: u32,
     pub mmask: u32,
     pub flags: Flags,
+    /// PEy condition flags and multiplier result registers (used in SIMD mode).
+    pub flags_y: Flags,
+    pub mr_y: [i128; 2],
     /// Number of instructions executed.
     pub steps: u64,
     sram: Box<[u8]>,
@@ -166,9 +181,12 @@ impl Core {
             lenient: false,
             skipped: 0,
             first_skipped: None,
+            skipped_pcs: Vec::new(),
             imask: 0,
             mmask: 0,
             flags: Flags::default(),
+            flags_y: Flags::default(),
+            mr_y: [0; 2],
             steps: 0,
             sram: mem,
             iop: vec![0u32; IOP_WORDS].into_boxed_slice(),
@@ -182,6 +200,11 @@ impl Core {
         }
     }
 
+    /// Instruction parcel at a short-word address (for tools that decode skipped operations).
+    pub fn parcel_at(&self, short: u32) -> u16 {
+        self.parcel(short)
+    }
+
     #[inline]
     fn parcel(&self, short: u32) -> u16 {
         let o = (short as usize) * 2;
@@ -191,9 +214,27 @@ impl Core {
         ])
     }
 
-    /// Whether condition code `c` (0..32, `31` = TRUE) holds.
+    /// Whether SIMD mode (PEy enabled) is on.
+    #[inline]
+    fn simd(&self) -> bool {
+        self.mode1 & MODE1_PEYEN != 0
+    }
+
+    /// Exchanges the PEx and PEy views (data registers, flags, multiplier results), so the code
+    /// written for PEx can run unchanged on PEy and the views are swapped back afterwards.
+    fn swap_pe(&mut self) {
+        std::mem::swap(&mut self.r, &mut self.s);
+        std::mem::swap(&mut self.flags, &mut self.flags_y);
+        std::mem::swap(&mut self.mr, &mut self.mr_y);
+    }
+
+    /// Whether condition code `c` (0..32, `31` = TRUE) holds for PEx.
     fn cond(&self, c: u64) -> bool {
-        let f = self.flags;
+        self.cond_for(self.flags, c)
+    }
+
+    /// Whether condition code `c` holds for the given flag set.
+    fn cond_for(&self, f: Flags, c: u64) -> bool {
         let lce = self.loops.last().is_some_and(|l| l.remaining > 1);
         let base = match c & 15 {
             0 => f.az,
@@ -201,6 +242,8 @@ impl Core {
             2 => f.an || f.az,
             3 => f.ac,
             4 => f.av,
+            7 => f.sv,
+            8 => f.sz,
             13 => f.tf,
             15 => !lce,
             _ => false,
@@ -227,6 +270,9 @@ impl Core {
         }
         self.skipped += 1;
         self.first_skipped.get_or_insert(pc);
+        if self.skipped_pcs.len() < SKIP_LOG_LIMIT {
+            self.skipped_pcs.push(pc);
+        }
         Ok(())
     }
 
