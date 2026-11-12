@@ -183,6 +183,15 @@ Status: **EMPIRICAL candidates, not attributed.** Our engine still uses `3.5 / 7
 
 Next: find the DSP-upload routine that copies `0x2f9ee8` (base + level*16) to the SHARC and identify the engine it belongs to; compare with the `Edt_Syn_kOscUnison` (id) and `Edt_Pno_k...` unison sender.
 
+### Attribution attempt for the detune tables (2026-11-12): not resolved
+
+- The `0x2f9e88` pointer array that many routines reference (and that sits directly before the `0x2f9ee8` table) is the **preset category list** as `(letter, name)` pairs: `_ Unknown`, `A Analog`, `b Bells`, `c Acoustic`, `d Digital`, `E Electric`, `F Formant`, `O Organ`, `P Piano`, `F Throat`. It says nothing about the numeric block that follows at `0x2f9ed8`, so adjacency does not attribute the table to Synth.
+- The numeric block is a run of 4-float rows: `1 1 1 1`, the three detune rows, then unrelated rows (`1 2 1 1`, `2 2 4 1.5`, `3 6 0.1 1`, `0.1 0.1 1 1`) and a repeat of the `+2..+6` cent pairs. It is reached by base + offset (no pointer word targets it), like the other 128/129-entry DSP tables of `0x2f730c..0x2fdbf0` (Q scale `0.1..10` at `0x2f970c`, `1 -> 0.1387` at `0x2fbd50`, `0.167 -> 1` at `0x2fbf54`, `0.999 -> 0.93` at `0x2fdbf0`), which the ARM uploads to the DSP.
+- No 128-step table was identified as the glide rate. `0x2fdbf0` (`0.999 -> 0.93`, accelerating) looks like a per-sample one-pole coefficient curve (dynamics-style) rather than a constant-rate glide table.
+- The `+/-5 .. +/-75` cent literal pool belongs to routines (`0x1c94cc`, `0x1c9a8c`, `0x1ca034`) that also reference the category list, so their purpose (display animation vs voice detune) is not settled either, although the ratios are exact `2^(n*5/1200)`.
+
+Decision: the engine keeps `3.5 / 7.0 / 11.5` cents (ASSUMED). Candidates to test on hardware: unison level 1 = `+/-2` cents (two voices), level 2 = `+/-4` and `+/-1.33`, level 3 = `+/-6` and `+/-2` (four voices), measured with `tools/sweep_analyze.py unison`.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).

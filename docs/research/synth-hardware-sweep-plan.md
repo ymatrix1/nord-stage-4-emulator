@@ -49,6 +49,7 @@ Already firmware-VERIFIED and needing no capture: LFO to pitch depth curve (`syn
 - Unison `0, 1, 2, 3`; hold **C6 (1046.5 Hz)** for 5 s. Record stereo and also test each channel separately (export L and R).
 - `python tools/sweep_analyze.py unison unison_2.wav --f0 1046.5` returns `spread_cents` and `peak_cents`. The default FFT needs a steady 2.7 s; the first 0.5 s of each take is discarded by cutting the file.
 - Result decides: the cents per setting and how many voices exist (count of peaks). Update `uni_cents` in `synth.rs`.
+- Candidate from firmware (`synth-0x2f-ns4decode-crosscheck.md`, "Detune tables found in ARM data"): level 1 `+/-2` cents (2 voices), level 2 `+/-4` and `+/-1.33` (4 voices), level 3 `+/-6` and `+/-2` (4 voices). A match would confirm that table for Synth.
 
 ### 4. Osc-envelope pitch depth (`oscenv_pitch_<amt>.wav`)
 
