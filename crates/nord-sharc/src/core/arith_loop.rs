@@ -14,8 +14,12 @@
 //! `FOREVER` (code 31) never terminates.
 //!
 //! Provenance: Type 13a layout VERIFIED against ADI (`0e00 0000 0007` is `do (pc,0x7) until
-//! eq`, TERM bits 37..33 as the `IF` condition field, `0e3e` is `until forever`); the
-//! evaluation point is EMPIRICAL from the PRM text and example, not measured on hardware.
+//! eq`, TERM bits 37..33 as the `IF` condition field, `0e3e` is `until forever`). The evaluation
+//! point and the extra passes are VERIFIED on the CCES ADSP-21489 simulator by
+//! `loops_measured.rs` (1 072 cases: conditions `eq ne lt ge gt le` and `LCE`, bodies of 1 to 6
+//! instructions, every flag-setting position) and `entry_measured.txt` (conditions true at loop
+//! entry), see `docs/research/sharc-loops.md`. Not covered: SIMD loops, branches inside the
+//! body, conditions other than the ALU flags.
 use super::exec::Decoded;
 use super::{sign_extend, Core, Fault, LoopFrame};
 use crate::visa::bits;
@@ -40,7 +44,36 @@ impl Core {
             ..LoopFrame::default()
         });
         self.refresh_check();
+        // VERIFIED (simulator, `loops_measured.txt`, `entry_measured.txt`): the termination
+        // condition is sampled after the instructions at body index `(N - 4) mod N` of every
+        // pass, and once more after the `DO` itself when that is the sample of the previous
+        // pass, i.e. for bodies of 1 and 3 instructions: a condition that already holds when
+        // the loop is entered then ends it after three body instructions (three passes of a
+        // one instruction body, one pass of a three instruction body).
+        if let Some(top) = self.loops.last().copied() {
+            let code = top.term.unwrap_or(FOREVER);
+            if code != FOREVER
+                && 3 % self.body_len(top.start, top.end) == 0
+                && self.term_holds(code)
+            {
+                let skip = self.body_len(top.start, top.end) == 1;
+                if let Some(t) = self.loops.last_mut() {
+                    t.exit_in = RUN_ON;
+                    t.skip_after = skip;
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// Number of instructions of the body `start..=end`.
+    fn body_len(&self, start: u32, end: u32) -> usize {
+        let (mut pc, mut n) = (start, 0usize);
+        while pc <= end && n < WALK_LIMIT {
+            pc = pc.wrapping_add(self.fetch(pc).insn.len.max(1) as u32);
+            n += 1;
+        }
+        n.max(1)
     }
 
     /// Recomputes the address whose execution tests the termination condition of the innermost
@@ -82,6 +115,10 @@ impl Core {
         if in_body && f.exit_in > 0 {
             if f.exit_in == 1 {
                 self.loops.pop(); // the last body instruction ran: fall out of the loop
+                if f.skip_after {
+                    // VERIFIED (simulator): the instruction after such a loop does not execute
+                    return next.wrapping_add(self.fetch(next).insn.len.max(1) as u32);
+                }
                 return next;
             }
             if let Some(top) = self.loops.last_mut() {
