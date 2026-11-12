@@ -3,11 +3,11 @@
 Single source of truth for Python tooling (`ns4_inspect.py`, `ns4_crosscheck.py`); the Rust
 decoder in `crates/nord-core/src/cbin/synth_preset.rs` implements the same offsets.
 
-Offsets are block-relative bit positions (MSB first). They come from the third-party ns4decode
-program map (MIT, `.reference/ns4decode_pkg/ns4maps.py`), converting its byte-bit ids with
-``bit = (byte - 1) * 8 + (bit - 1) - 3000 - block_base``. Status: EMPIRICAL, not firmware-verified;
-cross-checked against its regression program and the factory presets, see
-``docs/research/synth-0x2f-ns4decode-crosscheck.md``.
+Offsets are block-relative bit positions (MSB first), taken from the third-party ns4decode program
+map (MIT, `.reference/ns4decode_pkg/ns4maps.py`) with
+``bit = (byte - 1) * 8 + (bit - 1) - 3000 - block_base``. Field order and widths are checked against
+the firmware name tables by ``ns4_fw_order_check.py``; absolute anchors stay EMPIRICAL (see
+``docs/research/synth-0x2f-ns4decode-crosscheck.md``).
 """
 
 from __future__ import annotations

@@ -17,9 +17,9 @@ use serde::{Deserialize, Serialize};
 
 /// Decoded single Synth layer configuration (`0x32` Layer + `0x2F` Sound).
 ///
-/// Field offsets (block-relative bits) come from the third-party ns4decode map (MIT,
-/// `.reference/ns4decode_pkg`) and are EMPIRICAL (third-party decoder whose author hand-checked values against the NS4 display; NOT firmware-verified). Cross-checked with its regression program and 1152 factory layers:
-/// `python tools/ns4_crosscheck.py` (see `docs/research/synth-0x2f-ns4decode-crosscheck.md`).
+/// Field offsets (block-relative bits): VERIFIED for order/widths: field order and widths chain = firmware `Buffer_kSynLay` @0x2d70b8 / `Buffer_kSynSnd` @0x2d751c (bank0_CODE.bin) name tables, checked by `python tools/ns4_fw_order_check.py target/fw_unpacked/bank0_CODE.bin`, 0 problems over 50 fields. Absolute anchors are EMPIRICAL (ns4decode + corpus); value scales are ASSUMED unless stated.
+/// Offsets come from the third-party ns4decode map (MIT, `.reference/ns4decode_pkg`),
+/// cross-checked by `python tools/ns4_crosscheck.py` (see `docs/research/synth-0x2f-ns4decode-crosscheck.md`).
 /// `0x32` Layer: octave `+62` (4b signed), legato `+77`, mono `+78`, voice priority `+79` (2b),
 /// glide `+81` (7b), unison `+306` (2b). `0x2F` Sound: osc type `+10` (2b), category `+15` (3b),
 /// wave `+19` (6b), pitch fine `+56` (7b signed), coarse `+63` (6b signed), osc env ADR

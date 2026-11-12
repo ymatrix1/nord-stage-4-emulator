@@ -34,11 +34,28 @@ strings -n 2 -t x target/fw_unpacked/bank0_CODE.bin | awk 'length($1)==6 && $1>=
 | Independent bit scan | `tools/ns4_bitscan.py` placed filter ADR `+318`, osc ADR `+71`, amp velocity `+216`, unison `0x32 +306` from data alone, equal to the ns4decode map |
 | Firmware strings | `bank0_CODE.bin @0x2d7d44` holds the wave names in ns4decode's per-category order (`Pure: Sine, Triangle, Saw, Square, Pulse 33, Pulse 10, White Noise`; `Bells/Tines: Bell, Bar 1, Bar 2, Tines, Marimba, Tubular Bells`; `Acoustic`, `Digital 2nd..8th Spectra, Saw Random, Saw NoFund, Ice 1, Ice 2, Triplets`, `Organ`, `Keys: EPiano 1..Clavinet 3`, plus `Harmonic %c` (FM-H) and `Inharmonic %c` (FM-I)). `Voice Mode (Poly, Legato)`, `Voice Priority`, `Glide Rate`, `LFO Destination`, `LFO Master Clock`, `Oscillator Env Amount` exist as parameter names (`0x2cd540..0x2cd6b0`) |
 
+## Firmware order and width check (OQ7, part 1)
+
+The firmware keeps one field-name table per program buffer (`Buffer_kSynLay`, `Buffer_kSynSnd`; also `kOrg`, `kPno`, `kFx`...) in bitstream order. `tools/ns4_fw_order_check.py` compares our offsets with it:
+
+```bash
+python tools/ns4_fw_order_check.py target/fw_unpacked/bank0_CODE.bin
+# Buffer_kSynLay: 16 fields checked, 0 problems
+# Buffer_kSynSnd: 34 fields checked, 0 problems
+```
+
+- Order: every field sorted by our offset matches the firmware name order (`OscCtrl, TuneFine, TuneCoarse, OscUnison_obsolete, OscEnvAtk..Rls, OscEnvAmt, OscEnvDst, OscEnvVel, SmpDynamic, LFODst, LFOWave, LFOClkEnable, LFORateClkDiv, LFOAmt, AmpEnv*, Flt*, VibRate, VibAmt, SmpTimbre`; layer: `KbZone, OctaveShift, PStick*, Sustain, VibMode, VibDly_obsolete, VoiceMode, VoicePrio, GlideRate, ..., ArpRun, ArpKbdSync, ..., OscUnison, VibDly`).
+- Contiguity: from `+25` (`OscCtrl`) to `+354` (`SmpTimbre`) every field starts exactly where the previous one ends (morph = 31 bits), so the widths of all 33 fields between the independent anchors `+25`, `+133`, `+195`, `+318` are forced. The `0x32` run `+58..+88` is gapless too.
+- Firmware shows `VoiceMode` as one enum (Poly / Mono / Legato): ns4decode's separate `legato` (+77) and `mono` (+78) bits are its two bits; they are never both set in the corpus.
+- Firmware has two `Unison` fields: `OscUnison_obsolete` (`0x2F +69`, 2 bits, still in the layout) and the live `OscUnison` (`0x32 +306`).
+- Not covered: absolute positions (the table has names only), the `OscBank/OscCat/OscWave` split (the firmware widths are not in the strings; the type/category/wave decomposition is supported by the corpus invariant "WAVE category <= 4"), and every value scale.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
-- Bit **offsets / category indices / value scales**: `EMPIRICAL` (third-party decoder whose author hand-checked values against the instrument display; corroborated by the checks above). Not firmware-verified: the firmware strings carry no bit layout.
-- Scales ASSUMED: glide seconds per octave, vibrato depth/rate mapping to DSP, osc envelope depth, unison cents, LFO pitch depth, the 64-table wavetable bank content.
+- Field **order and widths** (`+25..+354`, layer `+58..+88`): `VERIFIED` against the firmware name tables by `tools/ns4_fw_order_check.py`.
+- Absolute **offsets / category indices**: `EMPIRICAL` (ns4decode, hand-checked by its author against the instrument display; corroborated by the corpus and bitscan). The firmware strings carry names only, not bit positions.
+- Value scales ASSUMED: glide seconds per octave, vibrato depth/rate mapping to DSP, osc envelope depth, unison cents, LFO pitch depth, the 64-table wavetable bank content.
 
 ## Implications
 
@@ -48,5 +65,5 @@ strings -n 2 -t x target/fw_unpacked/bank0_CODE.bin | awk 'length($1)==6 && $1>=
 
 ## Follow-ups
 
-- Disassemble the `ARM0` preset parser to confirm offsets and the glide/vibrato/osc-env scales (OQ7).
+- Locate the `ARM0` code that serialises `Buffer_kSynSnd` and its glide / vibrato / osc-env scale tables (OQ7). Capstone is available; the name tables sit at `0x2d70b8` and `0x2d751c`, referenced from the buffer descriptor tables near `0x190300`.
 - Record hardware sweeps for unison cents and glide time.
