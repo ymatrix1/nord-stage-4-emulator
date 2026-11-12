@@ -482,6 +482,12 @@ impl Core {
             15 => self.r[n] = self.float_result(fn_ * fx),
             _ => return false,
         }
+        // Every ALU result updates AZ and AN (compares set them above).
+        match bits(c, 11, 8) {
+            0..=2 | 4..=6 | 12..=14 => self.set_arith_flags(self.r[n], false),
+            8..=10 | 15 => self.set_arith_flags(self.r[n], true),
+            _ => {}
+        }
         true
     }
 
@@ -612,6 +618,33 @@ impl Core {
                     if let Some(u) = update {
                         self.i[ii] = u;
                     }
+                }
+            }
+            Kind::T3c => {
+                // DM(Ii, Mm) <-> Rn, post-modify, DAG1 (bits 43..41 I, 40..38 M, 37 D, 35..32 Rn)
+                let ii = bits(w, 43, 41) as usize;
+                let mi = bits(w, 40, 38) as usize;
+                let reg = bits(w, 35, 32) as usize;
+                let addr = self.i[ii];
+                if bits(w, 37, 37) == 1 {
+                    self.dm_write(addr, self.r[reg]).map_err(bad)?;
+                } else {
+                    self.r[reg] = self.dm_read(addr).map_err(bad)?;
+                }
+                self.i[ii] = Self::dag_next(addr, self.m[mi], self.l[ii], self.b[ii]);
+            }
+            Kind::T7a | Kind::T7b => {
+                // [IF cond] [compute,] [Id =] MODIFY(Is, M): G bit 39 selects DAG2, the destination
+                // register is Is XOR IdIs (Table 10-1), modify always honours L/B (circular).
+                if cond_ok {
+                    let base = if bits(w, 39, 39) == 1 { 8 } else { 0 };
+                    let src = (bits(w, 32, 30) + base) as usize;
+                    let mi = (bits(w, 29, 27) + base) as usize;
+                    let dst = (src ^ bits(w, 26, 23) as usize) & 15;
+                    if kind == Kind::T7a && !self.compute(bits(w, 22, 0)) {
+                        return Err(self.fault(pc, &insn));
+                    }
+                    self.i[dst] = Self::dag_next(self.i[src], self.m[mi], self.l[src], self.b[src]);
                 }
             }
             Kind::T4a | Kind::T4b => {
@@ -842,6 +875,47 @@ mod tests {
         c.preset_device(0x3108_D008, 5);
         c.dm_write(0x3108_D008, 9).unwrap();
         assert_eq!(c.dm_read(0x3108_D008), Ok(5));
+    }
+
+    #[test]
+    fn short_pass_sets_zero_flag_for_mailbox_polls() {
+        let mut c = Core::new(&[]);
+        c.r[0] = 5;
+        assert!(c.short_compute(0x200));
+        assert!(!c.flags.az);
+        c.r[0] = 0;
+        assert!(c.short_compute(0x200));
+        assert!(c.flags.az);
+    }
+
+    #[test]
+    fn type_7b_modifies_the_index_register_by_the_modify_register() {
+        // IF TRUE MODIFY(I1, M3): VISA word 043e 583f at short-word 0
+        let mut image = vec![0u8; 16];
+        for (k, p) in [0x043eu16, 0x583f].iter().enumerate() {
+            image[2 * k..2 * k + 2].copy_from_slice(&p.to_le_bytes());
+        }
+        let mut c = Core::new(&image);
+        c.i[1] = 100;
+        c.m[3] = 5;
+        assert!(c.step().is_ok());
+        assert_eq!(c.i[1], 105);
+        assert_eq!(c.pc, 2);
+    }
+
+    #[test]
+    fn type_3c_loads_and_stores_with_post_modify() {
+        // R0 = DM(I2, M2): 16-bit word 0x9?: DMI=2, DMM=2, D=0, bit36=1, DREG=0
+        let p: u16 = (0b1001 << 12) | (2 << 9) | (2 << 6) | (1 << 4);
+        let mut image = vec![0u8; 0x24_0000 + 16];
+        image[..2].copy_from_slice(&p.to_le_bytes());
+        let mut c = Core::new(&image);
+        c.i[2] = 0x9_0010;
+        c.m[2] = 3;
+        c.dm_write(0x9_0010, 42).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!(c.r[0], 42);
+        assert_eq!(c.i[2], 0x9_0013);
     }
 
     #[test]
