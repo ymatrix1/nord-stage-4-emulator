@@ -151,6 +151,24 @@ Consequences:
 - Glide, unison, osc-envelope pitch depth and velocity curves run inside the DSP code we cannot read, unless the ARM computes the DSP parameter from the 7-bit value before sending it. Forum reports that glide changed between OS versions (1.06 vs later) suggest at least the glide **knob-to-DSP mapping is in the ARM**.
 - Next lead: find the ARM routine that sends `Edt_Syn_kGlideRate` (descriptor `0x1aa4a4`) to the DSP and read its math (soft-float constants / table). The other session already traced one such sender (`0x1be108`, biquad indices via double math).
 
+## OS update history as evidence (user-supplied Nord changelog, 2026-11-12)
+
+Source: Nord "Nord Stage 4 - Update History" (OS v0.90 .. v1.66), pasted by the user. Items that bear on where synth behaviour lives:
+
+| Release | Item | Reading |
+|---|---|---|
+| v0.94 | "Adjustments to Piano Unison detune values and behaviour" | detune amounts changed by an OS update; so either an ARM-side constant/table or DSP code in the update |
+| v1.20 | New Analog category `Sub Osc`, `Multi Saw` unison with detune, category reorder, `Shape Sine Fold` pure sine at its start, "improvements to mod and filter envelope behavior with Mono/Legato sounds using envelope velocity" | new waveform behaviour and envelope handling shipped in the OS |
+| v1.30 | "Synth Glide could become inactive for a Layer, if a non-pitched sample had previously been loaded", "Samples could get wrong pitch in Legato mode" (v1.20) | glide / legato are state handled in the host firmware |
+| v1.32 | "Sound Init for Synth now also deactivates Unison" | ARM-side parameter handling |
+| v1.44 | "Osc Env amount did not display correct values on negative side for the range 0 to -1" | display/value mapping in ARM (our display tables are ARM) |
+| v1.54 | "Delay mode for Vibrato would not work as expected" (bug from v1.52); "Optimizations to Ring Mod effect" | vibrato delay logic is in the OS; Ring Mod optimisation sounds like DSP code, but could also be ARM-side parameter handling |
+| v1.60 | "Improvements to sample voice allocation in Synth", "Selecting first wavetable in Organ category did not produce the correct sound" | voice allocation and wavetable selection in the OS |
+
+Reading, with the container result above (no recognisable DSP code in the update): voice allocation, glide / legato state, vibrato delay, parameter mapping and display are **ARM-side and shipped in the OS image**, so their scale constants should be recoverable by reading ARM code, even if the DSP signal code is not in the update. Piano unison detune "values" being adjustable by an OS update suggests the unison amounts are also ARM-supplied parameters (Synth unison unchecked). Whether DSP algorithm changes such as the Ring Mod optimisation ship in the update stays unresolved: either DSP code is present in a form we do not recognise, or the DSP engines are parameter-driven and the change is ARM-side.
+
+Next: trace the ARM routines for glide (`Edt_Syn_kGlideRate`, id `0x103`), vibrato delay (`Edt_Syn_kVibDly`) and unison (`Edt_Syn_kOscUnison`) to the point where they are converted to the value sent to the DSP.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
