@@ -78,6 +78,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fx", group = "Layer FX")]
     pub layer_fx: crate::fx_params::LayerFxBank,
 
+    /// Per-layer FX selectors (mod types/rates, cabinet, delay switches, reverb model/colour).
+    #[nested(id_prefix = "fxsel", group = "Layer FX Selectors")]
+    pub layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -292,6 +296,7 @@ impl Default for Stage4Params {
             .with_step_size(0.01),
             morph_assign: crate::morph_assign::MorphAssignParams::default(),
             layer_fx: crate::fx_params::LayerFxBank::default(),
+            layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -552,6 +557,7 @@ impl Stage4Params {
         // Morph assignments (depths only; base values are written below)
         self.morph_assign.sync_to_engine(engine);
         self.layer_fx.sync_to_engine(engine);
+        self.layer_fx_selectors.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();
@@ -740,5 +746,7 @@ mod tests {
         assert!(ids.contains(&"morph_level_wheel_1".to_string()));
         assert!(ids.contains(&"morph_cutoff_at_3".to_string()));
         assert!(ids.contains(&"fx_delay_mix_7".to_string()));
+        assert!(ids.contains(&"fxsel_rev_model_7".to_string()));
+        assert!(ids.contains(&"fxsel_mod1_type_1".to_string()));
     }
 }
