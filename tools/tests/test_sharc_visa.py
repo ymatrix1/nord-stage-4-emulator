@@ -92,7 +92,8 @@ def test_decode_added_forms():
 def test_compute_units():
     assert v.mult_text(0x30, 1, 2, 3) == "F1 = F2 * F3"
     assert v.mult_text(0x78, 0, 1, 2) == "R0 = R1 * R2 (SSF)"
-    assert v.mult_text(0x00, 0, 1, 2) is None
+    assert v.mult_text(0x00, 0, 1, 2) == "R0 = SAT MRF (SI)"
+    assert v.mult_text(0x10, 0, 1, 2) is None  # 0001 0000 is not in Table 12-5
     assert v.compute_text((0b0000111 << 16) | 0x4321) == "R4 = R2 - R1, R3 = R2 + R1"
     assert v.compute_text(0x4E4321) == "R4 = MRF + R0 * R6 (SSFR), R3 = (R8 + R13)/2"
     assert v.compute_text(0x4F0000).startswith("MULTI?")  # opcode 001111 is not in Table 12-12
@@ -104,3 +105,18 @@ def test_shifter_and_multifunction_compute():
     assert v.compute_text(0x635666) == "R5 = R1 * R6, R6 = R9 + R14, R3 = R9 - R14"
     assert v.compute_text(0x585666) == "F5 = F1 * F6, F6 = F9 + F14"
     assert v.multi_text(0x0) is None  # bit 22 clear: not a multifunction field
+
+
+def test_undocumented_0x02_form_and_type_only_forms():
+    # First byte 0x02: 48-bit "IF cond compute" with extra bits 31..23 (see docs 5.9).
+    assert v.classify(0x023E, 0x2019) == ("2x", 3)
+    assert v.decode((0x023E, 0x2019, 0x1002)).startswith("R0 = MRF + R0 * R2 (SUIR)")
+    assert "extra bits" in v.decode((0x023E, 0x4019, 0x1002))
+    assert v.decode((0x1629, 0x0000, 0x0012)) == "I4 = MODIFY(I1, 0x12)"
+
+
+def test_multiplier_register_ops():
+    assert v.mult_text(0x01, 3, 0, 0) == "R3 = SAT MRF (UI)"
+    assert v.mult_text(0x14, 0, 0, 0) == "MRF = 0"
+    assert v.mult_text(0x16, 0, 0, 0) == "MRB = 0"
+    assert v.mult_text(0x1C, 2, 0, 0) == "MRF = RND MRF (SF)"

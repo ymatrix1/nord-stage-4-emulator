@@ -239,6 +239,22 @@ Raw instructions left (3,299): `??` with first byte `0x02` (1,103; type not in t
 
 Sender: `DSP Comm` (`0x6CA48`) has more than 1,000 `bl` call sites across `bank0_CODE`, so it is the generic parameter-write path (confirms section 5.7). It does not carry the code blocks. The strings near `0x5263A8..0x527278` ("Piano Flash Error", "Sample Flash Error", "DSP/Chip fail") belong to piano/sample flash handling, not to a DSP loader. The path that puts these blocks into the SHARCs is still unidentified.
 
+### 5.9 The `0x02` form and coverage
+
+**First byte `0x02` (undocumented in the reference I read).** 1,103 instructions in the six large blocks of v1.64 start with `0x02` (bits 47..40 = `000 00010`; Type 2a is `000 00001`). Evidence from the data (`bank0_CODE` v1.64): bits 39..32 are `0x3E` in 1,073 of 1,103 (so bits 37..33 = `11111` = unconditional `TRUE` and bit 32 = 0), and the low 23 bits are a valid compute field (multiplier forms such as `R0 = MRF + R0 * R2 (SUIR)`, `R0 = SAT MRF (UI)`). Bits 31..23 hold extra non-zero values (`0x00`, `0x10`, `0x78`, `0x30`, `0x20`, `0x40`) whose meaning is unknown. `decode` prints these as `IF cond compute  [extra bits 31..23 = 0x..]` (type name `2x`, ASSUMED to be a 48-bit conditional compute with an extra field). Not found in Table 10-1 to 10-4 or the type diagrams of rev 2.4.
+
+**New decoding:** multiplier register ops (`SAT`, `RND`, `MRx = 0`; Table 12-5), index-register modify with immediate (Type 19a, `I4 = MODIFY(I1, 0x12)`; bit-reverse form too). Types 1a, 1b, 6a, 7a, 7b, 9a, 9b, 10a, 16a, 16b are now named by type (`TYPE_ONLY` in the tool) with raw operands, so they no longer count as unknown.
+
+**Coverage** (v1.64, six large blocks, 56,663 instructions):
+
+| Measure | Result |
+|---|---|
+| Type recognised | 98.7% (762 unnamed raw) |
+| Operands fully decoded | 95.4% (955 type-only, 881 with raw compute) |
+| Unnamed raw left | 742 `21/22` forms (first byte `0x00` with other bits set; look like inline data), 16 `??`, 3 `20a`, 1 `25` |
+
+The `21/22` rows sit where the tiling sees `000 00000` first bytes with non-zero low bits (for example `0001 76be 803f`); the likely reading is data words inside the blocks, not instructions.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications

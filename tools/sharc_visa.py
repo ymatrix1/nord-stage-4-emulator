@@ -51,6 +51,7 @@ def classify(p0: int, p1: int | None) -> tuple[str, int]:
     short = (p0 >> 7) & 1
     table = {
         0x01: ("2b", 2) if short else ("2a", 3),
+        0x02: ("2x", 3),
         0x04: ("7b", 2) if marker else ("7a", 3),
         0x06: ("8a", 3),
         0x07: ("8a", 3),
@@ -220,6 +221,25 @@ def mult_text(opcode: int, rn: int, rx: int, ry: int) -> str | None:
     f, sel, r = (opcode >> 3) & 1, (opcode >> 1) & 3, opcode & 1
     mod = f"({'S' if x else 'U'}{'S' if y else 'U'}{'F' if f else 'I'}{'R' if r else ''})"
     if cls == 0:
+        if opcode >> 4 == 0:  # Rn|MRx = SAT MRx mod2 (0000 f s x)
+            sat = {
+                0: f"R{rn} = SAT MRF",
+                1: f"R{rn} = SAT MRB",
+                2: "MRF = SAT MRF",
+                3: "MRB = SAT MRB",
+            }
+            return f"{sat[sel]} ({'U' if opcode & 1 else 'S'}{'F' if f else 'I'})"
+        if opcode in (0x14, 0x16):
+            return "MRF = 0" if opcode == 0x14 else "MRB = 0"
+        if opcode >> 4 == 1 and (opcode >> 3) & 1:
+            sel = (opcode >> 1) & 3
+            reg = {
+                0: f"R{rn} = RND MRF",
+                1: f"R{rn} = RND MRB",
+                2: "MRF = RND MRF",
+                3: "MRB = RND MRB",
+            }[sel]
+            return f"{reg} ({'U' if opcode & 1 else 'S'}F)"
         return None
     sign = {1: "", 2: "+ ", 3: "- "}[cls]
     reg = {0: "R{n}", 1: "R{n}", 2: "MRF", 3: "MRB"}[sel].format(n=rn)
@@ -354,6 +374,21 @@ def _mem_move(w: int, name: str, iff: str) -> str:
     return f"{iff}{ea} = {reg}{tail}" if write else f"{iff}{reg} = {ea}{tail}"
 
 
+# Instruction forms whose type is known from the diagrams but whose operand fields are not decoded.
+TYPE_ONLY = {
+    "1a": "dual DM/PM move + compute",
+    "1b": "dual DM/PM move",
+    "6a": "shift immediate",
+    "7a": "index modify + compute",
+    "7b": "index modify",
+    "9a": "indirect/rel branch + compute",
+    "9b": "indirect/rel branch",
+    "10a": "jump + dual move + compute",
+    "16a": "immediate store",
+    "16b": "immediate store (16-bit)",
+}
+
+
 def decode(parcels: tuple[int, ...]) -> str:
     """Disassembly text for one instruction (best effort; unknown forms stay raw)."""
     name, _ = classify(parcels[0], parcels[1] if len(parcels) > 1 else None)
@@ -391,6 +426,18 @@ def decode(parcels: tuple[int, ...]) -> str:
         return compute_text(bits(w, 38, 16))
     if name == "2c":
         return short_compute_text(bits(w, 43, 32))
+    if name == "2x":
+        extra = bits(w, 31, 23)
+        tail = f"  [extra bits 31..23 = 0x{extra:x}]" if extra else ""
+        return f"{iff}{compute_text(bits(w, 22, 0))}{tail}"
+    if name == "19a":
+        g = 8 if bits(w, 38, 38) else 0
+        src = bits(w, 34, 32) + g
+        dst = (bits(w, 37, 35) ^ bits(w, 34, 32)) + g
+        op = "BITREV" if bits(w, 39, 39) else "MODIFY"
+        return f"I{dst} = {op}(I{src}, 0x{bits(w, 31, 0):x})"
+    if name in TYPE_ONLY:
+        return f"{TYPE_ONLY[name]} (operands raw) " + " ".join(f"{x:04x}" for x in parcels)
     if name == "17a":
         return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 0):x}"
     if name == "17b":
