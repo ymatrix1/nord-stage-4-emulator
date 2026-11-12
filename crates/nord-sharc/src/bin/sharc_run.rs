@@ -287,8 +287,8 @@ mod tests {
     fn runs_a_tiny_image_and_reports_the_stop_reason() {
         let path = std::env::temp_dir().join("nord_sharc_run_test.bin");
         let mut image = vec![0u8; 0x24_0000 + 16];
-        // at short-word 0x120000 (byte 0x240000): NOP, then an unimplemented Type 6a word
-        for (k, p) in [0x0001u16, 0x8000, 0x0000, 0x0000].iter().enumerate() {
+        // at short-word 0x120000 (byte 0x240000): NOP, then an unimplemented Type 10a word
+        for (k, p) in [0x0001u16, 0xd70a, 0x3c23, 0xd70a].iter().enumerate() {
             image[0x24_0000 + 2 * k..0x24_0000 + 2 * k + 2].copy_from_slice(&p.to_le_bytes());
         }
         std::fs::write(&path, &image).unwrap();
@@ -361,10 +361,10 @@ mod tests {
         assert!(len.contains("steps 1"), "{len}");
         assert!(run(&[p, "0".into(), "1".into(), "--poke".into(), "x".into()]).is_err());
         std::fs::remove_file(&path).ok();
-        // a lenient run lists the skipped operation: `IF TRUE F1 = FPACK F2` is not modelled
+        // a lenient run lists the skipped operation: an MR3 transfer (compute 0x403000) does not exist
         let skip_path = std::env::temp_dir().join("nord_sharc_run_skip_test.bin");
         let mut image = vec![0u8; 0x24_0000 + 16];
-        for (k, p) in [0x013eu16, 0x0029, 0x0112, 0x0001].iter().enumerate() {
+        for (k, p) in [0x013eu16, 0x0040, 0x3000, 0x0001].iter().enumerate() {
             image[0x24_0000 + 2 * k..0x24_0000 + 2 * k + 2].copy_from_slice(&p.to_le_bytes());
         }
         std::fs::write(&skip_path, &image).unwrap();
@@ -378,7 +378,7 @@ mod tests {
         ])
         .unwrap();
         assert!(skipped.contains("skipped operations by text:"), "{skipped}");
-        assert!(skipped.contains("FPACK"), "{skipped}");
+        assert!(skipped.contains("MULTI?op=03"), "{skipped}");
         std::fs::remove_file(skip_path).ok();
     }
 }
