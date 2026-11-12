@@ -22,6 +22,8 @@ mod banks;
 mod bitfifo;
 mod branch;
 mod branch_ext;
+#[cfg(test)]
+mod compute_adi;
 mod dag;
 mod dag_modes;
 mod dualmove;
@@ -45,11 +47,16 @@ mod interrupts;
 #[cfg(test)]
 mod irq_scenarios;
 mod isa;
+#[cfg(test)]
+mod loops_measured;
 mod memory;
 mod moves;
 mod multifunction;
 mod multiplier;
 mod pcstack;
+pub mod periph;
+#[cfg(test)]
+mod probe_fixture;
 mod shifter;
 mod stacks;
 #[cfg(test)]
@@ -139,6 +146,9 @@ struct LoopFrame {
     check: u32,
     /// Instructions an arithmetic loop still runs after its condition held (0 = not leaving).
     exit_in: u8,
+    /// The instruction after the loop is skipped (a one instruction loop ended by the sample
+    /// of the `DO` itself).
+    skip_after: bool,
     /// Return addresses below this loop's top-of-loop entry on the shared PC stack (`pcstack`).
     cs_depth: usize,
     /// The top-of-loop address is not on the PC stack (`POP PCSTK` or a fresh `PUSH LOOP`).
@@ -220,6 +230,8 @@ pub struct Core {
     /// ISA-mode program memory ([`isa`]): 3 parcels (most significant first) per 48-bit word.
     /// Empty = VISA mode, where `pc` addresses the flat SRAM image in parcels.
     isa_code: Vec<u16>,
+    /// Optional peripheral models ([`periph`]); `None` keeps the plain device store.
+    periph: Option<Box<periph::Periph>>,
 }
 
 #[inline]
@@ -278,6 +290,7 @@ impl Core {
             banks: banks::Banks::default(),
             cb_wrap: std::cell::Cell::new(0),
             isa_code: Vec::new(),
+            periph: None,
         }
     }
 

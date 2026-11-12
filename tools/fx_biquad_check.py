@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Check the FX biquad cascade routine `0x120fdb` of the oracle against a reference model.
+
+Used by docs/research/fx-dsp-map.md section 6. The FX DSP image routine `0x120fdb` (FX Core1 and
+Core2, identical code) runs a cascade of three transposed direct form II biquads over four stereo
+frames in SIMD (left in PEx, right in PEy), coefficients `b0 b1 b2 a1 a2` read from PM at `I9`
+(`0x9437a`), states at `I1 + 0x12 + 4k` (`s1L s1R s2L s2R`), output in place at `I1 + 0xA`.
+This script runs it through `sharc-fx` (the oracle) on scripted inputs and states and compares the
+result word for word with
+
+    y  = b0 x + s1
+    s1 = (b1 x + s2) - a1 y
+    s2 = b2 x - a2 y
+
+computed in exact rational arithmetic with every operation rounded to the 40-bit register format
+(32-bit mantissa, round to nearest even, `MODE1.RND32 = 0`) in the order of the listing, and every
+store to memory keeping the upper 32 bits of the register (truncation toward zero).
+
+    cargo build -p nord-sharc --release
+    python tools/fx_biquad_check.py SRAM/core2_sram.bin
+"""
+
+from __future__ import annotations
+
+import argparse
+import math
+import struct
+import subprocess
+import sys
+from fractions import Fraction
+from pathlib import Path
+
+FRAMES = 4
+STAGES = 3
+IN_ADDR, FRAME_ADDR, COEF_ADDR = 0xB1000, 0xB2000, 0x9437A
+OUT_ADDR = FRAME_ADDR + 0xA
+STATE_ADDR = FRAME_ADDR + 0x12
+#: A state word may differ by this many float32 ulp (see `compare`): the stored state is the
+#: difference of two nearly equal terms, so a 1-ulp wobble of a 40-bit register shows up there.
+STATE_ULP_TOLERANCE = 8
+
+
+def bits(x: float) -> int:
+    return struct.unpack("<I", struct.pack("<f", x))[0]
+
+
+def from_bits(w: int) -> Fraction:
+    return Fraction(struct.unpack("<f", struct.pack("<I", w))[0])
+
+
+def word(q: Fraction) -> int:
+    """Float32 bit pattern of a value that is exactly representable (a stored word)."""
+    return bits(float(q))
+
+
+def round_mantissa(q: Fraction, width: int, nearest: bool) -> Fraction:
+    """`q` kept to `width` significant bits: round to nearest even, or truncate toward zero."""
+    if q == 0:
+        return q
+    a = abs(q)
+    e = a.numerator.bit_length() - a.denominator.bit_length()
+    if Fraction(2) ** e > a:
+        e -= 1
+    if Fraction(2) ** (e + 1) <= a:
+        e += 1
+    unit = Fraction(2) ** (e - (width - 1))
+    k = a / unit
+    m = math.floor(k)
+    if nearest:
+        rem = k - m
+        if rem > Fraction(1, 2) or (rem == Fraction(1, 2) and m % 2 == 1):
+            m += 1
+    return (m * unit) if q > 0 else -(m * unit)
+
+
+def ext40(q: Fraction) -> Fraction:
+    """A register value: 32-bit mantissa (24 of the IEEE single plus the 8 extension bits)."""
+    return round_mantissa(q, 32, True)
+
+
+def store32(q: Fraction) -> Fraction:
+    """What a store of a 40-bit register to a 32-bit memory word keeps (upper 32 bits)."""
+    return round_mantissa(q, 24, False)
+
+
+def biquad_step(
+    x: Fraction, coef: tuple[Fraction, ...], state: list[Fraction], rnd=ext40
+) -> Fraction:
+    """One sample of the firmware's transposed form II (state = [s1, s2]); every operation is
+    rounded with `rnd`. Returns the register value `y` (the caller stores it with `store32`)."""
+    b0, b1, b2, a1, a2 = coef
+    y = rnd(rnd(b0 * x) + state[0])
+    t = rnd(rnd(b1 * x) + state[1])
+    state[0] = rnd(t - rnd(a1 * y))
+    state[1] = rnd(rnd(b2 * x) - rnd(a2 * y))
+    return y
+
+
+def reference_cascade(
+    frames: list[tuple[Fraction, Fraction]],
+    coef: tuple[Fraction, ...],
+    states: list[Fraction],
+) -> list[tuple[Fraction, Fraction]]:
+    """`len(states) // 4` stages over stereo frames; each stage reads and writes memory words.
+    `states` is [s1L, s1R, s2L, s2R] per stage, loaded and stored as 32-bit words once per stage
+    and block, and updated in place."""
+    out = list(frames)
+    for k in range(len(states) // 4):
+        st = states[4 * k : 4 * k + 4]
+        sl, sr = [st[0], st[2]], [st[1], st[3]]
+        out = [
+            (store32(biquad_step(left, coef, sl)), store32(biquad_step(right, coef, sr)))
+            for (left, right) in out
+        ]
+        states[4 * k : 4 * k + 4] = [store32(v) for v in (sl[0], sr[0], sl[1], sr[1])]
+    return out
+
+
+def parse_dumps(text: str) -> list[dict[int, int]]:
+    """`call N:` blocks of `sharc-fx` output into one {address: word} dict per call."""
+    calls: list[dict[int, int]] = []
+    for line in text.splitlines():
+        if line.startswith("call "):
+            calls.append({})
+        elif line.startswith("dump ") and calls:
+            _, a, w, *_ = line.split()
+            calls[-1][int(a, 16)] = int(w, 16)
+    return calls
+
+
+def find_binary(explicit: str | None) -> Path:
+    if explicit:
+        return Path(explicit)
+    root = Path(__file__).resolve().parents[1]
+    for name in ("sharc-fx.exe", "sharc-fx"):
+        p = root / "target" / "release" / name
+        if p.exists():
+            return p
+    raise SystemExit("sharc-fx not built: cargo build -p nord-sharc --release")
+
+
+def fill(addr: int, words: list[Fraction], call: int | None = None) -> list[str]:
+    prefix = "" if call is None else f"{call}:"
+    return ["--fill", f"{prefix}{addr:#x}=" + ",".join(f"{word(w):#x}" for w in words)]
+
+
+def oracle_args(
+    image: str, blocks: list[list[tuple[Fraction, Fraction]]], states: list[Fraction]
+) -> list[str]:
+    """`sharc-fx` command line for one pass context plus one routine call per input block."""
+    a = [
+        image,
+        "--dev", "0x28300b00=1",
+        "--dev", "0x3108d008=5",
+        "--trigger", "0xC02C2",
+        "--stop-at", "0x12139b",
+        "--max", "200000",
+        "--call", "0x120fdb",
+        "--until", "0x1210b0",
+        "--calls", str(len(blocks)),
+        "--set", f"I0={IN_ADDR:#x}",
+        "--set", f"I1={FRAME_ADDR:#x}",
+        "--set", f"I9={COEF_ADDR:#x}",
+        "--set", "M0=0", "--set", "M2=2", "--set", "M9=1",
+        "--dump", f"{OUT_ADDR:#x}:{2 * FRAMES}",
+        "--dump", f"{STATE_ADDR:#x}:{4 * STAGES}",
+        "--dump", f"{COEF_ADDR:#x}:5",
+    ]  # fmt: skip
+    a += fill(STATE_ADDR, states)
+    for n, block in enumerate(blocks):
+        a += fill(IN_ADDR, [v for frame in block for v in frame], n)
+    return a
+
+
+def ulp_distance(a: int, b: int) -> int:
+    """Distance in float32 ulp between two words of the same sign."""
+    return abs(a - b) if (a >> 31) == (b >> 31) else 1 << 30
+
+
+def compare(
+    calls: list[dict[int, int]],
+    blocks: list[list[tuple[Fraction, Fraction]]],
+    states: list[Fraction],
+) -> dict[str, int]:
+    """Output words must be identical; state words are counted and their worst ulp error kept."""
+    coef = tuple(from_bits(calls[0][COEF_ADDR + k]) for k in range(5))
+    st = list(states)
+    r = {"out_same": 0, "out_total": 0, "st_same": 0, "st_total": 0, "st_worst_ulp": 0}
+    for dump, block in zip(calls, blocks):
+        want = reference_cascade(block, coef, st)
+        for k, v in enumerate(v for frame in want for v in frame):
+            r["out_total"] += 1
+            r["out_same"] += word(v) == dump[OUT_ADDR + k]
+        for k, v in enumerate(st):
+            r["st_total"] += 1
+            d = ulp_distance(word(v), dump[STATE_ADDR + k])
+            r["st_same"] += d == 0
+            r["st_worst_ulp"] = max(r["st_worst_ulp"], d)
+    return r
+
+
+def scenario() -> tuple[list[list[tuple[Fraction, Fraction]]], list[Fraction]]:
+    """Two input blocks (impulse-like, then a mixed block) and non-zero initial states."""
+
+    def q(x: float) -> Fraction:
+        return from_bits(bits(x))  # the float32 word the oracle will read
+
+    raw = [
+        [(1.0, 0.5), (0.0, 0.25), (0.0, 0.0), (0.0, -1.0)],
+        [(0.3, -0.7), (-0.2, 0.9), (0.05, 0.0), (0.6, 0.4)],
+    ]
+    blocks = [[(q(a), q(b)) for a, b in blk] for blk in raw]
+    states = [q(0.01 * (k + 1) * (-1) ** k) for k in range(4 * STAGES)]
+    return blocks, states
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    p.add_argument("image", help="FX Core1 or Core2 flat SRAM image (tools/ns4_dsp_ldr.py --sram)")
+    p.add_argument("--bin", help="path of sharc-fx (default target/release)")
+    args = p.parse_args(argv)
+    blocks, states = scenario()
+    cmd = [str(find_binary(args.bin))] + oracle_args(args.image, blocks, states)
+    run = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if run.returncode != 0:
+        print(run.stderr.strip() or run.stdout, file=sys.stderr)
+        return 1
+    calls = parse_dumps(run.stdout)
+    coef = [float(from_bits(calls[0][COEF_ADDR + k])) for k in range(5)]
+    print("coefficients b0 b1 b2 a1 a2 =", " ".join(f"{c:.9g}" for c in coef))
+    r = compare(calls, blocks, states)
+    print(
+        f"output words bit-identical {r['out_same']}/{r['out_total']}; "
+        f"state words bit-identical {r['st_same']}/{r['st_total']}, worst {r['st_worst_ulp']} ulp"
+    )
+    ok = r["out_same"] == r["out_total"] and r["st_worst_ulp"] <= STATE_ULP_TOLERANCE
+    return 0 if ok else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

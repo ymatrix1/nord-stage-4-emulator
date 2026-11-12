@@ -53,8 +53,13 @@ impl Core {
         }
     }
 
-    /// Executes a multiplier fixed-point op. Returns false (and changes nothing) for the forms
-    /// not modelled (integer rounding, SAT/RND forms that do not exist).
+    /// Executes a multiplier fixed-point op. Returns false (and changes nothing) for the codes
+    /// that are no multiplier operation (the SAT/RND forms that do not exist).
+    ///
+    /// ASSUMED: the integer rounding formats `SSIR`/`SUIR`/`USIR`/`UUIR` (ADI's assembler and
+    /// `elfdump` accept all four, `docs/research/sharc-type2c.md`) use the same rounding stage
+    /// as the fractional `R` formats (round half to even at bit 32), so `Rn` (MR0) reads zero.
+    /// Not measured on the simulator; no firmware image uses them (`sharc-run --skips`).
     ///
     /// ASSUMED: the active result register is always MRF (the MODE1 SRCU swap is ignored).
     pub(super) fn fixed_mult(&mut self, op: u64, n: usize, x: usize, y: usize) -> bool {

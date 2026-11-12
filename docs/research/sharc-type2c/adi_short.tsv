@@ -1,0 +1,4096 @@
+000	r0=r0+r0
+001	r0=r0+r1
+002	r0=r0+r2
+003	r0=r0+r3
+004	r0=r0+r4
+005	r0=r0+r5
+006	r0=r0+r6
+007	r0=r0+r7
+008	r0=r0+r8
+009	r0=r0+r9
+00a	r0=r0+r10
+00b	r0=r0+r11
+00c	r0=r0+r12
+00d	r0=r0+r13
+00e	r0=r0+r14
+00f	r0=r0+r15
+010	r1=r1+r0
+011	r1=r1+r1
+012	r1=r1+r2
+013	r1=r1+r3
+014	r1=r1+r4
+015	r1=r1+r5
+016	r1=r1+r6
+017	r1=r1+r7
+018	r1=r1+r8
+019	r1=r1+r9
+01a	r1=r1+r10
+01b	r1=r1+r11
+01c	r1=r1+r12
+01d	r1=r1+r13
+01e	r1=r1+r14
+01f	r1=r1+r15
+020	r2=r2+r0
+021	r2=r2+r1
+022	r2=r2+r2
+023	r2=r2+r3
+024	r2=r2+r4
+025	r2=r2+r5
+026	r2=r2+r6
+027	r2=r2+r7
+028	r2=r2+r8
+029	r2=r2+r9
+02a	r2=r2+r10
+02b	r2=r2+r11
+02c	r2=r2+r12
+02d	r2=r2+r13
+02e	r2=r2+r14
+02f	r2=r2+r15
+030	r3=r3+r0
+031	r3=r3+r1
+032	r3=r3+r2
+033	r3=r3+r3
+034	r3=r3+r4
+035	r3=r3+r5
+036	r3=r3+r6
+037	r3=r3+r7
+038	r3=r3+r8
+039	r3=r3+r9
+03a	r3=r3+r10
+03b	r3=r3+r11
+03c	r3=r3+r12
+03d	r3=r3+r13
+03e	r3=r3+r14
+03f	r3=r3+r15
+040	r4=r4+r0
+041	r4=r4+r1
+042	r4=r4+r2
+043	r4=r4+r3
+044	r4=r4+r4
+045	r4=r4+r5
+046	r4=r4+r6
+047	r4=r4+r7
+048	r4=r4+r8
+049	r4=r4+r9
+04a	r4=r4+r10
+04b	r4=r4+r11
+04c	r4=r4+r12
+04d	r4=r4+r13
+04e	r4=r4+r14
+04f	r4=r4+r15
+050	r5=r5+r0
+051	r5=r5+r1
+052	r5=r5+r2
+053	r5=r5+r3
+054	r5=r5+r4
+055	r5=r5+r5
+056	r5=r5+r6
+057	r5=r5+r7
+058	r5=r5+r8
+059	r5=r5+r9
+05a	r5=r5+r10
+05b	r5=r5+r11
+05c	r5=r5+r12
+05d	r5=r5+r13
+05e	r5=r5+r14
+05f	r5=r5+r15
+060	r6=r6+r0
+061	r6=r6+r1
+062	r6=r6+r2
+063	r6=r6+r3
+064	r6=r6+r4
+065	r6=r6+r5
+066	r6=r6+r6
+067	r6=r6+r7
+068	r6=r6+r8
+069	r6=r6+r9
+06a	r6=r6+r10
+06b	r6=r6+r11
+06c	r6=r6+r12
+06d	r6=r6+r13
+06e	r6=r6+r14
+06f	r6=r6+r15
+070	r7=r7+r0
+071	r7=r7+r1
+072	r7=r7+r2
+073	r7=r7+r3
+074	r7=r7+r4
+075	r7=r7+r5
+076	r7=r7+r6
+077	r7=r7+r7
+078	r7=r7+r8
+079	r7=r7+r9
+07a	r7=r7+r10
+07b	r7=r7+r11
+07c	r7=r7+r12
+07d	r7=r7+r13
+07e	r7=r7+r14
+07f	r7=r7+r15
+080	r8=r8+r0
+081	r8=r8+r1
+082	r8=r8+r2
+083	r8=r8+r3
+084	r8=r8+r4
+085	r8=r8+r5
+086	r8=r8+r6
+087	r8=r8+r7
+088	r8=r8+r8
+089	r8=r8+r9
+08a	r8=r8+r10
+08b	r8=r8+r11
+08c	r8=r8+r12
+08d	r8=r8+r13
+08e	r8=r8+r14
+08f	r8=r8+r15
+090	r9=r9+r0
+091	r9=r9+r1
+092	r9=r9+r2
+093	r9=r9+r3
+094	r9=r9+r4
+095	r9=r9+r5
+096	r9=r9+r6
+097	r9=r9+r7
+098	r9=r9+r8
+099	r9=r9+r9
+09a	r9=r9+r10
+09b	r9=r9+r11
+09c	r9=r9+r12
+09d	r9=r9+r13
+09e	r9=r9+r14
+09f	r9=r9+r15
+0a0	r10=r10+r0
+0a1	r10=r10+r1
+0a2	r10=r10+r2
+0a3	r10=r10+r3
+0a4	r10=r10+r4
+0a5	r10=r10+r5
+0a6	r10=r10+r6
+0a7	r10=r10+r7
+0a8	r10=r10+r8
+0a9	r10=r10+r9
+0aa	r10=r10+r10
+0ab	r10=r10+r11
+0ac	r10=r10+r12
+0ad	r10=r10+r13
+0ae	r10=r10+r14
+0af	r10=r10+r15
+0b0	r11=r11+r0
+0b1	r11=r11+r1
+0b2	r11=r11+r2
+0b3	r11=r11+r3
+0b4	r11=r11+r4
+0b5	r11=r11+r5
+0b6	r11=r11+r6
+0b7	r11=r11+r7
+0b8	r11=r11+r8
+0b9	r11=r11+r9
+0ba	r11=r11+r10
+0bb	r11=r11+r11
+0bc	r11=r11+r12
+0bd	r11=r11+r13
+0be	r11=r11+r14
+0bf	r11=r11+r15
+0c0	r12=r12+r0
+0c1	r12=r12+r1
+0c2	r12=r12+r2
+0c3	r12=r12+r3
+0c4	r12=r12+r4
+0c5	r12=r12+r5
+0c6	r12=r12+r6
+0c7	r12=r12+r7
+0c8	r12=r12+r8
+0c9	r12=r12+r9
+0ca	r12=r12+r10
+0cb	r12=r12+r11
+0cc	r12=r12+r12
+0cd	r12=r12+r13
+0ce	r12=r12+r14
+0cf	r12=r12+r15
+0d0	r13=r13+r0
+0d1	r13=r13+r1
+0d2	r13=r13+r2
+0d3	r13=r13+r3
+0d4	r13=r13+r4
+0d5	r13=r13+r5
+0d6	r13=r13+r6
+0d7	r13=r13+r7
+0d8	r13=r13+r8
+0d9	r13=r13+r9
+0da	r13=r13+r10
+0db	r13=r13+r11
+0dc	r13=r13+r12
+0dd	r13=r13+r13
+0de	r13=r13+r14
+0df	r13=r13+r15
+0e0	r14=r14+r0
+0e1	r14=r14+r1
+0e2	r14=r14+r2
+0e3	r14=r14+r3
+0e4	r14=r14+r4
+0e5	r14=r14+r5
+0e6	r14=r14+r6
+0e7	r14=r14+r7
+0e8	r14=r14+r8
+0e9	r14=r14+r9
+0ea	r14=r14+r10
+0eb	r14=r14+r11
+0ec	r14=r14+r12
+0ed	r14=r14+r13
+0ee	r14=r14+r14
+0ef	r14=r14+r15
+0f0	r15=r15+r0
+0f1	r15=r15+r1
+0f2	r15=r15+r2
+0f3	r15=r15+r3
+0f4	r15=r15+r4
+0f5	r15=r15+r5
+0f6	r15=r15+r6
+0f7	r15=r15+r7
+0f8	r15=r15+r8
+0f9	r15=r15+r9
+0fa	r15=r15+r10
+0fb	r15=r15+r11
+0fc	r15=r15+r12
+0fd	r15=r15+r13
+0fe	r15=r15+r14
+0ff	r15=r15+r15
+100	r0=r0-r0
+101	r0=r0-r1
+102	r0=r0-r2
+103	r0=r0-r3
+104	r0=r0-r4
+105	r0=r0-r5
+106	r0=r0-r6
+107	r0=r0-r7
+108	r0=r0-r8
+109	r0=r0-r9
+10a	r0=r0-r10
+10b	r0=r0-r11
+10c	r0=r0-r12
+10d	r0=r0-r13
+10e	r0=r0-r14
+10f	r0=r0-r15
+110	r1=r1-r0
+111	r1=r1-r1
+112	r1=r1-r2
+113	r1=r1-r3
+114	r1=r1-r4
+115	r1=r1-r5
+116	r1=r1-r6
+117	r1=r1-r7
+118	r1=r1-r8
+119	r1=r1-r9
+11a	r1=r1-r10
+11b	r1=r1-r11
+11c	r1=r1-r12
+11d	r1=r1-r13
+11e	r1=r1-r14
+11f	r1=r1-r15
+120	r2=r2-r0
+121	r2=r2-r1
+122	r2=r2-r2
+123	r2=r2-r3
+124	r2=r2-r4
+125	r2=r2-r5
+126	r2=r2-r6
+127	r2=r2-r7
+128	r2=r2-r8
+129	r2=r2-r9
+12a	r2=r2-r10
+12b	r2=r2-r11
+12c	r2=r2-r12
+12d	r2=r2-r13
+12e	r2=r2-r14
+12f	r2=r2-r15
+130	r3=r3-r0
+131	r3=r3-r1
+132	r3=r3-r2
+133	r3=r3-r3
+134	r3=r3-r4
+135	r3=r3-r5
+136	r3=r3-r6
+137	r3=r3-r7
+138	r3=r3-r8
+139	r3=r3-r9
+13a	r3=r3-r10
+13b	r3=r3-r11
+13c	r3=r3-r12
+13d	r3=r3-r13
+13e	r3=r3-r14
+13f	r3=r3-r15
+140	r4=r4-r0
+141	r4=r4-r1
+142	r4=r4-r2
+143	r4=r4-r3
+144	r4=r4-r4
+145	r4=r4-r5
+146	r4=r4-r6
+147	r4=r4-r7
+148	r4=r4-r8
+149	r4=r4-r9
+14a	r4=r4-r10
+14b	r4=r4-r11
+14c	r4=r4-r12
+14d	r4=r4-r13
+14e	r4=r4-r14
+14f	r4=r4-r15
+150	r5=r5-r0
+151	r5=r5-r1
+152	r5=r5-r2
+153	r5=r5-r3
+154	r5=r5-r4
+155	r5=r5-r5
+156	r5=r5-r6
+157	r5=r5-r7
+158	r5=r5-r8
+159	r5=r5-r9
+15a	r5=r5-r10
+15b	r5=r5-r11
+15c	r5=r5-r12
+15d	r5=r5-r13
+15e	r5=r5-r14
+15f	r5=r5-r15
+160	r6=r6-r0
+161	r6=r6-r1
+162	r6=r6-r2
+163	r6=r6-r3
+164	r6=r6-r4
+165	r6=r6-r5
+166	r6=r6-r6
+167	r6=r6-r7
+168	r6=r6-r8
+169	r6=r6-r9
+16a	r6=r6-r10
+16b	r6=r6-r11
+16c	r6=r6-r12
+16d	r6=r6-r13
+16e	r6=r6-r14
+16f	r6=r6-r15
+170	r7=r7-r0
+171	r7=r7-r1
+172	r7=r7-r2
+173	r7=r7-r3
+174	r7=r7-r4
+175	r7=r7-r5
+176	r7=r7-r6
+177	r7=r7-r7
+178	r7=r7-r8
+179	r7=r7-r9
+17a	r7=r7-r10
+17b	r7=r7-r11
+17c	r7=r7-r12
+17d	r7=r7-r13
+17e	r7=r7-r14
+17f	r7=r7-r15
+180	r8=r8-r0
+181	r8=r8-r1
+182	r8=r8-r2
+183	r8=r8-r3
+184	r8=r8-r4
+185	r8=r8-r5
+186	r8=r8-r6
+187	r8=r8-r7
+188	r8=r8-r8
+189	r8=r8-r9
+18a	r8=r8-r10
+18b	r8=r8-r11
+18c	r8=r8-r12
+18d	r8=r8-r13
+18e	r8=r8-r14
+18f	r8=r8-r15
+190	r9=r9-r0
+191	r9=r9-r1
+192	r9=r9-r2
+193	r9=r9-r3
+194	r9=r9-r4
+195	r9=r9-r5
+196	r9=r9-r6
+197	r9=r9-r7
+198	r9=r9-r8
+199	r9=r9-r9
+19a	r9=r9-r10
+19b	r9=r9-r11
+19c	r9=r9-r12
+19d	r9=r9-r13
+19e	r9=r9-r14
+19f	r9=r9-r15
+1a0	r10=r10-r0
+1a1	r10=r10-r1
+1a2	r10=r10-r2
+1a3	r10=r10-r3
+1a4	r10=r10-r4
+1a5	r10=r10-r5
+1a6	r10=r10-r6
+1a7	r10=r10-r7
+1a8	r10=r10-r8
+1a9	r10=r10-r9
+1aa	r10=r10-r10
+1ab	r10=r10-r11
+1ac	r10=r10-r12
+1ad	r10=r10-r13
+1ae	r10=r10-r14
+1af	r10=r10-r15
+1b0	r11=r11-r0
+1b1	r11=r11-r1
+1b2	r11=r11-r2
+1b3	r11=r11-r3
+1b4	r11=r11-r4
+1b5	r11=r11-r5
+1b6	r11=r11-r6
+1b7	r11=r11-r7
+1b8	r11=r11-r8
+1b9	r11=r11-r9
+1ba	r11=r11-r10
+1bb	r11=r11-r11
+1bc	r11=r11-r12
+1bd	r11=r11-r13
+1be	r11=r11-r14
+1bf	r11=r11-r15
+1c0	r12=r12-r0
+1c1	r12=r12-r1
+1c2	r12=r12-r2
+1c3	r12=r12-r3
+1c4	r12=r12-r4
+1c5	r12=r12-r5
+1c6	r12=r12-r6
+1c7	r12=r12-r7
+1c8	r12=r12-r8
+1c9	r12=r12-r9
+1ca	r12=r12-r10
+1cb	r12=r12-r11
+1cc	r12=r12-r12
+1cd	r12=r12-r13
+1ce	r12=r12-r14
+1cf	r12=r12-r15
+1d0	r13=r13-r0
+1d1	r13=r13-r1
+1d2	r13=r13-r2
+1d3	r13=r13-r3
+1d4	r13=r13-r4
+1d5	r13=r13-r5
+1d6	r13=r13-r6
+1d7	r13=r13-r7
+1d8	r13=r13-r8
+1d9	r13=r13-r9
+1da	r13=r13-r10
+1db	r13=r13-r11
+1dc	r13=r13-r12
+1dd	r13=r13-r13
+1de	r13=r13-r14
+1df	r13=r13-r15
+1e0	r14=r14-r0
+1e1	r14=r14-r1
+1e2	r14=r14-r2
+1e3	r14=r14-r3
+1e4	r14=r14-r4
+1e5	r14=r14-r5
+1e6	r14=r14-r6
+1e7	r14=r14-r7
+1e8	r14=r14-r8
+1e9	r14=r14-r9
+1ea	r14=r14-r10
+1eb	r14=r14-r11
+1ec	r14=r14-r12
+1ed	r14=r14-r13
+1ee	r14=r14-r14
+1ef	r14=r14-r15
+1f0	r15=r15-r0
+1f1	r15=r15-r1
+1f2	r15=r15-r2
+1f3	r15=r15-r3
+1f4	r15=r15-r4
+1f5	r15=r15-r5
+1f6	r15=r15-r6
+1f7	r15=r15-r7
+1f8	r15=r15-r8
+1f9	r15=r15-r9
+1fa	r15=r15-r10
+1fb	r15=r15-r11
+1fc	r15=r15-r12
+1fd	r15=r15-r13
+1fe	r15=r15-r14
+1ff	r15=r15-r15
+200	r0=pass r0
+201	r0=pass r1
+202	r0=pass r2
+203	r0=pass r3
+204	r0=pass r4
+205	r0=pass r5
+206	r0=pass r6
+207	r0=pass r7
+208	r0=pass r8
+209	r0=pass r9
+20a	r0=pass r10
+20b	r0=pass r11
+20c	r0=pass r12
+20d	r0=pass r13
+20e	r0=pass r14
+20f	r0=pass r15
+210	r1=pass r0
+211	r1=pass r1
+212	r1=pass r2
+213	r1=pass r3
+214	r1=pass r4
+215	r1=pass r5
+216	r1=pass r6
+217	r1=pass r7
+218	r1=pass r8
+219	r1=pass r9
+21a	r1=pass r10
+21b	r1=pass r11
+21c	r1=pass r12
+21d	r1=pass r13
+21e	r1=pass r14
+21f	r1=pass r15
+220	r2=pass r0
+221	r2=pass r1
+222	r2=pass r2
+223	r2=pass r3
+224	r2=pass r4
+225	r2=pass r5
+226	r2=pass r6
+227	r2=pass r7
+228	r2=pass r8
+229	r2=pass r9
+22a	r2=pass r10
+22b	r2=pass r11
+22c	r2=pass r12
+22d	r2=pass r13
+22e	r2=pass r14
+22f	r2=pass r15
+230	r3=pass r0
+231	r3=pass r1
+232	r3=pass r2
+233	r3=pass r3
+234	r3=pass r4
+235	r3=pass r5
+236	r3=pass r6
+237	r3=pass r7
+238	r3=pass r8
+239	r3=pass r9
+23a	r3=pass r10
+23b	r3=pass r11
+23c	r3=pass r12
+23d	r3=pass r13
+23e	r3=pass r14
+23f	r3=pass r15
+240	r4=pass r0
+241	r4=pass r1
+242	r4=pass r2
+243	r4=pass r3
+244	r4=pass r4
+245	r4=pass r5
+246	r4=pass r6
+247	r4=pass r7
+248	r4=pass r8
+249	r4=pass r9
+24a	r4=pass r10
+24b	r4=pass r11
+24c	r4=pass r12
+24d	r4=pass r13
+24e	r4=pass r14
+24f	r4=pass r15
+250	r5=pass r0
+251	r5=pass r1
+252	r5=pass r2
+253	r5=pass r3
+254	r5=pass r4
+255	r5=pass r5
+256	r5=pass r6
+257	r5=pass r7
+258	r5=pass r8
+259	r5=pass r9
+25a	r5=pass r10
+25b	r5=pass r11
+25c	r5=pass r12
+25d	r5=pass r13
+25e	r5=pass r14
+25f	r5=pass r15
+260	r6=pass r0
+261	r6=pass r1
+262	r6=pass r2
+263	r6=pass r3
+264	r6=pass r4
+265	r6=pass r5
+266	r6=pass r6
+267	r6=pass r7
+268	r6=pass r8
+269	r6=pass r9
+26a	r6=pass r10
+26b	r6=pass r11
+26c	r6=pass r12
+26d	r6=pass r13
+26e	r6=pass r14
+26f	r6=pass r15
+270	r7=pass r0
+271	r7=pass r1
+272	r7=pass r2
+273	r7=pass r3
+274	r7=pass r4
+275	r7=pass r5
+276	r7=pass r6
+277	r7=pass r7
+278	r7=pass r8
+279	r7=pass r9
+27a	r7=pass r10
+27b	r7=pass r11
+27c	r7=pass r12
+27d	r7=pass r13
+27e	r7=pass r14
+27f	r7=pass r15
+280	r8=pass r0
+281	r8=pass r1
+282	r8=pass r2
+283	r8=pass r3
+284	r8=pass r4
+285	r8=pass r5
+286	r8=pass r6
+287	r8=pass r7
+288	r8=pass r8
+289	r8=pass r9
+28a	r8=pass r10
+28b	r8=pass r11
+28c	r8=pass r12
+28d	r8=pass r13
+28e	r8=pass r14
+28f	r8=pass r15
+290	r9=pass r0
+291	r9=pass r1
+292	r9=pass r2
+293	r9=pass r3
+294	r9=pass r4
+295	r9=pass r5
+296	r9=pass r6
+297	r9=pass r7
+298	r9=pass r8
+299	r9=pass r9
+29a	r9=pass r10
+29b	r9=pass r11
+29c	r9=pass r12
+29d	r9=pass r13
+29e	r9=pass r14
+29f	r9=pass r15
+2a0	r10=pass r0
+2a1	r10=pass r1
+2a2	r10=pass r2
+2a3	r10=pass r3
+2a4	r10=pass r4
+2a5	r10=pass r5
+2a6	r10=pass r6
+2a7	r10=pass r7
+2a8	r10=pass r8
+2a9	r10=pass r9
+2aa	r10=pass r10
+2ab	r10=pass r11
+2ac	r10=pass r12
+2ad	r10=pass r13
+2ae	r10=pass r14
+2af	r10=pass r15
+2b0	r11=pass r0
+2b1	r11=pass r1
+2b2	r11=pass r2
+2b3	r11=pass r3
+2b4	r11=pass r4
+2b5	r11=pass r5
+2b6	r11=pass r6
+2b7	r11=pass r7
+2b8	r11=pass r8
+2b9	r11=pass r9
+2ba	r11=pass r10
+2bb	r11=pass r11
+2bc	r11=pass r12
+2bd	r11=pass r13
+2be	r11=pass r14
+2bf	r11=pass r15
+2c0	r12=pass r0
+2c1	r12=pass r1
+2c2	r12=pass r2
+2c3	r12=pass r3
+2c4	r12=pass r4
+2c5	r12=pass r5
+2c6	r12=pass r6
+2c7	r12=pass r7
+2c8	r12=pass r8
+2c9	r12=pass r9
+2ca	r12=pass r10
+2cb	r12=pass r11
+2cc	r12=pass r12
+2cd	r12=pass r13
+2ce	r12=pass r14
+2cf	r12=pass r15
+2d0	r13=pass r0
+2d1	r13=pass r1
+2d2	r13=pass r2
+2d3	r13=pass r3
+2d4	r13=pass r4
+2d5	r13=pass r5
+2d6	r13=pass r6
+2d7	r13=pass r7
+2d8	r13=pass r8
+2d9	r13=pass r9
+2da	r13=pass r10
+2db	r13=pass r11
+2dc	r13=pass r12
+2dd	r13=pass r13
+2de	r13=pass r14
+2df	r13=pass r15
+2e0	r14=pass r0
+2e1	r14=pass r1
+2e2	r14=pass r2
+2e3	r14=pass r3
+2e4	r14=pass r4
+2e5	r14=pass r5
+2e6	r14=pass r6
+2e7	r14=pass r7
+2e8	r14=pass r8
+2e9	r14=pass r9
+2ea	r14=pass r10
+2eb	r14=pass r11
+2ec	r14=pass r12
+2ed	r14=pass r13
+2ee	r14=pass r14
+2ef	r14=pass r15
+2f0	r15=pass r0
+2f1	r15=pass r1
+2f2	r15=pass r2
+2f3	r15=pass r3
+2f4	r15=pass r4
+2f5	r15=pass r5
+2f6	r15=pass r6
+2f7	r15=pass r7
+2f8	r15=pass r8
+2f9	r15=pass r9
+2fa	r15=pass r10
+2fb	r15=pass r11
+2fc	r15=pass r12
+2fd	r15=pass r13
+2fe	r15=pass r14
+2ff	r15=pass r15
+300	comp(r0,r0)
+301	comp(r0,r1)
+302	comp(r0,r2)
+303	comp(r0,r3)
+304	comp(r0,r4)
+305	comp(r0,r5)
+306	comp(r0,r6)
+307	comp(r0,r7)
+308	comp(r0,r8)
+309	comp(r0,r9)
+30a	comp(r0,r10)
+30b	comp(r0,r11)
+30c	comp(r0,r12)
+30d	comp(r0,r13)
+30e	comp(r0,r14)
+30f	comp(r0,r15)
+310	comp(r1,r0)
+311	comp(r1,r1)
+312	comp(r1,r2)
+313	comp(r1,r3)
+314	comp(r1,r4)
+315	comp(r1,r5)
+316	comp(r1,r6)
+317	comp(r1,r7)
+318	comp(r1,r8)
+319	comp(r1,r9)
+31a	comp(r1,r10)
+31b	comp(r1,r11)
+31c	comp(r1,r12)
+31d	comp(r1,r13)
+31e	comp(r1,r14)
+31f	comp(r1,r15)
+320	comp(r2,r0)
+321	comp(r2,r1)
+322	comp(r2,r2)
+323	comp(r2,r3)
+324	comp(r2,r4)
+325	comp(r2,r5)
+326	comp(r2,r6)
+327	comp(r2,r7)
+328	comp(r2,r8)
+329	comp(r2,r9)
+32a	comp(r2,r10)
+32b	comp(r2,r11)
+32c	comp(r2,r12)
+32d	comp(r2,r13)
+32e	comp(r2,r14)
+32f	comp(r2,r15)
+330	comp(r3,r0)
+331	comp(r3,r1)
+332	comp(r3,r2)
+333	comp(r3,r3)
+334	comp(r3,r4)
+335	comp(r3,r5)
+336	comp(r3,r6)
+337	comp(r3,r7)
+338	comp(r3,r8)
+339	comp(r3,r9)
+33a	comp(r3,r10)
+33b	comp(r3,r11)
+33c	comp(r3,r12)
+33d	comp(r3,r13)
+33e	comp(r3,r14)
+33f	comp(r3,r15)
+340	comp(r4,r0)
+341	comp(r4,r1)
+342	comp(r4,r2)
+343	comp(r4,r3)
+344	comp(r4,r4)
+345	comp(r4,r5)
+346	comp(r4,r6)
+347	comp(r4,r7)
+348	comp(r4,r8)
+349	comp(r4,r9)
+34a	comp(r4,r10)
+34b	comp(r4,r11)
+34c	comp(r4,r12)
+34d	comp(r4,r13)
+34e	comp(r4,r14)
+34f	comp(r4,r15)
+350	comp(r5,r0)
+351	comp(r5,r1)
+352	comp(r5,r2)
+353	comp(r5,r3)
+354	comp(r5,r4)
+355	comp(r5,r5)
+356	comp(r5,r6)
+357	comp(r5,r7)
+358	comp(r5,r8)
+359	comp(r5,r9)
+35a	comp(r5,r10)
+35b	comp(r5,r11)
+35c	comp(r5,r12)
+35d	comp(r5,r13)
+35e	comp(r5,r14)
+35f	comp(r5,r15)
+360	comp(r6,r0)
+361	comp(r6,r1)
+362	comp(r6,r2)
+363	comp(r6,r3)
+364	comp(r6,r4)
+365	comp(r6,r5)
+366	comp(r6,r6)
+367	comp(r6,r7)
+368	comp(r6,r8)
+369	comp(r6,r9)
+36a	comp(r6,r10)
+36b	comp(r6,r11)
+36c	comp(r6,r12)
+36d	comp(r6,r13)
+36e	comp(r6,r14)
+36f	comp(r6,r15)
+370	comp(r7,r0)
+371	comp(r7,r1)
+372	comp(r7,r2)
+373	comp(r7,r3)
+374	comp(r7,r4)
+375	comp(r7,r5)
+376	comp(r7,r6)
+377	comp(r7,r7)
+378	comp(r7,r8)
+379	comp(r7,r9)
+37a	comp(r7,r10)
+37b	comp(r7,r11)
+37c	comp(r7,r12)
+37d	comp(r7,r13)
+37e	comp(r7,r14)
+37f	comp(r7,r15)
+380	comp(r8,r0)
+381	comp(r8,r1)
+382	comp(r8,r2)
+383	comp(r8,r3)
+384	comp(r8,r4)
+385	comp(r8,r5)
+386	comp(r8,r6)
+387	comp(r8,r7)
+388	comp(r8,r8)
+389	comp(r8,r9)
+38a	comp(r8,r10)
+38b	comp(r8,r11)
+38c	comp(r8,r12)
+38d	comp(r8,r13)
+38e	comp(r8,r14)
+38f	comp(r8,r15)
+390	comp(r9,r0)
+391	comp(r9,r1)
+392	comp(r9,r2)
+393	comp(r9,r3)
+394	comp(r9,r4)
+395	comp(r9,r5)
+396	comp(r9,r6)
+397	comp(r9,r7)
+398	comp(r9,r8)
+399	comp(r9,r9)
+39a	comp(r9,r10)
+39b	comp(r9,r11)
+39c	comp(r9,r12)
+39d	comp(r9,r13)
+39e	comp(r9,r14)
+39f	comp(r9,r15)
+3a0	comp(r10,r0)
+3a1	comp(r10,r1)
+3a2	comp(r10,r2)
+3a3	comp(r10,r3)
+3a4	comp(r10,r4)
+3a5	comp(r10,r5)
+3a6	comp(r10,r6)
+3a7	comp(r10,r7)
+3a8	comp(r10,r8)
+3a9	comp(r10,r9)
+3aa	comp(r10,r10)
+3ab	comp(r10,r11)
+3ac	comp(r10,r12)
+3ad	comp(r10,r13)
+3ae	comp(r10,r14)
+3af	comp(r10,r15)
+3b0	comp(r11,r0)
+3b1	comp(r11,r1)
+3b2	comp(r11,r2)
+3b3	comp(r11,r3)
+3b4	comp(r11,r4)
+3b5	comp(r11,r5)
+3b6	comp(r11,r6)
+3b7	comp(r11,r7)
+3b8	comp(r11,r8)
+3b9	comp(r11,r9)
+3ba	comp(r11,r10)
+3bb	comp(r11,r11)
+3bc	comp(r11,r12)
+3bd	comp(r11,r13)
+3be	comp(r11,r14)
+3bf	comp(r11,r15)
+3c0	comp(r12,r0)
+3c1	comp(r12,r1)
+3c2	comp(r12,r2)
+3c3	comp(r12,r3)
+3c4	comp(r12,r4)
+3c5	comp(r12,r5)
+3c6	comp(r12,r6)
+3c7	comp(r12,r7)
+3c8	comp(r12,r8)
+3c9	comp(r12,r9)
+3ca	comp(r12,r10)
+3cb	comp(r12,r11)
+3cc	comp(r12,r12)
+3cd	comp(r12,r13)
+3ce	comp(r12,r14)
+3cf	comp(r12,r15)
+3d0	comp(r13,r0)
+3d1	comp(r13,r1)
+3d2	comp(r13,r2)
+3d3	comp(r13,r3)
+3d4	comp(r13,r4)
+3d5	comp(r13,r5)
+3d6	comp(r13,r6)
+3d7	comp(r13,r7)
+3d8	comp(r13,r8)
+3d9	comp(r13,r9)
+3da	comp(r13,r10)
+3db	comp(r13,r11)
+3dc	comp(r13,r12)
+3dd	comp(r13,r13)
+3de	comp(r13,r14)
+3df	comp(r13,r15)
+3e0	comp(r14,r0)
+3e1	comp(r14,r1)
+3e2	comp(r14,r2)
+3e3	comp(r14,r3)
+3e4	comp(r14,r4)
+3e5	comp(r14,r5)
+3e6	comp(r14,r6)
+3e7	comp(r14,r7)
+3e8	comp(r14,r8)
+3e9	comp(r14,r9)
+3ea	comp(r14,r10)
+3eb	comp(r14,r11)
+3ec	comp(r14,r12)
+3ed	comp(r14,r13)
+3ee	comp(r14,r14)
+3ef	comp(r14,r15)
+3f0	comp(r15,r0)
+3f1	comp(r15,r1)
+3f2	comp(r15,r2)
+3f3	comp(r15,r3)
+3f4	comp(r15,r4)
+3f5	comp(r15,r5)
+3f6	comp(r15,r6)
+3f7	comp(r15,r7)
+3f8	comp(r15,r8)
+3f9	comp(r15,r9)
+3fa	comp(r15,r10)
+3fb	comp(r15,r11)
+3fc	comp(r15,r12)
+3fd	comp(r15,r13)
+3fe	comp(r15,r14)
+3ff	comp(r15,r15)
+400	r0= not r0
+401	r0= not r1
+402	r0= not r2
+403	r0= not r3
+404	r0= not r4
+405	r0= not r5
+406	r0= not r6
+407	r0= not r7
+408	r0= not r8
+409	r0= not r9
+40a	r0= not r10
+40b	r0= not r11
+40c	r0= not r12
+40d	r0= not r13
+40e	r0= not r14
+40f	r0= not r15
+410	r1= not r0
+411	r1= not r1
+412	r1= not r2
+413	r1= not r3
+414	r1= not r4
+415	r1= not r5
+416	r1= not r6
+417	r1= not r7
+418	r1= not r8
+419	r1= not r9
+41a	r1= not r10
+41b	r1= not r11
+41c	r1= not r12
+41d	r1= not r13
+41e	r1= not r14
+41f	r1= not r15
+420	r2= not r0
+421	r2= not r1
+422	r2= not r2
+423	r2= not r3
+424	r2= not r4
+425	r2= not r5
+426	r2= not r6
+427	r2= not r7
+428	r2= not r8
+429	r2= not r9
+42a	r2= not r10
+42b	r2= not r11
+42c	r2= not r12
+42d	r2= not r13
+42e	r2= not r14
+42f	r2= not r15
+430	r3= not r0
+431	r3= not r1
+432	r3= not r2
+433	r3= not r3
+434	r3= not r4
+435	r3= not r5
+436	r3= not r6
+437	r3= not r7
+438	r3= not r8
+439	r3= not r9
+43a	r3= not r10
+43b	r3= not r11
+43c	r3= not r12
+43d	r3= not r13
+43e	r3= not r14
+43f	r3= not r15
+440	r4= not r0
+441	r4= not r1
+442	r4= not r2
+443	r4= not r3
+444	r4= not r4
+445	r4= not r5
+446	r4= not r6
+447	r4= not r7
+448	r4= not r8
+449	r4= not r9
+44a	r4= not r10
+44b	r4= not r11
+44c	r4= not r12
+44d	r4= not r13
+44e	r4= not r14
+44f	r4= not r15
+450	r5= not r0
+451	r5= not r1
+452	r5= not r2
+453	r5= not r3
+454	r5= not r4
+455	r5= not r5
+456	r5= not r6
+457	r5= not r7
+458	r5= not r8
+459	r5= not r9
+45a	r5= not r10
+45b	r5= not r11
+45c	r5= not r12
+45d	r5= not r13
+45e	r5= not r14
+45f	r5= not r15
+460	r6= not r0
+461	r6= not r1
+462	r6= not r2
+463	r6= not r3
+464	r6= not r4
+465	r6= not r5
+466	r6= not r6
+467	r6= not r7
+468	r6= not r8
+469	r6= not r9
+46a	r6= not r10
+46b	r6= not r11
+46c	r6= not r12
+46d	r6= not r13
+46e	r6= not r14
+46f	r6= not r15
+470	r7= not r0
+471	r7= not r1
+472	r7= not r2
+473	r7= not r3
+474	r7= not r4
+475	r7= not r5
+476	r7= not r6
+477	r7= not r7
+478	r7= not r8
+479	r7= not r9
+47a	r7= not r10
+47b	r7= not r11
+47c	r7= not r12
+47d	r7= not r13
+47e	r7= not r14
+47f	r7= not r15
+480	r8= not r0
+481	r8= not r1
+482	r8= not r2
+483	r8= not r3
+484	r8= not r4
+485	r8= not r5
+486	r8= not r6
+487	r8= not r7
+488	r8= not r8
+489	r8= not r9
+48a	r8= not r10
+48b	r8= not r11
+48c	r8= not r12
+48d	r8= not r13
+48e	r8= not r14
+48f	r8= not r15
+490	r9= not r0
+491	r9= not r1
+492	r9= not r2
+493	r9= not r3
+494	r9= not r4
+495	r9= not r5
+496	r9= not r6
+497	r9= not r7
+498	r9= not r8
+499	r9= not r9
+49a	r9= not r10
+49b	r9= not r11
+49c	r9= not r12
+49d	r9= not r13
+49e	r9= not r14
+49f	r9= not r15
+4a0	r10= not r0
+4a1	r10= not r1
+4a2	r10= not r2
+4a3	r10= not r3
+4a4	r10= not r4
+4a5	r10= not r5
+4a6	r10= not r6
+4a7	r10= not r7
+4a8	r10= not r8
+4a9	r10= not r9
+4aa	r10= not r10
+4ab	r10= not r11
+4ac	r10= not r12
+4ad	r10= not r13
+4ae	r10= not r14
+4af	r10= not r15
+4b0	r11= not r0
+4b1	r11= not r1
+4b2	r11= not r2
+4b3	r11= not r3
+4b4	r11= not r4
+4b5	r11= not r5
+4b6	r11= not r6
+4b7	r11= not r7
+4b8	r11= not r8
+4b9	r11= not r9
+4ba	r11= not r10
+4bb	r11= not r11
+4bc	r11= not r12
+4bd	r11= not r13
+4be	r11= not r14
+4bf	r11= not r15
+4c0	r12= not r0
+4c1	r12= not r1
+4c2	r12= not r2
+4c3	r12= not r3
+4c4	r12= not r4
+4c5	r12= not r5
+4c6	r12= not r6
+4c7	r12= not r7
+4c8	r12= not r8
+4c9	r12= not r9
+4ca	r12= not r10
+4cb	r12= not r11
+4cc	r12= not r12
+4cd	r12= not r13
+4ce	r12= not r14
+4cf	r12= not r15
+4d0	r13= not r0
+4d1	r13= not r1
+4d2	r13= not r2
+4d3	r13= not r3
+4d4	r13= not r4
+4d5	r13= not r5
+4d6	r13= not r6
+4d7	r13= not r7
+4d8	r13= not r8
+4d9	r13= not r9
+4da	r13= not r10
+4db	r13= not r11
+4dc	r13= not r12
+4dd	r13= not r13
+4de	r13= not r14
+4df	r13= not r15
+4e0	r14= not r0
+4e1	r14= not r1
+4e2	r14= not r2
+4e3	r14= not r3
+4e4	r14= not r4
+4e5	r14= not r5
+4e6	r14= not r6
+4e7	r14= not r7
+4e8	r14= not r8
+4e9	r14= not r9
+4ea	r14= not r10
+4eb	r14= not r11
+4ec	r14= not r12
+4ed	r14= not r13
+4ee	r14= not r14
+4ef	r14= not r15
+4f0	r15= not r0
+4f1	r15= not r1
+4f2	r15= not r2
+4f3	r15= not r3
+4f4	r15= not r4
+4f5	r15= not r5
+4f6	r15= not r6
+4f7	r15= not r7
+4f8	r15= not r8
+4f9	r15= not r9
+4fa	r15= not r10
+4fb	r15= not r11
+4fc	r15= not r12
+4fd	r15= not r13
+4fe	r15= not r14
+4ff	r15= not r15
+500	r0=r0+1
+501	r0=r1+1
+502	r0=r2+1
+503	r0=r3+1
+504	r0=r4+1
+505	r0=r5+1
+506	r0=r6+1
+507	r0=r7+1
+508	r0=r8+1
+509	r0=r9+1
+50a	r0=r10+1
+50b	r0=r11+1
+50c	r0=r12+1
+50d	r0=r13+1
+50e	r0=r14+1
+50f	r0=r15+1
+510	r1=r0+1
+511	r1=r1+1
+512	r1=r2+1
+513	r1=r3+1
+514	r1=r4+1
+515	r1=r5+1
+516	r1=r6+1
+517	r1=r7+1
+518	r1=r8+1
+519	r1=r9+1
+51a	r1=r10+1
+51b	r1=r11+1
+51c	r1=r12+1
+51d	r1=r13+1
+51e	r1=r14+1
+51f	r1=r15+1
+520	r2=r0+1
+521	r2=r1+1
+522	r2=r2+1
+523	r2=r3+1
+524	r2=r4+1
+525	r2=r5+1
+526	r2=r6+1
+527	r2=r7+1
+528	r2=r8+1
+529	r2=r9+1
+52a	r2=r10+1
+52b	r2=r11+1
+52c	r2=r12+1
+52d	r2=r13+1
+52e	r2=r14+1
+52f	r2=r15+1
+530	r3=r0+1
+531	r3=r1+1
+532	r3=r2+1
+533	r3=r3+1
+534	r3=r4+1
+535	r3=r5+1
+536	r3=r6+1
+537	r3=r7+1
+538	r3=r8+1
+539	r3=r9+1
+53a	r3=r10+1
+53b	r3=r11+1
+53c	r3=r12+1
+53d	r3=r13+1
+53e	r3=r14+1
+53f	r3=r15+1
+540	r4=r0+1
+541	r4=r1+1
+542	r4=r2+1
+543	r4=r3+1
+544	r4=r4+1
+545	r4=r5+1
+546	r4=r6+1
+547	r4=r7+1
+548	r4=r8+1
+549	r4=r9+1
+54a	r4=r10+1
+54b	r4=r11+1
+54c	r4=r12+1
+54d	r4=r13+1
+54e	r4=r14+1
+54f	r4=r15+1
+550	r5=r0+1
+551	r5=r1+1
+552	r5=r2+1
+553	r5=r3+1
+554	r5=r4+1
+555	r5=r5+1
+556	r5=r6+1
+557	r5=r7+1
+558	r5=r8+1
+559	r5=r9+1
+55a	r5=r10+1
+55b	r5=r11+1
+55c	r5=r12+1
+55d	r5=r13+1
+55e	r5=r14+1
+55f	r5=r15+1
+560	r6=r0+1
+561	r6=r1+1
+562	r6=r2+1
+563	r6=r3+1
+564	r6=r4+1
+565	r6=r5+1
+566	r6=r6+1
+567	r6=r7+1
+568	r6=r8+1
+569	r6=r9+1
+56a	r6=r10+1
+56b	r6=r11+1
+56c	r6=r12+1
+56d	r6=r13+1
+56e	r6=r14+1
+56f	r6=r15+1
+570	r7=r0+1
+571	r7=r1+1
+572	r7=r2+1
+573	r7=r3+1
+574	r7=r4+1
+575	r7=r5+1
+576	r7=r6+1
+577	r7=r7+1
+578	r7=r8+1
+579	r7=r9+1
+57a	r7=r10+1
+57b	r7=r11+1
+57c	r7=r12+1
+57d	r7=r13+1
+57e	r7=r14+1
+57f	r7=r15+1
+580	r8=r0+1
+581	r8=r1+1
+582	r8=r2+1
+583	r8=r3+1
+584	r8=r4+1
+585	r8=r5+1
+586	r8=r6+1
+587	r8=r7+1
+588	r8=r8+1
+589	r8=r9+1
+58a	r8=r10+1
+58b	r8=r11+1
+58c	r8=r12+1
+58d	r8=r13+1
+58e	r8=r14+1
+58f	r8=r15+1
+590	r9=r0+1
+591	r9=r1+1
+592	r9=r2+1
+593	r9=r3+1
+594	r9=r4+1
+595	r9=r5+1
+596	r9=r6+1
+597	r9=r7+1
+598	r9=r8+1
+599	r9=r9+1
+59a	r9=r10+1
+59b	r9=r11+1
+59c	r9=r12+1
+59d	r9=r13+1
+59e	r9=r14+1
+59f	r9=r15+1
+5a0	r10=r0+1
+5a1	r10=r1+1
+5a2	r10=r2+1
+5a3	r10=r3+1
+5a4	r10=r4+1
+5a5	r10=r5+1
+5a6	r10=r6+1
+5a7	r10=r7+1
+5a8	r10=r8+1
+5a9	r10=r9+1
+5aa	r10=r10+1
+5ab	r10=r11+1
+5ac	r10=r12+1
+5ad	r10=r13+1
+5ae	r10=r14+1
+5af	r10=r15+1
+5b0	r11=r0+1
+5b1	r11=r1+1
+5b2	r11=r2+1
+5b3	r11=r3+1
+5b4	r11=r4+1
+5b5	r11=r5+1
+5b6	r11=r6+1
+5b7	r11=r7+1
+5b8	r11=r8+1
+5b9	r11=r9+1
+5ba	r11=r10+1
+5bb	r11=r11+1
+5bc	r11=r12+1
+5bd	r11=r13+1
+5be	r11=r14+1
+5bf	r11=r15+1
+5c0	r12=r0+1
+5c1	r12=r1+1
+5c2	r12=r2+1
+5c3	r12=r3+1
+5c4	r12=r4+1
+5c5	r12=r5+1
+5c6	r12=r6+1
+5c7	r12=r7+1
+5c8	r12=r8+1
+5c9	r12=r9+1
+5ca	r12=r10+1
+5cb	r12=r11+1
+5cc	r12=r12+1
+5cd	r12=r13+1
+5ce	r12=r14+1
+5cf	r12=r15+1
+5d0	r13=r0+1
+5d1	r13=r1+1
+5d2	r13=r2+1
+5d3	r13=r3+1
+5d4	r13=r4+1
+5d5	r13=r5+1
+5d6	r13=r6+1
+5d7	r13=r7+1
+5d8	r13=r8+1
+5d9	r13=r9+1
+5da	r13=r10+1
+5db	r13=r11+1
+5dc	r13=r12+1
+5dd	r13=r13+1
+5de	r13=r14+1
+5df	r13=r15+1
+5e0	r14=r0+1
+5e1	r14=r1+1
+5e2	r14=r2+1
+5e3	r14=r3+1
+5e4	r14=r4+1
+5e5	r14=r5+1
+5e6	r14=r6+1
+5e7	r14=r7+1
+5e8	r14=r8+1
+5e9	r14=r9+1
+5ea	r14=r10+1
+5eb	r14=r11+1
+5ec	r14=r12+1
+5ed	r14=r13+1
+5ee	r14=r14+1
+5ef	r14=r15+1
+5f0	r15=r0+1
+5f1	r15=r1+1
+5f2	r15=r2+1
+5f3	r15=r3+1
+5f4	r15=r4+1
+5f5	r15=r5+1
+5f6	r15=r6+1
+5f7	r15=r7+1
+5f8	r15=r8+1
+5f9	r15=r9+1
+5fa	r15=r10+1
+5fb	r15=r11+1
+5fc	r15=r12+1
+5fd	r15=r13+1
+5fe	r15=r14+1
+5ff	r15=r15+1
+600	r0=r0-1
+601	r0=r1-1
+602	r0=r2-1
+603	r0=r3-1
+604	r0=r4-1
+605	r0=r5-1
+606	r0=r6-1
+607	r0=r7-1
+608	r0=r8-1
+609	r0=r9-1
+60a	r0=r10-1
+60b	r0=r11-1
+60c	r0=r12-1
+60d	r0=r13-1
+60e	r0=r14-1
+60f	r0=r15-1
+610	r1=r0-1
+611	r1=r1-1
+612	r1=r2-1
+613	r1=r3-1
+614	r1=r4-1
+615	r1=r5-1
+616	r1=r6-1
+617	r1=r7-1
+618	r1=r8-1
+619	r1=r9-1
+61a	r1=r10-1
+61b	r1=r11-1
+61c	r1=r12-1
+61d	r1=r13-1
+61e	r1=r14-1
+61f	r1=r15-1
+620	r2=r0-1
+621	r2=r1-1
+622	r2=r2-1
+623	r2=r3-1
+624	r2=r4-1
+625	r2=r5-1
+626	r2=r6-1
+627	r2=r7-1
+628	r2=r8-1
+629	r2=r9-1
+62a	r2=r10-1
+62b	r2=r11-1
+62c	r2=r12-1
+62d	r2=r13-1
+62e	r2=r14-1
+62f	r2=r15-1
+630	r3=r0-1
+631	r3=r1-1
+632	r3=r2-1
+633	r3=r3-1
+634	r3=r4-1
+635	r3=r5-1
+636	r3=r6-1
+637	r3=r7-1
+638	r3=r8-1
+639	r3=r9-1
+63a	r3=r10-1
+63b	r3=r11-1
+63c	r3=r12-1
+63d	r3=r13-1
+63e	r3=r14-1
+63f	r3=r15-1
+640	r4=r0-1
+641	r4=r1-1
+642	r4=r2-1
+643	r4=r3-1
+644	r4=r4-1
+645	r4=r5-1
+646	r4=r6-1
+647	r4=r7-1
+648	r4=r8-1
+649	r4=r9-1
+64a	r4=r10-1
+64b	r4=r11-1
+64c	r4=r12-1
+64d	r4=r13-1
+64e	r4=r14-1
+64f	r4=r15-1
+650	r5=r0-1
+651	r5=r1-1
+652	r5=r2-1
+653	r5=r3-1
+654	r5=r4-1
+655	r5=r5-1
+656	r5=r6-1
+657	r5=r7-1
+658	r5=r8-1
+659	r5=r9-1
+65a	r5=r10-1
+65b	r5=r11-1
+65c	r5=r12-1
+65d	r5=r13-1
+65e	r5=r14-1
+65f	r5=r15-1
+660	r6=r0-1
+661	r6=r1-1
+662	r6=r2-1
+663	r6=r3-1
+664	r6=r4-1
+665	r6=r5-1
+666	r6=r6-1
+667	r6=r7-1
+668	r6=r8-1
+669	r6=r9-1
+66a	r6=r10-1
+66b	r6=r11-1
+66c	r6=r12-1
+66d	r6=r13-1
+66e	r6=r14-1
+66f	r6=r15-1
+670	r7=r0-1
+671	r7=r1-1
+672	r7=r2-1
+673	r7=r3-1
+674	r7=r4-1
+675	r7=r5-1
+676	r7=r6-1
+677	r7=r7-1
+678	r7=r8-1
+679	r7=r9-1
+67a	r7=r10-1
+67b	r7=r11-1
+67c	r7=r12-1
+67d	r7=r13-1
+67e	r7=r14-1
+67f	r7=r15-1
+680	r8=r0-1
+681	r8=r1-1
+682	r8=r2-1
+683	r8=r3-1
+684	r8=r4-1
+685	r8=r5-1
+686	r8=r6-1
+687	r8=r7-1
+688	r8=r8-1
+689	r8=r9-1
+68a	r8=r10-1
+68b	r8=r11-1
+68c	r8=r12-1
+68d	r8=r13-1
+68e	r8=r14-1
+68f	r8=r15-1
+690	r9=r0-1
+691	r9=r1-1
+692	r9=r2-1
+693	r9=r3-1
+694	r9=r4-1
+695	r9=r5-1
+696	r9=r6-1
+697	r9=r7-1
+698	r9=r8-1
+699	r9=r9-1
+69a	r9=r10-1
+69b	r9=r11-1
+69c	r9=r12-1
+69d	r9=r13-1
+69e	r9=r14-1
+69f	r9=r15-1
+6a0	r10=r0-1
+6a1	r10=r1-1
+6a2	r10=r2-1
+6a3	r10=r3-1
+6a4	r10=r4-1
+6a5	r10=r5-1
+6a6	r10=r6-1
+6a7	r10=r7-1
+6a8	r10=r8-1
+6a9	r10=r9-1
+6aa	r10=r10-1
+6ab	r10=r11-1
+6ac	r10=r12-1
+6ad	r10=r13-1
+6ae	r10=r14-1
+6af	r10=r15-1
+6b0	r11=r0-1
+6b1	r11=r1-1
+6b2	r11=r2-1
+6b3	r11=r3-1
+6b4	r11=r4-1
+6b5	r11=r5-1
+6b6	r11=r6-1
+6b7	r11=r7-1
+6b8	r11=r8-1
+6b9	r11=r9-1
+6ba	r11=r10-1
+6bb	r11=r11-1
+6bc	r11=r12-1
+6bd	r11=r13-1
+6be	r11=r14-1
+6bf	r11=r15-1
+6c0	r12=r0-1
+6c1	r12=r1-1
+6c2	r12=r2-1
+6c3	r12=r3-1
+6c4	r12=r4-1
+6c5	r12=r5-1
+6c6	r12=r6-1
+6c7	r12=r7-1
+6c8	r12=r8-1
+6c9	r12=r9-1
+6ca	r12=r10-1
+6cb	r12=r11-1
+6cc	r12=r12-1
+6cd	r12=r13-1
+6ce	r12=r14-1
+6cf	r12=r15-1
+6d0	r13=r0-1
+6d1	r13=r1-1
+6d2	r13=r2-1
+6d3	r13=r3-1
+6d4	r13=r4-1
+6d5	r13=r5-1
+6d6	r13=r6-1
+6d7	r13=r7-1
+6d8	r13=r8-1
+6d9	r13=r9-1
+6da	r13=r10-1
+6db	r13=r11-1
+6dc	r13=r12-1
+6dd	r13=r13-1
+6de	r13=r14-1
+6df	r13=r15-1
+6e0	r14=r0-1
+6e1	r14=r1-1
+6e2	r14=r2-1
+6e3	r14=r3-1
+6e4	r14=r4-1
+6e5	r14=r5-1
+6e6	r14=r6-1
+6e7	r14=r7-1
+6e8	r14=r8-1
+6e9	r14=r9-1
+6ea	r14=r10-1
+6eb	r14=r11-1
+6ec	r14=r12-1
+6ed	r14=r13-1
+6ee	r14=r14-1
+6ef	r14=r15-1
+6f0	r15=r0-1
+6f1	r15=r1-1
+6f2	r15=r2-1
+6f3	r15=r3-1
+6f4	r15=r4-1
+6f5	r15=r5-1
+6f6	r15=r6-1
+6f7	r15=r7-1
+6f8	r15=r8-1
+6f9	r15=r9-1
+6fa	r15=r10-1
+6fb	r15=r11-1
+6fc	r15=r12-1
+6fd	r15=r13-1
+6fe	r15=r14-1
+6ff	r15=r15-1
+700	r0=r0*r0(ssi)
+701	r0=r0*r1(ssi)
+702	r0=r0*r2(ssi)
+703	r0=r0*r3(ssi)
+704	r0=r0*r4(ssi)
+705	r0=r0*r5(ssi)
+706	r0=r0*r6(ssi)
+707	r0=r0*r7(ssi)
+708	r0=r0*r8(ssi)
+709	r0=r0*r9(ssi)
+70a	r0=r0*r10(ssi)
+70b	r0=r0*r11(ssi)
+70c	r0=r0*r12(ssi)
+70d	r0=r0*r13(ssi)
+70e	r0=r0*r14(ssi)
+70f	r0=r0*r15(ssi)
+710	r1=r1*r0(ssi)
+711	r1=r1*r1(ssi)
+712	r1=r1*r2(ssi)
+713	r1=r1*r3(ssi)
+714	r1=r1*r4(ssi)
+715	r1=r1*r5(ssi)
+716	r1=r1*r6(ssi)
+717	r1=r1*r7(ssi)
+718	r1=r1*r8(ssi)
+719	r1=r1*r9(ssi)
+71a	r1=r1*r10(ssi)
+71b	r1=r1*r11(ssi)
+71c	r1=r1*r12(ssi)
+71d	r1=r1*r13(ssi)
+71e	r1=r1*r14(ssi)
+71f	r1=r1*r15(ssi)
+720	r2=r2*r0(ssi)
+721	r2=r2*r1(ssi)
+722	r2=r2*r2(ssi)
+723	r2=r2*r3(ssi)
+724	r2=r2*r4(ssi)
+725	r2=r2*r5(ssi)
+726	r2=r2*r6(ssi)
+727	r2=r2*r7(ssi)
+728	r2=r2*r8(ssi)
+729	r2=r2*r9(ssi)
+72a	r2=r2*r10(ssi)
+72b	r2=r2*r11(ssi)
+72c	r2=r2*r12(ssi)
+72d	r2=r2*r13(ssi)
+72e	r2=r2*r14(ssi)
+72f	r2=r2*r15(ssi)
+730	r3=r3*r0(ssi)
+731	r3=r3*r1(ssi)
+732	r3=r3*r2(ssi)
+733	r3=r3*r3(ssi)
+734	r3=r3*r4(ssi)
+735	r3=r3*r5(ssi)
+736	r3=r3*r6(ssi)
+737	r3=r3*r7(ssi)
+738	r3=r3*r8(ssi)
+739	r3=r3*r9(ssi)
+73a	r3=r3*r10(ssi)
+73b	r3=r3*r11(ssi)
+73c	r3=r3*r12(ssi)
+73d	r3=r3*r13(ssi)
+73e	r3=r3*r14(ssi)
+73f	r3=r3*r15(ssi)
+740	r4=r4*r0(ssi)
+741	r4=r4*r1(ssi)
+742	r4=r4*r2(ssi)
+743	r4=r4*r3(ssi)
+744	r4=r4*r4(ssi)
+745	r4=r4*r5(ssi)
+746	r4=r4*r6(ssi)
+747	r4=r4*r7(ssi)
+748	r4=r4*r8(ssi)
+749	r4=r4*r9(ssi)
+74a	r4=r4*r10(ssi)
+74b	r4=r4*r11(ssi)
+74c	r4=r4*r12(ssi)
+74d	r4=r4*r13(ssi)
+74e	r4=r4*r14(ssi)
+74f	r4=r4*r15(ssi)
+750	r5=r5*r0(ssi)
+751	r5=r5*r1(ssi)
+752	r5=r5*r2(ssi)
+753	r5=r5*r3(ssi)
+754	r5=r5*r4(ssi)
+755	r5=r5*r5(ssi)
+756	r5=r5*r6(ssi)
+757	r5=r5*r7(ssi)
+758	r5=r5*r8(ssi)
+759	r5=r5*r9(ssi)
+75a	r5=r5*r10(ssi)
+75b	r5=r5*r11(ssi)
+75c	r5=r5*r12(ssi)
+75d	r5=r5*r13(ssi)
+75e	r5=r5*r14(ssi)
+75f	r5=r5*r15(ssi)
+760	r6=r6*r0(ssi)
+761	r6=r6*r1(ssi)
+762	r6=r6*r2(ssi)
+763	r6=r6*r3(ssi)
+764	r6=r6*r4(ssi)
+765	r6=r6*r5(ssi)
+766	r6=r6*r6(ssi)
+767	r6=r6*r7(ssi)
+768	r6=r6*r8(ssi)
+769	r6=r6*r9(ssi)
+76a	r6=r6*r10(ssi)
+76b	r6=r6*r11(ssi)
+76c	r6=r6*r12(ssi)
+76d	r6=r6*r13(ssi)
+76e	r6=r6*r14(ssi)
+76f	r6=r6*r15(ssi)
+770	r7=r7*r0(ssi)
+771	r7=r7*r1(ssi)
+772	r7=r7*r2(ssi)
+773	r7=r7*r3(ssi)
+774	r7=r7*r4(ssi)
+775	r7=r7*r5(ssi)
+776	r7=r7*r6(ssi)
+777	r7=r7*r7(ssi)
+778	r7=r7*r8(ssi)
+779	r7=r7*r9(ssi)
+77a	r7=r7*r10(ssi)
+77b	r7=r7*r11(ssi)
+77c	r7=r7*r12(ssi)
+77d	r7=r7*r13(ssi)
+77e	r7=r7*r14(ssi)
+77f	r7=r7*r15(ssi)
+780	r8=r8*r0(ssi)
+781	r8=r8*r1(ssi)
+782	r8=r8*r2(ssi)
+783	r8=r8*r3(ssi)
+784	r8=r8*r4(ssi)
+785	r8=r8*r5(ssi)
+786	r8=r8*r6(ssi)
+787	r8=r8*r7(ssi)
+788	r8=r8*r8(ssi)
+789	r8=r8*r9(ssi)
+78a	r8=r8*r10(ssi)
+78b	r8=r8*r11(ssi)
+78c	r8=r8*r12(ssi)
+78d	r8=r8*r13(ssi)
+78e	r8=r8*r14(ssi)
+78f	r8=r8*r15(ssi)
+790	r9=r9*r0(ssi)
+791	r9=r9*r1(ssi)
+792	r9=r9*r2(ssi)
+793	r9=r9*r3(ssi)
+794	r9=r9*r4(ssi)
+795	r9=r9*r5(ssi)
+796	r9=r9*r6(ssi)
+797	r9=r9*r7(ssi)
+798	r9=r9*r8(ssi)
+799	r9=r9*r9(ssi)
+79a	r9=r9*r10(ssi)
+79b	r9=r9*r11(ssi)
+79c	r9=r9*r12(ssi)
+79d	r9=r9*r13(ssi)
+79e	r9=r9*r14(ssi)
+79f	r9=r9*r15(ssi)
+7a0	r10=r10*r0(ssi)
+7a1	r10=r10*r1(ssi)
+7a2	r10=r10*r2(ssi)
+7a3	r10=r10*r3(ssi)
+7a4	r10=r10*r4(ssi)
+7a5	r10=r10*r5(ssi)
+7a6	r10=r10*r6(ssi)
+7a7	r10=r10*r7(ssi)
+7a8	r10=r10*r8(ssi)
+7a9	r10=r10*r9(ssi)
+7aa	r10=r10*r10(ssi)
+7ab	r10=r10*r11(ssi)
+7ac	r10=r10*r12(ssi)
+7ad	r10=r10*r13(ssi)
+7ae	r10=r10*r14(ssi)
+7af	r10=r10*r15(ssi)
+7b0	r11=r11*r0(ssi)
+7b1	r11=r11*r1(ssi)
+7b2	r11=r11*r2(ssi)
+7b3	r11=r11*r3(ssi)
+7b4	r11=r11*r4(ssi)
+7b5	r11=r11*r5(ssi)
+7b6	r11=r11*r6(ssi)
+7b7	r11=r11*r7(ssi)
+7b8	r11=r11*r8(ssi)
+7b9	r11=r11*r9(ssi)
+7ba	r11=r11*r10(ssi)
+7bb	r11=r11*r11(ssi)
+7bc	r11=r11*r12(ssi)
+7bd	r11=r11*r13(ssi)
+7be	r11=r11*r14(ssi)
+7bf	r11=r11*r15(ssi)
+7c0	r12=r12*r0(ssi)
+7c1	r12=r12*r1(ssi)
+7c2	r12=r12*r2(ssi)
+7c3	r12=r12*r3(ssi)
+7c4	r12=r12*r4(ssi)
+7c5	r12=r12*r5(ssi)
+7c6	r12=r12*r6(ssi)
+7c7	r12=r12*r7(ssi)
+7c8	r12=r12*r8(ssi)
+7c9	r12=r12*r9(ssi)
+7ca	r12=r12*r10(ssi)
+7cb	r12=r12*r11(ssi)
+7cc	r12=r12*r12(ssi)
+7cd	r12=r12*r13(ssi)
+7ce	r12=r12*r14(ssi)
+7cf	r12=r12*r15(ssi)
+7d0	r13=r13*r0(ssi)
+7d1	r13=r13*r1(ssi)
+7d2	r13=r13*r2(ssi)
+7d3	r13=r13*r3(ssi)
+7d4	r13=r13*r4(ssi)
+7d5	r13=r13*r5(ssi)
+7d6	r13=r13*r6(ssi)
+7d7	r13=r13*r7(ssi)
+7d8	r13=r13*r8(ssi)
+7d9	r13=r13*r9(ssi)
+7da	r13=r13*r10(ssi)
+7db	r13=r13*r11(ssi)
+7dc	r13=r13*r12(ssi)
+7dd	r13=r13*r13(ssi)
+7de	r13=r13*r14(ssi)
+7df	r13=r13*r15(ssi)
+7e0	r14=r14*r0(ssi)
+7e1	r14=r14*r1(ssi)
+7e2	r14=r14*r2(ssi)
+7e3	r14=r14*r3(ssi)
+7e4	r14=r14*r4(ssi)
+7e5	r14=r14*r5(ssi)
+7e6	r14=r14*r6(ssi)
+7e7	r14=r14*r7(ssi)
+7e8	r14=r14*r8(ssi)
+7e9	r14=r14*r9(ssi)
+7ea	r14=r14*r10(ssi)
+7eb	r14=r14*r11(ssi)
+7ec	r14=r14*r12(ssi)
+7ed	r14=r14*r13(ssi)
+7ee	r14=r14*r14(ssi)
+7ef	r14=r14*r15(ssi)
+7f0	r15=r15*r0(ssi)
+7f1	r15=r15*r1(ssi)
+7f2	r15=r15*r2(ssi)
+7f3	r15=r15*r3(ssi)
+7f4	r15=r15*r4(ssi)
+7f5	r15=r15*r5(ssi)
+7f6	r15=r15*r6(ssi)
+7f7	r15=r15*r7(ssi)
+7f8	r15=r15*r8(ssi)
+7f9	r15=r15*r9(ssi)
+7fa	r15=r15*r10(ssi)
+7fb	r15=r15*r11(ssi)
+7fc	r15=r15*r12(ssi)
+7fd	r15=r15*r13(ssi)
+7fe	r15=r15*r14(ssi)
+7ff	r15=r15*r15(ssi)
+800	f0=f0+f0
+801	f0=f0+f1
+802	f0=f0+f2
+803	f0=f0+f3
+804	f0=f0+f4
+805	f0=f0+f5
+806	f0=f0+f6
+807	f0=f0+f7
+808	f0=f0+f8
+809	f0=f0+f9
+80a	f0=f0+f10
+80b	f0=f0+f11
+80c	f0=f0+f12
+80d	f0=f0+f13
+80e	f0=f0+f14
+80f	f0=f0+f15
+810	f1=f1+f0
+811	f1=f1+f1
+812	f1=f1+f2
+813	f1=f1+f3
+814	f1=f1+f4
+815	f1=f1+f5
+816	f1=f1+f6
+817	f1=f1+f7
+818	f1=f1+f8
+819	f1=f1+f9
+81a	f1=f1+f10
+81b	f1=f1+f11
+81c	f1=f1+f12
+81d	f1=f1+f13
+81e	f1=f1+f14
+81f	f1=f1+f15
+820	f2=f2+f0
+821	f2=f2+f1
+822	f2=f2+f2
+823	f2=f2+f3
+824	f2=f2+f4
+825	f2=f2+f5
+826	f2=f2+f6
+827	f2=f2+f7
+828	f2=f2+f8
+829	f2=f2+f9
+82a	f2=f2+f10
+82b	f2=f2+f11
+82c	f2=f2+f12
+82d	f2=f2+f13
+82e	f2=f2+f14
+82f	f2=f2+f15
+830	f3=f3+f0
+831	f3=f3+f1
+832	f3=f3+f2
+833	f3=f3+f3
+834	f3=f3+f4
+835	f3=f3+f5
+836	f3=f3+f6
+837	f3=f3+f7
+838	f3=f3+f8
+839	f3=f3+f9
+83a	f3=f3+f10
+83b	f3=f3+f11
+83c	f3=f3+f12
+83d	f3=f3+f13
+83e	f3=f3+f14
+83f	f3=f3+f15
+840	f4=f4+f0
+841	f4=f4+f1
+842	f4=f4+f2
+843	f4=f4+f3
+844	f4=f4+f4
+845	f4=f4+f5
+846	f4=f4+f6
+847	f4=f4+f7
+848	f4=f4+f8
+849	f4=f4+f9
+84a	f4=f4+f10
+84b	f4=f4+f11
+84c	f4=f4+f12
+84d	f4=f4+f13
+84e	f4=f4+f14
+84f	f4=f4+f15
+850	f5=f5+f0
+851	f5=f5+f1
+852	f5=f5+f2
+853	f5=f5+f3
+854	f5=f5+f4
+855	f5=f5+f5
+856	f5=f5+f6
+857	f5=f5+f7
+858	f5=f5+f8
+859	f5=f5+f9
+85a	f5=f5+f10
+85b	f5=f5+f11
+85c	f5=f5+f12
+85d	f5=f5+f13
+85e	f5=f5+f14
+85f	f5=f5+f15
+860	f6=f6+f0
+861	f6=f6+f1
+862	f6=f6+f2
+863	f6=f6+f3
+864	f6=f6+f4
+865	f6=f6+f5
+866	f6=f6+f6
+867	f6=f6+f7
+868	f6=f6+f8
+869	f6=f6+f9
+86a	f6=f6+f10
+86b	f6=f6+f11
+86c	f6=f6+f12
+86d	f6=f6+f13
+86e	f6=f6+f14
+86f	f6=f6+f15
+870	f7=f7+f0
+871	f7=f7+f1
+872	f7=f7+f2
+873	f7=f7+f3
+874	f7=f7+f4
+875	f7=f7+f5
+876	f7=f7+f6
+877	f7=f7+f7
+878	f7=f7+f8
+879	f7=f7+f9
+87a	f7=f7+f10
+87b	f7=f7+f11
+87c	f7=f7+f12
+87d	f7=f7+f13
+87e	f7=f7+f14
+87f	f7=f7+f15
+880	f8=f8+f0
+881	f8=f8+f1
+882	f8=f8+f2
+883	f8=f8+f3
+884	f8=f8+f4
+885	f8=f8+f5
+886	f8=f8+f6
+887	f8=f8+f7
+888	f8=f8+f8
+889	f8=f8+f9
+88a	f8=f8+f10
+88b	f8=f8+f11
+88c	f8=f8+f12
+88d	f8=f8+f13
+88e	f8=f8+f14
+88f	f8=f8+f15
+890	f9=f9+f0
+891	f9=f9+f1
+892	f9=f9+f2
+893	f9=f9+f3
+894	f9=f9+f4
+895	f9=f9+f5
+896	f9=f9+f6
+897	f9=f9+f7
+898	f9=f9+f8
+899	f9=f9+f9
+89a	f9=f9+f10
+89b	f9=f9+f11
+89c	f9=f9+f12
+89d	f9=f9+f13
+89e	f9=f9+f14
+89f	f9=f9+f15
+8a0	f10=f10+f0
+8a1	f10=f10+f1
+8a2	f10=f10+f2
+8a3	f10=f10+f3
+8a4	f10=f10+f4
+8a5	f10=f10+f5
+8a6	f10=f10+f6
+8a7	f10=f10+f7
+8a8	f10=f10+f8
+8a9	f10=f10+f9
+8aa	f10=f10+f10
+8ab	f10=f10+f11
+8ac	f10=f10+f12
+8ad	f10=f10+f13
+8ae	f10=f10+f14
+8af	f10=f10+f15
+8b0	f11=f11+f0
+8b1	f11=f11+f1
+8b2	f11=f11+f2
+8b3	f11=f11+f3
+8b4	f11=f11+f4
+8b5	f11=f11+f5
+8b6	f11=f11+f6
+8b7	f11=f11+f7
+8b8	f11=f11+f8
+8b9	f11=f11+f9
+8ba	f11=f11+f10
+8bb	f11=f11+f11
+8bc	f11=f11+f12
+8bd	f11=f11+f13
+8be	f11=f11+f14
+8bf	f11=f11+f15
+8c0	f12=f12+f0
+8c1	f12=f12+f1
+8c2	f12=f12+f2
+8c3	f12=f12+f3
+8c4	f12=f12+f4
+8c5	f12=f12+f5
+8c6	f12=f12+f6
+8c7	f12=f12+f7
+8c8	f12=f12+f8
+8c9	f12=f12+f9
+8ca	f12=f12+f10
+8cb	f12=f12+f11
+8cc	f12=f12+f12
+8cd	f12=f12+f13
+8ce	f12=f12+f14
+8cf	f12=f12+f15
+8d0	f13=f13+f0
+8d1	f13=f13+f1
+8d2	f13=f13+f2
+8d3	f13=f13+f3
+8d4	f13=f13+f4
+8d5	f13=f13+f5
+8d6	f13=f13+f6
+8d7	f13=f13+f7
+8d8	f13=f13+f8
+8d9	f13=f13+f9
+8da	f13=f13+f10
+8db	f13=f13+f11
+8dc	f13=f13+f12
+8dd	f13=f13+f13
+8de	f13=f13+f14
+8df	f13=f13+f15
+8e0	f14=f14+f0
+8e1	f14=f14+f1
+8e2	f14=f14+f2
+8e3	f14=f14+f3
+8e4	f14=f14+f4
+8e5	f14=f14+f5
+8e6	f14=f14+f6
+8e7	f14=f14+f7
+8e8	f14=f14+f8
+8e9	f14=f14+f9
+8ea	f14=f14+f10
+8eb	f14=f14+f11
+8ec	f14=f14+f12
+8ed	f14=f14+f13
+8ee	f14=f14+f14
+8ef	f14=f14+f15
+8f0	f15=f15+f0
+8f1	f15=f15+f1
+8f2	f15=f15+f2
+8f3	f15=f15+f3
+8f4	f15=f15+f4
+8f5	f15=f15+f5
+8f6	f15=f15+f6
+8f7	f15=f15+f7
+8f8	f15=f15+f8
+8f9	f15=f15+f9
+8fa	f15=f15+f10
+8fb	f15=f15+f11
+8fc	f15=f15+f12
+8fd	f15=f15+f13
+8fe	f15=f15+f14
+8ff	f15=f15+f15
+900	f0=f0-f0
+901	f0=f0-f1
+902	f0=f0-f2
+903	f0=f0-f3
+904	f0=f0-f4
+905	f0=f0-f5
+906	f0=f0-f6
+907	f0=f0-f7
+908	f0=f0-f8
+909	f0=f0-f9
+90a	f0=f0-f10
+90b	f0=f0-f11
+90c	f0=f0-f12
+90d	f0=f0-f13
+90e	f0=f0-f14
+90f	f0=f0-f15
+910	f1=f1-f0
+911	f1=f1-f1
+912	f1=f1-f2
+913	f1=f1-f3
+914	f1=f1-f4
+915	f1=f1-f5
+916	f1=f1-f6
+917	f1=f1-f7
+918	f1=f1-f8
+919	f1=f1-f9
+91a	f1=f1-f10
+91b	f1=f1-f11
+91c	f1=f1-f12
+91d	f1=f1-f13
+91e	f1=f1-f14
+91f	f1=f1-f15
+920	f2=f2-f0
+921	f2=f2-f1
+922	f2=f2-f2
+923	f2=f2-f3
+924	f2=f2-f4
+925	f2=f2-f5
+926	f2=f2-f6
+927	f2=f2-f7
+928	f2=f2-f8
+929	f2=f2-f9
+92a	f2=f2-f10
+92b	f2=f2-f11
+92c	f2=f2-f12
+92d	f2=f2-f13
+92e	f2=f2-f14
+92f	f2=f2-f15
+930	f3=f3-f0
+931	f3=f3-f1
+932	f3=f3-f2
+933	f3=f3-f3
+934	f3=f3-f4
+935	f3=f3-f5
+936	f3=f3-f6
+937	f3=f3-f7
+938	f3=f3-f8
+939	f3=f3-f9
+93a	f3=f3-f10
+93b	f3=f3-f11
+93c	f3=f3-f12
+93d	f3=f3-f13
+93e	f3=f3-f14
+93f	f3=f3-f15
+940	f4=f4-f0
+941	f4=f4-f1
+942	f4=f4-f2
+943	f4=f4-f3
+944	f4=f4-f4
+945	f4=f4-f5
+946	f4=f4-f6
+947	f4=f4-f7
+948	f4=f4-f8
+949	f4=f4-f9
+94a	f4=f4-f10
+94b	f4=f4-f11
+94c	f4=f4-f12
+94d	f4=f4-f13
+94e	f4=f4-f14
+94f	f4=f4-f15
+950	f5=f5-f0
+951	f5=f5-f1
+952	f5=f5-f2
+953	f5=f5-f3
+954	f5=f5-f4
+955	f5=f5-f5
+956	f5=f5-f6
+957	f5=f5-f7
+958	f5=f5-f8
+959	f5=f5-f9
+95a	f5=f5-f10
+95b	f5=f5-f11
+95c	f5=f5-f12
+95d	f5=f5-f13
+95e	f5=f5-f14
+95f	f5=f5-f15
+960	f6=f6-f0
+961	f6=f6-f1
+962	f6=f6-f2
+963	f6=f6-f3
+964	f6=f6-f4
+965	f6=f6-f5
+966	f6=f6-f6
+967	f6=f6-f7
+968	f6=f6-f8
+969	f6=f6-f9
+96a	f6=f6-f10
+96b	f6=f6-f11
+96c	f6=f6-f12
+96d	f6=f6-f13
+96e	f6=f6-f14
+96f	f6=f6-f15
+970	f7=f7-f0
+971	f7=f7-f1
+972	f7=f7-f2
+973	f7=f7-f3
+974	f7=f7-f4
+975	f7=f7-f5
+976	f7=f7-f6
+977	f7=f7-f7
+978	f7=f7-f8
+979	f7=f7-f9
+97a	f7=f7-f10
+97b	f7=f7-f11
+97c	f7=f7-f12
+97d	f7=f7-f13
+97e	f7=f7-f14
+97f	f7=f7-f15
+980	f8=f8-f0
+981	f8=f8-f1
+982	f8=f8-f2
+983	f8=f8-f3
+984	f8=f8-f4
+985	f8=f8-f5
+986	f8=f8-f6
+987	f8=f8-f7
+988	f8=f8-f8
+989	f8=f8-f9
+98a	f8=f8-f10
+98b	f8=f8-f11
+98c	f8=f8-f12
+98d	f8=f8-f13
+98e	f8=f8-f14
+98f	f8=f8-f15
+990	f9=f9-f0
+991	f9=f9-f1
+992	f9=f9-f2
+993	f9=f9-f3
+994	f9=f9-f4
+995	f9=f9-f5
+996	f9=f9-f6
+997	f9=f9-f7
+998	f9=f9-f8
+999	f9=f9-f9
+99a	f9=f9-f10
+99b	f9=f9-f11
+99c	f9=f9-f12
+99d	f9=f9-f13
+99e	f9=f9-f14
+99f	f9=f9-f15
+9a0	f10=f10-f0
+9a1	f10=f10-f1
+9a2	f10=f10-f2
+9a3	f10=f10-f3
+9a4	f10=f10-f4
+9a5	f10=f10-f5
+9a6	f10=f10-f6
+9a7	f10=f10-f7
+9a8	f10=f10-f8
+9a9	f10=f10-f9
+9aa	f10=f10-f10
+9ab	f10=f10-f11
+9ac	f10=f10-f12
+9ad	f10=f10-f13
+9ae	f10=f10-f14
+9af	f10=f10-f15
+9b0	f11=f11-f0
+9b1	f11=f11-f1
+9b2	f11=f11-f2
+9b3	f11=f11-f3
+9b4	f11=f11-f4
+9b5	f11=f11-f5
+9b6	f11=f11-f6
+9b7	f11=f11-f7
+9b8	f11=f11-f8
+9b9	f11=f11-f9
+9ba	f11=f11-f10
+9bb	f11=f11-f11
+9bc	f11=f11-f12
+9bd	f11=f11-f13
+9be	f11=f11-f14
+9bf	f11=f11-f15
+9c0	f12=f12-f0
+9c1	f12=f12-f1
+9c2	f12=f12-f2
+9c3	f12=f12-f3
+9c4	f12=f12-f4
+9c5	f12=f12-f5
+9c6	f12=f12-f6
+9c7	f12=f12-f7
+9c8	f12=f12-f8
+9c9	f12=f12-f9
+9ca	f12=f12-f10
+9cb	f12=f12-f11
+9cc	f12=f12-f12
+9cd	f12=f12-f13
+9ce	f12=f12-f14
+9cf	f12=f12-f15
+9d0	f13=f13-f0
+9d1	f13=f13-f1
+9d2	f13=f13-f2
+9d3	f13=f13-f3
+9d4	f13=f13-f4
+9d5	f13=f13-f5
+9d6	f13=f13-f6
+9d7	f13=f13-f7
+9d8	f13=f13-f8
+9d9	f13=f13-f9
+9da	f13=f13-f10
+9db	f13=f13-f11
+9dc	f13=f13-f12
+9dd	f13=f13-f13
+9de	f13=f13-f14
+9df	f13=f13-f15
+9e0	f14=f14-f0
+9e1	f14=f14-f1
+9e2	f14=f14-f2
+9e3	f14=f14-f3
+9e4	f14=f14-f4
+9e5	f14=f14-f5
+9e6	f14=f14-f6
+9e7	f14=f14-f7
+9e8	f14=f14-f8
+9e9	f14=f14-f9
+9ea	f14=f14-f10
+9eb	f14=f14-f11
+9ec	f14=f14-f12
+9ed	f14=f14-f13
+9ee	f14=f14-f14
+9ef	f14=f14-f15
+9f0	f15=f15-f0
+9f1	f15=f15-f1
+9f2	f15=f15-f2
+9f3	f15=f15-f3
+9f4	f15=f15-f4
+9f5	f15=f15-f5
+9f6	f15=f15-f6
+9f7	f15=f15-f7
+9f8	f15=f15-f8
+9f9	f15=f15-f9
+9fa	f15=f15-f10
+9fb	f15=f15-f11
+9fc	f15=f15-f12
+9fd	f15=f15-f13
+9fe	f15=f15-f14
+9ff	f15=f15-f15
+a00	f0=float r0
+a01	f0=float r1
+a02	f0=float r2
+a03	f0=float r3
+a04	f0=float r4
+a05	f0=float r5
+a06	f0=float r6
+a07	f0=float r7
+a08	f0=float r8
+a09	f0=float r9
+a0a	f0=float r10
+a0b	f0=float r11
+a0c	f0=float r12
+a0d	f0=float r13
+a0e	f0=float r14
+a0f	f0=float r15
+a10	f1=float r0
+a11	f1=float r1
+a12	f1=float r2
+a13	f1=float r3
+a14	f1=float r4
+a15	f1=float r5
+a16	f1=float r6
+a17	f1=float r7
+a18	f1=float r8
+a19	f1=float r9
+a1a	f1=float r10
+a1b	f1=float r11
+a1c	f1=float r12
+a1d	f1=float r13
+a1e	f1=float r14
+a1f	f1=float r15
+a20	f2=float r0
+a21	f2=float r1
+a22	f2=float r2
+a23	f2=float r3
+a24	f2=float r4
+a25	f2=float r5
+a26	f2=float r6
+a27	f2=float r7
+a28	f2=float r8
+a29	f2=float r9
+a2a	f2=float r10
+a2b	f2=float r11
+a2c	f2=float r12
+a2d	f2=float r13
+a2e	f2=float r14
+a2f	f2=float r15
+a30	f3=float r0
+a31	f3=float r1
+a32	f3=float r2
+a33	f3=float r3
+a34	f3=float r4
+a35	f3=float r5
+a36	f3=float r6
+a37	f3=float r7
+a38	f3=float r8
+a39	f3=float r9
+a3a	f3=float r10
+a3b	f3=float r11
+a3c	f3=float r12
+a3d	f3=float r13
+a3e	f3=float r14
+a3f	f3=float r15
+a40	f4=float r0
+a41	f4=float r1
+a42	f4=float r2
+a43	f4=float r3
+a44	f4=float r4
+a45	f4=float r5
+a46	f4=float r6
+a47	f4=float r7
+a48	f4=float r8
+a49	f4=float r9
+a4a	f4=float r10
+a4b	f4=float r11
+a4c	f4=float r12
+a4d	f4=float r13
+a4e	f4=float r14
+a4f	f4=float r15
+a50	f5=float r0
+a51	f5=float r1
+a52	f5=float r2
+a53	f5=float r3
+a54	f5=float r4
+a55	f5=float r5
+a56	f5=float r6
+a57	f5=float r7
+a58	f5=float r8
+a59	f5=float r9
+a5a	f5=float r10
+a5b	f5=float r11
+a5c	f5=float r12
+a5d	f5=float r13
+a5e	f5=float r14
+a5f	f5=float r15
+a60	f6=float r0
+a61	f6=float r1
+a62	f6=float r2
+a63	f6=float r3
+a64	f6=float r4
+a65	f6=float r5
+a66	f6=float r6
+a67	f6=float r7
+a68	f6=float r8
+a69	f6=float r9
+a6a	f6=float r10
+a6b	f6=float r11
+a6c	f6=float r12
+a6d	f6=float r13
+a6e	f6=float r14
+a6f	f6=float r15
+a70	f7=float r0
+a71	f7=float r1
+a72	f7=float r2
+a73	f7=float r3
+a74	f7=float r4
+a75	f7=float r5
+a76	f7=float r6
+a77	f7=float r7
+a78	f7=float r8
+a79	f7=float r9
+a7a	f7=float r10
+a7b	f7=float r11
+a7c	f7=float r12
+a7d	f7=float r13
+a7e	f7=float r14
+a7f	f7=float r15
+a80	f8=float r0
+a81	f8=float r1
+a82	f8=float r2
+a83	f8=float r3
+a84	f8=float r4
+a85	f8=float r5
+a86	f8=float r6
+a87	f8=float r7
+a88	f8=float r8
+a89	f8=float r9
+a8a	f8=float r10
+a8b	f8=float r11
+a8c	f8=float r12
+a8d	f8=float r13
+a8e	f8=float r14
+a8f	f8=float r15
+a90	f9=float r0
+a91	f9=float r1
+a92	f9=float r2
+a93	f9=float r3
+a94	f9=float r4
+a95	f9=float r5
+a96	f9=float r6
+a97	f9=float r7
+a98	f9=float r8
+a99	f9=float r9
+a9a	f9=float r10
+a9b	f9=float r11
+a9c	f9=float r12
+a9d	f9=float r13
+a9e	f9=float r14
+a9f	f9=float r15
+aa0	f10=float r0
+aa1	f10=float r1
+aa2	f10=float r2
+aa3	f10=float r3
+aa4	f10=float r4
+aa5	f10=float r5
+aa6	f10=float r6
+aa7	f10=float r7
+aa8	f10=float r8
+aa9	f10=float r9
+aaa	f10=float r10
+aab	f10=float r11
+aac	f10=float r12
+aad	f10=float r13
+aae	f10=float r14
+aaf	f10=float r15
+ab0	f11=float r0
+ab1	f11=float r1
+ab2	f11=float r2
+ab3	f11=float r3
+ab4	f11=float r4
+ab5	f11=float r5
+ab6	f11=float r6
+ab7	f11=float r7
+ab8	f11=float r8
+ab9	f11=float r9
+aba	f11=float r10
+abb	f11=float r11
+abc	f11=float r12
+abd	f11=float r13
+abe	f11=float r14
+abf	f11=float r15
+ac0	f12=float r0
+ac1	f12=float r1
+ac2	f12=float r2
+ac3	f12=float r3
+ac4	f12=float r4
+ac5	f12=float r5
+ac6	f12=float r6
+ac7	f12=float r7
+ac8	f12=float r8
+ac9	f12=float r9
+aca	f12=float r10
+acb	f12=float r11
+acc	f12=float r12
+acd	f12=float r13
+ace	f12=float r14
+acf	f12=float r15
+ad0	f13=float r0
+ad1	f13=float r1
+ad2	f13=float r2
+ad3	f13=float r3
+ad4	f13=float r4
+ad5	f13=float r5
+ad6	f13=float r6
+ad7	f13=float r7
+ad8	f13=float r8
+ad9	f13=float r9
+ada	f13=float r10
+adb	f13=float r11
+adc	f13=float r12
+add	f13=float r13
+ade	f13=float r14
+adf	f13=float r15
+ae0	f14=float r0
+ae1	f14=float r1
+ae2	f14=float r2
+ae3	f14=float r3
+ae4	f14=float r4
+ae5	f14=float r5
+ae6	f14=float r6
+ae7	f14=float r7
+ae8	f14=float r8
+ae9	f14=float r9
+aea	f14=float r10
+aeb	f14=float r11
+aec	f14=float r12
+aed	f14=float r13
+aee	f14=float r14
+aef	f14=float r15
+af0	f15=float r0
+af1	f15=float r1
+af2	f15=float r2
+af3	f15=float r3
+af4	f15=float r4
+af5	f15=float r5
+af6	f15=float r6
+af7	f15=float r7
+af8	f15=float r8
+af9	f15=float r9
+afa	f15=float r10
+afb	f15=float r11
+afc	f15=float r12
+afd	f15=float r13
+afe	f15=float r14
+aff	f15=float r15
+b00	comp(f0,f0)
+b01	comp(f0,f1)
+b02	comp(f0,f2)
+b03	comp(f0,f3)
+b04	comp(f0,f4)
+b05	comp(f0,f5)
+b06	comp(f0,f6)
+b07	comp(f0,f7)
+b08	comp(f0,f8)
+b09	comp(f0,f9)
+b0a	comp(f0,f10)
+b0b	comp(f0,f11)
+b0c	comp(f0,f12)
+b0d	comp(f0,f13)
+b0e	comp(f0,f14)
+b0f	comp(f0,f15)
+b10	comp(f1,f0)
+b11	comp(f1,f1)
+b12	comp(f1,f2)
+b13	comp(f1,f3)
+b14	comp(f1,f4)
+b15	comp(f1,f5)
+b16	comp(f1,f6)
+b17	comp(f1,f7)
+b18	comp(f1,f8)
+b19	comp(f1,f9)
+b1a	comp(f1,f10)
+b1b	comp(f1,f11)
+b1c	comp(f1,f12)
+b1d	comp(f1,f13)
+b1e	comp(f1,f14)
+b1f	comp(f1,f15)
+b20	comp(f2,f0)
+b21	comp(f2,f1)
+b22	comp(f2,f2)
+b23	comp(f2,f3)
+b24	comp(f2,f4)
+b25	comp(f2,f5)
+b26	comp(f2,f6)
+b27	comp(f2,f7)
+b28	comp(f2,f8)
+b29	comp(f2,f9)
+b2a	comp(f2,f10)
+b2b	comp(f2,f11)
+b2c	comp(f2,f12)
+b2d	comp(f2,f13)
+b2e	comp(f2,f14)
+b2f	comp(f2,f15)
+b30	comp(f3,f0)
+b31	comp(f3,f1)
+b32	comp(f3,f2)
+b33	comp(f3,f3)
+b34	comp(f3,f4)
+b35	comp(f3,f5)
+b36	comp(f3,f6)
+b37	comp(f3,f7)
+b38	comp(f3,f8)
+b39	comp(f3,f9)
+b3a	comp(f3,f10)
+b3b	comp(f3,f11)
+b3c	comp(f3,f12)
+b3d	comp(f3,f13)
+b3e	comp(f3,f14)
+b3f	comp(f3,f15)
+b40	comp(f4,f0)
+b41	comp(f4,f1)
+b42	comp(f4,f2)
+b43	comp(f4,f3)
+b44	comp(f4,f4)
+b45	comp(f4,f5)
+b46	comp(f4,f6)
+b47	comp(f4,f7)
+b48	comp(f4,f8)
+b49	comp(f4,f9)
+b4a	comp(f4,f10)
+b4b	comp(f4,f11)
+b4c	comp(f4,f12)
+b4d	comp(f4,f13)
+b4e	comp(f4,f14)
+b4f	comp(f4,f15)
+b50	comp(f5,f0)
+b51	comp(f5,f1)
+b52	comp(f5,f2)
+b53	comp(f5,f3)
+b54	comp(f5,f4)
+b55	comp(f5,f5)
+b56	comp(f5,f6)
+b57	comp(f5,f7)
+b58	comp(f5,f8)
+b59	comp(f5,f9)
+b5a	comp(f5,f10)
+b5b	comp(f5,f11)
+b5c	comp(f5,f12)
+b5d	comp(f5,f13)
+b5e	comp(f5,f14)
+b5f	comp(f5,f15)
+b60	comp(f6,f0)
+b61	comp(f6,f1)
+b62	comp(f6,f2)
+b63	comp(f6,f3)
+b64	comp(f6,f4)
+b65	comp(f6,f5)
+b66	comp(f6,f6)
+b67	comp(f6,f7)
+b68	comp(f6,f8)
+b69	comp(f6,f9)
+b6a	comp(f6,f10)
+b6b	comp(f6,f11)
+b6c	comp(f6,f12)
+b6d	comp(f6,f13)
+b6e	comp(f6,f14)
+b6f	comp(f6,f15)
+b70	comp(f7,f0)
+b71	comp(f7,f1)
+b72	comp(f7,f2)
+b73	comp(f7,f3)
+b74	comp(f7,f4)
+b75	comp(f7,f5)
+b76	comp(f7,f6)
+b77	comp(f7,f7)
+b78	comp(f7,f8)
+b79	comp(f7,f9)
+b7a	comp(f7,f10)
+b7b	comp(f7,f11)
+b7c	comp(f7,f12)
+b7d	comp(f7,f13)
+b7e	comp(f7,f14)
+b7f	comp(f7,f15)
+b80	comp(f8,f0)
+b81	comp(f8,f1)
+b82	comp(f8,f2)
+b83	comp(f8,f3)
+b84	comp(f8,f4)
+b85	comp(f8,f5)
+b86	comp(f8,f6)
+b87	comp(f8,f7)
+b88	comp(f8,f8)
+b89	comp(f8,f9)
+b8a	comp(f8,f10)
+b8b	comp(f8,f11)
+b8c	comp(f8,f12)
+b8d	comp(f8,f13)
+b8e	comp(f8,f14)
+b8f	comp(f8,f15)
+b90	comp(f9,f0)
+b91	comp(f9,f1)
+b92	comp(f9,f2)
+b93	comp(f9,f3)
+b94	comp(f9,f4)
+b95	comp(f9,f5)
+b96	comp(f9,f6)
+b97	comp(f9,f7)
+b98	comp(f9,f8)
+b99	comp(f9,f9)
+b9a	comp(f9,f10)
+b9b	comp(f9,f11)
+b9c	comp(f9,f12)
+b9d	comp(f9,f13)
+b9e	comp(f9,f14)
+b9f	comp(f9,f15)
+ba0	comp(f10,f0)
+ba1	comp(f10,f1)
+ba2	comp(f10,f2)
+ba3	comp(f10,f3)
+ba4	comp(f10,f4)
+ba5	comp(f10,f5)
+ba6	comp(f10,f6)
+ba7	comp(f10,f7)
+ba8	comp(f10,f8)
+ba9	comp(f10,f9)
+baa	comp(f10,f10)
+bab	comp(f10,f11)
+bac	comp(f10,f12)
+bad	comp(f10,f13)
+bae	comp(f10,f14)
+baf	comp(f10,f15)
+bb0	comp(f11,f0)
+bb1	comp(f11,f1)
+bb2	comp(f11,f2)
+bb3	comp(f11,f3)
+bb4	comp(f11,f4)
+bb5	comp(f11,f5)
+bb6	comp(f11,f6)
+bb7	comp(f11,f7)
+bb8	comp(f11,f8)
+bb9	comp(f11,f9)
+bba	comp(f11,f10)
+bbb	comp(f11,f11)
+bbc	comp(f11,f12)
+bbd	comp(f11,f13)
+bbe	comp(f11,f14)
+bbf	comp(f11,f15)
+bc0	comp(f12,f0)
+bc1	comp(f12,f1)
+bc2	comp(f12,f2)
+bc3	comp(f12,f3)
+bc4	comp(f12,f4)
+bc5	comp(f12,f5)
+bc6	comp(f12,f6)
+bc7	comp(f12,f7)
+bc8	comp(f12,f8)
+bc9	comp(f12,f9)
+bca	comp(f12,f10)
+bcb	comp(f12,f11)
+bcc	comp(f12,f12)
+bcd	comp(f12,f13)
+bce	comp(f12,f14)
+bcf	comp(f12,f15)
+bd0	comp(f13,f0)
+bd1	comp(f13,f1)
+bd2	comp(f13,f2)
+bd3	comp(f13,f3)
+bd4	comp(f13,f4)
+bd5	comp(f13,f5)
+bd6	comp(f13,f6)
+bd7	comp(f13,f7)
+bd8	comp(f13,f8)
+bd9	comp(f13,f9)
+bda	comp(f13,f10)
+bdb	comp(f13,f11)
+bdc	comp(f13,f12)
+bdd	comp(f13,f13)
+bde	comp(f13,f14)
+bdf	comp(f13,f15)
+be0	comp(f14,f0)
+be1	comp(f14,f1)
+be2	comp(f14,f2)
+be3	comp(f14,f3)
+be4	comp(f14,f4)
+be5	comp(f14,f5)
+be6	comp(f14,f6)
+be7	comp(f14,f7)
+be8	comp(f14,f8)
+be9	comp(f14,f9)
+bea	comp(f14,f10)
+beb	comp(f14,f11)
+bec	comp(f14,f12)
+bed	comp(f14,f13)
+bee	comp(f14,f14)
+bef	comp(f14,f15)
+bf0	comp(f15,f0)
+bf1	comp(f15,f1)
+bf2	comp(f15,f2)
+bf3	comp(f15,f3)
+bf4	comp(f15,f4)
+bf5	comp(f15,f5)
+bf6	comp(f15,f6)
+bf7	comp(f15,f7)
+bf8	comp(f15,f8)
+bf9	comp(f15,f9)
+bfa	comp(f15,f10)
+bfb	comp(f15,f11)
+bfc	comp(f15,f12)
+bfd	comp(f15,f13)
+bfe	comp(f15,f14)
+bff	comp(f15,f15)
+c00	r0=r0 and r0
+c01	r0=r0 and r1
+c02	r0=r0 and r2
+c03	r0=r0 and r3
+c04	r0=r0 and r4
+c05	r0=r0 and r5
+c06	r0=r0 and r6
+c07	r0=r0 and r7
+c08	r0=r0 and r8
+c09	r0=r0 and r9
+c0a	r0=r0 and r10
+c0b	r0=r0 and r11
+c0c	r0=r0 and r12
+c0d	r0=r0 and r13
+c0e	r0=r0 and r14
+c0f	r0=r0 and r15
+c10	r1=r1 and r0
+c11	r1=r1 and r1
+c12	r1=r1 and r2
+c13	r1=r1 and r3
+c14	r1=r1 and r4
+c15	r1=r1 and r5
+c16	r1=r1 and r6
+c17	r1=r1 and r7
+c18	r1=r1 and r8
+c19	r1=r1 and r9
+c1a	r1=r1 and r10
+c1b	r1=r1 and r11
+c1c	r1=r1 and r12
+c1d	r1=r1 and r13
+c1e	r1=r1 and r14
+c1f	r1=r1 and r15
+c20	r2=r2 and r0
+c21	r2=r2 and r1
+c22	r2=r2 and r2
+c23	r2=r2 and r3
+c24	r2=r2 and r4
+c25	r2=r2 and r5
+c26	r2=r2 and r6
+c27	r2=r2 and r7
+c28	r2=r2 and r8
+c29	r2=r2 and r9
+c2a	r2=r2 and r10
+c2b	r2=r2 and r11
+c2c	r2=r2 and r12
+c2d	r2=r2 and r13
+c2e	r2=r2 and r14
+c2f	r2=r2 and r15
+c30	r3=r3 and r0
+c31	r3=r3 and r1
+c32	r3=r3 and r2
+c33	r3=r3 and r3
+c34	r3=r3 and r4
+c35	r3=r3 and r5
+c36	r3=r3 and r6
+c37	r3=r3 and r7
+c38	r3=r3 and r8
+c39	r3=r3 and r9
+c3a	r3=r3 and r10
+c3b	r3=r3 and r11
+c3c	r3=r3 and r12
+c3d	r3=r3 and r13
+c3e	r3=r3 and r14
+c3f	r3=r3 and r15
+c40	r4=r4 and r0
+c41	r4=r4 and r1
+c42	r4=r4 and r2
+c43	r4=r4 and r3
+c44	r4=r4 and r4
+c45	r4=r4 and r5
+c46	r4=r4 and r6
+c47	r4=r4 and r7
+c48	r4=r4 and r8
+c49	r4=r4 and r9
+c4a	r4=r4 and r10
+c4b	r4=r4 and r11
+c4c	r4=r4 and r12
+c4d	r4=r4 and r13
+c4e	r4=r4 and r14
+c4f	r4=r4 and r15
+c50	r5=r5 and r0
+c51	r5=r5 and r1
+c52	r5=r5 and r2
+c53	r5=r5 and r3
+c54	r5=r5 and r4
+c55	r5=r5 and r5
+c56	r5=r5 and r6
+c57	r5=r5 and r7
+c58	r5=r5 and r8
+c59	r5=r5 and r9
+c5a	r5=r5 and r10
+c5b	r5=r5 and r11
+c5c	r5=r5 and r12
+c5d	r5=r5 and r13
+c5e	r5=r5 and r14
+c5f	r5=r5 and r15
+c60	r6=r6 and r0
+c61	r6=r6 and r1
+c62	r6=r6 and r2
+c63	r6=r6 and r3
+c64	r6=r6 and r4
+c65	r6=r6 and r5
+c66	r6=r6 and r6
+c67	r6=r6 and r7
+c68	r6=r6 and r8
+c69	r6=r6 and r9
+c6a	r6=r6 and r10
+c6b	r6=r6 and r11
+c6c	r6=r6 and r12
+c6d	r6=r6 and r13
+c6e	r6=r6 and r14
+c6f	r6=r6 and r15
+c70	r7=r7 and r0
+c71	r7=r7 and r1
+c72	r7=r7 and r2
+c73	r7=r7 and r3
+c74	r7=r7 and r4
+c75	r7=r7 and r5
+c76	r7=r7 and r6
+c77	r7=r7 and r7
+c78	r7=r7 and r8
+c79	r7=r7 and r9
+c7a	r7=r7 and r10
+c7b	r7=r7 and r11
+c7c	r7=r7 and r12
+c7d	r7=r7 and r13
+c7e	r7=r7 and r14
+c7f	r7=r7 and r15
+c80	r8=r8 and r0
+c81	r8=r8 and r1
+c82	r8=r8 and r2
+c83	r8=r8 and r3
+c84	r8=r8 and r4
+c85	r8=r8 and r5
+c86	r8=r8 and r6
+c87	r8=r8 and r7
+c88	r8=r8 and r8
+c89	r8=r8 and r9
+c8a	r8=r8 and r10
+c8b	r8=r8 and r11
+c8c	r8=r8 and r12
+c8d	r8=r8 and r13
+c8e	r8=r8 and r14
+c8f	r8=r8 and r15
+c90	r9=r9 and r0
+c91	r9=r9 and r1
+c92	r9=r9 and r2
+c93	r9=r9 and r3
+c94	r9=r9 and r4
+c95	r9=r9 and r5
+c96	r9=r9 and r6
+c97	r9=r9 and r7
+c98	r9=r9 and r8
+c99	r9=r9 and r9
+c9a	r9=r9 and r10
+c9b	r9=r9 and r11
+c9c	r9=r9 and r12
+c9d	r9=r9 and r13
+c9e	r9=r9 and r14
+c9f	r9=r9 and r15
+ca0	r10=r10 and r0
+ca1	r10=r10 and r1
+ca2	r10=r10 and r2
+ca3	r10=r10 and r3
+ca4	r10=r10 and r4
+ca5	r10=r10 and r5
+ca6	r10=r10 and r6
+ca7	r10=r10 and r7
+ca8	r10=r10 and r8
+ca9	r10=r10 and r9
+caa	r10=r10 and r10
+cab	r10=r10 and r11
+cac	r10=r10 and r12
+cad	r10=r10 and r13
+cae	r10=r10 and r14
+caf	r10=r10 and r15
+cb0	r11=r11 and r0
+cb1	r11=r11 and r1
+cb2	r11=r11 and r2
+cb3	r11=r11 and r3
+cb4	r11=r11 and r4
+cb5	r11=r11 and r5
+cb6	r11=r11 and r6
+cb7	r11=r11 and r7
+cb8	r11=r11 and r8
+cb9	r11=r11 and r9
+cba	r11=r11 and r10
+cbb	r11=r11 and r11
+cbc	r11=r11 and r12
+cbd	r11=r11 and r13
+cbe	r11=r11 and r14
+cbf	r11=r11 and r15
+cc0	r12=r12 and r0
+cc1	r12=r12 and r1
+cc2	r12=r12 and r2
+cc3	r12=r12 and r3
+cc4	r12=r12 and r4
+cc5	r12=r12 and r5
+cc6	r12=r12 and r6
+cc7	r12=r12 and r7
+cc8	r12=r12 and r8
+cc9	r12=r12 and r9
+cca	r12=r12 and r10
+ccb	r12=r12 and r11
+ccc	r12=r12 and r12
+ccd	r12=r12 and r13
+cce	r12=r12 and r14
+ccf	r12=r12 and r15
+cd0	r13=r13 and r0
+cd1	r13=r13 and r1
+cd2	r13=r13 and r2
+cd3	r13=r13 and r3
+cd4	r13=r13 and r4
+cd5	r13=r13 and r5
+cd6	r13=r13 and r6
+cd7	r13=r13 and r7
+cd8	r13=r13 and r8
+cd9	r13=r13 and r9
+cda	r13=r13 and r10
+cdb	r13=r13 and r11
+cdc	r13=r13 and r12
+cdd	r13=r13 and r13
+cde	r13=r13 and r14
+cdf	r13=r13 and r15
+ce0	r14=r14 and r0
+ce1	r14=r14 and r1
+ce2	r14=r14 and r2
+ce3	r14=r14 and r3
+ce4	r14=r14 and r4
+ce5	r14=r14 and r5
+ce6	r14=r14 and r6
+ce7	r14=r14 and r7
+ce8	r14=r14 and r8
+ce9	r14=r14 and r9
+cea	r14=r14 and r10
+ceb	r14=r14 and r11
+cec	r14=r14 and r12
+ced	r14=r14 and r13
+cee	r14=r14 and r14
+cef	r14=r14 and r15
+cf0	r15=r15 and r0
+cf1	r15=r15 and r1
+cf2	r15=r15 and r2
+cf3	r15=r15 and r3
+cf4	r15=r15 and r4
+cf5	r15=r15 and r5
+cf6	r15=r15 and r6
+cf7	r15=r15 and r7
+cf8	r15=r15 and r8
+cf9	r15=r15 and r9
+cfa	r15=r15 and r10
+cfb	r15=r15 and r11
+cfc	r15=r15 and r12
+cfd	r15=r15 and r13
+cfe	r15=r15 and r14
+cff	r15=r15 and r15
+d00	r0=r0 or r0
+d01	r0=r0 or r1
+d02	r0=r0 or r2
+d03	r0=r0 or r3
+d04	r0=r0 or r4
+d05	r0=r0 or r5
+d06	r0=r0 or r6
+d07	r0=r0 or r7
+d08	r0=r0 or r8
+d09	r0=r0 or r9
+d0a	r0=r0 or r10
+d0b	r0=r0 or r11
+d0c	r0=r0 or r12
+d0d	r0=r0 or r13
+d0e	r0=r0 or r14
+d0f	r0=r0 or r15
+d10	r1=r1 or r0
+d11	r1=r1 or r1
+d12	r1=r1 or r2
+d13	r1=r1 or r3
+d14	r1=r1 or r4
+d15	r1=r1 or r5
+d16	r1=r1 or r6
+d17	r1=r1 or r7
+d18	r1=r1 or r8
+d19	r1=r1 or r9
+d1a	r1=r1 or r10
+d1b	r1=r1 or r11
+d1c	r1=r1 or r12
+d1d	r1=r1 or r13
+d1e	r1=r1 or r14
+d1f	r1=r1 or r15
+d20	r2=r2 or r0
+d21	r2=r2 or r1
+d22	r2=r2 or r2
+d23	r2=r2 or r3
+d24	r2=r2 or r4
+d25	r2=r2 or r5
+d26	r2=r2 or r6
+d27	r2=r2 or r7
+d28	r2=r2 or r8
+d29	r2=r2 or r9
+d2a	r2=r2 or r10
+d2b	r2=r2 or r11
+d2c	r2=r2 or r12
+d2d	r2=r2 or r13
+d2e	r2=r2 or r14
+d2f	r2=r2 or r15
+d30	r3=r3 or r0
+d31	r3=r3 or r1
+d32	r3=r3 or r2
+d33	r3=r3 or r3
+d34	r3=r3 or r4
+d35	r3=r3 or r5
+d36	r3=r3 or r6
+d37	r3=r3 or r7
+d38	r3=r3 or r8
+d39	r3=r3 or r9
+d3a	r3=r3 or r10
+d3b	r3=r3 or r11
+d3c	r3=r3 or r12
+d3d	r3=r3 or r13
+d3e	r3=r3 or r14
+d3f	r3=r3 or r15
+d40	r4=r4 or r0
+d41	r4=r4 or r1
+d42	r4=r4 or r2
+d43	r4=r4 or r3
+d44	r4=r4 or r4
+d45	r4=r4 or r5
+d46	r4=r4 or r6
+d47	r4=r4 or r7
+d48	r4=r4 or r8
+d49	r4=r4 or r9
+d4a	r4=r4 or r10
+d4b	r4=r4 or r11
+d4c	r4=r4 or r12
+d4d	r4=r4 or r13
+d4e	r4=r4 or r14
+d4f	r4=r4 or r15
+d50	r5=r5 or r0
+d51	r5=r5 or r1
+d52	r5=r5 or r2
+d53	r5=r5 or r3
+d54	r5=r5 or r4
+d55	r5=r5 or r5
+d56	r5=r5 or r6
+d57	r5=r5 or r7
+d58	r5=r5 or r8
+d59	r5=r5 or r9
+d5a	r5=r5 or r10
+d5b	r5=r5 or r11
+d5c	r5=r5 or r12
+d5d	r5=r5 or r13
+d5e	r5=r5 or r14
+d5f	r5=r5 or r15
+d60	r6=r6 or r0
+d61	r6=r6 or r1
+d62	r6=r6 or r2
+d63	r6=r6 or r3
+d64	r6=r6 or r4
+d65	r6=r6 or r5
+d66	r6=r6 or r6
+d67	r6=r6 or r7
+d68	r6=r6 or r8
+d69	r6=r6 or r9
+d6a	r6=r6 or r10
+d6b	r6=r6 or r11
+d6c	r6=r6 or r12
+d6d	r6=r6 or r13
+d6e	r6=r6 or r14
+d6f	r6=r6 or r15
+d70	r7=r7 or r0
+d71	r7=r7 or r1
+d72	r7=r7 or r2
+d73	r7=r7 or r3
+d74	r7=r7 or r4
+d75	r7=r7 or r5
+d76	r7=r7 or r6
+d77	r7=r7 or r7
+d78	r7=r7 or r8
+d79	r7=r7 or r9
+d7a	r7=r7 or r10
+d7b	r7=r7 or r11
+d7c	r7=r7 or r12
+d7d	r7=r7 or r13
+d7e	r7=r7 or r14
+d7f	r7=r7 or r15
+d80	r8=r8 or r0
+d81	r8=r8 or r1
+d82	r8=r8 or r2
+d83	r8=r8 or r3
+d84	r8=r8 or r4
+d85	r8=r8 or r5
+d86	r8=r8 or r6
+d87	r8=r8 or r7
+d88	r8=r8 or r8
+d89	r8=r8 or r9
+d8a	r8=r8 or r10
+d8b	r8=r8 or r11
+d8c	r8=r8 or r12
+d8d	r8=r8 or r13
+d8e	r8=r8 or r14
+d8f	r8=r8 or r15
+d90	r9=r9 or r0
+d91	r9=r9 or r1
+d92	r9=r9 or r2
+d93	r9=r9 or r3
+d94	r9=r9 or r4
+d95	r9=r9 or r5
+d96	r9=r9 or r6
+d97	r9=r9 or r7
+d98	r9=r9 or r8
+d99	r9=r9 or r9
+d9a	r9=r9 or r10
+d9b	r9=r9 or r11
+d9c	r9=r9 or r12
+d9d	r9=r9 or r13
+d9e	r9=r9 or r14
+d9f	r9=r9 or r15
+da0	r10=r10 or r0
+da1	r10=r10 or r1
+da2	r10=r10 or r2
+da3	r10=r10 or r3
+da4	r10=r10 or r4
+da5	r10=r10 or r5
+da6	r10=r10 or r6
+da7	r10=r10 or r7
+da8	r10=r10 or r8
+da9	r10=r10 or r9
+daa	r10=r10 or r10
+dab	r10=r10 or r11
+dac	r10=r10 or r12
+dad	r10=r10 or r13
+dae	r10=r10 or r14
+daf	r10=r10 or r15
+db0	r11=r11 or r0
+db1	r11=r11 or r1
+db2	r11=r11 or r2
+db3	r11=r11 or r3
+db4	r11=r11 or r4
+db5	r11=r11 or r5
+db6	r11=r11 or r6
+db7	r11=r11 or r7
+db8	r11=r11 or r8
+db9	r11=r11 or r9
+dba	r11=r11 or r10
+dbb	r11=r11 or r11
+dbc	r11=r11 or r12
+dbd	r11=r11 or r13
+dbe	r11=r11 or r14
+dbf	r11=r11 or r15
+dc0	r12=r12 or r0
+dc1	r12=r12 or r1
+dc2	r12=r12 or r2
+dc3	r12=r12 or r3
+dc4	r12=r12 or r4
+dc5	r12=r12 or r5
+dc6	r12=r12 or r6
+dc7	r12=r12 or r7
+dc8	r12=r12 or r8
+dc9	r12=r12 or r9
+dca	r12=r12 or r10
+dcb	r12=r12 or r11
+dcc	r12=r12 or r12
+dcd	r12=r12 or r13
+dce	r12=r12 or r14
+dcf	r12=r12 or r15
+dd0	r13=r13 or r0
+dd1	r13=r13 or r1
+dd2	r13=r13 or r2
+dd3	r13=r13 or r3
+dd4	r13=r13 or r4
+dd5	r13=r13 or r5
+dd6	r13=r13 or r6
+dd7	r13=r13 or r7
+dd8	r13=r13 or r8
+dd9	r13=r13 or r9
+dda	r13=r13 or r10
+ddb	r13=r13 or r11
+ddc	r13=r13 or r12
+ddd	r13=r13 or r13
+dde	r13=r13 or r14
+ddf	r13=r13 or r15
+de0	r14=r14 or r0
+de1	r14=r14 or r1
+de2	r14=r14 or r2
+de3	r14=r14 or r3
+de4	r14=r14 or r4
+de5	r14=r14 or r5
+de6	r14=r14 or r6
+de7	r14=r14 or r7
+de8	r14=r14 or r8
+de9	r14=r14 or r9
+dea	r14=r14 or r10
+deb	r14=r14 or r11
+dec	r14=r14 or r12
+ded	r14=r14 or r13
+dee	r14=r14 or r14
+def	r14=r14 or r15
+df0	r15=r15 or r0
+df1	r15=r15 or r1
+df2	r15=r15 or r2
+df3	r15=r15 or r3
+df4	r15=r15 or r4
+df5	r15=r15 or r5
+df6	r15=r15 or r6
+df7	r15=r15 or r7
+df8	r15=r15 or r8
+df9	r15=r15 or r9
+dfa	r15=r15 or r10
+dfb	r15=r15 or r11
+dfc	r15=r15 or r12
+dfd	r15=r15 or r13
+dfe	r15=r15 or r14
+dff	r15=r15 or r15
+e00	r0=r0 xor r0
+e01	r0=r0 xor r1
+e02	r0=r0 xor r2
+e03	r0=r0 xor r3
+e04	r0=r0 xor r4
+e05	r0=r0 xor r5
+e06	r0=r0 xor r6
+e07	r0=r0 xor r7
+e08	r0=r0 xor r8
+e09	r0=r0 xor r9
+e0a	r0=r0 xor r10
+e0b	r0=r0 xor r11
+e0c	r0=r0 xor r12
+e0d	r0=r0 xor r13
+e0e	r0=r0 xor r14
+e0f	r0=r0 xor r15
+e10	r1=r1 xor r0
+e11	r1=r1 xor r1
+e12	r1=r1 xor r2
+e13	r1=r1 xor r3
+e14	r1=r1 xor r4
+e15	r1=r1 xor r5
+e16	r1=r1 xor r6
+e17	r1=r1 xor r7
+e18	r1=r1 xor r8
+e19	r1=r1 xor r9
+e1a	r1=r1 xor r10
+e1b	r1=r1 xor r11
+e1c	r1=r1 xor r12
+e1d	r1=r1 xor r13
+e1e	r1=r1 xor r14
+e1f	r1=r1 xor r15
+e20	r2=r2 xor r0
+e21	r2=r2 xor r1
+e22	r2=r2 xor r2
+e23	r2=r2 xor r3
+e24	r2=r2 xor r4
+e25	r2=r2 xor r5
+e26	r2=r2 xor r6
+e27	r2=r2 xor r7
+e28	r2=r2 xor r8
+e29	r2=r2 xor r9
+e2a	r2=r2 xor r10
+e2b	r2=r2 xor r11
+e2c	r2=r2 xor r12
+e2d	r2=r2 xor r13
+e2e	r2=r2 xor r14
+e2f	r2=r2 xor r15
+e30	r3=r3 xor r0
+e31	r3=r3 xor r1
+e32	r3=r3 xor r2
+e33	r3=r3 xor r3
+e34	r3=r3 xor r4
+e35	r3=r3 xor r5
+e36	r3=r3 xor r6
+e37	r3=r3 xor r7
+e38	r3=r3 xor r8
+e39	r3=r3 xor r9
+e3a	r3=r3 xor r10
+e3b	r3=r3 xor r11
+e3c	r3=r3 xor r12
+e3d	r3=r3 xor r13
+e3e	r3=r3 xor r14
+e3f	r3=r3 xor r15
+e40	r4=r4 xor r0
+e41	r4=r4 xor r1
+e42	r4=r4 xor r2
+e43	r4=r4 xor r3
+e44	r4=r4 xor r4
+e45	r4=r4 xor r5
+e46	r4=r4 xor r6
+e47	r4=r4 xor r7
+e48	r4=r4 xor r8
+e49	r4=r4 xor r9
+e4a	r4=r4 xor r10
+e4b	r4=r4 xor r11
+e4c	r4=r4 xor r12
+e4d	r4=r4 xor r13
+e4e	r4=r4 xor r14
+e4f	r4=r4 xor r15
+e50	r5=r5 xor r0
+e51	r5=r5 xor r1
+e52	r5=r5 xor r2
+e53	r5=r5 xor r3
+e54	r5=r5 xor r4
+e55	r5=r5 xor r5
+e56	r5=r5 xor r6
+e57	r5=r5 xor r7
+e58	r5=r5 xor r8
+e59	r5=r5 xor r9
+e5a	r5=r5 xor r10
+e5b	r5=r5 xor r11
+e5c	r5=r5 xor r12
+e5d	r5=r5 xor r13
+e5e	r5=r5 xor r14
+e5f	r5=r5 xor r15
+e60	r6=r6 xor r0
+e61	r6=r6 xor r1
+e62	r6=r6 xor r2
+e63	r6=r6 xor r3
+e64	r6=r6 xor r4
+e65	r6=r6 xor r5
+e66	r6=r6 xor r6
+e67	r6=r6 xor r7
+e68	r6=r6 xor r8
+e69	r6=r6 xor r9
+e6a	r6=r6 xor r10
+e6b	r6=r6 xor r11
+e6c	r6=r6 xor r12
+e6d	r6=r6 xor r13
+e6e	r6=r6 xor r14
+e6f	r6=r6 xor r15
+e70	r7=r7 xor r0
+e71	r7=r7 xor r1
+e72	r7=r7 xor r2
+e73	r7=r7 xor r3
+e74	r7=r7 xor r4
+e75	r7=r7 xor r5
+e76	r7=r7 xor r6
+e77	r7=r7 xor r7
+e78	r7=r7 xor r8
+e79	r7=r7 xor r9
+e7a	r7=r7 xor r10
+e7b	r7=r7 xor r11
+e7c	r7=r7 xor r12
+e7d	r7=r7 xor r13
+e7e	r7=r7 xor r14
+e7f	r7=r7 xor r15
+e80	r8=r8 xor r0
+e81	r8=r8 xor r1
+e82	r8=r8 xor r2
+e83	r8=r8 xor r3
+e84	r8=r8 xor r4
+e85	r8=r8 xor r5
+e86	r8=r8 xor r6
+e87	r8=r8 xor r7
+e88	r8=r8 xor r8
+e89	r8=r8 xor r9
+e8a	r8=r8 xor r10
+e8b	r8=r8 xor r11
+e8c	r8=r8 xor r12
+e8d	r8=r8 xor r13
+e8e	r8=r8 xor r14
+e8f	r8=r8 xor r15
+e90	r9=r9 xor r0
+e91	r9=r9 xor r1
+e92	r9=r9 xor r2
+e93	r9=r9 xor r3
+e94	r9=r9 xor r4
+e95	r9=r9 xor r5
+e96	r9=r9 xor r6
+e97	r9=r9 xor r7
+e98	r9=r9 xor r8
+e99	r9=r9 xor r9
+e9a	r9=r9 xor r10
+e9b	r9=r9 xor r11
+e9c	r9=r9 xor r12
+e9d	r9=r9 xor r13
+e9e	r9=r9 xor r14
+e9f	r9=r9 xor r15
+ea0	r10=r10 xor r0
+ea1	r10=r10 xor r1
+ea2	r10=r10 xor r2
+ea3	r10=r10 xor r3
+ea4	r10=r10 xor r4
+ea5	r10=r10 xor r5
+ea6	r10=r10 xor r6
+ea7	r10=r10 xor r7
+ea8	r10=r10 xor r8
+ea9	r10=r10 xor r9
+eaa	r10=r10 xor r10
+eab	r10=r10 xor r11
+eac	r10=r10 xor r12
+ead	r10=r10 xor r13
+eae	r10=r10 xor r14
+eaf	r10=r10 xor r15
+eb0	r11=r11 xor r0
+eb1	r11=r11 xor r1
+eb2	r11=r11 xor r2
+eb3	r11=r11 xor r3
+eb4	r11=r11 xor r4
+eb5	r11=r11 xor r5
+eb6	r11=r11 xor r6
+eb7	r11=r11 xor r7
+eb8	r11=r11 xor r8
+eb9	r11=r11 xor r9
+eba	r11=r11 xor r10
+ebb	r11=r11 xor r11
+ebc	r11=r11 xor r12
+ebd	r11=r11 xor r13
+ebe	r11=r11 xor r14
+ebf	r11=r11 xor r15
+ec0	r12=r12 xor r0
+ec1	r12=r12 xor r1
+ec2	r12=r12 xor r2
+ec3	r12=r12 xor r3
+ec4	r12=r12 xor r4
+ec5	r12=r12 xor r5
+ec6	r12=r12 xor r6
+ec7	r12=r12 xor r7
+ec8	r12=r12 xor r8
+ec9	r12=r12 xor r9
+eca	r12=r12 xor r10
+ecb	r12=r12 xor r11
+ecc	r12=r12 xor r12
+ecd	r12=r12 xor r13
+ece	r12=r12 xor r14
+ecf	r12=r12 xor r15
+ed0	r13=r13 xor r0
+ed1	r13=r13 xor r1
+ed2	r13=r13 xor r2
+ed3	r13=r13 xor r3
+ed4	r13=r13 xor r4
+ed5	r13=r13 xor r5
+ed6	r13=r13 xor r6
+ed7	r13=r13 xor r7
+ed8	r13=r13 xor r8
+ed9	r13=r13 xor r9
+eda	r13=r13 xor r10
+edb	r13=r13 xor r11
+edc	r13=r13 xor r12
+edd	r13=r13 xor r13
+ede	r13=r13 xor r14
+edf	r13=r13 xor r15
+ee0	r14=r14 xor r0
+ee1	r14=r14 xor r1
+ee2	r14=r14 xor r2
+ee3	r14=r14 xor r3
+ee4	r14=r14 xor r4
+ee5	r14=r14 xor r5
+ee6	r14=r14 xor r6
+ee7	r14=r14 xor r7
+ee8	r14=r14 xor r8
+ee9	r14=r14 xor r9
+eea	r14=r14 xor r10
+eeb	r14=r14 xor r11
+eec	r14=r14 xor r12
+eed	r14=r14 xor r13
+eee	r14=r14 xor r14
+eef	r14=r14 xor r15
+ef0	r15=r15 xor r0
+ef1	r15=r15 xor r1
+ef2	r15=r15 xor r2
+ef3	r15=r15 xor r3
+ef4	r15=r15 xor r4
+ef5	r15=r15 xor r5
+ef6	r15=r15 xor r6
+ef7	r15=r15 xor r7
+ef8	r15=r15 xor r8
+ef9	r15=r15 xor r9
+efa	r15=r15 xor r10
+efb	r15=r15 xor r11
+efc	r15=r15 xor r12
+efd	r15=r15 xor r13
+efe	r15=r15 xor r14
+eff	r15=r15 xor r15
+f00	f0=f0*f0
+f01	f0=f0*f1
+f02	f0=f0*f2
+f03	f0=f0*f3
+f04	f0=f0*f4
+f05	f0=f0*f5
+f06	f0=f0*f6
+f07	f0=f0*f7
+f08	f0=f0*f8
+f09	f0=f0*f9
+f0a	f0=f0*f10
+f0b	f0=f0*f11
+f0c	f0=f0*f12
+f0d	f0=f0*f13
+f0e	f0=f0*f14
+f0f	f0=f0*f15
+f10	f1=f1*f0
+f11	f1=f1*f1
+f12	f1=f1*f2
+f13	f1=f1*f3
+f14	f1=f1*f4
+f15	f1=f1*f5
+f16	f1=f1*f6
+f17	f1=f1*f7
+f18	f1=f1*f8
+f19	f1=f1*f9
+f1a	f1=f1*f10
+f1b	f1=f1*f11
+f1c	f1=f1*f12
+f1d	f1=f1*f13
+f1e	f1=f1*f14
+f1f	f1=f1*f15
+f20	f2=f2*f0
+f21	f2=f2*f1
+f22	f2=f2*f2
+f23	f2=f2*f3
+f24	f2=f2*f4
+f25	f2=f2*f5
+f26	f2=f2*f6
+f27	f2=f2*f7
+f28	f2=f2*f8
+f29	f2=f2*f9
+f2a	f2=f2*f10
+f2b	f2=f2*f11
+f2c	f2=f2*f12
+f2d	f2=f2*f13
+f2e	f2=f2*f14
+f2f	f2=f2*f15
+f30	f3=f3*f0
+f31	f3=f3*f1
+f32	f3=f3*f2
+f33	f3=f3*f3
+f34	f3=f3*f4
+f35	f3=f3*f5
+f36	f3=f3*f6
+f37	f3=f3*f7
+f38	f3=f3*f8
+f39	f3=f3*f9
+f3a	f3=f3*f10
+f3b	f3=f3*f11
+f3c	f3=f3*f12
+f3d	f3=f3*f13
+f3e	f3=f3*f14
+f3f	f3=f3*f15
+f40	f4=f4*f0
+f41	f4=f4*f1
+f42	f4=f4*f2
+f43	f4=f4*f3
+f44	f4=f4*f4
+f45	f4=f4*f5
+f46	f4=f4*f6
+f47	f4=f4*f7
+f48	f4=f4*f8
+f49	f4=f4*f9
+f4a	f4=f4*f10
+f4b	f4=f4*f11
+f4c	f4=f4*f12
+f4d	f4=f4*f13
+f4e	f4=f4*f14
+f4f	f4=f4*f15
+f50	f5=f5*f0
+f51	f5=f5*f1
+f52	f5=f5*f2
+f53	f5=f5*f3
+f54	f5=f5*f4
+f55	f5=f5*f5
+f56	f5=f5*f6
+f57	f5=f5*f7
+f58	f5=f5*f8
+f59	f5=f5*f9
+f5a	f5=f5*f10
+f5b	f5=f5*f11
+f5c	f5=f5*f12
+f5d	f5=f5*f13
+f5e	f5=f5*f14
+f5f	f5=f5*f15
+f60	f6=f6*f0
+f61	f6=f6*f1
+f62	f6=f6*f2
+f63	f6=f6*f3
+f64	f6=f6*f4
+f65	f6=f6*f5
+f66	f6=f6*f6
+f67	f6=f6*f7
+f68	f6=f6*f8
+f69	f6=f6*f9
+f6a	f6=f6*f10
+f6b	f6=f6*f11
+f6c	f6=f6*f12
+f6d	f6=f6*f13
+f6e	f6=f6*f14
+f6f	f6=f6*f15
+f70	f7=f7*f0
+f71	f7=f7*f1
+f72	f7=f7*f2
+f73	f7=f7*f3
+f74	f7=f7*f4
+f75	f7=f7*f5
+f76	f7=f7*f6
+f77	f7=f7*f7
+f78	f7=f7*f8
+f79	f7=f7*f9
+f7a	f7=f7*f10
+f7b	f7=f7*f11
+f7c	f7=f7*f12
+f7d	f7=f7*f13
+f7e	f7=f7*f14
+f7f	f7=f7*f15
+f80	f8=f8*f0
+f81	f8=f8*f1
+f82	f8=f8*f2
+f83	f8=f8*f3
+f84	f8=f8*f4
+f85	f8=f8*f5
+f86	f8=f8*f6
+f87	f8=f8*f7
+f88	f8=f8*f8
+f89	f8=f8*f9
+f8a	f8=f8*f10
+f8b	f8=f8*f11
+f8c	f8=f8*f12
+f8d	f8=f8*f13
+f8e	f8=f8*f14
+f8f	f8=f8*f15
+f90	f9=f9*f0
+f91	f9=f9*f1
+f92	f9=f9*f2
+f93	f9=f9*f3
+f94	f9=f9*f4
+f95	f9=f9*f5
+f96	f9=f9*f6
+f97	f9=f9*f7
+f98	f9=f9*f8
+f99	f9=f9*f9
+f9a	f9=f9*f10
+f9b	f9=f9*f11
+f9c	f9=f9*f12
+f9d	f9=f9*f13
+f9e	f9=f9*f14
+f9f	f9=f9*f15
+fa0	f10=f10*f0
+fa1	f10=f10*f1
+fa2	f10=f10*f2
+fa3	f10=f10*f3
+fa4	f10=f10*f4
+fa5	f10=f10*f5
+fa6	f10=f10*f6
+fa7	f10=f10*f7
+fa8	f10=f10*f8
+fa9	f10=f10*f9
+faa	f10=f10*f10
+fab	f10=f10*f11
+fac	f10=f10*f12
+fad	f10=f10*f13
+fae	f10=f10*f14
+faf	f10=f10*f15
+fb0	f11=f11*f0
+fb1	f11=f11*f1
+fb2	f11=f11*f2
+fb3	f11=f11*f3
+fb4	f11=f11*f4
+fb5	f11=f11*f5
+fb6	f11=f11*f6
+fb7	f11=f11*f7
+fb8	f11=f11*f8
+fb9	f11=f11*f9
+fba	f11=f11*f10
+fbb	f11=f11*f11
+fbc	f11=f11*f12
+fbd	f11=f11*f13
+fbe	f11=f11*f14
+fbf	f11=f11*f15
+fc0	f12=f12*f0
+fc1	f12=f12*f1
+fc2	f12=f12*f2
+fc3	f12=f12*f3
+fc4	f12=f12*f4
+fc5	f12=f12*f5
+fc6	f12=f12*f6
+fc7	f12=f12*f7
+fc8	f12=f12*f8
+fc9	f12=f12*f9
+fca	f12=f12*f10
+fcb	f12=f12*f11
+fcc	f12=f12*f12
+fcd	f12=f12*f13
+fce	f12=f12*f14
+fcf	f12=f12*f15
+fd0	f13=f13*f0
+fd1	f13=f13*f1
+fd2	f13=f13*f2
+fd3	f13=f13*f3
+fd4	f13=f13*f4
+fd5	f13=f13*f5
+fd6	f13=f13*f6
+fd7	f13=f13*f7
+fd8	f13=f13*f8
+fd9	f13=f13*f9
+fda	f13=f13*f10
+fdb	f13=f13*f11
+fdc	f13=f13*f12
+fdd	f13=f13*f13
+fde	f13=f13*f14
+fdf	f13=f13*f15
+fe0	f14=f14*f0
+fe1	f14=f14*f1
+fe2	f14=f14*f2
+fe3	f14=f14*f3
+fe4	f14=f14*f4
+fe5	f14=f14*f5
+fe6	f14=f14*f6
+fe7	f14=f14*f7
+fe8	f14=f14*f8
+fe9	f14=f14*f9
+fea	f14=f14*f10
+feb	f14=f14*f11
+fec	f14=f14*f12
+fed	f14=f14*f13
+fee	f14=f14*f14
+fef	f14=f14*f15
+ff0	f15=f15*f0
+ff1	f15=f15*f1
+ff2	f15=f15*f2
+ff3	f15=f15*f3
+ff4	f15=f15*f4
+ff5	f15=f15*f5
+ff6	f15=f15*f6
+ff7	f15=f15*f7
+ff8	f15=f15*f8
+ff9	f15=f15*f9
+ffa	f15=f15*f10
+ffb	f15=f15*f11
+ffc	f15=f15*f12
+ffd	f15=f15*f13
+ffe	f15=f15*f14
+fff	f15=f15*f15

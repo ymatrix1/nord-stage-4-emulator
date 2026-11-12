@@ -20,6 +20,7 @@ fn short_op(op: u64) -> Option<ShortOp> {
         4 => (0, 0x43, false),  // Rn = NOT Rx
         5 => (0, 0x29, false),  // Rn = Rx + 1
         6 => (0, 0x2A, false),  // Rn = Rx - 1
+        7 => (1, 0x70, true),   // Rn = Rn * Rx (SSI)
         8 => (0, 0x81, true),   // Fn = Fn + Fx
         9 => (0, 0x82, true),   // Fn = Fn - Fx
         10 => (0, 0xCA, false), // Fn = FLOAT Rx
@@ -132,6 +133,9 @@ mod tests {
         (c.r[1], c.r[2]) = (1.5f32.to_bits(), 2.0f32.to_bits());
         assert!(c.short_compute(0xF12)); // F1 = F1 * F2
         assert_eq!(f32::from_bits(c.r[1]), 3.0);
-        assert!(!c.short_compute(0x712), "op 7 is not a short compute");
+        // op 7: Rn = Rn * Rx (SSI), the Type 2c words c7dc and c701 of the ORG image
+        (c.r[1], c.r[2]) = (6, (-7i32) as u32);
+        assert!(c.short_compute(0x712));
+        assert_eq!(c.r[1] as i32, -42);
     }
 }
