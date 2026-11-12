@@ -88,7 +88,8 @@ impl Core {
             Kind::T15b => {
                 // UREG 29..23, signed DATA7 22..16 (VERIFIED, docs 5.28)
                 let offset = sign_extend(bits(w, 22, 16) as u32, 7);
-                let ii = bits(w, 43, 41) as usize;
+                // G bit 37 selects program memory with the DAG2 index (ADI `i5=pm(0x8,i9)`)
+                let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 37, 37));
                 let addr = self.dag_out(ii, self.i[ii].wrapping_add(offset));
                 self.mem_transfer(d, addr, bits(w, 29, 23) as u8, write_bit(40))?;
             }
@@ -307,6 +308,16 @@ mod tests {
         c.dm_write(0x9_0011, 22).unwrap();
         assert!(c.step().is_ok());
         assert_eq!((c.r[4], c.s[4]), (11, 22));
+    }
+
+    /// ADI: `9228 0a88` is `i5=pm(0x8,i9)`: G bit 37 selects PM and the DAG2 index.
+    #[test]
+    fn type_15b_program_memory_form_uses_the_dag2_index() {
+        let mut c = core_at_zero(&[0x9228, 0x0a88]);
+        (c.i[1], c.i[9]) = (0x9_0000, 0x9_0200);
+        c.dm_write(0x9_0208, 0x1234).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!(c.i[5], 0x1234);
     }
 
     #[test]

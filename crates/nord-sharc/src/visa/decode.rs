@@ -76,7 +76,6 @@ fn dual_half(space: &str, write: bool, i: u64, m: u64, reg: u64) -> String {
 
 pub(super) fn type_only(kind: Kind) -> Option<&'static str> {
     Some(match kind {
-        Kind::T6a => "shift immediate",
         Kind::T9a => "indirect/rel branch + compute",
         Kind::T9b => "indirect/rel branch",
         Kind::T10a => "jump + dual move + compute",
@@ -148,7 +147,13 @@ pub fn decode_text(insn: &Insn) -> String {
         Kind::T15b => {
             // I 43..41, D 40, UREG 29..23, signed DATA7 22..16 (VERIFIED, docs 5.28)
             let data = signed_field(bits(w, 22, 16), 7);
-            let ea = format!("DM({data}, I{})", bits(w, 43, 41));
+            // G bit 37: program memory with the DAG2 index (`pm(0x8,i9)`), VERIFIED on 1,400 samples
+            let (space, bank) = if bits(w, 37, 37) == 1 {
+                ("PM", 8)
+            } else {
+                ("DM", 0)
+            };
+            let ea = format!("{space}({data}, I{})", bits(w, 43, 41) + bank);
             let u = ureg_name(bits(w, 29, 23) as u8);
             if bits(w, 40, 40) == 1 {
                 format!("{ea} = {u}")
@@ -215,6 +220,18 @@ pub fn decode_text(insn: &Insn) -> String {
             }
         }
         Kind::T6n => format!("{iff}{}", shift_imm_text(w)),
+        Kind::T6a => {
+            // shift fields of the 0x02 form plus a post-modify data move (docs 5.36)
+            let bank = if bits(w, 32, 32) == 1 { 8 } else { 0 };
+            let mv = dual_half(
+                if bank == 8 { "PM" } else { "DM" },
+                bits(w, 31, 31) == 1,
+                bits(w, 43, 41) + bank,
+                bits(w, 40, 38) + bank,
+                bits(w, 26, 23),
+            );
+            format!("{iff}{}, {mv}", shift_imm_text(w))
+        }
         Kind::T19a => {
             let g = if bits(w, 38, 38) == 1 { 8 } else { 0 };
             let src = bits(w, 34, 32) + g;
@@ -338,6 +355,7 @@ mod tests {
             "R12 = DM(0, I5), F8 = PASS F8"
         );
         assert_eq!(dec(&[0x687E, 0x143F]), "R8 = DM(I4, 2)");
+        assert_eq!(dec(&[0x9228, 0x0A88]), "I5 = PM(8, I9)");
         // Type 4: DATA6 is a signed offset; a zero compute field prints no NOP (ADI ground truth)
         assert_eq!(
             dec(&[0x6A3F, 0x218D, 0xA00F]),
@@ -368,6 +386,14 @@ mod tests {
             dec(&[0x043F, 0xD808, 0x1BAE]),
             "I7 = MODIFY(I7, M3), F11 = F10 + F14"
         );
+        // shift immediate with a data move (ADI elfdump ground truth, docs 5.36)
+        assert_eq!(
+            dec(&[0x8B7E, 0x3011, 0x4650]),
+            "R5 = FDEP R0 BY 6:25, R0 = DM(I5, M5)"
+        );
+        // multiplier result register transfers (ADI elfdump ground truth, docs 5.36)
+        assert_eq!(dec(&[0x5EBE, 0x8440, 0x1100]), "DM(I7, M2) = R8, R1 = MR1F");
+        assert_eq!(dec(&[0x5CBE, 0x0440, 0x0000]), "R8 = DM(I6, M2), R0 = MR0F");
         // Type 4 post-modify, MODIFY bank/destination, loop counts (ADI elfdump ground truth)
         assert_eq!(dec(&[0x6C7E, 0x10BF]), "R1 = DM(I6, 2)");
         assert_eq!(

@@ -15,7 +15,7 @@ use super::{Core, Flags};
 /// routine of an `IRQ2-0` or timer interrupt.
 pub(super) const MMASK_RESET: u32 = 1 << 21;
 /// ASTAT bits the flag set does not model: AS, AI, MN, MV, MU, MI, AF (4-10), SF (14), CACC (24-31).
-const ASTAT_EXTRA: u32 = 0x7F << 4 | 1 << 14 | 0xFF00_0000;
+const ASTAT_EXTRA: u32 = 0x1F << 6 | 1 << 14 | 0xFF00_0000;
 /// STKY bits a program can write: AUS AVS AOS (0-2), AIS MOS MVS MUS MIS (5-9), CB7S CB15S IIRA
 /// U64MA (17-20).
 const STKY_WRITABLE: u32 = 0x3E7 | 0x1E_0000;
@@ -60,6 +60,8 @@ fn astat_pack(f: Flags, extra: u32) -> u32 {
         | b(f.av, 1)
         | b(f.an, 2)
         | b(f.ac, 3)
+        | b(f.as_, 4)
+        | b(f.ai, 5)
         | b(f.sv, 11)
         | b(f.sz, 12)
         | b(f.ss, 13)
@@ -67,17 +69,20 @@ fn astat_pack(f: Flags, extra: u32) -> u32 {
         | extra & ASTAT_EXTRA
 }
 
-fn astat_unpack(v: u32) -> (Flags, u32) {
+fn astat_unpack(v: u32, old: Flags) -> (Flags, u32) {
     let t = |n: u32| v >> n & 1 == 1;
     let f = Flags {
         az: t(0),
         av: t(1),
         an: t(2),
         ac: t(3),
+        as_: t(4),
+        ai: t(5),
         tf: t(18),
         sz: t(12),
         sv: t(11),
         ss: t(13),
+        ..old
     };
     (f, v & ASTAT_EXTRA)
 }
@@ -89,7 +94,8 @@ impl Core {
     }
 
     pub(super) fn set_astat(&mut self, y: usize, v: u32) {
-        let (f, extra) = astat_unpack(v);
+        let old = if y == 0 { self.flags } else { self.flags_y };
+        let (f, extra) = astat_unpack(v, old);
         if y == 0 {
             self.flags = f;
         } else {

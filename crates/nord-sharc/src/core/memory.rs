@@ -81,12 +81,18 @@ impl Core {
     pub fn write_ureg(&mut self, code: u8, v: u32) {
         let n = (code & 15) as usize;
         match (code >> 4) & 7 {
-            0 => self.r[n] = v,
+            0 => {
+                self.r[n] = v;
+                self.fx.clear(n);
+            }
             1 => self.i[n] = v,
             2 => self.m[n] = v,
             3 => self.l[n] = v,
             4 => self.b[n] = v,
-            5 => self.s[n] = v,
+            5 => {
+                self.s[n] = v;
+                self.fx_y.clear(n);
+            }
             7 if n < 2 => self.ustat[n] = v,
             6 | 7 => self.write_sys(code, v),
             _ => {}
