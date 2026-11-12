@@ -145,14 +145,14 @@ SMP (`bank0_CODE@0x51B574`) contains the loop that PNO lacks. Listing `0x1C07D8.
 | Interpolation | `I9 = R14 + (R1 >> 24)` with `R14 = 0xE3400`, `M11 = 0x100`, six `MRF = MRF + R0*R1 (SSF)` with `R1 = PM(I9, M11)` | **6-tap, 256-phase polyphase kernel** read with stride 256 |
 | Output | `R3 = R2*R3 (SSF)`, `R5 = R2*R5`, added to `DM(M0, I7)` | left and right gain, mixed into the bus |
 
-This matches the fixed-LPC residual codec of [nsmp4-and-npno-cnsp-codec](nsmp4-and-npno-cnsp-codec.md) (order 0..4, 1..16 bit residuals). The 1,536-word block at SMP `DM(0xE3400)` is that kernel in **Q31 (24-bit significant, low byte zero)**: six rows of 256 phases, row `t` and phase `p` at `0xE3400 + 256 t + p`; value `h[t][p] = sinc(d) * window(d)` with `d = (2 - t) + p/256` (peak 0x7FFFFF00 = 1.0 at `t = 2, p = 0`), exactly mirror symmetric (`h[3][p] = h[2][256-p]`, `h[4][p] = h[1][256-p]`, `h[5][p] = h[0][256-p]`, 0 differences). The window is smooth and non-zero at `|d| = 3`; best simple fits are a 3-term cosine sum (rms 1.9e-4) and a Kaiser window `beta 5.3, half width 3.05` (rms 4.6e-4), so the family is **not identified** (EMPIRICAL, no exact form). It is a different kernel from the 12-tap float set of SY1SY2.
+This matches the fixed-LPC residual codec of [nsmp4-and-npno-cnsp-codec](nsmp4-and-npno-cnsp-codec.md) (order 0..4, 1..16 bit residuals). The 1,536-word block at SMP `DM(0xE3400)` is that kernel in **Q31 (24-bit significant, low byte zero)**: six rows of 256 phases, row `t` and phase `p` at `0xE3400 + 256 t + p`; value `h[t][p] = sinc(d) * window(d)` with `d = (2 - t) + p/256` (peak 0x7FFFFF00 = 1.0 at `t = 2, p = 0`), exactly mirror symmetric (`h[3][p] = h[2][256-p]`, `h[4][p] = h[1][256-p]`, `h[5][p] = h[0][256-p]`, 0 differences). **Identified and bit-exact** ([smp-kernel-fit](smp-kernel-fit.md)): `h[t][p] = u + (1 - sum_t u) / 6` with `u = sinc(d) (0.54 + 0.46 cos(pi d / 3))` (Hamming window, half width 3) and word `min(round(h 2^23), 2^23 - 1) << 8`; 0 mismatches over 1,536 words (VERIFIED, `tools/ns4_smp_kernel_fit.py`). The earlier fits (3-term cosine rms 1.9e-4, Kaiser rms 4.6e-4) missed the additive per-phase DC correction. It is a different kernel from the 12-tap float set of SY1SY2.
 
-For `piano.rs` and `sample_osc`: the sampler path of the hardware is **6-tap Q31**, not 12-tap float; see TD-08.
+For `piano.rs` and `sample_osc`: the sampler path of the hardware is **6-tap Q31**, not 12-tap float; see TD-08. `crates/nord-core/src/piano/q31_kernel.rs` implements the kernel (default `SampleInterp::SmpQ31`).
 
 ## Implications
 
 - The PNO image is block-level stereo post-processing around the sample voices, not the voices themselves. Replicating it 1:1 needs the module installation order from the ARM side (which routines are put in the 8-slot table and the chain for each piano sound), not more static reading.
-- `piano.rs` sample interpolation should follow SMP (6 taps, 256 phases, Q31) once the window is identified; the SY1SY2 12-tap kernel is the synth path only.
+- `piano.rs` sample interpolation follows SMP (6 taps, 256 phases, Q31; window identified, implemented as `SampleInterp::SmpQ31`); the SY1SY2 12-tap kernel is the synth path only.
 - The `0.292893 / 0.585786 / 0.171573` coefficients are a VERIFIED constant of the firmware (Butterworth fs/4); where they are applied (oversampling filter) is ASSUMED.
 
 ## Follow-ups
@@ -160,7 +160,7 @@ For `piano.rs` and `sample_osc`: the sampler path of the hardware is **6-tap Q31
 1. Find the ARM code that writes the slot table and chain heads (`0xC01D6`, `0xC2F48`, `0xC2F82`) as `(id, value)` messages: join with the 904 `0xC006CA48` call sites of [arm-dsp-protocol](arm-dsp-protocol.md); the ARM holds DSP addresses as constants (for example `0xE3400` is loaded at `0xC0001BAC` and stored into a table).
 2. Run one biquad routine under `sharc-run` against a Python transposed direct form II model (needs `MODE1` SIMD bits and `M`/`I` registers preset at an `--enter` point) to turn section 4 from EMPIRICAL into VERIFIED.
 3. Run SMP's voice loop (`0x1C07D8`) on a CNSP page from a backup to compare decoded and interpolated samples with `crates/nord-core` (the fixed-LPC decoder exists).
-4. Identify the SMP kernel window (tried: Kaiser, Hann, Gaussian, Lanczos, 3-term cosine, polynomial).
+4. ~~Identify the SMP kernel window~~ Done: Hamming 0.54/0.46 with additive DC normalisation ([smp-kernel-fit](smp-kernel-fit.md)).
 5. Trace which of the 93 routines the P4I pass calls once the slot table is populated (for example by poking `0xC01D6..` with the routine addresses of section 5).
 
 ## Reproduce
