@@ -115,6 +115,23 @@ Unpacked with `ns4 inspect <fw> --verify --unpack` (all checksums OK). Findings:
 
 Reading: sound changes between releases land in ARM-side tables and code of the main image. This is consistent with the SHARC code being stored elsewhere (SPI flash) and the DSP being driven by data from these tables, but it does not prove it.
 
+### 5.3 v1.62 unpacked: diff against v1.60 and v1.64
+
+Unpacked from `.reference/Update Nord Stage 4 OS v1.62.zip` (firmware cut at `SRAM` header, `ns4 inspect --verify --unpack`, all six checksums OK). SHA-1 prefixes of the unpacked segments:
+
+| Segment | v1.60 | v1.62 | v1.64 |
+|---|---|---|---|
+| `bank0_CODE` | `0960cb9c` (5,498,016 B) | `e5a5f6f0` (5,499,872 B) | `933fe78d` (5,499,872 B) |
+| `bank0_SRAM` | `7484db05` | `e2a775f3` | `e2a775f3` |
+| `bank0_ARM0` | `65f0e1fd` | `726f8bd1` | `726f8bd1` |
+| `bank1_CODE`, `bank1_SRAM`, `bank1_ARM0` | same | same | same |
+
+- **v1.62 vs v1.60:** 1.15 MB of `bank0_CODE` differs (1,388 runs, mostly ARM code shifted by an edit) plus 20 KB of data at `>= 0x300000`; `bank0_SRAM` and `bank0_ARM0` changed. This is the reverb-tail fix on top of the v1.60 rebuild.
+- **v1.62 vs v1.64:** only **3 bytes** differ in `bank0_CODE`:
+  - `0x27CBB0`: `0xA2` to `0xA4`, and `0x27CBB4`: `0x0B64` to `0x0B66`. They sit in a structure of function pointers and small numbers right next to `0xC007A670` (ASSUMED: version `162`/`164` and build counter `2916`/`2918`).
+  - `0x45D63C`: byte `0x74` to `0x70` (16-bit item `0x0074` becomes `0x0070`), inside the 16-bit item streams of section 5.1 (run near `0x45D640`). This single byte is the whole functional change of v1.64 ("program under rare conditions could become silent").
+- So v1.64 fixed an audible bug by editing one byte in that data stream. A stream that can silence a program is not a passive table: it configures or drives the sound path. Hypothesis (ASSUMED, untested): the 16-bit-aligned items are parcels of SHARC VISA code (16/32/48-bit instructions, per the hardware reference's VISA description), or a command script interpreted on the ARM and sent to the SHARC. Test: decode `0x45D600..0x45D680` as VISA and as a command stream.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
@@ -129,5 +146,5 @@ Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and 
 - Trace `bank0_CODE` code that touches `0x62004000` / SPI0 `0x01C41000` to confirm whether the ARM ever streams data to the SHARC at runtime (DSP comm `0x6CA48` is the known sender of table words).
 - If hardware access exists: dump the SPI flash and look for the ADI loader stream there; ADI's loader documentation (not in `.reference/sharc/`) is needed for the block layout.
 - Check the `.dmg` updater for any additional payload (not done here).
-- Decode the changed `0x440000+` runs between v1.46 and v1.64 (section 5); they are the only data that moved with the DSP-related releases.
+- Decode the `0x440000+` item streams (section 5.1/5.3): VISA parcels or a command script? The v1.62 to v1.64 one-byte fix at `0x45D63C` is the best entry point.
 - Remove or relabel the 16-bit PCM-like block in `OPEN-QUESTIONS.md` once identified.
