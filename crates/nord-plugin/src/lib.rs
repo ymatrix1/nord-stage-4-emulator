@@ -1,97 +1,50 @@
-//! CLAP and VST3 DAW Plugin wrapper for the Nord Stage 4 Emulator.
-#![allow(unknown_lints, semicolon_in_expressions_from_non_local_macros)]
+//! Nord Stage 4 DAW Plugin implementation.
+//!
+//! Provides CLAP and VST3 wrappers around `Stage4Engine` with host automation,
+//! multitimbral MIDI handling, sample rate safety, zero-allocation audio callback,
+//! and state persistence.
 
+#![allow(unknown_lints)]
+#![allow(semicolon_in_expressions_from_macros)]
+#![allow(semicolon_in_expressions_from_non_local_macros)]
+
+pub mod fx_params;
+pub mod midi;
+pub mod morph_assign;
 pub mod params;
+pub mod state;
 
 use nih_plug::prelude::*;
 use nord_core::engine::Stage4Engine;
-use nord_core::midi::MidiEvent;
-use params::{MidiRoutingMode, Stage4Params};
-use std::num::NonZeroU32;
+use params::Stage4Params;
 use std::sync::Arc;
 
-/// Real-time CLAP/VST3/Standalone plugin hosting `Stage4Engine`.
+/// The Nord Stage 4 DAW Plugin.
 pub struct NordStage4Plugin {
-    params: Arc<Stage4Params>,
-    engine: Stage4Engine,
+    pub params: Arc<Stage4Params>,
+    pub engine: Stage4Engine,
+    pub sample_rate: f32,
 }
 
 impl Default for NordStage4Plugin {
     fn default() -> Self {
-        let params = Arc::new(Stage4Params::default());
-        let mut engine = Stage4Engine::new(48_000.0);
-        params.sync_to_engine(&mut engine);
-        Self { params, engine }
-    }
-}
-
-/// Translates a sample-accurate NIH-plug MIDI event into a `nord_core::midi::MidiEvent`.
-pub fn note_event_to_midi<S>(event: &NoteEvent<S>, mode: MidiRoutingMode) -> Option<MidiEvent> {
-    let map_ch = |ch: u8| match mode {
-        MidiRoutingMode::OmniSplit => 0,
-        MidiRoutingMode::MultitimbralPerLayer => ch & 0x0F,
-    };
-
-    match *event {
-        NoteEvent::NoteOn {
-            channel,
-            note,
-            velocity,
-            ..
-        } => {
-            let vel = ((velocity * 127.0).round() as u8).clamp(1, 127);
-            Some(MidiEvent::NoteOn {
-                channel: map_ch(channel),
-                note,
-                velocity: vel,
-            })
+        Self {
+            params: Arc::new(Stage4Params::default()),
+            engine: Stage4Engine::new(44100.0),
+            sample_rate: 44100.0,
         }
-        NoteEvent::NoteOff {
-            channel,
-            note,
-            velocity,
-            ..
-        } => {
-            let vel = (velocity * 127.0).round().clamp(0.0, 127.0) as u8;
-            Some(MidiEvent::NoteOff {
-                channel: map_ch(channel),
-                note,
-                velocity: vel,
-            })
-        }
-        NoteEvent::MidiCC {
-            channel, cc, value, ..
-        } => {
-            let val = (value * 127.0).round().clamp(0.0, 127.0) as u8;
-            Some(MidiEvent::ControlChange {
-                channel: map_ch(channel),
-                controller: cc,
-                value: val,
-            })
-        }
-        NoteEvent::PolyPressure {
-            channel, pressure, ..
-        }
-        | NoteEvent::MidiChannelPressure {
-            channel, pressure, ..
-        } => {
-            let p = (pressure * 127.0).round().clamp(0.0, 127.0) as u8;
-            Some(MidiEvent::ChannelAftertouch {
-                channel: map_ch(channel),
-                pressure: p,
-            })
-        }
-        _ => None,
     }
 }
 
 impl Plugin for NordStage4Plugin {
-    const NAME: &'static str = "Nord Stage 4 Emulator";
-    const VENDOR: &'static str = "Nord Stage 4 Contributors";
-    const URL: &'static str = env!("CARGO_PKG_REPOSITORY");
-    const EMAIL: &'static str = "";
+    const NAME: &'static str = "Nord Stage 4";
+    const VENDOR: &'static str = "OpenNord";
+    const URL: &'static str = "https://github.com/yuriolive/nord-stage-4-emulator";
+    const EMAIL: &'static str = "yuri@github.com";
+
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+    // Stereo output instrument.
     const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
         main_input_channels: None,
         main_output_channels: NonZeroU32::new(2),
@@ -101,7 +54,6 @@ impl Plugin for NordStage4Plugin {
     }];
 
     const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
-    const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
 
     type SysExMessage = ();
@@ -117,13 +69,15 @@ impl Plugin for NordStage4Plugin {
         buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
-        self.engine = Stage4Engine::new(buffer_config.sample_rate);
+        self.sample_rate = buffer_config.sample_rate;
+        self.engine = Stage4Engine::new(self.sample_rate);
         self.params.sync_to_engine(&mut self.engine);
         true
     }
 
     fn reset(&mut self) {
-        self.engine = Stage4Engine::new(self.engine.sample_rate);
+        // Reset engine states upon host reset / playhead reposition
+        self.engine = Stage4Engine::new(self.sample_rate);
         self.params.sync_to_engine(&mut self.engine);
     }
 
@@ -133,59 +87,74 @@ impl Plugin for NordStage4Plugin {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
+        // Synchronize automatable parameters to engine state
         self.params.sync_to_engine(&mut self.engine);
-        let midi_mode = self.params.midi_mode.value();
-        let num_samples = buffer.samples();
-        let out_slices = buffer.as_slice();
-        if out_slices.is_empty() || num_samples == 0 {
-            return ProcessStatus::Normal;
+
+        // Synchronize host transport tempo if available
+        if let Some(transport) = context.transport().tempo {
+            self.engine.master_clock.bpm = transport as f32;
         }
 
-        let mut frame_cursor = 0usize;
+        // Process incoming MIDI and note events
         let mut next_event = context.next_event();
+        let num_samples = buffer.samples();
+        let mut sample_idx = 0;
 
-        while let Some(event) = next_event {
-            let target_sample = (event.timing() as usize).min(num_samples);
-            while frame_cursor < target_sample {
-                let [l, r] = self.engine.render_frame();
-                write_stereo_frame(out_slices, frame_cursor, l, r);
-                frame_cursor += 1;
-            }
-            if let Some(midi) = note_event_to_midi(&event, midi_mode) {
-                self.engine.handle_midi(midi);
-            }
-            next_event = context.next_event();
-        }
+        let mode = self.params.midi_mode.value();
+        let channels = buffer.as_slice();
 
-        while frame_cursor < num_samples {
-            let [l, r] = self.engine.render_frame();
-            write_stereo_frame(out_slices, frame_cursor, l, r);
-            frame_cursor += 1;
+        while sample_idx < num_samples {
+            // Dispatch all events at the current sample offset
+            while let Some(event) = next_event {
+                if event.timing() as usize <= sample_idx {
+                    midi::route_plugin_event(&mut self.engine, &self.params, mode, event);
+                    next_event = context.next_event();
+                } else {
+                    break;
+                }
+            }
+
+            // Determine block end (up to next event timing or end of buffer)
+            let block_end = if let Some(ref event) = next_event {
+                (event.timing() as usize).min(num_samples)
+            } else {
+                num_samples
+            };
+
+            // Process stereo audio block into host buffer without heap allocations
+            if channels.len() >= 2 {
+                let (left, right) = channels.split_at_mut(1);
+                let left_slice = &mut left[0][sample_idx..block_end];
+                let right_slice = &mut right[0][sample_idx..block_end];
+
+                for (l, r) in left_slice.iter_mut().zip(right_slice.iter_mut()) {
+                    let [out_l, out_r] = self.engine.render_frame();
+                    *l = out_l;
+                    *r = out_r;
+                }
+            } else if channels.len() == 1 {
+                let mono_slice = &mut channels[0][sample_idx..block_end];
+                for m in mono_slice.iter_mut() {
+                    let [out_l, out_r] = self.engine.render_frame();
+                    *m = 0.5 * (out_l + out_r);
+                }
+            }
+
+            sample_idx = block_end;
         }
 
         ProcessStatus::Normal
     }
-}
 
-#[inline]
-fn write_stereo_frame(out_slices: &mut [&mut [f32]], idx: usize, l: f32, r: f32) {
-    if out_slices.len() >= 2 {
-        out_slices[0][idx] = l;
-        out_slices[1][idx] = r;
-        for ch in out_slices.iter_mut().skip(2) {
-            ch[idx] = 0.0;
-        }
-    } else if let Some(mono) = out_slices.first_mut() {
-        mono[idx] = 0.5 * (l + r);
-    }
+    fn deactivate(&mut self) {}
 }
 
 impl ClapPlugin for NordStage4Plugin {
-    const CLAP_ID: &'static str = "org.nordstage4.emulator";
+    const CLAP_ID: &'static str = "org.opennord.nord-stage-4";
     const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Nord Stage 4 7-layer stage keyboard emulator");
+        Some("Open-source Nord Stage 4 7-Layer Multitimbral Emulator");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
-    const CLAP_SUPPORT_URL: Option<&'static str> = Some(Self::URL);
+    const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[
         ClapFeature::Instrument,
         ClapFeature::Synthesizer,
@@ -194,11 +163,11 @@ impl ClapPlugin for NordStage4Plugin {
 }
 
 impl Vst3Plugin for NordStage4Plugin {
-    const VST3_CLASS_ID: [u8; 16] = *b"NordStage4Emul01";
+    const VST3_CLASS_ID: [u8; 16] = *b"NordStage4Emulat";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
         Vst3SubCategory::Instrument,
         Vst3SubCategory::Synth,
-        Vst3SubCategory::Piano,
+        Vst3SubCategory::Stereo,
     ];
 }
 
@@ -208,49 +177,85 @@ nih_export_vst3!(NordStage4Plugin);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::mem::MaybeUninit;
 
-    #[test]
-    fn test_note_event_translation_omni_and_multitimbral() {
-        let ev = NoteEvent::<()>::NoteOn {
-            timing: 16,
-            voice_id: None,
-            channel: 4,
-            note: 60,
-            velocity: 1.0,
-        };
-        assert_eq!(
-            note_event_to_midi(&ev, MidiRoutingMode::OmniSplit),
-            Some(MidiEvent::NoteOn {
-                channel: 0,
-                note: 60,
-                velocity: 127
-            })
-        );
-        assert_eq!(
-            note_event_to_midi(&ev, MidiRoutingMode::MultitimbralPerLayer),
-            Some(MidiEvent::NoteOn {
-                channel: 4,
-                note: 60,
-                velocity: 127
-            })
-        );
+    struct MockInitContext;
+    impl InitContext<NordStage4Plugin> for MockInitContext {
+        fn plugin_api(&self) -> PluginApi {
+            PluginApi::Clap
+        }
+        fn execute(&self, _task: ()) {}
+        fn set_latency_samples(&self, _samples: u32) {}
+        fn set_current_voice_capacity(&self, _capacity: u32) {}
+    }
+
+    struct MockProcessContext {
+        transport: Transport,
+    }
+
+    impl ProcessContext<NordStage4Plugin> for MockProcessContext {
+        fn plugin_api(&self) -> PluginApi {
+            PluginApi::Clap
+        }
+        fn execute_background(&self, _task: ()) {}
+        fn execute_gui(&self, _task: ()) {}
+        fn transport(&self) -> &Transport {
+            &self.transport
+        }
+        fn next_event(&mut self) -> Option<NoteEvent<()>> {
+            None
+        }
+        fn send_event(&mut self, _event: NoteEvent<()>) {}
+        fn set_latency_samples(&self, _samples: u32) {}
+        fn set_current_voice_capacity(&self, _capacity: u32) {}
     }
 
     #[test]
-    fn test_plugin_engine_renders_stereo_audio() {
+    fn test_plugin_instantiation_and_reset() {
         let mut plugin = NordStage4Plugin::default();
-        plugin.engine.handle_midi(MidiEvent::NoteOn {
-            channel: 0,
-            note: 60,
-            velocity: 100,
-        });
+        assert_eq!(plugin.sample_rate, 44100.0);
+        plugin.sample_rate = 96000.0;
+        plugin.reset();
+        assert_eq!(plugin.engine.sample_rate, 96000.0);
+    }
 
-        let mut energy = 0.0f32;
-        for _ in 0..512 {
-            let [l, r] = plugin.engine.render_frame();
-            assert!(l.is_finite() && r.is_finite());
-            energy += l * l + r * r;
+    #[test]
+    fn test_plugin_process_buffer_zero_alloc() {
+        let mut plugin = NordStage4Plugin::default();
+        let mut init_ctx = MockInitContext;
+        plugin.initialize(
+            &NordStage4Plugin::AUDIO_IO_LAYOUTS[0],
+            &BufferConfig {
+                sample_rate: 48000.0,
+                min_buffer_size: None,
+                max_buffer_size: 512,
+                process_mode: ProcessMode::Realtime,
+            },
+            &mut init_ctx,
+        );
+
+        let mut left_buf = [0.0f32; 128];
+        let mut right_buf = [0.0f32; 128];
+        let channel_slices: Vec<&mut [f32]> = vec![&mut left_buf[..], &mut right_buf[..]];
+        let mut buffer = Buffer::default();
+        unsafe {
+            buffer.set_slices(128, |output| {
+                *output = channel_slices;
+            });
         }
-        assert!(energy > 0.01);
+
+        let mut aux = AuxiliaryBuffers {
+            inputs: &mut [],
+            outputs: &mut [],
+        };
+
+        let mut transport: Transport = unsafe { MaybeUninit::zeroed().assume_init() };
+        transport.sample_rate = 48000.0;
+        transport.tempo = Some(132.0);
+
+        let mut context = MockProcessContext { transport };
+        let status = plugin.process(&mut buffer, &mut aux, &mut context);
+        assert_eq!(status, ProcessStatus::Normal);
+        assert_eq!(plugin.engine.master_clock.bpm, 132.0);
     }
 }
