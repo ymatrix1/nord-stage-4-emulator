@@ -1,13 +1,16 @@
-//! Standalone desktop binary entry point for the `nord-plugin` wrapper.
+use nih_plug::prelude::*;
+use nord_plugin::NordStage4Plugin;
 
 fn main() {
-    nih_plug::nih_export_standalone::<nord_plugin::NordStage4Plugin>();
+    nih_export_standalone::<NordStage4Plugin>();
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn test_standalone_plugin_constructs() {
-        let _plugin = nord_plugin::NordStage4Plugin::default();
+    fn test_standalone_target_symbols() {
+        assert_eq!(NordStage4Plugin::NAME, "Nord Stage 4");
     }
 }

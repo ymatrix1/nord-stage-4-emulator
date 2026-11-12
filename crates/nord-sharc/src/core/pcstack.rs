@@ -51,7 +51,12 @@ impl Core {
 
     /// LADDR: loop end address, termination code and loop type by length (`LCE` = `0x0F`).
     pub(super) fn laddr(&self) -> u32 {
-        let Some(f) = self.loops.last() else { return 0 };
+        let Some(f) = self.loops.last() else {
+            return u32::MAX; // VERIFIED: all ones with an empty loop stack
+        };
+        if f.end == 0 {
+            return 0; // VERIFIED: a fresh `PUSH LOOP` entry reads 0
+        }
         let mut pc = f.start;
         let mut n = 0;
         while pc <= f.end && n < 4 {
@@ -82,8 +87,10 @@ impl Core {
 
     /// `PUSH LOOP`: an empty loop frame whose registers the program then loads.
     fn push_loop_stack(&mut self) {
+        // VERIFIED: a fresh entry has CURLCNTR = 1
         self.push_loop(LoopFrame {
             detached: true,
+            remaining: 1,
             ..LoopFrame::default()
         });
     }
@@ -99,17 +106,17 @@ impl Core {
     }
 
     /// `PUSH PCSTK`: a new PC stack entry. Right after `PUSH LOOP` it is the entry of that loop.
-    fn push_pc_stack(&mut self) {
+    fn push_pc_stack(&mut self, next: u32) {
         let depth = self.call_stack.len();
         if let Some(f) = self.loops.last_mut().filter(|f| f.detached) {
             *f = LoopFrame {
                 detached: false,
                 cs_depth: depth,
-                start: 0,
+                start: next, // VERIFIED: PUSH PCSTK stores the address of the next instruction
                 ..*f
             };
         } else {
-            self.push_return(0);
+            self.push_return(next); // VERIFIED: the address of the next instruction
         }
     }
 
@@ -141,7 +148,7 @@ impl Core {
             _ => {}
         }
         match pair(35, 34) {
-            (true, _) => self.push_pc_stack(),
+            (true, _) => self.push_pc_stack(d.pc.wrapping_add(d.insn.len as u32)),
             (_, true) => self.pop_pc_stack(),
             _ => {}
         }
