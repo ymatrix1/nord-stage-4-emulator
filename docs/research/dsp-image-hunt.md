@@ -132,6 +132,26 @@ Unpacked from `.reference/Update Nord Stage 4 OS v1.62.zip` (firmware cut at `SR
   - `0x45D63C`: byte `0x74` to `0x70` (16-bit item `0x0074` becomes `0x0070`), inside the 16-bit item streams of section 5.1 (run near `0x45D640`). This single byte is the whole functional change of v1.64 ("program under rare conditions could become silent").
 - So v1.64 fixed an audible bug by editing one byte in that data stream. A stream that can silence a program is not a passive table: it configures or drives the sound path. Hypothesis (ASSUMED, untested): the 16-bit-aligned items are parcels of SHARC VISA code (16/32/48-bit instructions, per the hardware reference's VISA description), or a command script interpreted on the ARM and sent to the SHARC. Test: decode `0x45D600..0x45D680` as VISA and as a command stream.
 
+### 5.4 Decode attempt of the `0x45D600` stream (ARM, Thumb, records, SHARC addresses)
+
+Bytes: v1.64 `bank0_CODE@0x45D5EA..0x45D8C0` (v1.62 differs only at `0x45D63C`). Scripts were ad hoc Python with `capstone` 5.0.7 (ARM and Thumb) and `struct`.
+
+- **Not ARM, not Thumb:** ARM decode of `0x45D600..0x45D680` has invalid words and unrelated condition codes; Thumb decodes without errors but into noise (`ldr r6,[r7,#0x2c]`, `asrs r7,r7,#2`, `lsrs r4,r4,#0x1e`, branches into the data).
+- **Record framing (VERIFIED by dump, 26 records between `0x45D3xx` and `0x45D900`):** every record starts with the 4 bytes `20 00 1a 72` and ends with `86 14 00 00`. Lengths 16, 38, 72, 74, 96 bytes; across `0x440000..0x4FFFFF` there are 98 headers with gaps 16 (x64), 72 (x12), 38 (x8), 96 (x4).
+- **The v1.64 fix in context:** the 38-byte record at `0x45D630` carries `a40f XXXX` where `XXXX` is `0x0074` in v1.62 and `0x0070` in v1.64. The same field in the neighbouring records is `0x006c`, `0x0078`, `0x007a`. So the fix changes one operand/parameter of one record, not the stream layout.
+- **SHARC-like addresses:** inside the stream, 16-bit parcel pairs `0c00 d803`, `0c00 da03`, `0c00 dc03`, `0c00 de03` (then `e003 .. e603`) read as `0x000C03D8` stepping by 2, i.e. addresses in the SHARC internal RAM range of the DSP region table (`0x90000`, `0xB0000`, `0xC0000`, section 1). Counting 16-bit parcels in `bank0_CODE`:
+
+  | Region | Parcel `0x000C` | Share |
+  |---|---|---|
+  | `0x440000..0x4FFFFF` (item streams) | 6,835 of 393,216 | 1.74% |
+  | `0x300000..0x43FFFF` (PCM-like block) | 180 of 655,360 | 0.03% |
+  | `0x000000..0x26FFFF` (ARM code) | 3,141 of 1,277,952 | 0.25% |
+
+  Prefixes `0x000B` (3,063), `0x0008` (917), `0x0009` (735), `0x000E` (829) are elevated in the same region as well. Uniform data would give 6 per prefix.
+- **Verdict on the two hypotheses:** the stream is not ARM data and is framed like a command or code script that addresses SHARC internal RAM. Both "VISA code block" and "command stream sent to the SHARC" remain open. It could not be decided without SHARC opcode tables: the hardware reference in `.reference/sharc/` has no instruction encoding, and no open-source SHARC/VISA disassembler or SLEIGH spec was found (GitHub repository and code searches returned nothing; a web search found none).
+
+Next step: obtain the ADI *ADSP-214xx SHARC Processor Programming Reference* (instruction set appendix with VISA opcode maps), check whether the `20 00 1a 72 ... 86 14 00 00` records decode as a consistent VISA instruction sequence (lengths 16/32/48 bits matching the record lengths) and what `0x7a1a`/`0x6afe`/`0x687e` parcels are.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
