@@ -663,6 +663,21 @@ Delayed branches (J bit 26 of Types 8a, 9a, 9b) are implemented: the two followi
 - At the stop the call stack holds one entry (`0x127310`, the return address of the failing `CALL (M8, I8)`): the handler reaches the processing code by jumps, not calls.
 - The pointer table read by the delayed `CALL (M8, I8)` sites, `DM(0xC10B8..)`, is initialised in the image (ORG: `0x120bf7, 0x120bf7, 0x120300, 0x120300, 0, 0, 0, 0`, code addresses in the VISA window; `python` over `core2_sram.bin` at byte `4 * 0xC10B8`). It does not need to be written by the ARM. The non-delayed call at `0x12730e` still has `I8 = 0` because the executed path never loads it; which caller sets it is open.
 
+### 5.27 The processing pass: double buffer, module list, function pointers
+
+Reading the ORG Core2 handler (`0x24BBD8..0x24BD5E`, short-words `0x125DEC..0x125EAF`) together with the image data (`python` over `core2_sram.bin`, `DM(addr)` = bytes `4 * addr`):
+
+| Item | Evidence |
+|---|---|
+| Timing | `R0 = EMUCLK` minus stored values, kept in `DM(0xC2C68..0xC2C78)` (min, max and last pass time, ASSUMED) |
+| Double buffer | `R0 = DM(0xB2EF3)` is compared with `0x282C01E0`; `IF NE` selects base pointers `0xB0000`/`0xB0078` or `0xC0000`/`0xC0078`, stored to `DM(0xB00E4/E5)` and `DM(0xB2EF4..F8)` (ASSUMED reading: ping-pong audio buffers, one per pass) |
+| Module list | `I1 = DM(0xC1386)` = `0xC13A6` in the image; `M3 = 0x28`; records of 40 words. Record 0 at `0xC13A6`: word 0 `0x12538C` (a code address in the VISA window), word 1 `0x1267`, word 4 `0x3F7DA3C2` (float 0.9908), words 6 and 7 `0xD1B71`, word 8 `0xC13CE` (the next record, base + 0x28), word 9 `0xC139A`. Records 1 and 2 repeat the same pattern (VERIFIED by reading the image) |
+| Processing | after the six unrolled `reg = DM(0, I1); COMP(R0, R6 = 0xFFFE); IF EQ JUMP 0x12712E` peeks the handler runs the list: it never takes the skip jump in the run |
+
+The six peeks load into `ureg 0x7A`, which the decoder names `IRPTL`; the compare that follows uses `R0`, so that register code or the 15b field split is probably misread (open).
+
+`sharc-run --set REG=VALUE` presets `R`/`I`/`M`/`L`/`B` registers. With `--set I8=0x12538C` (the first record's code pointer) the failing `CALL (M8, I8)` at `0x12730E` enters that routine and the run continues 844 steps further (496,183 steps, 95 skipped ops) before the next indirect call stops it at address 0 (call stack `127abd`). So the module records carry the routine each pass calls; which instruction should load `I8` from the record is still open.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
