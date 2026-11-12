@@ -45,8 +45,10 @@ pub enum Kind {
     T19a,
     T20a,
     T25,
-    /// `000 00000` first byte: NOP, idle or data.
+    /// `000 00000` first byte, 48-bit form: NOP, idle or data.
     T21,
+    /// `000 00000` first byte ending in a 1 bit: 16-bit NOP or idle.
+    T21c,
     Unknown,
 }
 
@@ -91,6 +93,7 @@ impl Kind {
             T20a => "20a",
             T25 => "25",
             T21 => "21/22",
+            T21c => "21c",
             Unknown => "??",
         }
     }
@@ -199,7 +202,13 @@ pub fn classify(p0: u16, p1: Option<u16>) -> (Kind, usize) {
         0x16 => (T19a, 3),
         0x17 => (T20a, 3),
         0x10..=0x13 => (T14a, 3),
-        0x00 => (T21, 3),
+        0x00 => {
+            if p0 & 1 == 1 {
+                (T21c, 1)
+            } else {
+                (T21, 3)
+            }
+        }
         _ => (Unknown, 3),
     }
 }
@@ -807,6 +816,13 @@ pub fn decode_text(insn: &Insn) -> String {
             format!("{iff}{kind_s}{rel} 0x{:x}", bits(w, 23, 0))
         }
         Kind::T2a => format!("{iff}{}", compute_text(bits(w, 22, 0))),
+        Kind::T21c => {
+            if parcels[0] == 0x0001 {
+                "NOP".to_string()
+            } else {
+                format!("21c? raw {}", raw_hex(parcels))
+            }
+        }
         Kind::T11a | Kind::T11c => {
             format!("{iff}{}", if bits(w, 40, 40) == 1 { "RTI" } else { "RTS" })
         }
@@ -941,6 +957,31 @@ mod tests {
         assert_eq!(
             listing_line(0x2423DE, &insns[0]),
             "0x2423de 17a   0f15 000c 0440  I5 = 0xc0440"
+        );
+    }
+
+    #[test]
+    fn sixteen_bit_nop_and_entry_code_shape() {
+        assert_eq!(classify(0x0001, Some(0x06BE)), (Kind::T21c, 1));
+        assert_eq!(classify(0x0000, Some(0x0000)), (Kind::T21, 3));
+        // entry code of the FX Core1 section: BIT CLR; NOP; CALL; CALL; R0 = 0; I0 = 0xc0430
+        let stream = [
+            0x1422, 0x0000, 0x1000, 0x0001, 0x06BE, 0x0012, 0x0528, 0x06BE, 0x0012, 0x05A0, 0x0F80,
+            0x0000, 0x0F10, 0x000C, 0x0430,
+        ];
+        let (insns, exact) = tile(&stream);
+        assert!(exact);
+        let text: Vec<String> = insns.iter().map(decode_text).collect();
+        assert_eq!(
+            text,
+            [
+                "BIT CLR MODE1 0x1000",
+                "NOP",
+                "CALL 0x120528",
+                "CALL 0x1205a0",
+                "R0 = 0x0",
+                "I0 = 0xc0430"
+            ]
         );
     }
 
