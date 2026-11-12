@@ -78,3 +78,20 @@ def test_main_sweep(tmp_path, capsys):
     f.write_bytes(bytes(0x800) + bytes.fromhex("150f0c003804") + bytes(0x800))
     assert v.main([str(f), "0", "0x1000", "--sweep"]) == 0
     assert "index-register loads" in capsys.readouterr().out
+
+
+def test_decode_added_forms():
+    d = v.decode
+    assert d((0x1000, 0x0001, 0x06BE)) == "R0 = DM(0x106be)"  # Type 14a read
+    assert d((0x1103, 0x000C, 0x02C0)) == "DM(0xc02c0) = R3"  # Type 14a write
+    assert d((0xC000 | 0x0F34,)) == "F3 = F3 * F4"  # Type 2c short compute
+    assert v.short_compute_text(0x0804) == "F0 = F0 + F4"
+    assert v.short_compute_text(0x0428) == "R2 = NOT R8"
+
+
+def test_compute_units():
+    assert v.mult_text(0x30, 1, 2, 3) == "F1 = F2 * F3"
+    assert v.mult_text(0x78, 0, 1, 2) == "R0 = R1 * R2 (SSF)"
+    assert v.mult_text(0x00, 0, 1, 2) is None
+    assert v.compute_text((0b0000111 << 16) | 0x4321) == "R4 = R2 - R1, R3 = R2 + R1"
+    assert v.compute_text(0x4E4321).startswith("MULTI?")

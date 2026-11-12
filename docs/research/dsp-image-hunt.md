@@ -219,6 +219,18 @@ Smaller isolated hits (1 to 10) sit at `0x44EC00`, `0x477800`, `0x4AF000`, `0x4D
 
 Hypothesis (ASSUMED, untested): the bank 1 table lists six core images (`DSPFxCore1/2`, `DSPOrgCore1/2`, `DSPSynCore1/2`); six clusters A to F match that count, and the three near-identical D/E/F could be one program per instance. Mapping clusters to cores needs the ARM code that sends them (`DSP Comm`, sender `0x6CA48`) and the L1 addresses used.
 
+### 5.7 Decoder coverage and the ARM sender (negative result)
+
+**Decoder coverage** (v1.64, the six large blocks A to F, 56,663 instructions tiled from each block start): `tools/sharc_visa.py` now decodes **94.2%** of instructions (3,299 stay `type? raw`) and 86.8% including the compute field (4,207 compute fields stay raw). Added since 5.6: Types 14a/15a (`DM|PM(addr32) = ureg`, e.g. `DM(0xc02c0) = R3`, `R0 = DM(0x106be)`: the first is a SHARC RAM address, which supports the layout), 2b/2c (short compute: `F3 = F3 * F4`, `F0 = F0 + F4`), multiplier opcodes (Tables 12-5 to 12-7), dual ALU add/subtract, 3c and 15b. 15b field split (`I` 43..41, `D` 40, `DATA7` 29..23, `UREG` 22..16) is ASSUMED from bit-frequency statistics. Still raw: multifunction compute (MUL+ALU, MUL+dual ALU), shifter opcodes (Table 12-11), types 1a, 7a/7b, 9a/9b, 10a, 16a/16b, 19a, `??` and zero padding.
+
+**ARM sender** (searched, not found). Results, all on `bank0_CODE` v1.64:
+
+- `DSP Comm` (`0x6CA48`) is a message FIFO: it limits a message to `0x40` entries / `0x100` bytes, polls a ready bit in a peripheral register and advances a ring. It sends control and parameter messages, not code images.
+- No aligned 32-bit word in the ARM code or tables points at the start of any code block A to H, and none equals a round boundary (`0x430000..0x440400` or `0x520000..0x526000`). The 793 pointers into `0x440000..0x52FFFF` from outside land in the data tables at `0x441xxx..0x446xxx` (floats, coefficient tables) and the string area.
+- Data-processing immediates in `0x440000..0x52FFFF` (`0x500000`, `0x480000`, `0x4d0000`, `0x4a0000`) occur 11 times, none in a copy loop I could identify.
+
+Reading: the blocks are not addressed by absolute pointers, so they are reached by base plus offset or are copied as a whole to a peripheral from a loop that uses a table elsewhere (for example the flash tool in bank 1, which programs the SPI flash; the SHARCs then boot from that flash, per the hardware reference). That would explain why the update carries the code as VISA: the OS update may write it to the SPI flash. Untested: trace the bank 1 `Flash Tool` / `Update Image Log` routines (`bank1_CODE@0x919F4`, `0x91A88`) for a copy from `0xC0440000..`.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
@@ -229,8 +241,8 @@ Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and 
 
 ## Follow-ups
 
-- Finish `tools/sharc_visa.py`: multiplier/shifter/multifunction compute fields (Tables 12-5 to 12-12), types 1a/6a/7/9/10/14 to 16, and validate 5a/5b field pairing.
-- Map code blocks to `DSPO` / `DSPS` / `DSPF` (which cores, which L1 blocks: DAG addresses `0xC03D8..` are block-1 RAM) and find the ARM routine that sends them (`DSP Comm`, sender `0x6CA48`).
+- Finish `tools/sharc_visa.py`: multifunction and shifter compute fields (Tables 12-11, 12-12 onward), types 1a/7/9/10a/16/19a, and validate the 5a/5b and 15b field pairing.
+- Map code blocks to `DSPO` / `DSPS` / `DSPF` (which cores, which L1 blocks: DAG addresses `0xC03D8..` are block-1 RAM). The ARM sender is not `DSP Comm` (section 5.7); trace the bank 1 flash-tool routines for a copy from `0xC0440000..`.
 - Check whether ADI's own disassembler (CCES `elfdump`/`dis21k`) can read a raw VISA blob for cross-checking (not downloadable without ADI tools).
 - Trace `bank0_CODE` code that touches `0x62004000` / SPI0 `0x01C41000` to confirm whether the ARM ever streams data to the SHARC at runtime (DSP comm `0x6CA48` is the known sender of table words).
 - If hardware access exists: dump the SPI flash and look for the ADI loader stream there; ADI's loader documentation (not in `.reference/sharc/`) is needed for the block layout.

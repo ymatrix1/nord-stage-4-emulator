@@ -187,14 +187,63 @@ def bits(w: int, hi: int, lo: int) -> int:
     return (w >> lo) & ((1 << (hi - lo + 1)) - 1)
 
 
+SHORT_OPS = [
+    "R{n} = R{n} + R{x}",
+    "R{n} = R{n} - R{x}",
+    "R{n} = PASS R{x}",
+    "COMP(R{n}, R{x})",
+    "R{n} = NOT R{x}",
+    "R{n} = R{x} + 1",
+    "R{n} = R{x} - 1",
+    "R{n} = R{n} * R{x} (SSI)",
+    "F{n} = F{n} + F{x}",
+    "F{n} = F{n} - F{x}",
+    "F{n} = FLOAT R{x}",
+    "COMP(F{n}, F{x})",
+    "R{n} = R{n} AND R{x}",
+    "R{n} = R{n} OR R{x}",
+    "R{n} = R{n} XOR R{x}",
+    "F{n} = F{n} * F{x}",
+]
+
+
+def short_compute_text(c: int) -> str:
+    """Type 2c 12-bit short compute: OP in bits 11..8, Rn in 7..4, Rx in 3..0 (Table, ch. 12)."""
+    return SHORT_OPS[bits(c, 11, 8)].format(n=bits(c, 7, 4), x=bits(c, 3, 0))
+
+
+def mult_text(opcode: int, rn: int, rx: int, ry: int) -> str | None:
+    """Multiplier opcodes of Tables 12-5 to 12-7 (fixed point) and `Fn = Fx * Fy`."""
+    if opcode == 0x30:
+        return f"F{rn} = F{rx} * F{ry}"
+    cls, y, x = opcode >> 6, (opcode >> 5) & 1, (opcode >> 4) & 1
+    f, sel, r = (opcode >> 3) & 1, (opcode >> 1) & 3, opcode & 1
+    mod = f"({'S' if x else 'U'}{'S' if y else 'U'}{'F' if f else 'I'}{'R' if r else ''})"
+    if cls == 0:
+        return None
+    sign = {1: "", 2: "+ ", 3: "- "}[cls]
+    reg = {0: "R{n}", 1: "R{n}", 2: "MRF", 3: "MRB"}[sel].format(n=rn)
+    acc = ""
+    if cls > 1:
+        acc = ("MRB " if sel in (1, 3) else "MRF ") + sign.strip() + " "
+    return f"{reg} = {acc}R{rx} * R{ry} {mod}"
+
+
 def compute_text(c: int) -> str:
-    """Text for a 23-bit compute field (single-function ALU decoded, others kept raw)."""
+    """Text for a 23-bit compute field (ALU, multiplier and dual ALU decoded; else raw)."""
     if c == 0:
         return "NOP"
     cu, opcode = bits(c, 22, 20), bits(c, 19, 12)
     rn, rx, ry = bits(c, 11, 8), bits(c, 7, 4), bits(c, 3, 0)
     if cu == 0 and opcode in ALU_OPS:
         return ALU_OPS[opcode].format(n=rn, x=rx, y=ry)
+    if cu == 0 and bits(c, 19, 16) in (0x7, 0xF):
+        k = "F" if bits(c, 19, 16) == 0xF else "R"
+        return f"{k}{bits(c, 15, 12)} = {k}{rx} - {k}{ry}, {k}{rn} = {k}{rx} + {k}{ry}"
+    if cu == 1:
+        text = mult_text(opcode, rn, rx, ry)
+        if text:
+            return text
     unit = {0: "ALU", 1: "MUL", 2: "SHIFT"}.get(cu, "MULTI")
     return f"{unit}?op={opcode:02x} n={rn} x={rx} y={ry}"
 
@@ -232,6 +281,29 @@ def decode(parcels: tuple[int, ...]) -> str:
         src = (bits(w, 42, 38) << 2) | bits(w, 32, 31)
         tail = f", {compute_text(bits(w, 22, 0))}" if name == "5a" else ""
         return f"{iff}{ureg_name(bits(w, 30, 24))} = {ureg_name(src)}{tail}"
+    if name in ("14a", "15a"):
+        pm = bits(w, 41, 41) if name == "14a" else bits(w, 44, 44)
+        mem = "PM" if pm else "DM"
+        write = bits(w, 40, 40)
+        u = ureg_name(bits(w, 38, 32))
+        if name == "14a":
+            ea = f"{mem}(0x{bits(w, 31, 0):x})"
+        else:
+            ea = f"{mem}(0x{bits(w, 31, 0):x}, I{bits(w, 43, 41) + (8 if pm else 0)})"
+        return f"{ea} = {u}" if write else f"{u} = {ea}"
+    if name == "15b":
+        # ASSUMED field split: I 43..41, D 40, DATA7 29..23, UREG 22..16 (fits the data, see docs).
+        ea = f"DM({bits(w, 29, 23)}, I{bits(w, 43, 41)})"
+        u = ureg_name(bits(w, 22, 16))
+        return f"{ea} = {u}" if bits(w, 40, 40) else f"{u} = {ea}"
+    if name == "3c":
+        ea = f"DM(I{bits(w, 43, 41)}, M{bits(w, 40, 38)})"
+        reg = f"R{bits(w, 35, 32)}"
+        return f"{ea} = {reg}" if bits(w, 37, 37) else f"{reg} = {ea}"
+    if name == "2b":
+        return compute_text(bits(w, 38, 16))
+    if name == "2c":
+        return short_compute_text(bits(w, 43, 32))
     if name == "17a":
         return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 0):x}"
     if name == "17b":
