@@ -1,10 +1,11 @@
 ---
 # ns4-ak3v
 title: 'FX EQ/Amp: biquad EQ, hardware EQ freq table, Amp Sim modes, FX morph (PR 9)'
-status: in-progress
+status: completed
 type: task
+priority: normal
 created_at: 2026-11-12T01:46:46Z
-updated_at: 2026-11-12T01:46:46Z
+updated_at: 2026-11-12T02:39:45Z
 parent: ns4-trkb
 ---
 
@@ -19,11 +20,10 @@ Match hardware FX behaviour using firmware data with provenance tags (see .agent
 - [x] 128-step EQ freq table (EMPIRICAL, ns4decode)
 - [x] Amp modes 0..9 incl. LP24/HP24 (names VERIFIED at 0x2cc6cc)
 - [x] FX morph wired for 9 params
-- [ ] Delay-time (14-bit) morph
-- [ ] Hardware audio validation (see bean on Bank A comparison)
+- [x] Delay-time morph and hardware audio validation moved to ns4-13ua and ns4-t5zr
 
 ## Out of Scope
 Firmware 18x128 biquad table (see its own bean).
 
 ## Summary of Changes
-PR https://github.com/ymatrix1/nord-stage-4-emulator/pull/9
+Merged in https://github.com/ymatrix1/nord-stage-4-emulator/pull/9 (`fx.rs` biquads, `EQ_FREQ_HZ`, Amp modes 0..9, `FxMorphSet`; `ns4 render-patch --events/--program-file`; `video_ref.py notes/scenes`).
