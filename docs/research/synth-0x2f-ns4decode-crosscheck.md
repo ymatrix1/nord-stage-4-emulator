@@ -50,6 +50,21 @@ python tools/ns4_fw_order_check.py target/fw_unpacked/bank0_CODE.bin
 - Firmware has two `Unison` fields: `OscUnison_obsolete` (`0x2F +69`, 2 bits, still in the layout) and the live `OscUnison` (`0x32 +306`).
 - Not covered: absolute positions (the table has names only), the `OscBank/OscCat/OscWave` split (the firmware widths are not in the strings; the type/category/wave decomposition is supported by the corpus invariant "WAVE category <= 4"), and every value scale.
 
+## ARM serializer search (OQ7, part 2: negative result)
+
+Goal: find the table or code that gives the firmware's own bit positions and value scales. Helper: `tools/fw_xref.py`.
+
+| Attempt | Result |
+|---|---|
+| Descriptor tables for `Buffer_kSynLay` / `Buffer_kSynSnd` (words pointing at the `Edt_Syn_k*` strings, `0x1aa4a4..0x1aa6c0` in `bank0_CODE.bin`) | Alternating name pointers and small ids (`0x11a` LFODst, `0x11b` LFOWave, `0x11f..0x123` osc env, `0x131` amp velocity, `0x133..0x13b` filter ...), also the ids used by the UI/morph tables near `0x190300` and `0xfc8bc`/`0xfdf28`. They are dense parameter ids, not bit offsets or widths. |
+| Tables of block-relative or absolute bit offsets (`56, 63, 69, 71, 78, 85, 92...` as u8/u16/u32 with strides up to 6 words, plus `+248`, `+1472`, `+3000`) | No match |
+| Tables of widths (`7,6,2,7,7,7`, `7,7,7,1,1,7,6`, `4,4,1,4,1,3,2,2,2,7`, strides 1..12 words) | No match for sequences longer than 3 (3-element sequences match noise everywhere) |
+| ARM immediates (`mov`/`movw`/`add`/`cmp`) equal to our absolute positions, clustered within 1.5 KB | 357 isolated hits, 0 clusters of 8 or more distinct positions |
+
+Conclusion: the layout is not stored as a plain offset/width table and is not hard-coded as clustered immediates. It is probably derived from a generic bitstream reader/writer driven by per-field type descriptors, which needs a call-graph trace of the buffer reader (look for the function that takes `Buffer_k*` and a field index, `Capstone` is available). Still unconfirmed by firmware code: absolute offsets and all value scales.
+
+Next steps (OQ7): trace callers of the `Buffer_kSynSnd` descriptor at `0x1aa59c`, identify the field-descriptor struct (the interleaved ids suggest `{name, id, morph ids}` plus a separate type/width map), then read the glide/vibrato/osc-env scale routines that consume the raw 7-bit values.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
