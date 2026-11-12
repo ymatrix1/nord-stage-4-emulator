@@ -22,6 +22,66 @@ pub const LFO_PITCH_SEMITONES: [f32; 128] = [
     38.0, 39.0, 40.0, 41.0, 42.0, 42.5, 43.0, 44.0, 45.0, 46.0, 47.0, 48.0,
 ];
 
+/// One unison partner voice: pitch ratio and which channel carries it most strongly.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UnisonVoice {
+    pub ratio: f32,
+    pub strong_left: bool,
+}
+
+/// Number of unison partner voices per Unison setting `0..=3`.
+///
+/// EMPIRICAL: counted as spectral peaks around the harmonics of a sustained Pure Saw note on a
+/// real Stage 4 (Audible Genius "Nord Stage 4 Lesson Pack - Unison" video, 19-44 s, 48 kHz):
+/// `2`, `4`, `4` peaks for settings 1, 2, 3, none at the centre pitch. Reproduce with
+/// `python tools/sweep_analyze.py unison <clip.wav> --f0 392 --harmonic 10`.
+pub const UNISON_VOICE_COUNT: [usize; 4] = [0, 2, 4, 4];
+
+/// Amplitude of a unison voice in its weaker channel relative to its stronger channel.
+///
+/// EMPIRICAL: peak magnitude ratio `0.43..0.45` (L vs R spectra of the same recording, all three
+/// settings); equal-power panning is not assumed, the measured ratio is used.
+pub const UNISON_WEAK_CHANNEL_GAIN: f32 = 0.43;
+
+/// Unison partner voices per setting (`[setting][voice]`, unused slots repeat unity).
+///
+/// VERIFIED: pitch ratios copied from the firmware table `bank0_CODE.bin @0x2f9ee8` (4 x 4 `f32`
+/// rows for levels 0..3), checked by `python tools/fw_ratio_scan.py` and by the unit test
+/// `unison_ratios_match_the_measured_cents`; the cents also match the hardware measurement above
+/// to 0.02 cent (`-2/+2`, `-4/-1.32/+1.33/+4`, `-6/-2/+2/+6`). Which channel is strong is
+/// EMPIRICAL (same recording): setting 1 `-2` right, `+2` left; setting 2 `-4` right, `-1.32`
+/// left, `+1.33` right, `+4` left; setting 3 `-6` right, `-2` left, `+2` right, `+6` left.
+pub const UNISON_VOICES: [[UnisonVoice; 4]; 4] = {
+    const fn v(bits: u32, strong_left: bool) -> UnisonVoice {
+        UnisonVoice {
+            ratio: f32::from_bits(bits),
+            strong_left,
+        }
+    }
+    let unity = v(0x3f80_0000, true);
+    [
+        [unity; 4],
+        [
+            v(0x3f7f_b44e, false), // -2.00 cents (0.998845)
+            v(0x3f80_25e1, true),  // +2.00 cents (1.001156)
+            unity,
+            unity,
+        ],
+        [
+            v(0x3f7f_68be, false), // -4.00 cents (0.997692)
+            v(0x3f7f_cdee, true),  // -1.32 cents (0.999236)
+            v(0x3f80_193b, false), // +1.33 cents (1.000770)
+            v(0x3f80_4bcb, true),  // +4.00 cents (1.002313)
+        ],
+        [
+            v(0x3f7f_1d3f, false), // -6.00 cents (0.996540)
+            v(0x3f7f_b44e, true),  // -2.00 cents (0.998845)
+            v(0x3f80_25e1, false), // +2.00 cents (1.001156)
+            v(0x3f80_71c5, true),  // +6.00 cents (1.003472)
+        ],
+    ]
+};
+
 /// Pitch depth in semitones for a normalised LFO amount `0.0..=1.0` (nearest table entry).
 pub fn lfo_pitch_semitones(amount: f32) -> f32 {
     let idx = (amount.clamp(0.0, 1.0) * 127.0).round() as usize;
@@ -54,5 +114,40 @@ mod tests {
         assert_eq!(lfo_pitch_semitones(-1.0), 0.0);
         assert_eq!(lfo_pitch_semitones(2.0), 48.0);
         assert_eq!(lfo_pitch_semitones(27.0 / 127.0), LFO_PITCH_SEMITONES[27]);
+    }
+
+    #[test]
+    fn unison_ratios_match_the_measured_cents() {
+        let cents = |r: f32| 1200.0 * r.log2();
+        let want: [&[f32]; 4] = [
+            &[],
+            &[-2.0, 2.0],
+            &[-4.0, -1.3226, 1.3334, 4.0],
+            &[-6.0, -2.0, 2.0, 6.0],
+        ];
+        for (level, expected) in want.iter().enumerate() {
+            assert_eq!(UNISON_VOICE_COUNT[level], expected.len());
+            for (k, &c) in expected.iter().enumerate() {
+                let got = cents(UNISON_VOICES[level][k].ratio);
+                assert!(
+                    (got - c).abs() < 0.01,
+                    "level {level} voice {k}: {got} vs {c}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unison_channels_alternate_so_both_ears_get_inner_and_outer_voices() {
+        for level in 1..=3 {
+            let n = UNISON_VOICE_COUNT[level];
+            let left = UNISON_VOICES[level][..n]
+                .iter()
+                .filter(|v| v.strong_left)
+                .count();
+            assert_eq!(left, n / 2, "level {level}");
+        }
+        let weak = std::hint::black_box(UNISON_WEAK_CHANNEL_GAIN);
+        assert!(weak > 0.4 && weak < 0.5);
     }
 }

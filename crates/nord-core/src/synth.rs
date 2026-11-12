@@ -6,7 +6,9 @@ use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 
 pub use crate::synth_sample::{LoadedSynthSample, SampleTimbre, SynthSampleSound};
-use crate::synth_tables::lfo_pitch_semitones;
+use crate::synth_tables::{
+    lfo_pitch_semitones, UNISON_VOICES, UNISON_VOICE_COUNT, UNISON_WEAK_CHANNEL_GAIN,
+};
 pub use crate::synth_types::{
     ArpMode, FilterModel, LfoDestination, LfoShape, NotePriority, SynthOscMode, VaWaveform,
     VibratoMode,
@@ -64,6 +66,16 @@ pub const FM_RATIOS: [f32; 16] = [
     2.5,
     3.5,
 ];
+
+/// Left/right gains of a unison voice: full level in its strong channel, `weak` in the other.
+#[inline]
+fn unison_pan(strong_left: bool, weak: f32, norm: f32) -> (f32, f32) {
+    if strong_left {
+        (norm, norm * weak)
+    } else {
+        (norm * weak, norm)
+    }
+}
 
 /// 2-point Polynomial Band-Limited Step (`PolyBLEP`) anti-aliasing residual.
 #[inline]
@@ -140,6 +152,33 @@ impl ZdfFilter {
     }
 }
 
+/// ASSUMED: start phases of the four unison voices; they only decorrelate the voices.
+pub(crate) const UNISON_START_PHASES: [f32; 4] = [0.0, 0.31, 0.57, 0.83];
+
+/// Octaves of cutoff sweep at full Filter Env Amt.
+///
+/// EMPIRICAL: Audible Genius "laser zap" clip (LPM filter, Freq 468 Hz, Env Amt 7.4, env
+/// 0.5 ms / 2.07 s, Pure Saw G4, resonance high): the resonance peak starts about 5-6 octaves above
+/// 468 Hz, i.e. 7-8 octaves per full scale. Accuracy about +/-1 octave (peak snaps to harmonics of
+/// the 392 Hz note, onset time uncertain). Replaces an inherited ASSUMED 3 octaves.
+const FILTER_ENV_OCTAVES: f32 = 8.0;
+
+/// Ratio of the audible filter and oscillator envelope decay time constant to the displayed Decay.
+///
+/// EMPIRICAL: filter envelope, same clip as above; the resonance peak, in octaves above the base cutoff, falls by a factor
+/// 0.77 per 0.1 s (tau 0.38 s) while the display reads 2.07 s, so tau = 0.18 x display. One decay
+/// value only; the shape (exponential in octaves) fits the nine tracked points within 10 %. The
+/// oscillator envelope agrees: Audible Genius pitch-blip clip, displayed Decay 100 ms, pitch falls
+/// x0.88..0.93 per 2 ms (tau 16-27 ms, predicted 18 ms). The amp envelope is NOT covered (its clip
+/// settings had no decay); it keeps tau = displayed Decay.
+const ENV_DECAY_TAU_FRACTION: f32 = 0.18;
+
+/// Seconds the Delay-mode vibrato takes to fade from zero to full depth after its delay.
+///
+/// EMPIRICAL: 0.40..0.45 s measured on a real Stage 4 (Audible Genius "Delayed vibrato" clip,
+/// Delay 0.7 s, f0 tracking); see `docs/research/synth-0x2f-ns4decode-crosscheck.md`.
+const VIBRATO_DELAY_RAMP_SEC: f32 = 0.45;
+
 /// Roland/Nord 7-saw detune spread coefficients relative to fundamental.
 const SUPERSAW_DETUNES: [f32; 7] = [
     -0.11002313,
@@ -179,8 +218,8 @@ pub struct SynthVoice {
     /// Seconds since note-on (vibrato delay).
     pub age_sec: f32,
     /// Unison detuned oscillator phases (low, high).
-    pub uni_phase: [f32; 2],
-    pub uni_supersaw: [[f32; 7]; 2],
+    pub uni_phase: [f32; 4],
+    pub uni_supersaw: [[f32; 7]; 4],
     pub supersaw_phases: [f32; 7],
     pub amp_env: f32,
     pub filter: ZdfFilter,
@@ -212,8 +251,8 @@ impl Default for SynthVoice {
             oenv: 0.0,
             oenv_attack_done: false,
             age_sec: 0.0,
-            uni_phase: [0.0, 0.31],
-            uni_supersaw: [SUPERSAW_PHASE_INITS; 2],
+            uni_phase: UNISON_START_PHASES,
+            uni_supersaw: [SUPERSAW_PHASE_INITS; 4],
             supersaw_phases: SUPERSAW_PHASE_INITS,
             amp_env: 0.0,
             filter: ZdfFilter::default(),
@@ -268,9 +307,10 @@ pub struct SynthLayer {
     pub filter_env_vel_amount: f32,
 
     // Voice mode
-    /// Stereo unison width: `0` = off, `1`/`2`/`3` = 3.5 / 7.0 / 11.5 cents.
-    /// ASSUMED: cents copied from the Piano unison widths (`docs/specs/piano-engine.md`), not measured
-    /// on Synth; confirm by recording Synth Unison 1/2/3 and measuring beat rate.
+    /// Unison setting `0..=3`. EMPIRICAL + firmware-VERIFIED voices: `1` = -2/+2 cents, `2` =
+    /// -4/-1.32/+1.33/+4, `3` = -6/-2/+2/+6, no centre voice, each voice mostly in one channel;
+    /// see `synth_tables::UNISON_VOICES`. Applies to Analog and Wavetable modes; FM and Sample
+    /// modes ignore it (Sample unison uses a different detune set, unmodelled).
     pub unison: u8,
     pub mono: bool,
     pub legato: bool,
@@ -501,14 +541,16 @@ impl SynthLayer {
         self.vib_phase =
             (self.vib_phase + TAU * self.vibrato_rate_hz.clamp(0.1, 20.0) * inv_fs) % TAU;
         let vib_sin = self.vib_phase.sin();
-        let uni_cents = match self.unison {
-            0 => 0.0,
-            1 => 3.5,
-            2 => 7.0,
-            _ => 11.5,
+        let uni_level = usize::from(self.unison.min(3));
+        let uni_count = UNISON_VOICE_COUNT[uni_level];
+        // Per voice gains: constant power over the partner voices, measured weak-channel leakage.
+        let uni_voice_gain = if uni_count > 0 {
+            1.0 / (uni_count as f32).sqrt()
+        } else {
+            0.0
         };
-        // ASSUMED: side voices at -/+ `uni_cents`, mixed 50/50 with the centre per channel.
-        let uni_ratio = 2.0f32.powf(uni_cents / 1200.0);
+        let weak = UNISON_WEAK_CHANNEL_GAIN;
+        let pan_norm = 1.0 / (1.0 + weak * weak).sqrt();
 
         for v in &mut self.voices {
             if !v.active {
@@ -557,7 +599,7 @@ impl SynthLayer {
                         v.oenv_attack_done = true;
                     }
                 } else if self.osc_env_decay_sec < 44.0 {
-                    let dec = self.osc_env_decay_sec.max(0.003);
+                    let dec = (self.osc_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
                     v.oenv -= v.oenv * (inv_fs / dec).min(1.0);
                 }
             } else {
@@ -575,7 +617,9 @@ impl SynthLayer {
             } else {
                 osc_env_mod
             };
-            // ASSUMED: +/-12 semitones of pitch at full Env Amt (Env To Pitch) and +/-0.5 of Osc Ctrl range.
+            // EMPIRICAL: +/-12 semitones of pitch at full Env Amt (Env To Pitch); Audible Genius "pitch
+            // blip" clip, Env Amt +5.5 shows ~6-7 semitone onset peaks (+6.6 predicted), accuracy
+            // limited to ~1 semitone by 5 ms onset detection. ASSUMED: +/-0.5 of Osc Ctrl range.
             let env_pitch = if self.osc_env_to_pitch {
                 2.0f32.powf(osc_env_mod)
             } else {
@@ -585,7 +629,11 @@ impl SynthLayer {
             let vib_amount = match self.vibrato_mode {
                 VibratoMode::Off => 0.0,
                 VibratoMode::On => 1.0,
-                VibratoMode::Delay => ((v.age_sec - self.vibrato_delay_sec) / 0.5).clamp(0.0, 1.0),
+                // EMPIRICAL: onset at the displayed delay, full depth ~0.45 s later (hardware clip,
+                // Delay 0.7 s: onset 0.74 s, full depth 1.15 s).
+                VibratoMode::Delay => {
+                    ((v.age_sec - self.vibrato_delay_sec) / VIBRATO_DELAY_RAMP_SEC).clamp(0.0, 1.0)
+                }
                 VibratoMode::Wheel | VibratoMode::Aftertouch | VibratoMode::Pedal => {
                     self.vibrato_ctrl.clamp(0.0, 1.0)
                 }
@@ -604,7 +652,7 @@ impl SynthLayer {
                             v.fenv_attack_done = true;
                         }
                     } else if self.filter_env_decay_sec < 44.0 {
-                        let dec = self.filter_env_decay_sec.max(0.003);
+                        let dec = (self.filter_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
                         v.fenv -= v.fenv * (inv_fs / dec).min(1.0);
                     }
                 } else {
@@ -622,26 +670,17 @@ impl SynthLayer {
 
             let (raw_osc_l, raw_osc_r) = match self.osc_mode {
                 SynthOscMode::Analog => {
-                    let c = Self::render_va(
-                        self.waveform,
-                        self.supersaw_detune,
-                        self.pulse_width,
-                        self.lfo_dest,
-                        self.lfo_amount,
-                        lfo_val,
-                        t,
-                        dt,
-                        eff_freq,
-                        inv_fs,
-                        &mut v.supersaw_phases,
-                    );
-                    if self.unison > 0 {
-                        let mut side = [0.0f32; 2];
-                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
-                            let f_k = eff_freq * ratio;
+                    if uni_count > 0 {
+                        let mut acc = (0.0f32, 0.0f32);
+                        for (k, voice) in UNISON_VOICES[uni_level][..uni_count]
+                            .iter()
+                            .copied()
+                            .enumerate()
+                        {
+                            let f_k = eff_freq * voice.ratio;
                             let dt_k = (f_k * inv_fs).clamp(1e-5, 0.49);
                             let t_k = v.uni_phase[k];
-                            side[k] = Self::render_va(
+                            let s_k = Self::render_va(
                                 self.waveform,
                                 self.supersaw_detune,
                                 self.pulse_width,
@@ -655,26 +694,53 @@ impl SynthLayer {
                                 &mut v.uni_supersaw[k],
                             );
                             v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                            let (gl, gr) = unison_pan(voice.strong_left, weak, pan_norm);
+                            acc.0 += s_k * uni_voice_gain * gl;
+                            acc.1 += s_k * uni_voice_gain * gr;
                         }
-                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                        (acc.0, Some(acc.1))
                     } else {
-                        (c, None)
+                        (
+                            Self::render_va(
+                                self.waveform,
+                                self.supersaw_detune,
+                                self.pulse_width,
+                                self.lfo_dest,
+                                self.lfo_amount,
+                                lfo_val,
+                                t,
+                                dt,
+                                eff_freq,
+                                inv_fs,
+                                &mut v.supersaw_phases,
+                            ),
+                            None,
+                        )
                     }
                 }
                 SynthOscMode::Wavetable => {
-                    let c = sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt);
-                    if self.unison > 0 {
-                        let mut side = [0.0f32; 2];
-                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
-                            let dt_k = (eff_freq * ratio * inv_fs).clamp(1e-5, 0.49);
+                    if uni_count > 0 {
+                        let mut acc = (0.0f32, 0.0f32);
+                        for (k, voice) in UNISON_VOICES[uni_level][..uni_count]
+                            .iter()
+                            .copied()
+                            .enumerate()
+                        {
+                            let dt_k = (eff_freq * voice.ratio * inv_fs).clamp(1e-5, 0.49);
                             let t_k = v.uni_phase[k];
-                            side[k] =
+                            let s_k =
                                 sample_wavetable(bank, self.wavetable_index, wt_pos, t_k, dt_k);
                             v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                            let (gl, gr) = unison_pan(voice.strong_left, weak, pan_norm);
+                            acc.0 += s_k * uni_voice_gain * gl;
+                            acc.1 += s_k * uni_voice_gain * gr;
                         }
-                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                        (acc.0, Some(acc.1))
                     } else {
-                        (c, None)
+                        (
+                            sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt),
+                            None,
+                        )
                     }
                 }
                 SynthOscMode::Fm => {
@@ -746,8 +812,9 @@ impl SynthLayer {
                 1.0
             };
             let env_scale = if self.filter_env_amount.abs() > 1e-4 {
-                // ASSUMED (inherited, no recorded source): +/-3 octaves of cutoff at full env amount.
-                2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * filter_env_level)
+                2.0f32.powf(
+                    self.filter_env_amount.clamp(-1.0, 1.0) * FILTER_ENV_OCTAVES * filter_env_level,
+                )
             } else {
                 1.0
             };
@@ -917,6 +984,24 @@ mod tests {
     }
 
     #[test]
+    fn filter_envelope_decay_follows_the_measured_time_constant() {
+        // Laser-zap clip: displayed Decay 2.07 s, audible tau 0.38 s (0.18 x display).
+        let mut s = SynthLayer::new(48_000.0);
+        s.filter_env_dedicated = true;
+        s.filter_env_amount = 0.74;
+        s.filter_env_attack_sec = 0.0005;
+        s.filter_env_decay_sec = 2.07;
+        s.note_on(67, 127);
+        render_n(&mut s, 48_000 / 2);
+        let fenv = s.voices.iter().find(|v| v.active).unwrap().fenv;
+        let want = (-(0.5 - 0.0005) / (2.07 * ENV_DECAY_TAU_FRACTION)).exp();
+        assert!((fenv - want).abs() < 0.03, "fenv {fenv} want {want}");
+        // 7.4 on the panel is a ~5.9 octave sweep at its start.
+        let octaves = 0.74 * FILTER_ENV_OCTAVES;
+        assert!((5.0..7.0).contains(&octaves));
+    }
+
+    #[test]
     fn amp_velocity_zero_ignores_velocity_and_one_follows_it() {
         let run = |sens: f32, vel: u8| {
             let mut s = SynthLayer::new(48_000.0);
@@ -975,6 +1060,24 @@ mod tests {
         assert_ne!(run(1.0, true), run(0.0, true));
         assert_ne!(run(1.0, false), run(0.0, false));
         assert!(run(-1.0, true).iter().all(|f| f[0].is_finite()));
+    }
+
+    #[test]
+    fn osc_envelope_decay_uses_the_same_time_constant_fraction() {
+        // Pitch-blip clip: displayed Decay 100 ms, audible tau about 18 ms.
+        let mut s = SynthLayer::new(48_000.0);
+        s.osc_env_to_pitch = true;
+        s.osc_env_amount = 1.0;
+        s.osc_env_attack_sec = 0.0005;
+        s.osc_env_decay_sec = 0.1;
+        s.note_on(60, 100);
+        render_n(&mut s, 480); // attack done (~10 ms)
+        let at_start = s.voices.iter().find(|v| v.active).unwrap().oenv;
+        render_n(&mut s, 864); // 18 ms more
+        let after_18ms = s.voices.iter().find(|v| v.active).unwrap().oenv;
+        let ratio = after_18ms / at_start;
+        let want = (-0.018f32 / (0.1 * ENV_DECAY_TAU_FRACTION)).exp();
+        assert!((ratio - want).abs() < 0.03, "ratio {ratio} want {want}");
     }
 
     #[test]

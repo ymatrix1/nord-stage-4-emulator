@@ -122,9 +122,8 @@ impl SynthLayer {
             oenv: 0.0,
             oenv_attack_done: false,
             age_sec: 0.0,
-            // ASSUMED: 0.31 start phase offset only decorrelates the unison side voices.
-            uni_phase: [0.0, 0.31],
-            uni_supersaw: [SUPERSAW_PHASE_INITS; 2],
+            uni_phase: UNISON_START_PHASES,
+            uni_supersaw: [SUPERSAW_PHASE_INITS; 4],
             phase: 0.0,
             mod_phase: 0.0,
             op3_phase: 0.0,
@@ -197,6 +196,78 @@ mod tests {
         let diff: f32 = frames.iter().map(|f| (f[0] - f[1]).abs()).sum();
         assert!(diff > 1.0, "unison L/R should differ, diff={diff}");
         assert!(frames.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
+    }
+
+    /// Hann-windowed single-bin DFT magnitude of `x` at `freq` Hz.
+    fn bin_magnitude(x: &[f32], rate: f32, freq: f32) -> f32 {
+        let n = x.len() as f32;
+        let (mut re, mut im) = (0.0f64, 0.0f64);
+        for (i, &v) in x.iter().enumerate() {
+            let w = 0.5 - 0.5 * (std::f32::consts::TAU * i as f32 / (n - 1.0)).cos();
+            let ph = f64::from(std::f32::consts::TAU * freq * i as f32 / rate);
+            re += f64::from(v * w) * ph.cos();
+            im -= f64::from(v * w) * ph.sin();
+        }
+        (re * re + im * im).sqrt() as f32
+    }
+
+    #[test]
+    fn unison_partner_voices_land_on_the_measured_cents_and_channels() {
+        use crate::synth::{SynthOscMode, VaWaveform};
+        use crate::synth_tables::{UNISON_VOICES, UNISON_VOICE_COUNT, UNISON_WEAK_CHANNEL_GAIN};
+        let rate = 48_000.0f32;
+        let f0 = 1760.0f32; // MIDI 93
+        for level in 1..=3u8 {
+            let mut s = SynthLayer::new(rate);
+            s.osc_mode = SynthOscMode::Analog;
+            s.waveform = VaWaveform::Sine;
+            s.filter_on = false;
+            s.attack_sec = 0.0005;
+            s.decay_sec = 45.0;
+            s.sustain_level = 1.0;
+            s.unison = level;
+            s.note_on(93, 127);
+            render_n(&mut s, 4800);
+            let frames = render_n(&mut s, 120_000);
+            let left: Vec<f32> = frames.iter().map(|f| f[0]).collect();
+            let right: Vec<f32> = frames.iter().map(|f| f[1]).collect();
+            let n = UNISON_VOICE_COUNT[usize::from(level)];
+            let mut strongs = Vec::new();
+            for voice in &UNISON_VOICES[usize::from(level)][..n] {
+                let f = f0 * voice.ratio;
+                let (ml, mr) = (
+                    bin_magnitude(&left, rate, f),
+                    bin_magnitude(&right, rate, f),
+                );
+                let (strong, weak) = if voice.strong_left {
+                    (ml, mr)
+                } else {
+                    (mr, ml)
+                };
+                assert!(strong > weak, "level {level} ratio {}", voice.ratio);
+                let leak = weak / strong;
+                assert!(
+                    (leak - UNISON_WEAK_CHANNEL_GAIN).abs() < 0.06,
+                    "level {level} ratio {} leak {leak}",
+                    voice.ratio
+                );
+                strongs.push(strong);
+            }
+            let max = strongs.iter().cloned().fold(0.0f32, f32::max);
+            let min = strongs.iter().cloned().fold(f32::MAX, f32::min);
+            assert!(
+                min > 0.8 * max,
+                "level {level}: voices must have equal level"
+            );
+            if level != 2 {
+                // No centre voice (levels 1 and 3 keep every partner at least 2 cents away).
+                let centre = bin_magnitude(&left, rate, f0).max(bin_magnitude(&right, rate, f0));
+                assert!(
+                    centre < 0.25 * max,
+                    "level {level}: centre {centre} vs {max}"
+                );
+            }
+        }
     }
 
     #[test]

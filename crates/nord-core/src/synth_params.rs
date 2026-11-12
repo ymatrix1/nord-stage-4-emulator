@@ -19,8 +19,11 @@ const HOLD_DECAY_MS: f32 = 44_000.0;
 /// ASSUMED: Glide knob `0..10` maps to `(knob/10)^2 * 2 s` per octave. The manual only says the
 /// glide is constant-rate; confirm by recording a one-octave glide at several knob values.
 const GLIDE_MAX_SEC_PER_OCTAVE: f32 = 2.0;
-/// ASSUMED: Vibrato Amount `0..10` maps to `0..100` cents peak depth.
-const VIBRATO_MAX_CENTS: f32 = 100.0;
+/// EMPIRICAL: Vibrato Amount `0..10` maps linearly to `0..92` cents peak depth. Measured on a real
+/// Stage 4 (Audible Genius "Delayed vibrato and aftertouch" clip, f0 tracking): Amount 5.0 gives
+/// 44.4..47.0 cents peak over four runs (mean 46), i.e. 92 at 10. Linearity is assumed from this
+/// single amount; confirm with a second Amount value.
+const VIBRATO_MAX_CENTS: f32 = 92.0;
 /// ASSUMED: Amp velocity setting `1..=3` scales sensitivity linearly (`n / 3`); `0` is off.
 const AMP_VELOCITY_STEPS: f32 = 3.0;
 
@@ -199,7 +202,7 @@ mod tests {
         assert_eq!(s.lfo_shape, LfoShape::SawDown);
         assert_eq!(s.lfo_dest, LfoDestination::Off);
         assert_eq!(s.vibrato_mode, VibratoMode::Delay);
-        assert!((s.vibrato_depth_cents - 50.0).abs() < 1e-4);
+        assert!((s.vibrato_depth_cents - 46.0).abs() < 1e-4);
         assert_eq!(s.arp_mode, ArpMode::Up);
         assert_eq!(apply(&SynthLayerDecoded::default()).arp_mode, ArpMode::Off);
     }
