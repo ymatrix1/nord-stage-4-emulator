@@ -94,3 +94,4 @@ Other 128/129-entry curves in `0x2f7000..0x2fbf00` and `0x453c44..` (`0.0093 .. 
 
 - Locate the `ARM0` code that serialises `Buffer_kSynSnd` and its glide / vibrato / osc-env scale tables (OQ7). Capstone is available; the name tables sit at `0x2d70b8` and `0x2d751c`, referenced from the buffer descriptor tables near `0x190300`.
 - Record hardware sweeps for unison cents and glide time.
+- Hardware route for the remaining ASSUMED scales: `docs/research/synth-hardware-sweep-plan.md` (analysis tool `tools/sweep_analyze.py`).
