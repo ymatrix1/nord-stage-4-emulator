@@ -18,7 +18,14 @@ pub struct PassConfig {
     pub idle_pc: u32,
     /// Instruction limit per pass.
     pub max_steps: u64,
+    /// `(vector, SEC source id)`: start the pass by raising this interrupt (Core1 sections, P4I)
+    /// instead of writing the mailbox; the service routine stores the mailbox itself.
+    pub irq: Option<(u8, u32)>,
 }
+
+/// SEC core-interface source-id register that the P4I vector reads (`DM(0x3108945C)`, VERIFIED
+/// in the ORG Core1 listing at short-word `0x12003C`, see `docs/research/dsp-rx-protocol.md`).
+pub const SEC_CSID: u32 = 0x3108_945C;
 
 /// Why a pass stopped.
 #[derive(Debug, PartialEq)]
@@ -86,7 +93,15 @@ pub fn fault_text(f: &Fault) -> String {
 /// Starts a pass by writing 1 to the mailbox and runs it to the next poll-loop visit.
 pub fn run_pass(core: &mut Core, cfg: &PassConfig) -> PassReport {
     let before = snapshot(core);
-    let _ = core.dm_write(cfg.trigger, 1);
+    match cfg.irq {
+        Some((vector, status)) => {
+            core.preset_device(SEC_CSID, status);
+            core.raise_interrupt(vector);
+        }
+        None => {
+            let _ = core.dm_write(cfg.trigger, 1);
+        }
+    }
     // the host's trigger write is not a core store
     core.watch_hits.clear();
     core.watch_addrs.clear();
@@ -189,7 +204,27 @@ pub mod tests {
             trigger: 0xB_00E2,
             idle_pc: 0x12_0002,
             max_steps,
+            irq: None,
         }
+    }
+
+    #[test]
+    fn an_irq_start_presets_the_sec_source_id_and_leaves_the_mailbox_alone() {
+        let mut c = core_with(&[1, 1, 1, 1, 1]);
+        let r = run_pass(
+            &mut c,
+            &PassConfig {
+                irq: Some((15, 0x41)),
+                ..cfg(3)
+            },
+        );
+        assert_eq!(c.dm_read(SEC_CSID), Ok(0x41));
+        assert_eq!(r.changed, vec![], "the host must not write the mailbox");
+        assert_eq!(
+            r.end,
+            PassEnd::Idle,
+            "mailbox stays 0, so the loop is 'idle'"
+        );
     }
 
     #[test]
