@@ -137,6 +137,20 @@ Conclusion: the 46 WAVE waveforms (`Bells/Tines ... Keys`) are not in the ARM `C
 
 The factory backup `Nord Stage 4 Factory Restore RevK v1.66.ns4b` has 195 `.nsmp4` files under `Samp Lib/<category>/`: `Accordion_Harm`, `Bass`, `Brass Ensemble/Solo`, `Choir`, `Guitar_Plucked`, `Mellotron`, `Orchestral`, `Organ`, `Percussion Tuned`, `Strings Analog/Ensemble/Solo`, `Wind Ensemble/Solo`. They are the multisampled **Sample Library** used by the `Samples` oscillator mode (layer `+8 is_osc_mode = 0`, `sample_id` = name hash), 87 KB to tens of MB each (smallest `Kalimba_KG 4.1` at 86,960 B, typical 1-10 MB). Their names do not match the 46 WAVE-type items (`Bar 1`, `Bar 2`, `Tines`, `2nd Spectra`, `Saw NoFund`, `Ice 1`, `Triplets`, `Squabble`, `EPiano 1`, `DX 1`, `Clavinet 1` ...): only generic words coincide (`Bells`, `Marimba`, `Tubular Bells`, `Flute`, `Clarinet`, `Principal`). No file is small enough to be a single-cycle or short wave. The WAVE waves therefore are in neither the ARM `CODE` images nor the factory backup; they remain with the DSP-side data (see the DSP-code section) and our wavetable bank stays ASSUMED.
 
+## Container accounting and block classification (DSP code search, 2026-11-12)
+
+Result: **no DSP code in the update container; it almost certainly lives in the mainboard flash and is not shipped by OS updates.** Evidence, from our docs plus new checks:
+
+1. **Every byte of the container is accounted for** (`docs/research/clavia-lz-reconstruction.md`, LZO1X verified 100% on both banks). Image 0 (`3,575,686 B`) = `0x2D4` header + `64,640` SRAM + `3,509,573` compressed `CODE` + `1` alignment + `748` ARM0 stub; image 1 (`461,362 B`) = `0x2D4` + `49,496` + `410,321` + `1` + `820`. Nothing is left over, so DSP code could only sit inside the decompressed `CODE`. The installer's only other resource is the NSIS USB driver setup.
+2. **Block classification** (`python tools/fw_classify.py target/fw_unpacked/bank0_CODE.bin`, 4 KiB blocks): ARM code `2528 KiB` (`0..0x279000`), int16 audio-like `1204 KiB` (noise tables, ramp curves, bitmap-like data, see above), float tables `388 KiB`, pointer tables `116 KiB`, text `60 KiB`, zero `16 KiB`, other `1060 KiB`. The `other` blocks (`0x447000..0x526000`, `0x2a1000`, `0x2d8000`) are float/int coefficient tables, structured int tables and string tables (spot-checked: `0x3ad6b228..` increasing floats, `0x2d8000` strings). No region has the structure of SHARC 48-bit code.
+3. **DSP boot path in ARM code:** `"DSP Boot Error"` (`@0x529688`, literal pool `0x24bba8`) sits in a routine that configures the memory-mapped DSP host interface (`0x62000010`, `0x6200400c/18/1c`) and waits for the DSP; there is no loop copying a code image. The names `DSP*Core* L1 bl.N` are memory-test descriptors (see the table section above).
+4. **Bank 1 is the bootloader / flash tool:** strings `Flash Tool`, `SPI Flash`, `Piano Flash`, `Sample Flash`, `Checksum Update`, `Update Image Log`, `Flash Erase`, `Micron MT25QL128A`. It programs flash from data the host sends; the OS update file only carries the two ARM images, so the SHARC images stay in flash.
+
+Consequences:
+
+- Glide, unison, osc-envelope pitch depth and velocity curves run inside the DSP code we cannot read, unless the ARM computes the DSP parameter from the 7-bit value before sending it. Forum reports that glide changed between OS versions (1.06 vs later) suggest at least the glide **knob-to-DSP mapping is in the ARM**.
+- Next lead: find the ARM routine that sends `Edt_Syn_kGlideRate` (descriptor `0x1aa4a4`) to the DSP and read its math (soft-float constants / table). The other session already traced one such sender (`0x1be108`, biquad indices via double math).
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
