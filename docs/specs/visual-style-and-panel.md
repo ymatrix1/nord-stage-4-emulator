@@ -110,7 +110,7 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
 
 | Item | This spec says | Manual / evidence | Status |
 |---|---|---|---|
-| Morph target display (§4.4) | Amber glowing arc around the knob | Manual p.11: green Morph LEDs at the bottom-left of the knob show morph assignment | Spec wrong; renderer to follow the manual (B8, [D15](../DECISIONS.md#d15-hybrid-baked-sprite--egui-painter-25d-rendering)) |
+| Morph target display (§4.4) | Amber glowing arc around the knob | Manual p.11: green Morph LEDs at the bottom-left of the knob show morph assignment | Spec wrong; renderer to follow the manual (B8, [D15](../DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering)) |
 | Fader LED ladder (§4.1) | 11 segments | Not yet checked against manual p.11 | `ASSUMED`; verify in B2 ([control inventory](control-inventory.md)) |
 
 ---
