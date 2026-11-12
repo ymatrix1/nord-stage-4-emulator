@@ -329,7 +329,7 @@ PY
 
 The five images chain exactly (each end equals the next pointer) from `0x44667C` to `0x5263A8`, 916,780 bytes in total; `0x5263A8` is where the UI string area starts (`Layer Level Adjust`). The index order here is the one in the bank 1 jump table (`bank1_CODE@0x481AC`: index 0 to `0x9D50C`, 1 to `0x9B8C0`, 2 to `0x99AC0`, 3 to `0x95FAC`, 4 to `0x924F8`), so bank 1's small test programs (section 5.11) are the same five slots; their overlap with the bank 0 blocks agrees with the index mapping (index 0 blob: 40% of block A; indices 1 and 2: 25 to 28% of D/E/F; indices 3 and 4: 9 to 16% of G/H).
 
-**DSP names (ASSUMED).** The name array at `bank1_CODE@0x5D78` is `[FXFX, PNO, ORG, SY1SY2, SMP]` (the test prints `%s (%d)` with name and id), so the five slots are the FX, piano, organ, synth and sample DSPs, in that order. That the download index equals this id is likely (the same index selects the blob and the name in the test) but not proven.
+**DSP names (ASSUMED; supported by 5.13).** The name array at `bank1_CODE@0x5D78` is `[FXFX, PNO, ORG, SY1SY2, SMP]` (the test prints `%s (%d)` with name and id), so the five slots are the FX, piano, organ, synth and sample DSPs, in that order. That the download index equals this id is likely (the same index selects the blob and the name in the test) but not proven.
 
 **Image structure.** Images 0 to 2 start with a header. First 24 bytes as stored (hex): FX `03 50 17 ac e3 11 12 00 00 00 00 00 44 4d 01 00 03 00 80 ac 00 40 00 20`, PNO `03 50 dc ac 07 10 12 00 00 00 00 00 08 2c 02 00 03 00 82 ac 00 40 00 20`, ORG `03 50 b5 ac 88 5c 12 00 00 00 00 00 c4 4a 02 00 03 00 62 ac 00 40 00 20`. The 32-bit little-endian word at byte 12 is `0x14D44` (FX), `0x22C08` (PNO), `0x24AC4` (ORG), growing with image size (a size or code-length field, ASSUMED); the bytes 4 to 5 and 0 to 3 differ per image. Images 3 and 4 start with zeros. Header fields are not decoded.
 
@@ -338,6 +338,43 @@ Consequences:
 - The five images are the complete SHARC programs plus data (about 917 KB); the earlier A to H blocks are the code parts inside them. D, E and F (near-identical code) sit in the PNO, ORG images (D in PNO, E and F in ORG), i.e. shared engine code, not one DSP's cores.
 - Mapping `DSPFxCore*` / `DSPOrgCore*` / `DSPSynCore*` names (bank 1 table) to code is still open: ORG holds two copies (E, F) which fits Core1/Core2.
 - The driver method (virtual slot 0 of the object passed in `r0`) is the remaining unknown: it decides whether the images are sent as they are or wrapped in loader headers. Its address has not been found yet.
+
+### 5.13 The five images across releases (v1.44 to v1.66)
+
+Tool: `tools/ns4_dsp_images.py` (tests in `tools/tests/test_ns4_dsp_images.py`) finds the pointer and length chain of section 5.12 without fixed offsets (longest chain of pointer/length word pairs within two words of each other; trailing entries that start in the UI string table are dropped) and can export the images with `--out DIR` (never commit them). It finds exactly five contiguous images in every release from v1.44 to v1.66.
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin
+```
+
+Sizes in bytes (SHA-1 prefix of the image):
+
+| Release | FX (idx0) | PNO (idx1) | ORG (idx2) | SY1SY2 (idx3) | SMP (idx4) |
+|---|---|---|---|---|---|
+| v1.44 | 171,320 `b9d0cd36` | 281,128 `afb23fa8` | 296,264 `687cfa4f` | 121,844 `f8d50a75` | 45,140 `1a6aeda7` |
+| v1.46 | 171,320 `b9d0cd36` | 281,156 `25b12e9f` | 296,320 `0e191d65` | 121,844 `f8d50a75` | 45,140 `1a6aeda7` |
+| v1.52 | 171,320 `b9d0cd36` | 292,284 `dd470a56` | 296,656 `6b4ee1e6` | 121,844 `f8d50a75` | 44,596 `06dc48ee` |
+| v1.54 | 171,320 `280ac5cb` | 292,284 `78269040` | 296,656 `f6441551` | 121,844 `f8d50a75` | 44,596 `06dc48ee` |
+| v1.60 | 164,880 `df5d27e6` | 288,804 `c77d3567` | 296,656 `f6441551` | 121,844 `f8d50a75` | 44,596 `06dc48ee` |
+| v1.62 | 164,880 `df5d27e6` | 288,804 `c77d3567` | 296,656 `f6441551` | 121,844 `f8d50a75` | 44,596 `06dc48ee` |
+| v1.64 | 164,880 `b5f3bf40` | 288,804 `c77d3567` | 296,656 `f6441551` | 121,844 `f8d50a75` | 44,596 `06dc48ee` |
+| v1.66 | 164,880 `b5f3bf40` | 288,804 `c77d3567` | 296,656 `f6441551` | 121,844 `f8d50a75` | 44,596 `06dc48ee` |
+
+Changes between consecutive releases, against the vendor update history:
+
+| Step | Image changes | Release notes (summary) | Fit |
+|---|---|---|---|
+| v1.44 to v1.46 | PNO +28, ORG +56 | Delay tempo fixes (Mst Clk) | small, plausible |
+| v1.46 to v1.52 | PNO +11,128, ORG +336, SMP -544, FX same | Vox treble and Vox/Farf onset (organ), Flanger fix for Piano B, silent layer for a missing sample | ORG, PNO and SMP change; large PNO growth with the piano flanger fix |
+| v1.52 to v1.54 | FX 12 B, PNO 14 B, ORG 16 B differ (same size) | Ring Mod optimisation, Vox hanging-note fix | Ring Mod patch in the three images that carry the effect rack; ORG for Vox |
+| v1.54 to v1.60 | FX -6,440, PNO -3,480; ORG, SY1SY2, SMP same | Reverb placed last, after the level fader and the Rotary Speaker | reverb code in FX and PNO |
+| v1.60 to v1.62 | none | Reverb tail with Rotary on program change | ARM-side fix |
+| v1.62 to v1.64 | FX: 1 byte differs | Program under rare conditions could become silent | the one-byte edit of section 5.3 (`0x74` to `0x70`) lies inside the FX image |
+| v1.64 to v1.66 | none | Production test routines only | consistent |
+
+**Reading (EMPIRICAL).** Every sound-engine release note in the history has a matching change in exactly the images one would expect, and the releases without sound changes (v1.62, v1.66) leave all five images byte-identical. The SY1SY2 image is identical in all eight releases. This supports three things: the five images are the real DSP programs, the index to name order of the bank 1 name array (FX, PNO, ORG, SY1SY2, SMP) is right at least for FX (reverb, Ring Mod, the v1.64 silent-program fix), ORG (Vox) and SMP (missing sample), and the code blocks A and B of section 5.6 are FX code. The match of the v1.64 byte with the FX image is the strongest single link (the byte is at `bank0_CODE@0x45D63C`, inside `0x4467EC..0x46EBFC` of v1.64).
+
+Not proven: that the synth DSP is idx3 (it is the only image that never changes, which is odd given the synth fixes in v1.52 and v1.60; those may have been ARM-side), and the Core1/Core2 split inside each image.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
