@@ -34,7 +34,7 @@ sharc-org core1_sram.bin --dev 0x3108d008=5 --dev 0x28ac0380=1 --dev 0x3108c06c=
 sharc-org core2_sram.bin ... --buf @0xB2EF4:40:f32 --wav out.wav --csv out.csv
 ```
 
-Options: `--poke PASS:ADDR=V` (V may be `f0.5` for a float), `--pre`, `--set`, `--dev`, `--flag`, `--lenient`, `--diff [LO:HI]` (SRAM and IOP words), `--watch LO:LEN` (store sites per pass), `--boot-stores`, `--coverage` (pc ranges and call targets), `--buf [@]ADDR:COUNT[:f32|q31[:STRIDE]]`, `--wav`, `--csv`, `--dump`. `@ADDR` captures through the pointer stored at ADDR (double-buffered pass buffers). Oracle change: `Core::watch_len`, `watch_addrs`, `watch_limit` extend the single-address data watch to a window (defaults keep `sharc-run --watch` unchanged).
+Options: `--poke PASS:ADDR=V` (V may be `f0.5` for a float), `--pre`, `--set`, `--dev`, `--flag`, `--lenient`, `--diff [LO:HI]` (SRAM and IOP words), `--watch LO:LEN` (store sites per pass), `--boot-stores`, `--coverage` (pc ranges and call targets), `--buf [@]ADDR:COUNT[:f32|q31[:STRIDE]]`, `--wav`, `--csv`, `--dump`, `--msg [PASS:]W1=W2` / `--msg-script FILE` / `--msg-base ADDR` (ARM-style messages, default base the channel strips `0xE0000`) and `--rx-irq VEC:ID` (start each pass through the P4I ISR, Core1), see [dsp-rx-protocol](dsp-rx-protocol.md). `@ADDR` captures through the pointer stored at ADDR (double-buffered pass buffers). Oracle change: `Core::watch_len`, `watch_addrs`, `watch_limit` extend the single-address data watch to a window (defaults keep `sharc-run --watch` unchanged).
 
 ## 3. The module records and the LFO (VERIFIED)
 

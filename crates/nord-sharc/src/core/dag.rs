@@ -50,7 +50,11 @@ impl Core {
         } else {
             (0, 0)
         };
-        Self::dag_next(self.i[ii], delta, l, b)
+        let next = Self::dag_next(self.i[ii], delta, l, b);
+        if circular && l != 0 {
+            self.note_cb_wrap(ii, self.i[ii].wrapping_add(delta), next);
+        }
+        next
     }
 
     /// Index register `ii` post-modified by `delta` in a data access: circular buffering applies

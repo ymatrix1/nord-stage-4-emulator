@@ -14,6 +14,7 @@
 mod classify;
 mod compute;
 mod decode;
+mod flow_text;
 mod regs;
 mod types;
 
