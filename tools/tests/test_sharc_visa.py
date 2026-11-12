@@ -94,7 +94,8 @@ def test_compute_units():
     assert v.mult_text(0x78, 0, 1, 2) == "R0 = R1 * R2 (SSF)"
     assert v.mult_text(0x00, 0, 1, 2) is None
     assert v.compute_text((0b0000111 << 16) | 0x4321) == "R4 = R2 - R1, R3 = R2 + R1"
-    assert v.compute_text(0x4E4321).startswith("MULTI?")
+    assert v.compute_text(0x4E4321) == "R4 = MRF + R0 * R6 (SSFR), R3 = (R8 + R13)/2"
+    assert v.compute_text(0x4F0000).startswith("MULTI?")  # opcode 001111 is not in Table 12-12
 
 
 def test_shifter_and_multifunction_compute():
