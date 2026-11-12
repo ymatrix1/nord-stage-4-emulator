@@ -208,8 +208,10 @@ pub const DELAY_TIME_MS: [f32; 128] = [
 /// Beats (quarter note = 1) for the 17 `Delay Time` steps when locked to the master clock:
 /// `1/2, 1/4D, 1/2T, 1/4S, 1/4, 1/8D, 1/4T, 1/8S, 1/8, 1/16D, 1/8T, 1/16S, 1/16, 1/16T, 1/32, 1/32T, 1/64`.
 ///
-/// EMPIRICAL (labels and order): `ns4decode` `DelayTempoFracs`. `D` = dotted (x1.5), `T` = triplet (x2/3).
-/// ASSUMED: `S` = septuplet (x8/7), inferred only because it sorts between the neighbouring entries.
+/// EMPIRICAL (labels and order): `ns4decode` `DelayTempoFracs`. VERIFIED (meaning): Nord Stage 4 User Manual
+/// p.51 lists straight, swing (`S`), triplet (`T`) and dotted (`D`) options from 1/2 to 1/32. `D` = x1.5 and
+/// `T` = x2/3 are exact; the swing ratio is not documented: the x8/7 used for `S` is an ASSUMED placeholder
+/// chosen only so the entry sorts between its neighbours.
 pub const DELAY_SYNC_BEATS: [f32; 17] = [
     2.0,
     1.5,
