@@ -8,11 +8,13 @@ median of the previous steps, or where zero padding starts or ends.
 
     python tools/ns4_dsp_tables.py dsp_image_0_FX.bin
     python tools/ns4_dsp_tables.py dsp_image_0_FX.bin --min-len 100
+    python tools/ns4_dsp_tables.py dsp_image_0_FX.bin --db
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import statistics
 import struct
 import sys
@@ -71,14 +73,25 @@ def find_tables(img: bytes, min_len: int = 48) -> list[Table]:
     return tables
 
 
+def db_range(t: Table) -> tuple[float, float, float]:
+    """`(first dB, last dB, dB per step)` of an exponential table, as `20 log10 |value|`."""
+    first, last = 20 * math.log10(abs(t.first)), 20 * math.log10(abs(t.last))
+    return first, last, (last - first) / (t.count - 1)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("image", type=Path)
     p.add_argument("--min-len", type=int, default=48)
+    p.add_argument("--db", action="store_true", help="show the dB range of exponential tables")
     args = p.parse_args(argv)
     tables = find_tables(args.image.read_bytes(), args.min_len)
     for t in tables:
-        print(f"0x{t.offset:06x} n={t.count:5d} {t.first:12.5g} .. {t.last:12.5g}  {t.kind}")
+        line = f"0x{t.offset:06x} n={t.count:5d} {t.first:12.5g} .. {t.last:12.5g}  {t.kind}"
+        if args.db and t.kind == "exponential":
+            lo, hi, step = db_range(t)
+            line += f"  {lo:8.3f} dB .. {hi:8.3f} dB ({step:+.4f} dB/step)"
+        print(line)
     print(f"{len(tables)} tables")
     return 0 if tables else 1
 
