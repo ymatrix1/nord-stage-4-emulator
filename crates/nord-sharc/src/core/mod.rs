@@ -27,6 +27,7 @@ mod float;
 mod float_conv;
 mod float_misc;
 mod float_ops;
+mod float_seeds;
 mod interrupts;
 #[cfg(test)]
 mod irq_scenarios;

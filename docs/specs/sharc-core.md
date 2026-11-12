@@ -47,7 +47,7 @@ Instruction decoding for all used forms is a prerequisite. `tools/sharc_visa.py`
 
 ## 6. Risks
 
-- Float exactness: 40-bit extended precision and the rounding modes (`RND32`, `TRUNC`) are modelled (`docs/research/sharc-float.md`); the seed ROM bits are not verified. Tolerance-based comparison is expected; bit-exactness is a stretch goal.
+- Float exactness: 40-bit extended precision and the rounding modes (`RND32`, `TRUNC`) are modelled (`docs/research/sharc-float.md`); the `RECIPS`/`RSQRTS` seed ROMs and their flags are VERIFIED against the CCES 2.12.1 ADSP-21489 simulator (`float_seeds.rs`, `docs/research/sharc-seeds/`); sticky flags and multiplier flags remain open. Tolerance-based comparison is expected; bit-exactness is a stretch goal.
 - Unknown peripherals: DMA and SPORT behaviour are not modelled (interrupts are raised from outside with `Core::raise_interrupt` / `--irq`); routines that depend on them cannot run in isolation.
 - External memory: delay and reverb lines live in the SDRAM window whose address mapping is still open (`dsp-image-hunt.md` 5.18).
 - Provenance: the oracle is only as good as the decoding; every newly decoded field needs a test that fails without it.
