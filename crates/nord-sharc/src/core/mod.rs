@@ -39,6 +39,8 @@ const IOP_WORDS: usize = 0x4_0000;
 pub const SKIP_LOG_LIMIT: usize = 100_000;
 /// MODE1 bit 21: processing element Y enabled (SIMD mode).
 const MODE1_PEYEN: u32 = 1 << 21;
+/// Most writes kept by the data watch.
+pub const WATCH_LIMIT: usize = 64;
 
 /// Hasher for the device store: addresses are `u32` keys that are not attacker controlled, so a
 /// multiplicative mix is enough and much cheaper than the default SipHash on the poll loops.
@@ -127,6 +129,10 @@ pub struct Core {
     pub first_skipped: Option<u32>,
     /// Program counters of skipped operations (first [`SKIP_LOG_LIMIT`]), for histograms.
     pub skipped_pcs: Vec<u32>,
+    /// Data address whose writes are logged in `watch_hits` (`u32::MAX` = none).
+    pub watch: u32,
+    /// Writes to the watched address as `(step, pc, value)`, at most [`WATCH_LIMIT`].
+    pub watch_hits: Vec<(u64, u32, u32)>,
     pub imask: u32,
     pub mmask: u32,
     pub flags: Flags,
@@ -182,6 +188,8 @@ impl Core {
             skipped: 0,
             first_skipped: None,
             skipped_pcs: Vec::new(),
+            watch: u32::MAX,
+            watch_hits: Vec::new(),
             imask: 0,
             mmask: 0,
             flags: Flags::default(),
