@@ -91,6 +91,17 @@ Method: fraction of 64-byte blocks of version A (per 256 KB region) that occur a
 
 Reading: no version carries a block that looks like a replaced DSP image, yet DSP behaviour did change. Either the DSP changes are in small tables and ARM-side parameters (SHARC code unchanged, which fits e.g. "Reverb placed last" being a routing change sent from the ARM), or the SHARC code is stored in a form this scan cannot see. ASSUMED: SHARC code entropy is not necessarily high (ARM code here is 6.1 to 6.5), so entropy alone never ruled it out; the 6-byte-period sweep is the real test and it found nothing.
 
+### 5.1 Decode of the changed `0x440000..0x4FFFFF` runs (v1.64)
+
+Commands: Python snippets over `bank0_CODE.bin` unpacked from the v1.64 updater (period scores with `tools/fw_dsp_scan.py`, word dumps, `struct`).
+
+- Period scores for the nine biggest runs (`0x49DA00`, `0x4C1800`, `0x4E6100`, `0x473900`, `0x48E1C0`, `0x445500`, `0x449480`, `0x45DD80`, `0x4515C0`): the lowest scores are at periods 4, 8 and 12 (for `0x49DA00`: `p4=5.34`, `p6=5.39`, `p8=5.24`, `p12=5.10`; `p5=5.99`, `p7=5.98`). Period 6 is never below period 4. Result: 16/32-bit-structured data, not a 48-bit SHARC stream.
+- The three 7,936-byte runs at `0x49DA00`, `0x4C1800`, `0x4E6100` are the same stream at different phase offsets (e.g. `96100c00 76141210 0c007a0b` appears at `0x49DA00+12` and at `0x4C1800`). It is a sequence of 16-bit items; `0x000C` recurs every 6 bytes and `0x3F68`, `0x3E7A`, `0x3E64`, `0x3F6A` recur often. No pointer in `bank0_CODE` references any run start (checked 9 run starts with base `0xC0000000`).
+- Other runs hold float32 tables (`0x443780`: -2.0708, -2.5347 ...), zero-padded descriptor-like records (`0x4515C0`, `0x48E1C0` with 1.0f, 3.0f) and 16-bit item streams (`0x473900`).
+- Self-similarity over `0x440000..0x4FFFFF` (byte equality at shift `s`): best `18.5%` at `0x24AE4`, `18.3%` at `0x23BEC`. So the region is several similar but variable-length chunks, not fixed copies.
+
+Reading: ARM-side data (tables and 16-bit item streams, probably parameter or program/routing descriptors) that changed with the DSP-related releases. No SHARC code found. The stream format is not decoded (ASSUMED role: parameter data sent to the SHARCs). Still open: which code reads these streams.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
