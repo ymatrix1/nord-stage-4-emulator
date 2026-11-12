@@ -155,6 +155,21 @@ impl ZdfFilter {
 /// ASSUMED: start phases of the four unison voices; they only decorrelate the voices.
 pub(crate) const UNISON_START_PHASES: [f32; 4] = [0.0, 0.31, 0.57, 0.83];
 
+/// Octaves of cutoff sweep at full Filter Env Amt.
+///
+/// EMPIRICAL: Audible Genius "laser zap" clip (LPM filter, Freq 468 Hz, Env Amt 7.4, env
+/// 0.5 ms / 2.07 s, Pure Saw G4, resonance high): the resonance peak starts about 5-6 octaves above
+/// 468 Hz, i.e. 7-8 octaves per full scale. Accuracy about +/-1 octave (peak snaps to harmonics of
+/// the 392 Hz note, onset time uncertain). Replaces an inherited ASSUMED 3 octaves.
+const FILTER_ENV_OCTAVES: f32 = 8.0;
+
+/// Ratio of the audible filter-envelope decay time constant to the displayed Decay time.
+///
+/// EMPIRICAL: same clip; the resonance peak, in octaves above the base cutoff, falls by a factor
+/// 0.77 per 0.1 s (tau 0.38 s) while the display reads 2.07 s, so tau = 0.18 x display. One decay
+/// value only; the shape (exponential in octaves) fits the nine tracked points within 10 %.
+const FILTER_ENV_DECAY_TAU_FRACTION: f32 = 0.18;
+
 /// Seconds the Delay-mode vibrato takes to fade from zero to full depth after its delay.
 ///
 /// EMPIRICAL: 0.40..0.45 s measured on a real Stage 4 (Audible Genius "Delayed vibrato" clip,
@@ -634,7 +649,8 @@ impl SynthLayer {
                             v.fenv_attack_done = true;
                         }
                     } else if self.filter_env_decay_sec < 44.0 {
-                        let dec = self.filter_env_decay_sec.max(0.003);
+                        let dec =
+                            (self.filter_env_decay_sec * FILTER_ENV_DECAY_TAU_FRACTION).max(0.003);
                         v.fenv -= v.fenv * (inv_fs / dec).min(1.0);
                     }
                 } else {
@@ -794,8 +810,9 @@ impl SynthLayer {
                 1.0
             };
             let env_scale = if self.filter_env_amount.abs() > 1e-4 {
-                // ASSUMED (inherited, no recorded source): +/-3 octaves of cutoff at full env amount.
-                2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * filter_env_level)
+                2.0f32.powf(
+                    self.filter_env_amount.clamp(-1.0, 1.0) * FILTER_ENV_OCTAVES * filter_env_level,
+                )
             } else {
                 1.0
             };
@@ -962,6 +979,24 @@ mod tests {
         render_n(&mut s, 100);
         let after = s.voices.iter().find(|v| v.active).unwrap().fenv;
         assert!(after <= before);
+    }
+
+    #[test]
+    fn filter_envelope_decay_follows_the_measured_time_constant() {
+        // Laser-zap clip: displayed Decay 2.07 s, audible tau 0.38 s (0.18 x display).
+        let mut s = SynthLayer::new(48_000.0);
+        s.filter_env_dedicated = true;
+        s.filter_env_amount = 0.74;
+        s.filter_env_attack_sec = 0.0005;
+        s.filter_env_decay_sec = 2.07;
+        s.note_on(67, 127);
+        render_n(&mut s, 48_000 / 2);
+        let fenv = s.voices.iter().find(|v| v.active).unwrap().fenv;
+        let want = (-(0.5 - 0.0005) / (2.07 * FILTER_ENV_DECAY_TAU_FRACTION)).exp();
+        assert!((fenv - want).abs() < 0.03, "fenv {fenv} want {want}");
+        // 7.4 on the panel is a ~5.9 octave sweep at its start.
+        let octaves = 0.74 * FILTER_ENV_OCTAVES;
+        assert!((5.0..7.0).contains(&octaves));
     }
 
     #[test]

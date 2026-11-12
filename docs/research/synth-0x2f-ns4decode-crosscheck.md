@@ -267,3 +267,13 @@ Method: 2^17-point FFT per 1 s window on steady G4 windows, -20 dB span of the 2
 Finding: the engine spread is several times too small, and the hardware curve looks non-linear (1.2 -> 3.0 grows ~9x in cents for 2.5x in knob). Not applied: the data are too coarse (moving knob, -20 dB edge bias, one note). SUPERSAW constants stay ASSUMED.
 
 Follow-ups: steady-note recordings at 5+ knob values (or the unmoved 3.0 / 6.0 / 10.0 spans in the clip with a longer window) to fit the curve, then change `SUPERSAW_DETUNES` scaling in `synth.rs`.
+
+## Audible Genius "classic laser zap" (checked 2026-11-12)
+
+Source: Audible Genius clip (hardware): Pure Saw, LPM filter, Freq 468 Hz, Env Amt 7.4, env 0.5 ms / 2.07 s / 3.0 ms, resonance high, G4 note at 55.7 s (clean, no overlap). Question: filter-envelope depth in octaves and decay time constant.
+
+Method: 2048-point FFT every 100 ms; strongest peak above 300 Hz (resonance peak). Peak track after onset: 11461, 5625, 3305, 2086, 1359, 1078, 867, 773, 586 Hz, then base. In octaves above 468 Hz: 4.61, 3.59, 2.82, 2.16, 1.54, 1.20, 0.89, 0.72, 0.33; each step is x0.71..0.81 (mean 0.77), i.e. exponential, tau 0.38 s against displayed 2.07 s (0.18x). Start about 5-6 octaves at Amt 7.4 gives 7-8 octaves per full scale.
+
+Applied: `FILTER_ENV_OCTAVES = 8` (was inherited ASSUMED 3), `FILTER_ENV_DECAY_TAU_FRACTION = 0.18`; test `filter_envelope_decay_follows_the_measured_time_constant`. Caveats: one clip and decay value; peak snaps to harmonics of 392 Hz; resonance peak is near, not exactly at, cutoff; release not measured (unchanged); the 49 s note of the same clip agrees roughly (3516 -> 773 Hz over 0.8 s) but overlaps other audio.
+
+Follow-ups: second Amt/Decay pair to confirm linearity in both; check whether the amp envelope decay uses the same 0.18 factor.
