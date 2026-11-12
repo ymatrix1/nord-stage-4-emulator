@@ -626,6 +626,23 @@ Findings (VERIFIED by the run, handler code read from the disassembly at `0x24BB
 
 Core fixes this needed: `PASS` and the other short ALU ops now set AZ/AN (the poll never left the loop before), `MODIFY(Ia, Mb)` (Type 7a/7b, destination = source XOR `IdIs`), and the short `DM(Ii, Mm)` transfer (Type 3c). The fixed-point multiplier is now modelled (`Rn|MRF|MRB = [MRx +/-] Rx * Ry` in S/U, F/I, R forms and `MRF = 0`; MRF/MRB are 80 bits; `SAT`/`RND` of MR, integer rounding and the MODE1 SRCU swap are not modelled; round-to-nearest-even at bit 32 and saturation on Rn are ASSUMED from programming reference 3-14..3-17, 11-49). With it the handler runs about 515 steps past the mailbox poll (`--poke 100000:0xb00e2=1 --dev 0x282c0380=1`, ORG Core2) and stops at the `2x` word `023e 0001 0211` at short-word `0x1262a6`: `IF TRUE`, compute field `0x010211` = ALU `op=0x10`, `n=2 x=1 y=1`. ALU opcode `0x10` is not in the fixed-point ALU table of rev 2.4 (see 5.9 for the undocumented `0x02` form), so its meaning is the next open item.
 
+### 5.23 Hardware photos and the lenient run
+
+**Main board photos** (local only, `.reference/mainboard/`, not committed; photos of the NP4 Main v0.72 and the "Moderkort NS4 0.95" boards):
+
+| Part | Evidence |
+|---|---|
+| Two packages marked `ADSP-21489 KSWZ-4B` (Analog Devices SHARC logo) | legible in the v0.72 close-up |
+| A third large Analog Devices package next to them | partly visible, marking not readable |
+| TI `AM1705DPTP4` | the ARM host CPU (an ARM926EJ-S part with no DSP core, ASSUMED from the part number) |
+| Eight small memory packages left of the DSPs | probably SDRAM, marking not readable |
+
+On the 0.95 board four large QFP packages sit in a row with the TI chip below them. Three of them carry hand-added DC-DC modules with trimmers (repair or voltage-mod work, labelled "Dumpad OK 2025 v30"), which hides their markings. Reading: **four SHARC ADSP-21489 plus one ARM** (two read from markings, the rest ASSUMED from package and position).
+
+Open: the firmware has five images with two sections in each of FX, PNO and ORG, so the mapping of images and sections to the four chips is unknown (an ADSP-21489 has a single SHARC core, so the sections cannot be two cores of one chip; Core1/Core2 in this document are just section names). Matching them needs the board netlist or the driver's per-chip download calls (`bank0_CODE@0x241C58`).
+
+**`sharc-run --lenient`** skips compute operations that are not modelled (counting them and reporting the first pc) so that control flow can be followed past undocumented forms. Results are not arithmetic-exact after a skip. With it ORG Core2 (`--poke 100000:0xb00e2=1 --dev 0x282c0380=1`) skips the `2x` ALU `op=0x10` word at `0x1262a6` (107 uses of `op=0x10`, 186 of `op=0x0f`, in 2x words of this section) and stops at the next gap, Type 5a `Dreg <-> CDreg swap` (`7a3e 0480 1001`) at `0x1262a9`.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications

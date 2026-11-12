@@ -59,6 +59,11 @@ pub struct Core {
     pub ustat: [u32; 4],
     /// Multiplier result registers MRF (index 0) and MRB (index 1), 80 bits sign-extended.
     pub mr: [i128; 2],
+    /// When set, compute operations that are not modelled are skipped and counted instead of faulting.
+    pub lenient: bool,
+    /// Number of skipped unmodelled compute operations and the pc of the first one.
+    pub skipped: u64,
+    pub first_skipped: Option<u32>,
     pub imask: u32,
     pub mmask: u32,
     pub flags: Flags,
@@ -105,6 +110,9 @@ impl Core {
             mode2: 0,
             ustat: [0; 4],
             mr: [0; 2],
+            lenient: false,
+            skipped: 0,
+            first_skipped: None,
             imask: 0,
             mmask: 0,
             flags: Flags::default(),
@@ -563,6 +571,16 @@ impl Core {
         true
     }
 
+    /// Skips an unmodelled compute operation in lenient mode, otherwise reports it as a fault.
+    fn unmodelled(&mut self, pc: u32, insn: &Insn) -> Result<(), Fault> {
+        if !self.lenient {
+            return Err(self.fault(pc, insn));
+        }
+        self.skipped += 1;
+        self.first_skipped.get_or_insert(pc);
+        Ok(())
+    }
+
     fn fault(&self, pc: u32, insn: &Insn) -> Fault {
         Fault::Unimplemented {
             pc,
@@ -659,7 +677,7 @@ impl Core {
                     let v = self.read_ureg(src);
                     self.write_ureg(bits(w, 30, 24) as u8, v);
                     if kind == Kind::T5a && !self.compute(bits(w, 22, 0)) {
-                        return Err(self.fault(pc, &insn));
+                        self.unmodelled(pc, &insn)?;
                     }
                 }
             }
@@ -678,7 +696,7 @@ impl Core {
                     };
                     let ureg = bits(w, 29, 23) as u8;
                     if kind == Kind::T3a && !self.compute(bits(w, 22, 0)) {
-                        return Err(self.fault(pc, &insn));
+                        self.unmodelled(pc, &insn)?;
                     }
                     if bits(w, 31, 31) == 1 {
                         let v = self.read_ureg(ureg);
@@ -714,7 +732,7 @@ impl Core {
                     let mi = (bits(w, 29, 27) + base) as usize;
                     let dst = (src ^ bits(w, 26, 23) as usize) & 15;
                     if kind == Kind::T7a && !self.compute(bits(w, 22, 0)) {
-                        return Err(self.fault(pc, &insn));
+                        self.unmodelled(pc, &insn)?;
                     }
                     self.i[dst] = Self::dag_next(self.i[src], self.m[mi], self.l[src], self.b[src]);
                 }
@@ -726,7 +744,7 @@ impl Core {
                     let addr = self.i[ii].wrapping_add(bits(w, 32, 27) as u32);
                     let reg = bits(w, 26, 23) as usize;
                     if kind == Kind::T4a && !self.compute(bits(w, 22, 0)) {
-                        return Err(self.fault(pc, &insn));
+                        self.unmodelled(pc, &insn)?;
                     }
                     if bits(w, 39, 39) == 1 {
                         self.dm_write(addr, self.r[reg]).map_err(bad)?;
@@ -742,12 +760,12 @@ impl Core {
                     bits(w, 22, 0)
                 };
                 if (kind == Kind::T2b || cond_ok) && !self.compute(c) {
-                    return Err(self.fault(pc, &insn));
+                    self.unmodelled(pc, &insn)?;
                 }
             }
             Kind::T2c => {
                 if !self.short_compute(bits(w, 43, 32)) {
-                    return Err(self.fault(pc, &insn));
+                    self.unmodelled(pc, &insn)?;
                 }
             }
             Kind::T8a => {
@@ -1029,6 +1047,21 @@ mod tests {
             !c.compute(mult_word(0x71, 3, 1, 2)),
             "integer rounding is not modelled"
         );
+    }
+
+    #[test]
+    fn lenient_mode_skips_unmodelled_compute_and_counts_it() {
+        // 2x word with ALU opcode 0x10 (undocumented, not modelled) at short-word 0
+        let mut image = vec![0u8; 16];
+        for (k, p) in [0x023eu16, 0x0001, 0x0211, 0x0000].iter().enumerate() {
+            image[2 * k..2 * k + 2].copy_from_slice(&p.to_le_bytes());
+        }
+        let mut strict = Core::new(&image);
+        assert!(strict.step().is_err());
+        let mut c = Core::new(&image);
+        c.lenient = true;
+        assert!(c.step().is_ok());
+        assert_eq!((c.skipped, c.first_skipped), (1, Some(0)));
     }
 
     #[test]
