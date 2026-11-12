@@ -10,4 +10,8 @@ description = "ADSP-214xx (SHARC) VISA instruction decoder and test-oracle core 
 name = "sharc-disasm"
 path = "src/bin/sharc_disasm.rs"
 
+[[bin]]
+name = "sharc-run"
+path = "src/bin/sharc_run.rs"
+
 [dependencies]
