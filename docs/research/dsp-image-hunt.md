@@ -460,6 +460,46 @@ Several endpoints are exactly round in dB (`-60.000`, `0.000`, `+2.000`, `+33.00
 
 **What is open:** which parameter each table serves. The tables are indexed by the 7-bit parameter values, so candidates are level, drive, gain and mix knobs; the bank 0 ARM-side tables already decoded (cutoff, rotary, EQ) are separate curves. Matching a table to a parameter needs the VISA code that reads it (a `DM(table + index)` load) or a test against measured hardware gain. When a table is matched, its dB range can be tagged VERIFIED in `crates/nord-core/src/fx.rs`.
 
+### 5.17 Image format: an ADI-style loader block stream with two core sections
+
+Tool: `tools/ns4_dsp_ldr.py` (tests in `tools/tests/test_ns4_dsp_ldr.py`). Applies to the FX, PNO and ORG images; SY1SY2 and SMP have no such header (they start with data or zeros).
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DIR
+python tools/ns4_dsp_ldr.py DIR/dsp_image_0_FX.bin              # summary
+python tools/ns4_dsp_ldr.py DIR/dsp_image_0_FX.bin --blocks     # every block
+python tools/ns4_dsp_ldr.py DIR/dsp_image_0_FX.bin --out SEG    # data segments (do not commit)
+```
+
+**Format (VERIFIED on the v1.66 FX, PNO and ORG images: every byte is consumed, 624 / 471 / 430 blocks, 0 header checksum failures).** A sequence of blocks, each a 16-byte little-endian header `tag, address, count, aux` plus a payload for data blocks:
+
+| Field | Meaning |
+|---|---|
+| tag byte 3 | XOR of the other 15 header bytes (checksum of the header) |
+| tag low 16 bits | `0x5003` core section header: `address` = entry value, `aux` = bytes in the section; `0x0003` data block, `count` payload bytes loaded at `address`; `0x0103` zero-fill, `count` bytes of zeros at `address`, no payload; `0x8003` final block of a section, `address` = entry value, `count` 0 |
+
+Each image holds two core sections (Core1 first, Core2 second); the section header sizes (`aux`) add up to the image size minus the 16-byte headers. The kind names are my labels from the observed behaviour (ASSUMED); the byte layout and checksum are verified.
+
+Load maps (v1.66; addresses are the loader addresses, their mapping to the SHARC address space is not decoded):
+
+| Image | Core | Entry value | `0x20xxxxxx` (external) | `0x28xxxxxx` (internal) |
+|---|---|---|---|---|
+| FX | 1 | `0x1211E3` | 844 B data at `0x20004000`; 409,600 B zero-fill at `0x20010000` | 156 data blocks (79,464 B), 155 zero blocks (175,576 B), `0x28240000..0x2838FA0C` |
+| FX | 2 | `0x1211E3` | 409,600 B zero-fill at `0x20080000` | 154 data (74,588 B), 153 zero (174,940 B), `0x28A40000..0x28B8FA0C` |
+| PNO | 1 | `0x121007` | 332 B data; 655,360 B zero-fill in two blocks, `0x20004000..0x200A8000` | 127 data (137,932 B), 125 zero (132,760 B), `0x28240000..0x2838E778` |
+| PNO | 2 | `0x125C88` | 240,000 B zero-fill at `0x200C0000` | 106 data (143,004 B), 106 zero (137,916 B), `0x28A40000..0x28B85420` |
+| ORG | 1 | `0x125C88` | 428 B data; 240,000 B zero-fill, `0x20004000..0x200BA980` | 106 data (146,360 B), 106 zero (137,916 B), `0x28240000..0x28385420` |
+| ORG | 2 | `0x125C88` | 240,000 B zero-fill at `0x200C0000` | 106 data (142,988 B), 106 zero (137,916 B), `0x28A40000..0x28B85420` |
+
+Reading:
+
+- **Core addressing.** Core1 sections load at `0x2824xxxx` (internal) and `0x2000xxxx..` (external), Core2 sections at `0x28A4xxxx` and a second external window (`0x2008xxxx`, `0x200Cxxxx`): the two cores use address bases `0x800000` apart. This explains the fixed distance between duplicated tables (section 5.14).
+- **Shared organ program.** The PNO image's Core2 section has the ORG entry value `0x125C88` and almost the same block sizes as the ORG cores (143,004 B against 142,988 B of data, same 137,916 B of zero-fill). So the second DSP of the piano image runs the organ program, and the three near-identical blocks D, E and F of section 5.10 are exactly these three organ sections (PNO Core2, ORG Core1, ORG Core2). The piano program itself is PNO Core1 (entry `0x121007`).
+- **External memory.** The zero-fill blocks at `0x2001xxxx`/`0x2008xxxx`/`0x200Cxxxx` are large RAM areas: FX 409,600 B per core (102,400 32-bit words, 2.13 s at 48 kHz, plausible delay and reverb memory, ASSUMED), ORG 240,000 B per core, PNO Core1 655,360 B. The 332 to 844 byte data block at `0x20004000` is a record table (20-byte records `0x2000xxxx, 0x283xxxxx, 0x0004422x, n, 4`) that looks like buffer descriptors; not decoded.
+- **Entry values** (`0x1211E3` FX, `0x121007` PNO Core1, `0x125C88` ORG) look like a start address with a low flag bits; their meaning needs the address-space mapping.
+
+Consequence: the load map needed by an emulator is complete in structure (what is loaded where, how much is zeroed). What is missing is the translation from these loader addresses to the SHARC address space (the code uses addresses such as `I5 = 0xC03D8` in the `0x80000..0xFFFFF` internal RAM range) and the core entry semantics.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications

@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""Parse the loader block stream of an exported SHARC DSP image (FX, PNO or ORG).
+
+Format found in `docs/research/dsp-image-hunt.md` 5.17 (all little endian). The image is a sequence
+of blocks, each a 16-byte header `tag, address, count, aux` plus a payload for data blocks:
+
+    tag byte 3  XOR of the other 15 header bytes (checked on every block of v1.66 FX, PNO, ORG)
+    tag low 16  0x5003 core section header: address = entry value, aux = bytes in the section
+                0x0003 data block: `count` payload bytes follow, loaded at `address`
+                0x0103 zero-fill block: `count` bytes of zeros at `address`, no payload
+                0x8003 final block of a core section: address = entry value, count 0
+
+Each image holds two core sections (Core1, Core2). SY1SY2 and SMP have no such header.
+
+    python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin
+    python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --blocks
+    python tools/ns4_dsp_ldr.py dsp_image_0_FX.bin --out dir   # data segments (do not commit)
+"""
+
+from __future__ import annotations
+
+import argparse
+import struct
+import sys
+from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+
+HEADER = 16
+SECTION, DATA, ZERO, FINAL = 0x5003, 0x0003, 0x0103, 0x8003
+KIND_NAMES = {SECTION: "section", DATA: "data", ZERO: "zero", FINAL: "final"}
+
+
+@dataclass(frozen=True)
+class Block:
+    offset: int  # byte offset of the header in the image
+    kind: int  # tag & 0xFFFF
+    address: int
+    count: int
+    aux: int
+    checksum_ok: bool
+
+    @property
+    def payload_size(self) -> int:
+        return self.count if self.kind == DATA else 0
+
+    @property
+    def next_offset(self) -> int:
+        return self.offset + HEADER + self.payload_size
+
+
+def header_checksum(header: bytes) -> int:
+    """XOR of the 15 header bytes other than tag byte 3."""
+    x = 0
+    for i, b in enumerate(header[:HEADER]):
+        if i != 3:
+            x ^= b
+    return x
+
+
+def parse_blocks(img: bytes) -> tuple[list[Block], int]:
+    """Blocks of the stream and the offset where parsing stopped (== len(img) when complete)."""
+    blocks: list[Block] = []
+    o = 0
+    while o + HEADER <= len(img):
+        tag, address, count, aux = struct.unpack_from("<4I", img, o)
+        kind = tag & 0xFFFF
+        if kind not in KIND_NAMES:
+            break
+        block = Block(
+            o, kind, address, count, aux, header_checksum(img[o : o + HEADER]) == tag >> 24
+        )
+        if block.next_offset > len(img):
+            break
+        blocks.append(block)
+        o = block.next_offset
+    return blocks, o
+
+
+def split_cores(blocks: list[Block]) -> list[list[Block]]:
+    """Group blocks into core sections, each starting at a `section` header block."""
+    cores: list[list[Block]] = []
+    for b in blocks:
+        if b.kind == SECTION:
+            cores.append([])
+        if cores:
+            cores[-1].append(b)
+    return cores
+
+
+def load_map(core: list[Block]) -> dict[int, tuple[int, int, int, int, int]]:
+    """Per top address byte: `(data blocks, data bytes, zero blocks, zero bytes, ...)` plus range.
+
+    Returns `{top byte: (n_data, data_bytes, n_zero, zero_bytes, low)}`; `address_range` gives ends.
+    """
+    acc: dict[int, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0xFFFFFFFF])
+    for b in core:
+        if b.kind in (DATA, ZERO):
+            r = acc[b.address >> 24]
+            if b.kind == DATA:
+                r[0] += 1
+                r[1] += b.count
+            else:
+                r[2] += 1
+                r[3] += b.count
+            r[4] = min(r[4], b.address)
+    return {k: (v[0], v[1], v[2], v[3], v[4]) for k, v in acc.items()}
+
+
+def address_range(core: list[Block], top: int) -> tuple[int, int]:
+    """Lowest address and highest end address of data and zero blocks with top byte `top`."""
+    spans = [
+        (b.address, b.address + b.count)
+        for b in core
+        if b.kind in (DATA, ZERO) and b.address >> 24 == top
+    ]
+    return min(a for a, _ in spans), max(e for _, e in spans)
+
+
+def segments(img: bytes, core: list[Block]) -> list[tuple[int, bytes]]:
+    """`(address, bytes)` for every data block of a core, in stream order."""
+    return [
+        (b.address, img[b.offset + HEADER : b.offset + HEADER + b.count])
+        for b in core
+        if b.kind == DATA
+    ]
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    p.add_argument("image", type=Path)
+    p.add_argument("--blocks", action="store_true", help="list every block")
+    p.add_argument("--out", type=Path, help="write each core's data segments here")
+    args = p.parse_args(argv)
+    img = args.image.read_bytes()
+    blocks, end = parse_blocks(img)
+    if not blocks or end != len(img):
+        print(
+            f"not a loader stream (parsed {len(blocks)} blocks, "
+            f"stopped at 0x{end:x} of 0x{len(img):x})"
+        )
+        return 1
+    bad = sum(not b.checksum_ok for b in blocks)
+    cores = split_cores(blocks)
+    print(f"{len(blocks)} blocks, {len(cores)} core sections, header checksum failures: {bad}")
+    for ci, core in enumerate(cores, 1):
+        entry = core[0].address
+        print(
+            f"core {ci}: section at 0x{core[0].offset:x}, entry value 0x{entry:x}, "
+            f"{core[0].aux} bytes"
+        )
+        for top, (nd, db, nz, zb, _low) in sorted(load_map(core).items()):
+            lo, hi = address_range(core, top)
+            print(
+                f"  0x{top:02x}xxxxxx: {nd} data blocks ({db} B), {nz} zero blocks ({zb} B), "
+                f"0x{lo:08x}..0x{hi:08x}"
+            )
+        if args.blocks:
+            for b in core:
+                print(
+                    f"    0x{b.offset:06x} {KIND_NAMES[b.kind]:7s} "
+                    f"addr 0x{b.address:08x} count {b.count}"
+                )
+        if args.out:
+            args.out.mkdir(parents=True, exist_ok=True)
+            for i, (addr, data) in enumerate(segments(img, core)):
+                (args.out / f"core{ci}_{i:03d}_{addr:08x}.bin").write_bytes(data)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
