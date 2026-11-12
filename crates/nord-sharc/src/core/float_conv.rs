@@ -1,6 +1,6 @@
 //! Conversions and exponent operations of the float ALU: `FLOAT`, `FIX`/`TRUNC`, `SCALB`, `RND`
-//! (programming reference rev 2.4, 11-3x). Same provenance as `float.rs`: ASSUMED, transcribed
-//! from the reference text.
+//! (programming reference rev 2.4, 11-3x). Same provenance as `float.rs`: FIX/TRUNC, FLOAT and RND
+//! VERIFIED by `float_measured.rs`, SCALB ASSUMED.
 use super::float::{overflow_value, repack, round_pack, unpack, Class, Mode, Out, Un};
 
 /// `Fn = FLOAT Rx BY scale`: the integer converted with the exponent shifted by `scale`. The
@@ -58,7 +58,8 @@ pub fn to_int(a: u64, scale: i32, toward_zero: bool, mode: Mode) -> Out {
         let v = if mode.sat { max(neg) } else { 0xFFFF_FFFF };
         Out {
             v,
-            an: v >> 31 == 1,
+            // VERIFIED (simulator): the unsaturated all-ones result sets AV and AI but not AN
+            an: mode.sat && v >> 31 == 1,
             av: true,
             ai: !mode.sat,
             ..Out::default()
@@ -113,7 +114,7 @@ pub fn to_int(a: u64, scale: i32, toward_zero: bool, mode: Mode) -> Out {
         v: u64::from(v),
         az: v == 0,
         an: v >> 31 == 1,
-        av: e >= 31,
+        av: false, // VERIFIED: the exact -2^31 result is not an overflow
         ..Out::default()
     }
 }

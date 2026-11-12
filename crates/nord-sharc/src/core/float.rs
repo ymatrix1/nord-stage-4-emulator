@@ -7,8 +7,8 @@
 //! `RND32 = 0` (the reset state) keeps between operations. All arithmetic is exact integer
 //! arithmetic with a single rounding at the end, so results are deterministic on every platform.
 //!
-//! Provenance: ASSUMED unless a doc comment says otherwise. The behaviours are transcribed from
-//! the reference text; nothing here has been compared with silicon or an ADI simulator run, see
+//! Provenance: the rounding, FIX/TRUNC and extension behaviours are VERIFIED against the CCES
+//! ADSP-21489 simulator by `float_measured.rs` (912 rows, 0 mismatches); the rest is ASSUMED, see
 //! `docs/research/sharc-float.md`.
 
 /// MODE1 bit 13: ALU saturation.

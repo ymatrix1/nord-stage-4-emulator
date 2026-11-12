@@ -127,8 +127,7 @@ impl Core {
                     std::mem::swap(&mut self.r[r], &mut self.s[s]);
                 } else {
                     let src = ((bits(w, 42, 38) << 2) | bits(w, 32, 31)) as u8;
-                    let v = self.read_ureg(src);
-                    self.write_ureg(bits(w, 29, 23) as u8, v);
+                    self.move_ureg(bits(w, 29, 23) as u8, src);
                     self.run_move_compute(d, with_compute)?;
                 }
             }
