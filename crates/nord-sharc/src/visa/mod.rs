@@ -17,7 +17,7 @@ mod decode;
 mod regs;
 mod types;
 
-pub use classify::{bits, classify, parcels_le, tile, ureg_load, word48};
+pub use classify::{bits, classify, classify_isa, parcels_le, tile, ureg_load, word48};
 pub use compute::{compute_text, mult_text, multi_text, shift_imm_text, short_compute_text};
 pub use decode::{decode_text, listing_line};
 pub use regs::ureg_name;

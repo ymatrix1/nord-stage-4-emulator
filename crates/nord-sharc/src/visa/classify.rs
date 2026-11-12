@@ -5,15 +5,25 @@ use super::types::{Insn, Kind};
 ///
 /// `p1` is the following parcel, needed to recognise 32-bit forms (low 7 bits `0x3F`).
 pub fn classify(p0: u16, p1: Option<u16>) -> (Kind, usize) {
+    classify_with(p0, p1, true)
+}
+
+/// Type of a fixed 48-bit ISA-mode word (no 16/32-bit forms: `1100`/`1001` prefixes are Types
+/// 10a and 6a there). ISA-mode code is the SY1SY2/SMP boot kernel (`docs/research/sharc-sy1sy2-smp.md`).
+pub fn classify_isa(p0: u16) -> Kind {
+    classify_with(p0, None, false).0
+}
+
+fn classify_with(p0: u16, p1: Option<u16>, visa: bool) -> (Kind, usize) {
     use Kind::*;
-    let marker = p1.is_some_and(|p| p & 0x7F == 0x3F);
+    let marker = visa && p1.is_some_and(|p| p & 0x7F == 0x3F);
     let top3 = p0 >> 13;
     let top4 = p0 >> 12;
     let sub = (p0 >> 2) & 7;
-    if top4 == 0b1100 {
+    if visa && top4 == 0b1100 {
         return (T2c, 1);
     }
-    if top4 == 0b1001 {
+    if visa && top4 == 0b1001 {
         if sub & 4 != 0 {
             return (T3c, 1);
         }
@@ -44,7 +54,7 @@ pub fn classify(p0: u16, p1: Option<u16>) -> (Kind, usize) {
         return (T25, 3);
     }
     let code = (p0 >> 8) & 0x1F;
-    let short = (p0 >> 7) & 1 == 1;
+    let short = visa && (p0 >> 7) & 1 == 1;
     match code {
         0x01 => {
             if short {
@@ -90,7 +100,7 @@ pub fn classify(p0: u16, p1: Option<u16>) -> (Kind, usize) {
         0x17 => (T20a, 3),
         0x10..=0x13 => (T14a, 3),
         0x00 => {
-            if p0 & 1 == 1 {
+            if visa && p0 & 1 == 1 {
                 (T21c, 1)
             } else {
                 (T21, 3)
@@ -168,6 +178,26 @@ mod tests {
         assert_eq!(classify(0x023E, Some(0x2019)), (Kind::T6n, 3));
         assert_eq!(classify(0x0001, Some(0x06BE)), (Kind::T21c, 1));
         assert_eq!(classify(0x0000, Some(0x0000)), (Kind::T21, 3));
+    }
+
+    #[test]
+    fn isa_words_are_always_48_bit() {
+        // `lcntr=r2, do` and `r1=0x1420`-like words share prefixes with VISA short forms
+        assert_eq!(classify_isa(0x0c00), Kind::T12a);
+        assert_eq!(classify_isa(0x1000), Kind::T14a);
+        assert_eq!(classify_isa(0x0001), Kind::T21, "no 16-bit NOP in ISA mode");
+        assert_eq!(classify_isa(0xC123), Kind::T10a, "1100 is Type 10a, not 2c");
+        assert_eq!(
+            classify_isa(0x9000),
+            Kind::T6a,
+            "1001 is Type 6a, not 3c/15b/16"
+        );
+        assert_eq!(
+            classify_isa(0x0f81),
+            Kind::T17a,
+            "short bit 7 is not a length flag"
+        );
+        assert_eq!(classify_isa(0x013e), Kind::T2a);
     }
 
     #[test]

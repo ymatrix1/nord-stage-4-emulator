@@ -36,6 +36,7 @@ mod float_seeds;
 mod interrupts;
 #[cfg(test)]
 mod irq_scenarios;
+mod isa;
 mod memory;
 mod moves;
 mod multifunction;
@@ -187,6 +188,9 @@ pub struct Core {
     timer: timer::TimerState,
     sys: sysregs::SysState,
     banks: banks::Banks,
+    /// ISA-mode program memory ([`isa`]): 3 parcels (most significant first) per 48-bit word.
+    /// Empty = VISA mode, where `pc` addresses the flat SRAM image in parcels.
+    isa_code: Vec<u16>,
 }
 
 #[inline]
@@ -240,6 +244,7 @@ impl Core {
             timer: timer::TimerState::default(),
             sys: sysregs::SysState::new(),
             banks: banks::Banks::default(),
+            isa_code: Vec::new(),
         }
     }
 
