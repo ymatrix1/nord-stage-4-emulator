@@ -28,13 +28,18 @@ impl Core {
     fn fetch(&self, pc: u32) -> Decoded {
         let p0 = self.parcel(pc);
         let p1 = self.parcel(pc.wrapping_add(1));
-        let (kind, len) = classify(p0, Some(p1));
+        let (mut kind, mut len) = classify(p0, Some(p1));
         let mut parcels = [p0, 0, 0];
         if len > 1 {
             parcels[1] = p1;
         }
         if len > 2 {
             parcels[2] = self.parcel(pc.wrapping_add(2));
+        }
+        if let Some(isa) = self.isa_window_parcels(pc) {
+            // interrupt vector slot: 48-bit ISA words, least significant parcel first
+            parcels = isa;
+            (kind, len) = (classify(isa[0], Some(isa[1])).0, 3);
         }
         let w = word48(&parcels[..len]);
         Decoded {
@@ -77,10 +82,16 @@ impl Core {
 
     /// Executes one instruction. Returns `Ok(())` or the reason it could not.
     pub fn step(&mut self) -> Result<(), Fault> {
+        if self.steps >= self.irq.due && self.sequencer_event() {
+            return Ok(()); // the core slept in IDLE for this step
+        }
         let d = self.fetch(self.pc);
         let mut next = d.pc.wrapping_add(d.insn.len as u32);
         match d.kind() {
             Kind::T21c if d.insn.parcels[0] == 0x0001 => {}
+            // IDLE (0x0081 and 0x0091 both print as `idle` in ADI's elfdump)
+            Kind::T21c if d.insn.parcels[0] | 0x10 == 0x0091 => self.enter_idle(),
+            Kind::T19a => self.exec_modify_imm(&d),
             Kind::T21 if d.w == 0 => {}
             Kind::T2a | Kind::T2b | Kind::T2c => self.exec_compute(&d)?,
             Kind::T6n => self.exec_shift_imm(&d)?,
@@ -110,6 +121,9 @@ impl Core {
         }
         self.pc = self.finish_step(&d, next);
         self.steps += 1;
+        if self.irq.window_len != 0 {
+            self.close_window_if_left();
+        }
         Ok(())
     }
 
