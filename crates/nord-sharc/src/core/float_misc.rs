@@ -97,6 +97,12 @@ pub fn compare(a: u64, b: u64, mode: Mode) -> Out {
     }
 }
 
+/// `Rx > Ry` for the CACC history of `COMP` (a NaN operand counts as greater, VERIFIED).
+pub fn greater(a: u64, b: u64, mode: Mode) -> bool {
+    let (x, y) = (unpack(a, mode.r32), unpack(b, mode.r32));
+    x.class == Class::Nan || y.class == Class::Nan || key(x) > key(y)
+}
+
 /// `Rn = MANT Fx`: the mantissa with its hidden bit as an unsigned 1.31 integer.
 pub fn mant(a: u64, mode: Mode) -> Out {
     let x = unpack(a, mode.r32);
@@ -278,6 +284,15 @@ mod tests {
             "CLIP 5 by -2 gives +2"
         );
         assert_eq!(select_op(f(1.0), f(-2.0), 3, M).v, f(1.0));
+    }
+
+    #[test]
+    fn greater_for_cacc() {
+        assert!(greater(f(2.0), f(1.0), M));
+        assert!(!greater(f(1.0), f(1.0), M));
+        assert!(greater(f(f32::NAN), f(1.0), M), "a NaN counts as greater");
+        // a denormal is flushed to zero, so it is not greater than a negative denormal
+        assert!(!greater(f(f32::from_bits(1)), f(-f32::from_bits(1)), M));
     }
 
     #[test]

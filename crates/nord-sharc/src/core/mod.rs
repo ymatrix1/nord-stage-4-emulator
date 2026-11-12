@@ -23,6 +23,9 @@ mod branch;
 mod dag;
 mod dualmove;
 mod exec;
+mod fixed_alu;
+#[cfg(test)]
+mod fixed_measured;
 mod float;
 mod float_conv;
 #[cfg(test)]
