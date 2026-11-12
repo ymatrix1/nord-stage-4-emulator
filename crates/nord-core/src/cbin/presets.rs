@@ -1334,10 +1334,12 @@ impl PianoPresetDecoded {
 
 /// Decoded single Synth layer configuration (`0x32` Layer + `0x2F` Sound).
 ///
-/// The trailing "engine-side" fields (dedicated filter ADR, velocity-to-filter,
-/// LFO shape/destination, unison, mono/legato/glide) have no verified bit offsets
-/// yet: they are not read from or written to the bitstream (unpack yields defaults,
-/// the raw payload preserves the original bits) but drive the DSP via the engine.
+/// Filter envelope ADR is decoded from `0x2F +318..+339` (corpus-verified with
+/// `tools/ns4_bitscan.py`, curves assumed equal to the amp ADR tables). The other
+/// trailing "engine-side" fields (velocity-to-filter, LFO shape/destination, unison,
+/// mono/legato/glide) have no verified bit offsets yet: they are not read from or
+/// written to the bitstream (unpack yields defaults, the raw payload preserves the
+/// original bits) but drive the DSP via the engine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SynthLayerDecoded {
@@ -1559,6 +1561,11 @@ fn unpack_synth_layer_pair(
     let kb_track = r.read_bits(2)? as u8;
     let filter_drive = r.read_bits(2)? as f32 / 3.0;
     let (flt_env_raw, _) = read_morph(r, sound_base + 287, 7, 127)?;
+    // Filter envelope ADR (+318..+339, 3x7b): same layout as the amp ADR at +195.
+    r.set_bit_pos(sound_base + 318)?;
+    let fenv_atk = r.read_bits(7)? as usize;
+    let fenv_dcy = r.read_bits(7)? as usize;
+    let fenv_rel = r.read_bits(7)? as usize;
 
     let (osc_mode, waveform) = map_osc_mode_and_wave(is_osc_mode, osc_bank, osc_cat, osc_wave_raw);
 
@@ -1592,6 +1599,10 @@ fn unpack_synth_layer_pair(
         lfo_amount: lfo_amt_raw as f32 / 127.0,
         arp_enabled,
         arp_bpm,
+        filter_env_dedicated: true,
+        filter_env_attack_ms: ENV_ATTACK_MS_TABLE[fenv_atk.min(127)],
+        filter_env_decay_ms: ENV_DECAY_MS_TABLE[fenv_dcy.min(127)],
+        filter_env_release_ms: ENV_RELEASE_MS_TABLE[fenv_rel.min(127)],
         ..SynthLayerDecoded::default()
     })
 }
@@ -1724,6 +1735,23 @@ fn pack_synth_layer_pair(
         MorphDeltas::default(),
         7,
         127,
+    )?;
+
+    w.set_bit_pos(sound_base + 318)?;
+    w.write_bits(
+        table_val_to_idx(&ENV_ATTACK_MS_TABLE, layer.filter_env_attack_ms),
+        7,
+    )?;
+    let fdcy_bits =
+        if layer.filter_env_decay_ms >= 44_000.0 || !layer.filter_env_decay_ms.is_finite() {
+            127
+        } else {
+            table_val_to_idx(&ENV_DECAY_MS_TABLE, layer.filter_env_decay_ms).min(126)
+        };
+    w.write_bits(fdcy_bits, 7)?;
+    w.write_bits(
+        table_val_to_idx(&ENV_RELEASE_MS_TABLE, layer.filter_env_release_ms),
+        7,
     )?;
 
     Ok(())
@@ -2267,6 +2295,40 @@ mod tests {
         assert_eq!(unpacked.layer_a.dyn_comp, 2);
         assert_eq!(unpacked.layer_a.unison, 3);
         assert_eq!(unpacked.layer_a.octave, 1);
+    }
+
+    #[test]
+    fn test_synth_filter_env_adr_decoded_from_bits_318_and_roundtrips() {
+        let mut original = SynthPresetDecoded::default();
+        original.layer_a.filter_env_dedicated = true;
+        original.layer_a.filter_env_attack_ms = ENV_ATTACK_MS_TABLE[24];
+        original.layer_a.filter_env_decay_ms = ENV_DECAY_MS_TABLE[61];
+        original.layer_a.filter_env_release_ms = ENV_RELEASE_MS_TABLE[33];
+        let packed = original.pack().unwrap();
+
+        // Raw bits at 0x2F(layer A)=1472, +318: 7b attack, 7b decay, 7b release.
+        let mut r = BitReader::new(&packed);
+        r.set_bit_pos(1472 + 318).unwrap();
+        assert_eq!(r.read_bits(7).unwrap(), 24);
+        assert_eq!(r.read_bits(7).unwrap(), 61);
+        assert_eq!(r.read_bits(7).unwrap(), 33);
+
+        let un = SynthPresetDecoded::unpack(&packed).unwrap();
+        assert!(un.layer_a.filter_env_dedicated);
+        assert_eq!(un.layer_a.filter_env_attack_ms, ENV_ATTACK_MS_TABLE[24]);
+        assert_eq!(un.layer_a.filter_env_decay_ms, ENV_DECAY_MS_TABLE[61]);
+        assert_eq!(un.layer_a.filter_env_release_ms, ENV_RELEASE_MS_TABLE[33]);
+        assert_eq!(un.pack().unwrap(), packed);
+    }
+
+    #[test]
+    fn test_synth_filter_env_hold_decay_roundtrips_as_127() {
+        let mut p = SynthPresetDecoded::default();
+        p.layer_a.filter_env_decay_ms = 44_000.0;
+        let packed = p.pack().unwrap();
+        let mut r = BitReader::new(&packed);
+        r.set_bit_pos(1472 + 325).unwrap();
+        assert_eq!(r.read_bits(7).unwrap(), 127);
     }
 
     #[test]
