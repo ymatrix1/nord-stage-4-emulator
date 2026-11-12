@@ -158,6 +158,24 @@ def test_shift_immediate_matches_the_adi_disassembly():
     assert v.decode((0x023E, 0x0033, 0x0005)) == "BTST R5 BY 0"
 
 
+def test_bit_fifo_forms_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs/research/sharc-bitfifo.md; register forms
+    # read Ry (bits 3..0) for BITEXT and BFFWRP, immediates keep DATA12[5:0] / DATA12[6:0]
+    assert v.compute_text(0x250312) == "R3 = BITEXT R2"
+    assert v.compute_text(0x258312) == "R3 = BITEXT R2 (NU)"
+    assert v.compute_text(0x270312) == "R3 = BFFWRP"
+    assert v.compute_text(0x274312) == "BITDEP R1 BY R2"
+    assert v.compute_text(0x27C312) == "BFFWRP = R2"
+    assert v.decode((0x023E, 0x0014, 0x7F35)) == "R3 = BITEXT 63"
+    assert v.decode((0x023E, 0x7816, 0xFF35)) == "R3 = BITEXT 63 (NU)"
+    assert v.decode((0x023E, 0x081D, 0x23AC)) == "BITDEP R12 BY 35"
+    assert v.decode((0x023E, 0x001D, 0x8035)) == "BITDEP R5 BY 0"
+    assert v.decode((0x023E, 0x781F, 0xFF35)) == "BFFWRP = 127"
+    assert v.decode((0x023E, 0x401F, 0x0035)) == "BFFWRP = 0"
+    assert v.decode((0x013E, 0x0025, 0x0312)) == "R3 = BITEXT R2"
+    assert v.decode((0x013E, 0x0027, 0xC312)) == "BFFWRP = R2"
+
+
 def test_register_moves_and_swaps_match_the_adi_disassembly():
     # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
     assert v.decode((0x703E, 0x933F)) == "M6 = R1"

@@ -16,6 +16,7 @@
 //! single-step decoder that dispatches to them.
 
 mod alu;
+mod bitfifo;
 mod branch;
 mod dag;
 mod dualmove;
@@ -88,6 +89,8 @@ pub struct Flags {
     pub sz: bool,
     pub sv: bool,
     pub ss: bool,
+    /// Shifter bit FIFO of this processing element (`SF` is derived from its write pointer).
+    pub fifo: bitfifo::BitFifo,
 }
 
 /// Loop stack entry of `DO ... UNTIL LCE`.
@@ -253,6 +256,8 @@ impl Core {
             4 => f.av,
             7 => f.sv,
             8 => f.sz,
+            // BM on ADSP-2136x/2146x; on the ADSP-214xx the same code selects SF (table 10-4)
+            14 => f.fifo.sf(),
             13 => f.tf,
             15 => !lce,
             _ => false,

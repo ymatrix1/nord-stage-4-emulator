@@ -234,10 +234,11 @@ def shift_imm_text(w: int) -> str:
         19: f"R{n} = FDEP R{x} BY {field} (SE)",
         25: f"R{n} = R{n} OR FDEP R{x} BY {field}",
         27: f"R{n} = R{n} OR FDEP R{x} BY {field} (SE)",
-        20: f"R{n} = BITEXT {data}",
-        22: f"R{n} = BITEXT {data} (NU)",
-        29: f"BITDEP R{x} BY {data}",
-        31: f"BFFWRP = {data}",
+        # bit FIFO immediates keep DATA12[5:0] (length) or DATA12[6:0] (pointer), as ADI prints them
+        20: f"R{n} = BITEXT {data & 63}",
+        22: f"R{n} = BITEXT {data & 63} (NU)",
+        29: f"BITDEP R{x} BY {data & 63}",
+        31: f"BFFWRP = {data & 127}",
         48: f"R{n} = BSET R{x} BY {data}",
         49: f"R{n} = BCLR R{x} BY {data}",
         50: f"R{n} = BTGL R{x} BY {data}",
@@ -310,9 +311,11 @@ SHIFT_OPS = {
     0x90: "R{n} = FPACK F{x}",
     0x94: "F{n} = FUNPACK R{x}",
     0x74: "BITDEP R{x} BY R{y}",
-    0x50: "R{n} = BITEXT R{x}",
-    0x58: "R{n} = BITEXT R{x} (NU)",
-    0x70: "R{n} = BFFWRP1",
+    # bit FIFO, VERIFIED against ADI elfdump (docs/research/sharc-bitfifo.md): operand is Ry
+    0x50: "R{n} = BITEXT R{y}",
+    0x58: "R{n} = BITEXT R{y} (NU)",
+    0x70: "R{n} = BFFWRP",
+    0x7C: "BFFWRP = R{y}",
 }
 # Table 12-12, multifunction multiplier + ALU (opcode = compute bits 21..16).
 MULALU_OPS = {

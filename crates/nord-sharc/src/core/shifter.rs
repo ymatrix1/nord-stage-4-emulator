@@ -3,7 +3,8 @@
 //! and Shift Immediate Computations").
 //!
 //! Operands are the 32-bit fixed-point fields only (the 8-bit extension field is not modelled).
-//! Not modelled: the bit FIFO operations (`BITDEP`, `BITEXT`, `BFFWRP`).
+//! The bit FIFO operations (`BITDEP`, `BITEXT`, `BFFWRP`) live in `bitfifo.rs`.
+use super::bitfifo::{BFFWRP_WRITE, BITDEP, BITEXT, BITEXT_NU};
 use super::exec::Decoded;
 use super::{sign_extend, Core, Fault};
 use crate::visa::bits;
@@ -134,8 +135,12 @@ fn immediate_to_register_op(op6: u64) -> Option<u64> {
         17 => 0x44,
         18 => 0x48,
         19 => 0x4C,
+        20 => BITEXT,
+        22 => BITEXT_NU,
         25 => 0x64,
         27 => 0x6C,
+        29 => BITDEP,
+        31 => BFFWRP_WRITE,
         48 => 0xC0,
         49 => 0xC4,
         50 => 0xC8,
@@ -185,7 +190,7 @@ impl Core {
         Ok(())
     }
 
-    fn set_shifter_flags(&mut self, sz: bool, sv: bool, ss: bool) {
+    pub(super) fn set_shifter_flags(&mut self, sz: bool, sv: bool, ss: bool) {
         self.flags.sz = sz;
         self.flags.sv = sv;
         self.flags.ss = ss;
@@ -281,6 +286,8 @@ impl Core {
                 self.set_shifter_flags(msb == (op == 0x88), count == 32, false);
                 count
             }
+            // bit FIFO: BITEXT (NU), BFFWRP read, BITDEP, BFFWRP write
+            0x50 | 0x58 | 0x70 | 0x74 | 0x7C => return self.bitfifo_op(op, n, rx, ry),
             _ => return false,
         };
         self.r[n] = result;
@@ -413,9 +420,10 @@ mod tests {
         c.r[4] = 0x10;
         assert_eq!(c.step(), Ok(()));
         assert_eq!(c.r[4], 0x11);
-        // bit FIFO forms are not modelled
-        let mut c = core_at_zero(&[0x023e, 0x001d, 0x0502]);
-        assert!(c.step().is_err());
+        // r3 = bitext 0x5 is a bit FIFO form (see bitfifo.rs); FPACK stays unmodelled
+        let mut c = core_at_zero(&[0x023e, 0x0014, 0x0535]);
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!(c.r[3], 0);
     }
 
     /// Values worked out from the reference's description of the short float format.
