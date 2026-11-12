@@ -79,7 +79,22 @@ Other 128/129-entry curves in `0x2f7000..0x2fbf00` and `0x453c44..` (`0.0093 .. 
 
 ## ARM display-string tables (OQ7, part 4)
 
-The five `0x53abe4..0x53b3e4` "tables" in `bank0_CODE.bin` are arrays of 128 pointers to 8-byte **display strings** (`"0.5 ms"`, `"748 ms"`, `"43 s"`/`"Inf"`, `"14 Hz"`..`"32 kHz"`, `"0.03 Hz"`..`"523 Hz"`), not DSP values. `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin` compares them with `ENV_ATTACK/DECAY/RELEASE_MS_TABLE`, `FILTER_CUTOFF_HZ_TABLE` and `LFO_RATE_HZ_TABLE`: 128/128 entries match for every table within the rounding of the displayed digits, so those five inherited tables are now `VERIFIED` as *displayed* values. The scales that act on the sound (glide rate, unison detune, osc-env pitch depth, velocity curves, filter-env depth) are applied by the SHARC DSP images, which are stored on the mainboard SPI flash and are not part of the update file (`sharc-dsp-and-preset-hash-teardown.md` section 2.1). ARM0 only holds the display strings and the translation tables it sends over DSP-Comm.
+The five `0x53abe4..0x53b3e4` "tables" in `bank0_CODE.bin` are arrays of 128 pointers to 8-byte **display strings** (`"0.5 ms"`, `"748 ms"`, `"43 s"`/`"Inf"`, `"14 Hz"`..`"32 kHz"`, `"0.03 Hz"`..`"523 Hz"`), not DSP values. `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin` compares them with `ENV_ATTACK/DECAY/RELEASE_MS_TABLE`, `FILTER_CUTOFF_HZ_TABLE` and `LFO_RATE_HZ_TABLE`: 128/128 entries match for every table within the rounding of the displayed digits, so those five inherited tables are now `VERIFIED` as *displayed* values. The scales that act on the sound (glide rate, unison detune, osc-env pitch depth, velocity curves, filter-env depth) are most likely applied inside the SHARC DSP code. **Not proven that the update does not contain it**: see the next section.
+
+## Is the DSP code in the update file? (open, not proven either way)
+
+Checked 2026-11-12:
+
+| Check | Result |
+|---|---|
+| Installer resources (`7z l "Update Nord Stage 4 OS v1.66.exe"`) | `BINA` (4,037,080 B, the firmware we unpack = `os.cab` in the macOS `.dmg`) and `BINE` (587,736 B): a 32-bit NSIS installer signed by Clavia (USB driver setup), not DSP code. No other firmware resource |
+| `DSP*Core* L1 bl.N` / `DSPSyn L2` / `DSPSmp block N` names (`bank1_CODE.bin @0x8cb7c`, table `@0x9ee0..0x9fe0`) | next to the `Micron MT25QL128A` string and `DSP Test` / `Possible DSP err`; the table pairs names with SHARC-style address ranges (`0x90000..0xC0000`). They look like **memory-block test / SPI-flash region descriptors**, not code images. The earlier teardown reading "loader table naming images" is not supported by the table contents |
+| Decompressed `bank0_CODE.bin` (5.5 MB) and `bank1_CODE.bin` (0.8 MB), 64 KB windows | ARM code (`0..0x278000`, entropy 6.1-6.4, byte lag-4 repeats), float / pointer tables, a 1.1 MB high-entropy block at `0x300000..0x420000` with 16-bit-sample-like correlation (lag-2 0.05-0.27, not 48-bit instructions); no region with SHARC 6-byte periodicity; no zlib/gzip/bzip2/ELF streams |
+| OS history | Nord OS updates changed Synth behaviour (glide fixes, Synth preset format 2.06), which is easier to explain if DSP code can be updated too |
+
+Reading: no DSP code recognised in what we unpack, but the container may still carry it in a form we do not recognise (the second compressed image, a SHARC `.ldr` stream inside the data blocks, or a custom packing). Until the full LZ decompressor is verified end to end and the data blocks are classified, "firmware cannot give these scales" stays a hypothesis.
+
+Lead: the `0x300000..0x420000` block (1.1 MB, 16-bit-sample-like) may hold the 46 WAVE-type waveforms (`Bells/Tines ... Keys`), which would replace our synthetic wavetable bank; unchecked.
 
 ## Status
 
