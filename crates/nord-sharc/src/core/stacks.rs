@@ -1,13 +1,13 @@
 //! PC, loop and status stacks of [`Core`] with their depth limits and the STKY bits that
 //! describe them. Depths (PRM 4-12, 4-37, 6-86): PC stack 30, status stack 15, loop stack 6.
 use super::{Core, LoopFrame};
-use crate::visa::classify;
 
 pub(super) const PC_STACK_DEPTH: usize = 30;
 pub(super) const STATUS_STACK_DEPTH: usize = 15;
 const LOOP_STACK_DEPTH: usize = 6;
-/// Value of PCSTK while the PC stack is empty (PRM 4-13).
-pub(super) const PCSTK_EMPTY: u32 = 0x3FF_FFFF;
+/// Value of PCSTK while the PC stack is empty. VERIFIED on the simulator (`stack_measured.rs`):
+/// 24 bits of ones (the PRM text suggests 26).
+pub(super) const PCSTK_EMPTY: u32 = 0xFF_FFFF;
 
 /// STKY read-only sticky stack bits: status stack overflow (23) and loop stack overflow (25).
 pub(super) const SSOV: u32 = 1 << 23;
@@ -20,8 +20,10 @@ pub(super) const SSEM: u32 = 1 << 24;
 pub(super) const LSEM: u32 = 1 << 26;
 
 impl Core {
+    /// Entries of the shared PC stack: return addresses plus the top-of-loop address of every
+    /// loop that still has one on it.
     pub(super) fn pc_depth(&self) -> usize {
-        self.call_stack.len() + self.loops.len()
+        self.call_stack.len() + self.loops.iter().filter(|f| !f.detached).count()
     }
 
     /// Pushes a return address on the PC stack. At 29 of 30 entries `SOVFI` is latched; a push
@@ -41,7 +43,8 @@ impl Core {
 
     /// Pushes a loop frame (more than six sets the loop stack overflow bit and `SOVFI`; the frame
     /// is kept so execution stays well defined).
-    pub(super) fn push_loop(&mut self, frame: LoopFrame) {
+    pub(super) fn push_loop(&mut self, mut frame: LoopFrame) {
+        frame.cs_depth = self.call_stack.len();
         self.loops.push(frame);
         if self.loops.len() > LOOP_STACK_DEPTH {
             self.sys.stky[0] |= LSOV;
@@ -68,24 +71,6 @@ impl Core {
             self.set_astat(1, y);
             self.set_mode1(mode1);
         }
-    }
-
-    /// PCSTK: the top return address, `0x3FFFFFF` while the stack is empty.
-    pub(super) fn pcstk(&self) -> u32 {
-        self.call_stack.last().copied().unwrap_or(PCSTK_EMPTY)
-    }
-
-    /// LADDR: loop end address, termination code (LCE = 15, ASSUMED) and loop type by length.
-    pub(super) fn laddr(&self) -> u32 {
-        let Some(f) = self.loops.last() else { return 0 };
-        let mut pc = f.start;
-        let mut n = 0;
-        while pc <= f.end && n < 4 {
-            pc += classify(self.parcel(pc), Some(self.parcel(pc + 1))).1 as u32;
-            n += 1;
-        }
-        let ty = [0b111, 0b010, 0b100, 0b110, 0b111][n.min(4)];
-        f.end & 0xFF_FFFF | 0x0F << 24 | ty << 29
     }
 }
 
@@ -148,6 +133,7 @@ mod tests {
             start: 0,
             end: 3,
             remaining: 2,
+            ..LoopFrame::default()
         };
         for _ in 0..6 {
             c.push_loop(frame);
@@ -161,12 +147,17 @@ mod tests {
     #[test]
     fn laddr_encodes_end_address_and_loop_length() {
         let mut c = Core::new(&[]);
-        assert_eq!(c.read_ureg(0x66), 0);
+        assert_eq!(
+            c.read_ureg(0x66),
+            u32::MAX,
+            "all ones while the loop stack is empty"
+        );
         // three 16-bit NOPs at 0x10..0x12: a counter loop of length 3
         c.push_loop(LoopFrame {
             start: 0x10,
             end: 0x12,
             remaining: 5,
+            ..LoopFrame::default()
         });
         for k in 0..3 {
             c.sram[(0x10 + k) * 2..][..2].copy_from_slice(&0x0001u16.to_le_bytes());

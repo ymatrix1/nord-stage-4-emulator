@@ -46,7 +46,8 @@ def classify(p0: int, p1: int | None) -> tuple[str, int]:
     if top3 >= 0b110:
         return "10a", 3
     if p0 >> 8 in (0x18, 0x19):
-        return "25", 3
+        # RFRAME has a 16-bit form (`1901`, ADI); the 48-bit form is `1900 0000 0000`
+        return "25", 1 if p0 == 0x1901 else 3
     code = (p0 >> 8) & 0x1F
     short = (p0 >> 7) & 1
     table = {
@@ -267,7 +268,7 @@ def mult_text(opcode: int, rn: int, rx: int, ry: int) -> str | None:
                 2: "MRF = SAT MRF",
                 3: "MRB = SAT MRB",
             }
-            return f"{sat[sel]} ({'U' if opcode & 1 else 'S'}{'F' if f else 'I'})"
+            return f"{sat[sel]} ({'S' if opcode & 1 else 'U'}{'F' if f else 'I'})"
         if opcode in (0x14, 0x16):
             return "MRF = 0" if opcode == 0x14 else "MRB = 0"
         if opcode >> 4 == 1 and (opcode >> 3) & 1:
@@ -278,7 +279,7 @@ def mult_text(opcode: int, rn: int, rx: int, ry: int) -> str | None:
                 2: "MRF = RND MRF",
                 3: "MRB = RND MRB",
             }[sel]
-            return f"{reg} ({'U' if opcode & 1 else 'S'}F)"
+            return f"{reg} ({'S' if opcode & 1 else 'U'}F)"
         return None
     sign = {1: "", 2: "+ ", 3: "- "}[cls]
     reg = {0: "R{n}", 1: "R{n}", 2: "MRF", 3: "MRB"}[sel].format(n=rn)
@@ -365,8 +366,11 @@ def multi_text(c: int) -> str | None:
     if bits(c, 21, 21):  # 1 1x: multiplier and dual ALU
         k = "F" if bits(c, 20, 20) else "R"
         rs = bits(c, 19, 16)
+        # ADI prints the rounding fractional format of the fixed-point product: `(SSFR)`
+        fmt = "" if k == "F" else " (SSFR)"
         return (
-            f"{k}{rm} = {k}{xm} * {k}{ym}, {k}{ra} = {k}{xa} + {k}{ya}, {k}{rs} = {k}{xa} - {k}{ya}"
+            f"{k}{rm} = {k}{xm} * {k}{ym}{fmt}, {k}{ra} = {k}{xa} + {k}{ya}, "
+            f"{k}{rs} = {k}{xa} - {k}{ya}"
         )
     text = MULALU_OPS.get(bits(c, 21, 16))
     if text is None:
@@ -439,6 +443,50 @@ def _dual_half(space: str, write: int, i: int, m: int, reg: int) -> str:
     if write:
         return f"{space}(I{i}, M{m}) = R{reg}"
     return f"R{reg} = {space}(I{i}, M{m})"
+
+
+def _modifiers(flags: list[tuple[str, int]]) -> str:
+    """` (DB,LA,CI)` as ADI prints the set modifiers, or nothing."""
+    on = [name for name, bit in flags if bit]
+    return f" ({','.join(on)})" if on else ""
+
+
+def _branch_modifiers(w: int) -> str:
+    """Types 8a/9a/9b: DB bit 26, LA bit 38 (jumps only), CI bit 24 (ADI `(la,ci)`)."""
+    jump = not bits(w, 39, 39)
+    return _modifiers(
+        [("DB", bits(w, 26, 26)), ("LA", jump and bits(w, 38, 38)), ("CI", bits(w, 24, 24))]
+    )
+
+
+def _return_modifiers(w: int, short: bool) -> str:
+    """Types 11a/11c: 16-bit DB bit 38, LR bit 32 (`rts (db,lr)` is `0aff`); 48-bit DB bit 26,
+    LR bit 24 (`0a3e 0400 0000` is `rts (db)`)."""
+    db, lr = (38, 32) if short else (26, 24)
+    return _modifiers([("DB", bits(w, db, db)), ("LR", bits(w, lr, lr))])
+
+
+def _stack_text(w: int) -> str:
+    """Type 20a in ADI order; a push wins over a pop of the same stack."""
+    parts = []
+    for push, pop, name in ((39, 38, "LOOP"), (37, 36, "STS"), (35, 34, "PCSTK")):
+        if bits(w, push, push):
+            parts.append(f"PUSH {name}")
+        elif bits(w, pop, pop):
+            parts.append(f"POP {name}")
+    if bits(w, 33, 33):
+        parts.append("FLUSH CACHE")
+    return ", ".join(parts)
+
+
+def _type25_text(w: int) -> str:
+    """RFRAME (`1901` / `1900 0000 0000`) or CJUMP; ADI prints no space before `(db)`."""
+    if bits(w, 47, 41) == 0x0C and bits(w, 40, 40):
+        return "RFRAME"
+    db = "(DB)" if bits(w, 34, 34) else ""
+    if bits(w, 38, 38):
+        return f"CJUMP (PC, 0x{bits(w, 23, 0):x}){db}"
+    return f"CJUMP 0x{bits(w, 23, 0):x}{db}"
 
 
 def decode(parcels: tuple[int, ...]) -> str:
@@ -546,7 +594,9 @@ def decode(parcels: tuple[int, ...]) -> str:
     if (name == "21c" and parcels[0] == 0x00FF) or (name == "21/22" and w == 0x0080_0000_0000):
         return "IDLE"
     if name == "20a":
-        return "FLUSH CACHE"
+        return _stack_text(w)
+    if name == "25":
+        return _type25_text(w)
     if name == "21c" or (name == "21/22" and w == 0):
         return "NOP"
     if name == "17a":
@@ -565,21 +615,18 @@ def decode(parcels: tuple[int, ...]) -> str:
             target = "(PC, 0)" if off == 0 else f"(PC, 0x{off:x})"
         else:
             target = f"0x{bits(w, 23, 0):x}"
-        # flags VERIFIED on ADI output: DB = bit 26 (delayed), LA = bit 38 (loop abort, jump)
-        loop_abort = bits(w, 38, 38) and not bits(w, 39, 39)
-        flags = [f for f, on in (("DB", bits(w, 26, 26)), ("LA", loop_abort)) if on]
-        tag = f" ({','.join(flags)})" if flags else ""
+        tag = _branch_modifiers(w)
         return f"{iff}{kind} {target}{tag}"
     if name == "2a":
         return f"{iff}{compute_text(bits(w, 22, 0))}"
     if name in ("11a", "11c"):
-        delayed = " (DB)" if bits(w, 38, 38) else ""
+        delayed = _return_modifiers(w, name == "11c")
         tail = f", {compute_text(bits(w, 22, 0))}" if name == "11a" and bits(w, 22, 0) else ""
         return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}{delayed}{tail}"
     if name in ("9a", "9b"):
         # delayed flag bit 26, call bit 39, indirect target Ic + Md on DAG2 (docs 5.34)
         op = "CALL" if bits(w, 39, 39) else "JUMP"
-        delayed = " (DB)" if bits(w, 26, 26) else ""
+        delayed = _branch_modifiers(w)
         if bits(w, 40, 40):
             rel = bits(w, 32, 27)
             target = f"(PC, {rel - 64 if rel & 32 else rel})"
@@ -594,7 +641,10 @@ def decode(parcels: tuple[int, ...]) -> str:
         offset -= 1 << 23 if offset & (1 << 22) else 0
         return f"DO (PC, {offset}) UNTIL LCE, LCNTR = {count}"
     if name == "13a":
-        return f"DO 0x{bits(w, 23, 0):x} UNTIL {COND[bits(w, 37, 33)]}"
+        offset = bits(w, 22, 0)
+        offset -= 1 << 23 if offset & (1 << 22) else 0
+        term = "FOREVER" if bits(w, 37, 33) == 31 else COND[bits(w, 37, 33)]
+        return f"DO (PC, {offset}) UNTIL {term}"
     return f"{name}? raw " + " ".join(f"{x:04x}" for x in parcels)
 
 

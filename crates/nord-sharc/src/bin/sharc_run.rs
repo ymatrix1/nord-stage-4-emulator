@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--enter STEP:PC]... [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--enter STEP:PC]... [--trace N] [--sc57x CORE] [--l2 ADDR:FILE]... [--spi2-rx W,W]... [--sec-raise ID]... [--spi-boot IMAGE[:OFFSET]]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -107,6 +107,11 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut lenient = false;
     let mut isa = false;
     let mut enters: Vec<(u64, u32)> = Vec::new();
+    let mut sc57x: Option<usize> = None;
+    let mut l2_files: Vec<(u32, String)> = Vec::new();
+    let mut spi2_rx: Vec<u32> = Vec::new();
+    let mut sec_raise: Vec<u32> = Vec::new();
+    let mut spi_boot: Option<(String, usize)> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -147,6 +152,42 @@ fn run(args: &[String]) -> Result<String, String> {
                         .ok_or("bad --flag number")? as u8,
                     parse_number(level).ok_or("bad --flag level")? != 0,
                 ));
+            }
+            "--sc57x" => {
+                // CORE (1 or 2): model SEC0, SPI2, DMA, TRU, LP1 and L2 of the ADSP-2157x
+                let n = parse_number(it.next().ok_or("--sc57x needs CORE (1 or 2)")?);
+                let n = n
+                    .filter(|n| (1..=2).contains(n))
+                    .ok_or("--sc57x needs 1 or 2")?;
+                sc57x = Some(n as usize - 1);
+            }
+            "--l2" => {
+                let spec = it.next().ok_or("--l2 needs ADDR:FILE")?;
+                let (addr, file) = spec.split_once(':').ok_or("--l2 needs ADDR:FILE")?;
+                let addr = parse_number(addr).ok_or("bad --l2 address")? as u32;
+                l2_files.push((addr, file.to_string()));
+            }
+            "--spi2-rx" => {
+                // comma separated words the ARM master clocks into SPI2
+                let list = it.next().ok_or("--spi2-rx needs W,W,...")?;
+                for w in list.split(',') {
+                    spi2_rx.push(parse_number(w).ok_or("bad --spi2-rx word")? as u32);
+                }
+            }
+            "--sec-raise" => {
+                let id = parse_number(it.next().ok_or("--sec-raise needs ID")?);
+                sec_raise.push(id.ok_or("bad --sec-raise id")? as u32);
+            }
+            "--spi-boot" => {
+                // IMAGE[:OFFSET]: serve the 2148x SPI-slave DMA with the words of IMAGE from OFFSET
+                let spec = it.next().ok_or("--spi-boot needs IMAGE[:OFFSET]")?;
+                let split = spec
+                    .rsplit_once(':')
+                    .filter(|(f, o)| f.len() > 1 && parse_number(o).is_some());
+                spi_boot = Some(match split {
+                    Some((f, o)) => (f.to_string(), parse_number(o).unwrap_or(0) as usize),
+                    None => (spec.clone(), 0),
+                });
             }
             "--lenient" => lenient = true,
             "--isa" => isa = true,
@@ -190,7 +231,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--enter STEP:PC]... [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--irq N@STEP]... [--flag N=LEVEL]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--isa] [--enter STEP:PC]... [--trace N] [--sc57x CORE] [--l2 ADDR:FILE]... [--spi2-rx W,W]... [--sec-raise ID]... [--spi-boot IMAGE[:OFFSET]]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -204,6 +245,27 @@ fn run(args: &[String]) -> Result<String, String> {
     } else {
         Core::new(&data)
     };
+    if let Some(c) = sc57x {
+        core.enable_sc57x(c);
+        for (addr, file) in &l2_files {
+            let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
+            if let Some(s) = core.sc57x() {
+                s.l2.load(*addr, &bytes);
+            }
+        }
+        core.sc57x_feed_spi2(&spi2_rx);
+        for id in &sec_raise {
+            core.sc57x_raise_source(*id);
+        }
+    }
+    if let Some((file, off)) = &spi_boot {
+        let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
+        let tail = bytes
+            .get(*off..)
+            .ok_or("--spi-boot offset is past the end")?;
+        let words = tail.as_chunks::<4>().0;
+        core.enable_spi_boot(words.iter().map(|w| u32::from_le_bytes(*w)).collect());
+    }
     core.lenient = lenient;
     core.watch = watch;
     core.pc = entry;
@@ -278,6 +340,11 @@ fn run(args: &[String]) -> Result<String, String> {
                 ""
             }
         ));
+    }
+    if let Some(s) = core.sc57x() {
+        let tx: Vec<String> = s.spi2.tx_out.iter().map(|w| format!("{w:x}")).collect();
+        out.push_str(&s.report());
+        out.push_str(&format!("spi2 tx words: {}\n", tx.join(" ")));
     }
     if core.skipped > 0 {
         out.push_str(&format!(
@@ -530,5 +597,43 @@ mod tests {
         assert!(run(&args(&["--irq", "99@5"])).is_err());
         assert!(run(&args(&["--irq", "P0I"])).is_err());
         assert!(run(&args(&["--flag", "16=1"])).is_err());
+    }
+
+    #[test]
+    fn peripheral_options_enable_the_models_and_validate_input() {
+        let path = std::env::temp_dir().join("nord_sharc_run_periph_test.bin");
+        std::fs::write(&path, vec![0u8; 0x24_0010]).unwrap();
+        let p = path.to_string_lossy().to_string();
+        let args = |extra: &[&str]| {
+            let mut v = vec![p.clone(), "0x120000".to_string(), "1".to_string()];
+            v.extend(extra.iter().map(|s| s.to_string()));
+            v
+        };
+        let text = run(&args(&[
+            "--sc57x",
+            "1",
+            "--spi2-rx",
+            "1,2",
+            "--sec-raise",
+            "90",
+        ]))
+        .unwrap();
+        assert!(
+            text.contains("spi2 tx words:") && text.contains("spi2 ctl"),
+            "{text}"
+        );
+        assert!(run(&args(&["--sc57x", "3"])).is_err());
+        assert!(run(&args(&["--spi2-rx", "zz"])).is_err());
+        let l2 = std::env::temp_dir().join("nord_sharc_run_l2_test.bin");
+        std::fs::write(&l2, [1u8, 0, 0, 0]).unwrap();
+        let spec = format!("0x20004000:{}", l2.to_string_lossy());
+        assert!(run(&args(&["--sc57x", "2", "--l2", &spec])).is_ok());
+        let boot = format!("{}:0", l2.to_string_lossy());
+        assert!(run(&args(&["--spi-boot", &boot])).is_ok());
+        assert!(run(&args(&[
+            "--spi-boot",
+            &format!("{}:99", l2.to_string_lossy())
+        ]))
+        .is_err());
     }
 }

@@ -18,6 +18,8 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D10](#d10-every-source-file-ships-unit-tests-enforced-in-ci) | 2026-11-10 | Every source file ships unit tests enforced by `tools/check_tests.py` | accepted |
 | [D11](#d11-dual-target-delivery-daw-plugin-clap--vst3-and-standalone-application) | 2026-11-10 | Dual-target delivery: DAW Plugin (`CLAP` + `VST3`) AND Standalone application | accepted |
 | [D12](#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression) | 2026-11-11 | Pursue Track B reverse engineering for `CNSP` sample codec and full LZ firmware decompression | accepted |
+| [D13](#d13-adopt-the-third-party-ns4decode-bit-map-for-synth-0x32--0x2f-fields) | 2026-11-11 | Adopt the third-party ns4decode bit map for Synth `0x32` / `0x2F` fields | accepted |
+| [D14](#d14-nih-plug-framework-for-clap-vst3-and-au-daw-plugin-architecture) | 2026-11-11 | NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture | accepted |
 | [D15](#d15-hybrid-baked-sprite--egui-painter-25d-rendering) | 2026-11-12 | Hybrid baked-sprite + egui painter 2.5D rendering | proposed |
 
 ---
@@ -156,6 +158,16 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** The map agrees with independent data (bitscan found the same offsets; corpus values stay in legal ranges) and unblocks real decoding of LFO, voice mode, glide, octave and oscillator selection (resolves OQ4).
 - **Alternatives:** Keep guessing from preset names (ambiguous); disassemble the `ARM0` preset parser (large effort, tracked in OQ7).
 - **Impact:** `SynthLayerDecoded` gains the decoded fields; `pack()` rewrites only mapped fields and preserves all other bits; scales that ns4decode does not define stay `ASSUMED`.
+
+### D14. NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture
+
+- **Status:** accepted 2026-11-11
+- **Decided by:** Yuri Olive
+- **Context:** To host the Nord Stage 4 Emulator across all major DAWs (Reaper, Bitwig, Ableton Live, Logic Pro, Studio One, FL Studio, Cubase), the plugin must provide CLAP and VST3 binaries natively, support AUv2 via wrapper on Apple platforms, preserve real-time audio safety, support multitimbral multi-channel routing, expose all 7-layer parameters with stable automation IDs, and allow backwards-compatible state serialization.
+- **Decision:** Use `nih-plug` as the unified plugin framework (`crates/nord-plugin`), leveraging its native CLAP and VST3 wrappers, `clap-wrapper` for Audio Unit, sample-accurate transport and event handlers, and parameter management macros.
+- **Why:** Avoids rewriting DSP logic; supports all required formats from a single trait implementation; guarantees real-time zero-allocation processing; integrates directly with existing `Stage4Engine` and `ProgramDecoded` preset serialization.
+- **Alternatives:** `clack-plugin` (CLAP only, lacks native VST3 and AU wrappers); manual C-FFI / COM shims (unmaintainable boilerplate).
+- **Impact:** Adds `crates/nord-plugin` workspace crate with targets for CLAP, VST3, and Standalone.
 
 ---
 

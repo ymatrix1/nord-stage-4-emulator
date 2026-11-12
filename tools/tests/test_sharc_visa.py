@@ -13,7 +13,8 @@ RECORD = bytes.fromhex(
 
 def test_classify_known_forms():
     assert v.classify(0x721A, 0x003F) == ("5b", 2)  # 011 1 0 ..., marker
-    assert v.classify(0x1900 | 0x01, None) == ("25", 3)
+    assert v.classify(0x1901, None) == ("25", 1)  # 16-bit RFRAME (ADI)
+    assert v.classify(0x1900, None) == ("25", 3)
     assert v.classify(0xC123, None) == ("2c", 1)
     assert v.classify(0x0FA4, 0x006C) == ("17b", 2)
     assert v.classify(0x0F15, 0x000C) == ("17a", 3)
@@ -92,7 +93,7 @@ def test_decode_added_forms():
 def test_compute_units():
     assert v.mult_text(0x30, 1, 2, 3) == "F1 = F2 * F3"
     assert v.mult_text(0x78, 0, 1, 2) == "R0 = R1 * R2 (SSF)"
-    assert v.mult_text(0x00, 0, 1, 2) == "R0 = SAT MRF (SI)"
+    assert v.mult_text(0x00, 0, 1, 2) == "R0 = SAT MRF (UI)"
     assert v.mult_text(0x10, 0, 1, 2) is None  # 0001 0000 is not in Table 12-5
     assert v.compute_text((0b0000111 << 16) | 0x4321) == "R4 = R2 - R1, R3 = R2 + R1"
     assert v.compute_text(0x4E4321) == "R4 = MRF + R0 * R6 (SSFR), R3 = (R8 + R13)/2"
@@ -102,7 +103,7 @@ def test_compute_units():
 def test_shifter_and_multifunction_compute():
     assert v.compute_text(0x200312) == "R3 = LSHIFT R1 BY R2"
     assert v.compute_text(0x445666) == "R5 = R1 * R6 (SSFR), R6 = R9 + R14"
-    assert v.compute_text(0x635666) == "R5 = R1 * R6, R6 = R9 + R14, R3 = R9 - R14"
+    assert v.compute_text(0x635666) == "R5 = R1 * R6 (SSFR), R6 = R9 + R14, R3 = R9 - R14"
     assert v.compute_text(0x585666) == "F5 = F1 * F6, F6 = F9 + F14"
     assert v.multi_text(0x0) is None  # bit 22 clear: not a multifunction field
 
@@ -116,10 +117,10 @@ def test_shift_immediate_form_and_type_only_forms():
 
 
 def test_multiplier_register_ops():
-    assert v.mult_text(0x01, 3, 0, 0) == "R3 = SAT MRF (UI)"
+    assert v.mult_text(0x01, 3, 0, 0) == "R3 = SAT MRF (SI)"
     assert v.mult_text(0x14, 0, 0, 0) == "MRF = 0"
     assert v.mult_text(0x16, 0, 0, 0) == "MRB = 0"
-    assert v.mult_text(0x1C, 2, 0, 0) == "MRF = RND MRF (SF)"
+    assert v.mult_text(0x1C, 2, 0, 0) == "MRF = RND MRF (UF)"
 
 
 def test_16_bit_nop_and_entry_code_shape():
@@ -258,3 +259,43 @@ def test_nop_branch_return_and_immediate_forms_match_the_adi_disassembly():
     assert v.decode((0x0AFE,)) == "RTS (DB)"
     assert v.decode((0x0ABE,)) == "RTS"
     assert v.decode((0x0F8F, 0xFFE1)) == "R15 = 0xffffffe1"
+
+
+def test_flow_modifiers_match_adi_elfdump():
+    """ADI text of probes assembled with easm21k (docs/research/sharc-leftovers.md)."""
+    assert v.decode((0x083E, 0x013F)) == "JUMP (M8, I8) (CI)"
+    assert v.decode((0x083E, 0x053F)) == "JUMP (M8, I8) (DB,CI)"
+    assert v.decode((0x087E, 0x043F)) == "JUMP (M8, I8) (DB,LA)"
+    assert v.decode((0x0800, 0x013F)) == "IF EQ JUMP (M8, I8) (CI)"
+    assert v.decode((0x073E, 0x0500, 0x0004)) == "JUMP (PC, 0x4) (DB,CI)"
+    assert v.decode((0x077E, 0x0500, 0x0004)) == "JUMP (PC, 0x4) (DB,LA,CI)"
+    assert v.decode((0x07BE, 0x0400, 0x0004)) == "CALL (PC, 0x4) (DB)"
+    assert v.decode((0x0ABF,)) == "RTS (LR)"
+    assert v.decode((0x0AFF,)) == "RTS (DB,LR)"
+    assert v.decode((0x0BFF,)) == "RTI (DB,LR)"
+
+
+def test_do_until_stack_and_compiler_instructions_match_adi_elfdump():
+    assert v.decode((0x0E00, 0x0000, 0x0007)) == "DO (PC, 7) UNTIL EQ"
+    assert v.decode((0x0E3E, 0x0000, 0x0007)) == "DO (PC, 7) UNTIL FOREVER"
+    assert v.decode((0x0E08, 0x00FF, 0xFFF9)) == "DO (PC, -7) UNTIL AV"
+    assert v.decode((0x0E00, 0x00FF, 0xFF81)) == "DO (PC, -127) UNTIL EQ"
+    assert v.decode((0x1780, 0, 0)) == "PUSH LOOP"
+    assert v.decode((0x1710, 0, 0)) == "POP STS"
+    assert v.decode((0x17A8, 0, 0)) == "PUSH LOOP, PUSH STS, PUSH PCSTK"
+    assert v.decode((0x1706, 0, 0)) == "POP PCSTK, FLUSH CACHE"
+    assert v.decode((0x1702, 0, 0)) == "FLUSH CACHE"
+    assert v.decode((0x1900, 0, 0)) == "RFRAME"
+    assert v.decode((0x1901,)) == "RFRAME"
+    assert v.classify(0x1901, None) == ("25", 1)
+    assert v.decode((0x1804, 0x0000, 0x1234)) == "CJUMP 0x1234(DB)"
+    assert v.decode((0x1844, 0x0000, 0x0010)) == "CJUMP (PC, 0x10)(DB)"
+
+
+def test_wide_return_modifiers_match_adi_elfdump():
+    assert v.decode((0x0A3E, 0x0400, 0x0000)) == "RTS (DB)"
+    assert v.decode((0x0A3E, 0x0100, 0x0000)) == "RTS (LR)"
+    assert v.decode((0x0A3E, 0x0500, 0x0000)) == "RTS (DB,LR)"
+    assert v.decode((0x0A7F, 0x0000, 0x0000)) == "RTS"
+    assert v.decode((0x0B3E, 0x0400, 0x0000)) == "RTI (DB)"
+    assert v.decode((0x0A00, 0x0400, 0x0000)) == "IF EQ RTS (DB)"

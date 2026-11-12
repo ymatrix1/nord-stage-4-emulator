@@ -72,10 +72,9 @@ pub fn to_int(a: u64, scale: i32, toward_zero: bool, mode: Mode) -> Out {
         Class::Nan => {
             return Out {
                 v: 0xFFFF_FFFF,
-                an: true,
-                ai: true,
+                ai: true, // VERIFIED: AI only, no AN
                 ..Out::default()
-            }
+            };
         }
         Class::Inf => return overflow(x.neg),
         Class::Zero => {
@@ -118,6 +117,9 @@ pub fn to_int(a: u64, scale: i32, toward_zero: bool, mode: Mode) -> Out {
         az: v == 0,
         an: v >> 31 == 1,
         av: false, // VERIFIED: the exact -2^31 result is not an overflow
+        // VERIFIED (simulator, 2 156 rows): a nonzero input whose scaled magnitude is below 1
+        // (exponent + scale < 0), whatever the rounded result, latches STKY AUS
+        au: e < 0,
         ..Out::default()
     }
 }

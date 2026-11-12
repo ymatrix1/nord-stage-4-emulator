@@ -211,8 +211,16 @@ impl Core {
         let result = match op {
             // LSHIFT / ASHIFT / ROT by Ry (positive left), with the OR variants
             0x00 | 0x20 | 0x04 | 0x24 => {
-                let r = shift(rx, ry as i32, op & 4 != 0) | if op & 0x20 != 0 { old } else { 0 };
-                self.set_shifter_flags(r == 0, (ry as i32) > 0, false);
+                let arith = op & 4 != 0;
+                let r = shift(rx, ry as i32, arith) | if op & 0x20 != 0 { old } else { 0 };
+                // VERIFIED (simulator): LSHIFT sets SV for any left shift, ASHIFT only when the
+                // shifted value no longer equals the operand (a significant bit was lost)
+                let left = (ry as i32) > 0;
+                let sv = left
+                    && (!arith
+                        || shift(rx, ry as i32, true) as i32 >> ry.min(31) != rx as i32
+                        || (ry >= 32 && (rx != 0 || op & 0x20 != 0)));
+                self.set_shifter_flags(r == 0, sv, false);
                 r
             }
             0x08 => {
@@ -228,13 +236,13 @@ impl Core {
                     (true, 0xC4) => rx & !(1 << bit),
                     (true, _) => rx ^ (1 << bit),
                 };
-                self.set_shifter_flags(r == 0, bit > 31, false);
+                self.set_shifter_flags(r == 0, !bit_ok, false); // VERIFIED: SV for a position outside 0..31
                 r
             }
             0xCC => {
                 // BTST: SZ set when the bit is 0 or the position is off-scale; no result
                 let zero = !bit_ok || (rx >> bit) & 1 == 0;
-                self.set_shifter_flags(zero, bit > 31, false);
+                self.set_shifter_flags(zero, !bit_ok, false);
                 return true;
             }
             // FDEP / FEXT, with (SE) = bit 3 and OR = bit 5

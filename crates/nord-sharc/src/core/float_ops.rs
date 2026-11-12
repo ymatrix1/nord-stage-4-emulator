@@ -146,6 +146,7 @@ impl Core {
             0x91 => abs(float::add(a, b, false, false, mode)),
             0x92 => abs(float::add(a, b, true, false, mode)),
             0x8A => {
+                self.shift_cacc(misc::greater(a, b, mode));
                 self.apply(misc::compare(a, b, mode));
                 return true;
             }

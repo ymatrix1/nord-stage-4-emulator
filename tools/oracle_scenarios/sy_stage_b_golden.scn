@@ -1,0 +1,27 @@
+# SY1SY2 Stage B (0x1C10EE): the 64-frame case behind crates/nord-core/tests/oracle_stage_b.rs.
+#
+# Ratio 0.5 and start position 0.3 frames: the 8-bit phase alternates between 76 and 204 (the
+# position keeps the same sub-phase bits), so the test needs only 24 kernel weights of kernel 2
+# (fc = 1.00, gain 1.0, so the engine's `interpolate` factor `fc` is exactly 1). The input is the
+# `hash` signal, exact in f32, so the test regenerates it without a sine table.
+# Run:  sharc-ref sy_sram.bin tools/oracle_scenarios/sy_stage_b_golden.scn --out target/oracle/golden
+meta rate 48000
+meta ref.mode resample
+meta ref.kernel 2
+meta ref.gain 1.0
+meta ref.ratio 0.5
+meta ref.pos_frames 0.3
+meta ref.ring 128
+warmup 0x1c0b2d 100000 flag12=1
+fill 0xC0000 128 hash stride=2 mul=37 add=11
+fill 0xC0001 128 hash stride=2 mul=23 add=5
+capture srcL 0xC0000 128 stride=2
+capture srcR 0xC0001 128 stride=2
+voice 0 stage_b=on kernel=2 gain=1.0 ratio=0.5 pos_frames=0.3
+loop 64
+poke 0x932ca 0
+poke 0x932cb 0
+run 0x1c0758 100000
+capture L 0x932ca 1
+capture R 0x932cb 1
+end

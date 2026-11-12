@@ -20,6 +20,7 @@ fn short_op(op: u64) -> Option<ShortOp> {
         4 => (0, 0x43, false),  // Rn = NOT Rx
         5 => (0, 0x29, false),  // Rn = Rx + 1
         6 => (0, 0x2A, false),  // Rn = Rx - 1
+        7 => (1, 0x70, true),   // Rn = Rn * Rx (SSI)
         8 => (0, 0x81, true),   // Fn = Fn + Fx
         9 => (0, 0x82, true),   // Fn = Fn - Fx
         10 => (0, 0xCA, false), // Fn = FLOAT Rx
@@ -38,19 +39,6 @@ fn short_op(op: u64) -> Option<ShortOp> {
 }
 
 impl Core {
-    pub(super) fn set_arith_flags(&mut self, result: u32) {
-        self.flags.az = result == 0;
-        self.flags.an = (result as i32) < 0;
-    }
-
-    /// Writes a fixed-point result to `Rn` and updates AZ and AN.
-    #[inline]
-    pub(super) fn set_fixed(&mut self, n: usize, v: u32) {
-        self.r[n] = v;
-        self.fx.clear(n);
-        self.set_arith_flags(v);
-    }
-
     /// Executes a 23-bit compute field. Returns false when the operation is not modelled.
     pub(super) fn compute(&mut self, c: u64) -> bool {
         if c == 0 {
@@ -68,58 +56,7 @@ impl Core {
         );
         let (rx, ry) = (self.r[x], self.r[y]);
         match (cu, op) {
-            (0, 0x01) => {
-                self.flags.ac = rx.overflowing_add(ry).1;
-                self.flags.av = (rx as i32).checked_add(ry as i32).is_none();
-                self.set_fixed(n, rx.wrapping_add(ry));
-            }
-            (0, 0x02) => {
-                self.flags.av = (rx as i32).checked_sub(ry as i32).is_none();
-                self.set_fixed(n, rx.wrapping_sub(ry));
-            }
-            (0, 0x05) => {
-                let carry_in = u32::from(self.flags.ac);
-                self.flags.ac = (u64::from(rx) + u64::from(ry) + u64::from(carry_in)) > 0xFFFF_FFFF;
-                self.set_fixed(n, rx.wrapping_add(ry).wrapping_add(carry_in));
-            }
-            (0, 0x06) => {
-                let r = rx
-                    .wrapping_sub(ry)
-                    .wrapping_add(u32::from(self.flags.ac))
-                    .wrapping_sub(1);
-                self.set_fixed(n, r);
-            }
-            (0, 0x09) => self.set_fixed(
-                n,
-                ((i64::from(rx as i32) + i64::from(ry as i32)) >> 1) as u32,
-            ),
-            (0, 0x0A) => {
-                self.flags.az = rx == ry;
-                self.flags.an = (rx as i32) < (ry as i32);
-            }
-            (0, 0x0B) => {
-                self.flags.az = rx == ry;
-                self.flags.an = rx < ry;
-            }
-            (0, 0x21) => self.set_fixed(n, rx),
-            (0, 0x22) => self.set_fixed(n, rx.wrapping_neg()),
-            (0, 0x25) => self.set_fixed(n, rx.wrapping_add(u32::from(self.flags.ac))),
-            (0, 0x26) => {
-                self.set_fixed(n, rx.wrapping_add(u32::from(self.flags.ac)).wrapping_sub(1));
-            }
-            (0, 0x29) => self.set_fixed(n, rx.wrapping_add(1)),
-            (0, 0x2A) => self.set_fixed(n, rx.wrapping_sub(1)),
-            (0, 0x30) => self.set_fixed(n, (rx as i32).wrapping_abs() as u32),
-            (0, 0x40) => self.set_fixed(n, rx & ry),
-            (0, 0x41) => self.set_fixed(n, rx | ry),
-            (0, 0x42) => self.set_fixed(n, rx ^ ry),
-            (0, 0x43) => self.set_fixed(n, !rx),
-            (0, 0x61) => self.set_fixed(n, (rx as i32).min(ry as i32) as u32),
-            (0, 0x62) => self.set_fixed(n, (rx as i32).max(ry as i32) as u32),
-            (0, 0x63) => {
-                let lim = (ry as i32).wrapping_abs();
-                self.set_fixed(n, (rx as i32).clamp(lim.wrapping_neg(), lim) as u32);
-            }
+            (0, op) if op < 0x80 && self.fixed_alu(op, n, rx, ry) => {}
             (1, 0x30) => self.float_mul(n, x, y),
             (0, op) if op >= 0x80 && self.float_alu(op, n, x, y) => {}
             (0, op) if matches!(op >> 4, 0x7 | 0xF) && self.dual_add_sub(c) => {}
@@ -196,6 +133,9 @@ mod tests {
         (c.r[1], c.r[2]) = (1.5f32.to_bits(), 2.0f32.to_bits());
         assert!(c.short_compute(0xF12)); // F1 = F1 * F2
         assert_eq!(f32::from_bits(c.r[1]), 3.0);
-        assert!(!c.short_compute(0x712), "op 7 is not a short compute");
+        // op 7: Rn = Rn * Rx (SSI), the Type 2c words c7dc and c701 of the ORG image
+        (c.r[1], c.r[2]) = (6, (-7i32) as u32);
+        assert!(c.short_compute(0x712));
+        assert_eq!(c.r[1] as i32, -42);
     }
 }

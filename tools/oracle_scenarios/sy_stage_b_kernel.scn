@@ -1,0 +1,24 @@
+# SY1SY2 Stage B (0x1C10EE): measure the interpolation kernels the oracle applies.
+#
+# A unit impulse is placed at frame `tap` of voice 0's 128-frame ring (DM 0xC0000, stereo,
+# interleaved) and the sample position is set to phase << 17 (the 8 phase bits are bits 24..17 of
+# the 32-bit position word), so one call returns h[tap][phase] x 1.0 x 1.0 = the table entry.
+# 6 kernels x 256 phases x 12 taps = 18432 calls, kernel pointer 0xE3400 + 0xC00 k written into the
+# voice record. Sample index = k * 3072 + phase * 12 + tap. The result is compared with the
+# `SincKernelSet` weights of sinc.rs and serves as the exact table for `sinc_ref --kernel-from`.
+# Run:  sharc-ref sy_sram.bin tools/oracle_scenarios/sy_stage_b_kernel.scn --out target/oracle/kernel
+meta rate 48000
+meta ref.mode kernel
+meta ref.kernel all
+warmup 0x1c0b2d 100000 flag12=1
+fill 0xC0000 128 zero stride=2
+fill 0xC0001 128 zero stride=2
+voice 0 stage_b=on gain=1.0 step=0 pos=0
+loop 18432
+poke {786432+2*i%24} f1.0
+voice 0 pos={i%3072/12*131072} kernel_ptr={i/3072*3072+930816}
+poke 0x932ca 0
+run 0x1c0758 100000
+capture k 0x932ca 1
+poke {786432+2*i%24} 0
+end

@@ -32,6 +32,8 @@ impl Core {
         }
         self.mem_transfer_with(d, dm_addr, dm_reg, dm_write, dm_captured)?;
         self.mem_transfer_with(d, pm_addr, pm_reg, pm_write, pm_captured)?;
+        self.broadcast_load(dmi, dm_reg, dm_write);
+        self.broadcast_load(pmi, pm_reg, pm_write);
         self.i[dmi] = dm_next;
         self.i[pmi] = pm_next;
         Ok(())

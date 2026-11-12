@@ -13,7 +13,14 @@ impl Core {
     #[inline]
     fn branch(&mut self, d: &Decoded, target: u32, next: u32) -> u32 {
         let call = bits(d.w, 39, 39) == 1;
-        if bits(d.w, 26, 26) == 1 {
+        self.apply_jump_modifiers(d);
+        self.take_branch(target, call, bits(d.w, 26, 26) == 1, next)
+    }
+
+    /// Branch mechanics shared by the jump, call and `CJUMP` forms: a delayed branch is
+    /// scheduled for after its two delay slots, an immediate one returns the target.
+    pub(super) fn take_branch(&mut self, target: u32, call: bool, delayed: bool, next: u32) -> u32 {
+        if delayed {
             self.pending = Some(Pending {
                 slots: DELAY_SLOTS + 1,
                 target,
@@ -61,8 +68,25 @@ impl Core {
                 };
                 Ok(self.branch(d, target, next))
             }
-            Kind::T11a | Kind::T11c if d.cond_ok => {
-                // RTS/RTI [(DB)]: a delayed return (bit 38) runs the two following instructions first
+            Kind::T11a | Kind::T11c => {
+                // RTS/RTI [(DB)] [, compute]: a delayed return runs the two following
+                // instructions first. DB is bit 38 in the 16-bit form and bit 26 in the 48-bit
+                // form (VERIFIED against ADI: `0aff` and `0a3e 0400 0000` are `rts (db..)`); the
+                // 48-bit form's bit 25 selects `, ELSE compute` (compute runs when the condition
+                // fails).
+                let wide = d.kind() == Kind::T11a;
+                let compute = bits(w, 22, 0);
+                if wide && compute != 0 {
+                    let else_form = bits(w, 25, 25) == 1;
+                    if else_form {
+                        self.on_each_pe(d, !d.cond_ok, !d.cond_y, |core| core.compute(compute))?;
+                    } else {
+                        self.run_compute(d, compute)?;
+                    }
+                }
+                if !d.cond_ok {
+                    return Ok(next);
+                }
                 let ret = self
                     .call_stack
                     .pop()
@@ -70,7 +94,12 @@ impl Core {
                 if bits(w, 40, 40) == 1 {
                     self.return_from_interrupt(); // RTI: ends the service of the interrupt
                 }
-                if bits(w, 38, 38) == 1 {
+                let delayed = if wide {
+                    bits(w, 26, 26)
+                } else {
+                    bits(w, 38, 38)
+                };
+                if delayed == 1 {
                     self.pending = Some(Pending {
                         slots: DELAY_SLOTS + 1,
                         target: ret,
@@ -100,6 +129,7 @@ impl Core {
                     start: next,
                     end,
                     remaining: count,
+                    ..LoopFrame::default()
                 });
                 Ok(next)
             }
@@ -125,7 +155,9 @@ impl Core {
     /// a delayed branch. Returns the pc of the next instruction.
     #[inline]
     pub(super) fn finish_step(&mut self, d: &Decoded, mut next: u32) -> u32 {
-        if let Some(frame) = self.loops.last_mut() {
+        if self.loops.last().is_some_and(|f| f.term.is_some()) {
+            next = self.arith_loop_step(d.pc, next);
+        } else if let Some(frame) = self.loops.last_mut() {
             if d.pc == frame.end && d.kind() != Kind::T12a {
                 if frame.remaining > 1 {
                     frame.remaining -= 1;
@@ -275,6 +307,32 @@ mod tests {
         // the non-delayed form `0abe` returns at once
         let mut c = core_at_zero(&[0x06be, 0x0000, 0x0010, 0x0001]);
         load(&mut c, 0x10, &[0x0abe, 0x0001]);
+        assert_eq!(c.run(2), None);
+        assert_eq!(c.pc, 3);
+    }
+
+    /// ADI: `0a3e 0400 0000` is `rts (db)` in the 48-bit form (DB is bit 26 there, not bit 38),
+    /// `0a3e 0400 1234` adds the compute `r2=r3+r4`.
+    #[test]
+    fn wide_delayed_return_runs_two_slots_and_its_compute() {
+        let mut c = core_at_zero(&[0x06be, 0x0000, 0x0010, 0x0001]);
+        load(
+            &mut c,
+            0x10,
+            &[0x0a3e, 0x0400, 0x1234, 0x0001, 0x0001, 0x0001],
+        );
+        (c.r[3], c.r[4]) = (5, 6);
+        assert_eq!(c.run(2), None);
+        assert_eq!(
+            (c.r[2], c.pc),
+            (11, 0x13),
+            "the compute ran; first delay slot next"
+        );
+        assert_eq!(c.run(2), None);
+        assert_eq!(c.pc, 3, "returned after the two delay slots");
+        // `0a3e 0000 0000` returns at once
+        let mut c = core_at_zero(&[0x06be, 0x0000, 0x0010, 0x0001]);
+        load(&mut c, 0x10, &[0x0a3e, 0x0000, 0x0000]);
         assert_eq!(c.run(2), None);
         assert_eq!(c.pc, 3);
     }

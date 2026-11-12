@@ -15,7 +15,7 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 | What does the default pass compute? | Six triangle LFOs with one-pole smoothing (section 3). Their outputs are float and fixed-point words (value times 2^29, range +-4) at `0xC1E34 + 10 k`. | VERIFIED |
 | Tonewheel phase, drawbars, key state, click | **Not located.** No word in the default pass has that meaning. Candidate carriers: the 8 slot records at `0xC10B8` and the packed parameter buffer `0xC1DDC` (section 5). | open |
 | Is the Core1 section the same program? | Yes: identical call sequence and store sites, mailbox `DM(0xB00E1)` and poll loop `0x125DF3` instead of `0xB00E2` / `0x125DDF`. | VERIFIED |
-| Oracle blocker | Type 2c word `c7dc` = `R13 = R13 * R12 (SSI)` at `0x12032E` faults (section 6). It stops the parameter-unpack function `0x120300` as soon as a slot selects it. | VERIFIED (fault), fix belongs to the multiplier lane |
+| Oracle blocker | Fixed: Type 2c word `c7dc` = `R13 = R13 * R12 (SSI)` at `0x12032E` (and `c701` at `0x124C9A`) was missing from the short-compute table; now executed ([sharc-type2c.md](sharc-type2c.md)). Slot 0 = `0x120300` runs a full pass (4 991 steps). | VERIFIED |
 
 ## 2. Harness: `sharc-org`
 
@@ -34,7 +34,7 @@ sharc-org core1_sram.bin --dev 0x3108d008=5 --dev 0x28ac0380=1 --dev 0x3108c06c=
 sharc-org core2_sram.bin ... --buf @0xB2EF4:40:f32 --wav out.wav --csv out.csv
 ```
 
-Options: `--poke PASS:ADDR=V` (V may be `f0.5` for a float), `--pre`, `--set`, `--dev`, `--flag`, `--lenient`, `--diff [LO:HI]` (SRAM and IOP words), `--watch LO:LEN` (store sites per pass), `--boot-stores`, `--coverage` (pc ranges and call targets), `--buf [@]ADDR:COUNT[:f32|q31[:STRIDE]]`, `--wav`, `--csv`, `--dump`. `@ADDR` captures through the pointer stored at ADDR (double-buffered pass buffers). Oracle change: `Core::watch_len`, `watch_addrs`, `watch_limit` extend the single-address data watch to a window (defaults keep `sharc-run --watch` unchanged).
+Options: `--poke PASS:ADDR=V` (V may be `f0.5` for a float), `--pre`, `--set`, `--dev`, `--flag`, `--lenient`, `--diff [LO:HI]` (SRAM and IOP words), `--watch LO:LEN` (store sites per pass), `--boot-stores`, `--coverage` (pc ranges and call targets), `--buf [@]ADDR:COUNT[:f32|q31[:STRIDE]]`, `--wav`, `--csv`, `--dump`, `--msg [PASS:]W1=W2` / `--msg-script FILE` / `--msg-base ADDR` (ARM-style messages, default base the channel strips `0xE0000`) and `--rx-irq VEC:ID` (start each pass through the P4I ISR, Core1), see [dsp-rx-protocol](dsp-rx-protocol.md). `@ADDR` captures through the pointer stored at ADDR (double-buffered pass buffers). Oracle change: `Core::watch_len`, `watch_addrs`, `watch_limit` extend the single-address data watch to a window (defaults keep `sharc-run --watch` unchanged).
 
 ## 3. The module records and the LFO (VERIFIED)
 
@@ -100,7 +100,9 @@ Pass buffers (VERIFIED by `--dump` after a pass): `DM(0xB00E4/E5) = 0xB0000 / 0x
 
 ## Follow-ups
 
-1. Implement `R13 = R13 * R12 (SSI)` (Type 2c `c7dc`, integer multiply to a register) in the multiplier lane; rerun with `--poke 1:0xC10B8=0x120300 --poke 1:0xC10B9=0x120300 --poke 1:0xC1DDC=0x01020304` and read `0xB135C..` and `0xC1E4E..` to confirm the byte unpack.
+0. Stage selection, module palette and the negative audio result: see [org-stage-map](org-stage-map.md).
+
+1. Done (`sharc-type2c.md`): `R13 = R13 * R12 (SSI)` (Type 2c `c7dc`) executes. Now confirm the byte unpack, running with `--poke 1:0xC10B8=0x120300 --poke 1:0xC10B9=0x120300 --poke 1:0xC1DDC=0x01020304` and read `0xB135C..` and `0xC1E4E..` to confirm the byte unpack.
 2. Disassemble the routines named by the `0x1206BE`, `0x123900`, `0x124500`, `0x128300` data references and select each in slot 0 to find the tonewheel, drawbar and click modules.
 3. Trace the DSP-side receive path (how a slot id reaches `0xC1DDC`) from the first-pass init and the first `DM(0x3E0xx)` external-port DMA set-up (`boot store` sites `0x125C8F..0x125D4C`).
 4. Run PNO Core2 and ORG Core1 passes with real parameter words to see whether Core1 owns the tonewheel bank.
