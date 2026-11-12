@@ -14,7 +14,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 | **TD-03** | `crates/nord-core::piano` | Low | Synthetic multi-sample fallback when no user `.npno` or SFZ bank is loaded | Phase 4 (`ns4-pno4`) | Resolved (SFZ + `.npno` loader in core & `nord-gui`) |
 | **TD-04** | `crates/nord-core::organ` | Low | Simplified key-click transient model instead of physical contact bounce network | Phase 2.2 (`ns4-orgn`) | Open |
 | **TD-05** | `crates/nord-core::engine` | Low | Boxed heap allocations for delay buffers occur during `Stage4Engine::new()` | Maintenance | Accepted (Zero RT allocs) |
-| **TD-06** | `docs/research` | Medium | `CNSP` & LZO1X unpacked; `ARM0` MurmurHash2 & OS v1.66 128-step DSP parameter curves mapped (`sharc-dsp-and-preset-hash-teardown.md`); raw SPI flash SHARC `.ldr` opcodes remain outside update image | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | Partial (ARM0/DSP curves calibrated) |
+| **TD-06** | `docs/research` | Medium | `CNSP` & LZO1X unpacked; `ARM0` MurmurHash2 & OS v1.66 128-step DSP parameter curves mapped (`sharc-dsp-and-preset-hash-teardown.md`); SHARC VISA code found in `bank0_CODE@0x440000..0x52FFFF` ([dsp-image-hunt.md](research/dsp-image-hunt.md) 5.5/5.6), disassembly and DSP mapping open | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | Partial (ARM0/DSP curves calibrated) |
 | **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Resolved (`crates/nord-core/src/synth.rs`) |
 
 ---
@@ -48,9 +48,9 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 
 ### TD-06: Firmware Internal SHARC / ARM0 Symbol & Lookup Table Mapping
 - **Context:** Factory backup `.ns4b` `CNSP` decompression (`.npno` / `.nsmp4`), full-stream Clavia LZO1X firmware decompression (`Image 1` `798,912 B`, `Image 0` `5,499,504 B`), `ARM0` MurmurHash2 sound-bank resolver (`0x0a5a44`), and the 5×128 OS v1.66 DSP parameter tables (`0x53abe4..0x53b5e4`, 800 Hz rotary crossover, and rotary mic balance steps) are now mapped and wired into `crates/nord-core` and `nord-gui` (`docs/research/sharc-dsp-and-preset-hash-teardown.md`).
-- **Remaining Debt:** Executable SHARC `.ldr` machine-code binaries for `DSPO` / `DSPS` / `DSPF` reside on mainboard SPI flash (`bank1_CODE.bin` contains their DMA/partition descriptors at `0x08cb7c..0x09fe8`), rather than inline inside the OS updater's `ARM0` image.
+- **Remaining Debt:** Executable SHARC code for `DSPO` / `DSPS` / `DSPF` is present as VISA inside `bank0_CODE@0x440000..0x52FFFF` (about 270 KB, 8 blocks, same layout in v1.44 to v1.66). Operand decoding is partial (`tools/sharc_visa.py`) and the blocks are not yet mapped to the three DSPs. `bank1_CODE.bin@0x08cb7c..0x09fe8` is a region/test table, not a loader table.
 - **Remediation Plan (Track B — [D12](DECISIONS.md)):**
-  1. Optionally dump mainboard SPI flash (`ADSP-21489` `.ldr` images) if raw SHARC opcode verification of reverb/amp FX stages beyond `ARM0` tables is pursued.
+  1. Finish the VISA decoder (multiplier/shifter/multifunction fields), map code blocks to cores via the ARM sender (`DSP Comm`, `0x06ca48`), then verify reverb/amp FX stages against the code. A SPI flash dump is no longer required to start.
 
 ---
 

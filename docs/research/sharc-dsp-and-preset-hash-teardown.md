@@ -39,7 +39,9 @@ Inspection of `bank1_CODE.bin` (`0x08cb7c..0x09fe8`) confirms the multi-SHARC SP
 - `DSPSmp` (`block 0..3`), `DSPPiano` (`block 0..3`)
 - Inter-DSP TDM SPORT routing slots (`Fx to Org`, `Org to Fx2Ap`, etc.).
 
-While the raw SHARC `.ldr` machine-code blocks live on the mainboard SPI flash outside the `ARM0` OS update container, **`ARM0` (`bank0_CODE.bin`) stores all calibrated 128-entry UI/DSP translation tables and filter coefficients** sent over `DSP Comm` (`0x06cc40`).
+> **Correction (2026-11-12, see [dsp-image-hunt.md](dsp-image-hunt.md)):** the claim that the SHARC code lives only on the mainboard SPI flash is not supported. About 270 KB of SHARC VISA code is inside `bank0_CODE@0x440000..0x52FFFF` of every OS image from v1.44 to v1.66. The bank 1 table at `0x08cb7c..0x09fe8` is a region/test table, not a loader table.
+
+While the SHARC `.ldr` blocks were assumed to live on the mainboard SPI flash outside the `ARM0` OS update container, **`ARM0` (`bank0_CODE.bin`) stores all calibrated 128-entry UI/DSP translation tables and filter coefficients** sent over `DSP Comm` (`0x06cc40`).
 
 ### 2.2 Extracted 128-Step Parameter Tables (`0x53abe4..0x53b5e4` in `bank0_CODE.bin`)
 
