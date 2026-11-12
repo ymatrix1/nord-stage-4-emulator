@@ -11,5 +11,6 @@ pub mod render;
 pub mod synth;
 pub mod synth_params;
 pub mod synth_sample;
+pub mod synth_tables;
 pub mod synth_types;
 pub mod synth_wavetable;

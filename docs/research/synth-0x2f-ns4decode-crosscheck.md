@@ -65,6 +65,18 @@ Conclusion: the layout is not stored as a plain offset/width table and is not ha
 
 Next steps (OQ7): trace callers of the `Buffer_kSynSnd` descriptor at `0x1aa59c`, identify the field-descriptor struct (the interleaved ids suggest `{name, id, morph ids}` plus a separate type/width map), then read the glide/vibrato/osc-env scale routines that consume the raw 7-bit values.
 
+## Firmware value-scale tables (OQ7, part 3)
+
+Scanned `bank0_CODE.bin` for monotonic `f32` arrays of 16..1000 entries, then compared them with the repo tables.
+
+| Scale | Firmware | Result |
+|---|---|---|
+| **LFO pitch depth table**: LFO amount (7b) to semitones | `@0x2ca2c0`, 128 `f32`, `0.0 .. 48.0`, monotonic | **VERIFIED** and now used by the engine (`synth_tables.rs::LFO_PITCH_SEMITONES`, `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`: max err 3.8e-7). ns4decode's `48*(i/127)^2.5` fit is off by up to 0.41 semitone near the top, so the table replaces both it and our old fixed `+/-5%` |
+| Env attack / decay / release, filter cutoff, LFO rate (`ENV_*`, `FILTER_CUTOFF_HZ_TABLE`, `LFO_RATE_HZ_TABLE`) | no `f32` table within 5% of any of them | not stored as float tables (computed or stored as integers); remain as before (see their own provenance) |
+| Glide, vibrato rate/amount/delay, osc env amount | no table (searched linear/short `f32` runs of 16..100) | computed analytically in code, still `ASSUMED` (`2 + 6*raw/127` Hz etc. are ns4decode formulas) |
+
+Other 128/129-entry curves in `0x2f7000..0x2fbf00` and `0x453c44..` (`0.0093 .. 3.76`, `0.1 .. 10`, ...) belong to DSP filter/Q/compressor curves studied in `sharc-dsp-and-preset-hash-teardown.md`, not to the program bitstream.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).

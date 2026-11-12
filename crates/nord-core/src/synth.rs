@@ -6,6 +6,7 @@ use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 
 pub use crate::synth_sample::{LoadedSynthSample, SampleTimbre, SynthSampleSound};
+use crate::synth_tables::lfo_pitch_semitones;
 pub use crate::synth_types::{
     ArpMode, FilterModel, LfoDestination, LfoShape, NotePriority, SynthOscMode, VaWaveform,
     VibratoMode,
@@ -470,7 +471,10 @@ impl SynthLayer {
         };
 
         let pitch_mod = match self.lfo_dest {
-            LfoDestination::OscPitch => 1.0 + self.lfo_amount * lfo_val * 0.05,
+            // VERIFIED depth curve (firmware table, see `synth_tables.rs`): 0..48 semitones.
+            LfoDestination::OscPitch => {
+                2.0f32.powf(lfo_pitch_semitones(self.lfo_amount) * lfo_val / 12.0)
+            }
             _ => 1.0,
         };
 
@@ -990,6 +994,24 @@ mod tests {
         let off = run(LfoShape::Square, LfoDestination::Off);
         let tri_off = run(LfoShape::Triangle, LfoDestination::Off);
         assert_eq!(off, tri_off, "LFO off must not modulate anything");
+    }
+
+    #[test]
+    fn lfo_pitch_depth_follows_the_firmware_curve_and_stays_finite_at_full_depth() {
+        let run = |amount: f32| {
+            let mut s = SynthLayer::new(48_000.0);
+            s.lfo_dest = LfoDestination::OscPitch;
+            s.lfo_shape = LfoShape::Square;
+            s.lfo_rate_hz = 20.0;
+            s.lfo_amount = amount;
+            s.note_on(60, 100);
+            render_n(&mut s, 4000)
+        };
+        let full = run(1.0);
+        assert!(full.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
+        // 1 semitone (raw 27) differs from the old fixed 5% rule and from a full +/-48 semitone swing.
+        assert_ne!(run(27.0 / 127.0), full);
+        assert_ne!(run(27.0 / 127.0), run(0.0));
     }
 
     #[test]
