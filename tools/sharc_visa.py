@@ -11,6 +11,7 @@ whether a byte stream *tiles* into plausible instructions. Parcels are read litt
 (firmware layout of `bank0_CODE` 0x440000..0x4FFFFF, see docs/research/dsp-image-hunt.md 5.5).
 
     python tools/sharc_visa.py target/fw_unpacked/bank0_CODE.bin 0x45d5ec 0x45d630
+    python tools/sharc_visa.py target/fw_unpacked/bank0_CODE.bin 0x440000 0x530000 --sweep
 """
 
 from __future__ import annotations
@@ -99,17 +100,209 @@ def ureg_load(parcels: tuple[int, ...]) -> tuple[int, int] | None:
     return None
 
 
+COND = (
+    "EQ LT LE AC AV MV MS SV SZ FLAG0_IN FLAG1_IN FLAG2_IN FLAG3_IN TF BM LCE "
+    "NE GE GT NOT_AC NOT_AV NOT_MV NOT_MS NOT_SV NOT_SZ NOT_FLAG0_IN NOT_FLAG1_IN "
+    "NOT_FLAG2_IN NOT_FLAG3_IN NOT_TF NOT_BM TRUE"
+).split()
+# Table 10-2 (processing element X), groups 6 and 7 (bits 6..4 of the 7-bit UREG code).
+_SYS6 = (
+    "FADDR DADDR ? PC PCSTK PCSTKP LADDR CURLCNTR LCNTR EMUCLK EMUCLK2 PX PX1 PX2 TPERIOD TCOUNT"
+)
+_SYS7 = (
+    "USTAT1 USTAT2 MODE1 MMASK MODE2 FLAGS ASTATx ASTATy STKYx STKYy IRPTL IMASK IMASKP LRPTL "
+    "USTAT3 USTAT4"
+)
+_UREG_GROUPS = ["R", "I", "M", "L", "B", "S"]
+BOP = {0: "SET", 1: "CLR", 2: "TGL", 4: "TST", 5: "XOR"}
+# Tables 12-3 and 12-4 (single-function ALU); key = 8-bit opcode, CU = 000.
+ALU_OPS = {
+    0x01: "R{n} = R{x} + R{y}",
+    0x02: "R{n} = R{x} - R{y}",
+    0x05: "R{n} = R{x} + R{y} + CI",
+    0x06: "R{n} = R{x} - R{y} + CI - 1",
+    0x09: "R{n} = (R{x} + R{y})/2",
+    0x0A: "COMP(R{x}, R{y})",
+    0x0B: "COMPU(R{x}, R{y})",
+    0x25: "R{n} = R{x} + CI",
+    0x26: "R{n} = R{x} + CI - 1",
+    0x29: "R{n} = R{x} + 1",
+    0x2A: "R{n} = R{x} - 1",
+    0x22: "R{n} = -R{x}",
+    0x30: "R{n} = ABS R{x}",
+    0x21: "R{n} = PASS R{x}",
+    0x40: "R{n} = R{x} AND R{y}",
+    0x41: "R{n} = R{x} OR R{y}",
+    0x42: "R{n} = R{x} XOR R{y}",
+    0x43: "R{n} = NOT R{x}",
+    0x61: "R{n} = MIN(R{x}, R{y})",
+    0x62: "R{n} = MAX(R{x}, R{y})",
+    0x63: "R{n} = CLIP R{x} BY R{y}",
+    0x81: "F{n} = F{x} + F{y}",
+    0x82: "F{n} = F{x} - F{y}",
+    0x91: "F{n} = ABS (F{x} + F{y})",
+    0x92: "F{n} = ABS (F{x} - F{y})",
+    0x89: "F{n} = (F{x} + F{y})/2",
+    0x8A: "COMP(F{x}, F{y})",
+    0xA2: "F{n} = -F{x}",
+    0xB0: "F{n} = ABS F{x}",
+    0xA1: "F{n} = PASS F{x}",
+    0xA5: "F{n} = RND F{x}",
+    0xBD: "F{n} = SCALB F{x} BY R{y}",
+    0xAD: "R{n} = MANT F{x}",
+    0xC1: "R{n} = LOGB F{x}",
+    0xD9: "R{n} = FIX F{x} BY R{y}",
+    0xC9: "R{n} = FIX F{x}",
+    0xDD: "R{n} = TRUNC F{x} BY R{y}",
+    0xCD: "R{n} = TRUNC F{x}",
+    0xDA: "F{n} = FLOAT R{x} BY R{y}",
+    0xCA: "F{n} = FLOAT R{x}",
+    0xC4: "F{n} = RECIPS F{x}",
+    0xC5: "F{n} = RSQRTS F{x}",
+    0xE0: "F{n} = F{x} COPYSIGN F{y}",
+    0xE1: "F{n} = MIN(F{x}, F{y})",
+    0xE2: "F{n} = MAX(F{x}, F{y})",
+    0xE3: "F{n} = CLIP F{x} BY F{y}",
+}
+
+
+def ureg_name(code: int) -> str:
+    """Name of a 7-bit universal register code (Table 10-2, processing element X)."""
+    group, num = (code >> 4) & 7, code & 15
+    if group < 6:
+        return f"{_UREG_GROUPS[group]}{num}"
+    return (_SYS6 if group == 6 else _SYS7).split()[num]
+
+
+def word48(parcels: tuple[int, ...]) -> int:
+    """MSB-aligned 48-bit value of an instruction (shorter ones are left-aligned)."""
+    w = 0
+    for p in parcels:
+        w = (w << 16) | p
+    return w << (48 - 16 * len(parcels))
+
+
+def bits(w: int, hi: int, lo: int) -> int:
+    """Bits ``hi..lo`` of a 48-bit instruction word."""
+    return (w >> lo) & ((1 << (hi - lo + 1)) - 1)
+
+
+def compute_text(c: int) -> str:
+    """Text for a 23-bit compute field (single-function ALU decoded, others kept raw)."""
+    if c == 0:
+        return "NOP"
+    cu, opcode = bits(c, 22, 20), bits(c, 19, 12)
+    rn, rx, ry = bits(c, 11, 8), bits(c, 7, 4), bits(c, 3, 0)
+    if cu == 0 and opcode in ALU_OPS:
+        return ALU_OPS[opcode].format(n=rn, x=rx, y=ry)
+    unit = {0: "ALU", 1: "MUL", 2: "SHIFT"}.get(cu, "MULTI")
+    return f"{unit}?op={opcode:02x} n={rn} x={rx} y={ry}"
+
+
+def _mem_move(w: int, name: str, iff: str) -> str:
+    """Types 3a/3b (Ureg <-> DM/PM(Im, Mn)) and 4a/4b (Dreg <-> DM/PM(data6, Ii))."""
+    tail = f", {compute_text(bits(w, 22, 0))}" if name.endswith("a") else ""
+    if name.startswith("3"):
+        pm = bits(w, 32, 32)
+        base = 8 if pm else 0
+        i, m = bits(w, 43, 41) + base, bits(w, 40, 38) + base
+        ea = f"{'PM' if pm else 'DM'}(I{i}, M{m}){'' if bits(w, 44, 44) else ' [pre-mod]'}"
+        reg = ureg_name(bits(w, 29, 23))
+        write = bits(w, 31, 31)
+    else:
+        pm = bits(w, 40, 40)
+        i = bits(w, 43, 41) + (8 if pm else 0)
+        ea = f"{'PM' if pm else 'DM'}({bits(w, 32, 27)}, I{i})"
+        reg = f"R{bits(w, 26, 23)}"
+        write = bits(w, 39, 39)
+    return f"{iff}{ea} = {reg}{tail}" if write else f"{iff}{reg} = {ea}{tail}"
+
+
+def decode(parcels: tuple[int, ...]) -> str:
+    """Disassembly text for one instruction (best effort; unknown forms stay raw)."""
+    name, _ = classify(parcels[0], parcels[1] if len(parcels) > 1 else None)
+    w = word48(parcels)
+    cond = COND[bits(w, 37, 33)]
+    iff = "" if cond == "TRUE" else f"IF {cond} "
+    if name in ("3a", "3b", "4a", "4b"):
+        return _mem_move(w, name, iff)
+    if name in ("5a", "5b"):
+        if bits(w, 43, 43):
+            return f"{iff}Dreg <-> CDreg swap (raw {w >> (48 - 16 * len(parcels)):x})"
+        src = (bits(w, 42, 38) << 2) | bits(w, 32, 31)
+        tail = f", {compute_text(bits(w, 22, 0))}" if name == "5a" else ""
+        return f"{iff}{ureg_name(bits(w, 30, 24))} = {ureg_name(src)}{tail}"
+    if name == "17a":
+        return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 0):x}"
+    if name == "17b":
+        return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 16):x}"
+    if name == "18a":
+        sreg = ureg_name(0x70 | bits(w, 35, 32))
+        return f"BIT {BOP.get(bits(w, 39, 37), '?')} {sreg} 0x{bits(w, 31, 0):x}"
+    if name == "8a":
+        kind = "CALL" if bits(w, 39, 39) else "JUMP"
+        rel = " (PC,rel)" if bits(w, 40, 40) else ""
+        return f"{iff}{kind}{rel} 0x{bits(w, 23, 0):x}"
+    if name == "2a":
+        return f"{iff}{compute_text(bits(w, 22, 0))}"
+    if name in ("11a", "11c"):
+        return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}"
+    if name == "12a":
+        return f"DO 0x{bits(w, 23, 0):x} UNTIL LCE, LCNTR = {bits(w, 39, 24)}"
+    if name == "13a":
+        return f"DO 0x{bits(w, 23, 0):x} UNTIL {COND[bits(w, 37, 33)]}"
+    return f"{name}? raw " + " ".join(f"{x:04x}" for x in parcels)
+
+
+def sweep(
+    data: bytes, start: int, end: int, window: int = 0x400, min_hits: int = 1
+) -> list[tuple[int, int, int]]:
+    """Find code-like spans as ``(start, end, hits)`` runs.
+
+    A hit is a Type 17a load that puts a value in SHARC internal RAM (`0x80000..0xFFFFF`) into an
+    index register `I0..I15`. ARM code and PCM-like data give 0 hits per window (checked on
+    `bank0_CODE` of v1.64). Windows within `0x2000` of each other merge into one run.
+    """
+    runs: list[list[int]] = []
+    for off in range(start, end, window):
+        best = 0
+        for phase in (0, 2):
+            insns, _ = tile(parcels_le(data[off + phase : off + window]))
+            n = 0
+            for nm, ps in insns:
+                r = ureg_load(ps)
+                if nm == "17a" and r and (r[0] >> 4) == 1 and 0x80000 <= r[1] < 0x100000:
+                    n += 1
+            best = max(best, n)
+        if best >= min_hits:
+            if runs and off - runs[-1][1] <= 0x2000:
+                runs[-1][1] = off + window
+                runs[-1][2] += best
+            else:
+                runs.append([off, off + window, best])
+    return [(a, b, c) for a, b, c in runs]
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("image", type=Path)
     p.add_argument("start", type=lambda s: int(s, 0))
     p.add_argument("end", type=lambda s: int(s, 0))
+    p.add_argument("--sweep", action="store_true", help="list code-like spans in start..end")
     args = p.parse_args(argv)
+    if args.sweep:
+        full = args.image.read_bytes()
+        for a, b, hits in sweep(full, args.start, min(args.end, len(full))):
+            print(
+                f"0x{a:06x}..0x{b:06x} size 0x{b - a:x} index-register loads in SHARC RAM: {hits}"
+            )
+        return 0
     data = args.image.read_bytes()[args.start : args.end]
     insns, exact = tile(parcels_le(data))
     off = args.start
     for name, ps in insns:
-        print(f"0x{off:06x} {name:5s} " + " ".join(f"{x:04x}" for x in ps))
+        raw = " ".join(f"{x:04x}" for x in ps)
+        print(f"0x{off:06x} {name:5s} {raw:15s} {decode(ps)}")
         off += 2 * len(ps)
     print("tiles exactly" if exact else "does NOT tile exactly")
     return 0

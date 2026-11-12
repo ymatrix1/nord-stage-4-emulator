@@ -44,3 +44,37 @@ def test_main_prints_and_reports(tmp_path, capsys):
     assert v.main([str(f), "0", str(len(RECORD))]) == 0
     out = capsys.readouterr().out
     assert "17b" in out and "tiles exactly" in out
+
+
+def test_decode_known_instructions():
+    d = v.decode
+    assert d((0x0FA4, 0x0070)) == "M4 = 0x70"
+    assert d((0x0F15, 0x000C, 0x0440)) == "I5 = 0xc0440"
+    assert d((0x1486, 0x0000, 0x0020)) == "BIT TST ASTATx 0x20"
+    assert d((0x6A3E, 0x060A, 0x1880)) == "R12 = DM(0, I5), F8 = PASS F8"
+    assert d((0x687E, 0x143F)) == "R8 = DM(2, I4)"
+
+
+def test_names_and_fields():
+    assert v.ureg_name(0x24) == "M4"
+    assert v.ureg_name(0x62) == "?"
+    assert v.ureg_name(0x73) == "MMASK"
+    assert v.bits(0xABCD00000000, 47, 40) == 0xAB
+    assert v.compute_text(0) == "NOP"
+    assert v.compute_text(0x0A1880) == "F8 = PASS F8"
+
+
+def test_sweep_finds_index_register_loads():
+    load = bytes.fromhex("150f0c003804")  # I5 = 0xC0438
+    pad = bytes(0x400)
+    data = pad + load * 3 + pad[len(load) * 3 :] + pad
+    runs = v.sweep(data, 0, len(data), window=0x400)
+    assert len(runs) == 1 and runs[0][0] == 0x400 and runs[0][2] == 3
+    assert v.sweep(pad * 4, 0, 0x1000) == []
+
+
+def test_main_sweep(tmp_path, capsys):
+    f = tmp_path / "x.bin"
+    f.write_bytes(bytes(0x800) + bytes.fromhex("150f0c003804") + bytes(0x800))
+    assert v.main([str(f), "0", "0x1000", "--sweep"]) == 0
+    assert "index-register loads" in capsys.readouterr().out

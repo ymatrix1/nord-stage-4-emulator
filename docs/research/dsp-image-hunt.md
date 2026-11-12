@@ -183,6 +183,42 @@ Conclusions and limits:
 - ASSUMED: the instruction typing is a best-effort reading of the opcode tables (no ADI disassembler was available to cross-check). Full-register and operand decoding is not done. `??`/`21/22` counts include padding and data mixed in the long gaps between records, so the extent of code versus data is not measured.
 - v1.64 changed one immediate of a DAG setup; plausible for a "program becomes silent" fix. v1.52 to v1.60 changed 20 to 98 KB of this region (section 5.2): that region is where the sound-engine changes live.
 
+### 5.6 Operand decoder and code sweep
+
+`tools/sharc_visa.py` now decodes operands (`decode`) and sweeps for code (`--sweep`, function `sweep`). Layout sources: SHARC Programming Reference rev 2.4, chapter 10 (type diagrams, Tables 10-2 and 10-4) and chapter 12 (ALU opcodes, Tables 12-3 and 12-4). Decoded fields: `COND` (bits 37-33), universal registers, `DM/PM` moves of types 3a/3b/4a/4b, `Ureg = Ureg` (5a/5b), immediate loads (17a/17b), `BIT` ops (18a), branches (8a), `RTS`/`RTI`, `DO` loops and the single-function ALU compute field. Other forms (multiplier, shifter, multifunction, 1a, 2b, 6a, 7x, 9x, 10a, 14a to 16b) print as `type? raw ...`.
+
+Layout check on the data: the 5-bit window that is `11111` (TRUE, unconditional) most often is bits 37-33 for types 4a (98%), 3a (98%), 5a (99%), 7b and 9b (100%), 8a (87%); this matches the manual's `COND` position (`bank0_CODE` v1.64, cluster at `0x491800`). Another cross-check: the compute field of a `4a` instruction decodes as ALU opcode `1010 0001` = `Fn = PASS Fx` (Table 12-4), a plausible no-op/move.
+
+Listing (v1.64, `python tools/sharc_visa.py target/fw_unpacked/bank0_CODE.bin 0x45d5ec 0x45d650`):
+
+```text
+0x45d5ec 4a  6abe 1088 12ae   DM(2, I5) = R1, F2 = F10 + F14
+0x45d5fc 17b 0fa4 0028        M4 = 0x28
+0x45d604 17a 0f15 000c 03d8   I5 = 0xc03d8
+0x45d60a 4b  687e 143f        R8 = DM(2, I4)
+0x45d61a 4a  6a3e 060a 1880   R12 = DM(0, I5), F8 = PASS F8
+0x45d620 18a 1486 0000 0020   BIT TST ASTATx 0x20
+0x45d626 5b  721a 043f        IF TF R4 = M0
+```
+
+Reading: DAG setup (`I5`, `M4`), data reads with float compute, then `BIT TST` followed by a conditional move on `TF`. The pair `BIT TST` then `IF TF` is the usual test-then-branch idiom, which supports the decode. ASSUMED: the operand fields of 5a/5b and the 4a/4b immediate offset are read from the diagrams; the `R4 = M0` register pairing in particular is not confirmed.
+
+**Sweep** (`--sweep`, window 1 KB, hit = Type 17a load of a value in `0x80000..0xFFFFF` into `I0..I15`, merged within 8 KB): ARM code `bank0_CODE 0..0x26FFFF` gives **0** hits. The OS images from v1.44 to v1.66 all contain the same set of code-like blocks in `0x440000..0x52FFFF`. v1.64 (offsets `0x448000..`):
+
+| Block | Span | Size | Hits | Notes |
+|---|---|---|---|---|
+| A | `0x448000..0x44C800` | 18 KB | 96 | 58% of its 32-byte windows also occur in B |
+| B | `0x45CC00..0x464400` | 30 KB | 90 | contains the `20 00 1a 72` records of section 5.3 |
+| C | `0x470400..0x474400` | 16 KB | 101 | 15 to 19% overlap with A and B |
+| D | `0x491800..0x4A2400` | 67 KB | 228 | |
+| E | `0x4B5800..0x4C6000` | 66 KB | 222 | 98 to 99% identical to D and F |
+| F | `0x4DA000..0x4EA800` | 66 KB | 227 | |
+| G, H | `0x517400..0x519000`, `0x523C00..0x525800` | 7 KB each | 26, 28 | 8% overlap with each other |
+
+Smaller isolated hits (1 to 10) sit at `0x44EC00`, `0x477800`, `0x4AF000`, `0x4D3000`, `0x4F7800`, `0x4FE000`; they may be data that happens to decode or short stubs. Total code-like span is about 270 KB. D, E and F are three copies of nearly the same 66 KB program (E is at +`0x24000` from D, F at +`0x24800` from E).
+
+Hypothesis (ASSUMED, untested): the bank 1 table lists six core images (`DSPFxCore1/2`, `DSPOrgCore1/2`, `DSPSynCore1/2`); six clusters A to F match that count, and the three near-identical D/E/F could be one program per instance. Mapping clusters to cores needs the ARM code that sends them (`DSP Comm`, sender `0x6CA48`) and the L1 addresses used.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
@@ -193,7 +229,7 @@ Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and 
 
 ## Follow-ups
 
-- Extend `tools/sharc_visa.py` to full operand decoding (compute field tables, chapter 12) and add a linear sweep of `0x440000..0x4FFFFF` to separate code from data and find the code extent.
+- Finish `tools/sharc_visa.py`: multiplier/shifter/multifunction compute fields (Tables 12-5 to 12-12), types 1a/6a/7/9/10/14 to 16, and validate 5a/5b field pairing.
 - Map code blocks to `DSPO` / `DSPS` / `DSPF` (which cores, which L1 blocks: DAG addresses `0xC03D8..` are block-1 RAM) and find the ARM routine that sends them (`DSP Comm`, sender `0x6CA48`).
 - Check whether ADI's own disassembler (CCES `elfdump`/`dis21k`) can read a raw VISA blob for cross-checking (not downloadable without ADI tools).
 - Trace `bank0_CODE` code that touches `0x62004000` / SPI0 `0x01C41000` to confirm whether the ARM ever streams data to the SHARC at runtime (DSP comm `0x6CA48` is the known sender of table words).
