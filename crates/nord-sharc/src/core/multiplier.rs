@@ -52,8 +52,13 @@ impl Core {
         }
     }
 
-    /// Executes a multiplier fixed-point op. Returns false (and changes nothing) for the forms
-    /// not modelled (integer rounding, SAT/RND forms that do not exist).
+    /// Executes a multiplier fixed-point op. Returns false (and changes nothing) for the codes
+    /// that are no multiplier operation (the SAT/RND forms that do not exist).
+    ///
+    /// ASSUMED: the integer rounding formats `SSIR`/`SUIR`/`USIR`/`UUIR` (ADI's assembler and
+    /// `elfdump` accept all four, `docs/research/sharc-type2c.md`) use the same rounding stage
+    /// as the fractional `R` formats (round half to even at bit 32), so `Rn` (MR0) reads zero.
+    /// Not measured on the simulator; no firmware image uses them (`sharc-run --skips`).
     ///
     /// ASSUMED: the active result register is always MRF (the MODE1 SRCU swap is ignored).
     pub(super) fn fixed_mult(&mut self, op: u64, n: usize, x: usize, y: usize) -> bool {
@@ -73,9 +78,6 @@ impl Core {
         }
         let (sy, sx) = ((op >> 5) & 1 == 1, (op >> 4) & 1 == 1);
         let (frac, sel, round) = ((op >> 3) & 1 == 1, (op >> 1) & 3, op & 1 == 1);
-        if round && !frac {
-            return false;
-        }
         let operand = |v: u32, signed: bool| {
             if signed {
                 v as i32 as i128
@@ -250,10 +252,11 @@ mod tests {
         c.r[2] = 0x4000_0000;
         assert!(c.compute(mult_word(0x79, 3, 1, 2)));
         assert_eq!(c.r[3], 0);
-        assert!(
-            !c.compute(mult_word(0x71, 3, 1, 2)),
-            "integer rounding is not modelled"
-        );
+        // ASSUMED: SSIR rounds like SSFR, so the integer result (MR0) reads zero
+        c.r[1] = 3;
+        c.r[2] = 5;
+        assert!(c.compute(mult_word(0x71, 3, 1, 2)));
+        assert_eq!(c.r[3], 0);
     }
 
     #[test]

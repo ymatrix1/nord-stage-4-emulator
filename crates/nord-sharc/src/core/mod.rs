@@ -22,6 +22,8 @@ mod banks;
 mod bitfifo;
 mod branch;
 mod branch_ext;
+#[cfg(test)]
+mod compute_adi;
 mod dag;
 mod dag_modes;
 mod dualmove;
