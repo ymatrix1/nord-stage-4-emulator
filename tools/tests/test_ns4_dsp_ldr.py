@@ -74,3 +74,25 @@ def test_bad_checksum_is_flagged():
     b[3] ^= 0xFF
     blocks, end = ldr.parse_blocks(bytes(b))
     assert end == len(b) and blocks[0].checksum_ok is False
+
+
+def test_address_mapping_helpers_and_sram_image():
+    assert ldr.chip_of(0x28240000) == 0 and ldr.chip_of(0x28A40000) == 1
+    assert ldr.short_word_range(0x28240000, 0x300) == (0x120000, 0x12017F)
+    img = image()
+    blocks, _ = ldr.parse_blocks(img)
+    cores = ldr.split_cores(blocks)
+    mem = ldr.sram_image(img, cores[0])
+    assert len(mem) == ldr.SRAM_BYTES and bytes(mem[0x240000:0x240008]) == bytes(range(8))
+    mem2 = ldr.sram_image(img, cores[1])
+    assert bytes(mem2[0x240000:0x240004]) == bytes(
+        [170, 187, 204, 221]
+    )  # 0x28A40000 -> same offset
+    assert not any(mem[0x240008:0x240100])  # zeros elsewhere
+
+
+def test_main_writes_sram_images(tmp_path):
+    f = tmp_path / "img.bin"
+    f.write_bytes(image())
+    assert ldr.main([str(f), "--sram", str(tmp_path / "s")]) == 0
+    assert (tmp_path / "s" / "core1_sram.bin").stat().st_size == ldr.SRAM_BYTES
