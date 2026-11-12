@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--lenient] [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -22,6 +22,7 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut devices = Vec::new();
     let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
     let mut trace = 0usize;
+    let mut lenient = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -43,6 +44,7 @@ fn run(args: &[String]) -> Result<String, String> {
                     parse_number(value).ok_or("bad --poke value")? as u32,
                 ));
             }
+            "--lenient" => lenient = true,
             "--trace" => {
                 trace = parse_number(it.next().ok_or("--trace needs N")?).ok_or("bad --trace")?
                     as usize;
@@ -52,13 +54,14 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--lenient] [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
     let entry = parse_number(entry).ok_or("bad ENTRY")? as u32;
     let max_steps = parse_number(max_steps).ok_or("bad MAX_STEPS")?;
     let mut core = Core::new(&data);
+    core.lenient = lenient;
     core.pc = entry;
     for (addr, value) in devices {
         core.preset_device(addr, value);
@@ -96,6 +99,14 @@ fn run(args: &[String]) -> Result<String, String> {
 ",
         core.steps, core.pc, core.device_reads, core.device_writes
     );
+    if core.skipped > 0 {
+        out.push_str(&format!(
+            "skipped {} unmodelled compute ops, first at 0x{:x}
+",
+            core.skipped,
+            core.first_skipped.unwrap_or(0)
+        ));
+    }
     if trace > 0 {
         let list: Vec<String> = recent.iter().map(|p| format!("{p:x}")).collect();
         out.push_str(&format!(
@@ -193,6 +204,8 @@ mod tests {
         ])
         .unwrap();
         assert!(poked.contains("steps 1 pc"), "{poked}");
+        let len = run(&[p.clone(), "0x120000".into(), "1".into(), "--lenient".into()]).unwrap();
+        assert!(len.contains("steps 1"), "{len}");
         assert!(run(&[p, "0".into(), "1".into(), "--poke".into(), "x".into()]).is_err());
         std::fs::remove_file(path).ok();
     }
