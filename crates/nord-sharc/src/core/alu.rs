@@ -72,7 +72,7 @@ impl Core {
             return true;
         }
         if bits(c, 22, 22) == 1 {
-            return false;
+            return self.multifunction(c);
         }
         let cu = bits(c, 22, 20);
         let op = bits(c, 19, 12);
@@ -167,7 +167,9 @@ impl Core {
             (0, 0xE2) => self.set_float(n, fx.max(fy)),
             (0, 0xE3) => self.set_float(n, fx.clamp(-fy.abs(), fy.abs())),
             (1, 0x30) => self.set_float(n, fx * fy),
+            (0, op) if matches!(op >> 4, 0x7 | 0xF) && self.dual_add_sub(c) => {}
             (1, op) if self.fixed_mult(op, n, x, y) => {}
+            (2, op) if self.shifter(op, n, x, y) => {}
             _ => return false,
         }
         true
@@ -214,7 +216,10 @@ mod tests {
         assert_eq!(c.r[6], 3, "CLIP 7 by 3 saturates at the magnitude of Ry");
         assert!(c.compute((0xBD << 12) | (7 << 8) | (3 << 4) | 1)); // SCALB F3 by R1 (7)
         assert_eq!(f32::from_bits(c.r[7]), 3.0 * 128.0);
-        assert!(!c.compute(0x40_0000), "multifunction is not modelled yet");
+        assert!(
+            !c.compute(0x40_0000),
+            "a multifunction word with op group 0 does not exist"
+        );
         assert!(
             !c.compute((0xC4 << 12) | (1 << 8)),
             "RECIPS seed table is unknown"

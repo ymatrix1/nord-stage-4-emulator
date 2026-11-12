@@ -727,6 +727,22 @@ Non-zero data extents of the ORG Core2 SRAM image (`python` over `core2_sram.bin
 The image value at `DM(0xE0000)` is `0x80120BF7`, followed by `0x80125B79`, zeros and `0x7F000000` at `+7`: a code pointer with bit 31 set, the same two values that sit in record 0 words 10 and 11 (`0xC13AE`: `0x80120BF7 0x80125B79`). So the earlier remark in 5.30 that it is 0 in the image is wrong: the preamble compares `R0 = 0x80120BF7` (negative as a signed integer) with the record field `R1`, and `LT` then holds for any non-negative `R1`, which is the case in the image (the first runtime value seen was `R0 = 0x80000000` after earlier arithmetic). So the replacement of record 1's code pointer by `DM(38, I1)` is the normal first-pass result of this code with the image's initial state, not necessarily an error of the oracle; whether the hardware loads a different `R1` (word 34 of record 0, `0x3B96FF65` at that point) or runs an earlier init pass cannot be told from the image alone.
 
 The bit-31 flag on the pointers (`0x8012xxxx`) is the next thing to explain: the preamble reads it through the signed compare, so it probably marks a record as "already processed" or "use alternate path".
+### 5.32 SIMD, shifter, multifunction, and the per-record structure of the pass
+
+Added to the core: SIMD (MODE1 bit 21: every compute and register-file data transfer also runs on PEy with its own flags and condition, loads and stores at `addr + 1`), the barrel shifter, multifunction compute and `SAT`/`RND` of the accumulators. `sharc-run --skips` prints the skipped operations of a lenient run grouped by instruction text. ORG Core2, one pass (`--lenient --dev 0x282c0380=1 --poke 100000:0xb00e2=1`): skipped operations fell from 130 to 42, all of them undocumented `0x02` forms (32 times `2x ALU op=0x10 n=2 x=1 y=1`, 10 times `2x MUL op=0x21 ...` with extra bits `0x20`).
+
+The code after the preamble is an unrolled sequence, one block per record (`0x24E60A..`, short-words `0x127305..`):
+
+```text
+I7 = 0xC13A6            ; record address as an immediate
+I8 = DM(0, I7)          ; the record's code pointer (0x12538C for record 0)
+R10 = DM(0, I2); R11 = DM(6, I2)     ; two input words from the pass buffer (I2 = DM(0xB2EF8))
+CALL (M8, I8)           ; M8 = 0: call the module routine
+R4 = DM(3, I7); F0 = F0 + F4 ...     ; update record fields 3, 4, 5, write results to the I6 buffer
+I7 = 0xC13CE            ; next record
+```
+
+So the record addresses are baked into the code (the list pointer `DM(0xC1386)` is only used by the preamble), and each pass needs real per-record state. The image holds the initial values; the preamble can replace a record's code pointer with the slot default `0x7FFFFFFF`, which is where the oracle's run leaves the code (5.30). The remaining open question is the input state the ARM provides (the region `DM(0xE0000..)` and the records), which needs the ARM side of the protocol.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 

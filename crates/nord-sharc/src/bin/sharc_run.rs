@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -56,6 +56,33 @@ fn register_dump(core: &Core) -> String {
     )
 }
 
+/// The skipped operations of a lenient run, grouped by instruction text, most frequent first.
+fn skip_histogram(core: &Core) -> String {
+    let mut counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for &pc in &core.skipped_pcs {
+        let (kind, len) = classify(core.parcel_at(pc), Some(core.parcel_at(pc + 1)));
+        let mut parcels = [0u16; 3];
+        for (k, p) in parcels.iter_mut().enumerate().take(len.min(3)) {
+            *p = core.parcel_at(pc + k as u32);
+        }
+        let text = decode_text(&Insn { kind, parcels, len });
+        *counts.entry(format!("{} {text}", kind.name())).or_insert(0) += 1;
+    }
+    let mut rows: Vec<_> = counts.into_iter().collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut out = String::from(
+        "skipped operations by text:
+",
+    );
+    for (text, n) in rows.iter().take(40) {
+        out.push_str(&format!(
+            "{n:>7}  {text}
+"
+        ));
+    }
+    out
+}
+
 fn run(args: &[String]) -> Result<String, String> {
     let mut positional = Vec::new();
     let mut devices = Vec::new();
@@ -64,6 +91,7 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut dumps: Vec<(u32, u32)> = Vec::new();
     let mut watch = u32::MAX;
     let mut show_regs = false;
+    let mut histogram = false;
     let mut trace = 0usize;
     let mut lenient = false;
     let mut it = args.iter();
@@ -88,6 +116,7 @@ fn run(args: &[String]) -> Result<String, String> {
                 ));
             }
             "--lenient" => lenient = true,
+            "--skips" => histogram = true,
             "--regs" => show_regs = true,
             "--watch" => {
                 watch = parse_number(it.next().ok_or("--watch needs ADDR")?).ok_or("bad --watch")?
@@ -118,7 +147,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--skips] [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -177,6 +206,9 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     if show_regs {
         out.push_str(&register_dump(&core));
+    }
+    if histogram {
+        out.push_str(&skip_histogram(&core));
     }
     for (step, pc, value) in &core.watch_hits {
         out.push_str(&format!(
@@ -328,6 +360,25 @@ mod tests {
         let len = run(&[p.clone(), "0x120000".into(), "1".into(), "--lenient".into()]).unwrap();
         assert!(len.contains("steps 1"), "{len}");
         assert!(run(&[p, "0".into(), "1".into(), "--poke".into(), "x".into()]).is_err());
-        std::fs::remove_file(path).ok();
+        std::fs::remove_file(&path).ok();
+        // a lenient run lists the skipped operation: `IF TRUE F1 = FPACK F2` is not modelled
+        let skip_path = std::env::temp_dir().join("nord_sharc_run_skip_test.bin");
+        let mut image = vec![0u8; 0x24_0000 + 16];
+        for (k, p) in [0x013eu16, 0x0029, 0x0112, 0x0001].iter().enumerate() {
+            image[0x24_0000 + 2 * k..0x24_0000 + 2 * k + 2].copy_from_slice(&p.to_le_bytes());
+        }
+        std::fs::write(&skip_path, &image).unwrap();
+        let sp = skip_path.to_string_lossy().to_string();
+        let skipped = run(&[
+            sp.clone(),
+            "0x120000".into(),
+            "1".into(),
+            "--lenient".into(),
+            "--skips".into(),
+        ])
+        .unwrap();
+        assert!(skipped.contains("skipped operations by text:"), "{skipped}");
+        assert!(skipped.contains("FPACK"), "{skipped}");
+        std::fs::remove_file(skip_path).ok();
     }
 }
