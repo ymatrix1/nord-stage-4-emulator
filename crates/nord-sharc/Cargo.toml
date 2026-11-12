@@ -15,6 +15,10 @@ name = "sharc-run"
 path = "src/bin/sharc_run.rs"
 
 [[bin]]
+name = "sharc-bank"
+path = "src/bin/sharc_bank.rs"
+
+[[bin]]
 name = "sharc-org"
 path = "src/bin/sharc_org.rs"
 
