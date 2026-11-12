@@ -28,6 +28,8 @@ mod dag;
 mod dag_modes;
 mod dualmove;
 mod exec;
+#[cfg(test)]
+mod fixed2_measured;
 mod fixed_alu;
 #[cfg(test)]
 mod fixed_measured;

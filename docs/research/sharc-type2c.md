@@ -49,7 +49,7 @@ Result: no compute word of any image is unmodelled any more. Every remaining sto
 
 * The ORG parameter-unpack routine `0x120300` and any slot that selects it can now be run; its byte-unpack semantics are the next verification (`org-dsp-map.md` follow-up 1).
 * The decoders (`visa/compute.rs`, `tools/sharc_visa.py`) and the executor agree with ADI on the whole compute space, enforced by the sweep, so a new opcode in a future image cannot be silently mis-decoded.
-* `fixed_mult` accepts the integer rounding formats on an ASSUMED basis; promote it with one more simulator build (`sharc-fixed/gen_fixed_probe.py` formats list plus `ssir suir usir uuir`).
+* The integer rounding formats `SSIR SUIR USIR UUIR` behave exactly like the plain integer ones: VERIFIED on the simulator by PR #61 (measured rows in `docs/research/`); this supersedes the earlier ASSUMED rounding rule.
 
 ## Follow-ups
 

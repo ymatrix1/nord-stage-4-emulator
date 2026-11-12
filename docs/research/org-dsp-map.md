@@ -100,6 +100,8 @@ Pass buffers (VERIFIED by `--dump` after a pass): `DM(0xB00E4/E5) = 0xB0000 / 0x
 
 ## Follow-ups
 
+0. Stage selection, module palette and the negative audio result: see [org-stage-map](org-stage-map.md).
+
 1. Done (`sharc-type2c.md`): `R13 = R13 * R12 (SSI)` (Type 2c `c7dc`) executes. Now confirm the byte unpack, running with `--poke 1:0xC10B8=0x120300 --poke 1:0xC10B9=0x120300 --poke 1:0xC1DDC=0x01020304` and read `0xB135C..` and `0xC1E4E..` to confirm the byte unpack.
 2. Disassemble the routines named by the `0x1206BE`, `0x123900`, `0x124500`, `0x128300` data references and select each in slot 0 to find the tonewheel, drawbar and click modules.
 3. Trace the DSP-side receive path (how a slot id reaches `0xC1DDC`) from the first-pass init and the first `DM(0x3E0xx)` external-port DMA set-up (`boot store` sites `0x125C8F..0x125D4C`).
