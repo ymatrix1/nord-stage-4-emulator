@@ -34,7 +34,7 @@ The audio detector reports many notes at MIDI 28 and 29; the video footprint (le
 | A:84 Vintage Vox J3 (organ, Twin) | 39:31, 12 s | +3.11 dB | +0.23 dB | +5.48 dB | -8.37 dB | +28 Hz |
 | A:78 Jazz Guitar II (synth, Twin) | 37:35, 20 s | invalid | invalid | invalid | invalid | -271 Hz |
 
-- **Jazz Guitar II is not a valid FX test:** the emulator render is almost mono (width 0.12 vs 0.96) and silent above 1.5 kHz (-46 dB), i.e. the sample voice (`Jazz Gtr Amped`) is not producing the hardware sound. This is a sound-loading/synth issue, not an amp issue.
+- **Jazz Guitar II is not a valid FX test:** the emulator render is almost mono (width 0.12 vs 0.96) and silent above 1.5 kHz (-46 dB). Cause found: the sample resolves correctly (`Samp Lib/Guitar_Plucked/Jazz Guitar_ST 4.1.nsmp4`, shown by `render-patch`), but layer A has `filter on/off = off` (third-party `ns4decode` output; cutoff 554 Hz is stored but bypassed) and this branch's engine applies the 554 Hz LP24 anyway. The decode and wiring of the filter on/off flag (`filter_on`) exists on `claude/synth-params-dsps-0x2f-b7b76d` (not yet in `main`). Re-run this comparison after that branch merges.
 - Level difference is large (emulator +6 to +8 dB RMS on the organ clips); organ drawbar levels are not calibrated here.
 
 ## Caveats found while working

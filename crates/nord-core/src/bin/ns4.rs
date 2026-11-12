@@ -245,15 +245,17 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                     .and_then(|idx| args.get(idx + 1))
             };
             let mut engine = Stage4Engine::new(SAMPLE_RATE);
+            let mut sound_refs: Option<nord_core::cbin::ProgramSoundRefs> = None;
 
             if let Some(backup_path) = flag("--backup") {
                 let archive = nord_core::cbin::Ns4BackupArchive::open(backup_path)
                     .map_err(|e| e.to_string())?;
                 let mut file = fs::File::open(backup_path)
                     .map_err(|e| format!("failed to open {backup_path}: {e}"))?;
-                engine
+                let (_, refs) = engine
                     .load_program_with_sounds_from_backup(&archive, &mut file, path)
                     .map_err(|e| e.to_string())?;
+                sound_refs = Some(refs);
             } else {
                 let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;
                 let cbin = CbinFile::parse(&bytes).map_err(|e| e.to_string())?;
@@ -353,6 +355,10 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                  Peak amplitude: {peak:.4}
                  RMS level: {rms:.4}"
             );
+            if let Some(r) = &sound_refs {
+                out.push_str(&format!("
+Sounds: {r:?}"));
+            }
             if let Some(wav_path) = flag("--wav") {
                 let wav = render::encode_wav_f32_stereo(SAMPLE_RATE as u32, &left, &right);
                 fs::write(wav_path, &wav)

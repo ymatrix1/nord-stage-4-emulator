@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-11-12T01:46:46Z
-updated_at: 2026-11-12T01:57:08Z
+updated_at: 2026-11-12T02:31:05Z
 parent: ns4-trkb
 ---
 
@@ -30,3 +30,7 @@ Sample-accurate waveform match (live performance, room, different samples).
 - [x] `ns4 render-patch --events <json> [--confirmed-only]` replays detected notes
 - [x] First comparison (A:25 Sidechain Whl II): centroid error 312 Hz -> 10 Hz; remaining +5 dB above 1.5 kHz (docs/research/hardware-audio-reference-fx.md)
 - [ ] Single-layer programs (Silverface Mk I, Jazz Guitar II) and layer-mute moments
+
+
+- [x] Jazz Guitar II invalid: filter on/off flag ignored (sample resolves). Fix lives on claude/synth-params-dsps-0x2f-b7b76d (filter_on); re-run after merge.
+- [x] ns4 render-patch now prints resolved sounds (piano/synth refs).
