@@ -512,6 +512,7 @@ impl Stage4Engine {
         fx.delay_enabled = dec.delay_enabled;
         fx.delay_time_ms = dec.delay_time_ms();
         fx.delay_clock_sync = dec.delay_clock_sync;
+        fx.delay_sync_beats = dec.delay_clock_sync.then(|| dec.delay_sync_beats());
         fx.delay_analog = dec.delay_analog_on();
         fx.delay_ping_pong = dec.delay_ping_pong_on();
         fx.delay_filter = match dec.delay_filter_type() {

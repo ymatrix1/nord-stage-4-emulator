@@ -58,6 +58,13 @@ Mapping the Jazz Guitar II width gap led to a decode audit. Against `ns4decode` 
 
 Jazz Guitar II after these fixes: width 0.16 (was 0.13; hardware 0.96), presence -6.6 dB, brilliance -11.3 dB, sub +8.0 dB: the width gap is not explained by the FX decode.
 
+## Stereo width gap (Jazz Guitar II): findings
+
+- The emulator's synth source is exactly mono: with all FX blocks off the render has width 0.000 and the amp-only/delay-only variants stay 0.000; Mod 2 alone gives 0.17, reverb alone 0.08.
+- The sample itself is mono in the file (`Jazz Guitar_ST 4.1.nsmp4`: 0 of 40 strokes stereo; the `_ST` name tag does not mean stereo, only 16 of 53 `_ST` files are). So the hardware width is produced by the effects, not the sample.
+- Band-wise (Hann STFT 16384): hardware width 0.38 / 0.84 / **1.89** / 0.94 / 0.58 / 0.31 at 40-120, 120-400, 400-1000, 1000-2000, 2000-4000, 4000-8000 Hz with inter-channel coherence 0.93 / 0.30 / 0.57 / **0.06** / 0.50 / 0.84; emulator 0.13 to 0.20 flat with coherence 0.92 to 0.97. Side energy above mid at 400..1000 Hz means strongly decorrelated or anti-phase content, characteristic of a wide chorus/vibrato, not of reverb.
+- The manual (section 2.7 of the effects spec) says Mod 2 VIBE variation is mono, so the delay feedback effect `CHOR variation` (stereo widening) and reverb are the candidates; our delay feedback effect is a single modulated-feedback mode, not a stereo chorus. Next step: implement the delay-path chorus as a stereo decorrelating chorus and compare band-wise width.
+
 ## Caveats found while working
 
 - The player touches knobs, sliders and the mod wheel during clips (OLED pop-ups such as `Filter Frequency 5.6 kHz`, `Level Synth A Off`). Renders with fixed controls therefore differ from hardware in those windows. Follow-up: detect OLED pop-ups (`scenes --rows 0,1`) and the wheel position to drive CC events.
