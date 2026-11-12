@@ -580,7 +580,7 @@ Both the loop target `0x800003` and similar `DO`/jump operands show that the 24-
 
 ### 5.21 Running the start-up code: the cores reach their main loops
 
-The execution core `crates/nord-sharc/src/core.rs` (spec milestones M2 and M3) runs the flat SRAM images directly from the section entry value. Tool: `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--trace N]` (`cargo run -p nord-sharc --bin sharc-run --release`).
+The execution core `crates/nord-sharc/src/core.rs` (spec milestones M2 and M3) runs the flat SRAM images directly from the section entry value. Tool: `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--trace N]` (`cargo run -p nord-sharc --bin sharc-run --release`).
 
 ```bash
 python tools/ns4_dsp_ldr.py DIR/dsp_image_0_FX.bin --sram SRAM        # core1_sram.bin, core2_sram.bin
@@ -605,6 +605,26 @@ What the start-up code does (from the traces): interrupts off, `MODE1` set-up, i
 **Speed.** The core executes straight from the raw parcels (no decoded objects, no strings, no allocation per step): 50,000,000 instructions in about 0.56 s of wall time in a release build, roughly 100 million instructions per second.
 
 **Not yet modelled** (execution stops with a fault naming the instruction): multifunction and shifter compute, SIMD (the PEy register file), delayed branches, `RECIPS`/`RSQRTS` (the hardware seed table is unknown), indirect jumps, interrupts, DMA, 40-bit extended precision. Float results use IEEE single precision with round to nearest (ASSUMED).
+
+### 5.22 Waking the ORG Core2 command handler
+
+`sharc-run` takes `--poke STEP:ADDR=VALUE` to write a data word at a given instruction count, which stands in for the ARM writing a command. Test: ORG Core2 (entry `0x125C88`), poke `DM(0xB00E2)` after the start-up settled (step 100000), plus `--dev 0x282c0380=1`.
+
+```bash
+sharc-run SRAM/core2_sram.bin 0x125C88 2000000 --dev 0x282c0380=1 --poke 100000:0xb00e2=1 --trace 6
+```
+
+Findings (VERIFIED by the run, handler code read from the disassembly at `0x24BBB6..0x24BB50`):
+
+| Step | Instruction | Meaning |
+|---|---|---|
+| poll | `R3 = R3 + 1; R0 = DM(0xB00E2); R0 = PASS R0; IF EQ JUMP` | wait for a non-zero command word |
+| accept | `DM(0xC2C71..75) = R0,R1,R2` | store the three command words |
+| busy | `DM(0xB00E0) = 1` | busy flag, cleared at the end (ASSUMED reading) |
+| wait | `R3 = DM(0x282C0380); PASS; IF EQ JUMP` | waits for a flag in an external or shared window (needs a non-zero device value) |
+| dispatch | `CALL 0x128699`, then more work | not traced yet |
+
+Core fixes this needed: `PASS` and the other short ALU ops now set AZ/AN (the poll never left the loop before), `MODIFY(Ia, Mb)` (Type 7a/7b, destination = source XOR `IdIs`), and the short `DM(Ii, Mm)` transfer (Type 3c). The run now stops at the fixed-point multiplier with scaling mode (`R0 = R0 * R12 (SSF)`, Type 3a), the next gap.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 

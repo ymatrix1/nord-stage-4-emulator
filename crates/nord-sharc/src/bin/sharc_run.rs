@@ -1,5 +1,6 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--trace N]`: run a flat SRAM image from a
-//! short-word entry address, optionally scripting device registers and printing the last N pcs.
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--trace N]`
+//! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
+//! writing data words at a given step (a host command) and printing the last N pcs.
 //!
 //! Prints the number of executed instructions, the final program counter and, when the run stops
 //! early, the faulting instruction in the listing format of `sharc-disasm`. Use the images written
@@ -19,6 +20,7 @@ fn parse_number(s: &str) -> Option<u64> {
 fn run(args: &[String]) -> Result<String, String> {
     let mut positional = Vec::new();
     let mut devices = Vec::new();
+    let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
     let mut trace = 0usize;
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -31,6 +33,16 @@ fn run(args: &[String]) -> Result<String, String> {
                     parse_number(value).ok_or("bad --dev value")? as u32,
                 ));
             }
+            "--poke" => {
+                let spec = it.next().ok_or("--poke needs STEP:ADDR=VALUE")?;
+                let (step, rest) = spec.split_once(':').ok_or("--poke needs STEP:ADDR=VALUE")?;
+                let (addr, value) = rest.split_once('=').ok_or("--poke needs STEP:ADDR=VALUE")?;
+                pokes.push((
+                    parse_number(step).ok_or("bad --poke step")?,
+                    parse_number(addr).ok_or("bad --poke address")? as u32,
+                    parse_number(value).ok_or("bad --poke value")? as u32,
+                ));
+            }
             "--trace" => {
                 trace = parse_number(it.next().ok_or("--trace needs N")?).ok_or("bad --trace")?
                     as usize;
@@ -40,7 +52,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -51,20 +63,32 @@ fn run(args: &[String]) -> Result<String, String> {
     for (addr, value) in devices {
         core.preset_device(addr, value);
     }
+    pokes.sort_by_key(|p| p.0);
     let mut recent = std::collections::VecDeque::with_capacity(trace + 1);
     let mut fault = None;
-    if trace == 0 {
-        fault = core.run(max_steps);
-    } else {
-        while core.steps < max_steps {
+    let mut next_poke = 0;
+    while core.steps < max_steps && fault.is_none() {
+        while next_poke < pokes.len() && pokes[next_poke].0 <= core.steps {
+            let (_, addr, value) = pokes[next_poke];
+            core.dm_write(addr, value)
+                .map_err(|a| format!("bad poke address 0x{a:x}"))?;
+            next_poke += 1;
+        }
+        if trace > 0 {
             recent.push_back(core.pc);
             if recent.len() > trace {
                 recent.pop_front();
             }
-            if let Err(f) = core.step() {
-                fault = Some(f);
-                break;
-            }
+        }
+        // run in one go until the next poke step to keep the hot loop tight
+        let until = pokes
+            .get(next_poke)
+            .map_or(max_steps, |p| p.0.min(max_steps));
+        if trace == 0 {
+            let n = until.saturating_sub(core.steps).max(1);
+            fault = core.run(n);
+        } else if let Err(f) = core.step() {
+            fault = Some(f);
         }
     }
     let mut out = format!(
@@ -159,7 +183,17 @@ mod tests {
             "oops".into()
         ])
         .is_err());
-        assert!(run(&[p, "0".into(), "1".into(), "--trace".into()]).is_err());
+        assert!(run(&[p.clone(), "0".into(), "1".into(), "--trace".into()]).is_err());
+        let poked = run(&[
+            p.clone(),
+            "0x120000".into(),
+            "3".into(),
+            "--poke".into(),
+            "1:0xb0000=7".into(),
+        ])
+        .unwrap();
+        assert!(poked.contains("steps 1 pc"), "{poked}");
+        assert!(run(&[p, "0".into(), "1".into(), "--poke".into(), "x".into()]).is_err());
         std::fs::remove_file(path).ok();
     }
 }
