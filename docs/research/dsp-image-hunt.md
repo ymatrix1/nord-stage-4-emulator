@@ -331,7 +331,7 @@ The five images chain exactly (each end equals the next pointer) from `0x44667C`
 
 **DSP names (ASSUMED).** The name array at `bank1_CODE@0x5D78` is `[FXFX, PNO, ORG, SY1SY2, SMP]` (the test prints `%s (%d)` with name and id), so the five slots are the FX, piano, organ, synth and sample DSPs, in that order. That the download index equals this id is likely (the same index selects the blob and the name in the test) but not proven.
 
-**Image structure.** Images 0 to 2 start with a header (words, little endian): `0350 17AC`, `E311 1200`, `0`, `0001 4D44`, `0300 80AC`, `0040 0020` for FX; the first word, second word and fourth word differ for PNO (`0350 DCAC`, `0712 0012`... fourth `0002 2C08`) and ORG (`0350 B5AC`, `885C 1200`, fourth `0002 4AC4`); the fourth word grows with image size. Images 3 and 4 start with zeros. Header fields are not decoded.
+**Image structure.** Images 0 to 2 start with a header. First 24 bytes as stored (hex): FX `03 50 17 ac e3 11 12 00 00 00 00 00 44 4d 01 00 03 00 80 ac 00 40 00 20`, PNO `03 50 dc ac 07 10 12 00 00 00 00 00 08 2c 02 00 03 00 82 ac 00 40 00 20`, ORG `03 50 b5 ac 88 5c 12 00 00 00 00 00 c4 4a 02 00 03 00 62 ac 00 40 00 20`. The 32-bit little-endian word at byte 12 is `0x14D44` (FX), `0x22C08` (PNO), `0x24AC4` (ORG), growing with image size (a size or code-length field, ASSUMED); the bytes 4 to 5 and 0 to 3 differ per image. Images 3 and 4 start with zeros. Header fields are not decoded.
 
 Consequences:
 
