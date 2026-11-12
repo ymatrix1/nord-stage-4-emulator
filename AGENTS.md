@@ -33,6 +33,7 @@ Detailed rules live in `.agents/rules/`:
 - [.agents/rules/testing.md](.agents/rules/testing.md): every source file ships unit tests enforced by `tools/check_tests.py`.
 - [.agents/rules/dsp-and-realtime.md](.agents/rules/dsp-and-realtime.md): real-time audio invariants (no allocations/locks in `process_block`).
 - [.agents/rules/provenance-in-code.md](.agents/rules/provenance-in-code.md): tag constants `VERIFIED` / `EMPIRICAL` / `ASSUMED` with source and check.
+- [.agents/rules/code-structure.md](.agents/rules/code-structure.md): small modular files, DRY helpers, tests per module.
 - [.agents/rules/git-workflow.md](.agents/rules/git-workflow.md): branches, Conventional Commits, PR structure, and pushing.
 
 Short version:

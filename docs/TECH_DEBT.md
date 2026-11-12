@@ -17,6 +17,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 | **TD-06** | `docs/research` | Medium | `CNSP` & LZO1X unpacked; `ARM0` MurmurHash2 & OS v1.66 128-step DSP parameter curves mapped (`sharc-dsp-and-preset-hash-teardown.md`); SHARC VISA code found in `bank0_CODE@0x440000..0x52FFFF` ([dsp-image-hunt.md](research/dsp-image-hunt.md) 5.5/5.6), disassembly and DSP mapping open | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | Partial (ARM0/DSP curves calibrated) |
 | **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Resolved (`crates/nord-core/src/synth.rs`) |
 | **TD-08** | `crates/nord-core::synth` | Low | `SAMPLES` oscillator interpolates with 4-point Catmull-Rom; the hardware uses a 12-tap windowed-sinc polyphase kernel (`crates/nord-core/src/sinc.rs`, not wired into voices) | Phase 3.x (`ns4-synt`) | Open |
+| **TD-09** | `crates/nord-core` (`piano.rs` 1,848 lines, `fx.rs` 1,771, `synth.rs` 1,236, `engine.rs` 1,214, `firmware.rs` 1,035), `tools/video_ref.py` (1,556) | Low | Files far above the 400-line guideline of `.agents/rules/code-structure.md`; `crates/nord-sharc` already follows it (`core/`, `visa/`) | Split opportunistically when touched, behaviour-preserving with tests per module | Open |
 
 ---
 
@@ -64,3 +65,8 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 
 1. Every newly introduced structural compromise or temporary fallback must be logged here with a **TD-XX** identifier.
 2. When a roadmap phase or bean resolves a technical debt item, update its status to `Resolved` and link the corresponding commit/PR.
+
+### TD-09: Oversized Source Files
+- **Context:** `.agents/rules/code-structure.md` asks for focused modules under about 400 lines. `crates/nord-sharc` was split into `core/` and `visa/` submodules; the older files listed in the summary table were not.
+- **Debt:** Large files mix several concerns (voice state, DSP blocks, parameter tables, tests), which slows review and invites duplicated helpers.
+- **Remediation Plan:** When a change touches one of these files, first split it into a directory module with unchanged public API and tests per submodule, proving identical output (golden render hashes) before and after.

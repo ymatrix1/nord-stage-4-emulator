@@ -557,7 +557,7 @@ Observations that matter for a core model:
 
 Found while tracing the entry code of FX Core1 in the flat SRAM image (`tools/ns4_dsp_ldr.py --sram`, byte offset = 2 x short-word address).
 
-**Decoder fix (16-bit NOP).** The parcel `0x0001` right after the entry instruction is a 16-bit NOP (Type 21c: first byte `0x00`, last bit 1), not the start of a 48-bit `21/22` word. Classifying first byte `0x00` with bit 0 set as a one-parcel instruction re-tiles about 1,900 instructions: of 65,343 instructions in the code spans, 3,056 (4.7%) keep raw operands (was 4,933 of 66,305); `21c` NOPs are now 721. `tools/sharc_visa.py` and `crates/nord-sharc/src/visa.rs` carry the same fix and still produce identical listings (0 differing lines on FX Core1 and ORG Core2).
+**Decoder fix (16-bit NOP).** The parcel `0x0001` right after the entry instruction is a 16-bit NOP (Type 21c: first byte `0x00`, last bit 1), not the start of a 48-bit `21/22` word. Classifying first byte `0x00` with bit 0 set as a one-parcel instruction re-tiles about 1,900 instructions: of 65,343 instructions in the code spans, 3,056 (4.7%) keep raw operands (was 4,933 of 66,305); `21c` NOPs are now 721. `tools/sharc_visa.py` and `crates/nord-sharc/src/visa/` carry the same fix and still produce identical listings (0 differing lines on FX Core1 and ORG Core2).
 
 **Interrupt vector table.** Short-word `0x120000` (byte `0x240000`) holds the vector table in ISA form: 48-bit words stored with the least significant parcel first (opposite to the VISA code, where the first parcel is the most significant). Entries are `0000 0000 073e`, read as the word `0x073E_0000_0000`: Type 8a PC-relative jump (`000 00111`, condition `TRUE`) with offset 0, a jump to itself for unused vectors. The slot at byte `0x24001E` is `11e3 0012 063e`, the word `0x063E_0012_11E3`: a direct `JUMP 0x1211E3`, which is the section entry value of the loader stream, so the entry value is the reset vector's target.
 
@@ -580,7 +580,7 @@ Both the loop target `0x800003` and similar `DO`/jump operands show that the 24-
 
 ### 5.21 Running the start-up code: the cores reach their main loops
 
-The execution core `crates/nord-sharc/src/core.rs` (spec milestones M2 and M3) runs the flat SRAM images directly from the section entry value. Tool: `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--trace N]` (`cargo run -p nord-sharc --bin sharc-run --release`).
+The execution core `crates/nord-sharc/src/core/` (spec milestones M2 and M3) runs the flat SRAM images directly from the section entry value. Tool: `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--trace N]` (`cargo run -p nord-sharc --bin sharc-run --release`).
 
 ```bash
 python tools/ns4_dsp_ldr.py DIR/dsp_image_0_FX.bin --sram SRAM        # core1_sram.bin, core2_sram.bin
@@ -648,6 +648,12 @@ Open: the firmware has five images with two sections in each of FX, PNO and ORG,
 Added to the core: Type 5a `Dreg <-> CDreg` swap (PEy file `S0..S15`, field positions ASSUMED from one data point `7a3e 0480 1001`) and Types 9a/9b `JUMP|CALL (Md, Ic)` and `JUMP|CALL (pc + <reladdr6>)` (indirect target = `I(8+PMI) + M(8+PMM)`, ASSUMED from the syntax; delayed forms still fault).
 
 ORG Core2, `--lenient --dev 0x282c0380=1 --poke 100000:0xb00e2=1`: the command handler now runs 2,098 distinct instructions (about 6,800 steps) after the poke and enters a routine of float multiplies, `CLIP`, `FIX`, table loads through `I7 = 0xb10d6`, `I1 = R1` and MODE1 bit clears (audio-rate arithmetic rather than command parsing, ASSUMED from the instruction mix). At short-word `0x12730e` it executes `CALL (M8, I8)` (`08be 003f`) while `I8` and `M8` are still 0, because no executed instruction wrote them, so the call target is address 0 and the run slides through zeroed memory. Open: where `I8`/`M8` come from (state not set by the start-up path, a skipped 2x op, or a wrong reading of the 9b fields).
+
+### 5.25 Refactor, delayed branches and the indirect-call convention
+
+`crates/nord-sharc` was split into small modules (`core/` and `visa/`, largest file 335 lines; rule in `.agents/rules/code-structure.md`). Evidence that behaviour is unchanged: the disassembly of the ORG Core2 image (90,858 lines, `sharc-disasm IMG 0x240000 0x2C0000`) is byte-identical before and after, and the lenient ORG Core2 run stops at the same step (495,339) with the same 65 skipped compute ops. Speed: 50,000,000 steps of FX Core1 take about 0.78 s now against 0.72 s before (about 8% slower, measured back to back on the same machine, release build).
+
+Delayed branches (J bit 26 of Types 8a, 9a, 9b) are implemented: the two following instructions run first, a delayed call returns to the instruction after them. In the ORG image 32 of the 38 `CALL (M8, I8)` sites are the delayed form `I8 = DM(0xc10xx); I0 = ...; CALL (M8, I8) (DB)` with `M8 = 0`: `I8` is a function pointer loaded from a table at `DM(0xc10b8..)` (VERIFIED by reading the listing around `0x24f4f2`). The 6 non-delayed sites, including the one at `0x12730e` where the run stops, get `I8` from a caller that the executed path did not visit, which is why the lenient run still ends in a call to address 0.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 

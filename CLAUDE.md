@@ -8,6 +8,7 @@ Claude Code entry point. Canonical instructions are shared with other agents (Go
 @.agents/rules/testing.md
 @.agents/rules/dsp-and-realtime.md
 @.agents/rules/provenance-in-code.md
+@.agents/rules/code-structure.md
 @.agents/rules/git-workflow.md
 
 Skills: `.claude/skills` points to `.agents/skills`.
