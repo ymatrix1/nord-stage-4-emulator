@@ -67,6 +67,7 @@ nord-stage-4-emulator/
 │   ├── rules/                  # Project rules (docs, testing, DSP, evidence, git)
 │   └── skills/                 # Reusable agent workflows
 ├── crates/
+│   ├── nord-sharc/             # ADSP-214xx (SHARC) VISA decoder + `sharc-disasm`; Track B test-oracle core (docs/specs/sharc-core.md)
 │   └── nord-core/              # Pure Rust DSP + CBIN/Firmware parser + CLI
 │       ├── Cargo.toml
 │       └── src/
