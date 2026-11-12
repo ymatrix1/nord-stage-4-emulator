@@ -8,6 +8,7 @@ pub mod morph;
 pub mod organ;
 pub mod piano;
 pub mod render;
+pub mod sinc;
 pub mod synth;
 pub mod synth_params;
 pub mod synth_sample;

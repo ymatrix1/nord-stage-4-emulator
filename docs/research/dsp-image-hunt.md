@@ -417,18 +417,18 @@ python tools/ns4_synth_kernels.py DIR/dsp_image_3_SY1SY2.bin
 
 The 18,432-float run of section 5.14 (`SY1SY2` image offset `0x76A8`, 73,728 bytes) is six blocks of 3,072 floats, each a polyphase interpolation kernel: 12 taps x 256 sub-sample phases, stored `[tap][phase]`.
 
-**Model (fits every block with rms 0.0003 against a peak of 1.0):**
+**Model (fits every block with rms 0.000036, max error 0.000088, against a peak of 1.0):**
 
 ```text
-value[tap][phase] = sinc(fc * d) * blackman(d),   d = tap - 5 - phase / 256,   |d| < 6
-blackman(d)       = 0.42 + 0.5 cos(pi d / 6) + 0.08 cos(2 pi d / 6)
+value[tap][phase] = sinc(fc * d) * window(d),   d = tap - 5 - phase / 256,   |d| < 6
+window(d)         = 0.4231 + 0.4991 cos(pi d / 6) + 0.0778 cos(2 pi d / 6)
 ```
 
 The sum over the 12 taps is `1 / fc` for every phase (the kernels are not normalised to unity gain): block sums divided by 256 are 0.9091, 0.9524, 1.0000, 1.0417, 1.0811 and 1.1173. Cutoffs `fc` (relative to Nyquist, as the argument scale of `sinc`) of the six kernels: **1.100, 1.050, 1.000, 0.960, 0.925, 0.895**. The identical table is present in every release from v1.44 to v1.66 (checked with `ns4_synth_kernels.py` on the SY1SY2 image of v1.44, v1.52, v1.60 and v1.66; the image never changes).
 
-Reading: the sample playback path of the synth DSP resamples with a 12-point windowed-sinc polyphase interpolator at 256 phases, and picks one of six cutoffs, plausibly by playback ratio (a higher ratio needs a lower cutoff to avoid aliasing; the selection rule is not decoded). The window is a Blackman window of half-width 6 taps. Status: **VERIFIED** structure and constants (table values, reproducible fit, same in all releases); the assignment of kernels to pitch ratios is ASSUMED.
+Reading: the sample playback path of the synth DSP resamples with a 12-point windowed-sinc polyphase interpolator at 256 phases, and picks one of six cutoffs, plausibly by playback ratio (a higher ratio needs a lower cutoff to avoid aliasing; the selection rule is not decoded). The window is a three-term cosine sum of half-width 6 taps whose coefficients (0.4231, 0.4991, 0.0778, sum 1) were fitted jointly to all six blocks (EMPIRICAL); it is close to, but not exactly, the textbook Blackman window (0.42, 0.5, 0.08), which leaves rms 0.0003. Status: **VERIFIED** structure, cutoffs and table values (reproducible fit, same in all releases); the window coefficients are an EMPIRICAL fit; the assignment of kernels to pitch ratios is ASSUMED.
 
-Comparison with Track A: `docs/specs/piano-engine.md` specifies 4-point Catmull-Rom interpolation for sample playback. The hardware path is a longer sinc kernel; the difference matters for high-frequency fidelity at large transpositions.
+Track A: `crates/nord-core/src/sinc.rs` implements these kernels (golden-tested against nine values read from the firmware table; on a 0.3 fs sine its error is at least 5x below Catmull-Rom). `docs/specs/piano-engine.md` and the `SAMPLES` oscillator still use 4-point Catmull-Rom interpolation (TD-08). The hardware path is a longer sinc kernel; the difference matters for high-frequency fidelity at large transpositions.
 
 ### 5.16 dB taper tables (129-point exponential curves)
 
