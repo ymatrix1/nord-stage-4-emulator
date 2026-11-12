@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--lenient] [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -36,6 +36,7 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut devices = Vec::new();
     let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
     let mut registers: Vec<(u8, u32)> = Vec::new();
+    let mut dumps: Vec<(u32, u32)> = Vec::new();
     let mut trace = 0usize;
     let mut lenient = false;
     let mut it = args.iter();
@@ -60,6 +61,14 @@ fn run(args: &[String]) -> Result<String, String> {
                 ));
             }
             "--lenient" => lenient = true,
+            "--dump" => {
+                let spec = it.next().ok_or("--dump needs ADDR:COUNT")?;
+                let (addr, count) = spec.split_once(':').ok_or("--dump needs ADDR:COUNT")?;
+                dumps.push((
+                    parse_number(addr).ok_or("bad --dump address")? as u32,
+                    parse_number(count).ok_or("bad --dump count")? as u32,
+                ));
+            }
             "--set" => {
                 let spec = it.next().ok_or("--set needs REG=VALUE")?;
                 let (name, value) = spec.split_once('=').ok_or("--set needs REG=VALUE")?;
@@ -77,7 +86,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--lenient] [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -131,6 +140,16 @@ fn run(args: &[String]) -> Result<String, String> {
 ",
             core.skipped,
             core.first_skipped.unwrap_or(0)
+        ));
+    }
+    for (addr, count) in dumps {
+        let words: Vec<String> = (0..count)
+            .map(|k| format!("{:x}", core.dm_read(addr.wrapping_add(k)).unwrap_or(0)))
+            .collect();
+        out.push_str(&format!(
+            "DM(0x{addr:x}..): {}
+",
+            words.join(" ")
         ));
     }
     if !core.return_addresses().is_empty() {

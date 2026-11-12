@@ -416,9 +416,14 @@ def decode(parcels: tuple[int, ...]) -> str:
             ea = f"{mem}(0x{bits(w, 31, 0):x}, I{bits(w, 43, 41) + (8 if pm else 0)})"
         return f"{ea} = {u}" if write else f"{u} = {ea}"
     if name == "15b":
-        # ASSUMED field split: I 43..41, D 40, DATA7 29..23, UREG 22..16 (fits the data, see docs).
-        ea = f"DM({bits(w, 29, 23)}, I{bits(w, 43, 41)})"
-        u = ureg_name(bits(w, 22, 16))
+        # Fields: I 43..41, D 40, UREG 29..23, signed DATA7 22..16. VERIFIED on the ORG image
+        # (docs/research/dsp-image-hunt.md 5.28): 99% of UREG codes are R or I registers and the
+        # register is used again within six instructions in 88% of the loads; the earlier
+        # swapped split put 79% of the transfers into system registers.
+        data = bits(w, 22, 16)
+        data -= 128 if data & 0x40 else 0
+        ea = f"DM({data}, I{bits(w, 43, 41)})"
+        u = ureg_name(bits(w, 29, 23))
         return f"{ea} = {u}" if bits(w, 40, 40) else f"{u} = {ea}"
     if name == "3c":
         ea = f"DM(I{bits(w, 43, 41)}, M{bits(w, 40, 38)})"

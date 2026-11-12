@@ -139,3 +139,10 @@ def test_16_bit_nop_and_entry_code_shape():
         "R0 = 0x0",
         "I0 = 0xc0430",
     ]
+
+
+def test_type_15b_register_and_signed_offset_fields():
+    # UREG is bits 29..23, DATA7 is bits 22..16 as a signed offset (docs 5.28)
+    assert v.decode((0x9E08, 0x0C00)) == "I8 = DM(0, I7)"
+    assert v.decode((0x9208, 0x007A)) == "R0 = DM(-6, I1)"
+    assert v.decode((0x9908, 0x0014)) == "DM(20, I4) = R0"

@@ -678,7 +678,7 @@ The six peeks load into `ureg 0x7A`, which the decoder names `IRPTL`; the compar
 
 `sharc-run --set REG=VALUE` presets `R`/`I`/`M`/`L`/`B` registers. With `--set I8=0x12538C` (the first record's code pointer) the failing `CALL (M8, I8)` at `0x12730E` enters that routine and the run continues 844 steps further (496,183 steps, 95 skipped ops) before the next indirect call stops it at address 0 (call stack `127abd`). So the module records carry the routine each pass calls; which instruction should load `I8` from the record is still open.
 
-### 5.28 The Type 15b register field is misdecoded (open)
+### 5.28 The Type 15b register field was swapped (fixed)
 
 Evidence from the ORG Core2 listing (90,858 lines, `sharc-disasm IMG 0x240000 0x2C0000`), counting the 7-bit register code (bits 22..16) of each instruction type, by group (`code >> 4`):
 
@@ -692,6 +692,26 @@ Evidence from the ORG Core2 listing (90,858 lines, `sharc-disasm IMG 0x240000 0x
 Types 14a, 17a and 17b load R and I registers almost exclusively, as expected. Type 15b puts 79% of its 2,533 transfers into codes `0x60..0x7F`, which the decoder prints as system registers (`FADDR` 283, `PC` 79, `PCSTK` 78, `IRPTL` 73, `LADDR`, `CURLCNTR`, `EMUCLK2`, `PX`, `TPERIOD`, ...). A program does not load data into `PC` or `PCSTK` hundreds of times, and no group 2-4 register (M, L, B) appears at all, so the 15b field split (`DATA7` bits 29..23, `UREG` bits 22..16, ASSUMED in `visa/decode.rs` and `tools/sharc_visa.py`) or the meaning of codes `0x6n`/`0x7n` in this form is wrong. Weak support for "code `0x6n` is `Rn`": for loads (D = 0) the register with the same low nibble is used in the next six instructions in 46% of group 6 cases against 29% for an unrelated register (group 0, known R registers: 50% against 24%; group 7: 40% against 30%). Stronger structural evidence: the six unrolled peeks at `0x24BCFE..0x24BD5A` load `DM(0, I1)` into code `0x7A` and then compare `R0`, so the loaded register must be `R0` in that instruction, which a plain `Rn = nibble` rule does not give (nibble 10).
 
 Consequence for the oracle: `write_ureg` ignores unlisted system registers, so these loads currently drop their data, which can explain the missing `I8` and the failed processing pass of 5.27. Next: find the real 15b field layout (compare the 32-bit form with the Type 15a layout `101 G I D L UREG DATA` and its `G` bit; test candidate splits by checking that `R0` is loaded in the six-peek loop), then fix `tools/sharc_visa.py`, `visa/decode.rs` and `core/moves.rs` together.
+
+**Resolution (VERIFIED by a field-position fit).** For each candidate position of the 7-bit register field inside bits 33..16 of the 15b word, counting the register groups over the 2,533 transfers of the ORG Core2 listing:
+
+| UREG bits | R/I share | loaded register used again within 6 instructions |
+|---|---|---|
+| 22..16 (old, swapped) | 21% | 46% |
+| 28..22 | 89% | 37% |
+| **29..23** | **99%** | **88%** |
+| 30..24 | 99% | 50% |
+| 32..26 | 100% | 71% |
+
+The register is in bits 29..23 and the offset in bits 22..16 as a 7-bit two's-complement number (the data values cluster at `0x60..0x7F` = -32..-1, 90 loads use 0). So `R0 = DM(24, I7)` was `I8 = DM(0, I7)`, the six peeks are `R0 = DM(-6, I1)`, and `DM(0, I4) = I4` was `DM(20, I4) = R0`. Fixed in `tools/sharc_visa.py`, `visa/decode.rs` and `core/moves.rs` with tests. The unconditional `ureg_load`-style claims made earlier in 5.27 about `IRPTL` are void.
+
+### 5.29 After the fix: a full pass of module 0
+
+`sharc-run --dump ADDR:COUNT` prints data words after a run. ORG Core2 (`--lenient --dev 0x282c0380=1 --poke 100000:0xb00e2=1`):
+
+- Without any `--set`, the first `CALL (M8, I8)` now goes to `0x12538C`: `I8 = DM(0, I7)` with `I7 = 0xC13A6` loads the record's code pointer. Module 0 runs about 12,000 instructions (`1267`..`127333`), writes `0x3C170F80` into its record word 5 (a float, ASSUMED output state), and moves on to record 1 (`I7 = 0xC13CE`).
+- Record 1 word 0 holds `0x7FFFFFFF` by then (the image has `0x12538C`), so the next `CALL (M8, I8)` jumps to `0x7FFFFFFF` and the run slides. Something in module 0's pass writes that value (a saturated result, or a write through a wrongly decoded or skipped instruction): open.
+- 65 compute ops were skipped before the wild jump (all of the undocumented `2x` forms), so inexact arithmetic is the first suspect.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 

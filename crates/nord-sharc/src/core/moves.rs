@@ -49,8 +49,10 @@ impl Core {
                 self.mem_transfer(d, addr, bits(w, 38, 32) as u8, write_bit(40))?;
             }
             Kind::T15b => {
-                let addr = self.i[bits(w, 43, 41) as usize].wrapping_add(bits(w, 29, 23) as u32);
-                self.mem_transfer(d, addr, bits(w, 22, 16) as u8, write_bit(40))?;
+                // UREG 29..23, signed DATA7 22..16 (VERIFIED, docs 5.28)
+                let offset = sign_extend(bits(w, 22, 16) as u32, 7);
+                let addr = self.i[bits(w, 43, 41) as usize].wrapping_add(offset);
+                self.mem_transfer(d, addr, bits(w, 29, 23) as u8, write_bit(40))?;
             }
             Kind::T16a => {
                 // DM/PM(Ii, Mm) = <data32>, post-modify with update
@@ -202,6 +204,25 @@ mod tests {
         assert!(c.step().is_ok());
         assert_eq!(c.r[0], 42);
         assert_eq!(c.i[2], 0x9_0013);
+    }
+
+    #[test]
+    fn type_15b_loads_into_the_register_field_with_a_signed_offset() {
+        // I8 = DM(0, I7): 9e08 0c00 (UREG 0x18 in bits 29..23, DATA7 = 0)
+        let mut c = core_at_zero(&[0x9e08, 0x0c00]);
+        c.i[7] = 0x9_0100;
+        c.dm_write(0x9_0100, 0x12_538C).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!(
+            c.i[8], 0x12_538C,
+            "the module record's code pointer lands in I8"
+        );
+        // R0 = DM(-6, I1): 9208 007a (UREG 0, DATA7 = 0x7a = -6)
+        let mut c = core_at_zero(&[0x9208, 0x007a]);
+        c.i[1] = 0x9_0200;
+        c.dm_write(0x9_0200 - 6, 0xFFFE).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!(c.r[0], 0xFFFE);
     }
 
     #[test]
