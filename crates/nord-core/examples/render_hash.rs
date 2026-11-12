@@ -7,6 +7,10 @@
 //! With `--timing` it also prints ns/frame for the sample oscillator and the full engine.
 
 use nord_core::engine::Stage4Engine;
+use nord_core::fx::{
+    AmpCabinet, DelayFeedbackFx, DelayFilterMode, DelaySubdivision, LayerFxChain, MasterBus,
+    Mod1Type, Mod2Type, ReverbColor, ReverbModel,
+};
 use nord_core::midi::MidiEvent;
 use nord_core::organ::OrganLayer;
 use nord_core::piano::PianoLayer;
@@ -121,6 +125,8 @@ fn main() {
         push(&mut out, piano.render_frame());
     }
 
+    fx_sweep(&mut out);
+
     std::fs::write(path, &out).expect("write");
     println!("wrote {} bytes", out.len());
 
@@ -211,4 +217,109 @@ fn micro_interp() {
         std::hint::black_box(acc);
     }
     println!("timing interpolator only: cubic {c_best:.2} ns, sinc12 {s_best:.2} ns per sample");
+}
+
+/// Sweeps every Mod1 x Mod2 pair while cycling amp, delay and reverb settings so each FX stage
+/// is exercised with non-default parameters.
+fn fx_sweep(out: &mut Vec<u8>) {
+    let mods1 = [
+        Mod1Type::Off,
+        Mod1Type::Tremolo,
+        Mod1Type::AutoPan,
+        Mod1Type::RingMod,
+        Mod1Type::Wah,
+    ];
+    let mods2 = [
+        Mod2Type::Off,
+        Mod2Type::Chorus,
+        Mod2Type::Flanger,
+        Mod2Type::Phaser,
+        Mod2Type::Vibe,
+    ];
+    let amps = [
+        AmpCabinet::Off,
+        AmpCabinet::Small,
+        AmpCabinet::Jc,
+        AmpCabinet::Twin,
+        AmpCabinet::ToRotary,
+        AmpCabinet::LpFilter,
+        AmpCabinet::HpFilter,
+    ];
+    let dfx = [
+        DelayFeedbackFx::Off,
+        DelayFeedbackFx::Ensemble,
+        DelayFeedbackFx::Vibe,
+        DelayFeedbackFx::Chorus,
+        DelayFeedbackFx::Flam,
+        DelayFeedbackFx::Space,
+    ];
+    let dfilt = [
+        DelayFilterMode::Off,
+        DelayFilterMode::Hp,
+        DelayFilterMode::Lp,
+        DelayFilterMode::Bp,
+    ];
+    let revs = [
+        ReverbModel::Off,
+        ReverbModel::Booth,
+        ReverbModel::Room,
+        ReverbModel::Stage,
+        ReverbModel::Spring,
+        ReverbModel::Hall,
+        ReverbModel::Cathedral,
+    ];
+    let cols = [
+        ReverbColor::Normal,
+        ReverbColor::Bright,
+        ReverbColor::Dark,
+        ReverbColor::Chorale,
+    ];
+    let subs = [
+        DelaySubdivision::Quarter,
+        DelaySubdivision::DottedEighth,
+        DelaySubdivision::Eighth,
+        DelaySubdivision::Sixteenth,
+    ];
+    let mut bus = MasterBus::default();
+    let mut k = 0usize;
+    for m1 in mods1 {
+        for m2 in mods2 {
+            let mut fx = LayerFxChain::new(FS);
+            fx.mod1_type = m1;
+            fx.mod2_type = m2;
+            fx.mod1_amount = 0.6;
+            fx.mod2_amount = 0.6;
+            fx.amp_cabinet = amps[k % amps.len()];
+            fx.amp_variation = k % 2 == 1;
+            fx.drive_amount = 0.2 + 0.1 * (k % 5) as f32;
+            fx.eq_bass_db = 3.0;
+            fx.eq_mid_db = -4.0;
+            fx.eq_mid_freq_hz = 900.0;
+            fx.eq_treble_db = 2.0;
+            fx.comp_enabled = !k.is_multiple_of(3);
+            fx.comp_amount = 0.5;
+            fx.comp_fast = k.is_multiple_of(2);
+            fx.delay_enabled = true;
+            fx.delay_time_ms = 180.0 + 20.0 * (k % 7) as f32;
+            fx.delay_clock_sync = k % 4 == 3;
+            fx.delay_subdivision = subs[k % subs.len()];
+            fx.delay_analog = k % 3 == 1;
+            fx.delay_ping_pong = k.is_multiple_of(2);
+            fx.delay_filter = dfilt[k % dfilt.len()];
+            fx.delay_fx = dfx[k % dfx.len()];
+            fx.delay_feedback = 0.4;
+            fx.delay_mix = 0.35;
+            fx.reverb_model = revs[k % revs.len()];
+            fx.reverb_color = cols[k % cols.len()];
+            fx.reverb_mix = 0.3;
+            for n in 0..4000usize {
+                let t = n as f32 / FS;
+                let x = 0.4 * (TAU * 220.0 * t).sin() + 0.2 * (TAU * 1730.0 * t).sin();
+                let y = if n % 997 == 0 { 0.8 } else { 0.0 };
+                let f = fx.process_frame_with_bpm([x + y, 0.8 * x - y], 118.0);
+                push(out, bus.process_frame(f));
+            }
+            k += 1;
+        }
+    }
 }
