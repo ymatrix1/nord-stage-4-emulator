@@ -6,7 +6,7 @@
 
 | Blocker | Result | Status |
 |---|---|---|
-| DSP images encrypted? | Not encrypted as far as tested, but the compression result covers the **ARM** sections only. **No SHARC image is in the update at all** ([dsp-image-hunt.md](dsp-image-hunt.md)); `DSP*` names are region labels in the bank 1 flash tool. DSP code stays in board SPI flash | **Not in container** |
+| DSP images in the update? | Compression covers the **ARM** sections only (custom LZ). Not encrypted as far as tested. SHARC VISA code is present, uncompressed, in `bank0_CODE@0x440000..0x4FFFFF` ([dsp-image-hunt.md](dsp-image-hunt.md) 5.5). `DSP*` names are region labels in the bank 1 flash tool, not images | **Found (VISA), not yet disassembled** |
 | Boot ROMs | Not obtainable without hardware; not in the update package | **Blocked** |
 | Central unknown chip / buses | Not identifiable from the photos; web sources are generic and speculate an FPGA | **Open** |
 | Sample codec (`CNSP`) | Opaque payload, no sub-structure found (section 3) | **Open** |
@@ -45,7 +45,7 @@ Method: signature scan, zlib trial decode at every header hit, entropy map in 64
 
 ## 4. Verdict
 
-1:1 low-level emulation is **not currently feasible**: boot ROMs are unavailable, DSP images are not in the update (board SPI flash, see [dsp-image-hunt.md](dsp-image-hunt.md)), the sample codec is unknown, and no SHARC simulator exists. None of that is proven impossible, so Track B stays a research option, not a plan. The shipping engine remains the high-level Rust implementation (Track A).
+1:1 low-level emulation is **not currently feasible**: boot ROMs are unavailable, SHARC code is in the update as VISA inside `bank0_CODE` but not yet disassembled or mapped to the three DSPs (see [dsp-image-hunt.md](dsp-image-hunt.md) 5.5), the sample codec is unknown, and no SHARC simulator exists. None of that is proven impossible, so Track B stays a research option, not a plan. The shipping engine remains the high-level Rust implementation (Track A).
 
 ## 6. Deeper analysis of the firmware containers
 

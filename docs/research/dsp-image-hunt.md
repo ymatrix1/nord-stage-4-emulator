@@ -6,7 +6,9 @@
 
 ## Verdict
 
-**Not found in the container (v1.44, v1.46, v1.64, v1.66 all checked).** The update carries only ARM images (two banks: `SRAM`, `CODE`, `ARM0` each). The strings `DSPSyn` / `DSPOrg` / `DSPFxCore*` are memory-region names in a bank 1 flash/test tool, not image names. No 48-bit instruction stream, no ADI loader stream and no compressed blob of a plausible size exists in any segment of either bank. The SHARC code stays in the board SPI flash, as `sharc-dsp-and-preset-hash-teardown.md` says. The `0x3CF040` offset in older notes is in the *packed* container, not in `bank0_CODE`.
+**Update (section 5.5): SHARC VISA code is present in `bank0_CODE` at `0x440000..0x4FFFFF`.** Read as 16-bit little-endian parcels, the framed records tile exactly into ADSP-214xx VISA instructions (97 of 97, null streams 19%), and 96% of the loads into index registers carry SHARC internal-RAM addresses. The earlier conclusion below ("not in the container") was wrong for this region: my 6-byte (48-bit ISA) scan could not see 16/32/48-bit VISA code. Operand-level decoding, the full extent and the mapping to `DSPO` / `DSPS` / `DSPF` are still open.
+
+Earlier verdict (sections 1 to 4, kept for the record): the update carries only ARM images (two banks: `SRAM`, `CODE`, `ARM0` each). The strings `DSPSyn` / `DSPOrg` / `DSPFxCore*` are memory-region names in a bank 1 flash/test tool, not image names. No 48-bit ISA instruction stream and no ADI loader stream exists in any segment of either bank. The `0x3CF040` offset in older notes is in the *packed* container, not in `bank0_CODE`.
 
 ## 1. Where the strings are (task 1)
 
@@ -152,17 +154,48 @@ Bytes: v1.64 `bank0_CODE@0x45D5EA..0x45D8C0` (v1.62 differs only at `0x45D63C`).
 
 Next step: obtain the ADI *ADSP-214xx SHARC Processor Programming Reference* (instruction set appendix with VISA opcode maps), check whether the `20 00 1a 72 ... 86 14 00 00` records decode as a consistent VISA instruction sequence (lengths 16/32/48 bits matching the record lengths) and what `0x7a1a`/`0x6afe`/`0x687e` parcels are.
 
+### 5.5 The `0x440000+` streams decode as SHARC VISA code
+
+Tool: `tools/sharc_visa.py` (tests in `tools/tests/test_sharc_visa.py`). Rules from the SHARC Programming Reference rev 2.4, chapter 10 (`.reference/adsp-2136x_2137x_214xx_pgr_rev2.4.pdf`, downloaded from analog.com): VISA instructions are 16, 32 or 48 bits (`c`/`b`/`a` types), decoded MSB-first from bit 47; 32-bit forms have `0111111` in bits 22..16. Parcels are read little-endian. The tool only recovers type and boundaries; operands are decoded just for Types 17a/17b (`Ureg = <data>`).
+
+Commands:
+
+```bash
+python tools/sharc_visa.py target/fw_unpacked/bank0_CODE.bin 0x45d5ec 0x45d630
+```
+
+Evidence (all on `bank0_CODE` of v1.64):
+
+| Check | Result |
+|---|---|
+| Records between headers `20 00 1a 72` tiled into instructions starting 2 bytes after the header | **97 of 97** tile exactly. Starting at the header (offset 0), -2 or +4: 0 of 97. +6 (3 parcels): 97 of 97 (instruction boundaries realign) |
+| Null: random spans of ARM code or the PCM-like block with the same length distribution | 378 of 2000 (19%) and 403 of 2000 (20%) tile exactly |
+| 32-bit forms end with `0x3F` in the low 7 bits of the second parcel | The second parcels `003f`, `00bf`, `043f`, `04bf`, `503f`, `e73f`, `143f` all do (that is how 5b/4b/7b are recognised) |
+| `Ureg = data32` loads (Type 17a): 773 found | 296 target `I0..I15`; **284 (96%)** load values in `0x80000..0xFFFFF` (SHARC internal RAM), for example `I5 = 0xC04B0`, `0xC0458`, `0xC03D8`. Same range as the DSP region table of section 1 |
+| `Ureg = data16` (Type 17b) | `0fa4 006c` is `M4 = 0x006C` (UREG code `0x24` is `M4` in Table 10-2); the v1.62 to v1.64 fix changes the immediate `0x0074` to `0x0070` in this instruction |
+| Terminator `1486 0000 0020` | Type 18a (bit manipulation with a 32-bit immediate); every record ends with it. Operand meaning not decoded |
+
+Sample (v1.64, `0x45D5EC`): `4a 6abe 1088 12ae | 4a 6abe 2108 13bf | 15b 9b08 0186 | 17b 0fa4 0028 (M4=0x28) | 7b 043e e73f | 17a 0f15 000c 03d8 (I5=0xC03D8) | 4b 687e 143f ...`. These are DAG setups (index and modifier registers) followed by moves.
+
+Conclusions and limits:
+
+- The Nord Stage 4 OS image **does contain SHARC code**, uncompressed, as 16-bit-aligned VISA, inside the ARM `CODE` segment. It is not in ADI `.ldr` form; the ARM presumably sends it to the DSPs (see `DSP Comm` at `bank0@0x29ED9C`, sender `0x6CA48`).
+- ASSUMED: the instruction typing is a best-effort reading of the opcode tables (no ADI disassembler was available to cross-check). Full-register and operand decoding is not done. `??`/`21/22` counts include padding and data mixed in the long gaps between records, so the extent of code versus data is not measured.
+- v1.64 changed one immediate of a DAG setup; plausible for a "program becomes silent" fix. v1.52 to v1.60 changed 20 to 98 KB of this region (section 5.2): that region is where the sound-engine changes live.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
 
-- The 1:1 verdict does not change from "not currently feasible", but the reason is sharper: the DSP code is simply not in the OS update, so no amount of container work recovers it. Track B needs a hardware flash read (`Micron N25Q032` / `MT25QL128A`) or an image from another source.
-- `docs/research/ns4-firmware-teardown.md` rows for `0x003CF06C..` describe packed-container offsets (bank 1), not DSP images. `docs/research/sharc-dsp-and-preset-hash-teardown.md` and `docs/TECH_DEBT.md` TD-06 are right that the `.ldr` is outside the update.
-- `docs/research/1to1-emulation-feasibility.md` row "DSP images encrypted?" was misleading: the compression result concerns ARM sections only. Updated.
-- Continue to tune the high-level engine against recordings and against firmware tables read from `bank0_CODE`.
+- The 1:1 verdict changes from "DSP code is not in the update" to "SHARC VISA code is in the update (`bank0_CODE@0x440000..0x4FFFFF`), uncompressed and 16-bit aligned". Track B no longer needs a hardware flash dump to start; it needs a SHARC/VISA disassembler (none exists openly) or a decoder written from the programming reference, plus a SHARC core model to run it.
+- `docs/research/ns4-firmware-teardown.md` rows for `0x003CF06C..` describe packed-container offsets (bank 1), not DSP images. The bank 1 `DSP*` table is a region/test table. `docs/research/sharc-dsp-and-preset-hash-teardown.md` and `docs/TECH_DEBT.md` TD-06 ("`.ldr` outside the update image") need the same correction once the mapping to `DSPO` / `DSPS` / `DSPF` is known.
+- The high-level engine stays the production path ([D2](../DECISIONS.md)). The VISA code is a new source of VERIFIED constants (coefficient addresses, DAG strides) once it can be read.
 
 ## Follow-ups
 
+- Extend `tools/sharc_visa.py` to full operand decoding (compute field tables, chapter 12) and add a linear sweep of `0x440000..0x4FFFFF` to separate code from data and find the code extent.
+- Map code blocks to `DSPO` / `DSPS` / `DSPF` (which cores, which L1 blocks: DAG addresses `0xC03D8..` are block-1 RAM) and find the ARM routine that sends them (`DSP Comm`, sender `0x6CA48`).
+- Check whether ADI's own disassembler (CCES `elfdump`/`dis21k`) can read a raw VISA blob for cross-checking (not downloadable without ADI tools).
 - Trace `bank0_CODE` code that touches `0x62004000` / SPI0 `0x01C41000` to confirm whether the ARM ever streams data to the SHARC at runtime (DSP comm `0x6CA48` is the known sender of table words).
 - If hardware access exists: dump the SPI flash and look for the ADI loader stream there; ADI's loader documentation (not in `.reference/sharc/`) is needed for the block layout.
 - Check the `.dmg` updater for any additional payload (not done here).
