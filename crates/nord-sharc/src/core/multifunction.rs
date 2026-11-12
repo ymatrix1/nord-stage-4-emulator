@@ -39,6 +39,11 @@ impl Core {
 
     /// Multiplier plus ALU forms (compute bit 22 set), Tables 12-12 and 12-13.
     pub(super) fn multifunction(&mut self, c: u64) -> bool {
+        // multifunction op6 0 or 1 (bits 21..17 clear; no multiplier+ALU form uses them): the
+        // multiplier result register transfers `Rn = MRxF`, `MRxF = Rn`
+        if bits(c, 21, 17) == 0 {
+            return self.mr_transfer(bits(c, 19, 12), bits(c, 11, 8) as usize);
+        }
         let (xm, ym) = (bits(c, 7, 6) as usize, 4 + bits(c, 5, 4) as usize);
         let (xa, ya) = (8 + bits(c, 3, 2), 12 + bits(c, 1, 0));
         let (rm, ra) = (bits(c, 15, 12) as usize, bits(c, 11, 8));
@@ -168,7 +173,10 @@ mod tests {
         assert!(c.compute(word(0b000101, 1, 2, 0, 0, 0, 0)));
         assert_eq!((c.r[1], c.r[2]), (0x2000_0000, (5u32).wrapping_sub(6)));
         // opcode groups that do not exist are not modelled
-        assert!(!c.compute(word(0b000000, 1, 2, 0, 0, 0, 0)));
+        assert!(
+            !c.compute(word(0b000000, 3, 2, 0, 0, 0, 0)),
+            "op8 3 is no MR transfer"
+        );
     }
 
     #[test]

@@ -780,6 +780,19 @@ Results with the fixes: ORG Core2 code region (`0x24A718..0x252000`): **0 differ
 
 Loader entry values (`tools/ns4_dsp_ldr.py`): FX both sections `0x1211E3`; PNO core 1 `0x121007`, PNO core 2 `0x125C88`; ORG both sections `0x125C88`. So the organ program runs from two ORG sections and from PNO's second section, the piano program from PNO's first section.
 
+### 5.36 PNO and FX: multiplier registers, 6a, short floats, PM accesses
+
+`tools/adi_compare.py` on the PNO sections found the next real gaps (every item has golden tests from the ADI output):
+
+| Item | Evidence | Done |
+|---|---|---|
+| Multiplier result register transfers `Rn = MRxF|MRxB`, `MRxF|MRxB = Rn` | compute group with bit 22 set and op6 0 or 1; all 256 op8 codes read from ADI: bits 1..0 = MR0/1/2 (3 invalid), bit 2 = background, bit 4 = write | core (`mr_transfer`: MR2 reads sign-extend from 16 bits, an MR1 write sign-extends into MR2, an MR0 write keeps the rest), decoders |
+| Type 6a: shift immediate with a post-modify data move | the shift fields of the `0x02` form plus PM select bit 32, index 43..41, modify 40..38, direction bit 31, register 26..23; fits 24 of 34 samples (the others are data) | `exec_shift_move`, decoders |
+| `FPACK` / `FUNPACK` (16-bit short float: sign 15, exponent 14..11, fraction 10..0) | worked out from the reference text; the round trip of all packed values passes | shifter (rounding to nearest even and the carry into the exponent are ASSUMED) |
+| Type 15b with G bit 37: `i5=pm(0x8,i9)` | 1,400 samples: bit 37 selects PM and the DAG2 index | core and decoders |
+
+State: with these, the strict start-up runs of FX Core1, PNO Core1 (the piano program, entry `0x121007`) and PNO Core2 (the organ program) reach their idle loops with no unmodelled instruction, and the ORG Core2 processing pass still completes. Remaining differences against ADI on the PNO sections are data words (the `1a`/`10a`/`3a` forms in the coefficient tables) and the cosmetic operand naming of `FUNPACK`.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
