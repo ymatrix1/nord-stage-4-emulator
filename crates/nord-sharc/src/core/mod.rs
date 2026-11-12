@@ -156,8 +156,14 @@ pub struct Core {
     pub skipped_pcs: Vec<u32>,
     /// Data address whose writes are logged in `watch_hits` (`u32::MAX` = none).
     pub watch: u32,
+    /// Number of consecutive words watched from `watch` (1 = just that address).
+    pub watch_len: u32,
     /// Writes to the watched address as `(step, pc, value)`, at most [`WATCH_LIMIT`].
     pub watch_hits: Vec<(u64, u32, u32)>,
+    /// Address of each entry of `watch_hits` (differs from `watch` when `watch_len > 1`).
+    pub watch_addrs: Vec<u32>,
+    /// Maximum number of logged writes (default [`WATCH_LIMIT`]).
+    pub watch_limit: usize,
     pub imask: u32,
     pub mmask: u32,
     pub flags: Flags,
@@ -219,7 +225,10 @@ impl Core {
             first_skipped: None,
             skipped_pcs: Vec::new(),
             watch: u32::MAX,
+            watch_len: 1,
             watch_hits: Vec::new(),
+            watch_addrs: Vec::new(),
+            watch_limit: WATCH_LIMIT,
             imask: 0,
             mmask: sysregs::MMASK_RESET,
             flags: Flags::default(),

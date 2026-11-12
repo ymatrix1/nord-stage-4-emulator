@@ -39,8 +39,11 @@ impl Core {
 
     /// Writes a 32-bit data word at a normal-word address (see [`Core::dm_read`]).
     pub fn dm_write(&mut self, addr: u32, value: u32) -> Result<(), u32> {
-        if addr == self.watch && self.watch_hits.len() < super::WATCH_LIMIT {
+        if addr.wrapping_sub(self.watch) < self.watch_len
+            && self.watch_hits.len() < self.watch_limit
+        {
             self.watch_hits.push((self.steps, self.pc, value));
+            self.watch_addrs.push(addr);
         }
         if (addr as usize) < IOP_WORDS {
             self.iop[addr as usize] = value;
@@ -130,6 +133,14 @@ mod tests {
         c.dm_write(0x9_0010, 7).unwrap();
         c.dm_write(0x9_0014, 8).unwrap();
         assert_eq!(c.watch_hits, vec![(0, 0x42, 7)]);
+        assert_eq!(c.watch_addrs, vec![0x9_0010]);
+        // a range logs the address of each hit and honours the limit
+        let mut c = Core::new(&[]);
+        (c.watch, c.watch_len, c.watch_limit) = (0x9_0010, 4, 2);
+        for a in [0x9_000F, 0x9_0011, 0x9_0013, 0x9_0014, 0x9_0012] {
+            c.dm_write(a, 1).unwrap();
+        }
+        assert_eq!(c.watch_addrs, vec![0x9_0011, 0x9_0013]);
     }
 
     #[test]

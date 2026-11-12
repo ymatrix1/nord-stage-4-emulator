@@ -14,4 +14,8 @@ path = "src/bin/sharc_disasm.rs"
 name = "sharc-run"
 path = "src/bin/sharc_run.rs"
 
+[[bin]]
+name = "sharc-org"
+path = "src/bin/sharc_org.rs"
+
 [dependencies]
