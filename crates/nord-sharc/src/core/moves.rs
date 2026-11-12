@@ -126,11 +126,10 @@ impl Core {
                     // exchange (the PEy file is the S file).
                     let (s, r) = (bits(w, 41, 38) as usize, bits(w, 26, 23) as usize);
                     self.run_move_compute(d, with_compute)?;
-                    std::mem::swap(&mut self.r[r], &mut self.s[s]);
+                    self.swap_rs(r, s);
                 } else {
                     let src = ((bits(w, 42, 38) << 2) | bits(w, 32, 31)) as u8;
-                    let v = self.read_ureg(src);
-                    self.write_ureg(bits(w, 29, 23) as u8, v);
+                    self.move_ureg(bits(w, 29, 23) as u8, src);
                     self.run_move_compute(d, with_compute)?;
                 }
             }

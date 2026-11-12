@@ -428,6 +428,8 @@ The sum over the 12 taps is `1 / fc` for every phase (the kernels are not normal
 
 Reading: the sample playback path of the synth DSP resamples with a 12-point windowed-sinc polyphase interpolator at 256 phases, and picks one of six cutoffs, plausibly by playback ratio (a higher ratio needs a lower cutoff to avoid aliasing; the selection rule is not decoded). The window is a three-term cosine sum of half-width 6 taps whose coefficients (0.4231, 0.4991, 0.0778, sum 1) were fitted jointly to all six blocks (EMPIRICAL); it is close to, but not exactly, the textbook Blackman window (0.42, 0.5, 0.08), which leaves rms 0.0003. Status: **VERIFIED** structure, cutoffs and table values (reproducible fit, same in all releases); the window coefficients are an EMPIRICAL fit; the assignment of kernels to pitch ratios is ASSUMED.
 
+**Update (sy-dsp-map.md section 2):** the window is a Kaiser window with `beta = 8.5` and half width 6, including the `d = +6` edge; max error 5.9e-8 (one float32 ulp) over all six blocks (`tools/ns4_sinc_check.py`). The three-term cosine fit above approximates it (rms 3.6e-5). The only reader of the table is the SY1SY2 resampler `0x1C10EE`; no DSP instruction writes the voice's kernel pointer.
+
 Track A: `crates/nord-core/src/sinc.rs` implements these kernels (golden-tested against nine values read from the firmware table; on a 0.3 fs sine its error is at least 5x below Catmull-Rom). `docs/specs/piano-engine.md` and the `SAMPLES` oscillator still use 4-point Catmull-Rom interpolation (TD-08). The hardware path is a longer sinc kernel; the difference matters for high-frequency fidelity at large transpositions.
 
 ### 5.16 dB taper tables (129-point exponential curves)
