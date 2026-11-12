@@ -94,7 +94,23 @@ Checked 2026-11-12:
 
 Reading: no DSP code recognised in what we unpack, but the container may still carry it in a form we do not recognise (the second compressed image, a SHARC `.ldr` stream inside the data blocks, or a custom packing). Until the full LZ decompressor is verified end to end and the data blocks are classified, "firmware cannot give these scales" stays a hypothesis.
 
-Lead: the `0x300000..0x420000` block (1.1 MB, 16-bit-sample-like) may hold the 46 WAVE-type waveforms (`Bells/Tines ... Keys`), which would replace our synthetic wavetable bank; unchecked.
+Lead: the `0x300000..0x420000` block is embedded audio, see the next section; it is not yet mapped to the 46 WAVE waveforms.
+
+## Embedded audio block (`bank0_CODE.bin @0x300000`)
+
+`python tools/fw_audio_scan.py scan target/fw_unpacked/bank0_CODE.bin` finds three int16 audio-like regions: `0x2b3000..0x2b6000` (12 KiB), **`0x2fe000..0x441000` (1.29 MiB)** and `0x529000..0x53a000` (68 KiB).
+
+| Fact | Evidence |
+|---|---|
+| Little-endian signed 16-bit PCM | adjacent-sample correlation `0.85` (LE) vs `0.04` (BE) over `0x300000..0x420000`; many 8 KiB windows at `0.95..0.99` |
+| Four interleaved channels | rows of 4 samples; each phase is smooth on its own (e.g. rows start `-1332 -1471 -1471 -359 / -1426 -1434 -1434 -476 ...`); phases correlate `0.87..0.97` with each other; `phase1 == phase2` in about 19% of rows near the start |
+| Periodic, slowly evolving waveform | steep edge repeats every about 519-524 rows (autocorrelation peak at 524 rows: `f0 = 91.6 Hz` if the rate were 48 kHz); the shape changes cycle to cycle, so these are recordings or analysis data, not exact single-cycle wavetables |
+| Peaks per 1024 samples | spiky, roughly regular segments in the first third, then a flatter `~17000` plateau: several different items concatenated |
+| Directory table | none points into `0x300000..0x420000`. The only table-like pointer cluster (135 `{pointer, length}` pairs at `0x2fd5c0`, lengths `8`, `0x200`, `0xcf5`, `0x6e7`, `0x4381`) targets the tail `0x426d1c..0x437004`, which is a different, smoother data set |
+
+Not established: what the data is (WAVE-type oscillator tables, sample-rate-converter / reverb impulse data, or DSP sample ROM), the sample rate, the channel meaning, and any mapping to the 46 waves. Exports for listening: `python tools/fw_audio_scan.py export <image> <dir> --offset 0x300000 --length 0x120000 --channels 4`. Keep exported audio out of git (Nord content).
+
+Next: segment by waveform edges per channel and compare each segment's harmonic content with the manual's wave descriptions; look for the loader that DMA-copies `0x300000..` to the DSP (a `{src, length}` word pair in ARM code).
 
 ## Status
 
