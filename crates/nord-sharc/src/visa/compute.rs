@@ -121,6 +121,19 @@ pub fn shift_imm_text(w: u64) -> String {
     }
 }
 
+/// `Rn = MR1F` / `MR1F = Rn` and friends (operation code bits 19..12, register bits 11..8).
+fn mr_transfer_text(op: u64, n: u64) -> Option<String> {
+    if op & 3 == 3 || op & !0x17 != 0 {
+        return None;
+    }
+    let mr = format!("MR{}{}", op & 3, if (op >> 2) & 1 == 1 { 'B' } else { 'F' });
+    Some(if (op >> 4) & 1 == 1 {
+        format!("{mr} = R{n}")
+    } else {
+        format!("R{n} = {mr}")
+    })
+}
+
 pub(super) fn mulalu_template(opcode: u64) -> Option<&'static str> {
     Some(match opcode {
         0b000100 => "Rm = Rxm * Rym (SSFR), Ra = Rxa + Rya",
@@ -258,6 +271,9 @@ pub fn mult_text(opcode: u64, rn: u64, rx: u64, ry: u64) -> Option<String> {
 pub fn multi_text(c: u64) -> Option<String> {
     if bits(c, 22, 22) == 0 {
         return None;
+    }
+    if bits(c, 21, 17) == 0 {
+        return mr_transfer_text(bits(c, 19, 12), bits(c, 11, 8));
     }
     let xm = bits(c, 7, 6);
     let ym = 4 + bits(c, 5, 4);

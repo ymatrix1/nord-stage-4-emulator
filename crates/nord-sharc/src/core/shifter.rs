@@ -3,7 +3,7 @@
 //! and Shift Immediate Computations").
 //!
 //! Operands are the 32-bit fixed-point fields only (the 8-bit extension field is not modelled).
-//! Not modelled: `FPACK`/`FUNPACK` and the bit FIFO operations (`BITDEP`, `BITEXT`, `BFFWRP`).
+//! Not modelled: the bit FIFO operations (`BITDEP`, `BITEXT`, `BFFWRP`).
 use super::exec::Decoded;
 use super::{sign_extend, Core, Fault};
 use crate::visa::bits;
@@ -38,6 +38,60 @@ fn shift(v: u32, s: i32, arithmetic: bool) -> u32 {
     } else {
         v >> -s
     }
+}
+
+/// `FPACK`: an IEEE single to the 16-bit short float (sign 15, exponent 14..11, fraction 10..0).
+/// Returns the packed value and whether it overflowed (programming reference 11-84).
+///
+/// Source exponent `e`: above 135 the largest magnitude; 121..=135 the exponent is the MSB of `e`
+/// followed by its three LSBs and the fraction is the upper 11 bits, rounded; 110..=120 a
+/// denormal `1.f * 2^(e - 110)` (gradual underflow, rounded); below 110 zero. ASSUMED: rounding
+/// is to nearest with ties to even, and a rounding carry increments the exponent.
+fn fpack(x: u32) -> (u32, bool) {
+    let sign = (x >> 31) << 15;
+    let e = (x >> 23) & 0xFF;
+    let frac = x & 0x7F_FFFF;
+    let round = |value: u32, drop: u32| -> u32 {
+        // value >> drop with round to nearest even
+        let kept = value >> drop;
+        let rest = value & ((1u32 << drop) - 1);
+        let half = 1u32 << (drop - 1);
+        kept + u32::from(rest > half || (rest == half && kept & 1 == 1))
+    };
+    if e > 135 {
+        return (sign | 0x7FFF, true);
+    }
+    let magnitude = if e > 120 {
+        let packed = ((((e >> 7) & 1) << 3) | (e & 7)) << 11;
+        packed + round(frac, 12) // a carry out of the fraction increments the exponent
+    } else if e > 109 {
+        round(0x80_0000 | frac, 133 - e)
+    } else {
+        0
+    };
+    if magnitude > 0x7FFF {
+        return (sign | 0x7FFF, true);
+    }
+    (sign | magnitude, false)
+}
+
+/// `FUNPACK`: the 16-bit short float in the low half of `x` to an IEEE single.
+fn funpack(x: u32) -> u32 {
+    let sign = ((x >> 15) & 1) << 31;
+    let exp = (x >> 11) & 0xF;
+    let frac = x & 0x7FF;
+    if exp != 0 {
+        let msb = exp >> 3;
+        let e8 = (msb << 7) | ((1 - msb) * 0xF) << 3 | (exp & 7);
+        return sign | (e8 << 23) | (frac << 12);
+    }
+    if frac == 0 {
+        return sign;
+    }
+    // denormal: exponent 120 - N for N leading zeros of the 11-bit fraction, hidden 1 stripped
+    let leading = frac.leading_zeros() - 21;
+    let normalised = (frac << (leading + 1)) & 0x7FF;
+    sign | ((120 - leading) << 23) | (normalised << 12)
 }
 
 /// Field deposit: the low `len` bits of `x` placed at bit `pos`; returns the 32-bit result and
@@ -108,6 +162,27 @@ impl Core {
         self.on_each_pe(d, d.cond_ok, d.cond_y, |core| {
             core.shifter_op(op, n, core.r[x], ry)
         })
+    }
+
+    /// Type 6a: `[IF cond] <shift immediate>, DM|PM(Ii, Mm) <-> Rn` with the shift fields of the
+    /// `0x02` form and a post-modify data move: PM select bit 32 (DAG2), index 43..41, modify
+    /// 40..38, direction bit 31 (1 = store), register 26..23. VERIFIED against ADI's `elfdump`
+    /// on 24 shift-and-move instructions (docs 5.36). The store reads its register before the
+    /// shift writes.
+    pub(super) fn exec_shift_move(&mut self, d: &Decoded) -> Result<(), Fault> {
+        let w = d.w;
+        let bank = Self::dag_bank(bits(w, 32, 32));
+        let ii = bits(w, 43, 41) as usize + bank;
+        let mi = bits(w, 40, 38) as usize + bank;
+        let (addr, next_i) = (self.i[ii], self.modified(ii, mi));
+        let ureg = bits(w, 26, 23) as u8;
+        let captured = self.capture(ureg);
+        self.exec_shift_imm(d)?;
+        if d.cond_ok {
+            self.mem_transfer_with(d, addr, ureg, bits(w, 31, 31) == 1, captured)?;
+            self.i[ii] = next_i;
+        }
+        Ok(())
     }
 
     fn set_shifter_flags(&mut self, sz: bool, sv: bool, ss: bool) {
@@ -187,6 +262,15 @@ impl Core {
                 self.set_shifter_flags(exp == 0, false, ss);
                 exp as u32
             }
+            0x90 => {
+                let (packed, overflow) = fpack(rx);
+                self.set_shifter_flags(false, overflow, false);
+                packed
+            }
+            0x94 => {
+                self.set_shifter_flags(false, false, false);
+                funpack(rx)
+            }
             0x88 | 0x8C => {
                 let count = if op == 0x88 {
                     rx.leading_zeros()
@@ -207,6 +291,32 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ADI: `8b7e 3011 4650` is `r5=fdep r0 by 0x6:0x19, r0=dm(i5,m5)`: the shift reads the old R0
+    /// and the load then replaces it; I5 is post-modified by M5.
+    #[test]
+    fn shift_immediate_with_a_data_move() {
+        use super::super::support::core_at_zero;
+        let mut c = core_at_zero(&[0x8b7e, 0x3011, 0x4650]);
+        (c.i[5], c.m[5]) = (0x9_0100, 4);
+        c.r[0] = 0x0000_0003;
+        c.dm_write(0x9_0100, 0x55).unwrap();
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!(
+            c.r[5],
+            3 << 6,
+            "R5 = FDEP R0 BY 6:25 (the low 25 bits of 3 at bit 6)"
+        );
+        assert_eq!(c.r[0], 0x55, "R0 = DM(I5, M5)");
+        assert_eq!((c.i[5], c.pc), (0x9_0104, 3));
+        // a failing condition skips the whole instruction: `if eq` with AZ clear (cond 0)
+        let mut c = core_at_zero(&[0x8b00, 0x3011, 0x4650]);
+        (c.i[5], c.m[5]) = (0x9_0100, 4);
+        c.r[0] = 3;
+        c.dm_write(0x9_0100, 0x55).unwrap();
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!((c.r[5], c.r[0], c.i[5]), (0, 3, 0x9_0100));
+    }
 
     /// Compute word of a shifter operation `Rn = op Rx BY Ry`.
     fn word(op: u64, n: u64, x: u64, y: u64) -> u64 {
@@ -308,6 +418,62 @@ mod tests {
         assert!(c.step().is_err());
     }
 
+    /// Values worked out from the reference's description of the short float format.
+    #[test]
+    fn short_float_pack_and_unpack() {
+        let f = |x: f32| x.to_bits();
+        assert_eq!(
+            fpack(f(1.0)),
+            (0x3800, false),
+            "exponent 127 -> MSB 0, LSBs 7"
+        );
+        assert_eq!(
+            fpack(f(2.0)),
+            (0x4000, false),
+            "exponent 128 -> MSB 1, LSBs 0"
+        );
+        assert_eq!(fpack(f(-1.0)).0, 0xB800);
+        assert_eq!(funpack(0x3800), f(1.0));
+        assert_eq!(funpack(0x4000), f(2.0));
+        assert_eq!(funpack(0xB800), f(-1.0));
+        // a fraction survives with 11 bits: 1.5 and 1 + 2^-11
+        assert_eq!(funpack(fpack(f(1.5)).0), f(1.5));
+        assert_eq!(
+            funpack(fpack(f(1.0 + 1.0 / 2048.0)).0),
+            f(1.0 + 1.0 / 2048.0)
+        );
+        // rounding carries into the exponent: the largest fraction below 2.0 rounds up to 2.0
+        assert_eq!(fpack(0x3FFF_FFFF), (0x4000, false));
+        // overflow gives the largest magnitude and sets SV, zero stays zero
+        assert_eq!(fpack(f(1.0e10)), (0x7FFF, true));
+        assert_eq!(fpack(f(-1.0e10)), (0xFFFF, true));
+        assert_eq!(fpack(0), (0, false));
+        // gradual underflow: 2^-8 packs as the denormal 0x0200 and unpacks exactly
+        assert_eq!(fpack(f(2f32.powi(-8))), (0x0200, false));
+        assert_eq!(funpack(0x0200), f(2f32.powi(-8)));
+        assert_eq!(funpack(0x0001), f(2f32.powi(-17)), "the smallest denormal");
+        assert_eq!(fpack(f(2f32.powi(-40))), (0, false), "too small");
+        // the exponent range maps back for every packed value
+        for packed in (0u32..0x8000).step_by(7) {
+            let (again, overflow) = fpack(funpack(packed));
+            assert!(!overflow);
+            assert_eq!(again, packed, "round trip of {packed:#x}");
+        }
+    }
+
+    #[test]
+    fn fpack_funpack_through_the_compute_unit() {
+        let mut c = Core::new(&[]);
+        c.r[1] = 1.0f32.to_bits();
+        assert!(c.compute(word(0x90, 3, 1, 0)));
+        assert_eq!(c.r[3], 0x3800);
+        assert!(c.compute(word(0x94, 4, 3, 0)));
+        assert_eq!(f32::from_bits(c.r[4]), 1.0);
+        c.r[1] = 1.0e10f32.to_bits();
+        assert!(c.compute(word(0x90, 3, 1, 0)));
+        assert!(c.flags.sv, "overflow sets SV");
+    }
+
     #[test]
     fn exponent_and_leading_bit_counts() {
         assert_eq!(run(0x80, 0x0000_0001, 0, 0).1 as i32, -30);
@@ -323,7 +489,5 @@ mod tests {
         c.r[1] = 0x4000_0000;
         assert!(c.compute(word(0x84, 3, 1, 2)));
         assert_eq!(c.r[3], 1, "EXP (EX) reports the ALU overflow bit");
-        let mut c = Core::new(&[]);
-        assert!(!c.compute(word(0x90, 3, 1, 2)), "FPACK is not modelled");
     }
 }

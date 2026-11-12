@@ -216,10 +216,7 @@ mod tests {
         assert_eq!(c.r[6], 3, "CLIP 7 by 3 saturates at the magnitude of Ry");
         assert!(c.compute((0xBD << 12) | (7 << 8) | (3 << 4) | 1)); // SCALB F3 by R1 (7)
         assert_eq!(f32::from_bits(c.r[7]), 3.0 * 128.0);
-        assert!(
-            !c.compute(0x40_0000),
-            "a multifunction word with op group 0 does not exist"
-        );
+        assert!(!c.compute(0x40_3000), "there is no MR3 transfer");
         assert!(
             !c.compute((0xC4 << 12) | (1 << 8)),
             "RECIPS seed table is unknown"

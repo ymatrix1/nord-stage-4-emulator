@@ -185,6 +185,25 @@ def test_dual_moves_immediate_stores_and_modify_match_the_adi_disassembly():
     assert v.decode((0x043F, 0xD808, 0x1BAE)) == "I7 = MODIFY(I7, M3), F11 = F10 + F14"
 
 
+def test_type_15b_program_memory_form_matches_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1): `i5=pm(0x8,i9)`
+    assert v.decode((0x9228, 0x0A88)) == "I5 = PM(8, I9)"
+
+
+def test_shift_immediate_with_a_data_move_matches_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.36
+    assert v.decode((0x8B7E, 0x3011, 0x4650)) == "R5 = FDEP R0 BY 6:25, R0 = DM(I5, M5)"
+
+
+def test_multiplier_result_register_transfers_match_the_adi_disassembly():
+    # ground truth from ADI elfdump (CCES 2.12.1), docs 5.36
+    assert v.decode((0x5EBE, 0x8440, 0x1100)) == "DM(I7, M2) = R8, R1 = MR1F"
+    assert v.decode((0x5CBE, 0x0440, 0x0000)) == "R8 = DM(I6, M2), R0 = MR0F"
+    assert v.mr_transfer_text(0x11, 3) == "MR1F = R3"
+    assert v.mr_transfer_text(0x15, 3) == "MR1B = R3"
+    assert v.mr_transfer_text(0x03, 3) is None
+
+
 def test_post_modify_modify_bank_and_loop_counts_match_the_adi_disassembly():
     # ground truth from ADI elfdump (CCES 2.12.1), docs 5.34
     assert v.decode((0x6C7E, 0x10BF)) == "R1 = DM(I6, 2)"
