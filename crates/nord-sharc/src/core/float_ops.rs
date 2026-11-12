@@ -70,6 +70,35 @@ impl Core {
         if let (Some(e), true) = (ext, self.ext_slot(dst).is_some()) {
             self.put_ext_slot(dst, e);
         }
+        if self.simd() && dst < 16 {
+            self.move_ureg_pey(dst, src, v);
+        }
+        if self.simd() && src < 16 && (dst == 0x76 || dst == 0x78) {
+            // VERIFIED (`simd_measured.rs`): `ASTAT = Rn` also loads ASTATy from `Sn` (the probe clears
+            // both with `ASTAT = R6`). ASSUMED the same for STKY.
+            self.write_ureg(dst + 1, self.s[src as usize]);
+        }
+    }
+
+    /// SIMD `Rn = Ureg`: PEy's `Sn` takes the complement of the source.
+    ///
+    /// VERIFIED (`simd_measured.rs`): `Rn = Rm` also copies `Sm` to `Sn`, and `Rn = ASTAT` loads
+    /// `Sn` with ASTATy (the probe reads ASTAT after every operation of both elements).
+    /// ASSUMED: STKY likewise pairs with STKYy, and any other source register is broadcast
+    /// (`Sn = Rn`, as for the immediate loads); no firmware path depends on it.
+    fn move_ureg_pey(&mut self, dst: u8, src: u8, v: u32) {
+        let n = dst as usize;
+        if src < 16 {
+            let ext = self.ext_slot(0x50 | src);
+            self.s[n] = self.s[src as usize];
+            if let (Some(e), true) = (ext, self.ext_slot(0x50 | dst).is_some()) {
+                self.put_ext_slot(0x50 | dst, e);
+            }
+        } else if src == 0x76 || src == 0x78 {
+            self.s[n] = self.read_ureg(src + 1);
+        } else {
+            self.s[n] = v;
+        }
     }
 
     /// `Rx <-> Sy`: swaps the registers with their extensions (VERIFIED: the extension survives).
@@ -371,5 +400,22 @@ mod tests {
                 "{n}/{d}: {got} vs {want}"
             );
         }
+    }
+
+    #[test]
+    fn simd_register_moves_carry_the_pey_complement() {
+        let mut c = Core::new(&[]);
+        c.mode1 = 1 << 21;
+        (c.r[1], c.s[1]) = (11, 22);
+        c.move_ureg(9, 1); // R9 = R1 also copies S1 to S9
+        assert_eq!((c.r[9], c.s[9]), (11, 22));
+        c.set_astat(0, 0x400);
+        c.set_astat(1, 0x404);
+        c.move_ureg(7, 0x76); // R7 = ASTAT: S7 = ASTATy
+        assert_eq!((c.r[7], c.s[7]), (0x400, 0x404));
+        (c.r[6], c.s[6]) = (0, 0);
+        c.set_astat(1, 0xFF);
+        c.move_ureg(0x76, 6); // ASTAT = R6 clears ASTATy from S6
+        assert_eq!((c.astat(0), c.astat(1)), (0, 0));
     }
 }

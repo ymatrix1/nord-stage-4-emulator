@@ -36,11 +36,11 @@ def main(argv):
                 a = vaddr + j
                 if opt['--code'][0] <= a < opt['--code'][1]:
                     code[a] = '%04x' % (blob[2 * j] << 8 | blob[2 * j + 1])   # parcels are stored most significant byte first
-        else:                   # data memory, 4 bytes per word
-            for j in range(len(blob) // 4):
+        else:                   # data memory: 5 bytes per word (the 32-bit word most significant byte first, then a zero byte; checked on `_va` of the SIMD probe)
+            for j in range(len(blob) // 5):
                 a = vaddr + j
                 if opt['--data'][0] <= a < opt['--data'][1]:
-                    data[a] = struct.unpack_from('<I', blob, 4 * j)[0]
+                    data[a] = struct.unpack_from('>I', blob, 5 * j)[0]
     lines = ['# fixture of %s' % dxe.split('/')[-1], 'entry %x' % opt['--entry'][0], 'exit %x' % opt['--exit'][0],
              'out %x %d' % tuple(opt['--out'])]
     if '--fill' in opt:

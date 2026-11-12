@@ -223,4 +223,19 @@ mod tests {
         assert!(c.step().is_err());
         assert_eq!((c.pc, c.steps), before);
     }
+
+    #[test]
+    fn simd_multiplier_flags_belong_to_each_element() {
+        // R3 = R1 * R2 (signed integer): PEx positive, PEy negative product -> MN (ASTAT bit 6) only in ASTATy
+        let mut c = core_with(&[0x0000u16]);
+        c.mode1 = 1 << 21;
+        c.set_astat(0, 0);
+        (c.r[1], c.r[2], c.s[1], c.s[2]) = (0x4000_0000, 0x4000_0000, 0xC000_0000, 0x4000_0000);
+        c.on_each_pe(&c.fetch(0), true, true, |core| {
+            core.compute((1 << 20) | (0x70 << 12) | (3 << 8) | (1 << 4) | 2)
+        })
+        .unwrap();
+        assert_eq!((c.astat(0) >> 6) & 1, 0);
+        assert_eq!((c.astat(1) >> 6) & 1, 1);
+    }
 }

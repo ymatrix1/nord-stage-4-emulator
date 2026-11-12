@@ -64,6 +64,14 @@ impl Core {
             (2, op) if self.shifter(op, n, x, y) => {}
             _ => return false,
         }
+        if cu == 0 {
+            // AF (ASTAT bit 10) = the last ALU operation was floating-point.
+            // VERIFIED: set by float ALU ops (`simd_measured.rs`, ASTAT after FADD/FSUB/FAVG and the
+            // float dual forms) and untouched by the multiplier. ASSUMED (PRM): a fixed-point ALU
+            // op clears it; every probe case started from ASTAT = 0.
+            let af = u32::from(op >= 0x80) << 10;
+            self.sys.astat_extra[0] = self.sys.astat_extra[0] & !(1 << 10) | af;
+        }
         true
     }
 
@@ -137,5 +145,17 @@ mod tests {
         (c.r[1], c.r[2]) = (6, (-7i32) as u32);
         assert!(c.short_compute(0x712));
         assert_eq!(c.r[1] as i32, -42);
+    }
+
+    #[test]
+    fn af_follows_the_last_alu_operation() {
+        let mut c = Core::new(&[]);
+        (c.r[1], c.r[2]) = (1.5f32.to_bits(), 2.0f32.to_bits());
+        assert!(c.compute((0x81 << 12) | (3 << 8) | (1 << 4) | 2)); // F3 = F1 + F2
+        assert_eq!(c.astat(0) >> 10 & 1, 1, "float ALU sets AF");
+        assert!(c.compute((0x30 << 12) | (1 << 20) | (3 << 8) | (1 << 4) | 2)); // F3 = F1 * F2
+        assert_eq!(c.astat(0) >> 10 & 1, 1, "the multiplier leaves AF alone");
+        assert!(c.compute((0x01 << 12) | (3 << 8) | (1 << 4) | 2)); // R3 = R1 + R2
+        assert_eq!(c.astat(0) >> 10 & 1, 0, "fixed ALU clears AF (ASSUMED)");
     }
 }

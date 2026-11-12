@@ -4,7 +4,7 @@
 //! Both halves read the register values from before the instruction, so the ALU half is
 //! evaluated first on the original registers, the state is restored, the multiplier half runs on
 //! the original registers and only then the ALU result is written.
-use super::Core;
+use super::{Core, Flags};
 use crate::visa::bits;
 
 /// Multiplier op codes of [`Core::fixed_mult`] used by the fixed-point multifunction forms:
@@ -120,7 +120,7 @@ impl Core {
         self.r = orig;
         self.fx = fx;
         let ok = ok && self.compute(word(sub, rs));
-        let (diff, diff_fx) = (self.r[rs as usize], self.fx);
+        let (diff, diff_fx, diff_flags) = (self.r[rs as usize], self.fx, self.flags);
         self.r = orig;
         self.fx = fx;
         if !ok {
@@ -131,7 +131,18 @@ impl Core {
         self.r[rs as usize] = diff;
         self.fx.take(&sum_fx, ra as usize);
         self.fx.take(&diff_fx, rs as usize);
-        self.flags = sum_flags;
+        // VERIFIED (`simd_measured.rs`, 64 operand pairs of the fixed dual form on PEx, ASTAT bits
+        // AZ AV AN AC): the flags are the OR of the sum's and the difference's. ASSUMED for AS and
+        // AI and for the float form (AZ AN AV AC checked there too; the SIMD probe covers both).
+        self.flags = Flags {
+            az: sum_flags.az || diff_flags.az,
+            an: sum_flags.an || diff_flags.an,
+            av: sum_flags.av || diff_flags.av,
+            ac: sum_flags.ac || diff_flags.ac,
+            as_: sum_flags.as_ || diff_flags.as_,
+            ai: sum_flags.ai || diff_flags.ai,
+            ..sum_flags
+        };
         true
     }
 }
@@ -207,5 +218,16 @@ mod tests {
         let dual = (0x7 << 16) | (2 << 12) | (3 << 8) | 1;
         assert!(c.compute(dual));
         assert_eq!((c.r[2], c.r[3]), (7, 13));
+    }
+
+    #[test]
+    fn dual_add_sub_flags_are_the_or_of_both_results() {
+        // R4 = R9 + R13, R8 = R9 - R13 with 0x3FC00000 and 0x40000000: the sum is positive, the
+        // difference negative -> AN; measured on the simulator (`simd_measured.rs`)
+        let mut c = Core::new(&[]);
+        (c.r[9], c.r[13]) = (0x3FC0_0000, 0x4000_0000);
+        assert!(c.compute((0x7 << 16) | (8 << 12) | (4 << 8) | (9 << 4) | 13));
+        assert_eq!((c.r[4], c.r[8]), (0x7FC0_0000, 0xFFC0_0000));
+        assert!(c.flags.an);
     }
 }
