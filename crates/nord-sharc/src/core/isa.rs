@@ -19,7 +19,7 @@ impl Core {
     /// [`ISA_BASE`] and switches the core to ISA mode.
     pub fn load_isa(&mut self, image: &[u8]) {
         self.isa_code.clear();
-        for w in image.chunks_exact(6) {
+        for w in image.as_chunks::<6>().0 {
             let lo = u16::from_le_bytes([w[0], w[1]]);
             let mid = u16::from_le_bytes([w[2], w[3]]);
             let hi = u16::from_le_bytes([w[4], w[5]]);
