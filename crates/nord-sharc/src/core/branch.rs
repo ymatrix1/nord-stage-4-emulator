@@ -22,7 +22,7 @@ impl Core {
             return next;
         }
         if call {
-            self.call_stack.push(next);
+            self.push_return(next);
         }
         target
     }
@@ -67,6 +67,9 @@ impl Core {
                     .call_stack
                     .pop()
                     .ok_or_else(|| self.fault(pc, &d.insn))?;
+                if bits(w, 40, 40) == 1 {
+                    self.return_from_interrupt(); // RTI: ends the service of the interrupt
+                }
                 if bits(w, 38, 38) == 1 {
                     self.pending = Some(Pending {
                         slots: DELAY_SLOTS + 1,
@@ -93,7 +96,7 @@ impl Core {
                 if count == 0 {
                     return Err(self.fault(pc, &d.insn));
                 }
-                self.loops.push(LoopFrame {
+                self.push_loop(LoopFrame {
                     start: next,
                     end,
                     remaining: count,
@@ -133,7 +136,7 @@ impl Core {
             } else {
                 self.pending = None;
                 if p.call {
-                    self.call_stack.push(next);
+                    self.push_return(next);
                 }
                 next = p.target;
             }

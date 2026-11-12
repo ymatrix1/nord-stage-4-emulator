@@ -13,24 +13,35 @@
 //! Layout: this file holds the state and the small shared helpers; `memory` the data memory and
 //! register files, `dag` address generation, `alu` and `multiplier` the compute units, `moves`
 //! the data and register transfers, `branch` jumps, calls, loops and delay slots, and `exec` the
-//! single-step decoder that dispatches to them.
+//! single-step decoder that dispatches to them. The sequencer system (`interrupts` controller and
+//! IVT dispatch, `timer` and cycle clock, `sysregs` system registers and stacks, `banks` secondary
+//! register sets) is described in `docs/research/sharc-sequencer.md`.
 
 mod alu;
+mod banks;
 mod branch;
 mod dag;
 mod dualmove;
 mod exec;
+mod interrupts;
+#[cfg(test)]
+mod irq_scenarios;
 mod memory;
 mod moves;
 mod multifunction;
 mod multiplier;
 mod shifter;
+mod stacks;
 #[cfg(test)]
 mod support;
+mod sysregs;
+mod timer;
+mod vectors;
 
 use crate::visa::Insn;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
+pub use vectors::{vector_by_name, VECTOR_COUNT};
 
 /// Bytes of the flat SRAM image: index = `address & 0x7FFFFF` (loader address), byte `2 * short`.
 pub const SRAM_BYTES: usize = 0x40_0000;
@@ -154,6 +165,10 @@ pub struct Core {
     call_stack: Vec<u32>,
     loops: Vec<LoopFrame>,
     pending: Option<Pending>,
+    irq: interrupts::IrqState,
+    timer: timer::TimerState,
+    sys: sysregs::SysState,
+    banks: banks::Banks,
 }
 
 #[inline]
@@ -192,7 +207,7 @@ impl Core {
             watch: u32::MAX,
             watch_hits: Vec::new(),
             imask: 0,
-            mmask: 0,
+            mmask: sysregs::MMASK_RESET,
             flags: Flags::default(),
             flags_y: Flags::default(),
             mr_y: [0; 2],
@@ -206,6 +221,10 @@ impl Core {
             call_stack: Vec::with_capacity(64),
             loops: Vec::with_capacity(8),
             pending: None,
+            irq: interrupts::IrqState::new(),
+            timer: timer::TimerState::default(),
+            sys: sysregs::SysState::new(),
+            banks: banks::Banks::default(),
         }
     }
 
