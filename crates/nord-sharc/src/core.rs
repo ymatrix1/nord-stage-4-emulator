@@ -50,6 +50,8 @@ pub struct Core {
     /// Program counter, a short-word address.
     pub pc: u32,
     pub r: [u32; 16],
+    /// PEy data registers (S0-S15), reached only through the `Dreg <-> CDreg` swap for now.
+    pub s: [u32; 16],
     pub i: [u32; 16],
     pub m: [u32; 16],
     pub l: [u32; 16],
@@ -109,6 +111,7 @@ impl Core {
             mode1: 0,
             mode2: 0,
             ustat: [0; 4],
+            s: [0; 16],
             mr: [0; 2],
             lenient: false,
             skipped: 0,
@@ -671,6 +674,17 @@ impl Core {
                     _ => return Err(self.fault(pc, &insn)),
                 }
             }
+            Kind::T5a | Kind::T5b if bits(w, 43, 43) == 1 => {
+                // Dreg <-> CDreg swap [, compute]. ASSUMED field positions: CDREG bits 42..39,
+                // DREG bits 27..24 (one data point, `7a3e 0480 1001` = R4 <-> S4 with R0 = R0 + R1).
+                if cond_ok {
+                    let (c, d) = (bits(w, 42, 39) as usize, bits(w, 27, 24) as usize);
+                    if kind == Kind::T5a && !self.compute(bits(w, 22, 0)) {
+                        self.unmodelled(pc, &insn)?;
+                    }
+                    std::mem::swap(&mut self.r[d], &mut self.s[c]);
+                }
+            }
             Kind::T5a | Kind::T5b if bits(w, 43, 43) == 0 => {
                 if cond_ok {
                     let src = ((bits(w, 42, 38) << 2) | bits(w, 32, 31)) as u8;
@@ -779,6 +793,31 @@ impl Core {
                         pc.wrapping_add(sign_extend(raw, 24))
                     } else {
                         raw
+                    };
+                    if bits(w, 39, 39) == 1 {
+                        self.call_stack.push(next);
+                    }
+                    next = target;
+                }
+            }
+            Kind::T9a | Kind::T9b => {
+                // JUMP|CALL (Md, Ic) or JUMP|CALL (pc + <reladdr6>): bit 40 = relative, bit 39 =
+                // call, J (bit 26) = delayed, 9a only: E (bit 25) = run the compute when the
+                // condition is false instead of when it is true. Indirect target = Ic + Md on
+                // DAG2 (PM), ASSUMED from the syntax; the J bit is read as in Type 8a.
+                if bits(w, 26, 26) == 1 {
+                    return Err(self.fault(pc, &insn));
+                }
+                let else_form = kind == Kind::T9a && bits(w, 25, 25) == 1;
+                if kind == Kind::T9a && cond_ok != else_form && !self.compute(bits(w, 22, 0)) {
+                    self.unmodelled(pc, &insn)?;
+                }
+                if cond_ok {
+                    let target = if bits(w, 40, 40) == 1 {
+                        pc.wrapping_add(sign_extend(bits(w, 32, 27) as u32, 6))
+                    } else {
+                        self.i[8 + bits(w, 32, 30) as usize]
+                            .wrapping_add(self.m[8 + bits(w, 29, 27) as usize])
                     };
                     if bits(w, 39, 39) == 1 {
                         self.call_stack.push(next);
@@ -1062,6 +1101,35 @@ mod tests {
         c.lenient = true;
         assert!(c.step().is_ok());
         assert_eq!((c.skipped, c.first_skipped), (1, Some(0)));
+    }
+
+    #[test]
+    fn type_5a_swaps_a_data_register_with_its_pey_register() {
+        // IF TRUE R0 = R0 + R1 with swap R4 <-> S4: parcels 7a3e 0480 1001
+        let mut image = vec![0u8; 16];
+        for (k, p) in [0x7a3eu16, 0x0480, 0x1001].iter().enumerate() {
+            image[2 * k..2 * k + 2].copy_from_slice(&p.to_le_bytes());
+        }
+        let mut c = Core::new(&image);
+        (c.r[4], c.s[4], c.r[0], c.r[1]) = (7, 9, 1, 2);
+        assert!(c.step().is_ok());
+        assert_eq!((c.r[4], c.s[4], c.r[0]), (9, 7, 3));
+        assert_eq!(c.pc, 3);
+    }
+
+    #[test]
+    fn type_9b_indirect_call_uses_dag2_index_plus_modify() {
+        // IF TRUE CALL (M8, I8): parcels 08be 003f at short-word 0
+        let mut image = vec![0u8; 16];
+        for (k, p) in [0x08beu16, 0x003f].iter().enumerate() {
+            image[2 * k..2 * k + 2].copy_from_slice(&p.to_le_bytes());
+        }
+        let mut c = Core::new(&image);
+        c.i[8] = 0x1000;
+        c.m[8] = 0x24;
+        assert!(c.step().is_ok());
+        assert_eq!(c.pc, 0x1024);
+        assert_eq!(c.call_stack, vec![2]);
     }
 
     #[test]

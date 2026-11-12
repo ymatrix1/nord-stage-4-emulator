@@ -643,6 +643,12 @@ Open: the firmware has five images with two sections in each of FX, PNO and ORG,
 
 **`sharc-run --lenient`** skips compute operations that are not modelled (counting them and reporting the first pc) so that control flow can be followed past undocumented forms. Results are not arithmetic-exact after a skip. With it ORG Core2 (`--poke 100000:0xb00e2=1 --dev 0x282c0380=1`) skips the `2x` ALU `op=0x10` word at `0x1262a6` (107 uses of `op=0x10`, 186 of `op=0x0f`, in 2x words of this section) and stops at the next gap, Type 5a `Dreg <-> CDreg swap` (`7a3e 0480 1001`) at `0x1262a9`.
 
+### 5.24 Past the swap: the handler reaches audio code
+
+Added to the core: Type 5a `Dreg <-> CDreg` swap (PEy file `S0..S15`, field positions ASSUMED from one data point `7a3e 0480 1001`) and Types 9a/9b `JUMP|CALL (Md, Ic)` and `JUMP|CALL (pc + <reladdr6>)` (indirect target = `I(8+PMI) + M(8+PMM)`, ASSUMED from the syntax; delayed forms still fault).
+
+ORG Core2, `--lenient --dev 0x282c0380=1 --poke 100000:0xb00e2=1`: the command handler now runs 2,098 distinct instructions (about 6,800 steps) after the poke and enters a routine of float multiplies, `CLIP`, `FIX`, table loads through `I7 = 0xb10d6`, `I1 = R1` and MODE1 bit clears (audio-rate arithmetic rather than command parsing, ASSUMED from the instruction mix). At short-word `0x12730e` it executes `CALL (M8, I8)` (`08be 003f`) while `I8` and `M8` are still 0, because no executed instruction wrote them, so the call target is address 0 and the run slides through zeroed memory. Open: where `I8`/`M8` come from (state not set by the start-up path, a skipped 2x op, or a wrong reading of the 9b fields).
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
