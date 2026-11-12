@@ -170,12 +170,10 @@ impl Core {
         let n = (code & 15) as usize;
         if (code >> 4) & 7 == 6 {
             match n {
-                4 => {
-                    if let Some(top) = self.call_stack.last_mut() {
-                        *top = v & 0xFF_FFFF;
-                    }
-                }
+                4 => self.set_pcstk(v),
                 5 if !self.sys.pc_overflow => self.call_stack.truncate(v as usize),
+                6 => self.set_laddr(v),
+                7 | 8 => self.set_curlcntr(v),
                 11 => self.sys.px = self.sys.px & !0xFFFF_FFFF | u64::from(v),
                 12 => self.sys.px = self.sys.px & !0xFFFF_FFFF | u64::from(v),
                 13 => self.sys.px = self.sys.px & 0xFFFF_FFFF | u64::from(v) << 32,
@@ -222,7 +220,7 @@ impl Core {
 
     /// FLAGS as read: FLGx is bit `2x`, FLGxO bit `2x + 1` (PRM Table A-5); an input flag shows
     /// the pin level, an output flag the level the program wrote.
-    fn flags_value(&self) -> u32 {
+    pub(super) fn flags_value(&self) -> u32 {
         let written = self.sys.flags_reg;
         (0..16).fold(written, |acc, n| {
             let level = if written >> (2 * n + 1) & 1 == 1 {

@@ -1,6 +1,9 @@
 //! Instruction text: the operand decoding of every type and the listing line format.
 use super::classify::{bits, word48};
 use super::compute::{compute_text, shift_imm_text, short_compute_text};
+use super::flow_text::{
+    branch_modifiers, do_until_text, return_modifiers, stack_text, type25_text,
+};
 use super::regs::{ureg_name, COND};
 use super::types::{Insn, Kind};
 /// A `width`-bit two's-complement field as a signed number.
@@ -275,28 +278,17 @@ pub fn decode_text(insn: &Insn) -> String {
             } else {
                 format!("0x{:x}", bits(w, 23, 0))
             };
-            // flags VERIFIED on ADI output: DB = bit 26 (delayed), LA = bit 38 (loop abort, jump)
-            let (db, la) = (
-                bits(w, 26, 26) == 1,
-                bits(w, 38, 38) == 1 && bits(w, 39, 39) == 0,
-            );
-            let db = match (db, la) {
-                (true, true) => " (DB,LA)",
-                (true, false) => " (DB)",
-                (false, true) => " (LA)",
-                _ => "",
-            };
-            let la = "";
-            format!("{iff}{kind_s} {target}{db}{la}")
+            format!("{iff}{kind_s} {target}{}", branch_modifiers(w))
         }
         Kind::T2a => format!("{iff}{}", compute_text(bits(w, 22, 0))),
         Kind::T21c if parcels[0] == 0x00FF => "IDLE".to_string(),
         Kind::T21c => "NOP".to_string(),
         Kind::T21 if w == 0 => "NOP".to_string(),
         Kind::T21 if w == 0x0080_0000_0000 => "IDLE".to_string(),
-        Kind::T20a => "FLUSH CACHE".to_string(),
+        Kind::T20a => stack_text(w),
+        Kind::T25 => type25_text(w),
         Kind::T11a | Kind::T11c => {
-            let delayed = if bits(w, 38, 38) == 1 { " (DB)" } else { "" };
+            let delayed = return_modifiers(w, kind == Kind::T11c);
             // Type 11a may carry a compute in parallel (`IF GT RTS, R2 = MRF - R3 * R14 (UUI)`)
             let tail = if kind == Kind::T11a && bits(w, 22, 0) != 0 {
                 format!(", {}", compute_text(bits(w, 22, 0)))
@@ -311,7 +303,7 @@ pub fn decode_text(insn: &Insn) -> String {
         Kind::T9a | Kind::T9b => {
             // delayed flag bit 26, call bit 39, indirect target Ic + Md on DAG2 (docs 5.34)
             let op = if bits(w, 39, 39) == 1 { "CALL" } else { "JUMP" };
-            let delayed = if bits(w, 26, 26) == 1 { " (DB)" } else { "" };
+            let delayed = branch_modifiers(w);
             let target = if bits(w, 40, 40) == 1 {
                 format!("(PC, {})", signed_field(bits(w, 32, 27), 6))
             } else {
@@ -336,11 +328,7 @@ pub fn decode_text(insn: &Insn) -> String {
             let offset = signed_field(bits(w, 22, 0), 23);
             format!("DO (PC, {offset}) UNTIL LCE, LCNTR = {count}")
         }
-        Kind::T13a => format!(
-            "DO 0x{:x} UNTIL {}",
-            bits(w, 23, 0),
-            COND[bits(w, 37, 33) as usize]
-        ),
+        Kind::T13a => do_until_text(w),
         _ => {
             if let Some(t) = type_only(kind) {
                 format!("{t} (operands raw) {}", raw_hex(parcels))

@@ -51,7 +51,8 @@ fn classify_with(p0: u16, p1: Option<u16>, visa: bool) -> (Kind, usize) {
         _ => {}
     }
     if matches!(p0 >> 8, 0x18 | 0x19) {
-        return (T25, 3);
+        // `RFRAME` has a 16-bit form (`1901`, ADI); the 48-bit form is `1900 0000 0000`
+        return (T25, if visa && p0 == 0x1901 { 1 } else { 3 });
     }
     let code = (p0 >> 8) & 0x1F;
     let short = visa && (p0 >> 7) & 1 == 1;
@@ -170,7 +171,9 @@ mod tests {
     #[test]
     fn classify_known_forms() {
         assert_eq!(classify(0x721A, Some(0x003F)), (Kind::T5b, 2));
-        assert_eq!(classify(0x1901, None), (Kind::T25, 3));
+        assert_eq!(classify(0x1901, None), (Kind::T25, 1), "16-bit RFRAME");
+        assert_eq!(classify(0x1900, None), (Kind::T25, 3));
+        assert_eq!(classify_isa(0x1901), Kind::T25);
         assert_eq!(classify(0xC123, None), (Kind::T2c, 1));
         assert_eq!(classify(0x0FA4, Some(0x006C)), (Kind::T17b, 2));
         assert_eq!(classify(0x0F15, Some(0x000C)), (Kind::T17a, 3));

@@ -17,10 +17,13 @@
 //! register sets) is described in `docs/research/sharc-sequencer.md`.
 
 mod alu;
+mod arith_loop;
 mod banks;
 mod bitfifo;
 mod branch;
+mod branch_ext;
 mod dag;
+mod dag_modes;
 mod dualmove;
 mod exec;
 mod float;
@@ -41,6 +44,7 @@ mod memory;
 mod moves;
 mod multifunction;
 mod multiplier;
+mod pcstack;
 mod shifter;
 mod stacks;
 #[cfg(test)]
@@ -117,12 +121,23 @@ pub struct Flags {
     pub fifo: bitfifo::BitFifo,
 }
 
-/// Loop stack entry of `DO ... UNTIL LCE`.
+/// Loop stack entry of `DO ... UNTIL cond` (`arith_loop`) and `DO ... UNTIL LCE`.
 #[derive(Debug, Clone, Copy, Default)]
 struct LoopFrame {
     start: u32,
     end: u32,
     remaining: u32,
+    /// Termination condition code of an arithmetic loop (Type 13a); `None` for a counter loop.
+    term: Option<u8>,
+    /// Address whose execution evaluates the termination condition (`arith_loop`); `u32::MAX` =
+    /// never.
+    check: u32,
+    /// Instructions an arithmetic loop still runs after its condition held (0 = not leaving).
+    exit_in: u8,
+    /// Return addresses below this loop's top-of-loop entry on the shared PC stack (`pcstack`).
+    cs_depth: usize,
+    /// The top-of-loop address is not on the PC stack (`POP PCSTK` or a fresh `PUSH LOOP`).
+    detached: bool,
 }
 
 /// A delayed branch waiting for its two delay-slot instructions to finish.
@@ -194,6 +209,9 @@ pub struct Core {
     timer: timer::TimerState,
     sys: sysregs::SysState,
     banks: banks::Banks,
+    /// Circular buffer wraps of `I7` (bit 0) and `I15` (bit 1) since the last instruction ended
+    /// (set while an address is computed, see `dag_modes`).
+    cb_wrap: std::cell::Cell<u8>,
     /// ISA-mode program memory ([`isa`]): 3 parcels (most significant first) per 48-bit word.
     /// Empty = VISA mode, where `pc` addresses the flat SRAM image in parcels.
     isa_code: Vec<u16>,
@@ -253,6 +271,7 @@ impl Core {
             timer: timer::TimerState::default(),
             sys: sysregs::SysState::new(),
             banks: banks::Banks::default(),
+            cb_wrap: std::cell::Cell::new(0),
             isa_code: Vec::new(),
         }
     }
@@ -302,6 +321,8 @@ impl Core {
             4 => f.av,
             7 => f.sv,
             8 => f.sz,
+            // FLAG0_IN..FLAG3_IN: the pin level of an input flag (PRM Table 4-37)
+            n @ 9..=12 => self.flags_value() >> (2 * (n - 9)) & 1 == 1,
             // BM on ADSP-2136x/2146x; on the ADSP-214xx the same code selects SF (table 10-4)
             14 => f.fifo.sf(),
             13 => f.tf,
