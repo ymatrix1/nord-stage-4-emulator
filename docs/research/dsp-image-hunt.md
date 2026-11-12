@@ -713,6 +713,14 @@ The register is in bits 29..23 and the offset in bits 22..16 as a 7-bit two's-co
 - Record 1 word 0 holds `0x7FFFFFFF` by then (the image has `0x12538C`), so the next `CALL (M8, I8)` jumps to `0x7FFFFFFF` and the run slides. Something in module 0's pass writes that value (a saturated result, or a write through a wrongly decoded or skipped instruction): open.
 - 65 compute ops were skipped before the wild jump (all of the undocumented `2x` forms), so inexact arithmetic is the first suspect.
 
+### 5.31 What the image holds at `DM(0xE0000)`
+
+Non-zero data extents of the ORG Core2 SRAM image (`python` over `core2_sram.bin`, normal-word addresses): `0x90001..0x9631E` (21,741 words), `0xB00E4..0xB2EFA` (4,672), `0xC00DC..0xC2C83` (6,291), `0xE0000..0xE08C9` (620). Only ORG reads `DM(0xE0000)` (one load in each ORG section, none in FX), and no instruction writes that address directly.
+
+The image value at `DM(0xE0000)` is `0x80120BF7`, followed by `0x80125B79`, zeros and `0x7F000000` at `+7`: a code pointer with bit 31 set, the same two values that sit in record 0 words 10 and 11 (`0xC13AE`: `0x80120BF7 0x80125B79`). So the earlier remark in 5.30 that it is 0 in the image is wrong: the preamble compares `R0 = 0x80120BF7` (negative as a signed integer) with the record field `R1`, and `LT` then holds for any non-negative `R1`, which is the case in the image (the first runtime value seen was `R0 = 0x80000000` after earlier arithmetic). So the replacement of record 1's code pointer by `DM(38, I1)` is the normal first-pass result of this code with the image's initial state, not necessarily an error of the oracle; whether the hardware loads a different `R1` (word 34 of record 0, `0x3B96FF65` at that point) or runs an earlier init pass cannot be told from the image alone.
+
+The bit-31 flag on the pointers (`0x8012xxxx`) is the next thing to explain: the preamble reads it through the signed compare, so it probably marks a record as "already processed" or "use alternate path".
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
