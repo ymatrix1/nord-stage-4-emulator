@@ -10,9 +10,9 @@ Question: does the Rust engine reproduce what the firmware's Stage B resampler (
 
 | | Finding | Status |
 |---|---|---|
-| Kernel table | The 18,432 table values read through Stage B equal `SincKernelSet` within **1.19e-7** (2 ulp near 1.0); 4,153 of 18,432 are bit-identical. With the decimal cutoff in f64 the same table is within **5.95e-8** (the figure of `sy-dsp-map.md`). The extra 6e-8 is `kernel_value(fc: f32, ..)` widening `1.1f32` (= 1.10000002384) to f64 | VERIFIED (section 4) |
+| Kernel table | The 18,432 table values read through Stage B equal `SincKernelSet` within **1.19e-7** (2 ulp near 1.0); 4,153 of 18,432 are bit-identical. With the decimal cutoff in f64 the same table is within **5.95e-8** (the figure of `sy-dsp-map.md`). The extra 6e-8 was `kernel_value(fc: f32, ..)` widening `1.1f32` (= 1.10000002384) to f64; **fixed**: `CUTOFFS` are now f64 and the engine table measures max 5.96e-8 (one ulp), 9,355 of 18,432 bit-identical (was 4,153) | VERIFIED (section 4) |
 | Arithmetic | With the oracle's own table, an engine-side emulation of the DSP's 40-bit extended arithmetic reproduces **every output bit** of three renders (64, 240 and 360 stereo frames, both channels): max error **0**, SNR infinite. Plain sequential f32 is 1 to 232 ulp off (max abs 6e-8) | VERIFIED against the oracle; the oracle's arithmetic is VERIFIED against the ADI simulator ([sharc-float.md](sharc-float.md)); no hardware recording exists |
-| Phase rule | The hardware uses the 8 phase bits (bits 24..17 of the position word) and **ignores the bits below**: floor, no interpolation between phases. `SincKernel::interpolate` rounds to the nearest phase. On a position with a fraction of 76.8 phases this costs **3.4e-3** abs error (SNR 41 to 45 dB) | VERIFIED (section 4) |
+| Phase rule | **Fixed in `sinc.rs` (TD-08).** The hardware uses the 8 phase bits (bits 24..17 of the position word) and **ignores the bits below**: floor, no interpolation between phases. `SincKernel::interpolate` rounded to the nearest phase and now floors. On a position with a fraction of 76.8 phases this costs **3.4e-3** abs error (SNR 41 to 45 dB) | VERIFIED (section 4) |
 | Delay | 0.000 samples in every comparison once the position model of section 3 is used | VERIFIED |
 | Engine path as called today | `kernel.interpolate(pcm, pos)` with an exactly representable phase: max abs error 5.96e-8 (one ulp at 0.5) against the oracle | VERIFIED (`tests/oracle_stage_b.rs`) |
 
@@ -101,10 +101,10 @@ Delay estimate: 0.000 samples in all rows. Reading:
 
 | # | Difference | Where | Size | Action |
 |---|---|---|---|---|
-| 1 | Phase: hardware floors to the 8-bit phase, `SincKernel::interpolate` rounds to nearest (ASSUMED in its doc comment) | `sinc.rs` `interpolate` | up to half a phase = 1/512 sample; 3.4e-3 abs on a 0.3-sample start (SNR 41 dB) | The ASSUMED can now be replaced by VERIFIED floor. Tracked in TD-08; not changed here (file owned by another lane). The test `known_difference_engine_rounds_the_phase_where_the_oracle_floors` pins the current behaviour and must be inverted with the fix |
-| 2 | `kernel_value(fc: f32, ..)` computes `sinc(f64::from(fc) * d)` with `1.1f32` | `sinc.rs` | 1.19e-7 instead of 5.95e-8 against the table | Keep `CUTOFFS` as f64 literals (or compute in f64) |
+| 1 | Phase: hardware floors to the 8-bit phase, `SincKernel::interpolate` rounded to nearest (ASSUMED in its doc comment) | `sinc.rs` `interpolate` | up to half a phase = 1/512 sample; 3.4e-3 abs on a 0.3-sample start (SNR 41 dB) | **Fixed**: `interpolate` floors (`split_position`), documented VERIFIED. The pinned test was inverted to `engine_floors_the_phase_like_the_oracle` |
+| 2 | `kernel_value(fc: f32, ..)` computes `sinc(f64::from(fc) * d)` with `1.1f32` | `sinc.rs` | 1.19e-7 instead of 5.95e-8 against the table | **Fixed**: `CUTOFFS: [f64; 6]`, `kernel_value(fc: f64, ..)` |
 | 3 | Unity DC gain: the engine multiplies the sum by `fc`; the firmware leaves the sum at `1 / fc` and applies the voice gain (word `+0x08`) afterwards | `sinc.rs` | gain choice, not an error | Voice code must apply `gain = fc * g` or equivalent |
-| 4 | Accumulation precision (40-bit versus f32 sequential) | engine voice code | up to 1 ulp per output sample (5.96e-8 abs) | Not worth emulating for sound; a bit-exact build can use `tests/support/ext40.rs` |
+| 4 | Accumulation precision (40-bit versus f32 sequential) | engine voice code | up to 1 ulp per output sample (5.96e-8 abs) | Not worth emulating for sound; `sinc::ext40` (`SincKernel::interpolate_ext40`, `mac_ext40`) implements the rules for tests and `sinc_ref`, not the render path |
 | 5 | Ring: 128 stereo frames, circular; the engine's `interpolate` clamps at the edges | voice code | design | Keep a circular ring when `SAMPLES` is wired in |
 
 ## 6. Reproduce
@@ -167,7 +167,7 @@ To add a module (ORG tonewheel, PNO string, FX reverb): write the scenario with 
 
 ## Follow-ups
 
-1. Apply section 5 items 1 and 2 in `sinc.rs` and invert the pinned test.
+1. ~~Apply section 5 items 1 and 2 in `sinc.rs` and invert the pinned test.~~ Done (TD-08): floor phase, f64 cutoffs, `sinc::ext40`. Re-measured after the change with the section 6 commands: table max 5.96e-8, 9,355 of 18,432 bit-exact; renders with the engine kernel and `--accum ext40` max 5.96e-8 (golden, resample L), 2.98e-8 (sine L), `--kernel-from` still bit-exact.
 2. Decode the second FIR pass (mask words) with an input that makes it observable (two-position scenario).
 3. Add Stage A (voice start, rate and gain slewing: `0x1C07B0`, ISR step 3) to a scenario so gain and step come from firmware, not from the script.
 4. ORG tonewheel and FX scenarios on the same format, starting from the `sharc-org` pass entries.

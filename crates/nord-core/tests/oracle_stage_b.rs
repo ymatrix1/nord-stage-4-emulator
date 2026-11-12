@@ -8,28 +8,29 @@
 //! Case (`tools/oracle_scenarios/sy_stage_b_golden.scn`): 128-frame ring of the `hash` signal
 //! (`((n * mul + add) % 64) / 64 - 0.5`, mul/add 37/11 left and 23/5 right), kernel 2 (`fc = 1.00`),
 //! gain 1.0, ratio 0.5 source frames per output frame, start position 0.3 frames.
-#[path = "support/ext40.rs"]
-mod ext40;
 #[path = "support/stage_b_golden.rs"]
 mod golden;
 
 use golden::*;
-use nord_core::sinc::{SincKernelSet, CENTER_TAP, PHASES, TAPS};
+use nord_core::sinc::ext40;
+use nord_core::sinc::{SincKernel, SincKernelSet, CENTER_TAP, PHASES, TAPS};
 
-/// Largest `|engine kernel - oracle table|` over all 18,432 table values: 1.19e-7 (2 ulp near 1),
-/// measured with `ns4_oracle_compare.py` on the `sy_stage_b_kernel` dump. VERIFIED. The cause is
-/// `kernel_value(fc: f32, ..)` widening the f32 cutoff (1.1f32 = 1.10000002384) to f64; with the
-/// decimal cutoff the error against the table is 5.95e-8 (model fit in `sy-dsp-map.md`).
-const KERNEL_TOL: f32 = 1.2e-7;
+/// One float32 ulp in [0.5, 1): 2^-24.
+const ULP_HALF: f32 = 5.960_464_5e-8;
 
-/// Largest `|engine render - oracle|` over the 64 golden frames with the engine kernel and the
-/// DSP's 40-bit arithmetic: the kernel difference (weights differ by up to 2 ulp) times the signal.
-/// Measured: 5.96e-8 (one ulp at 0.5) on both channels; the bound is 1.0e-7.
-const RENDER_TOL: f32 = 1.0e-7;
+/// Largest `|engine kernel - oracle table|` over the sampled table values: one ulp (5.96e-8 near
+/// 0.8). Over all 18,432 values the engine (decimal cutoffs kept in f64) is within 5.95e-8 of the
+/// firmware table (`ns4_oracle_compare.py` on the `sy_stage_b_kernel` dump, and `sy-dsp-map.md`);
+/// widening `1.1f32` to f64 before the fix gave 1.19e-7. VERIFIED.
+const KERNEL_TOL: f32 = ULP_HALF;
 
-/// Bound for the plain-f32 `SincKernel::interpolate` path (sequential f32 accumulation).
-/// Measured with the same engine weights: 5.96e-8 (left channel, the one tested here).
-const INTERPOLATE_TOL: f32 = 1.5e-7;
+/// Largest `|engine render - oracle|` over the 64 golden frames (both channels) with the engine
+/// kernel and the DSP's 40-bit arithmetic. Measured: 5.96e-8 (one ulp at 0.5), previously bound 1e-7.
+const RENDER_TOL: f32 = ULP_HALF;
+
+/// Bound for the plain-f32 `SincKernel::interpolate` path at the true fractional positions
+/// (floored phase, sequential f32 accumulation). Measured: 5.96e-8 left, 8.94e-8 right.
+const INTERPOLATE_TOL: f32 = 9.0e-8;
 
 const FRAMES: usize = 64;
 
@@ -116,7 +117,7 @@ fn stage_b_is_bit_exact_with_the_oracle_weights_and_40_bit_arithmetic() {
 }
 
 #[test]
-fn engine_kernel_stays_within_two_ulp_of_the_oracle_table() {
+fn engine_kernel_stays_within_one_ulp_of_the_oracle_table() {
     let set = SincKernelSet::new();
     for (k, tap, phase, bits) in ORACLE_TABLE_SAMPLES {
         let want = f32::from_bits(bits);
@@ -143,36 +144,77 @@ fn engine_kernel_with_dsp_arithmetic_is_within_tolerance_of_the_oracle() {
     assert!(el > 0.0 || er > 0.0);
 }
 
-#[test]
-fn engine_interpolate_matches_the_oracle_when_the_phase_is_exact() {
-    // `SincKernel::interpolate` takes the centre-sample position (frame index + 5 + phase / 256),
-    // rounds the phase to nearest and multiplies by fc (= 1.0 for kernel 2). Phases 76 and 204 are
-    // exact there, so only kernel and f32-accumulation differences remain.
-    let kern = SincKernelSet::new().get(2).clone();
-    let ring = hash_ring(37, 11);
-    let want = oracle(&ORACLE_L);
-    let got: Vec<f32> = (0..FRAMES)
-        .map(|n| {
-            let (idx, phase) = frame_index_and_phase(pos_word(n));
-            let pos = (idx + CENTER_TAP) as f64 + phase as f64 / PHASES as f64;
-            kern.interpolate(&ring, pos)
-        })
-        .collect();
-    assert_eq!(TAPS, 12);
-    let e = max_abs(&got, &want);
-    assert!(e <= INTERPOLATE_TOL, "max error {e:e}");
+/// Centre-tap position (frames, `f64`) of output frame `n`: the position word is exact in f64.
+fn centre_pos(n: usize) -> f64 {
+    f64::from(pos_word(n)) / f64::from(1u32 << 25) + CENTER_TAP as f64
+}
+
+fn oracle_columns() -> [(Vec<f32>, Vec<f32>); 2] {
+    [
+        (hash_ring(37, 11), oracle(&ORACLE_L)),
+        (hash_ring(23, 5), oracle(&ORACLE_R)),
+    ]
 }
 
 #[test]
-fn known_difference_engine_rounds_the_phase_where_the_oracle_floors() {
-    // Start position 0.3 frames = phase 76.8. The oracle uses the 8 phase bits only (phase 76);
-    // `interpolate` rounds to nearest (phase 77). The two answers differ by far more than any
-    // arithmetic effect, which is the finding behind `docs/research/oracle-vs-engine.md` section 5.
+fn engine_interpolate_matches_the_oracle_at_the_true_fractional_positions() {
+    // `SincKernel::interpolate` takes the centre-sample position (frame index + 5 + phase / 256 +
+    // the ignored low bits), floors the phase like the hardware and multiplies by fc (= 1.0 for
+    // kernel 2). Positions are the real ones (fraction 76.8 phases at the start): only the kernel
+    // table and the f32 accumulation differ from the oracle.
+    let kern = SincKernelSet::new().get(2).clone();
+    assert_eq!(TAPS, 12);
+    for (ch, (ring, want)) in oracle_columns().into_iter().enumerate() {
+        let got: Vec<f32> = (0..FRAMES)
+            .map(|n| kern.interpolate(&ring, centre_pos(n)))
+            .collect();
+        let e = max_abs(&got, &want);
+        assert!(e <= INTERPOLATE_TOL, "channel {ch}: max error {e:e}");
+    }
+}
+
+#[test]
+fn engine_interpolate_ext40_with_the_engine_kernel_stays_within_one_ulp() {
+    let kern = SincKernelSet::new().get(2).clone();
+    for (ch, (ring, want)) in oracle_columns().into_iter().enumerate() {
+        let got: Vec<f32> = (0..FRAMES)
+            .map(|n| kern.interpolate_ext40(&ring, centre_pos(n), kern.cutoff()))
+            .collect();
+        let e = max_abs(&got, &want);
+        assert!(e <= RENDER_TOL, "channel {ch}: max error {e:e}");
+    }
+}
+
+#[test]
+fn engine_floors_the_phase_like_the_oracle() {
+    // Start position 0.3 frames = phase 76.8. The oracle uses the 8 phase bits only (phase 76) and
+    // the engine now floors too (TD-08 item 1, fixed). This pinned the old rounding to phase 77,
+    // which was 3.4e-3 off (SNR 41 to 45 dB), see `docs/research/oracle-vs-engine.md` section 5.
     let kern = SincKernelSet::new().get(2).clone();
     let ring = hash_ring(37, 11);
     let (_, phase0) = frame_index_and_phase(pos_word(0));
     assert_eq!(phase0, 76);
-    let engine = kern.interpolate(&ring, CENTER_TAP as f64 + 0.3);
     let oracle0 = oracle(&ORACLE_L)[0];
-    assert!((engine - oracle0).abs() > 1.0e-3, "{engine} vs {oracle0}");
+    let floored = kern.interpolate(&ring, CENTER_TAP as f64 + 0.3);
+    assert!(
+        (floored - oracle0).abs() <= INTERPOLATE_TOL,
+        "{floored} vs {oracle0}"
+    );
+    // what the old nearest-phase rule returned (phase 77): far more than any arithmetic effect
+    let rounded = kern.interpolate(&ring, CENTER_TAP as f64 + 77.0 / PHASES as f64);
+    assert!((rounded - oracle0).abs() > 1.0e-3, "{rounded} vs {oracle0}");
+}
+
+#[test]
+fn engine_cutoffs_are_the_decimal_values_in_f64() {
+    // The table matches the decimal cutoffs evaluated in f64 (5.95e-8); the widened f32 cutoff
+    // gave 1.19e-7. Compare the engine weights with the f32-widened kernel to see the change.
+    let set = SincKernelSet::new();
+    let widened = SincKernel::new(f64::from(1.1_f32));
+    let decimal = set.get(0);
+    let diff = (0..PHASES)
+        .flat_map(|p| (0..TAPS).map(move |t| (p, t)))
+        .map(|(p, t)| (widened.weights(p)[t] - decimal.weights(p)[t]).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(diff > 0.0 && diff < 2.0e-7, "{diff:e}");
 }

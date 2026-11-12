@@ -9,8 +9,7 @@
 //! Position model (VERIFIED against the oracle, see the document): a 32-bit word `pos` with the
 //! frame index in bits 31..25, the phase index in bits 24..17 (lower bits ignored: floor), and
 //! `pos += 2 * step` after every output frame, `step = round(ratio * 2^24)`.
-#[path = "../tests/support/ext40.rs"]
-mod ext40;
+use nord_core::sinc::ext40;
 use nord_core::sinc::{SincKernelSet, PHASES, TAPS};
 use std::collections::HashMap;
 
