@@ -40,3 +40,13 @@ def test_main_prints_and_reports_empty(tmp_path, capsys):
     g = tmp_path / "empty.bin"
     g.write_bytes(bytes(64))
     assert t.main([str(g)]) == 1
+
+
+def test_db_range_and_flag(tmp_path, capsys):
+    tab = t.Table(0, 129, 0.001, 1.0235, "exponential")
+    lo, hi, step = t.db_range(tab)
+    assert abs(lo + 60.0) < 1e-9 and abs(hi - 0.2) < 0.01 and abs(step - (hi - lo) / 128) < 1e-12
+    f = tmp_path / "img.bin"
+    f.write_bytes(pack([0.0] + [0.001 * 2 ** (i / 16) for i in range(129)] + [0.0]))
+    assert t.main([str(f), "--db"]) == 0
+    assert "dB/step" in capsys.readouterr().out

@@ -430,6 +430,36 @@ Reading: the sample playback path of the synth DSP resamples with a 12-point win
 
 Comparison with Track A: `docs/specs/piano-engine.md` specifies 4-point Catmull-Rom interpolation for sample playback. The hardware path is a longer sinc kernel; the difference matters for high-frequency fidelity at large transpositions.
 
+### 5.16 dB taper tables (129-point exponential curves)
+
+`python tools/ns4_dsp_tables.py DIR/dsp_image_N_NAME.bin --db` now prints the dB range of exponential tables. The images share 19 distinct 129-point (128-interval) exponential tables, i.e. a knob or parameter index 0..127 (plus a guard point for interpolation) mapped to a linear gain that is linear in dB. Endpoints, in dB (`20 log10 |value|`), by table (v1.66):
+
+| First value | Last value | dB range | dB/step | Found in |
+|---|---|---|---|---|
+| 0.0004 | 0.4648 | -67.96 .. -6.66 | +0.479 | FX, PNO |
+| 0.0008 | 1.1859 | -61.94 .. +1.48 | +0.496 | PNO |
+| 0.0010 | 1.0235 | **-60.000** .. +0.20 | +0.470 | ORG, PNO |
+| 0.0026 | 1.0000 | -51.70 .. **0.000** | +0.404 | FX, PNO |
+| 0.0037 | 0.6980 | -48.64 .. -3.12 | +0.356 | FX, ORG, PNO |
+| 0.0177 | 0.0025 | -35.04 .. -52.04 | -0.133 | ORG, PNO |
+| 0.1260 | 0.0033 | -17.99 .. -49.63 | -0.247 | FX, ORG, PNO |
+| 0.2346 | 44.6692 | -12.59 .. **+33.000** | +0.356 | FX, PNO |
+| 0.4607 | 0.1382 | -6.73 .. -17.19 | -0.082 | ORG, PNO |
+| 0.8193 | 33.5019 | -1.73 .. +30.50 | +0.252 | ORG, PNO |
+| 0.9317 | 1.0000 | -0.61 .. 0.00 | +0.005 | ORG, PNO |
+| 0.9652 | 1.0000 | -0.31 .. 0.00 | +0.002 | ORG, PNO |
+| 1.0000 | 1.2589 | 0.00 .. **+2.000** | +0.016 | ORG, PNO |
+| 1.1704 | 16.7509 | +1.37 .. +24.48 | +0.181 | ORG, PNO |
+| 1.2899 | 0.1935 | +2.21 .. -14.27 | -0.129 | ORG, PNO |
+| 1.9990 | 0.9765 | +6.02 .. -0.21 | -0.049 | ORG, PNO |
+| 2.0000 | 0.6069 | +6.02 .. -4.34 | -0.081 | ORG, PNO |
+| 2.0160 | 0.0527 | +6.09 .. -25.56 | -0.247 | FX, PNO |
+| 2.0160 | 4.0320 | +6.09 .. +12.11 | +0.047 | FX, PNO |
+
+Several endpoints are exactly round in dB (`-60.000`, `0.000`, `+2.000`, `+33.000`), so these are designed dB tapers, not fitted curves. Two tables share the slope 0.356 dB/step (`0.0037..0.698` and `0.2346..44.67`) and two share -0.247 dB/step (`0.1260..0.0033` and `2.016..0.0527`): they are the same taper at different offsets.
+
+**What is open:** which parameter each table serves. The tables are indexed by the 7-bit parameter values, so candidates are level, drive, gain and mix knobs; the bank 0 ARM-side tables already decoded (cutoff, rotary, EQ) are separate curves. Matching a table to a parameter needs the VISA code that reads it (a `DM(table + index)` load) or a test against measured hardware gain. When a table is matched, its dB range can be tagged VERIFIED in `crates/nord-core/src/fx.rs`.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
