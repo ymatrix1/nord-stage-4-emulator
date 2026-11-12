@@ -296,15 +296,15 @@ fn fx_sweep(out: &mut Vec<u8>) {
             fx.eq_mid_db = -4.0;
             fx.eq_mid_freq_hz = 900.0;
             fx.eq_treble_db = 2.0;
-            fx.comp_enabled = k % 3 != 0;
+            fx.comp_enabled = !k.is_multiple_of(3);
             fx.comp_amount = 0.5;
-            fx.comp_fast = k % 2 == 0;
+            fx.comp_fast = k.is_multiple_of(2);
             fx.delay_enabled = true;
             fx.delay_time_ms = 180.0 + 20.0 * (k % 7) as f32;
             fx.delay_clock_sync = k % 4 == 3;
             fx.delay_subdivision = subs[k % subs.len()];
             fx.delay_analog = k % 3 == 1;
-            fx.delay_ping_pong = k % 2 == 0;
+            fx.delay_ping_pong = k.is_multiple_of(2);
             fx.delay_filter = dfilt[k % dfilt.len()];
             fx.delay_fx = dfx[k % dfx.len()];
             fx.delay_feedback = 0.4;
