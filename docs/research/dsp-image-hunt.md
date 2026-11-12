@@ -6,7 +6,7 @@
 
 ## Verdict
 
-**Not present in the container.** The update carries only ARM images (two banks: `SRAM`, `CODE`, `ARM0` each). The strings `DSPSyn` / `DSPOrg` / `DSPFxCore*` are memory-region names in a bank 1 flash/test tool, not image names. No 48-bit instruction stream, no ADI loader stream and no compressed blob of a plausible size exists in any segment of either bank. The SHARC code stays in the board SPI flash, as `sharc-dsp-and-preset-hash-teardown.md` says. The `0x3CF040` offset in older notes is in the *packed* container, not in `bank0_CODE`.
+**Not found in the container (v1.44, v1.46, v1.64, v1.66 all checked).** The update carries only ARM images (two banks: `SRAM`, `CODE`, `ARM0` each). The strings `DSPSyn` / `DSPOrg` / `DSPFxCore*` are memory-region names in a bank 1 flash/test tool, not image names. No 48-bit instruction stream, no ADI loader stream and no compressed blob of a plausible size exists in any segment of either bank. The SHARC code stays in the board SPI flash, as `sharc-dsp-and-preset-hash-teardown.md` says. The `0x3CF040` offset in older notes is in the *packed* container, not in `bank0_CODE`.
 
 ## 1. Where the strings are (task 1)
 
@@ -71,6 +71,28 @@ ADI-loader-shaped triples (`tag, count, address in 0x80000..0xFFFFF`, 32-bit wor
 | Encrypted / protected | **Not indicated, not tested.** Nothing to circumvent was found and no circumvention was attempted |
 | In the container at all | **No.** Recovery needs the SPI flash dump of the board or a DSP image from another source |
 
+## 5. Cross-version diff (v1.44, v1.46, v1.64, v1.66)
+
+Added after the release history showed DSP-side fixes shipping in OS updates (v1.52 to v1.64: Ring Mod, Vox organ, Reverb after Rotary, 56 voices in v1.30). Inputs: the four updaters under `.reference/` (v1.44, v1.46, v1.64 as `.zip` holding the `.exe`; v1.66 `.exe`). Each firmware resource was cut at the `SRAM` header (`PE offset 0x7A3B30` for v1.44/1.46, `0x7A3730` for v1.64; length `0x20 + size0 + size1` from the big-endian container header) and unpacked with `ns4 inspect <fw> --verify --unpack <dir>`. All six segments per version report `checksum=OK`.
+
+| Version | `bank0_CODE` | `bank1_CODE` | `bank1_ARM0` |
+|---|---|---|---|
+| 1.44 | 5,355,456 B | 779,424 B | 748 B |
+| 1.46 | 5,356,616 B | 779,424 B | 748 B |
+| 1.64 | 5,499,872 B | 796,288 B | 900 B |
+| 1.66 | 5,499,504 B | 798,912 B | 820 B |
+
+Method: fraction of 64-byte blocks of version A (per 256 KB region) that occur anywhere in version B (all offsets, so code that moves still matches).
+
+- `bank0_CODE 0x300000..0x3FFFFF`: **100% identical in every pair** (1.44-1.46, 1.46-1.64, 1.64-1.66). This is the 1 MB 16-bit-like high-entropy block from section 3. It did not change across the releases that changed Ring Mod, Vox, Reverb routing and voice allocation, so it is not DSP algorithm code (or those fixes did not touch it).
+- ARM code `0x000000..0x23FFFF`: 12% to 73% match between versions (code moved and edited, as expected).
+- `0x440000..0x500000`, new in 1.64 vs 1.46: about 60 runs of 1 to 9 KB with entropy 2.1 to 6.6 bits/byte (structured tables, several runs repeat the same length, for example 7,936 B at `0x49DA00`, `0x4C1800`, `0x4E6100`). None is near-random, none shows 6-byte structure in the scan of section 3.
+- `bank1_CODE` matches only 54% to 63% between versions; the DSP name table is the same.
+
+Reading: no version carries a block that looks like a replaced DSP image, yet DSP behaviour did change. Either the DSP changes are in small tables and ARM-side parameters (SHARC code unchanged, which fits e.g. "Reverb placed last" being a routing change sent from the ARM), or the SHARC code is stored in a form this scan cannot see. ASSUMED: SHARC code entropy is not necessarily high (ARM code here is 6.1 to 6.5), so entropy alone never ruled it out; the 6-byte-period sweep is the real test and it found nothing.
+
+Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
+
 ## Implications
 
 - The 1:1 verdict does not change from "not currently feasible", but the reason is sharper: the DSP code is simply not in the OS update, so no amount of container work recovers it. Track B needs a hardware flash read (`Micron N25Q032` / `MT25QL128A`) or an image from another source.
@@ -83,4 +105,5 @@ ADI-loader-shaped triples (`tag, count, address in 0x80000..0xFFFFF`, 32-bit wor
 - Trace `bank0_CODE` code that touches `0x62004000` / SPI0 `0x01C41000` to confirm whether the ARM ever streams data to the SHARC at runtime (DSP comm `0x6CA48` is the known sender of table words).
 - If hardware access exists: dump the SPI flash and look for the ADI loader stream there; ADI's loader documentation (not in `.reference/sharc/`) is needed for the block layout.
 - Check the `.dmg` updater for any additional payload (not done here).
+- Decode the changed `0x440000+` runs between v1.46 and v1.64 (section 5); they are the only data that moved with the DSP-related releases.
 - Remove or relabel the 16-bit PCM-like block in `OPEN-QUESTIONS.md` once identified.
