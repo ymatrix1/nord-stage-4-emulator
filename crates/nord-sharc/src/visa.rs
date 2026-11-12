@@ -225,8 +225,8 @@ pub fn tile(parcels: &[u16]) -> (Vec<Insn>, bool) {
 
 /// Little-endian 16-bit parcels of `data` (an odd trailing byte is dropped).
 pub fn parcels_le(data: &[u8]) -> Vec<u16> {
-    data.chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+    (0..data.len() / 2)
+        .map(|i| u16::from_le_bytes([data[2 * i], data[2 * i + 1]]))
         .collect()
 }
 
