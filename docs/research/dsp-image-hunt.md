@@ -102,6 +102,19 @@ Commands: Python snippets over `bank0_CODE.bin` unpacked from the v1.64 updater 
 
 Reading: ARM-side data (tables and 16-bit item streams, probably parameter or program/routing descriptors) that changed with the DSP-related releases. No SHARC code found. The stream format is not decoded (ASSUMED role: parameter data sent to the SHARCs). Still open: which code reads these streams.
 
+### 5.2 Downloaded updaters and release-to-release diff (v1.44 to v1.66)
+
+Official links are recorded in `tools/nord_os_urls.py` (document ids found by `HEAD` probes, `302` = exists): v1.44 `767`, v1.46 `783`, v1.52 `899`, v1.54 `906`, v1.60 `945`, v1.62 `947`, v1.64 `949`, v1.66 `1042` (`.dmg` `1041`). The zips are saved in `.reference/` (git-ignored); v1.62 was downloaded but not yet unpacked here.
+
+Unpacked with `ns4 inspect <fw> --verify --unpack` (all checksums OK). Findings:
+
+- `bank1_CODE` (flash tool and DSP region table) is **byte-identical in v1.52, v1.54, v1.60, v1.64** (SHA-1 prefix `f408734ae2`) and differs from v1.46 (`c55a9087b7`). So the DSP-related releases changed only the main OS image, not the DSP name table.
+- `bank0_CODE 0x300000..0x3FFFFF` is 100% unchanged in every pair from v1.44 to v1.66.
+- Data new in `bank0_CODE 0x300000+` per release: v1.46 to v1.52 about 98 KB, v1.52 to v1.54 about 22 KB, v1.54 to v1.60 about 96 KB (116 KB incl. gaps in 108 runs), v1.60 to v1.64 about 20 KB. The big ones (v1.52 Vox update, v1.60 reverb routing and voice allocation) match the releases that touched sound. All of it sits in the same `0x440000..0x4FFFFF` runs as section 5.1: 4-byte-structured tables (`p4`/`p8` lowest, `p6` never lowest), for example a float32 curve `-47.5, -43.6 ... 0.0` at `0x455480` in v1.60.
+- No version shows a new block with 6-byte (48-bit) structure.
+
+Reading: sound changes between releases land in ARM-side tables and code of the main image. This is consistent with the SHARC code being stored elsewhere (SPI flash) and the DSP being driven by data from these tables, but it does not prove it.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
