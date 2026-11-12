@@ -101,8 +101,13 @@ pub fn compare(a: u64, b: u64, mode: Mode) -> Out {
 pub fn mant(a: u64, mode: Mode) -> Out {
     let x = unpack(a, mode.r32);
     match x.class {
+        // VERIFIED (simulator): MANT of an infinity is 0x80000000, of a NaN all ones
         Class::Nan | Class::Inf => Out {
-            v: 0xFFFF_FFFF,
+            v: if x.class == Class::Inf {
+                0x8000_0000
+            } else {
+                0xFFFF_FFFF
+            },
             an: false,
             av: x.class == Class::Inf,
             as_: x.neg && x.class == Class::Inf,
@@ -131,7 +136,6 @@ pub fn logb(a: u64, mode: Mode) -> Out {
     match x.class {
         Class::Nan => Out {
             v: 0xFFFF_FFFF,
-            an: true,
             ai: true,
             ..Out::default()
         },
@@ -289,7 +293,7 @@ mod tests {
     fn mantissa_and_exponent_extraction() {
         assert_eq!(mant(f(-6.0), M).v, 0xC000_0000);
         assert!(mant(f(-6.0), M).as_);
-        assert_eq!(mant(f(f32::INFINITY), M).v, 0xFFFF_FFFF);
+        assert_eq!(mant(f(f32::INFINITY), M).v, 0x8000_0000);
         assert_eq!(logb(f(8.0), M).v, 3);
         assert_eq!(logb(f(0.25), M).v as u32 as i32, -2);
         assert_eq!(logb(f(0.0), M).v, 0xFF80_0000);

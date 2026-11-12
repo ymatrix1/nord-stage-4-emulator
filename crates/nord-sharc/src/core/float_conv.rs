@@ -30,7 +30,10 @@ pub fn scalb(a: u64, n: i32, mode: Mode) -> Out {
             if e > 127 {
                 Out::value(overflow_value(x.neg, mode, mode.r32), true, false)
             } else if e < -126 {
-                Out::value(u64::from(x.neg) << 39, false, true)
+                Out {
+                    au: true,
+                    ..Out::value(u64::from(x.neg) << 39, false, true)
+                }
             } else {
                 Out::value(repack(Un { exp: e as i32, ..x }), false, false)
             }

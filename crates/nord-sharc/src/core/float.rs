@@ -8,7 +8,7 @@
 //! arithmetic with a single rounding at the end, so results are deterministic on every platform.
 //!
 //! Provenance: the rounding, FIX/TRUNC and extension behaviours are VERIFIED against the CCES
-//! ADSP-21489 simulator by `float_measured.rs` (912 rows, 0 mismatches); the rest is ASSUMED, see
+//! ADSP-21489 simulator by `float_measured.rs` (912 rows) and special values, flags and STKY by `float_flags.rs` (13 956 rows), 0 mismatches; the rest is ASSUMED, see
 //! `docs/research/sharc-float.md`.
 
 /// MODE1 bit 13: ALU saturation.
@@ -105,6 +105,13 @@ pub struct Out {
     pub av: bool,
     pub as_: bool,
     pub ai: bool,
+    /// Multiplier flags (set by `mul` only): negative result, overflow, underflow, invalid.
+    pub mn: bool,
+    pub mv: bool,
+    pub mu: bool,
+    pub mi: bool,
+    /// ALU underflow: a result flushed to zero (sets STKY AUS; not an exact zero result).
+    pub au: bool,
 }
 
 impl Out {
@@ -124,8 +131,7 @@ impl Out {
     pub fn invalid() -> Out {
         Out {
             v: ALL_ONES,
-            an: true,
-            ai: true,
+            ai: true, // VERIFIED (simulator): AI only, no AN
             ..Out::default()
         }
     }
@@ -173,7 +179,10 @@ pub fn round_pack(neg: bool, e2: i32, m: u128, sticky: bool, mode: Mode, narrow:
         return Out::value(overflow_value(neg, mode, narrow), true, false);
     }
     if exp < -126 {
-        return Out::value(sign, false, true);
+        return Out {
+            au: true,
+            ..Out::value(sign, false, true)
+        };
     }
     let frac = (mant as u64) & ((1u64 << (width - 1)) - 1);
     let frac = if narrow { frac << 8 } else { frac };
@@ -234,36 +243,7 @@ pub fn add(a: u64, b: u64, sub: bool, halve: bool, mode: Mode) -> Out {
     round_pack(big.neg, big.exp - 95 - down, m, sticky, mode, mode.r32)
 }
 
-/// `Fx * Fy`.
-pub fn mul(a: u64, b: u64, mode: Mode) -> Out {
-    let (x, y) = (unpack(a, mode.r32), unpack(b, mode.r32));
-    let neg = x.neg ^ y.neg;
-    match (x.class, y.class) {
-        (Class::Nan, _) | (_, Class::Nan) => Out::invalid(),
-        (Class::Inf, Class::Zero) | (Class::Zero, Class::Inf) => Out::invalid(),
-        (Class::Inf, _) | (_, Class::Inf) => {
-            Out::value(repack(Un { neg, ..x_inf() }), false, false)
-        }
-        (Class::Zero, _) | (_, Class::Zero) => Out::value(u64::from(neg) << 39, false, true),
-        _ => round_pack(
-            neg,
-            x.exp + y.exp - 62,
-            u128::from(x.man) * u128::from(y.man),
-            false,
-            mode,
-            mode.r32,
-        ),
-    }
-}
-
-fn x_inf() -> Un {
-    Un {
-        neg: false,
-        class: Class::Inf,
-        exp: 128,
-        man: 0,
-    }
-}
+pub use super::float_mul::mul;
 
 #[cfg(test)]
 mod tests {
@@ -373,7 +353,7 @@ mod tests {
         let r = add(inf, inf, true, false, NEAR);
         assert!(r.ai, "inf - inf via subtract is invalid");
         let r = mul(inf, f(0.0), NEAR);
-        assert!(r.ai);
+        assert!(r.mi && !r.ai, "the multiplier reports MI, not AI");
         let nan = f(f32::NAN);
         assert!(add(nan, f(1.0), false, false, NEAR).ai);
         assert_eq!(mul(f(-2.0), inf, NEAR).v, f(f32::NEG_INFINITY));
