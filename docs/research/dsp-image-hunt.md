@@ -624,7 +624,7 @@ Findings (VERIFIED by the run, handler code read from the disassembly at `0x24BB
 | wait | `R3 = DM(0x282C0380); PASS; IF EQ JUMP` | waits for a flag in an external or shared window (needs a non-zero device value) |
 | dispatch | `CALL 0x128699`, then more work | not traced yet |
 
-Core fixes this needed: `PASS` and the other short ALU ops now set AZ/AN (the poll never left the loop before), `MODIFY(Ia, Mb)` (Type 7a/7b, destination = source XOR `IdIs`), and the short `DM(Ii, Mm)` transfer (Type 3c). The run now stops at the fixed-point multiplier with scaling mode (`R0 = R0 * R12 (SSF)`, Type 3a), the next gap.
+Core fixes this needed: `PASS` and the other short ALU ops now set AZ/AN (the poll never left the loop before), `MODIFY(Ia, Mb)` (Type 7a/7b, destination = source XOR `IdIs`), and the short `DM(Ii, Mm)` transfer (Type 3c). The fixed-point multiplier is now modelled (`Rn|MRF|MRB = [MRx +/-] Rx * Ry` in S/U, F/I, R forms and `MRF = 0`; MRF/MRB are 80 bits; `SAT`/`RND` of MR, integer rounding and the MODE1 SRCU swap are not modelled; round-to-nearest-even at bit 32 and saturation on Rn are ASSUMED from programming reference 3-14..3-17, 11-49). With it the handler runs about 515 steps past the mailbox poll (`--poke 100000:0xb00e2=1 --dev 0x282c0380=1`, ORG Core2) and stops at the `2x` word `023e 0001 0211` at short-word `0x1262a6`: `IF TRUE`, compute field `0x010211` = ALU `op=0x10`, `n=2 x=1 y=1`. ALU opcode `0x10` is not in the fixed-point ALU table of rev 2.4 (see 5.9 for the undocumented `0x02` form), so its meaning is the next open item.
 
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
