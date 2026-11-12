@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import parse_qs, urlparse
 
+import audio_notes
+import key_vision
 from PIL import Image, ImageDraw
 
 DEFAULT_REFERENCE_DIR = Path(".reference/videos")
@@ -304,8 +306,20 @@ def fetch_video(
     return downloaded
 
 
+_MSYS_PATH_RE = re.compile(r"^/([a-zA-Z])/(.*)$")
+
+
+def normalize_source_path(source: str) -> str:
+    """Converts Git-Bash ``/c/dev/x`` paths to ``C:/dev/x`` on Windows; others unchanged."""
+    m = _MSYS_PATH_RE.match(source)
+    if m and sys.platform == "win32":
+        return f"{m.group(1).upper()}:/{m.group(2)}"
+    return source
+
+
 def resolve_video(source: str, search_dirs: Sequence[Path] = ()) -> tuple[Path, str]:
     """Resolves ``source`` (file path, alias, URL, or ID) to an existing local video file."""
+    source = normalize_source_path(source)
     cand = Path(source)
     if cand.is_file():
         vid = extract_video_id(cand.name) or cand.stem
@@ -906,6 +920,125 @@ def compare_wavs(hw_path: Path, emu_path: Path) -> dict[str, Any]:
     }
 
 
+KEY_FRAME_FPS = 4.0
+VIDEO_SUPPORT_MIN = 0.30
+
+
+def video_support(
+    events: Sequence[audio_notes.NoteEvent],
+    frame_candidates: Sequence[set[int]],
+    fps: float = KEY_FRAME_FPS,
+    pad_s: float = 0.3,
+    tolerance: int = 1,
+) -> list[float]:
+    """Fraction of frames around each event where a fingertip is within ``tolerance`` semitones."""
+    out: list[float] = []
+    n = len(frame_candidates)
+    for e in events:
+        f0 = max(0, int(math.floor((e.onset_s - pad_s) * fps)))
+        f1 = min(n - 1, int(math.ceil((e.offset_s + pad_s) * fps)))
+        if n == 0 or f1 < f0:
+            out.append(0.0)
+            continue
+        hits = sum(
+            1
+            for f in range(f0, f1 + 1)
+            if any(abs(m - e.midi) <= tolerance for m in frame_candidates[f])
+        )
+        out.append(hits / (f1 - f0 + 1))
+    return out
+
+
+def detect_played_notes(
+    video_path: Path,
+    start_s: float,
+    duration_s: float,
+    crop: tuple[float, float, float, float] = key_vision.DEFAULT_KEYBOARD_CROP,
+    fps: float = KEY_FRAME_FPS,
+) -> dict[str, Any]:
+    """Audio polyphonic note detection cross-checked with fingertip positions from the video."""
+    import tempfile
+
+    import numpy as np
+
+    ffmpeg = _require_binary("ffmpeg")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        wav = tmp_dir / "clip.wav"
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-ss",
+                f"{start_s:.3f}",
+                "-t",
+                f"{duration_s:.3f}",
+                "-i",
+                str(video_path),
+                "-vn",
+                "-ac",
+                "2",
+                "-ar",
+                "48000",
+                "-c:a",
+                "pcm_f32le",
+                str(wav),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        x0, y0, x1, y1 = crop
+        crop_expr = f"crop=iw*{x1 - x0:.4f}:ih*{y1 - y0:.4f}:iw*{x0:.4f}:ih*{y0:.4f}"
+        vf = f"fps={fps},{crop_expr},scale=1920:-1"
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-ss",
+                f"{start_s:.3f}",
+                "-t",
+                f"{duration_s:.3f}",
+                "-i",
+                str(video_path),
+                "-an",
+                "-vf",
+                vf,
+                str(tmp_dir / "f_%04d.png"),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        sr, left, right = read_wav_stereo(wav)
+        mono = 0.5 * (np.asarray(left) + np.asarray(right))
+        keys = key_vision.build_keys()
+        frame_candidates = [
+            key_vision.candidate_keys(np.asarray(Image.open(f).convert("RGB")), keys)
+            for f in sorted(tmp_dir.glob("f_*.png"))
+        ]
+
+    events = audio_notes.transcribe(mono, sr)
+    support = video_support(events, frame_candidates, fps=fps)
+    rows = []
+    for e, sup in zip(events, support, strict=True):
+        d = e.to_dict()
+        d["video_support"] = round(sup, 2)
+        d["confirmed"] = sup >= VIDEO_SUPPORT_MIN
+        rows.append(d)
+    confirmed = [e for e, sup in zip(events, support, strict=True) if sup >= VIDEO_SUPPORT_MIN]
+    return {
+        "start_s": start_s,
+        "duration_s": duration_s,
+        "frames": len(frame_candidates),
+        "events_audio": len(events),
+        "events_confirmed": len(confirmed),
+        "audio_summary": audio_notes.summarize_events(events),
+        "confirmed_summary": audio_notes.summarize_events(confirmed),
+        "events": rows,
+    }
+
+
 def _parse_panel_box(raw: str | None) -> tuple[float, float, float, float] | None:
     if not raw:
         return None
@@ -962,6 +1095,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ana = sub.add_parser("analyze", help="Analyze loudness, stereo width, and 6-band spectrum.")
     p_ana.add_argument("wav", help="Path to WAV audio file.")
+
+    p_notes = sub.add_parser(
+        "notes",
+        help="Detect played notes from audio and confirm them with fingertips in the video.",
+    )
+    p_notes.add_argument("source", help="YouTube URL, video ID, alias, or local video path.")
+    p_notes.add_argument("--at", required=True, help="Start timestamp (e.g. 10:05).")
+    p_notes.add_argument("--duration", type=float, default=20.0)
+    p_notes.add_argument("--kbd-crop", help="Normalized x0,y0,x1,y1 keyboard crop override.")
+    p_notes.add_argument("--events-out", help="Write note events (JSON) to this path.")
 
     p_cmp = sub.add_parser("compare", help="Compare hardware reference WAV against emulator WAV.")
     p_cmp.add_argument("hw_wav", help="Hardware reference WAV file.")
@@ -1048,6 +1191,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                     f"{st.get('codec_name')} {st.get('width', '')}x{st.get('height', '')} "
                     f"{st.get('sample_rate', '')}"
                 )
+        return 0
+
+    if args.command == "notes":
+        video_path, _vid = resolve_video(args.source)
+        crop = _parse_panel_box(args.kbd_crop) or key_vision.DEFAULT_KEYBOARD_CROP
+        report = detect_played_notes(video_path, parse_timestamp(args.at), args.duration, crop=crop)
+        if args.events_out:
+            Path(args.events_out).write_text(json.dumps(report, indent=2), encoding="utf-8")
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            a, c = report["audio_summary"], report["confirmed_summary"]
+            print(
+                f"{report['events_audio']} audio notes, "
+                f"{report['events_confirmed']} confirmed by video "
+                f"({report['frames']} frames)"
+            )
+            print(f"audio-only register {a.get('register')}  suggested {a.get('suggested_notes')}")
+            print(f"confirmed register  {c.get('register')}  suggested {c.get('suggested_notes')}")
         return 0
 
     if args.command == "extract":
