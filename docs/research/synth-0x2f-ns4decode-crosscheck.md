@@ -110,6 +110,15 @@ Lead: the `0x300000..0x420000` block is embedded audio, see the next section; it
 
 Not established: what the data is (WAVE-type oscillator tables, sample-rate-converter / reverb impulse data, or DSP sample ROM), the sample rate, the channel meaning, and any mapping to the 46 waves. Exports for listening: `python tools/fw_audio_scan.py export <image> <dir> --offset 0x300000 --length 0x120000 --channels 4`. Keep exported audio out of git (Nord content).
 
+### Listening and spectrum result (2026-11-12)
+
+- **Listening test (user, 4 exported channels at 48 kHz):** not tonal; described as a slow "wobble" noise, not grain noise.
+- **Layout:** the first 9 records repeat at exactly 19,052 int16 samples (38,104 bytes): a full-scale spike sits at sample 14,691 of the block and recurs every 19,052 samples; only 12 samples in the whole block reach `|x| >= 32000`.
+- **Per-channel spectral slope** (16384-row chunks, 48 kHz assumed): `0x300000` about `-22 dB/decade` with strong narrow peaks (tonality 38-40 dB); `0x340000` `-14`; `0x380000..0x420000` about `-9 dB/decade` (weak peaks, tonality 13-21 dB). White noise is about 0, pink about -10, red/brown about -20 dB/decade.
+- **Reading:** the front is red-noise-like with a periodic component (the slow wobble), the rest is pink-noise-like. That matches noise sources rather than the instrument-like WAVE waves (`Bell`, `Flute`, `EPiano` ...). Hypotheses: the MISC `Pink Noise` / `Red Noise` tables and similar random/modulation sources, or noise-shaped reverb/diffusion data. Unproven.
+- **Consequence:** this block does not replace our synthetic wavetable bank. The 46 WAVE waveforms are still not located; the lead is demoted.
+
+
 Next: segment by waveform edges per channel and compare each segment's harmonic content with the manual's wave descriptions; look for the loader that DMA-copies `0x300000..` to the DSP (a `{src, length}` word pair in ARM code).
 
 ## Status
