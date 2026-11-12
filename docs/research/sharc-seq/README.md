@@ -16,3 +16,5 @@ It needs CCES 2.12.1 with an active licence (never touched) and re-runs itself u
 `TpsdkServer` is a 32-bit 3.6 SWIG module: set `NS4_SIM_PYTHON`, or `pyenv install 3.6.8-win32` (pyenv-win), or have
 `py -3.6-32`. `--out`/`--exit` take a symbol or address (defaults `_out`, `___lib_prog_term`). Build the `.dxe` as in
 `../sharc-loops.md`: `cc21k -proc ADSP-21489 -si-revision any -g -O0 -o x.dxe x.asm x.c`.
+
+Stack probe: `gen_stack_probe.py`, `stack_fixture.txt`, `stack_measured.txt`, `stack_names.json`; findings `../sharc-stacks.md`, check `stack_measured.rs`.

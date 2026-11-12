@@ -58,6 +58,8 @@ pub mod periph;
 #[cfg(test)]
 mod probe_fixture;
 mod shifter;
+#[cfg(test)]
+mod stack_measured;
 mod stacks;
 #[cfg(test)]
 mod support;
