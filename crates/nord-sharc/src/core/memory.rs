@@ -69,6 +69,7 @@ impl Core {
             2 => self.m[n],
             3 => self.l[n],
             4 => self.b[n],
+            5 => self.s[n],
             6 => match n {
                 3 => self.pc,
                 7 | 8 => self.loops.last().map_or(0, |f| f.remaining),
@@ -96,6 +97,7 @@ impl Core {
             2 => self.m[n] = v,
             3 => self.l[n] = v,
             4 => self.b[n] = v,
+            5 => self.s[n] = v,
             7 => match n {
                 0 | 1 => self.ustat[n] = v,
                 2 => self.mode1 = v,
@@ -153,6 +155,12 @@ mod tests {
         assert_eq!((c.mode1, c.read_ureg(0x72)), (0x4F0, 0x4F0));
         c.write_ureg(0x7F, 9);
         assert_eq!(c.ustat[3], 9);
+        c.write_ureg(0x53, 77);
+        assert_eq!(
+            (c.s[3], c.read_ureg(0x53)),
+            (77, 77),
+            "S registers are group 5"
+        );
         c.write_ureg(0x75, 1);
         assert_eq!(c.read_ureg(0x75), 0, "unlisted system registers read as 0");
     }

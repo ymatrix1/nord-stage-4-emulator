@@ -87,6 +87,40 @@ pub(super) fn shift_template(opcode: u64) -> Option<&'static str> {
 }
 
 /// Table 12-12 (multiplier + ALU), opcode = compute bits 21..16.
+/// Text of a shift-immediate word (opcode `0x02`, no data move). Fields, VERIFIED against ADI's
+/// `elfdump` disassembler on 834 instructions of the DSP images (`docs/research/dsp-image-hunt.md`
+/// 5.34): `SHIFTOP` bits 21..16, `DATA12` = bits 30..27 (high four) and 15..8 (low eight),
+/// `Rn` bits 7..4, `Rx` bits 3..0; `bit6 = DATA12[5:0]`, `len6 = DATA12[11:6]`.
+pub fn shift_imm_text(w: u64) -> String {
+    let op = bits(w, 21, 16);
+    let data = (bits(w, 30, 27) << 8) | bits(w, 15, 8);
+    let (n, x) = (bits(w, 7, 4), bits(w, 3, 0));
+    let amount = ((data << 52) as i64) >> 52;
+    let field = format!("{}:{}", data & 63, data >> 6);
+    match op {
+        0 => format!("R{n} = LSHIFT R{x} BY {amount}"),
+        1 => format!("R{n} = ASHIFT R{x} BY {amount}"),
+        2 => format!("R{n} = ROT R{x} BY {amount}"),
+        8 => format!("R{n} = R{n} OR LSHIFT R{x} BY {amount}"),
+        9 => format!("R{n} = R{n} OR ASHIFT R{x} BY {amount}"),
+        16 => format!("R{n} = FEXT R{x} BY {field}"),
+        17 => format!("R{n} = FDEP R{x} BY {field}"),
+        18 => format!("R{n} = FEXT R{x} BY {field} (SE)"),
+        19 => format!("R{n} = FDEP R{x} BY {field} (SE)"),
+        25 => format!("R{n} = R{n} OR FDEP R{x} BY {field}"),
+        27 => format!("R{n} = R{n} OR FDEP R{x} BY {field} (SE)"),
+        20 => format!("R{n} = BITEXT {data}"),
+        22 => format!("R{n} = BITEXT {data} (NU)"),
+        29 => format!("BITDEP R{x} BY {data}"),
+        31 => format!("BFFWRP = {data}"),
+        48 => format!("R{n} = BSET R{x} BY {data}"),
+        49 => format!("R{n} = BCLR R{x} BY {data}"),
+        50 => format!("R{n} = BTGL R{x} BY {data}"),
+        51 => format!("BTST R{x} BY {data}"),
+        _ => format!("SHIFTIMM?op={op} n={n} x={x} data={data}"),
+    }
+}
+
 pub(super) fn mulalu_template(opcode: u64) -> Option<&'static str> {
     Some(match opcode {
         0b000100 => "Rm = Rxm * Rym (SSFR), Ra = Rxa + Rya",

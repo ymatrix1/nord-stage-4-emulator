@@ -53,7 +53,7 @@ pub fn classify(p0: u16, p1: Option<u16>) -> (Kind, usize) {
                 (T2a, 3)
             }
         }
-        0x02 => (T2x, 3),
+        0x02 => (T6n, 3),
         0x04 => {
             if marker {
                 (T7b, 2)
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(classify(0x0FA4, Some(0x006C)), (Kind::T17b, 2));
         assert_eq!(classify(0x0F15, Some(0x000C)), (Kind::T17a, 3));
         assert_eq!(classify(0x1486, Some(0x0000)), (Kind::T18a, 3));
-        assert_eq!(classify(0x023E, Some(0x2019)), (Kind::T2x, 3));
+        assert_eq!(classify(0x023E, Some(0x2019)), (Kind::T6n, 3));
         assert_eq!(classify(0x0001, Some(0x06BE)), (Kind::T21c, 1));
         assert_eq!(classify(0x0000, Some(0x0000)), (Kind::T21, 3));
     }

@@ -51,7 +51,7 @@ def classify(p0: int, p1: int | None) -> tuple[str, int]:
     short = (p0 >> 7) & 1
     table = {
         0x01: ("2b", 2) if short else ("2a", 3),
-        0x02: ("2x", 3),
+        0x02: ("6n", 3),
         0x04: ("7b", 2) if marker else ("7a", 3),
         0x06: ("8a", 3),
         0x07: ("8a", 3),
@@ -210,6 +210,42 @@ SHORT_OPS = [
 ]
 
 
+def shift_imm_text(w: int) -> str:
+    """Text of a shift-immediate word (opcode 0x02, no data move).
+
+    VERIFIED against ADI's elfdump on 834 instructions of the DSP images (docs 5.34): SHIFTOP bits
+    21..16, DATA12 = bits 30..27 (high four) and 15..8 (low eight), Rn 7..4, Rx 3..0;
+    bit6 = DATA12[5:0], len6 = DATA12[11:6].
+    """
+    op = bits(w, 21, 16)
+    data = (bits(w, 30, 27) << 8) | bits(w, 15, 8)
+    n, x = bits(w, 7, 4), bits(w, 3, 0)
+    amount = data - 4096 if data & 0x800 else data
+    field = f"{data & 63}:{data >> 6}"
+    table = {
+        0: f"R{n} = LSHIFT R{x} BY {amount}",
+        1: f"R{n} = ASHIFT R{x} BY {amount}",
+        2: f"R{n} = ROT R{x} BY {amount}",
+        8: f"R{n} = R{n} OR LSHIFT R{x} BY {amount}",
+        9: f"R{n} = R{n} OR ASHIFT R{x} BY {amount}",
+        16: f"R{n} = FEXT R{x} BY {field}",
+        17: f"R{n} = FDEP R{x} BY {field}",
+        18: f"R{n} = FEXT R{x} BY {field} (SE)",
+        19: f"R{n} = FDEP R{x} BY {field} (SE)",
+        25: f"R{n} = R{n} OR FDEP R{x} BY {field}",
+        27: f"R{n} = R{n} OR FDEP R{x} BY {field} (SE)",
+        20: f"R{n} = BITEXT {data}",
+        22: f"R{n} = BITEXT {data} (NU)",
+        29: f"BITDEP R{x} BY {data}",
+        31: f"BFFWRP = {data}",
+        48: f"R{n} = BSET R{x} BY {data}",
+        49: f"R{n} = BCLR R{x} BY {data}",
+        50: f"R{n} = BTGL R{x} BY {data}",
+        51: f"BTST R{x} BY {data}",
+    }
+    return table.get(op, f"SHIFTIMM?op={op} n={n} x={x} data={data}")
+
+
 def short_compute_text(c: int) -> str:
     """Type 2c 12-bit short compute: OP in bits 11..8, Rn in 7..4, Rx in 3..0 (Table, ch. 12)."""
     return SHORT_OPS[bits(c, 11, 8)].format(n=bits(c, 7, 4), x=bits(c, 3, 0))
@@ -359,7 +395,7 @@ def compute_text(c: int) -> str:
 
 def _mem_move(w: int, name: str, iff: str) -> str:
     """Types 3a/3b (Ureg <-> DM/PM(Im, Mn)) and 4a/4b (Dreg <-> DM/PM(data6, Ii))."""
-    tail = f", {compute_text(bits(w, 22, 0))}" if name.endswith("a") else ""
+    tail = f", {compute_text(bits(w, 22, 0))}" if name.endswith("a") and bits(w, 22, 0) else ""
     if name.startswith("3"):
         pm = bits(w, 32, 32)
         base = 8 if pm else 0
@@ -370,7 +406,11 @@ def _mem_move(w: int, name: str, iff: str) -> str:
     else:
         pm = bits(w, 40, 40)
         i = bits(w, 43, 41) + (8 if pm else 0)
-        ea = f"{'PM' if pm else 'DM'}({bits(w, 32, 27)}, I{i})"
+        data = bits(w, 32, 27)
+        data -= 64 if data & 32 else 0  # DATA6 is signed (VERIFIED against ADI elfdump, docs 5.34)
+        # bit 38 = U: DM(I6, 2) post-modifies I6 by 2, DM(2, I6) is a pre-modify offset
+        operands = f"I{i}, {data}" if bits(w, 38, 38) else f"{data}, I{i}"
+        ea = f"{'PM' if pm else 'DM'}({operands})"
         reg = f"R{bits(w, 26, 23)}"
         write = bits(w, 39, 39)
     return f"{iff}{ea} = {reg}{tail}" if write else f"{iff}{reg} = {ea}{tail}"
@@ -378,17 +418,15 @@ def _mem_move(w: int, name: str, iff: str) -> str:
 
 # Instruction forms whose type is known from the diagrams but whose operand fields are not decoded.
 TYPE_ONLY = {
-    "1a": "dual DM/PM move + compute",
-    "1b": "dual DM/PM move",
     "6a": "shift immediate",
-    "7a": "index modify + compute",
-    "7b": "index modify",
-    "9a": "indirect/rel branch + compute",
-    "9b": "indirect/rel branch",
     "10a": "jump + dual move + compute",
-    "16a": "immediate store",
-    "16b": "immediate store (16-bit)",
 }
+
+
+def _dual_half(space: str, write: int, i: int, m: int, reg: int) -> str:
+    if write:
+        return f"{space}(I{i}, M{m}) = R{reg}"
+    return f"R{reg} = {space}(I{i}, M{m})"
 
 
 def decode(parcels: tuple[int, ...]) -> str:
@@ -400,11 +438,13 @@ def decode(parcels: tuple[int, ...]) -> str:
     if name in ("3a", "3b", "4a", "4b"):
         return _mem_move(w, name, iff)
     if name in ("5a", "5b"):
+        # VERIFIED against ADI elfdump (docs 5.34): source bits 42..38 and 32..31, destination
+        # bits 29..23; swap "Rx <-> Sy" with Rx bits 26..23 and Sy bits 41..38.
+        tail = f", {compute_text(bits(w, 22, 0))}" if name == "5a" and bits(w, 22, 0) else ""
         if bits(w, 43, 43):
-            return f"{iff}Dreg <-> CDreg swap (raw {w >> (48 - 16 * len(parcels)):x})"
+            return f"{iff}R{bits(w, 26, 23)} <-> S{bits(w, 41, 38)}{tail}"
         src = (bits(w, 42, 38) << 2) | bits(w, 32, 31)
-        tail = f", {compute_text(bits(w, 22, 0))}" if name == "5a" else ""
-        return f"{iff}{ureg_name(bits(w, 30, 24))} = {ureg_name(src)}{tail}"
+        return f"{iff}{ureg_name(bits(w, 29, 23))} = {ureg_name(src)}{tail}"
     if name in ("14a", "15a"):
         pm = bits(w, 41, 41) if name == "14a" else bits(w, 44, 44)
         mem = "PM" if pm else "DM"
@@ -433,10 +473,35 @@ def decode(parcels: tuple[int, ...]) -> str:
         return compute_text(bits(w, 38, 16))
     if name == "2c":
         return short_compute_text(bits(w, 43, 32))
-    if name == "2x":
-        extra = bits(w, 31, 23)
-        tail = f"  [extra bits 31..23 = 0x{extra:x}]" if extra else ""
-        return f"{iff}{compute_text(bits(w, 22, 0))}{tail}"
+    if name in ("1a", "1b"):
+        # layout VERIFIED against ADI elfdump on 587 instructions (docs 5.34)
+        dm = _dual_half("DM", bits(w, 44, 44), bits(w, 43, 41), bits(w, 40, 38), bits(w, 36, 33))
+        pm = _dual_half(
+            "PM", bits(w, 37, 37), bits(w, 32, 30) + 8, bits(w, 29, 27) + 8, bits(w, 26, 23)
+        )
+        if name == "1a" and bits(w, 22, 0):
+            return f"{dm}, {pm}, {compute_text(bits(w, 22, 0))}"
+        return f"{dm}, {pm}"
+    if name in ("16a", "16b"):
+        bank = 8 if bits(w, 37, 37) else 0
+        space = "PM" if bank else "DM"
+        if name == "16a":
+            value = bits(w, 31, 0)
+        else:
+            value = bits(w, 31, 16)
+            value = (value - 0x10000 if value & 0x8000 else value) & 0xFFFFFFFF
+        # no condition field in this type
+        return f"{space}(I{bits(w, 43, 41) + bank}, M{bits(w, 40, 38) + bank}) = 0x{value:x}"
+    if name in ("7a", "7b"):
+        bank = 8 if bits(w, 38, 38) else 0
+        src = bits(w, 32, 30) + bank
+        dst = src ^ bits(w, 26, 24)
+        text = f"{iff}I{dst} = MODIFY(I{src}, M{bits(w, 29, 27) + bank})"
+        if name == "7a" and bits(w, 22, 0):
+            text += f", {compute_text(bits(w, 22, 0))}"
+        return text
+    if name == "6n":
+        return f"{iff}{shift_imm_text(w)}"
     if name == "19a":
         g = 8 if bits(w, 38, 38) else 0
         src = bits(w, 34, 32) + g
@@ -445,14 +510,14 @@ def decode(parcels: tuple[int, ...]) -> str:
         return f"I{dst} = {op}(I{src}, 0x{bits(w, 31, 0):x})"
     if name in TYPE_ONLY:
         return f"{TYPE_ONLY[name]} (operands raw) " + " ".join(f"{x:04x}" for x in parcels)
-    if name == "21c":
-        return (
-            "NOP" if parcels[0] == 0x0001 else "21c? raw " + " ".join(f"{x:04x}" for x in parcels)
-        )
+    if name == "21c" or (name == "21/22" and w == 0):
+        return "NOP"
     if name == "17a":
         return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 0):x}"
     if name == "17b":
-        return f"{ureg_name(bits(w, 38, 32))} = 0x{bits(w, 31, 16):x}"
+        value = bits(w, 31, 16)
+        value = (value - 0x10000 if value & 0x8000 else value) & 0xFFFFFFFF  # sign extended
+        return f"{ureg_name(bits(w, 38, 32))} = 0x{value:x}"
     if name == "18a":
         sreg = ureg_name(0x70 | bits(w, 35, 32))
         return f"BIT {BOP.get(bits(w, 39, 37), '?')} {sreg} 0x{bits(w, 31, 0):x}"
@@ -463,9 +528,25 @@ def decode(parcels: tuple[int, ...]) -> str:
     if name == "2a":
         return f"{iff}{compute_text(bits(w, 22, 0))}"
     if name in ("11a", "11c"):
-        return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}"
+        delayed = " (DB)" if bits(w, 38, 38) else ""
+        return f"{iff}{'RTI' if bits(w, 40, 40) else 'RTS'}{delayed}"
+    if name in ("9a", "9b"):
+        # delayed flag bit 26, call bit 39, indirect target Ic + Md on DAG2 (docs 5.34)
+        op = "CALL" if bits(w, 39, 39) else "JUMP"
+        delayed = " (DB)" if bits(w, 26, 26) else ""
+        if bits(w, 40, 40):
+            rel = bits(w, 32, 27)
+            target = f"(PC, {rel - 64 if rel & 32 else rel})"
+        else:
+            target = f"(M{bits(w, 29, 27) + 8}, I{bits(w, 32, 30) + 8})"
+        tail = f", {compute_text(bits(w, 22, 0))}" if name == "9a" and bits(w, 22, 0) else ""
+        return f"{iff}{op} {target}{delayed}{tail}"
     if name == "12a":
-        return f"DO 0x{bits(w, 23, 0):x} UNTIL LCE, LCNTR = {bits(w, 39, 24)}"
+        # opcode 0x0D (bit 40) counts with a universal register, 0x0C with a 16-bit immediate
+        count = ureg_name(bits(w, 38, 32)) if bits(w, 40, 40) else bits(w, 39, 24)
+        offset = bits(w, 22, 0)
+        offset -= 1 << 23 if offset & (1 << 22) else 0
+        return f"DO (PC, {offset}) UNTIL LCE, LCNTR = {count}"
     if name == "13a":
         return f"DO 0x{bits(w, 23, 0):x} UNTIL {COND[bits(w, 37, 33)]}"
     return f"{name}? raw " + " ".join(f"{x:04x}" for x in parcels)
