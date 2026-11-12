@@ -27,7 +27,10 @@ pub fn mul(a: u64, b: u64, mode: Mode) -> Out {
     let (x, y) = (unpack(a, mode.r32), unpack(b, mode.r32));
     let neg = x.neg ^ y.neg;
     match (x.class, y.class) {
-        (Class::Nan, _) | (_, Class::Nan) => invalid(false),
+        // VERIFIED (`simd_measured.rs`, 5 NaN operand pairs per element): a NaN operand gives an
+        // all-ones NaN with the sign of the first NaN operand (x before y).
+        (Class::Nan, _) => invalid(x.neg),
+        (_, Class::Nan) => invalid(y.neg),
         (Class::Inf, Class::Zero) | (Class::Zero, Class::Inf) => invalid(neg),
         (Class::Inf, _) | (_, Class::Inf) => Out {
             v: repack(Un { neg, ..x_inf() }),
@@ -95,5 +98,15 @@ mod tests {
             !o.az && !o.an && !o.ai,
             "the ALU flags are not the multiplier's"
         );
+    }
+
+    #[test]
+    fn a_nan_operand_gives_all_ones_with_the_sign_of_the_first_nan() {
+        let neg_nan = u64::from(0xFFFF_FFFFu32) << 8;
+        let pos_nan = u64::from(0x7FFF_FFFFu32) << 8;
+        assert_eq!(mul(f(3.0), neg_nan, M).v >> 8, 0xFFFF_FFFF);
+        assert_eq!(mul(neg_nan, f(3.0), M).v >> 8, 0xFFFF_FFFF);
+        assert_eq!(mul(pos_nan, neg_nan, M).v >> 8, 0x7FFF_FFFF, "x first");
+        assert_eq!(mul(neg_nan, pos_nan, M).v >> 8, 0xFFFF_FFFF, "x first");
     }
 }

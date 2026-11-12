@@ -1,0 +1,1 @@
+{"per_iter": 120, "ops": ["fadd", "fsub", "fmul", "favg", "mul_ssf", "mul_ssfr", "mul_ssi", "mac_ssf", "msub_ssfr", "dual_fmul_fadd", "dual_mul_add", "dual_addsub", "dual_fsubadd", "mac_dual", "cond_add"], "n_a": 9, "n_b": 8}

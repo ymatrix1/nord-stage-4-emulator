@@ -59,6 +59,8 @@ pub mod periph;
 mod probe_fixture;
 mod shifter;
 #[cfg(test)]
+mod simd_measured;
+#[cfg(test)]
 mod stack_measured;
 mod stacks;
 #[cfg(test)]
@@ -323,6 +325,9 @@ impl Core {
         std::mem::swap(&mut self.flags, &mut self.flags_y);
         std::mem::swap(&mut self.mr, &mut self.mr_y);
         std::mem::swap(&mut self.fx, &mut self.fx_y);
+        // MN/MV/MU/MI, AF and the sticky bits belong to the element too
+        self.sys.astat_extra.swap(0, 1);
+        self.sys.stky.swap(0, 1);
     }
 
     /// Whether condition code `c` (0..32, `31` = TRUE) holds for PEx.
