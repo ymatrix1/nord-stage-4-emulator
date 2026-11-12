@@ -1,4 +1,4 @@
-//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--trace N]`
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--trace N]`
 //! runs a flat SRAM image from a short-word entry address, optionally scripting device registers,
 //! writing data words at a given step (a host command) and printing the last N pcs.
 //!
@@ -31,12 +31,39 @@ fn register_code(name: &str) -> Option<u8> {
     Some((group << 4) | n)
 }
 
+/// R0-R15, I0-I15 and the condition flags as text lines.
+fn register_dump(core: &Core) -> String {
+    let row = |name: &str, regs: &[u32]| {
+        let words: Vec<String> = regs.iter().map(|v| format!("{v:x}")).collect();
+        format!(
+            "{name}: {}
+",
+            words.join(" ")
+        )
+    };
+    let f = core.flags;
+    format!(
+        "{}{}{}flags AZ={} AN={} AV={} AC={} TF={}
+",
+        row("R", &core.r),
+        row("I", &core.i),
+        row("M", &core.m),
+        u8::from(f.az),
+        u8::from(f.an),
+        u8::from(f.av),
+        u8::from(f.ac),
+        u8::from(f.tf)
+    )
+}
+
 fn run(args: &[String]) -> Result<String, String> {
     let mut positional = Vec::new();
     let mut devices = Vec::new();
     let mut pokes: Vec<(u64, u32, u32)> = Vec::new();
     let mut registers: Vec<(u8, u32)> = Vec::new();
     let mut dumps: Vec<(u32, u32)> = Vec::new();
+    let mut watch = u32::MAX;
+    let mut show_regs = false;
     let mut trace = 0usize;
     let mut lenient = false;
     let mut it = args.iter();
@@ -61,6 +88,11 @@ fn run(args: &[String]) -> Result<String, String> {
                 ));
             }
             "--lenient" => lenient = true,
+            "--regs" => show_regs = true,
+            "--watch" => {
+                watch = parse_number(it.next().ok_or("--watch needs ADDR")?).ok_or("bad --watch")?
+                    as u32;
+            }
             "--dump" => {
                 let spec = it.next().ok_or("--dump needs ADDR:COUNT")?;
                 let (addr, count) = spec.split_once(':').ok_or("--dump needs ADDR:COUNT")?;
@@ -86,7 +118,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
-            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--lenient] [--trace N]".to_string(),
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev A=V]... [--poke STEP:ADDR=VALUE]... [--set REG=VALUE]... [--dump ADDR:COUNT]... [--watch ADDR] [--regs] [--lenient] [--trace N]".to_string(),
         );
     };
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
@@ -94,6 +126,7 @@ fn run(args: &[String]) -> Result<String, String> {
     let max_steps = parse_number(max_steps).ok_or("bad MAX_STEPS")?;
     let mut core = Core::new(&data);
     core.lenient = lenient;
+    core.watch = watch;
     core.pc = entry;
     for (code, value) in registers {
         core.write_ureg(code, value);
@@ -140,6 +173,16 @@ fn run(args: &[String]) -> Result<String, String> {
 ",
             core.skipped,
             core.first_skipped.unwrap_or(0)
+        ));
+    }
+    if show_regs {
+        out.push_str(&register_dump(&core));
+    }
+    for (step, pc, value) in &core.watch_hits {
+        out.push_str(&format!(
+            "write DM(0x{:x}) = 0x{value:x} at pc 0x{pc:x}, step {step}
+",
+            core.watch
         ));
     }
     for (addr, count) in dumps {
