@@ -39,6 +39,9 @@ impl Core {
 
     /// Writes a 32-bit data word at a normal-word address (see [`Core::dm_read`]).
     pub fn dm_write(&mut self, addr: u32, value: u32) -> Result<(), u32> {
+        if addr == self.watch && self.watch_hits.len() < super::WATCH_LIMIT {
+            self.watch_hits.push((self.steps, self.pc, value));
+        }
         if (addr as usize) < IOP_WORDS {
             self.iop[addr as usize] = value;
             return Ok(());
@@ -129,6 +132,16 @@ mod tests {
         c.preset_device(0x3108_D008, 5);
         c.dm_write(0x3108_D008, 9).unwrap();
         assert_eq!(c.dm_read(0x3108_D008), Ok(5));
+    }
+
+    #[test]
+    fn watch_logs_writes_to_one_address() {
+        let mut c = Core::new(&[]);
+        c.watch = 0x9_0010;
+        c.pc = 0x42;
+        c.dm_write(0x9_0010, 7).unwrap();
+        c.dm_write(0x9_0014, 8).unwrap();
+        assert_eq!(c.watch_hits, vec![(0, 0x42, 7)]);
     }
 
     #[test]

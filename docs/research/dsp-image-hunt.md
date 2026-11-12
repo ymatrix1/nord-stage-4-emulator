@@ -713,6 +713,13 @@ The register is in bits 29..23 and the offset in bits 22..16 as a 7-bit two's-co
 - Record 1 word 0 holds `0x7FFFFFFF` by then (the image has `0x12538C`), so the next `CALL (M8, I8)` jumps to `0x7FFFFFFF` and the run slides. Something in module 0's pass writes that value (a saturated result, or a write through a wrongly decoded or skipped instruction): open.
 - 65 compute ops were skipped before the wild jump (all of the undocumented `2x` forms), so inexact arithmetic is the first suspect.
 
+### 5.30 Who writes `0x7FFFFFFF` into record 1
+
+New `sharc-run` options: `--watch ADDR` logs every write to a data address (step, pc, value, at most 64) and `--regs` prints R, I, M and the condition flags at the stop. ORG Core2 (`--lenient --dev 0x282c0380=1 --poke 100000:0xb00e2=1`):
+
+- `--watch 0xc13ce` shows one write: `0x7FFFFFFF` at `pc 0x125f08` (byte `0x24BE10`, `DM(40, I0) = R4, F1 = F1 * F6`), step 100148, 148 steps after the trigger, inside the handler preamble and before module 0's routine runs. `I0 = 0xC13A6` (record 0), so `DM(40, I0)` is word 0 of record 1.
+- The preamble reads the record's fields with `Rn = DM(offset, I0)`: word 34 (`R1`, here `0x3B96FF65`), word 40 (`R4`, the next record's code pointer), words 36 to 58. It compares `R0 = DM(0xE0000)` with `R1` (`COMP(R0, R1)`) and, when `LT` holds, replaces `R4` by `DM(38, I1)` where `I1` points at slot records (`0xC1496`, 18-word slots `0xCCCCCCC 0xCCCCCCC 0x7FFFFFFF 0x7FFFFFFF ptr ptr ...`, whose `0x7FFFFFFF` is an "unset" default). It then writes `R4` back to `DM(40, I0)`.
+- In the image `DM(0xE0000)` is 0, so `0 < 0x3B96FF65` holds and the pointer is replaced by the default. Setting `DM(0xE0000)` to `0`, `0x3B96FF65` or `0x3F800000` does not change that (the compare is a signed fixed-point `COMP`, not a float compare, and the flag path involves more state); setting it to `0x7FFFFFFF` takes another path that writes `0xCCCCCCC`. Reading: the pass needs input state that is normally written by the ARM (the region `DM(0xE0000..)` and the slot records), so the next step is to find what the ARM writes there and in what format, not to patch values.
 ### 5.31 What the image holds at `DM(0xE0000)`
 
 Non-zero data extents of the ORG Core2 SRAM image (`python` over `core2_sram.bin`, normal-word addresses): `0x90001..0x9631E` (21,741 words), `0xB00E4..0xB2EFA` (4,672), `0xC00DC..0xC2C83` (6,291), `0xE0000..0xE08C9` (620). Only ORG reads `DM(0xE0000)` (one load in each ORG section, none in FX), and no instruction writes that address directly.
