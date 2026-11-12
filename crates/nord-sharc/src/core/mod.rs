@@ -7,8 +7,7 @@
 //!
 //! Provenance of the modelled semantics: instruction layouts are the ones verified in
 //! `visa.rs`; behaviour follows the SHARC Processor Programming Reference rev 2.4. Float results
-//! use IEEE single precision with round to nearest (ASSUMED: the hardware default 40-bit extended
-//! precision is not modelled yet, see the spec's risk list).
+//! use the 40-bit extended format with the MODE1 TRUNC / RND32 rounding modes (`float.rs`).
 //!
 //! Layout: this file holds the state and the small shared helpers; `memory` the data memory and
 //! register files, `dag` address generation, `alu` and `multiplier` the compute units, `moves`
@@ -20,6 +19,10 @@ mod branch;
 mod dag;
 mod dualmove;
 mod exec;
+mod float;
+mod float_conv;
+mod float_misc;
+mod float_ops;
 mod memory;
 mod moves;
 mod multifunction;
@@ -83,6 +86,9 @@ pub struct Flags {
     pub an: bool,
     pub av: bool,
     pub ac: bool,
+    /// Float invalid-operation flag (AI) and the sign flag of ABS/MANT (AS).
+    pub ai: bool,
+    pub as_: bool,
     pub tf: bool,
     /// Shifter flags: zero result, overflow and sign.
     pub sz: bool,
@@ -140,6 +146,9 @@ pub struct Core {
     /// PEy condition flags and multiplier result registers (used in SIMD mode).
     pub flags_y: Flags,
     pub mr_y: [i128; 2],
+    /// Low 8 bits of the 40-bit float registers of PEx and PEy (see `float_ops`).
+    fx: float_ops::ExtFile,
+    fx_y: float_ops::ExtFile,
     /// Number of instructions executed.
     pub steps: u64,
     sram: Box<[u8]>,
@@ -154,11 +163,6 @@ pub struct Core {
     call_stack: Vec<u32>,
     loops: Vec<LoopFrame>,
     pending: Option<Pending>,
-}
-
-#[inline]
-fn f32_of(x: u32) -> f32 {
-    f32::from_bits(x)
 }
 
 #[inline]
@@ -196,6 +200,8 @@ impl Core {
             flags: Flags::default(),
             flags_y: Flags::default(),
             mr_y: [0; 2],
+            fx: float_ops::ExtFile::default(),
+            fx_y: float_ops::ExtFile::default(),
             steps: 0,
             sram: mem,
             iop: vec![0u32; IOP_WORDS].into_boxed_slice(),
@@ -235,6 +241,7 @@ impl Core {
         std::mem::swap(&mut self.r, &mut self.s);
         std::mem::swap(&mut self.flags, &mut self.flags_y);
         std::mem::swap(&mut self.mr, &mut self.mr_y);
+        std::mem::swap(&mut self.fx, &mut self.fx_y);
     }
 
     /// Whether condition code `c` (0..32, `31` = TRUE) holds for PEx.
