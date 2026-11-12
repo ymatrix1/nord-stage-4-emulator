@@ -11,15 +11,15 @@ use super::Core;
 const CSV: &str = include_str!("../../../../docs/research/sharc-fixed/fixed_measured.csv");
 
 /// ASTAT bits compared: AZ AV AN AC AS AI, MN MV MU MI, SV SZ SS (AF is ignored) and CACC.
-const ASTAT_MASK: u64 = 0xFF00_3BFF;
+pub(super) const ASTAT_MASK: u64 = 0xFF00_3BFF;
 /// STKY bits compared: AUS AVS AOS, AIS MOS MVS MUS MIS.
-const STKY_MASK: u64 = 0x3E7;
+pub(super) const STKY_MASK: u64 = 0x3E7;
 
-fn hex(s: &str) -> Option<u64> {
+pub(super) fn hex(s: &str) -> Option<u64> {
     u64::from_str_radix(s, 16).ok()
 }
 
-fn mr_value(p: [u64; 3]) -> i128 {
+pub(super) fn mr_value(p: [u64; 3]) -> i128 {
     let raw = i128::from(p[0] as u16) << 64 | i128::from(p[1]) << 32 | i128::from(p[2]);
     (raw << 48) >> 48
 }

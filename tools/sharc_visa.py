@@ -268,7 +268,7 @@ def mult_text(opcode: int, rn: int, rx: int, ry: int) -> str | None:
                 2: "MRF = SAT MRF",
                 3: "MRB = SAT MRB",
             }
-            return f"{sat[sel]} ({'U' if opcode & 1 else 'S'}{'F' if f else 'I'})"
+            return f"{sat[sel]} ({'S' if opcode & 1 else 'U'}{'F' if f else 'I'})"
         if opcode in (0x14, 0x16):
             return "MRF = 0" if opcode == 0x14 else "MRB = 0"
         if opcode >> 4 == 1 and (opcode >> 3) & 1:
@@ -279,7 +279,7 @@ def mult_text(opcode: int, rn: int, rx: int, ry: int) -> str | None:
                 2: "MRF = RND MRF",
                 3: "MRB = RND MRB",
             }[sel]
-            return f"{reg} ({'U' if opcode & 1 else 'S'}F)"
+            return f"{reg} ({'S' if opcode & 1 else 'U'}F)"
         return None
     sign = {1: "", 2: "+ ", 3: "- "}[cls]
     reg = {0: "R{n}", 1: "R{n}", 2: "MRF", 3: "MRB"}[sel].format(n=rn)
@@ -366,8 +366,11 @@ def multi_text(c: int) -> str | None:
     if bits(c, 21, 21):  # 1 1x: multiplier and dual ALU
         k = "F" if bits(c, 20, 20) else "R"
         rs = bits(c, 19, 16)
+        # ADI prints the rounding fractional format of the fixed-point product: `(SSFR)`
+        fmt = "" if k == "F" else " (SSFR)"
         return (
-            f"{k}{rm} = {k}{xm} * {k}{ym}, {k}{ra} = {k}{xa} + {k}{ya}, {k}{rs} = {k}{xa} - {k}{ya}"
+            f"{k}{rm} = {k}{xm} * {k}{ym}{fmt}, {k}{ra} = {k}{xa} + {k}{ya}, "
+            f"{k}{rs} = {k}{xa} - {k}{ya}"
         )
     text = MULALU_OPS.get(bits(c, 21, 16))
     if text is None:

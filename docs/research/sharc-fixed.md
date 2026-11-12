@@ -30,16 +30,23 @@ Shifter flags (SZ bit 12, SV bit 11, SS bit 13; everything else already matched)
 * `ASHIFT` left sets SV only when a significant bit is lost; `LSHIFT` left sets it for any left shift (the model used the LSHIFT rule for both). The OR form of `ASHIFT` by 32 or more sets SV even for a zero operand.
 
 FIX/TRUNC and compares:
-* A NaN input of `FIX`/`TRUNC` gives all ones with AI only (no AN). A nonzero input that converts to zero latches STKY AUS (bit 0).
+* A NaN input of `FIX`/`TRUNC` gives all ones with AI only (no AN). STKY AUS (bit 0) is latched when the scaled magnitude of a nonzero input is below 1 (exponent + scale < 0), whatever the rounded result (0.75 rounds to 1 and still sets it); AVS (bit 1) for overflow, with ALUSAT clear and set (second probe set, 22 values x 7 scales x FIX/TRUNC with and without scale).
 * **CACC** (ASTAT bits 24..31) is a shift register: `COMP`/`COMPU` (fixed or float, any operation form) shift `Rx > Ry` in at bit 31 and move the older results down; a NaN operand counts as greater, denormals compare as zero; no other operation changes it (9 212 transitions in the float probe and 288 compare rows). The model did not have it.
+
+## Second probe set (`gen_fixed_probe2.py`, `fixed2_measured.csv`, 3 176 rows)
+
+* **Shifter OR forms** (`r0 = r0 or lshift/ashift/fdep ... `, R0 preset 0x0F0F0F0F after the ASTAT/STKY clear): result and flags match the model; the first set's R0 = 0 slip is closed.
+* **MRB**: multiply, accumulate, `Rn =` forms, SAT, RND and the transfers on MRB behave exactly like the MRF ones (every format, both presets, 49 operand pairs); an operation on one accumulator never touches the other.
+* **SRCU** (MODE1 bit 2): setting it **exchanges the contents of MRF and MRB** at the moment of the write (a preset written before the toggle reads back from the other name after it); instructions keep addressing MRF/MRB by name afterwards. This is what `banks.rs` already modelled (SRCU swap on MODE1 toggle); the data confirm it, including the write-after-toggle case.
+* **Integer rounding forms** (`SSIR`, `UUIR` ...): the `R` is ignored; they equal the plain integer forms. The model refused them.
 
 ## Implications
 
 * `fixed_alu.rs` (new, the fixed ALU moved out of `alu.rs`), `multiplier.rs` (rewritten), `shifter.rs`, `float_conv.rs`, `float_misc.rs` follow the measurement; `fixed_measured.rs` runs every CSV row (R0, MR0..MR2, ASTAT without AF, STKY) through `Core::compute` / `short_compute`.
 * Firmware that relied on the multiplier saturating `Rn` results (assumed before) behaves differently: only the explicit `SAT` forms saturate.
-* Limits of the data: the `OR` shifter forms were measured with R0 = 0 (a harness slip: the preset was overwritten), so their OR-with-R0 behaviour is untested; MRB/SRCU, SIMD (PEy) flags, the integer-rounding multiplier forms and the `Rn = Rx + CI` / `+ CI - 1` single-operand forms were not measured; the AUS rule for FIX is derived from one operand (a tiny float) and may be broader (any result that rounds to zero) or narrower; `MI` is never set by fixed-point operations in this data.
+* Limits of the data: the SIMD (PEy) flags, the `Rn = Rx + CI` / `+ CI - 1` single-operand ALU forms and the MODE1 SRCU effect on the data register file (only the MR exchange was measured) are not covered; `MI` is never set by fixed-point operations in this data.
 
 ## Follow-ups
 
-* Re-run the OR forms with a nonzero R0, measure MRB (`MODE1` SRCU), SIMD flags and STKY after FIX overflow.
+* SIMD (PEy) flags: needs a SIMD-mode setup and the PEy register view.
 * Differential run of real firmware routines on the simulator and on the oracle.
