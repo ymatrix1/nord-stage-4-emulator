@@ -363,17 +363,17 @@ impl Stage4Engine {
         }
 
         // Synth (Layers A, B & C + cutoff morph matrix)
-        Self::apply_synth_layer(
+        crate::synth_params::apply_decoded_layer(
             &mut self.synth_a,
             &mut self.synth_cutoff_morph[0],
             &prog.synth.layer_a,
         );
-        Self::apply_synth_layer(
+        crate::synth_params::apply_decoded_layer(
             &mut self.synth_b,
             &mut self.synth_cutoff_morph[1],
             &prog.synth.layer_b,
         );
-        Self::apply_synth_layer(
+        crate::synth_params::apply_decoded_layer(
             &mut self.synth_c,
             &mut self.synth_cutoff_morph[2],
             &prog.synth.layer_c,
@@ -448,53 +448,6 @@ impl Stage4Engine {
             slot.delta_aftertouch = morph.aftertouch;
             slot.delta_pedal = morph.ctrl_pedal;
         }
-    }
-
-    fn apply_synth_layer(
-        synth: &mut SynthLayer,
-        cutoff_morph: &mut MorphParameter,
-        dec: &crate::cbin::SynthLayerDecoded,
-    ) {
-        let ctrl_norm = (dec.detune / 10.0).clamp(0.0, 1.0);
-        synth.osc_mode = dec.osc_mode;
-        synth.waveform = dec.waveform;
-        synth.fm_amount = ctrl_norm;
-        synth.fm_ratio =
-            crate::synth::FM_RATIOS[(dec.wave_id as usize) % crate::synth::FM_RATIOS.len()];
-        synth.fm_feedback = if (dec.wave_id & 1) != 0 { 0.25 } else { 0.0 };
-        synth.fm_sub_amount = if dec.osc_cat > 0 { 0.35 } else { 0.0 };
-        synth.supersaw_detune = ctrl_norm;
-        synth.pulse_width = 0.5 - ctrl_norm * 0.45;
-        synth.wavetable_index = dec.wave_id % (crate::synth::NUM_WAVETABLES as u8);
-        synth.wavetable_position = ctrl_norm;
-        synth.filter_model = dec.filter_model;
-        synth.cutoff_hz = dec.filter_cutoff_hz;
-        synth.resonance = dec.filter_resonance;
-        synth.filter_drive = dec.filter_drive;
-        synth.filter_env_amount = dec.filter_env_amount;
-        synth.kb_track = dec.kb_track.min(3);
-        synth.attack_sec = (dec.env_attack_ms / 1000.0).clamp(0.0005, 45.0);
-        synth.decay_sec = (dec.env_decay_ms / 1000.0).clamp(0.003, 45.0);
-        synth.sustain_level = if dec.env_decay_ms >= 44_000.0 || !dec.env_decay_ms.is_finite() {
-            1.0
-        } else {
-            0.6
-        };
-        synth.release_sec = (dec.env_release_ms / 1000.0).clamp(0.003, 45.0);
-        synth.lfo_rate_hz = dec.lfo_rate_hz;
-        synth.lfo_amount = dec.lfo_amount;
-        synth.arp_mode = if dec.arp_enabled {
-            crate::synth::ArpMode::Up
-        } else {
-            crate::synth::ArpMode::Off
-        };
-        synth.arp_rate_bpm = dec.arp_bpm;
-
-        let cut_base = crate::cbin::cutoff_hz_to_norm(dec.filter_cutoff_hz);
-        cutoff_morph.base = cut_base;
-        cutoff_morph.delta_wheel = dec.filter_cutoff_morph.wheel;
-        cutoff_morph.delta_aftertouch = dec.filter_cutoff_morph.aftertouch;
-        cutoff_morph.delta_pedal = dec.filter_cutoff_morph.ctrl_pedal;
     }
 
     fn apply_fx_chain(fx: &mut LayerFxChain, dec: &crate::cbin::FxDecoded) {
@@ -1046,21 +999,27 @@ mod tests {
     }
 
     #[test]
-    fn apply_synth_layer_forwards_wavetable_fm_and_filter_env() {
+    fn apply_program_routes_synth_layer_params_through_synth_params() {
         let mut engine = Stage4Engine::new(48_000.0);
         let mut prog = crate::cbin::ProgramDecoded::default();
-        prog.synth.layer_a.osc_mode = crate::synth::SynthOscMode::Fm;
-        prog.synth.layer_a.wave_id = 11;
-        prog.synth.layer_a.osc_cat = 2;
-        prog.synth.layer_a.detune = 6.5;
-        prog.synth.layer_a.filter_env_amount = 0.75;
+        let l = &mut prog.synth.layer_b;
+        l.unison = 2;
+        l.legato = true;
+        l.glide = 5.0;
+        l.filter_env_dedicated = true;
+        l.filter_env_decay_ms = 500.0;
+        l.lfo_dest = crate::synth::LfoDestination::OscPitch;
         engine.apply_program(&prog);
 
-        assert_eq!(engine.synth_a.wavetable_index, 11);
-        assert!((engine.synth_a.fm_ratio - crate::synth::FM_RATIOS[11]).abs() < 1e-6);
-        assert!((engine.synth_a.fm_feedback - 0.25).abs() < 1e-6);
-        assert!((engine.synth_a.fm_sub_amount - 0.35).abs() < 1e-6);
-        assert!((engine.synth_a.filter_env_amount - 0.75).abs() < 1e-6);
+        let s = &engine.synth_b;
+        assert_eq!(s.unison, 2);
+        assert!(s.mono && s.legato);
+        assert!(s.glide_sec > 0.0);
+        assert!(s.filter_env_dedicated);
+        assert!((s.filter_env_decay_sec - 0.5).abs() < 1e-6);
+        assert_eq!(s.lfo_dest, crate::synth::LfoDestination::OscPitch);
+        // Untouched layers keep polyphonic defaults.
+        assert!(!engine.synth_a.mono);
     }
 
     #[test]

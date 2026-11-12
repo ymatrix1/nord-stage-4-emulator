@@ -2,24 +2,48 @@
 //!
 //! Spec: `docs/specs/synth-engine.md`
 
-use serde::{Deserialize, Serialize};
 use std::f32::consts::{PI, TAU};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
+
+pub use crate::synth_sample::{LoadedSynthSample, SampleTimbre, SynthSampleSound};
+use crate::synth_tables::lfo_pitch_semitones;
+pub use crate::synth_types::{
+    ArpMode, FilterModel, LfoDestination, LfoShape, NotePriority, SynthOscMode, VaWaveform,
+    VibratoMode,
+};
+pub use crate::synth_wavetable::NUM_WAVETABLES;
+use crate::synth_wavetable::{sample_wavetable, wavetable_bank};
+
+mod arp;
+mod sample_osc;
+mod voice_alloc;
+
+#[cfg(test)]
+pub(crate) mod test_util {
+    use super::*;
+
+    pub(crate) fn render_n(synth: &mut SynthLayer, n: usize) -> Vec<[f32; 2]> {
+        (0..n).map(|_| synth.render_frame()).collect()
+    }
+
+    pub(crate) fn energy(frames: &[[f32; 2]]) -> f32 {
+        frames.iter().map(|f| f[0] * f[0] + f[1] * f[1]).sum()
+    }
+
+    pub(crate) fn samples_until_freq(s: &mut SynthLayer, target: f32) -> usize {
+        for n in 0..400_000 {
+            s.render_frame();
+            let v = s.voices.iter().find(|v| v.active).unwrap();
+            if (v.freq_hz - target).abs() < target * 0.001 {
+                return n;
+            }
+        }
+        panic!("glide never reached target");
+    }
+}
 
 /// Maximum polyphonic voices per Synth layer. Pre-allocated with zero heap allocations during playback.
 pub const MAX_SYNTH_VOICES: usize = 16;
-
-/// Total number of single-cycle wavetables in the Nord Wave 2 derived bank (`0..=63`).
-pub const NUM_WAVETABLES: usize = 64;
-
-/// Number of octave mipmap levels per wavetable to prevent Nyquist aliasing.
-const WAVETABLE_MIPS: usize = 8;
-
-/// Single-cycle wavetable lookup resolution in samples.
-const WAVETABLE_SIZE: usize = 256;
-
-/// Maximum harmonic indices permitted at each mipmap level (2x oversampled guard).
-const MIP_MAX_HARMONICS: [usize; WAVETABLE_MIPS] = [128, 64, 32, 16, 8, 4, 2, 1];
 
 /// Classic FM harmonic and inharmonic carrier:modulator ratios.
 pub const FM_RATIOS: [f32; 16] = [
@@ -40,372 +64,6 @@ pub const FM_RATIOS: [f32; 16] = [
     2.5,
     3.5,
 ];
-
-/// Timbre brightness damping curve for `SAMPLES` oscillator playback.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum SampleTimbre {
-    #[default]
-    Off,
-    Soft,
-    Bright,
-}
-
-/// Pre-loaded single-zone multisample waveform ready for lock-free real-time synthesis.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LoadedSynthSample {
-    pub root_key: u8,
-    pub key_low: u8,
-    pub key_high: u8,
-    pub sample_rate: f32,
-    pub pcm: Arc<[f32]>,
-    pub pcm_right: Option<Arc<[f32]>>,
-    pub loop_start: Option<usize>,
-    pub loop_end: Option<usize>,
-    pub loop_crossfade: usize,
-}
-
-/// Pre-decoded playable multisample instrument for `SynthOscMode::Sample`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SynthSampleSound {
-    pub name: String,
-    pub zones: Vec<LoadedSynthSample>,
-}
-
-impl SynthSampleSound {
-    /// Creates a synthetic single-zone multisample fixture for deterministic rendering/tests.
-    pub fn new_synthetic(
-        name: &str,
-        root_key: u8,
-        pcm: &[f32],
-        sample_rate: f32,
-        loop_range: Option<(usize, usize)>,
-        loop_crossfade: usize,
-    ) -> Self {
-        let (loop_start, loop_end) = match loop_range {
-            Some((s, e)) if e > s && e <= pcm.len() => (Some(s), Some(e)),
-            _ => (None, None),
-        };
-        Self {
-            name: name.to_string(),
-            zones: vec![LoadedSynthSample {
-                root_key,
-                key_low: 0,
-                key_high: 127,
-                sample_rate: sample_rate.max(8000.0),
-                pcm: pcm.to_vec().into(),
-                pcm_right: None,
-                loop_start,
-                loop_end,
-                loop_crossfade,
-            }],
-        }
-    }
-
-    /// Creates a multi-zone sample sound from pre-decoded key/velocity zones.
-    pub fn from_zones(name: &str, zones: Vec<LoadedSynthSample>) -> Self {
-        Self {
-            name: name.to_string(),
-            zones,
-        }
-    }
-
-    /// Parses and decodes a clean-room `.nsmp4` byte slice into a playable `SynthSampleSound`.
-    pub fn from_nsmp4_bytes(bytes: &[u8]) -> Result<Self, crate::cbin::CbinError> {
-        struct DecodedStrokeCache<'a> {
-            id: u32,
-            left: Arc<[f32]>,
-            right: Option<Arc<[f32]>>,
-            meta: &'a crate::cbin::Nsmp4DecodedStroke,
-        }
-
-        let inst = crate::cbin::Nsmp4Instrument::parse(bytes)?;
-        let decoded = inst.decode_strokes(bytes)?;
-        let mut by_id = Vec::with_capacity(decoded.len());
-        for stroke in &decoded {
-            let g = stroke.gain_linear();
-            let left: Vec<f32> = stroke.left.iter().map(|&s| s * g).collect();
-            let right: Option<Arc<[f32]>> = stroke
-                .right
-                .as_ref()
-                .map(|r| r.iter().map(|&s| s * g).collect::<Vec<f32>>().into());
-            by_id.push(DecodedStrokeCache {
-                id: stroke.stroke_id,
-                left: left.into(),
-                right,
-                meta: stroke,
-            });
-        }
-
-        let mut zones = Vec::with_capacity(inst.zones.len());
-        for z in &inst.zones {
-            if let Some(entry) = by_id.iter().find(|e| e.id == z.stroke_id) {
-                let root_key = if z.root_key > 0 {
-                    z.root_key
-                } else {
-                    entry.meta.root_key
-                };
-                zones.push(LoadedSynthSample {
-                    root_key,
-                    key_low: z.key_low,
-                    key_high: z.key_high,
-                    sample_rate: f32::from(entry.meta.sample_rate.max(8000)),
-                    pcm: Arc::clone(&entry.left),
-                    pcm_right: entry.right.clone(),
-                    loop_start: entry.meta.loop_start,
-                    loop_end: entry.meta.loop_end,
-                    loop_crossfade: 0,
-                });
-            }
-        }
-
-        if zones.is_empty() {
-            for entry in &by_id {
-                zones.push(LoadedSynthSample {
-                    root_key: entry.meta.root_key,
-                    key_low: 0,
-                    key_high: 127,
-                    sample_rate: f32::from(entry.meta.sample_rate.max(8000)),
-                    pcm: Arc::clone(&entry.left),
-                    pcm_right: entry.right.clone(),
-                    loop_start: entry.meta.loop_start,
-                    loop_end: entry.meta.loop_end,
-                    loop_crossfade: 0,
-                });
-            }
-        }
-
-        Ok(Self {
-            name: inst.name,
-            zones,
-        })
-    }
-
-    /// Resolves the best zone index for a given MIDI note (exact range first, nearest root fallback).
-    fn zone_for_note(&self, note: u8) -> Option<usize> {
-        if let Some(pos) = self
-            .zones
-            .iter()
-            .position(|z| note >= z.key_low && note <= z.key_high && !z.pcm.is_empty())
-        {
-            return Some(pos);
-        }
-        self.zones
-            .iter()
-            .enumerate()
-            .filter(|(_, z)| !z.pcm.is_empty())
-            .min_by_key(|(_, z)| (i16::from(z.root_key) - i16::from(note)).unsigned_abs())
-            .map(|(i, _)| i)
-    }
-}
-
-/// Precomputed band-limited wavetable bank shared across all `SynthLayer` instances.
-struct WavetableBank {
-    tables: [[[f32; WAVETABLE_SIZE]; WAVETABLE_MIPS]; NUM_WAVETABLES],
-}
-
-static WAVETABLE_BANK: OnceLock<Box<WavetableBank>> = OnceLock::new();
-
-fn wavetable_harmonic_amp(table_idx: usize, k: usize) -> (f32, f32) {
-    let family = table_idx / 8;
-    let variant = (table_idx % 8) as f32;
-    let kf = k as f32;
-    match family {
-        // 0..7: Analog morphs (sine -> tri -> saw -> pulse/square)
-        0 => {
-            let tilt = 0.6 + 0.12 * variant;
-            let amp = 1.0 / kf.powf(tilt);
-            let odd_bias = if k % 2 == 1 {
-                1.0
-            } else {
-                (variant / 7.0) * 0.95
-            };
-            (amp * odd_bias, 0.0)
-        }
-        // 8..15: Formant vocal peaks (A/E/I/O/U vowel formants)
-        1 => {
-            let f1 = 2.5 + variant * 0.85;
-            let f2 = 7.0 + variant * 1.4;
-            let g1 = (-0.5 * ((kf - f1) / 1.8).powi(2)).exp();
-            let g2 = (-0.5 * ((kf - f2) / 2.8).powi(2)).exp();
-            let amp = (0.35 / kf) + 0.9 * g1 + 0.55 * g2;
-            (amp, 0.25)
-        }
-        // 16..23: Bell / metallic harmonic clusters
-        2 => {
-            let density = 1 + (variant as usize % 4);
-            if k == 1 || k.is_multiple_of(density + 1) || k == 5 || k == 11 {
-                (0.9 / kf.powf(0.55), 0.5 * (variant / 7.0))
-            } else {
-                (0.05 / kf, 0.0)
-            }
-        }
-        // 24..31: Additive Organ / drawbar recipes
-        3 => {
-            let match_bar = matches!(k, 1 | 2 | 3 | 4 | 6 | 8 | 10 | 12 | 16);
-            let weight = if match_bar {
-                0.7 + 0.3 * ((kf + variant) * 0.7).sin().abs()
-            } else {
-                0.08 / kf
-            };
-            (weight / kf.powf(0.45), 0.0)
-        }
-        // 32..39: Hollow / Woodwind / Comb notch
-        4 => {
-            let notch = 2.0 + variant;
-            let comb = ((PI * kf / notch).sin()).abs();
-            let amp = (comb / kf.powf(0.85)) * if k % 2 == 1 { 1.0 } else { 0.35 };
-            (amp, 0.0)
-        }
-        // 40..47: Brass / Reed bright edge
-        5 => {
-            let brightness = 0.55 + 0.07 * (7.0 - variant);
-            let bump = (-0.5 * ((kf - (4.0 + variant)) / 2.2).powi(2)).exp();
-            (1.0 / kf.powf(brightness) + 0.4 * bump, 0.15)
-        }
-        // 48..55: Resonant Sync-style harmonic sweep
-        6 => {
-            let center = 3.0 + variant * 2.2;
-            let bw = 2.4 + 0.3 * variant;
-            let env = (-0.5 * ((kf - center) / bw).powi(2)).exp();
-            (0.25 / kf + 1.15 * env, 0.4)
-        }
-        // 56..63: Deep Bass / Rich fundamental + sub-harmonic weight
-        _ => {
-            let cutoff_harm = 3.0 + variant * 1.5;
-            let lp = 1.0 / (1.0 + (kf / cutoff_harm).powi(2));
-            let fund = if k == 1 { 1.5 } else { 1.0 };
-            (fund * lp / kf.sqrt(), 0.0)
-        }
-    }
-}
-
-fn wavetable_bank() -> &'static WavetableBank {
-    WAVETABLE_BANK.get_or_init(|| {
-        let mut bank = Box::new(WavetableBank {
-            tables: [[[0.0; WAVETABLE_SIZE]; WAVETABLE_MIPS]; NUM_WAVETABLES],
-        });
-        for (t_idx, mip_set) in bank.tables.iter_mut().enumerate() {
-            let mut ref_norm = 1.0f32;
-            for (mip_idx, &max_h) in MIP_MAX_HARMONICS.iter().enumerate() {
-                let table = &mut mip_set[mip_idx];
-                for (s_idx, sample) in table.iter_mut().enumerate() {
-                    let phase = (s_idx as f32) / (WAVETABLE_SIZE as f32);
-                    let mut sum = 0.0f32;
-                    for k in 1..=max_h {
-                        let (amp, phase_skew) = wavetable_harmonic_amp(t_idx, k);
-                        // Lanczos sigma factor avoids Gibbs ringing on sharp truncations
-                        let sigma = if max_h > 4 {
-                            let x = PI * (k as f32) / ((max_h + 1) as f32);
-                            x.sin() / x
-                        } else {
-                            1.0
-                        };
-                        sum += amp * sigma * (TAU * (k as f32) * phase + phase_skew).sin();
-                    }
-                    *sample = sum;
-                }
-                if mip_idx == 0 {
-                    let peak = table.iter().fold(0.0f32, |m, &x| m.max(x.abs()));
-                    ref_norm = if peak > 1e-6 { 1.0 / peak } else { 1.0 };
-                }
-                for sample in table.iter_mut() {
-                    *sample *= ref_norm;
-                }
-            }
-        }
-        bank
-    })
-}
-
-/// Evaluates a band-limited mipmapped wavetable sample with position formant scan and interpolation.
-#[inline]
-fn sample_wavetable(
-    bank: &WavetableBank,
-    table_idx: u8,
-    position: f32,
-    phase: f32,
-    dt: f32,
-) -> f32 {
-    let max_non_aliasing = (0.48 / dt.max(1e-5)).floor() as usize;
-    let mip = MIP_MAX_HARMONICS
-        .iter()
-        .position(|&limit| limit <= max_non_aliasing)
-        .unwrap_or(WAVETABLE_MIPS - 1);
-
-    let t0 = (table_idx as usize) % NUM_WAVETABLES;
-    let t1 = (t0 + 1) % NUM_WAVETABLES;
-    let pos = position.clamp(0.0, 1.0);
-    // Gentle phase warp provides continuous spectral formant motion even on a single table index
-    let warped_phase = (phase + 0.16 * pos * (TAU * phase).sin()).rem_euclid(1.0);
-    let idx_f = warped_phase * (WAVETABLE_SIZE as f32);
-    let i0 = (idx_f.floor() as usize) % WAVETABLE_SIZE;
-    let i1 = (i0 + 1) % WAVETABLE_SIZE;
-    let frac = idx_f - idx_f.floor();
-
-    let s0 = bank.tables[t0][mip][i0] * (1.0 - frac) + bank.tables[t0][mip][i1] * frac;
-    let s1 = bank.tables[t1][mip][i0] * (1.0 - frac) + bank.tables[t1][mip][i1] * frac;
-    (1.0 - pos) * s0 + pos * s1
-}
-
-/// Oscillator synthesis modes in the Nord Stage 4 Synth Engine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SynthOscMode {
-    Analog,
-    Wavetable,
-    Fm,
-    Sample,
-}
-
-/// Virtual Analog waveform shapes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum VaWaveform {
-    Saw,
-    SuperSaw,
-    Pulse,
-    Triangle,
-    Sine,
-}
-
-/// Zero-Delay Feedback filter topologies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FilterModel {
-    Lp12,
-    Lp24,
-    Ladder24,
-    BandPass,
-    HighPass,
-}
-
-/// Low Frequency Oscillator (LFO) waveform shape.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum LfoShape {
-    #[default]
-    Triangle,
-    Saw,
-    Square,
-    SampleAndHold,
-}
-
-/// Destination parameter for LFO modulation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum LfoDestination {
-    #[default]
-    FilterCutoff,
-    OscPitch,
-    OscCtrl,
-}
-
-/// Arpeggiator & Gate play patterns.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum ArpMode {
-    #[default]
-    Off,
-    Up,
-    Down,
-    UpDown,
-    Random,
-    Poly,
-}
 
 /// 2-point Polynomial Band-Limited Step (`PolyBLEP`) anti-aliasing residual.
 #[inline]
@@ -510,6 +168,19 @@ pub struct SynthVoice {
     pub op3_phase: f32,
     pub mod_feedback_state: f32,
     pub mod_env: f32,
+    /// Target pitch for glide; `freq_hz` slews toward it.
+    pub target_freq_hz: f32,
+    /// Dedicated filter envelope level (`0..1`).
+    pub fenv: f32,
+    pub fenv_attack_done: bool,
+    /// Oscillator envelope level (`0..1`).
+    pub oenv: f32,
+    pub oenv_attack_done: bool,
+    /// Seconds since note-on (vibrato delay).
+    pub age_sec: f32,
+    /// Unison detuned oscillator phases (low, high).
+    pub uni_phase: [f32; 2],
+    pub uni_supersaw: [[f32; 7]; 2],
     pub supersaw_phases: [f32; 7],
     pub amp_env: f32,
     pub filter: ZdfFilter,
@@ -535,6 +206,14 @@ impl Default for SynthVoice {
             op3_phase: 0.0,
             mod_feedback_state: 0.0,
             mod_env: 0.0,
+            target_freq_hz: 440.0,
+            fenv: 0.0,
+            fenv_attack_done: false,
+            oenv: 0.0,
+            oenv_attack_done: false,
+            age_sec: 0.0,
+            uni_phase: [0.0, 0.31],
+            uni_supersaw: [SUPERSAW_PHASE_INITS; 2],
             supersaw_phases: SUPERSAW_PHASE_INITS,
             amp_env: 0.0,
             filter: ZdfFilter::default(),
@@ -576,6 +255,57 @@ pub struct SynthLayer {
     pub decay_sec: f32,
     pub sustain_level: f32,
     pub release_sec: f32,
+
+    // Dedicated filter envelope (ADR). When `filter_env_dedicated` is false the
+    // filter envelope mirrors the amp decay (legacy behaviour).
+    pub filter_env_dedicated: bool,
+    pub filter_env_attack_sec: f32,
+    pub filter_env_decay_sec: f32,
+    pub filter_env_release_sec: f32,
+    /// Velocity -> filter envelope depth (`0..1`; `0` = velocity ignored).
+    /// ASSUMED: peak = `1 - amount * (1 - velocity)` (linear); plausible for a
+    /// velocity-scaled depth; confirm by comparing filter sweep depth at vel 40 vs 127 on hardware.
+    pub filter_env_vel_amount: f32,
+
+    // Voice mode
+    /// Stereo unison width: `0` = off, `1`/`2`/`3` = 3.5 / 7.0 / 11.5 cents.
+    /// ASSUMED: cents copied from the Piano unison widths (`docs/specs/piano-engine.md`), not measured
+    /// on Synth; confirm by recording Synth Unison 1/2/3 and measuring beat rate.
+    pub unison: u8,
+    pub mono: bool,
+    pub legato: bool,
+    /// Glide (portamento) in seconds per octave; `0` = off. Constant-rate in pitch: the
+    /// manual says "the greater the distance between two notes, the longer the glide".
+    /// ASSUMED: linear-in-semitones slew; the seconds-per-octave scale is not measured.
+    /// Confirm by recording a one-octave glide at several Glide knob values.
+    pub glide_sec: f32,
+    pub note_priority: NotePriority,
+    /// Fine + coarse tuning in cents.
+    pub pitch_cents: f32,
+    /// Amp velocity sensitivity `0..1` (`0` = velocity ignored).
+    pub amp_velocity: f32,
+    /// `false` bypasses the filter.
+    pub filter_on: bool,
+    // Oscillator envelope (ADR) modulating Osc Ctrl, or pitch with `osc_env_to_pitch`.
+    pub osc_env_attack_sec: f32,
+    pub osc_env_decay_sec: f32,
+    pub osc_env_release_sec: f32,
+    /// Bipolar amount `-1..1`.
+    pub osc_env_amount: f32,
+    pub osc_env_to_pitch: bool,
+    pub osc_env_velocity: bool,
+    // Vibrato
+    pub vibrato_mode: VibratoMode,
+    pub vibrato_rate_hz: f32,
+    pub vibrato_depth_cents: f32,
+    pub vibrato_delay_sec: f32,
+    /// Controller value `0..1` for `Wheel`/`Aftertouch`/`Pedal` vibrato modes.
+    pub vibrato_ctrl: f32,
+    vib_phase: f32,
+    /// Octave offset in octaves (`-3..=3`).
+    /// ASSUMED: range clamp of +/-3 octaves; confirm against the panel Octave Shift range.
+    pub octave_offset: i8,
+    last_freq_hz: f32,
 
     // LFO Modulation
     pub lfo_shape: LfoShape,
@@ -634,6 +364,35 @@ impl SynthLayer {
             sustain_level: 0.7,
             release_sec: 0.25,
 
+            filter_env_dedicated: false,
+            filter_env_attack_sec: 0.005,
+            filter_env_decay_sec: 0.3,
+            filter_env_release_sec: 0.25,
+            filter_env_vel_amount: 0.0,
+
+            unison: 0,
+            mono: false,
+            legato: false,
+            glide_sec: 0.0,
+            note_priority: NotePriority::Off,
+            pitch_cents: 0.0,
+            amp_velocity: 1.0,
+            filter_on: true,
+            osc_env_attack_sec: 0.005,
+            osc_env_decay_sec: 0.3,
+            osc_env_release_sec: 0.25,
+            osc_env_amount: 0.0,
+            osc_env_to_pitch: false,
+            osc_env_velocity: false,
+            vibrato_mode: VibratoMode::Off,
+            vibrato_rate_hz: 5.0,
+            vibrato_depth_cents: 0.0,
+            vibrato_delay_sec: 0.0,
+            vibrato_ctrl: 0.0,
+            vib_phase: 0.0,
+            octave_offset: 0,
+            last_freq_hz: 0.0,
+
             lfo_shape: LfoShape::Triangle,
             lfo_dest: LfoDestination::FilterCutoff,
             lfo_rate_hz: 3.5,
@@ -672,208 +431,6 @@ impl SynthLayer {
         self.sample_sound.as_ref().map(|s| s.name.as_str())
     }
 
-    /// Triggers a note on across the polyphonic voice allocator or records in arpeggiator list.
-    pub fn note_on(&mut self, note: u8, velocity: u8) {
-        self.note_on_with_gain(note, velocity, 1.0);
-    }
-
-    pub fn note_on_with_gain(&mut self, note: u8, velocity: u8, gain: f32) {
-        let note_idx = (note as usize).min(127);
-        self.held_keys[note_idx] = true;
-        self.held_velocities[note_idx] = velocity.clamp(1, 127);
-        self.held_gains[note_idx] = gain.clamp(0.0, 1.0);
-
-        if self.arp_mode != ArpMode::Off {
-            return;
-        }
-
-        self.trigger_voice(note, velocity, gain);
-    }
-
-    fn trigger_voice(&mut self, note: u8, velocity: u8, gain: f32) {
-        let vel_norm = f32::from(velocity.clamp(1, 127)) / 127.0;
-        let freq = 440.0 * 2.0f32.powf((f32::from(note) - 69.0) / 12.0);
-
-        // Find existing note voice to re-trigger, or first inactive voice, or steal oldest/quietest
-        let idx = self
-            .voices
-            .iter()
-            .position(|v| v.active && v.note == note)
-            .or_else(|| self.voices.iter().position(|v| !v.active))
-            .unwrap_or_else(|| {
-                // Steal voice with lowest amp envelope
-                self.voices
-                    .iter()
-                    .enumerate()
-                    .min_by(|(_, a), (_, b)| {
-                        a.amp_env
-                            .partial_cmp(&b.amp_env)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    })
-                    .map(|(i, _)| i)
-                    .unwrap_or(0)
-            });
-
-        let (sample_zone_idx, sample_step) = if let Some(sound) = &self.sample_sound {
-            if let Some(z_idx) = sound.zone_for_note(note) {
-                let zone = &sound.zones[z_idx];
-                let step = (f64::from(zone.sample_rate) / f64::from(self.sample_rate))
-                    * 2.0f64.powf((f64::from(note) - f64::from(zone.root_key)) / 12.0);
-                (Some(z_idx), step)
-            } else {
-                (None, 1.0)
-            }
-        } else {
-            (None, 1.0)
-        };
-
-        self.voices[idx] = SynthVoice {
-            active: true,
-            gate: true,
-            note,
-            velocity: vel_norm,
-            gain: gain.clamp(0.0, 1.0),
-            freq_hz: freq,
-            phase: 0.0,
-            mod_phase: 0.0,
-            op3_phase: 0.0,
-            mod_feedback_state: 0.0,
-            mod_env: 1.0,
-            supersaw_phases: SUPERSAW_PHASE_INITS,
-            amp_env: 0.01,
-            filter: self.voices[idx].filter,
-            filter_right: self.voices[idx].filter_right,
-            sample_zone_idx,
-            sample_pos: 0.0,
-            sample_step,
-            sample_lp_state: 0.0,
-            sample_lp_state_right: 0.0,
-        };
-    }
-
-    /// Releases a held note across the polyphonic voices.
-    pub fn note_off(&mut self, note: u8) {
-        let note_idx = (note as usize).min(127);
-        self.held_keys[note_idx] = false;
-
-        if self.arp_mode != ArpMode::Off {
-            return;
-        }
-
-        for v in &mut self.voices {
-            if v.active && v.note == note {
-                v.gate = false;
-            }
-        }
-    }
-
-    /// Advances the arpeggiator engine and generates notes when active.
-    fn tick_arpeggiator(&mut self, inv_fs: f32) {
-        if self.arp_mode == ArpMode::Off {
-            return;
-        }
-
-        let mut held_list = [0u8; 128];
-        let mut count = 0;
-        for (n, &held) in self.held_keys.iter().enumerate() {
-            if held {
-                held_list[count] = n as u8;
-                count += 1;
-            }
-        }
-
-        if count == 0 {
-            self.release_arp_notes();
-            self.arp_step = 0;
-            return;
-        }
-
-        // Arp speed: 16th note division at arp_rate_bpm
-        let sixteenth_sec = 60.0 / (self.arp_rate_bpm.max(30.0) * 4.0);
-        self.arp_sample_counter += inv_fs;
-
-        if self.arp_sample_counter >= sixteenth_sec {
-            self.arp_sample_counter -= sixteenth_sec;
-
-            // Release previous arp note
-            self.release_arp_notes();
-
-            if self.arp_mode == ArpMode::Poly {
-                for (slot, &note) in held_list
-                    .iter()
-                    .take(count.min(MAX_SYNTH_VOICES))
-                    .enumerate()
-                {
-                    self.trigger_voice(
-                        note,
-                        self.held_velocities[note as usize],
-                        self.held_gains[note as usize],
-                    );
-                    self.arp_active_notes[slot] = Some(note);
-                }
-                self.arp_step = (self.arp_step + 1) % count.max(1);
-                return;
-            }
-
-            // Pick next note
-            let oct_range = self.arp_octave_range.clamp(1, 4) as usize;
-            let total_steps = count * oct_range;
-            let step = self.arp_step % total_steps;
-
-            let (note_in_chord, oct_offset) = match self.arp_mode {
-                ArpMode::Up => (step % count, (step / count) as u8),
-                ArpMode::Down => (
-                    (count - 1) - (step % count),
-                    (oct_range - 1 - (step / count)) as u8,
-                ),
-                ArpMode::UpDown => {
-                    let cycle_len = (count * 2).saturating_sub(2).max(1);
-                    let sub_step = step % cycle_len;
-                    let n_idx = if sub_step < count {
-                        sub_step
-                    } else {
-                        cycle_len - sub_step
-                    };
-                    (n_idx, (step / count) as u8)
-                }
-                ArpMode::Random => {
-                    self.arp_rng = self
-                        .arp_rng
-                        .wrapping_mul(1_664_525)
-                        .wrapping_add(1_013_904_223);
-                    (
-                        (self.arp_rng as usize) % count,
-                        ((self.arp_rng >> 16) as usize % oct_range) as u8,
-                    )
-                }
-                ArpMode::Off | ArpMode::Poly => unreachable!(),
-            };
-
-            let next_note = (held_list[note_in_chord] + oct_offset * 12).min(127);
-            self.arp_active_notes[0] = Some(next_note);
-            self.arp_step = (self.arp_step + 1) % total_steps;
-
-            let source_note = held_list[note_in_chord] as usize;
-            self.trigger_voice(
-                next_note,
-                self.held_velocities[source_note],
-                self.held_gains[source_note],
-            );
-        }
-    }
-
-    fn release_arp_notes(&mut self) {
-        for active in &mut self.arp_active_notes {
-            if let Some(note) = active.take() {
-                for voice in &mut self.voices {
-                    if voice.active && voice.note == note {
-                        voice.gate = false;
-                    }
-                }
-            }
-        }
-    }
-
     /// Renders a single stereo frame `[left, right]` across all 16 polyphonic voices.
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
@@ -883,6 +440,7 @@ impl SynthLayer {
         let lfo_val = match self.lfo_shape {
             LfoShape::Triangle => 1.0 - 4.0 * ((self.lfo_phase / TAU) - 0.5).abs(),
             LfoShape::Saw => 2.0 * (self.lfo_phase / TAU) - 1.0,
+            LfoShape::SawDown => 1.0 - 2.0 * (self.lfo_phase / TAU),
             LfoShape::Square => {
                 if self.lfo_phase < PI {
                     1.0
@@ -913,13 +471,16 @@ impl SynthLayer {
         };
 
         let pitch_mod = match self.lfo_dest {
-            LfoDestination::OscPitch => 1.0 + self.lfo_amount * lfo_val * 0.05,
+            // VERIFIED depth curve (firmware table, see `synth_tables.rs`): 0..48 semitones.
+            LfoDestination::OscPitch => {
+                2.0f32.powf(lfo_pitch_semitones(self.lfo_amount) * lfo_val / 12.0)
+            }
             _ => 1.0,
         };
 
         let bank = wavetable_bank();
         let sample_sound = self.sample_sound.as_deref();
-        let wt_pos = if self.lfo_dest == LfoDestination::OscCtrl {
+        let wt_pos_base = if self.lfo_dest == LfoDestination::OscCtrl {
             (self.wavetable_position + self.lfo_amount * lfo_val * 0.5).clamp(0.0, 1.0)
         } else {
             self.wavetable_position.clamp(0.0, 1.0)
@@ -931,6 +492,23 @@ impl SynthLayer {
         let fm_env_amt = self.fm_env_amount.clamp(0.0, 1.0);
         let mod_decay_tau = self.decay_sec.max(0.015);
         let mod_decay_coeff = (-inv_fs / mod_decay_tau).exp();
+        // Constant-rate glide: semitones travelled per sample (see `glide_sec`).
+        let glide_step_semi = if self.glide_sec > 0.0 {
+            12.0 * inv_fs / self.glide_sec.max(0.001)
+        } else {
+            0.0
+        };
+        self.vib_phase =
+            (self.vib_phase + TAU * self.vibrato_rate_hz.clamp(0.1, 20.0) * inv_fs) % TAU;
+        let vib_sin = self.vib_phase.sin();
+        let uni_cents = match self.unison {
+            0 => 0.0,
+            1 => 3.5,
+            2 => 7.0,
+            _ => 11.5,
+        };
+        // ASSUMED: side voices at -/+ `uni_cents`, mixed 50/50 with the centre per channel.
+        let uni_ratio = 2.0f32.powf(uni_cents / 1200.0);
 
         for v in &mut self.voices {
             if !v.active {
@@ -957,13 +535,94 @@ impl SynthLayer {
             }
             v.mod_env *= mod_decay_coeff;
 
-            let eff_freq = v.freq_hz * pitch_mod;
+            if glide_step_semi > 0.0 && v.freq_hz != v.target_freq_hz {
+                let d = 12.0 * (v.target_freq_hz / v.freq_hz.max(1.0)).log2();
+                if d.abs() <= glide_step_semi {
+                    v.freq_hz = v.target_freq_hz;
+                } else {
+                    v.freq_hz *= 2.0f32.powf(d.signum() * glide_step_semi / 12.0);
+                }
+            } else {
+                v.freq_hz = v.target_freq_hz;
+            }
+            v.age_sec += inv_fs;
+
+            // Oscillator envelope (ADR); `osc_env_velocity` scales its depth by velocity.
+            if v.gate {
+                if !v.oenv_attack_done {
+                    let atk = self.osc_env_attack_sec.max(0.0005);
+                    v.oenv += (1.0 - v.oenv) * (inv_fs / atk).min(1.0);
+                    if v.oenv >= 0.999 {
+                        v.oenv = 1.0;
+                        v.oenv_attack_done = true;
+                    }
+                } else if self.osc_env_decay_sec < 44.0 {
+                    let dec = self.osc_env_decay_sec.max(0.003);
+                    v.oenv -= v.oenv * (inv_fs / dec).min(1.0);
+                }
+            } else {
+                let rel = self.osc_env_release_sec.max(0.003);
+                v.oenv *= (-inv_fs / rel).exp();
+            }
+            let oenv_depth = if self.osc_env_velocity {
+                self.osc_env_amount * v.velocity
+            } else {
+                self.osc_env_amount
+            };
+            let osc_env_mod = oenv_depth * v.oenv;
+            let osc_ctrl_mod = if self.osc_env_to_pitch {
+                0.0
+            } else {
+                osc_env_mod
+            };
+            // ASSUMED: +/-12 semitones of pitch at full Env Amt (Env To Pitch) and +/-0.5 of Osc Ctrl range.
+            let env_pitch = if self.osc_env_to_pitch {
+                2.0f32.powf(osc_env_mod)
+            } else {
+                1.0
+            };
+            let wt_pos = (wt_pos_base + osc_ctrl_mod * 0.5).clamp(0.0, 1.0);
+            let vib_amount = match self.vibrato_mode {
+                VibratoMode::Off => 0.0,
+                VibratoMode::On => 1.0,
+                VibratoMode::Delay => ((v.age_sec - self.vibrato_delay_sec) / 0.5).clamp(0.0, 1.0),
+                VibratoMode::Wheel | VibratoMode::Aftertouch | VibratoMode::Pedal => {
+                    self.vibrato_ctrl.clamp(0.0, 1.0)
+                }
+            };
+            let vib_pitch = 2.0f32.powf(vib_amount * self.vibrato_depth_cents * vib_sin / 1200.0);
+
+            // Filter envelope: dedicated ADR, or mirror the amp decay (legacy).
+            let fenv_peak = 1.0 - self.filter_env_vel_amount.clamp(0.0, 1.0) * (1.0 - v.velocity);
+            let filter_env_level = if self.filter_env_dedicated {
+                if v.gate {
+                    if !v.fenv_attack_done {
+                        let atk = self.filter_env_attack_sec.max(0.0005);
+                        v.fenv += (1.0 - v.fenv) * (inv_fs / atk).min(1.0);
+                        if v.fenv >= 0.999 {
+                            v.fenv = 1.0;
+                            v.fenv_attack_done = true;
+                        }
+                    } else if self.filter_env_decay_sec < 44.0 {
+                        let dec = self.filter_env_decay_sec.max(0.003);
+                        v.fenv -= v.fenv * (inv_fs / dec).min(1.0);
+                    }
+                } else {
+                    let rel = self.filter_env_release_sec.max(0.003);
+                    v.fenv *= (-inv_fs / rel).exp();
+                }
+                v.fenv * fenv_peak
+            } else {
+                v.mod_env * fenv_peak
+            };
+
+            let eff_freq = v.freq_hz * pitch_mod * env_pitch * vib_pitch;
             let dt = (eff_freq * inv_fs).clamp(1e-5, 0.49);
             let t = v.phase;
 
             let (raw_osc_l, raw_osc_r) = match self.osc_mode {
-                SynthOscMode::Analog => (
-                    Self::render_va(
+                SynthOscMode::Analog => {
+                    let c = Self::render_va(
                         self.waveform,
                         self.supersaw_detune,
                         self.pulse_width,
@@ -975,13 +634,49 @@ impl SynthLayer {
                         eff_freq,
                         inv_fs,
                         &mut v.supersaw_phases,
-                    ),
-                    None,
-                ),
-                SynthOscMode::Wavetable => (
-                    sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt),
-                    None,
-                ),
+                    );
+                    if self.unison > 0 {
+                        let mut side = [0.0f32; 2];
+                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
+                            let f_k = eff_freq * ratio;
+                            let dt_k = (f_k * inv_fs).clamp(1e-5, 0.49);
+                            let t_k = v.uni_phase[k];
+                            side[k] = Self::render_va(
+                                self.waveform,
+                                self.supersaw_detune,
+                                self.pulse_width,
+                                self.lfo_dest,
+                                self.lfo_amount,
+                                lfo_val,
+                                t_k,
+                                dt_k,
+                                f_k,
+                                inv_fs,
+                                &mut v.uni_supersaw[k],
+                            );
+                            v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                        }
+                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                    } else {
+                        (c, None)
+                    }
+                }
+                SynthOscMode::Wavetable => {
+                    let c = sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt);
+                    if self.unison > 0 {
+                        let mut side = [0.0f32; 2];
+                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
+                            let dt_k = (eff_freq * ratio * inv_fs).clamp(1e-5, 0.49);
+                            let t_k = v.uni_phase[k];
+                            side[k] =
+                                sample_wavetable(bank, self.wavetable_index, wt_pos, t_k, dt_k);
+                            v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                        }
+                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                    } else {
+                        (c, None)
+                    }
+                }
                 SynthOscMode::Fm => {
                     let op3 = (TAU * v.op3_phase).sin();
                     let fb = fm_fb_amt * 1.8 * v.mod_feedback_state;
@@ -989,9 +684,10 @@ impl SynthLayer {
                     v.mod_feedback_state = 0.5 * (v.mod_feedback_state + mod_sig);
                     let dyn_env = (1.0 - fm_env_amt) + fm_env_amt * v.mod_env;
                     let fm_amt = if self.lfo_dest == LfoDestination::OscCtrl {
-                        (self.fm_amount + self.lfo_amount * lfo_val * 0.4).clamp(0.0, 1.0)
+                        (self.fm_amount + self.lfo_amount * lfo_val * 0.4 + osc_ctrl_mod * 0.4)
+                            .clamp(0.0, 1.0)
                     } else {
-                        self.fm_amount.clamp(0.0, 1.0)
+                        (self.fm_amount + osc_ctrl_mod * 0.4).clamp(0.0, 1.0)
                     };
                     ((TAU * t + 4.0 * fm_amt * dyn_env * mod_sig).sin(), None)
                 }
@@ -1050,32 +746,43 @@ impl SynthLayer {
                 1.0
             };
             let env_scale = if self.filter_env_amount.abs() > 1e-4 {
-                2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * v.mod_env)
+                // ASSUMED (inherited, no recorded source): +/-3 octaves of cutoff at full env amount.
+                2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * filter_env_level)
             } else {
                 1.0
             };
             let voice_cutoff =
                 (eff_cutoff * kb_track_scale * env_scale).clamp(14.0, 0.48 * self.sample_rate);
 
-            let filtered_l = v.filter.process(
-                raw_osc_l,
-                self.filter_model,
-                voice_cutoff,
-                self.resonance,
-                self.filter_drive,
-                self.sample_rate,
-            );
-            let env_gain = v.amp_env * v.velocity * v.gain * 0.25;
-            mix_l += filtered_l * env_gain;
-            if let Some(osc_r) = raw_osc_r {
-                let filtered_r = v.filter_right.process(
-                    osc_r,
+            let filtered_l = if self.filter_on {
+                v.filter.process(
+                    raw_osc_l,
                     self.filter_model,
                     voice_cutoff,
                     self.resonance,
                     self.filter_drive,
                     self.sample_rate,
-                );
+                )
+            } else {
+                raw_osc_l
+            };
+            let amp_vel = (1.0 - self.amp_velocity.clamp(0.0, 1.0))
+                + self.amp_velocity.clamp(0.0, 1.0) * v.velocity;
+            let env_gain = v.amp_env * amp_vel * v.gain * 0.25;
+            mix_l += filtered_l * env_gain;
+            if let Some(osc_r) = raw_osc_r {
+                let filtered_r = if self.filter_on {
+                    v.filter_right.process(
+                        osc_r,
+                        self.filter_model,
+                        voice_cutoff,
+                        self.resonance,
+                        self.filter_drive,
+                        self.sample_rate,
+                    )
+                } else {
+                    osc_r
+                };
                 mix_r += filtered_r * env_gain;
             } else {
                 mix_r += filtered_l * env_gain;
@@ -1127,121 +834,11 @@ impl SynthLayer {
             VaWaveform::Sine => (TAU * t).sin(),
         }
     }
-
-    #[inline]
-    fn sample_with_loop(
-        pcm: &[f32],
-        wrapped: f64,
-        ls: usize,
-        le_c: usize,
-        crossfade: usize,
-    ) -> f32 {
-        let primary = Self::cubic_pcm(pcm, wrapped);
-        if crossfade > 0 {
-            let xf = crossfade.min((le_c - ls) / 2) as f64;
-            let dist_to_end = le_c as f64 - wrapped;
-            if xf >= 1.0 && dist_to_end < xf && ls as f64 >= dist_to_end {
-                let fade = (xf - dist_to_end) / xf;
-                let pre_loop = Self::cubic_pcm(pcm, ls as f64 - dist_to_end);
-                return primary * (1.0 - fade as f32) + pre_loop * (fade as f32);
-            }
-        }
-        primary
-    }
-
-    #[inline]
-    fn render_sample_zone_stereo(
-        zone: &LoadedSynthSample,
-        sample_pos: &mut f64,
-        step: f64,
-        active: &mut bool,
-    ) -> (f32, Option<f32>) {
-        let len = zone.pcm.len();
-        if len < 2 {
-            *active = false;
-            return (0.0, None);
-        }
-        let pcm_r = zone.pcm_right.as_deref().filter(|r| r.len() >= 2);
-        let pos = *sample_pos;
-        if let (Some(ls), Some(le)) = (zone.loop_start, zone.loop_end) {
-            let le_c = le.min(len);
-            if le_c > ls {
-                let loop_len = (le_c - ls) as f64;
-                let wrapped = if pos >= le_c as f64 {
-                    ls as f64 + (pos - le_c as f64) % loop_len
-                } else {
-                    pos
-                };
-                let out_l =
-                    Self::sample_with_loop(&zone.pcm, wrapped, ls, le_c, zone.loop_crossfade);
-                let out_r = pcm_r.map(|r| {
-                    let le_r = le_c.min(r.len());
-                    if le_r > ls {
-                        Self::sample_with_loop(r, wrapped, ls, le_r, zone.loop_crossfade)
-                    } else {
-                        Self::cubic_pcm(r, wrapped)
-                    }
-                });
-                let next_pos = wrapped + step;
-                *sample_pos = if next_pos >= le_c as f64 {
-                    ls as f64 + (next_pos - le_c as f64) % loop_len
-                } else {
-                    next_pos
-                };
-                return (out_l, out_r);
-            }
-        }
-
-        if pos >= (len - 1) as f64 {
-            *active = false;
-            return (0.0, None);
-        }
-        let out_l = Self::cubic_pcm(&zone.pcm, pos);
-        let out_r = pcm_r.map(|r| Self::cubic_pcm(r, pos));
-        *sample_pos = pos + step;
-        (out_l, out_r)
-    }
-
-    #[inline]
-    fn cubic_pcm(pcm: &[f32], pos: f64) -> f32 {
-        let len = pcm.len();
-        if len == 0 {
-            return 0.0;
-        }
-        let max_idx = len - 1;
-        let idx1 = (pos.floor() as usize).min(max_idx);
-        let idx2 = (idx1 + 1).min(max_idx);
-        let frac = (pos - (idx1 as f64)).clamp(0.0, 1.0) as f32;
-        let p0 = pcm[idx1.saturating_sub(1)];
-        let p1 = pcm[idx1];
-        let p2 = pcm[idx2];
-        let p3 = pcm[(idx2 + 1).min(max_idx)];
-        let t2 = frac * frac;
-        let t3 = t2 * frac;
-        0.5 * ((2.0 * p1)
-            + (-p0 + p2) * frac
-            + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
-            + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
-    }
-
-    #[inline]
-    fn apply_sample_timbre(timbre: SampleTimbre, sample: f32, lp_state: &mut f32) -> f32 {
-        match timbre {
-            SampleTimbre::Off => sample,
-            SampleTimbre::Soft => {
-                *lp_state += 0.25 * (sample - *lp_state);
-                *lp_state
-            }
-            SampleTimbre::Bright => {
-                *lp_state += 0.18 * (sample - *lp_state);
-                sample + 0.55 * (sample - *lp_state)
-            }
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::test_util::*;
     use super::*;
 
     #[test]
@@ -1296,60 +893,125 @@ mod tests {
     }
 
     #[test]
-    fn test_arpeggiator_generation() {
-        let mut synth = SynthLayer::new(48_000.0);
-        synth.arp_mode = ArpMode::Up;
-        synth.arp_rate_bpm = 240.0;
-        synth.note_on(60, 100);
-        synth.note_on(64, 100);
-        synth.note_on(67, 100);
-
-        let mut energy = 0.0f32;
-        for _ in 0..24000 {
-            let [l, r] = synth.render_frame();
-            energy += l * l + r * r;
-        }
-        assert!(energy > 0.05, "Arpeggiator must output active sound energy");
-        assert!(synth.arp_step > 0, "Arpeggiator step must advance");
+    fn dedicated_filter_envelope_uses_adr_and_velocity() {
+        let mut s = SynthLayer::new(48_000.0);
+        s.filter_env_dedicated = true;
+        s.filter_env_amount = 1.0;
+        s.filter_env_attack_sec = 0.001;
+        s.filter_env_decay_sec = 0.01;
+        s.filter_env_vel_amount = 1.0;
+        s.note_on(60, 127);
+        render_n(&mut s, 4800);
+        let hi = s.voices.iter().find(|v| v.active).unwrap();
+        assert!(hi.fenv_attack_done);
+        assert!(
+            hi.fenv < 0.05,
+            "decay should fall toward 0, got {}",
+            hi.fenv
+        );
+        s.note_off(60);
+        let before = s.voices.iter().find(|v| v.active).unwrap().fenv;
+        render_n(&mut s, 100);
+        let after = s.voices.iter().find(|v| v.active).unwrap().fenv;
+        assert!(after <= before);
     }
 
     #[test]
-    fn poly_arpeggiator_triggers_held_chord_simultaneously() {
-        let mut synth = SynthLayer::new(48_000.0);
-        synth.arp_mode = ArpMode::Poly;
-        synth.arp_rate_bpm = 240.0;
-        synth.note_on(60, 70);
-        synth.note_on(64, 90);
-        synth.note_on(67, 110);
-        for _ in 0..3_200 {
-            synth.render_frame();
-        }
-        for note in [60, 64, 67] {
-            assert!(synth
-                .voices
-                .iter()
-                .any(|voice| voice.active && voice.gate && voice.note == note));
-        }
+    fn amp_velocity_zero_ignores_velocity_and_one_follows_it() {
+        let run = |sens: f32, vel: u8| {
+            let mut s = SynthLayer::new(48_000.0);
+            s.amp_velocity = sens;
+            s.note_on(60, vel);
+            energy(&render_n(&mut s, 4000))
+        };
+        assert!((run(0.0, 20) - run(0.0, 127)).abs() < 1e-3);
+        assert!(run(1.0, 20) < 0.2 * run(1.0, 127));
     }
 
     #[test]
-    fn arpeggiator_uses_allocator_without_overwriting_an_active_voice() {
-        let mut synth = SynthLayer::new(48_000.0);
-        synth.note_on(40, 100);
-        synth.note_off(40);
-        synth.arp_mode = ArpMode::Up;
-        synth.arp_rate_bpm = 240.0;
-        synth.note_on(60, 100);
-        synth.note_on(64, 100);
-        for _ in 0..3_200 {
-            synth.render_frame();
-        }
-        assert_eq!(synth.voices[0].note, 40);
-        assert!(!synth.voices[0].gate);
-        assert!(synth
-            .voices
-            .iter()
-            .any(|voice| voice.active && voice.gate && voice.note == 60));
+    fn filter_off_bypasses_a_closed_filter() {
+        let run = |on: bool| {
+            let mut s = SynthLayer::new(48_000.0);
+            s.cutoff_hz = 40.0;
+            s.filter_on = on;
+            s.note_on(81, 100);
+            energy(&render_n(&mut s, 4000))
+        };
+        assert!(run(false) > 10.0 * run(true));
+    }
+
+    #[test]
+    fn vibrato_delay_keeps_output_identical_until_the_delay_elapses() {
+        let run = |mode: VibratoMode| {
+            let mut s = SynthLayer::new(48_000.0);
+            s.vibrato_mode = mode;
+            s.vibrato_depth_cents = 100.0;
+            s.vibrato_delay_sec = 0.05;
+            s.vibrato_rate_hz = 6.0;
+            s.note_on(60, 100);
+            render_n(&mut s, 12_000)
+        };
+        let off = run(VibratoMode::Off);
+        let dly = run(VibratoMode::Delay);
+        assert_eq!(off[..2000], dly[..2000]);
+        assert_ne!(off[8000..], dly[8000..]);
+        let on = run(VibratoMode::On);
+        assert_ne!(off[1000..2000], on[1000..2000]);
+    }
+
+    #[test]
+    fn oscillator_envelope_modulates_pitch_or_osc_ctrl_only_when_amount_set() {
+        let run = |amount: f32, to_pitch: bool| {
+            let mut s = SynthLayer::new(48_000.0);
+            s.osc_mode = SynthOscMode::Wavetable;
+            s.osc_env_amount = amount;
+            s.osc_env_to_pitch = to_pitch;
+            s.osc_env_attack_sec = 0.001;
+            s.osc_env_decay_sec = 0.2;
+            s.note_on(60, 100);
+            render_n(&mut s, 3000)
+        };
+        assert_eq!(run(0.0, false), run(0.0, true));
+        assert_ne!(run(1.0, true), run(0.0, true));
+        assert_ne!(run(1.0, false), run(0.0, false));
+        assert!(run(-1.0, true).iter().all(|f| f[0].is_finite()));
+    }
+
+    #[test]
+    fn lfo_saw_down_differs_from_saw_up_and_off_destination_is_inert() {
+        let run = |shape: LfoShape, dest: LfoDestination| {
+            let mut s = SynthLayer::new(48_000.0);
+            s.lfo_shape = shape;
+            s.lfo_dest = dest;
+            s.lfo_amount = 1.0;
+            s.lfo_rate_hz = 5.0;
+            s.note_on(60, 100);
+            render_n(&mut s, 6000)
+        };
+        let up = run(LfoShape::Saw, LfoDestination::OscPitch);
+        let down = run(LfoShape::SawDown, LfoDestination::OscPitch);
+        assert_ne!(up, down);
+        let off = run(LfoShape::Square, LfoDestination::Off);
+        let tri_off = run(LfoShape::Triangle, LfoDestination::Off);
+        assert_eq!(off, tri_off, "LFO off must not modulate anything");
+    }
+
+    #[test]
+    fn lfo_pitch_depth_follows_the_firmware_curve_and_stays_finite_at_full_depth() {
+        let run = |amount: f32| {
+            let mut s = SynthLayer::new(48_000.0);
+            s.lfo_dest = LfoDestination::OscPitch;
+            s.lfo_shape = LfoShape::Square;
+            s.lfo_rate_hz = 20.0;
+            s.lfo_amount = amount;
+            s.note_on(60, 100);
+            render_n(&mut s, 4000)
+        };
+        let full = run(1.0);
+        assert!(full.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
+        // 1 semitone (raw 27) differs from the old fixed 5% rule and from a full +/-48 semitone swing.
+        assert_ne!(run(27.0 / 127.0), full);
+        assert_ne!(run(27.0 / 127.0), run(0.0));
     }
 
     #[test]
@@ -1436,146 +1098,6 @@ mod tests {
             s3.voices[0].mod_env < 1.0,
             "FM mod envelope must decay smoothly during note sustain"
         );
-    }
-
-    #[test]
-    fn test_sample_mode_zone_playback_loop_crossfade_and_timbre() {
-        let fs = 48_000.0;
-        let len = 512;
-        let pcm: Vec<f32> = (0..len)
-            .map(|i| {
-                let ph = (i as f32) / 32.0;
-                (TAU * ph).sin() + 0.4 * (3.0 * TAU * ph).sin()
-            })
-            .collect();
-        let sound = Arc::new(SynthSampleSound::new_synthetic(
-            "TestHarmonicSample",
-            60,
-            &pcm,
-            fs,
-            Some((128, 384)),
-            16,
-        ));
-
-        let mut s_soft = SynthLayer::new(fs);
-        s_soft.osc_mode = SynthOscMode::Sample;
-        s_soft.sample_timbre = SampleTimbre::Soft;
-        s_soft.cutoff_hz = 16_000.0;
-        s_soft.load_sample(Some(sound.clone()));
-        assert_eq!(s_soft.loaded_sample_name(), Some("TestHarmonicSample"));
-        s_soft.note_on(72, 110); // +12 semitones => 2.0x playback speed
-
-        let mut s_bright = SynthLayer::new(fs);
-        s_bright.osc_mode = SynthOscMode::Sample;
-        s_bright.sample_timbre = SampleTimbre::Bright;
-        s_bright.cutoff_hz = 16_000.0;
-        s_bright.load_sample(Some(sound));
-        s_bright.note_on(72, 110);
-
-        assert!((s_soft.voices[0].sample_step - 2.0).abs() < 1e-4);
-
-        let mut soft_energy = 0.0f32;
-        let mut bright_energy = 0.0f32;
-        for _ in 0..1024 {
-            let [l_s, _] = s_soft.render_frame();
-            let [l_b, _] = s_bright.render_frame();
-            assert!(l_s.is_finite() && l_b.is_finite());
-            soft_energy += l_s * l_s;
-            bright_energy += l_b * l_b;
-        }
-        // Looped 1024 frames @2x speed crossed the loop boundary multiple times without stopping
-        assert!(s_soft.voices[0].active);
-        assert!(soft_energy > 0.02);
-        assert!(
-            bright_energy > soft_energy,
-            "Bright timbre must retain more HF energy than Soft damping"
-        );
-    }
-
-    #[test]
-    fn test_from_nsmp4_bytes_loads_and_renders_stereo_looped_sample() {
-        // Build a synthetic .nsmp4 container with one stereo \0stk chunk (order-1 LPC).
-        let mut data = vec![0u8; 48];
-        data[0..4].copy_from_slice(b"CBIN");
-        data[4..8].copy_from_slice(&1u32.to_le_bytes());
-        data[8..12].copy_from_slice(b"nsmp");
-        data[0x2c..0x30].copy_from_slice(b"NSMP");
-        data.extend_from_slice(&[0u8; 12]);
-
-        let mut hdr = vec![0u8; 64];
-        let nm = b"CleanRoom Violin\0";
-        hdr[10..10 + nm.len()].copy_from_slice(nm);
-        data.extend_from_slice(b"\0hdr");
-        data.extend_from_slice(&1u32.to_be_bytes());
-        data.extend_from_slice(&(hdr.len() as u32).to_be_bytes());
-        data.extend_from_slice(&hdr);
-
-        let mut map = vec![0u8; 0x524 + 16];
-        let p = 0x524;
-        map[p + 1] = 127;
-        map[p + 2] = 60;
-        map[p + 3] = 72;
-        map[p + 4] = 48;
-        map[p + 10..p + 14].copy_from_slice(&1u32.to_be_bytes());
-        map[p + 15] = 1;
-        data.extend_from_slice(b"\0map");
-        data.extend_from_slice(&1u32.to_be_bytes());
-        data.extend_from_slice(&(map.len() as u32).to_be_bytes());
-        data.extend_from_slice(&map);
-
-        // Construct sustained stereo order-0 frame: L positive (+1000), R negative (-500), 8 frames each
-        let mut stk = vec![0u8; 0x44];
-        stk[0..4].copy_from_slice(&1u32.to_be_bytes());
-        stk[0x05] = 60;
-        stk[0x06..0x08].copy_from_slice(&35_002u16.to_be_bytes());
-        stk[0x08] = 2; // stereo
-        let w1: u32 = 100;
-        let w3: u32 = 100 + 1 + 4; // loop starts at frame 2 (1 ctrl + 2*2 interleaved words)
-        stk[0x12..0x16].copy_from_slice(&w1.to_be_bytes());
-        stk[0x24..0x28].copy_from_slice(&w3.to_be_bytes());
-        stk[0x39..0x3D].copy_from_slice(&0.0f32.to_be_bytes());
-
-        // Frame 1: spc=4 (ns=8), order=0, nbits=16 => wpc=2 -> 2 L words + 2 R words interleaved
-        let ctrl1: u32 = 8 | (15 << 19);
-        stk.extend_from_slice(&ctrl1.to_be_bytes());
-        for _ in 0..2 {
-            stk.extend_from_slice(&((1000u32 << 16) | 1000u32).to_be_bytes());
-            stk.extend_from_slice(
-                &((((-500i16) as u16) as u32) << 16 | ((-500i16) as u16) as u32).to_be_bytes(),
-            );
-        }
-        // Frame 2 (loop boundary at w3): spc=4, order=0, nbits=16
-        let ctrl2: u32 = 8 | (1 << 18) | (15 << 19);
-        stk.extend_from_slice(&ctrl2.to_be_bytes());
-        for _ in 0..2 {
-            stk.extend_from_slice(&((1200u32 << 16) | 1200u32).to_be_bytes());
-            stk.extend_from_slice(
-                &((((-600i16) as u16) as u32) << 16 | ((-600i16) as u16) as u32).to_be_bytes(),
-            );
-        }
-        stk.extend_from_slice(&0x0080_0040u32.to_be_bytes());
-
-        data.extend_from_slice(b"\0stk");
-        data.extend_from_slice(&1u32.to_be_bytes());
-        data.extend_from_slice(&(stk.len() as u32).to_be_bytes());
-        data.extend_from_slice(&stk);
-
-        let sound = Arc::new(SynthSampleSound::from_nsmp4_bytes(&data).expect("load nsmp4"));
-        assert_eq!(sound.name, "CleanRoom Violin");
-        assert_eq!(sound.zones.len(), 1);
-        assert_eq!(sound.zones[0].loop_start, Some(4));
-        assert_eq!(sound.zones[0].loop_end, Some(8));
-        assert!(sound.zones[0].pcm_right.is_some());
-
-        let mut layer = SynthLayer::new(48_000.0);
-        layer.osc_mode = SynthOscMode::Sample;
-        layer.cutoff_hz = 18_000.0;
-        layer.load_sample(Some(sound));
-        layer.note_on(60, 127);
-
-        let [l, r] = layer.render_frame();
-        assert!(l.is_finite() && r.is_finite());
-        assert!(l > 0.0 && r < 0.0, "stereo polarity L={l} R={r}");
     }
 
     #[test]
