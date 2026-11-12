@@ -262,10 +262,17 @@ def test_decode_hardware_bitfields_and_fx():
     _write_bits(syn_buf, 248 + 8, 1, 1)  # osc mode
     _write_bits(syn_buf, 248 + 135, 1, 1)  # arp on
     _write_bits(syn_buf, 1472 + 218, 3, 1)  # LP24
+    _write_bits(syn_buf, 1472 + 318, 7, 24)  # filter env attack
+    _write_bits(syn_buf, 1472 + 325, 7, 61)  # filter env decay
+    _write_bits(syn_buf, 1472 + 332, 7, 33)  # filter env release
     syn = decode_synth_payload(bytes(syn_buf))
     assert syn["layer_a"]["enabled"] is True
     assert syn["layer_a"]["arp_enabled"] is True
     assert syn["layer_a"]["filter_type"] == 1
+    assert syn["layer_a"]["filter_env_adr_idx"] == [24, 61, 33]
+    raw = syn["layer_a"]["raw_fields"]
+    assert raw["filter_env_attack"] == 24 and raw["filter_type"] == 1
+    assert raw["octave"] == 0 and raw["unison"] == 0
 
     full_prog = bytes(glb_buf) + bytes(org_buf) + bytes(pno_buf) + bytes(syn_buf)
     prog_dec = decode_cbin_payload("ns4p", full_prog)

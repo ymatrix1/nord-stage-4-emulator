@@ -146,3 +146,12 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Relying strictly on open SFZ approximations (leaves `.npno` and `.nsmp4` payloads unreadable).
 - **Impact:** Updates `docs/ROADMAP.md`, `docs/TECH_DEBT.md`, and `docs/research/1to1-emulation-feasibility.md` with structured Track B milestones before implementation begins.
 
+### D13. Adopt the third-party ns4decode bit map for Synth `0x32` / `0x2F` fields
+
+- **Status:** accepted 2026-11-11
+- **Decided by:** Yuri Olive ("code is also here .reference/ns4decode_pkg", "incorporate everything we can")
+- **Context:** Statistical diffing of the 384 factory `.ns4y` presets located the filter ADR, osc ADR, amp velocity and unison, but could not place LFO shape/target, mono/legato/priority, glide, octave, pitch, osc type/category/wave from names alone. ns4decode (MIT, Randy 2024) publishes a complete `.ns4p` bit map and a regression program with hand-checked expected values.
+- **Decision:** Use ns4decode's offsets (converted to block-relative bits) for the Synth `0x32`/`0x2F` fields, tag the absolute offsets `EMPIRICAL` and the field order/widths `VERIFIED` against the firmware name tables (`tools/ns4_fw_order_check.py`), keep the code re-derived rather than copied, and gate regressions with `tools/ns4_crosscheck.py` (75/75 regression fields, 0 violations over 1152 factory layers).
+- **Why:** The map agrees with independent data (bitscan found the same offsets; corpus values stay in legal ranges) and unblocks real decoding of LFO, voice mode, glide, octave and oscillator selection (resolves OQ4).
+- **Alternatives:** Keep guessing from preset names (ambiguous); disassemble the `ARM0` preset parser (large effort, tracked in OQ7).
+- **Impact:** `SynthLayerDecoded` gains the decoded fields; `pack()` rewrites only mapped fields and preserves all other bits; scales that ns4decode does not define stay `ASSUMED`.
