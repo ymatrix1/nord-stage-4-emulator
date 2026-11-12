@@ -143,7 +143,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [ ] **B4** Split oversized `nord-gui` files (`panel.rs`, `library.rs`, `audio.rs`, `widgets.rs`) and add `crates/nord-panel` skeleton; behaviour unchanged (`ns4-r7vt`)
 - [ ] **B5** Host and behaviour layer: `PanelHost`, `PanelAction`, Shift / hold / double-tap / selector cycling / pot snap / Live Mode with unit tests (`ns4-q6p7`, after B4)
 - [ ] **B6** Headless golden-image harness: CPU raster via `tiny-skia`, per-pixel tolerance + error budget, goldens at 0.5x; optional local-only photo comparison skipped without `.reference/` (`ns4-7cv6`, after B4)
-- [ ] **B7** Asset baker (`xtask bake-panel`) and material/shadow system: reproducible atlas hashes, theme tokens (`ns4-77s9`, after B1, B4)
+- [ ] **B7** Asset baker (`xtask bake-panel`) and material/shadow system: Blender-rendered sprites and filmstrips from our own models, committed renders with content hashes, `tiny-skia` for flat vector layers, theme tokens; first proves one knob filmstrip and one fader cap and measures atlas size (D15, `ns4-77s9`, after B1, B4)
 - [ ] **B8a-g** Section renderers with a golden image each and every section control bound: master/rotary/wheels (`ns4-0sud`), organ (`ns4-9h25`), piano (`ns4-otuf`), program + both OLEDs (`ns4-z6fi`), synth (`ns4-irgv`), effects (`ns4-hcuh`), keybed (`ns4-jpgx`) (after B2, B5, B6, B7)
 - [ ] **B9a-d** Parameter and engine parity, additive IDs only: synth per layer (`ns4-4w9l`), effects (`ns4-e3zs`), organ/piano per layer (`ns4-h7he`), program/menus/Extern (`ns4-ymci`) (after B3)
 - [ ] **B10** Lock-free telemetry engine to GUI; test proves `process_block` does not allocate; LED ladders show morphed level (`ns4-gjy2`, after B5)
