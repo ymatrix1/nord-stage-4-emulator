@@ -32,6 +32,8 @@ Detailed rules live in `.agents/rules/`:
 - [.agents/rules/evidence-over-claims.md](.agents/rules/evidence-over-claims.md): never claim work is done without test/build output.
 - [.agents/rules/testing.md](.agents/rules/testing.md): every source file ships unit tests enforced by `tools/check_tests.py`.
 - [.agents/rules/dsp-and-realtime.md](.agents/rules/dsp-and-realtime.md): real-time audio invariants (no allocations/locks in `process_block`).
+- [.agents/rules/provenance-in-code.md](.agents/rules/provenance-in-code.md): tag constants `VERIFIED` / `EMPIRICAL` / `ASSUMED` with source and check.
+- [.agents/rules/code-structure.md](.agents/rules/code-structure.md): small modular files, DRY helpers, tests per module.
 - [.agents/rules/git-workflow.md](.agents/rules/git-workflow.md): branches, Conventional Commits, PR structure, and pushing.
 
 Short version:
@@ -67,7 +69,7 @@ Skills live in `.agents/skills/`; `.claude/skills` points there.
 
 ## Layout
 
-`crates/nord-core/` Rust DSP & `CBIN`/firmware parser + `ns4` CLI · `tools/` Python inspection CLI (`ns4_inspect.py`) & test ratchet (`check_tests.py`) · `docs/` PRD, ROADMAP, ARCHITECTURE, DECISIONS, `specs/`, `research/` · `.agents/` rules & skills · `.beans/` tracked tasks
+`crates/nord-core/` Rust DSP & `CBIN`/firmware parser + `ns4` CLI · `crates/nord-sharc/` SHARC VISA decoder (Track B oracle) · `tools/` Python inspection CLI (`ns4_inspect.py`) & test ratchet (`check_tests.py`) · `docs/` PRD, ROADMAP, ARCHITECTURE, DECISIONS, `specs/`, `research/` · `.agents/` rules & skills · `.beans/` tracked tasks
 
 ## Checks before pushing
 

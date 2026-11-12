@@ -6,7 +6,7 @@
 
 | Blocker | Result | Status |
 |---|---|---|
-| DSP images encrypted? | **100% Not Encrypted.** Custom LZ algorithm reverse-engineered against ARM startup code (13-bit distance + 3-bit length bit packing) | **Solved / Not Encrypted** |
+| DSP images in the update? | Compression covers the **ARM** sections only (custom LZ). Not encrypted as far as tested. SHARC VISA code is present, uncompressed, in `bank0_CODE@0x440000..0x4FFFFF` ([dsp-image-hunt.md](dsp-image-hunt.md) 5.5). `DSP*` names are region labels in the bank 1 flash tool, not images | **Found (five images, exact boundaries), partly disassembled** |
 | Boot ROMs | Not obtainable without hardware; not in the update package | **Blocked** |
 | Central unknown chip / buses | Not identifiable from the photos; web sources are generic and speculate an FPGA | **Open** |
 | Sample codec (`CNSP`) | Opaque payload, no sub-structure found (section 3) | **Open** |
@@ -18,7 +18,7 @@
 Method: signature scan, zlib trial decode at every header hit, entropy map in 64 KB steps, and a printable-string count against a byte-shuffled control.
 
 - No gzip, xz, bzip2, zip or lz4 signatures. The 76 `lzma`-style and 31 zlib-style hits are chance 2 to 3 byte matches; **0 zlib streams decode**.
-- Entropy map: first 64 KB is about 1.1 (empty); most of `0x010000..0x3BFFFF` is 7.1 to 7.7 bits per byte; the loader table area near `0x3CF040` drops to about 5.5 and has readable strings.
+- Entropy map: first 64 KB is about 1.1 (empty); most of `0x010000..0x3BFFFF` is 7.1 to 7.7 bits per byte; the area near `0x3CF040` drops to about 5.5 and has readable strings (packed bank 1 `CODE` literals; it is not a DSP loader, see [dsp-image-hunt.md](dsp-image-hunt.md)).
 - Printable strings in the high-entropy region exceed the shuffled control by 1x to 5x but contain no meaningful text, which is what structured compressed data produces.
 - The beginning of the `CODE` segment decodes as ARM instructions (for example `msr cpsr_c`), so at least the start of the host image is plain.
 
@@ -45,7 +45,23 @@ Method: signature scan, zlib trial decode at every header hit, entropy map in 64
 
 ## 4. Verdict
 
-1:1 low-level emulation is **not currently feasible**: boot ROMs are unavailable, DSP images are unreadable, the sample codec is unknown, and no SHARC simulator exists. None of that is proven impossible, so Track B stays a research option, not a plan. The shipping engine remains the high-level Rust implementation (Track A).
+**Updated 2026-11-12** (evidence: [dsp-image-hunt.md](dsp-image-hunt.md) 5.5 to 5.13).
+
+1:1 low-level emulation is **still not a plan, but it is no longer blocked on missing DSP code.** What changed:
+
+| Blocker | Before | Now |
+|---|---|---|
+| DSP images | assumed on the board SPI flash, unreadable | **Present** in the OS update: five SHARC images (FX, PNO, ORG, SY1SY2, SMP), 916,780 bytes in v1.64 to v1.66, exact boundaries and a tool that finds them in every release v1.44 to v1.66 (`tools/ns4_dsp_images.py`) |
+| Instruction set | unknown | ADSP-214xx VISA, decoded by `tools/sharc_visa.py` (type known for 98.7% of the instructions in the large blocks, operands for 95.4%) |
+| Proof the images are the real programs | none | Every sound release note matches a change in the expected image, and no-change releases leave all five images identical (5.13) |
+| Download path | unknown | ARM calls a DSP driver method with (index, pointer, length); bank 0 caller `0x241C58`, bank 1 test caller `0x480E0` |
+| SHARC simulator | none open source | **Still none** |
+| Boot ROMs / board bring-up | not obtainable | **Partly known**: the image format is decoded (loader block stream with two core sections, [dsp-image-hunt.md](dsp-image-hunt.md) 5.17); the internal-SRAM address mapping is verified (5.18); still unknown are the external window mapping, the driver method behind the download call and the ARM-to-DSP bus protocol |
+| Sample and piano data, `CNSP` codec | unknown | **Unchanged**: sample and piano data live in flash outside the update |
+
+**What a Track B would still need**, in order: (1) ~~map the loader addresses of the decoded block stream to the SHARC address space~~ (done for internal SRAM, [dsp-image-hunt.md](dsp-image-hunt.md) 5.18; the external SDRAM window and entry semantics remain); (2) a ADSP-214xx core model (VISA, SIMD, DAGs, circular buffers) written from the Programming Reference, plus DAI/SPORT/DMA stubs; (3) the driver method and the ARM-to-DSP message protocol, to feed parameters the way the OS does; (4) the sample and piano data, which the update does not contain. Items 1 and 3 are bounded reverse-engineering; item 2 is the large cost.
+
+**Recommendation.** Keep the high-level Rust engine as the shipping path ([D2](../DECISIONS.md)). Use the DSP images as a *reference oracle* and a source of verified constants: coefficient tables, reverb and delay line lengths, DAG strides, algorithm structure. Reading the FX image for the reverb and the effect racks is the highest-value next step because it feeds Track A directly. Treat a full SHARC emulator as optional research.
 
 ## 6. Deeper analysis of the firmware containers
 

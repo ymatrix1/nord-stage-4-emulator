@@ -9,13 +9,15 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 
 | ID | Component | Severity | Description | Target Phase / Milestone | Status |
 |---|---|---|---|---|---|
-| **TD-01** | `crates/nord-gui` | Medium | Standalone GUI uses `eframe`/`egui` rather than pure `nih-plug` vector UI | Phase 6 (`crates/nord-plugin`) | Open |
+| **TD-01** | `crates/nord-gui` | Medium | Standalone GUI uses `eframe`/`egui` 0.31 rather than embedded `nih_plug_egui` vector UI inside `crates/nord-plugin` | Phase 6.1 (`crates/nord-plugin` editor) | Open |
 | **TD-02** | `crates/nord-gui` | Medium | Single default MIDI input port bound on startup; no hotplug menu | Phase 6.1 (Settings Dialog) | Open |
-| **TD-03** | `crates/nord-core::piano` | Low | In-memory synthetic multi-sample wavetable fallback pending open SFZ loader | Phase 4 (`ns4-pno4`) | Open |
+| **TD-03** | `crates/nord-core::piano` | Low | Synthetic multi-sample fallback when no user `.npno` or SFZ bank is loaded | Phase 4 (`ns4-pno4`) | Resolved (SFZ + `.npno` loader in core & `nord-gui`) |
 | **TD-04** | `crates/nord-core::organ` | Low | Simplified key-click transient model instead of physical contact bounce network | Phase 2.2 (`ns4-orgn`) | Open |
 | **TD-05** | `crates/nord-core::engine` | Low | Boxed heap allocations for delay buffers occur during `Stage4Engine::new()` | Maintenance | Accepted (Zero RT allocs) |
-| **TD-06** | `docs/research` | High | `CNSP` compressed sample codec & full LZ firmware framing remain to be decoded | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | In Progress (Planned) |
+| **TD-06** | `docs/research` | Medium | `CNSP` & LZO1X unpacked; `ARM0` MurmurHash2 & OS v1.66 128-step DSP parameter curves mapped (`sharc-dsp-and-preset-hash-teardown.md`); SHARC VISA code found in `bank0_CODE@0x440000..0x52FFFF` ([dsp-image-hunt.md](research/dsp-image-hunt.md) 5.5/5.6), disassembly and DSP mapping open | Phase 7 (`ns4-trkb`, [D12](DECISIONS.md)) | Partial (ARM0/DSP curves calibrated) |
 | **TD-07** | `crates/nord-core::synth` | Medium | Arpeggiator & LFO are not yet tempo-synced across 7 layers | Phase 3.2 (`ns4-synt`) | Resolved (`crates/nord-core/src/synth.rs`) |
+| **TD-08** | `crates/nord-core::synth` | Low | `SAMPLES` oscillator interpolates with 4-point Catmull-Rom; the hardware uses a 12-tap windowed-sinc polyphase kernel (`crates/nord-core/src/sinc.rs`, not wired into voices) | Phase 3.x (`ns4-synt`) | Open |
+| **TD-09** | `crates/nord-core` (`piano.rs` 1,848 lines, `fx.rs` 1,771, `synth.rs` 1,236, `engine.rs` 1,214, `firmware.rs` 1,035), `tools/video_ref.py` (1,556) | Low | Files far above the 400-line guideline of `.agents/rules/code-structure.md`; `crates/nord-sharc` already follows it (`core/`, `visa/`) | Split opportunistically when touched, behaviour-preserving with tests per module | Open |
 
 ---
 
@@ -46,13 +48,16 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 - **Debt / Trade-off:** Buffer memory is allocated on the heap inside `Box::new()` during initialization (`Stage4Engine::new()`).
 - **Status:** **Accepted Architecture Invariant**. Real-time DSP rendering (`render_frame` / `process_block`) remains strictly zero-allocation and lock-free.
 
-### TD-06: Reverse-Engineered Sample Payload (`CNSP`) & Firmware LZ Framing
-- **Context:** Factory backup `.ns4b` contains 233 sample files in `.nsmp4` and `.npno` formats. Analysis shows standard 48-byte `CBIN` headers followed by high-entropy `CNSP` compressed payloads (~7.5 bits/byte). Meanwhile, the firmware `CODE` segment is proven unencrypted using a 16-bit LZ token scheme (`distance = token >> 3`, `length = (token & 7) + 2`).
-- **Debt:** Without completing the LZ literal-run state machine and reverse-engineering the `CNSP` decompressor, the emulator cannot directly load a user's local `.npno` and `.nsmp4` files from their `.ns4b` backup.
+### TD-06: Firmware Internal SHARC / ARM0 Symbol & Lookup Table Mapping
+- **Context:** Factory backup `.ns4b` `CNSP` decompression (`.npno` / `.nsmp4`), full-stream Clavia LZO1X firmware decompression (`Image 1` `798,912 B`, `Image 0` `5,499,504 B`), `ARM0` MurmurHash2 sound-bank resolver (`0x0a5a44`), and the 5×128 OS v1.66 DSP parameter tables (`0x53abe4..0x53b5e4`, 800 Hz rotary crossover, and rotary mic balance steps) are now mapped and wired into `crates/nord-core` and `nord-gui` (`docs/research/sharc-dsp-and-preset-hash-teardown.md`).
+- **Remaining Debt:** Executable SHARC code for `DSPO` / `DSPS` / `DSPF` is present as VISA inside `bank0_CODE@0x440000..0x52FFFF` (about 270 KB, 8 blocks, same layout in v1.44 to v1.66). Operand decoding is partial (`tools/sharc_visa.py`). The five DSP images (FX, PNO, ORG, SY1SY2, SMP; 916,780 bytes, `0x44667C..0x5263A8`) and the routine that hands them to the DSP driver (`bank0_CODE@0x241C58`) are identified in [dsp-image-hunt.md](research/dsp-image-hunt.md) 5.12; the driver method behind the call is not. `bank1_CODE.bin@0x08cb7c..0x09fe8` is a region/test table, not a loader table.
 - **Remediation Plan (Track B — [D12](DECISIONS.md)):**
-  1. Solve the literal-run framing in the custom LZ stream (`crates/nord-core/src/firmware.rs`) to unpack `ARM0`, `DSPO`, `DSPS`, and `DSPF`.
-  2. Perform differential analysis across all 233 `CNSP` headers (`0x30..0x80`) and disassemble the `CNSP` decompression routine from the unpacked firmware images.
-  3. Implement a clean-room `CNSP` reader in `crates/nord-core` alongside open SFZ sample support.
+  1. Finish the VISA decoder (multiplier/shifter/multifunction fields), map the five images to the Core1/Core2 names and decode the driver method behind the download call (`bank0_CODE@0x241C58`), then verify reverb/amp FX stages against the code. A SPI flash dump is no longer required to start.
+
+### TD-08: Sample Interpolation Kernel
+- **Context:** The firmware's synth DSP image holds six 12-tap x 256-phase windowed-sinc interpolation kernels (`docs/research/dsp-image-hunt.md` 5.15; cutoffs 1.10, 1.05, 1.00, 0.96, 0.925, 0.895 are VERIFIED). `crates/nord-core/src/sinc.rs` reproduces them (golden values from the firmware table) and measures at least 5x lower error than the current 4-point Catmull-Rom on a 0.3 fs sine.
+- **Debt:** `synth/sample_osc.rs::cubic_pcm` and the piano sample path still use cubic interpolation. The rule that picks a kernel from the playback ratio is not decoded (ASSUMED: higher ratio, lower `fc`).
+- **Remediation Plan:** Add a kernel selector by playback ratio, switch `sample_with_loop`/`render_sample_zone_stereo` to `SincKernel::interpolate`, compare CPU cost per voice (12 MACs against 4) and re-run the sample-mode tests.
 
 ---
 
@@ -60,3 +65,8 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 
 1. Every newly introduced structural compromise or temporary fallback must be logged here with a **TD-XX** identifier.
 2. When a roadmap phase or bean resolves a technical debt item, update its status to `Resolved` and link the corresponding commit/PR.
+
+### TD-09: Oversized Source Files
+- **Context:** `.agents/rules/code-structure.md` asks for focused modules under about 400 lines. `crates/nord-sharc` was split into `core/` and `visa/` submodules; the older files listed in the summary table were not.
+- **Debt:** Large files mix several concerns (voice state, DSP blocks, parameter tables, tests), which slows review and invites duplicated helpers.
+- **Remediation Plan:** When a change touches one of these files, first split it into a directory module with unchanged public API and tests per submodule, proving identical output (golden render hashes) before and after.

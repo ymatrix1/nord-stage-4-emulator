@@ -168,3 +168,115 @@ def test_extract_firmware_from_pe_synthetic(tmp_path: Path):
     extracted = ns4_inspect.extract_firmware_payload(pe_file.read_bytes())
     assert extracted[:4] == b"\x00\x00\x00\x20"
     assert ns4_inspect.main([str(pe_file)]) == 0
+
+
+def _write_bits(buf: bytearray, bit_pos: int, width: int, value: int) -> None:
+    for i in range(width):
+        bit = (value >> (width - 1 - i)) & 1
+        pos = bit_pos + i
+        byte_idx = pos // 8
+        bit_idx = 7 - (pos % 8)
+        if bit:
+            buf[byte_idx] |= 1 << bit_idx
+        else:
+            buf[byte_idx] &= ~(1 << bit_idx)
+
+
+def _write_morph(
+    buf: bytearray, bit_pos: int, width: int, base: int, max_val: int, d_w: int = 0
+) -> None:
+    _write_bits(buf, bit_pos, width, base)
+    _write_bits(buf, bit_pos + width, width + 1, max_val + d_w)
+    _write_bits(buf, bit_pos + 2 * width + 1, width + 1, max_val)
+    _write_bits(buf, bit_pos + 3 * width + 2, width + 1, max_val)
+
+
+def test_decode_hardware_bitfields_and_fx():
+    from ns4_inspect import (
+        decode_cbin_payload,
+        decode_fx_payload,
+        decode_global_payload,
+        decode_organ_payload,
+        decode_piano_payload,
+        decode_synth_payload,
+    )
+
+    fx_buf = bytearray(55)
+    fx_buf[0] = 0x36
+    _write_bits(fx_buf, 8, 1, 1)  # mod1 enabled
+    _write_morph(fx_buf, 10, 7, 64, 127, d_w=32)
+    _write_bits(fx_buf, 72, 4, 8)  # WahWahLfo
+    _write_bits(fx_buf, 139, 4, 4)  # ChorusAnalog
+    _write_bits(fx_buf, 143, 1, 1)  # amp enabled
+    _write_bits(fx_buf, 144, 7, (-12) & 0x7F)  # -3.0 dB
+    _write_bits(fx_buf, 371, 1, 1)  # reverb enabled
+    _write_bits(fx_buf, 405, 3, 4)  # Hall
+    fx = decode_fx_payload(bytes(fx_buf))
+    assert fx["mod1"]["enabled"] is True
+    assert fx["mod1"]["type"] == "WahWahLfo"
+    assert abs(fx["mod1"]["rate_morph"]["wheel"] - 0.252) < 0.01
+    assert fx["mod2"]["type"] == "ChorusAnalog"
+    assert fx["amp_eq"]["treble_db"] == -3.0
+    assert fx["reverb"]["enabled"] is True
+    assert fx["reverb"]["type"] == "Hall"
+
+    glb_buf = bytearray(45)
+    glb_buf[0] = 0x2C
+    _write_bits(glb_buf, 8, 1, 1)
+    _write_bits(glb_buf, 12, 4, 3)  # MIDI 60 (C4)
+    _write_bits(glb_buf, 35, 8, 90)  # 120 BPM
+    _write_bits(glb_buf, 284, 3, 0b101)
+    glb = decode_global_payload(bytes(glb_buf))
+    assert glb["split_enabled"] is True
+    assert glb["split_points"][0] == 60
+    assert glb["tempo_bpm"] == 120
+    assert glb["section_enable_i"] == 0b101
+
+    org_buf = bytearray(135)
+    org_buf[0] = 0x11
+    _write_bits(org_buf, 9, 2, 0b01)
+    _write_morph(org_buf, 14, 7, 127, 127)
+    _write_bits(org_buf, 144 + 17, 3, 0)  # B3
+    _write_morph(org_buf, 144 + 40, 4, 8, 8)
+    _write_morph(org_buf, 144 + 40 + 19, 4, 6, 8)
+    _write_bits(org_buf, 130, 3, 4)  # V3
+    _write_bits(org_buf, 144 + 232, 1, 1)  # vib on
+    org = decode_organ_payload(bytes(org_buf))
+    assert org["layer_a"]["drawbars"][:2] == [8, 6]
+    assert org["vibrato"]["type"] == "V3"
+
+    pno_buf = bytearray(147)
+    pno_buf[0] = 0x0C
+    _write_bits(pno_buf, 9, 2, 0b01)
+    _write_bits(pno_buf, 104 + 18, 3, 2)  # Electric
+    _write_bits(pno_buf, 104 + 21, 5, 3)
+    _write_bits(pno_buf, 104 + 62, 2, 2)  # acoustic=2
+    pno = decode_piano_payload(bytes(pno_buf))
+    assert pno["layer_a"]["enabled"] is True
+    assert pno["layer_a"]["category"] == "Electric"
+    assert pno["layer_a"]["acoustic_level"] == 2
+
+    syn_buf = bytearray(493)
+    syn_buf[0] = 0x1E
+    _write_bits(syn_buf, 10, 3, 0b001)
+    _write_bits(syn_buf, 248 + 8, 1, 1)  # osc mode
+    _write_bits(syn_buf, 248 + 135, 1, 1)  # arp on
+    _write_bits(syn_buf, 1472 + 218, 3, 1)  # LP24
+    _write_bits(syn_buf, 1472 + 318, 7, 24)  # filter env attack
+    _write_bits(syn_buf, 1472 + 325, 7, 61)  # filter env decay
+    _write_bits(syn_buf, 1472 + 332, 7, 33)  # filter env release
+    syn = decode_synth_payload(bytes(syn_buf))
+    assert syn["layer_a"]["enabled"] is True
+    assert syn["layer_a"]["arp_enabled"] is True
+    assert syn["layer_a"]["filter_type"] == 1
+    assert syn["layer_a"]["filter_env_adr_idx"] == [24, 61, 33]
+    raw = syn["layer_a"]["raw_fields"]
+    assert raw["filter_env_attack"] == 24 and raw["filter_type"] == 1
+    assert raw["octave"] == 0 and raw["unison"] == 0
+
+    full_prog = bytes(glb_buf) + bytes(org_buf) + bytes(pno_buf) + bytes(syn_buf)
+    prog_dec = decode_cbin_payload("ns4p", full_prog)
+    assert prog_dec["global"]["tempo_bpm"] == 120
+    assert prog_dec["piano_bytes"] == 147
+    assert prog_dec["synth_bytes"] == 493
+    assert decode_cbin_payload("ns4t", bytes(fx_buf))["fx"]["reverb"]["type"] == "Hall"

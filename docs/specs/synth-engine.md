@@ -15,9 +15,9 @@ Each Synth layer selects one of four synthesis paradigms:
 | Mode | Description | Control Parameters |
 |---|---|---|
 | **Analog (VA)** | Anti-aliased Virtual Analog waveforms (`Saw`, `Pulse/Square`, `Triangle`, `Sine`, `SuperSaw`) | Shape/PWM (`0..1`), Osc Config (`Pitch`, `Detune`, `Sync`, `Sub`, `Noise`) |
-| **Wavetable** | 64 single-cycle harmonic wavetables (`WaveTable` in firmware) with mipmap band-limiting | Table index (`0..63`), Spectral tilt / Formant shift |
-| **FM (2/3-Op)** | Phase-modulation synthesis with harmonic & inharmonic carrier:modulator ratios | Harmonic ratio (`0.5x..16.0x`), FM Amount (`0..1`), Feedback |
-| **Sample** | Open SFZ/WAV sample playback with pitch tracking and loop crossfade | Sample bank/ID, Attack skip, Timbre filter (`Soft`/`Bright`) |
+| **Wavetable** | 64 single-cycle harmonic wavetables (`NUM_WAVETABLES = 64`, 8 spectral families) with 8-band octave mipmap anti-aliasing (`MIP_MAX_HARMONICS`) and Lanczos-smoothed Fourier synthesis | Table index (`wavetable_index: 0..63`), Spectral formant/scan (`wavetable_position: 0..1`) |
+| **FM (2/3-Op)** | Phase-modulation synthesis with 2/3-operator cascade (`Op3 -> Op2 -> Op1`), 16 harmonic & inharmonic carrier:modulator ratios (`FM_RATIOS`), anti-hunting modulator self-feedback, and transient decay mod envelope | Harmonic ratio (`fm_ratio`), FM Amount (`fm_amount`), Feedback (`fm_feedback`), Op3 Sub Ratio/Amount, Mod Env Amount |
+| **Sample** | Lock-free zero-allocation multisample playback (`SynthSampleSound` / `LoadedSynthSample`) with root-key pitch tracking, linear loop crossfade, and 1-pole timbre filter (`Off`/`Soft`/`Bright`) | Sample zone bank, Loop crossfade (`loop_crossfade`), Timbre filter (`SampleTimbre`) |
 
 ---
 
@@ -69,13 +69,36 @@ $$
 u = \frac{\tanh(\text{drive} \cdot x) - k \cdot S}{1 + k \cdot G}
 $$
 
-This resolves the 4-stage feedback loop algebraically on every sample without instability near Nyquist.
+This resolves the 4-stage feedback loop algebraically on every sample without instability near Nyquist. Cutoff frequency (`14 Hz..32 kHz`), keyboard tracking (`kb_track`: `0`, `1/3`, `2/3`, `1/1`), and Morph Matrix modulation follow the 128-step OS v1.66 `FILTER_CUTOFF_HZ_TABLE` (`cutoff_norm_to_hz` / `cutoff_hz_to_norm`).
 
 ---
 
 ## 5. Envelopes, LFO & Arpeggiator
 
-- **Amp Envelope (ADR / ADSR):** Exponential Attack ($0.5\text{ ms}..10\text{ s}$), Decay/Sustain, and Release ($2\text{ ms}..15\text{ s}$) with velocity sensitivity switch.
+- **Amp Envelope (ADR / ADSR):** Exponential Attack (`ENV_ATTACK_MS_TABLE`: $0.5\text{ ms}..45\text{ s}$), Decay/Sustain (`ENV_DECAY_MS_TABLE`: $3.0\text{ ms}..43\text{ s}$, index `127 = Hold/Inf`), and Release (`ENV_RELEASE_MS_TABLE`: $3.0\text{ ms}..45\text{ s}$) with velocity sensitivity switch.
 - **Mod / Filter Envelope (ADR):** Dedicated bipolar/unipolar envelope modulating Osc Pitch, Osc Shape/FM, and Filter Cutoff.
-- **LFO:** 5 waveforms (`Triangle`, `Saw`, `InvSaw`, `Square`, `SampleHold`), routable to Pitch (Vibrato), Osc Mod, and Filter Cutoff; lockable to `MasterClock` divisions (`1/1` to `1/32T`).
+- **LFO:** 5 waveforms (`Triangle`, `Saw`, `InvSaw`, `Square`, `SampleHold`), exponential rate curve (`LFO_RATE_HZ_TABLE`: $0.03\text{ Hz}..523\text{ Hz}$), routable to Pitch (Vibrato), Osc Mod, and Filter Cutoff; lockable to `MasterClock` divisions (`1/1` to `1/32T`).
 - **Arpeggiator:** `Up`, `Down`, `UpDown`, `Random`, `Poly` modes. `Poly` triggers the held chord together; the other modes allocate each step through the regular polyphonic voice allocator. `Random` uses a seeded pseudo-random sequence so rendering is deterministic. The current rate control advances on sixteenth-note steps.
+
+## 6. Voice Modes, Modulation and Decoded-Parameter Wiring
+
+`crates/nord-core/src/synth_params.rs` (`apply_decoded_layer`) maps the decoded `0x32`/`0x2F` fields (see `docs/specs/cbin-and-presets.md`) onto `SynthLayer`. Status tags follow `.agents/rules/provenance-in-code.md`.
+
+| Panel feature | Engine behaviour | Status |
+|---|---|---|
+| Mono / Legato | Mono = one voice; Legato = mono + envelopes keep running on overlapping keys. Panel has separate LEDs; `legato` implies `mono`. | EMPIRICAL (manual p.35) |
+| Voice priority | `LO` ignores keys above the lowest held key, `HI` ignores keys below the highest; release falls back to the lowest/highest remaining key. | EMPIRICAL (manual p.35) |
+| Glide | Constant-rate (seconds per octave); Mono glides every note, Legato only between overlapping notes. Knob `0..10` maps to `(k/10)^2 * 2 s` per octave. | rate law EMPIRICAL (manual), scale ASSUMED |
+| Unison `1/2/3` | Partner voices with no centre voice: `1` = `-2/+2` cents, `2` = `-4/-1.32/+1.33/+4`, `3` = `-6/-2/+2/+6`; each voice mostly in one channel (weak channel `0.43`). Analog and Wavetable. | **VERIFIED** ratios (firmware `0x2f9ee8`), **EMPIRICAL** voice count / panning (hardware video, `docs/research/synth-0x2f-ns4decode-crosscheck.md`); overall level ASSUMED |
+| Octave shift | `-2..+2` octaves applied to the note frequency, key tracking uses the played note. | EMPIRICAL |
+| Pitch fine / coarse | Cents and semitones added to the note frequency. | EMPIRICAL (ranges from corpus: fine +/-17, coarse +/-24) |
+| Amp ADR | Decay falls to silence while held; `Hold` (127) sustains at full. Velocity setting `0..3` scales sensitivity `n/3`. | ADR EMPIRICAL (manual), scale ASSUMED |
+| Filter ADR | Dedicated envelope (`filter_env_dedicated`); `filter velocity` on = depth follows velocity. `filter_on = false` bypasses the filter. Full Env Amt sweeps 8 octaves (`FILTER_ENV_OCTAVES`, was 3) and the audible decay time constant is 0.18 x the displayed Decay (`FILTER_ENV_DECAY_TAU_FRACTION`). | structure EMPIRICAL, scales EMPIRICAL (one clip, +/-1 octave) |
+| Oscillator ADR | Modulates Osc Ctrl (wavetable position / FM index) or pitch with `osc_env_to_pitch`; `osc_env_velocity` scales depth by velocity. Amount `-1..1`. | EMPIRICAL structure, depth ASSUMED (+/-12 semitones, +/-0.5 Osc Ctrl) |
+| LFO | 5 shapes (`triangle, saw down, saw up, square, S/H`), destinations `Osc Ctrl / Pitch / Filter / Off`. Pitch depth uses the firmware 128-entry table (`0..48` semitones, `synth_tables.rs`). Master-clock sync is decoded but the free-running rate is used. | shapes/targets EMPIRICAL, **pitch depth VERIFIED** (firmware `0x2ca2c0`) |
+| Vibrato | Modes `ON`, `DLY` (per-voice fade-in after the delay) and controller modes via `vibrato_ctrl`; depth `0..10` maps to `0..92` cents (46 cents measured at 5.0 on hardware, linearity assumed); DLY fades in over 0.45 s after the delay. | structure EMPIRICAL, depth + ramp EMPIRICAL (one amount) |
+| Oscillator select | `osc_type`/`category`/`wave` map to Analog VA waveforms, FM ratio index, or a flat index over the 46 WAVE waves (`cbin/synth_osc.rs`). | field layout EMPIRICAL; wave-name order confirmed in firmware; wave audio ASSUMED (synthetic 64-table bank) |
+
+## 7. Sample interpolation (hardware reference)
+
+VERIFIED against the firmware (`docs/research/dsp-image-hunt.md` 5.15): the synth DSP image holds six interpolation kernels of 12 taps x 256 phases, each `sinc(fc * d) * window(d)` with `d = tap - 5 - phase / 256`, a three-term cosine window `0.4231 + 0.4991 cos(pi d / 6) + 0.0778 cos(2 pi d / 6)` (half-width 6; EMPIRICAL fit, close to Blackman), and `fc = 1.100, 1.050, 1.000, 0.960, 0.925, 0.895` (VERIFIED; tap sum `1 / fc`). Source: `SY1SY2` image offset `0x76A8` of OS v1.44 to v1.66, checked by `tools/ns4_synth_kernels.py`, rms error 0.000036 (max 0.000088). How the hardware selects a kernel from the playback ratio is not decoded (ASSUMED: a higher ratio uses a lower `fc`). `crates/nord-core/src/sinc.rs` implements the kernels (golden-tested against the firmware values); the engine does not use them yet (the `SAMPLES` oscillator and the piano spec use 4-point Catmull-Rom), tracked as TD-08 in `docs/TECH_DEBT.md`.

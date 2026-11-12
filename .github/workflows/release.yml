@@ -29,16 +29,19 @@ jobs:
             archive: ns4-linux-x86_64.tar.gz
             bin: ns4
             gui_bin: nord-stage4
+            plugin_bin: nord-plugin-standalone
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: ns4-windows-x86_64.zip
             bin: ns4.exe
             gui_bin: nord-stage4.exe
+            plugin_bin: nord-plugin-standalone.exe
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: ns4-macos-arm64.tar.gz
             bin: ns4
             gui_bin: nord-stage4
+            plugin_bin: nord-plugin-standalone
 
     steps:
       - name: Checkout repository
@@ -52,16 +55,18 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Linux system dependencies (ALSA)
+      - name: Install Linux system dependencies (ALSA, X11, JACK)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev
+          sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev libxi-dev libgl-dev libjack-jackd2-dev pkg-config
 
       - name: Build release binaries
         run: |
           cargo build --release --locked --target ${{ matrix.target }} -p nord-core --bin ns4
           cargo build --release --locked --target ${{ matrix.target }} -p nord-gui --bin nord-stage4
+          cargo build --release --locked --target ${{ matrix.target }} -p nord-plugin --bin nord-plugin-standalone
+          cargo xtask bundle nord-plugin --release --locked --target ${{ matrix.target }}
 
       - name: Run release tests
         run: cargo test --release --locked --target ${{ matrix.target }} --workspace
@@ -72,8 +77,11 @@ jobs:
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" dist/
           cp "target/${{ matrix.target }}/release/${{ matrix.gui_bin }}" dist/
+          cp "target/${{ matrix.target }}/release/${{ matrix.plugin_bin }}" dist/
+          cp -r target/bundled/nord-plugin.clap dist/
+          cp -r target/bundled/nord-plugin.vst3 dist/
           cp README.md dist/
-          tar -C dist -czf "${{ matrix.archive }}" "${{ matrix.bin }}" "${{ matrix.gui_bin }}" README.md
+          tar -C dist -czf "${{ matrix.archive }}" "${{ matrix.bin }}" "${{ matrix.gui_bin }}" "${{ matrix.plugin_bin }}" nord-plugin.clap nord-plugin.vst3 README.md
           shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
 
       - name: Package archive (Windows)
@@ -83,8 +91,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" dist/
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.gui_bin }}" dist/
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.plugin_bin }}" dist/
+          Copy-Item -Recurse "target/bundled/nord-plugin.clap" dist/
+          Copy-Item -Recurse "target/bundled/nord-plugin.vst3" dist/
           Copy-Item README.md dist/
-          Compress-Archive -Path "dist/${{ matrix.bin }}", "dist/${{ matrix.gui_bin }}", "dist/README.md" -DestinationPath "${{ matrix.archive }}" -Force
+          Compress-Archive -Path "dist/${{ matrix.bin }}", "dist/${{ matrix.gui_bin }}", "dist/${{ matrix.plugin_bin }}", "dist/nord-plugin.clap", "dist/nord-plugin.vst3", "dist/README.md" -DestinationPath "${{ matrix.archive }}" -Force
           $hash = (Get-FileHash -Algorithm SHA256 "${{ matrix.archive }}").Hash.ToLower()
           "$hash  ${{ matrix.archive }}" | Set-Content -Encoding ascii "${{ matrix.archive }}.sha256"
 

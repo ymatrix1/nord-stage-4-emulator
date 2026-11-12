@@ -18,7 +18,8 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D10](#d10-every-source-file-ships-unit-tests-enforced-in-ci) | 2026-11-10 | Every source file ships unit tests enforced by `tools/check_tests.py` | accepted |
 | [D11](#d11-dual-target-delivery-daw-plugin-clap--vst3-and-standalone-application) | 2026-11-10 | Dual-target delivery: DAW Plugin (`CLAP` + `VST3`) AND Standalone application | accepted |
 | [D12](#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression) | 2026-11-11 | Pursue Track B reverse engineering for `CNSP` sample codec and full LZ firmware decompression | accepted |
-| [D13](#d13-nih-plug-framework-for-daw-plugin-architecture) | 2026-11-11 | NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture | accepted |
+| [D13](#d13-adopt-the-third-party-ns4decode-bit-map-for-synth-0x32--0x2f-fields) | 2026-11-11 | Adopt the third-party ns4decode bit map for Synth `0x32` / `0x2F` fields | accepted |
+| [D14](#d14-nih-plug-framework-for-clap-vst3-and-au-daw-plugin-architecture) | 2026-11-11 | NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture | accepted |
 
 ---
 
@@ -147,7 +148,17 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Relying strictly on open SFZ approximations (leaves `.npno` and `.nsmp4` payloads unreadable).
 - **Impact:** Updates `docs/ROADMAP.md`, `docs/TECH_DEBT.md`, and `docs/research/1to1-emulation-feasibility.md` with structured Track B milestones before implementation begins.
 
-### D13. NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture
+### D13. Adopt the third-party ns4decode bit map for Synth `0x32` / `0x2F` fields
+
+- **Status:** accepted 2026-11-11
+- **Decided by:** Yuri Olive ("code is also here .reference/ns4decode_pkg", "incorporate everything we can")
+- **Context:** Statistical diffing of the 384 factory `.ns4y` presets located the filter ADR, osc ADR, amp velocity and unison, but could not place LFO shape/target, mono/legato/priority, glide, octave, pitch, osc type/category/wave from names alone. ns4decode (MIT, Randy 2024) publishes a complete `.ns4p` bit map and a regression program with hand-checked expected values.
+- **Decision:** Use ns4decode's offsets (converted to block-relative bits) for the Synth `0x32`/`0x2F` fields, tag the absolute offsets `EMPIRICAL` and the field order/widths `VERIFIED` against the firmware name tables (`tools/ns4_fw_order_check.py`), keep the code re-derived rather than copied, and gate regressions with `tools/ns4_crosscheck.py` (75/75 regression fields, 0 violations over 1152 factory layers).
+- **Why:** The map agrees with independent data (bitscan found the same offsets; corpus values stay in legal ranges) and unblocks real decoding of LFO, voice mode, glide, octave and oscillator selection (resolves OQ4).
+- **Alternatives:** Keep guessing from preset names (ambiguous); disassemble the `ARM0` preset parser (large effort, tracked in OQ7).
+- **Impact:** `SynthLayerDecoded` gains the decoded fields; `pack()` rewrites only mapped fields and preserves all other bits; scales that ns4decode does not define stay `ASSUMED`.
+
+### D14. NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture
 
 - **Status:** accepted 2026-11-11
 - **Decided by:** Yuri Olive

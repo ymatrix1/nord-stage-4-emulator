@@ -1,608 +1,284 @@
-//! Decoded Organ / Piano / Synth / Global / Program bitstream structures.
+//! Decoded Organ / Piano / Synth / FX / Global / Program bitstream structures.
+//!
+//! All bit offsets and morph encodings (`W`-bit base + three `(W+1)`-bit
+//! Wheel/Aftertouch/Control-Pedal deltas with zero sentinel `max_val`) match
+//! Nord Stage 4 OS v1.66 `Buffer_*` serialization and verified factory `.ns4b` presets.
 
 use super::bitstream::{BitReader, BitWriter};
 use super::container::{CbinError, CbinFile, CbinHeader, CbinKind};
+pub use super::fx_preset::FxDecoded;
+pub use super::organ_preset::OrganPresetDecoded;
+pub use super::piano_preset::{PianoLayerDecoded, PianoPresetDecoded};
+use super::synth_preset::SynthPresetDecoded;
 use crate::morph::CrossfadeWidth;
-use crate::organ::{OrganModel, RotarySpeed};
-use crate::piano::{PianoCategory, PianoTimbre, VelocityTouch};
-use crate::synth::{FilterModel, SynthOscMode, VaWaveform};
 use serde::{Deserialize, Serialize};
 
-/// Decoded Organ section configuration across Layer A and Layer B.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct OrganPresetDecoded {
-    pub model: OrganModel,
-    pub percussion_on: bool,
-    pub percussion_soft: bool,
-    pub percussion_fast: bool,
-    pub percussion_third: bool,
-    pub vibrato_on: bool,
-    pub vibrato_type: u8,
-    pub rotary_speed: RotarySpeed,
-    pub rotary_drive: f32,
-    pub layer_a_enabled: bool,
-    pub layer_a_level: f32,
-    pub layer_a_octave: i8,
-    pub drawbars_a: [u8; 9],
-    pub layer_b_enabled: bool,
-    pub layer_b_level: f32,
-    pub layer_b_octave: i8,
-    pub drawbars_b: [u8; 9],
+const SPLIT_NOTE_TABLE: [u8; 10] = [41, 48, 53, 60, 65, 72, 77, 84, 89, 96];
+
+/// Normalized (`-1.0..=1.0`) Morph deltas for `[ModWheel, Aftertouch, CtrlPedal]`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct MorphDeltas {
+    pub wheel: f32,
+    pub aftertouch: f32,
+    pub ctrl_pedal: f32,
 }
 
-impl Default for OrganPresetDecoded {
-    fn default() -> Self {
-        Self {
-            model: OrganModel::B3,
-            percussion_on: false,
-            percussion_soft: false,
-            percussion_fast: false,
-            percussion_third: false,
-            vibrato_on: false,
-            vibrato_type: 0,
-            rotary_speed: RotarySpeed::Slow,
-            rotary_drive: 0.0,
-            layer_a_enabled: true,
-            layer_a_level: 0.8,
-            layer_a_octave: 0,
-            drawbars_a: [8, 8, 8, 0, 0, 0, 0, 0, 0],
-            layer_b_enabled: false,
-            layer_b_level: 0.8,
-            layer_b_octave: 0,
-            drawbars_b: [8, 8, 8, 8, 8, 8, 8, 8, 8],
-        }
+impl MorphDeltas {
+    pub fn is_zero(self) -> bool {
+        self.wheel.abs() < 1e-4 && self.aftertouch.abs() < 1e-4 && self.ctrl_pedal.abs() < 1e-4
     }
 }
 
-impl OrganPresetDecoded {
-    pub const SIGNATURE_PREFIX: [u8; 9] = [0x11, 0x27, 0xFB, 0xFB, 0xFB, 0xFF, 0xF7, 0xF7, 0xF7];
-    pub const PAYLOAD_LEN: usize = 135;
-
-    pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
-        if slice.len() < Self::PAYLOAD_LEN {
-            return Err(CbinError::TooShort {
-                actual: slice.len(),
-                min: Self::PAYLOAD_LEN,
-            });
-        }
-        let mut r = BitReader::new(slice);
-        // Skip first 9 signature bytes = 72 bits
-        r.set_bit_pos(72)?;
-
-        let model_idx = r.read_bits(3)?;
-        let model = match model_idx {
-            0 => OrganModel::B3,
-            1 => OrganModel::Vox,
-            2 => OrganModel::Farfisa,
-            3 => OrganModel::Pipe1,
-            _ => OrganModel::Pipe2,
-        };
-        let percussion_on = r.read_bool()?;
-        let percussion_soft = r.read_bool()?;
-        let percussion_fast = r.read_bool()?;
-        let percussion_third = r.read_bool()?;
-        let vibrato_on = r.read_bool()?;
-        let vibrato_type = (r.read_bits(3)? as u8).min(5);
-        let speed_idx = r.read_bits(2)?;
-        let rotary_speed = match speed_idx {
-            0 => RotarySpeed::Stop,
-            1 => RotarySpeed::Slow,
-            _ => RotarySpeed::Fast,
-        };
-        let rotary_drive = (r.read_bits(7)? as f32 / 127.0) * 10.0;
-
-        let layer_a_enabled = r.read_bool()?;
-        let layer_a_level = r.read_bits(7)? as f32 / 127.0;
-        let layer_a_octave = (r.read_bits(3)? as i8) - 2;
-        let mut drawbars_a = [0u8; 9];
-        for db in &mut drawbars_a {
-            *db = (r.read_bits(4)? as u8).min(8);
-        }
-
-        let layer_b_enabled = r.read_bool()?;
-        let layer_b_level = r.read_bits(7)? as f32 / 127.0;
-        let layer_b_octave = (r.read_bits(3)? as i8) - 2;
-        let mut drawbars_b = [0u8; 9];
-        for db in &mut drawbars_b {
-            *db = (r.read_bits(4)? as u8).min(8);
-        }
-
-        Ok(Self {
-            model,
-            percussion_on,
-            percussion_soft,
-            percussion_fast,
-            percussion_third,
-            vibrato_on,
-            vibrato_type,
-            rotary_speed,
-            rotary_drive,
-            layer_a_enabled,
-            layer_a_level,
-            layer_a_octave,
-            drawbars_a,
-            layer_b_enabled,
-            layer_b_level,
-            layer_b_octave,
-            drawbars_b,
-        })
-    }
-
-    pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
-
-        let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72)?;
-
-        let model_idx = match self.model {
-            OrganModel::B3 => 0,
-            OrganModel::Vox => 1,
-            OrganModel::Farfisa => 2,
-            OrganModel::Pipe1 => 3,
-            OrganModel::Pipe2 => 4,
-        };
-        w.write_bits(model_idx, 3)?;
-        w.write_bool(self.percussion_on)?;
-        w.write_bool(self.percussion_soft)?;
-        w.write_bool(self.percussion_fast)?;
-        w.write_bool(self.percussion_third)?;
-        w.write_bool(self.vibrato_on)?;
-        w.write_bits(u32::from(self.vibrato_type & 0x07), 3)?;
-        let speed_idx = match self.rotary_speed {
-            RotarySpeed::Stop => 0,
-            RotarySpeed::Slow => 1,
-            RotarySpeed::Fast => 2,
-        };
-        w.write_bits(speed_idx, 2)?;
-        let drive_bits = ((self.rotary_drive / 10.0).clamp(0.0, 1.0) * 127.0).round() as u32;
-        w.write_bits(drive_bits, 7)?;
-
-        w.write_bool(self.layer_a_enabled)?;
-        w.write_bits(
-            (self.layer_a_level.clamp(0.0, 1.0) * 127.0).round() as u32,
-            7,
-        )?;
-        w.write_bits((self.layer_a_octave + 2).clamp(0, 4) as u32, 3)?;
-        for &db in &self.drawbars_a {
-            w.write_bits(u32::from(db.min(8)), 4)?;
-        }
-
-        w.write_bool(self.layer_b_enabled)?;
-        w.write_bits(
-            (self.layer_b_level.clamp(0.0, 1.0) * 127.0).round() as u32,
-            7,
-        )?;
-        w.write_bits((self.layer_b_octave + 2).clamp(0, 4) as u32, 3)?;
-        for &db in &self.drawbars_b {
-            w.write_bits(u32::from(db.min(8)), 4)?;
-        }
-
-        Ok(out)
+pub(super) fn decode_signed(raw: u32, bits: usize) -> i32 {
+    let sign_bit = 1u32 << (bits - 1);
+    let mask = (1u32 << bits) - 1;
+    let masked = raw & mask;
+    if (masked & sign_bit) != 0 {
+        (masked as i32) - ((1u32 << bits) as i32)
+    } else {
+        masked as i32
     }
 }
 
-/// Decoded single Piano layer configuration.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PianoLayerDecoded {
-    pub enabled: bool,
-    pub level: f32,
-    pub octave: i8,
-    pub category: PianoCategory,
-    pub model_id: u8,
-    pub timbre: PianoTimbre,
-    pub touch: VelocityTouch,
-    pub string_res: bool,
-    pub pedal_noise: bool,
-    pub soft_release: bool,
-    pub dyn_comp: u8,
-    pub unison: u8,
+pub(super) fn encode_signed(val: i32, bits: usize) -> u32 {
+    let mask = (1u32 << bits) - 1;
+    (val as u32) & mask
 }
 
-impl Default for PianoLayerDecoded {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            level: 0.8,
-            octave: 0,
-            category: PianoCategory::Grand,
-            model_id: 1,
-            timbre: PianoTimbre::Off,
-            touch: VelocityTouch::Medium,
-            string_res: true,
-            pedal_noise: true,
-            soft_release: false,
-            dyn_comp: 0,
-            unison: 0,
+pub(super) fn read_morph(
+    r: &mut BitReader,
+    bit_pos: usize,
+    width: usize,
+    max_val: u32,
+) -> Result<(u32, MorphDeltas), CbinError> {
+    r.set_bit_pos(bit_pos)?;
+    let base = r.read_bits(width)?;
+    let max_i = max_val as i32;
+    let max_f = max_val as f32;
+    let w = (r.read_bits(width + 1)? as i32 - max_i) as f32 / max_f;
+    let at = (r.read_bits(width + 1)? as i32 - max_i) as f32 / max_f;
+    let cp = (r.read_bits(width + 1)? as i32 - max_i) as f32 / max_f;
+    Ok((
+        base,
+        MorphDeltas {
+            wheel: w,
+            aftertouch: at,
+            ctrl_pedal: cp,
+        },
+    ))
+}
+
+pub(super) fn write_morph(
+    w_out: &mut BitWriter,
+    bit_pos: usize,
+    base: u32,
+    deltas: MorphDeltas,
+    width: usize,
+    max_val: u32,
+) -> Result<(), CbinError> {
+    w_out.set_bit_pos(bit_pos)?;
+    w_out.write_bits(base.min(max_val), width)?;
+    let max_i = max_val as i32;
+    let max_f = max_val as f32;
+    for d in [deltas.wheel, deltas.aftertouch, deltas.ctrl_pedal] {
+        let raw = (max_i + (d * max_f).round() as i32).clamp(0, max_i * 2) as u32;
+        w_out.write_bits(raw, width + 1)?;
+    }
+    Ok(())
+}
+
+pub(super) fn prepare_buffer(raw_payload: &[u8], expected_len: usize, block_tag: u8) -> Vec<u8> {
+    if raw_payload.len() >= expected_len {
+        let mut out = raw_payload[..expected_len].to_vec();
+        out[0] = block_tag;
+        out
+    } else {
+        let mut out = vec![0u8; expected_len];
+        out[0] = block_tag;
+        out
+    }
+}
+
+/// Exact 128-step hardware Synth Env Attack curve (ms) from NS4 OS v1.66 (`0x53abe4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
+pub const ENV_ATTACK_MS_TABLE: [f32; 128] = [
+    0.5, 0.6, 0.7, 0.9, 1.1, 1.3, 1.5, 1.8, 2.1, 2.5, 3.0, 3.5, 4.0, 4.7, 5.5, 6.3, 7.3, 8.4, 9.7,
+    11.0, 13.0, 14.0, 16.0, 19.0, 21.0, 24.0, 27.0, 31.0, 34.0, 39.0, 43.0, 49.0, 54.0, 61.0, 68.0,
+    75.0, 84.0, 93.0, 103.0, 114.0, 126.0, 139.0, 153.0, 169.0, 186.0, 204.0, 224.0, 246.0, 269.0,
+    295.0, 322.0, 352.0, 384.0, 419.0, 456.0, 496.0, 540.0, 586.0, 636.0, 690.0, 748.0, 810.0,
+    876.0, 947.0, 1020.0, 1100.0, 1190.0, 1280.0, 1380.0, 1490.0, 1600.0, 1720.0, 1850.0, 1990.0,
+    2130.0, 2280.0, 2450.0, 2620.0, 2810.0, 3000.0, 3210.0, 3430.0, 3660.0, 3910.0, 4170.0, 4450.0,
+    4740.0, 5050.0, 5370.0, 5720.0, 6080.0, 6470.0, 6870.0, 7300.0, 7750.0, 8220.0, 8720.0, 9250.0,
+    9800.0, 10000.0, 11000.0, 12000.0, 12000.0, 13000.0, 14000.0, 15000.0, 15000.0, 16000.0,
+    17000.0, 18000.0, 19000.0, 20000.0, 21000.0, 22000.0, 24000.0, 25000.0, 26000.0, 27000.0,
+    29000.0, 30000.0, 32000.0, 34000.0, 35000.0, 37000.0, 39000.0, 41000.0, 43000.0, 45000.0,
+];
+
+/// Exact 128-step hardware Synth Env Decay curve (ms) from NS4 OS v1.66 (`0x53ade4`; idx 127 = Hold).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
+pub const ENV_DECAY_MS_TABLE: [f32; 128] = [
+    3.0, 3.5, 4.0, 4.6, 5.3, 6.0, 6.9, 7.9, 9.0, 10.0, 12.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0,
+    26.0, 29.0, 33.0, 36.0, 41.0, 45.0, 50.0, 55.0, 61.0, 68.0, 75.0, 82.0, 91.0, 100.0, 110.0,
+    120.0, 132.0, 144.0, 158.0, 173.0, 188.0, 206.0, 224.0, 244.0, 265.0, 288.0, 313.0, 340.0,
+    368.0, 399.0, 432.0, 467.0, 505.0, 545.0, 588.0, 634.0, 683.0, 736.0, 792.0, 851.0, 915.0,
+    983.0, 1050.0, 1130.0, 1210.0, 1300.0, 1390.0, 1490.0, 1590.0, 1700.0, 1820.0, 1940.0, 2070.0,
+    2210.0, 2360.0, 2510.0, 2670.0, 2850.0, 3030.0, 3220.0, 3420.0, 3640.0, 3860.0, 4100.0, 4350.0,
+    4610.0, 4890.0, 5180.0, 5490.0, 5810.0, 6150.0, 6500.0, 6880.0, 7270.0, 7680.0, 8110.0, 8570.0,
+    9040.0, 9540.0, 10000.0, 11000.0, 11000.0, 12000.0, 12000.0, 13000.0, 14000.0, 14000.0,
+    15000.0, 16000.0, 17000.0, 18000.0, 19000.0, 20000.0, 20000.0, 22000.0, 23000.0, 24000.0,
+    25000.0, 26000.0, 27000.0, 29000.0, 30000.0, 31000.0, 33000.0, 34000.0, 36000.0, 38000.0,
+    39000.0, 41000.0, 43000.0, 45000.0,
+];
+
+/// Exact 128-step hardware Synth Env Release curve (ms) from NS4 OS v1.66 (`0x53afe4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
+pub const ENV_RELEASE_MS_TABLE: [f32; 128] = ENV_DECAY_MS_TABLE;
+
+/// Exact 128-step hardware Synth Filter Cutoff curve (Hz) from NS4 OS v1.66 (`0x53b1e4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
+pub const FILTER_CUTOFF_HZ_TABLE: [f32; 128] = [
+    14.0, 15.0, 15.0, 16.0, 17.0, 18.0, 19.0, 21.0, 22.0, 23.0, 24.0, 26.0, 27.0, 29.0, 31.0, 33.0,
+    35.0, 37.0, 39.0, 41.0, 44.0, 46.0, 49.0, 52.0, 55.0, 58.0, 62.0, 65.0, 69.0, 73.0, 78.0, 82.0,
+    87.0, 92.0, 98.0, 104.0, 110.0, 117.0, 123.0, 131.0, 139.0, 147.0, 156.0, 165.0, 175.0, 185.0,
+    196.0, 208.0, 220.0, 233.0, 247.0, 262.0, 277.0, 294.0, 311.0, 330.0, 349.0, 370.0, 392.0,
+    415.0, 440.0, 466.0, 494.0, 523.0, 554.0, 587.0, 622.0, 659.0, 698.0, 740.0, 784.0, 831.0,
+    880.0, 932.0, 988.0, 1000.0, 1100.0, 1200.0, 1200.0, 1300.0, 1400.0, 1500.0, 1600.0, 1700.0,
+    1800.0, 1900.0, 2000.0, 2100.0, 2200.0, 2300.0, 2500.0, 2600.0, 2800.0, 3000.0, 3100.0, 3300.0,
+    3500.0, 3700.0, 4000.0, 4200.0, 4400.0, 4700.0, 5000.0, 5300.0, 5600.0, 5900.0, 6300.0, 6600.0,
+    7000.0, 7500.0, 7900.0, 8400.0, 8900.0, 9400.0, 10000.0, 11000.0, 11000.0, 12000.0, 13000.0,
+    14000.0, 16000.0, 18000.0, 19000.0, 21000.0, 24000.0, 26000.0, 29000.0, 32000.0,
+];
+
+/// Exact 128-step hardware Synth LFO Rate curve (Hz) from NS4 OS v1.66 (`0x53b3e4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
+pub const LFO_RATE_HZ_TABLE: [f32; 128] = [
+    0.03, 0.03, 0.03, 0.04, 0.04, 0.04, 0.05, 0.05, 0.05, 0.06, 0.06, 0.07, 0.07, 0.08, 0.09, 0.09,
+    0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.19, 0.2, 0.22, 0.24, 0.26, 0.28, 0.3, 0.32,
+    0.35, 0.38, 0.41, 0.44, 0.47, 0.51, 0.55, 0.6, 0.64, 0.7, 0.75, 0.81, 0.88, 0.95, 1.0, 1.1,
+    1.2, 1.3, 1.4, 1.5, 1.6, 1.8, 1.9, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.5, 3.8, 4.1, 4.4, 4.8,
+    5.2, 5.6, 6.0, 6.5, 7.0, 7.6, 8.2, 8.8, 9.5, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 18.0,
+    19.0, 21.0, 22.0, 24.0, 26.0, 28.0, 30.0, 33.0, 35.0, 38.0, 41.0, 45.0, 48.0, 52.0, 56.0, 61.0,
+    65.0, 71.0, 76.0, 82.0, 89.0, 96.0, 104.0, 112.0, 121.0, 131.0, 141.0, 153.0, 165.0, 178.0,
+    192.0, 208.0, 224.0, 242.0, 262.0, 283.0, 305.0, 330.0, 356.0, 385.0, 415.0, 449.0, 484.0,
+    523.0,
+];
+
+pub(super) fn table_val_to_idx(table: &[f32; 128], val: f32) -> u32 {
+    let target = val.max(table[0]).ln();
+    let mut best_idx = 0usize;
+    let mut best_err = f32::INFINITY;
+    for (i, &entry) in table.iter().enumerate() {
+        let err = (target - entry.ln()).abs();
+        if err < best_err - 1e-6 {
+            best_err = err;
+            best_idx = i;
         }
     }
+    best_idx as u32
 }
 
-/// Decoded Piano section configuration across Layer A and Layer B.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PianoPresetDecoded {
-    pub layer_a: PianoLayerDecoded,
-    pub layer_b: PianoLayerDecoded,
+/// Converts normalized `0.0..=1.0` cutoff knob/morph position to Hz via the OS v1.66 hardware curve.
+pub fn cutoff_norm_to_hz(norm: f32) -> f32 {
+    let pos = norm.clamp(0.0, 1.0) * 127.0;
+    let lo = (pos.floor() as usize).min(127);
+    let hi = (lo + 1).min(127);
+    let frac = pos - lo as f32;
+    let a = FILTER_CUTOFF_HZ_TABLE[lo];
+    let b = FILTER_CUTOFF_HZ_TABLE[hi];
+    a * (b / a).powf(frac)
 }
 
-impl Default for PianoPresetDecoded {
-    fn default() -> Self {
-        Self {
-            layer_a: PianoLayerDecoded::default(),
-            layer_b: PianoLayerDecoded {
-                enabled: false,
-                category: PianoCategory::Upright,
-                ..PianoLayerDecoded::default()
-            },
+/// Converts cutoff Hz to normalized `0.0..=1.0` via the inverse OS v1.66 hardware curve.
+pub fn cutoff_hz_to_norm(hz: f32) -> f32 {
+    if hz <= FILTER_CUTOFF_HZ_TABLE[0] {
+        return 0.0;
+    }
+    if hz >= FILTER_CUTOFF_HZ_TABLE[127] {
+        return 1.0;
+    }
+    for i in 0..127 {
+        let a = FILTER_CUTOFF_HZ_TABLE[i];
+        let b = FILTER_CUTOFF_HZ_TABLE[i + 1];
+        if hz <= b {
+            let frac = if b > a {
+                ((hz / a).ln() / (b / a).ln()).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            return (i as f32 + frac) / 127.0;
         }
     }
+    1.0
 }
 
-impl PianoPresetDecoded {
-    pub const SIGNATURE_PREFIX: [u8; 9] = [0x0C, 0x27, 0x1B, 0xFB, 0xFB, 0xFD, 0xA7, 0xF7, 0xF7];
-    pub const PAYLOAD_LEN: usize = 147;
-
-    pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
-        if slice.len() < Self::PAYLOAD_LEN {
-            return Err(CbinError::TooShort {
-                actual: slice.len(),
-                min: Self::PAYLOAD_LEN,
-            });
-        }
-        let mut r = BitReader::new(slice);
-        r.set_bit_pos(72)?;
-
-        let unpack_layer = |r: &mut BitReader| -> Result<PianoLayerDecoded, CbinError> {
-            let enabled = r.read_bool()?;
-            let level = r.read_bits(7)? as f32 / 127.0;
-            let octave = (r.read_bits(3)? as i8) - 2;
-            let cat_idx = r.read_bits(3)?;
-            let category = match cat_idx {
-                0 => PianoCategory::Grand,
-                1 => PianoCategory::Upright,
-                2 => PianoCategory::Electric,
-                3 => PianoCategory::Clav,
-                4 => PianoCategory::Digital,
-                _ => PianoCategory::Misc,
-            };
-            let model_id = r.read_bits(8)? as u8;
-            let timbre_idx = r.read_bits(3)?;
-            let timbre = match timbre_idx {
-                0 => PianoTimbre::Off,
-                1 => PianoTimbre::Soft,
-                2 => PianoTimbre::Mid,
-                3 => PianoTimbre::Bright,
-                4 => PianoTimbre::Dyno1,
-                _ => PianoTimbre::Dyno2,
-            };
-            let touch_idx = r.read_bits(2)?;
-            let touch = match touch_idx {
-                0 => VelocityTouch::Light,
-                1 => VelocityTouch::Medium,
-                _ => VelocityTouch::Heavy,
-            };
-            let string_res = r.read_bool()?;
-            let pedal_noise = r.read_bool()?;
-            let soft_release = r.read_bool()?;
-            let dyn_comp = (r.read_bits(2)? as u8).min(3);
-            let unison = (r.read_bits(2)? as u8).min(3);
-
-            Ok(PianoLayerDecoded {
-                enabled,
-                level,
-                octave,
-                category,
-                model_id,
-                timbre,
-                touch,
-                string_res,
-                pedal_noise,
-                soft_release,
-                dyn_comp,
-                unison,
-            })
-        };
-
-        let layer_a = unpack_layer(&mut r)?;
-        let layer_b = unpack_layer(&mut r)?;
-
-        Ok(Self { layer_a, layer_b })
+/// Computes Clavia OS v1.66 (`ARM0 @ 0x0a5a44`) preset sound-name hash (MurmurHash2 with BE 4-byte reads, seed = len, `0 -> 1`).
+pub fn nord_name_hash(stem: &str) -> u32 {
+    const M: u32 = 0x5bd1_e995;
+    let data = stem.as_bytes();
+    let mut h: u32 = data.len() as u32;
+    let (chunks, rem) = data.as_chunks::<4>();
+    for &chunk in chunks {
+        let mut k = u32::from_be_bytes(chunk);
+        k = k.wrapping_mul(M);
+        k ^= k >> 24;
+        k = k.wrapping_mul(M);
+        h = h.wrapping_mul(M);
+        h ^= k;
     }
-
-    pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
-
-        let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72)?;
-
-        let pack_layer = |l: &PianoLayerDecoded, w: &mut BitWriter| -> Result<(), CbinError> {
-            w.write_bool(l.enabled)?;
-            w.write_bits((l.level.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
-            w.write_bits((l.octave + 2).clamp(0, 4) as u32, 3)?;
-            let cat_idx = match l.category {
-                PianoCategory::Grand => 0,
-                PianoCategory::Upright => 1,
-                PianoCategory::Electric => 2,
-                PianoCategory::Clav => 3,
-                PianoCategory::Digital => 4,
-                PianoCategory::Misc => 5,
-            };
-            w.write_bits(cat_idx, 3)?;
-            w.write_bits(u32::from(l.model_id), 8)?;
-            let timbre_idx = match l.timbre {
-                PianoTimbre::Off => 0,
-                PianoTimbre::Soft => 1,
-                PianoTimbre::Mid => 2,
-                PianoTimbre::Bright => 3,
-                PianoTimbre::Dyno1 => 4,
-                PianoTimbre::Dyno2 => 5,
-            };
-            w.write_bits(timbre_idx, 3)?;
-            let touch_idx = match l.touch {
-                VelocityTouch::Light => 0,
-                VelocityTouch::Medium => 1,
-                VelocityTouch::Heavy => 2,
-            };
-            w.write_bits(touch_idx, 2)?;
-            w.write_bool(l.string_res)?;
-            w.write_bool(l.pedal_noise)?;
-            w.write_bool(l.soft_release)?;
-            w.write_bits(u32::from(l.dyn_comp.min(3)), 2)?;
-            w.write_bits(u32::from(l.unison.min(3)), 2)?;
-            Ok(())
-        };
-
-        pack_layer(&self.layer_a, &mut w)?;
-        pack_layer(&self.layer_b, &mut w)?;
-
-        Ok(out)
+    if rem.len() == 3 {
+        h ^= u32::from(rem[2]) << 16;
+    }
+    if rem.len() >= 2 {
+        h ^= u32::from(rem[1]) << 8;
+    }
+    if !rem.is_empty() {
+        h ^= u32::from(rem[0]);
+        h = h.wrapping_mul(M);
+    }
+    h ^= h >> 13;
+    h = h.wrapping_mul(M);
+    h ^= h >> 15;
+    if h == 0 {
+        1
+    } else {
+        h
     }
 }
 
-/// Decoded single Synth layer configuration (Nord Wave 2 voice architecture).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SynthLayerDecoded {
-    pub enabled: bool,
-    pub level: f32,
-    pub octave: i8,
-    pub osc_mode: SynthOscMode,
-    pub waveform: VaWaveform,
-    pub wave_id: u8,
-    pub detune: f32,
-    pub filter_model: FilterModel,
-    pub filter_cutoff_hz: f32,
-    pub filter_resonance: f32,
-    pub filter_drive: f32,
-    pub kb_track: u8,
-    pub env_attack_ms: f32,
-    pub env_decay_ms: f32,
-    pub env_release_ms: f32,
-    pub lfo_rate_hz: f32,
-    pub arp_enabled: bool,
-    pub arp_bpm: f32,
+/// Checks whether a sound stem matches a `0x0B` Piano `name_hash` or `0x32` Synth `sample_id` (raw or ASCII uppercase).
+pub fn nord_name_hash_matches(stem: &str, target: u32) -> bool {
+    target != 0
+        && (nord_name_hash(stem) == target || nord_name_hash(&stem.to_ascii_uppercase()) == target)
 }
 
-impl Default for SynthLayerDecoded {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            level: 0.8,
-            octave: 0,
-            osc_mode: SynthOscMode::Analog,
-            waveform: VaWaveform::Saw,
-            wave_id: 0,
-            detune: 0.0,
-            filter_model: FilterModel::Ladder24,
-            filter_cutoff_hz: 4000.0,
-            filter_resonance: 0.2,
-            filter_drive: 0.0,
-            kb_track: 2,
-            env_attack_ms: 10.0,
-            env_decay_ms: 300.0,
-            env_release_ms: 250.0,
-            lfo_rate_hz: 2.5,
-            arp_enabled: false,
-            arp_bpm: 120.0,
-        }
-    }
+pub(super) fn split_idx_to_midi(idx: u32) -> u8 {
+    SPLIT_NOTE_TABLE[(idx as usize).min(SPLIT_NOTE_TABLE.len() - 1)]
 }
 
-/// Decoded Synth section configuration across 3 layers (A, B, C).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SynthPresetDecoded {
-    pub layer_a: SynthLayerDecoded,
-    pub layer_b: SynthLayerDecoded,
-    pub layer_c: SynthLayerDecoded,
+pub(super) fn midi_to_split_idx(midi: u8) -> u32 {
+    SPLIT_NOTE_TABLE
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, &n)| n.abs_diff(midi))
+        .map_or(4, |(idx, _)| idx as u32)
 }
 
-impl Default for SynthPresetDecoded {
-    fn default() -> Self {
-        Self {
-            layer_a: SynthLayerDecoded::default(),
-            layer_b: SynthLayerDecoded {
-                enabled: false,
-                ..SynthLayerDecoded::default()
-            },
-            layer_c: SynthLayerDecoded {
-                enabled: false,
-                ..SynthLayerDecoded::default()
-            },
-        }
-    }
-}
-
-impl SynthPresetDecoded {
-    pub const SIGNATURE_PREFIX: [u8; 9] = [0x1E, 0x08, 0x71, 0xBF, 0xBF, 0xBF, 0xD2, 0x7F, 0x7F];
-    pub const PAYLOAD_LEN: usize = 493;
-
-    pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
-        if slice.len() < Self::PAYLOAD_LEN {
-            return Err(CbinError::TooShort {
-                actual: slice.len(),
-                min: Self::PAYLOAD_LEN,
-            });
-        }
-        let mut r = BitReader::new(slice);
-        r.set_bit_pos(72)?;
-
-        let unpack_layer = |r: &mut BitReader| -> Result<SynthLayerDecoded, CbinError> {
-            let enabled = r.read_bool()?;
-            let level = r.read_bits(7)? as f32 / 127.0;
-            let octave = (r.read_bits(3)? as i8) - 2;
-            let mode_idx = r.read_bits(2)?;
-            let osc_mode = match mode_idx {
-                0 => SynthOscMode::Analog,
-                1 => SynthOscMode::Wavetable,
-                2 => SynthOscMode::Fm,
-                _ => SynthOscMode::Sample,
-            };
-            let wave_idx = r.read_bits(2)?;
-            let waveform = match wave_idx {
-                0 => VaWaveform::Saw,
-                1 => VaWaveform::Pulse,
-                2 => VaWaveform::Triangle,
-                _ => VaWaveform::Sine,
-            };
-            let wave_id = r.read_bits(8)? as u8;
-            let detune = (r.read_bits(7)? as f32 / 127.0) * 10.0;
-
-            let filter_idx = r.read_bits(3)?;
-            let filter_model = match filter_idx {
-                0 => FilterModel::Lp12,
-                1 => FilterModel::Lp24,
-                2 => FilterModel::Ladder24,
-                3 => FilterModel::BandPass,
-                _ => FilterModel::HighPass,
-            };
-            let cutoff_norm = r.read_bits(7)? as f32 / 127.0;
-            let filter_cutoff_hz = 20.0 * (1000.0f32).powf(cutoff_norm);
-            let filter_resonance = r.read_bits(7)? as f32 / 127.0;
-            let filter_drive = r.read_bits(7)? as f32 / 127.0;
-            let kb_track = (r.read_bits(2)? as u8).min(3);
-
-            let env_attack_ms = 1.0 + (r.read_bits(7)? as f32 / 127.0) * 4999.0;
-            let env_decay_ms = 10.0 + (r.read_bits(7)? as f32 / 127.0) * 9990.0;
-            let env_release_ms = 10.0 + (r.read_bits(7)? as f32 / 127.0) * 9990.0;
-            let lfo_rate_hz = 0.1 + (r.read_bits(7)? as f32 / 127.0) * 29.9;
-            let arp_enabled = r.read_bool()?;
-            let arp_bpm = 30.0 + (r.read_bits(8)? as f32 / 255.0) * 270.0;
-
-            Ok(SynthLayerDecoded {
-                enabled,
-                level,
-                octave,
-                osc_mode,
-                waveform,
-                wave_id,
-                detune,
-                filter_model,
-                filter_cutoff_hz,
-                filter_resonance,
-                filter_drive,
-                kb_track,
-                env_attack_ms,
-                env_decay_ms,
-                env_release_ms,
-                lfo_rate_hz,
-                arp_enabled,
-                arp_bpm,
-            })
-        };
-
-        let layer_a = unpack_layer(&mut r)?;
-        let layer_b = unpack_layer(&mut r)?;
-        let layer_c = unpack_layer(&mut r)?;
-
-        Ok(Self {
-            layer_a,
-            layer_b,
-            layer_c,
-        })
-    }
-
-    pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[..9].copy_from_slice(&Self::SIGNATURE_PREFIX);
-
-        let mut w = BitWriter::new(&mut out);
-        w.set_bit_pos(72)?;
-
-        let pack_layer = |l: &SynthLayerDecoded, w: &mut BitWriter| -> Result<(), CbinError> {
-            w.write_bool(l.enabled)?;
-            w.write_bits((l.level.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
-            w.write_bits((l.octave + 2).clamp(0, 4) as u32, 3)?;
-            let mode_idx = match l.osc_mode {
-                SynthOscMode::Analog => 0,
-                SynthOscMode::Wavetable => 1,
-                SynthOscMode::Fm => 2,
-                SynthOscMode::Sample => 3,
-            };
-            w.write_bits(mode_idx, 2)?;
-            let wave_idx = match l.waveform {
-                VaWaveform::Saw | VaWaveform::SuperSaw => 0,
-                VaWaveform::Pulse => 1,
-                VaWaveform::Triangle => 2,
-                VaWaveform::Sine => 3,
-            };
-            w.write_bits(wave_idx, 2)?;
-            w.write_bits(u32::from(l.wave_id), 8)?;
-            w.write_bits(
-                ((l.detune / 10.0).clamp(0.0, 1.0) * 127.0).round() as u32,
-                7,
-            )?;
-
-            let filter_idx = match l.filter_model {
-                FilterModel::Lp12 => 0,
-                FilterModel::Lp24 => 1,
-                FilterModel::Ladder24 => 2,
-                FilterModel::BandPass => 3,
-                FilterModel::HighPass => 4,
-            };
-            w.write_bits(filter_idx, 3)?;
-            let cutoff_norm = ((l.filter_cutoff_hz.max(20.0) / 20.0).log10() / 3.0).clamp(0.0, 1.0);
-            w.write_bits((cutoff_norm * 127.0).round() as u32, 7)?;
-            w.write_bits(
-                (l.filter_resonance.clamp(0.0, 1.0) * 127.0).round() as u32,
-                7,
-            )?;
-            w.write_bits((l.filter_drive.clamp(0.0, 1.0) * 127.0).round() as u32, 7)?;
-            w.write_bits(u32::from(l.kb_track.min(3)), 2)?;
-
-            let att_norm = ((l.env_attack_ms - 1.0) / 4999.0).clamp(0.0, 1.0);
-            w.write_bits((att_norm * 127.0).round() as u32, 7)?;
-            let dec_norm = ((l.env_decay_ms - 10.0) / 9990.0).clamp(0.0, 1.0);
-            w.write_bits((dec_norm * 127.0).round() as u32, 7)?;
-            let rel_norm = ((l.env_release_ms - 10.0) / 9990.0).clamp(0.0, 1.0);
-            w.write_bits((rel_norm * 127.0).round() as u32, 7)?;
-            let lfo_norm = ((l.lfo_rate_hz - 0.1) / 29.9).clamp(0.0, 1.0);
-            w.write_bits((lfo_norm * 127.0).round() as u32, 7)?;
-            w.write_bool(l.arp_enabled)?;
-            let bpm_norm = ((l.arp_bpm - 30.0) / 270.0).clamp(0.0, 1.0);
-            w.write_bits((bpm_norm * 255.0).round() as u32, 8)?;
-
-            Ok(())
-        };
-
-        pack_layer(&self.layer_a, &mut w)?;
-        pack_layer(&self.layer_b, &mut w)?;
-        pack_layer(&self.layer_c, &mut w)?;
-
-        Ok(out)
-    }
-}
-
-/// Decoded global program parameters (Split zones, Layer Scenes, Master Clock, Master Compressor).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Decoded global program parameters (`0x2C`, 45 bytes: Split zones, Section/Scene enables, Master Clock).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalProgramDecoded {
     pub tempo_bpm: f32,
     pub master_compressor: f32,
     pub transpose: i8,
     pub split_enabled: bool,
+    pub split_zone_enabled: [bool; 3],
     pub split_points: [u8; 3],
     pub split_crossfades: [CrossfadeWidth; 3],
+    pub section_enable_i: u8,
+    pub section_enable_ii: u8,
     pub scene_1_mask: u8,
     pub scene_2_mask: u8,
+    #[serde(skip)]
+    raw_payload: Vec<u8>,
 }
 
 impl Default for GlobalProgramDecoded {
@@ -612,19 +288,40 @@ impl Default for GlobalProgramDecoded {
             master_compressor: 0.0,
             transpose: 0,
             split_enabled: false,
-            split_points: [53, 65, 77], // F3, F4, F5
+            split_zone_enabled: [false, false, false],
+            split_points: [48, 65, 84],
             split_crossfades: [
                 CrossfadeWidth::Off,
                 CrossfadeWidth::Off,
                 CrossfadeWidth::Off,
             ],
-            scene_1_mask: 0b0001_0101, // Organ A, Piano A, Synth A active
-            scene_2_mask: 0b0111_1111, // All 7 layers active in Scene II
+            section_enable_i: 0b111,
+            section_enable_ii: 0b111,
+            scene_1_mask: 0b0001_0101,
+            scene_2_mask: 0b0111_1111,
+            raw_payload: Vec::new(),
         }
     }
 }
 
+impl PartialEq for GlobalProgramDecoded {
+    fn eq(&self, other: &Self) -> bool {
+        self.tempo_bpm == other.tempo_bpm
+            && self.master_compressor == other.master_compressor
+            && self.transpose == other.transpose
+            && self.split_enabled == other.split_enabled
+            && self.split_zone_enabled == other.split_zone_enabled
+            && self.split_points == other.split_points
+            && self.split_crossfades == other.split_crossfades
+            && self.section_enable_i == other.section_enable_i
+            && self.section_enable_ii == other.section_enable_ii
+            && self.scene_1_mask == other.scene_1_mask
+            && self.scene_2_mask == other.scene_2_mask
+    }
+}
+
 impl GlobalProgramDecoded {
+    pub const BLOCK_TAG: u8 = 0x2C;
     pub const PAYLOAD_LEN: usize = 45;
 
     pub fn unpack(slice: &[u8]) -> Result<Self, CbinError> {
@@ -634,59 +331,69 @@ impl GlobalProgramDecoded {
                 min: Self::PAYLOAD_LEN,
             });
         }
-        let mut r = BitReader::new(slice);
-        // Byte 0 is 0x2C signature = 8 bits
+        let mut r = BitReader::new(&slice[..Self::PAYLOAD_LEN]);
         r.set_bit_pos(8)?;
 
-        let tempo_bpm = 30.0 + (r.read_bits(9)? as f32 / 511.0) * 270.0;
-        let master_compressor = (r.read_bits(7)? as f32 / 127.0) * 10.0;
-        let transpose = (r.read_bits(4)? as i8) - 6;
         let split_enabled = r.read_bool()?;
-
-        let mut split_points = [0u8; 3];
+        let split_zone_enabled = [r.read_bool()?, r.read_bool()?, r.read_bool()?];
+        let split_points = [
+            split_idx_to_midi(r.read_bits(4)?),
+            split_idx_to_midi(r.read_bits(4)?),
+            split_idx_to_midi(r.read_bits(4)?),
+        ];
         let mut split_crossfades = [CrossfadeWidth::Off; 3];
-        for i in 0..3 {
-            split_points[i] = r.read_bits(7)? as u8;
-            let cf_idx = r.read_bits(2)?;
-            split_crossfades[i] = match cf_idx {
+        for cf in &mut split_crossfades {
+            *cf = match r.read_bits(2)? {
                 0 => CrossfadeWidth::Off,
                 1 => CrossfadeWidth::Small,
                 _ => CrossfadeWidth::Large,
             };
         }
 
-        let scene_1_mask = r.read_bits(7)? as u8;
-        let scene_2_mask = r.read_bits(7)? as u8;
+        r.set_bit_pos(35)?;
+        let tempo_bpm = 30.0 + r.read_bits(8)? as f32;
+
+        r.set_bit_pos(284)?;
+        let section_enable_i = r.read_bits(3)? as u8;
+        let section_enable_ii = r.read_bits(3)? as u8;
+
+        let scene_1_mask = u8::from((section_enable_i & 0x04) != 0)
+            | ((u8::from((section_enable_i & 0x02) != 0)) << 2)
+            | ((u8::from((section_enable_i & 0x01) != 0)) << 4);
+        let scene_2_mask = u8::from((section_enable_ii & 0x04) != 0)
+            | ((u8::from((section_enable_ii & 0x02) != 0)) << 2)
+            | ((u8::from((section_enable_ii & 0x01) != 0)) << 4);
 
         Ok(Self {
             tempo_bpm,
-            master_compressor,
-            transpose,
+            master_compressor: 0.0,
+            transpose: 0,
             split_enabled,
+            split_zone_enabled,
             split_points,
             split_crossfades,
+            section_enable_i,
+            section_enable_ii,
             scene_1_mask,
             scene_2_mask,
+            raw_payload: slice[..Self::PAYLOAD_LEN].to_vec(),
         })
     }
 
     pub fn pack(&self) -> Result<Vec<u8>, CbinError> {
-        let mut out = vec![0u8; Self::PAYLOAD_LEN];
-        out[0] = 0x2C;
-
+        let mut out = prepare_buffer(&self.raw_payload, Self::PAYLOAD_LEN, Self::BLOCK_TAG);
         let mut w = BitWriter::new(&mut out);
+
         w.set_bit_pos(8)?;
-
-        let bpm_norm = ((self.tempo_bpm - 30.0) / 270.0).clamp(0.0, 1.0);
-        w.write_bits((bpm_norm * 511.0).round() as u32, 9)?;
-        let comp_norm = (self.master_compressor / 10.0).clamp(0.0, 1.0);
-        w.write_bits((comp_norm * 127.0).round() as u32, 7)?;
-        w.write_bits((self.transpose + 6).clamp(0, 12) as u32, 4)?;
         w.write_bool(self.split_enabled)?;
-
-        for i in 0..3 {
-            w.write_bits(u32::from(self.split_points[i] & 0x7F), 7)?;
-            let cf_idx = match self.split_crossfades[i] {
+        for en in self.split_zone_enabled {
+            w.write_bool(en)?;
+        }
+        for note in self.split_points {
+            w.write_bits(midi_to_split_idx(note), 4)?;
+        }
+        for cf in self.split_crossfades {
+            let cf_idx = match cf {
                 CrossfadeWidth::Off => 0,
                 CrossfadeWidth::Small => 1,
                 CrossfadeWidth::Large => 2,
@@ -694,8 +401,13 @@ impl GlobalProgramDecoded {
             w.write_bits(cf_idx, 2)?;
         }
 
-        w.write_bits(u32::from(self.scene_1_mask & 0x7F), 7)?;
-        w.write_bits(u32::from(self.scene_2_mask & 0x7F), 7)?;
+        w.set_bit_pos(35)?;
+        let rate = (self.tempo_bpm - 30.0).round().clamp(0.0, 255.0) as u32;
+        w.write_bits(rate, 8)?;
+
+        w.set_bit_pos(284)?;
+        w.write_bits(u32::from(self.section_enable_i & 0x07), 3)?;
+        w.write_bits(u32::from(self.section_enable_ii & 0x07), 3)?;
 
         Ok(out)
     }
@@ -729,6 +441,25 @@ impl Default for ProgramDecoded {
     }
 }
 
+fn combine_scene_mask(sec_mask: u8, org_layers: u8, pno_layers: u8, syn_layers: u8) -> u8 {
+    let org = if (sec_mask & 0b100) != 0 {
+        org_layers & 0b11
+    } else {
+        0
+    };
+    let pno = if (sec_mask & 0b010) != 0 {
+        pno_layers & 0b11
+    } else {
+        0
+    };
+    let syn = if (sec_mask & 0b001) != 0 {
+        syn_layers & 0b111
+    } else {
+        0
+    };
+    org | (pno << 2) | (syn << 4)
+}
+
 impl ProgramDecoded {
     /// Decodes a Program from a parsed `CbinFile`.
     pub fn from_cbin_file(cbin: &CbinFile) -> Result<Self, CbinError> {
@@ -742,10 +473,23 @@ impl ProgramDecoded {
             });
         }
 
-        let global = GlobalProgramDecoded::unpack(&cbin.payload[0..45])?;
+        let mut global = GlobalProgramDecoded::unpack(&cbin.payload[0..45])?;
         let organ = OrganPresetDecoded::unpack(&cbin.payload[45..180])?;
         let piano = PianoPresetDecoded::unpack(&cbin.payload[180..327])?;
         let synth = SynthPresetDecoded::unpack(&cbin.payload[327..820])?;
+
+        let org_i = (u8::from(organ.layer_b_enabled) << 1) | u8::from(organ.layer_a_enabled);
+        let pno_i = (u8::from(piano.layer_b.enabled) << 1) | u8::from(piano.layer_a.enabled);
+        let syn_i = (u8::from(synth.layer_c.enabled) << 2)
+            | (u8::from(synth.layer_b.enabled) << 1)
+            | u8::from(synth.layer_a.enabled);
+        global.scene_1_mask = combine_scene_mask(global.section_enable_i, org_i, pno_i, syn_i);
+        global.scene_2_mask = combine_scene_mask(
+            global.section_enable_ii,
+            organ.enable_ii_mask,
+            piano.enable_ii_mask,
+            synth.enable_ii_mask,
+        );
 
         let bank_letter = (b'A' + (cbin.header.bank_index as u8).min(7)) as char;
         let prog_num = (cbin.header.location_index % 48) + 1;
@@ -806,124 +550,25 @@ impl ProgramDecoded {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cbin::synth_preset::SynthLayerDecoded;
+    use crate::organ::OrganModel;
+    use crate::piano::PianoTimbre;
+    use crate::synth::SynthOscMode;
 
     #[test]
-    fn test_organ_preset_bitstream_pack_and_unpack() {
-        let original = OrganPresetDecoded {
-            model: OrganModel::Vox,
-            percussion_on: true,
-            percussion_soft: true,
-            percussion_fast: false,
-            percussion_third: true,
-            vibrato_on: true,
-            vibrato_type: 3,
-            rotary_speed: RotarySpeed::Fast,
-            rotary_drive: 7.5,
-            drawbars_a: [8, 4, 2, 0, 1, 3, 5, 7, 8],
-            drawbars_b: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-            ..Default::default()
-        };
-
-        let packed = original.pack().expect("pack organ");
-        assert_eq!(packed.len(), 135);
-        assert_eq!(&packed[..9], &OrganPresetDecoded::SIGNATURE_PREFIX);
-
-        let unpacked = OrganPresetDecoded::unpack(&packed).expect("unpack organ");
-        assert_eq!(unpacked.model, OrganModel::Vox);
-        assert!(unpacked.percussion_on);
-        assert!(unpacked.percussion_soft);
-        assert!(!unpacked.percussion_fast);
-        assert!(unpacked.percussion_third);
-        assert!(unpacked.vibrato_on);
-        assert_eq!(unpacked.vibrato_type, 3);
-        assert_eq!(unpacked.rotary_speed, RotarySpeed::Fast);
-        assert!((unpacked.rotary_drive - 7.5).abs() < 0.1);
-        assert_eq!(unpacked.drawbars_a, original.drawbars_a);
-        assert_eq!(unpacked.drawbars_b, original.drawbars_b);
-    }
-
-    #[test]
-    fn test_piano_preset_bitstream_pack_and_unpack() {
-        let original = PianoPresetDecoded {
-            layer_a: PianoLayerDecoded {
-                category: PianoCategory::Electric,
-                model_id: 42,
-                timbre: PianoTimbre::Bright,
-                touch: VelocityTouch::Heavy,
-                string_res: true,
-                pedal_noise: true,
-                soft_release: true,
-                dyn_comp: 2,
-                unison: 3,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let packed = original.pack().expect("pack piano");
-        assert_eq!(packed.len(), 147);
-        assert_eq!(&packed[..9], &PianoPresetDecoded::SIGNATURE_PREFIX);
-
-        let unpacked = PianoPresetDecoded::unpack(&packed).expect("unpack piano");
-        assert_eq!(unpacked.layer_a.category, PianoCategory::Electric);
-        assert_eq!(unpacked.layer_a.model_id, 42);
-        assert_eq!(unpacked.layer_a.timbre, PianoTimbre::Bright);
-        assert_eq!(unpacked.layer_a.touch, VelocityTouch::Heavy);
-        assert!(unpacked.layer_a.string_res);
-        assert!(unpacked.layer_a.pedal_noise);
-        assert!(unpacked.layer_a.soft_release);
-        assert_eq!(unpacked.layer_a.dyn_comp, 2);
-        assert_eq!(unpacked.layer_a.unison, 3);
-    }
-
-    #[test]
-    fn test_synth_preset_bitstream_pack_and_unpack() {
-        let original = SynthPresetDecoded {
-            layer_a: SynthLayerDecoded {
-                osc_mode: SynthOscMode::Wavetable,
-                waveform: VaWaveform::Saw,
-                wave_id: 17,
-                detune: 3.4,
-                filter_model: FilterModel::Lp24,
-                filter_cutoff_hz: 1200.0,
-                filter_resonance: 0.65,
-                filter_drive: 0.45,
-                arp_enabled: true,
-                arp_bpm: 135.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let packed = original.pack().expect("pack synth");
-        assert_eq!(packed.len(), 493);
-        assert_eq!(&packed[..9], &SynthPresetDecoded::SIGNATURE_PREFIX);
-
-        let unpacked = SynthPresetDecoded::unpack(&packed).expect("unpack synth");
-        assert_eq!(unpacked.layer_a.osc_mode, SynthOscMode::Wavetable);
-        assert_eq!(unpacked.layer_a.wave_id, 17);
-        assert!((unpacked.layer_a.detune - 3.4).abs() < 0.2);
-        assert_eq!(unpacked.layer_a.filter_model, FilterModel::Lp24);
-        assert!((unpacked.layer_a.filter_cutoff_hz - 1200.0).abs() < 100.0);
-        assert!((unpacked.layer_a.filter_resonance - 0.65).abs() < 0.05);
-        assert!((unpacked.layer_a.filter_drive - 0.45).abs() < 0.05);
-        assert!(unpacked.layer_a.arp_enabled);
-        assert!((unpacked.layer_a.arp_bpm - 135.0).abs() < 2.0);
-    }
-
-    #[test]
-    fn test_program_decoded_roundtrip_cbin_and_json() {
+    fn test_program_decoded_roundtrip_cbin_and_json_and_lossless_preservation() {
         let prog = ProgramDecoded {
             global: GlobalProgramDecoded {
                 tempo_bpm: 132.0,
-                master_compressor: 4.5,
                 split_enabled: true,
-                split_points: [53, 65, 77],
+                split_zone_enabled: [false, true, false],
+                split_points: [48, 65, 84],
                 split_crossfades: [
                     CrossfadeWidth::Small,
                     CrossfadeWidth::Large,
                     CrossfadeWidth::Off,
                 ],
+                section_enable_i: 0b101,
                 ..Default::default()
             },
             organ: OrganPresetDecoded {
@@ -947,7 +592,6 @@ mod tests {
             ..Default::default()
         };
 
-        // 1. Test JSON conversion
         let json = prog.to_json().expect("to json");
         assert!(json.contains("Init Program"));
         assert!(json.contains("Farfisa"));
@@ -956,7 +600,6 @@ mod tests {
         assert_eq!(parsed_from_json.organ.model, OrganModel::Farfisa);
         assert_eq!(parsed_from_json.piano.layer_a.timbre, PianoTimbre::Dyno1);
 
-        // 2. Test CBIN packing and decoding
         let cbin_file = prog.to_cbin_file(0, 0).expect("to cbin");
         assert_eq!(cbin_file.header.kind, CbinKind::Program);
         assert_eq!(cbin_file.payload.len(), 820);
@@ -968,8 +611,67 @@ mod tests {
         assert_eq!(decoded.organ.model, OrganModel::Farfisa);
         assert_eq!(decoded.piano.layer_a.timbre, PianoTimbre::Dyno1);
         assert!(decoded.global.split_enabled);
+        assert_eq!(decoded.global.split_zone_enabled, [false, true, false]);
+        assert_eq!(decoded.global.scene_1_mask, 0b0001_0001); // Organ A + Synth A
         assert_eq!(decoded.global.split_crossfades[0], CrossfadeWidth::Small);
         assert_eq!(decoded.global.split_crossfades[1], CrossfadeWidth::Large);
         assert_eq!(decoded.global.split_crossfades[2], CrossfadeWidth::Off);
+
+        // Lossless preservation of unedited raw payload bytes (e.g. hardware NameHash / flags)
+        let mut synthetic_hw = bytes.clone();
+        // Set untouched reserved bits inside Global (bit 250) and Synth NameHash (byte 327+36)
+        synthetic_hw[48 + 31] = 0xAA;
+        synthetic_hw[48 + 327 + 36] = 0x5A;
+        let hw_cbin = CbinFile::parse(&synthetic_hw).expect("parse synthetic hw");
+        let hw_prog = hw_cbin.decode_program().expect("decode hw");
+        let repacked = hw_prog.to_cbin_file(0, 0).expect("repack hw");
+        assert_eq!(repacked.payload[31], 0xAA);
+        assert_eq!(repacked.payload[327 + 36], 0x5A);
+    }
+
+    #[test]
+    fn test_arm0_murmurhash2_name_hash_and_bit_offsets() {
+        // Known hashes verified against NS4 v1.66 factory .ns4p & ARM0 @ 0x0a5a44
+        assert_eq!(nord_name_hash("Astoria Grand Lrg 6.1"), 0x444e_bb81);
+        assert_eq!(nord_name_hash("Ac Guitar Finger_ST Mart 4.1"), 0xa281_b28c);
+        assert!(!nord_name_hash_matches("astoria grand lrg 6.1", 0));
+        assert!(nord_name_hash_matches("Astoria Grand Lrg 6.1", 0x444e_bb81));
+        assert!(nord_name_hash_matches(
+            "astoria grand lrg 6.1",
+            nord_name_hash("ASTORIA GRAND LRG 6.1")
+        ));
+
+        // Verify Piano 0x0B name_hash is aligned to bit (base + 28) and Synth 0x32 sample_id to (layer_base + 26)
+        let mut piano_preset = PianoPresetDecoded::default();
+        piano_preset.layer_a.name_hash = 0x444e_bb81;
+        piano_preset.layer_a.variation = 2;
+        let piano_raw = piano_preset.pack().expect("pack piano");
+        let piano_decoded = PianoPresetDecoded::unpack(&piano_raw).expect("unpack piano");
+        assert_eq!(piano_decoded.layer_a.name_hash, 0x444e_bb81);
+        assert_eq!(piano_decoded.layer_a.variation, 2);
+
+        let mut synth_preset = SynthPresetDecoded::default();
+        synth_preset.layer_a.osc_mode = SynthOscMode::Sample;
+        synth_preset.layer_a.sample_id = 0xa281_b28c;
+        synth_preset.layer_a.env_attack_ms = 54.0;
+        synth_preset.layer_a.env_decay_ms = 45_000.0;
+        synth_preset.layer_a.env_release_ms = 1490.0;
+        synth_preset.layer_a.filter_cutoff_hz = 440.0;
+        synth_preset.layer_a.lfo_rate_hz = 523.0;
+        let synth_raw = synth_preset.pack().expect("pack synth");
+        let synth_decoded = SynthPresetDecoded::unpack(&synth_raw).expect("unpack synth");
+        assert_eq!(synth_decoded.layer_a.osc_mode, SynthOscMode::Sample);
+        assert_eq!(synth_decoded.layer_a.sample_id, 0xa281_b28c);
+        assert_eq!(synth_decoded.layer_a.env_attack_ms, 54.0);
+        assert_eq!(synth_decoded.layer_a.env_decay_ms, 45_000.0);
+        assert_eq!(synth_decoded.layer_a.env_release_ms, 1490.0);
+        assert_eq!(synth_decoded.layer_a.filter_cutoff_hz, 440.0);
+        assert_eq!(synth_decoded.layer_a.lfo_rate_hz, 523.0);
+
+        // Cutoff norm<->Hz bijectivity at boundaries and 440 Hz anchor
+        assert_eq!(cutoff_norm_to_hz(0.0), 14.0);
+        assert_eq!(cutoff_norm_to_hz(1.0), 32000.0);
+        assert!((cutoff_norm_to_hz(cutoff_hz_to_norm(440.0)) - 440.0).abs() < 1e-2);
+        assert!((cutoff_norm_to_hz(cutoff_hz_to_norm(3500.0)) - 3500.0).abs() < 1.0);
     }
 }

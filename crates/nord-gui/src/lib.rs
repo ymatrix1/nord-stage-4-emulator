@@ -3,6 +3,7 @@
 //! Spec: `docs/specs/visual-style-and-panel.md`
 
 pub mod audio;
+pub mod library;
 pub mod panel;
 pub mod style;
 pub mod widgets;

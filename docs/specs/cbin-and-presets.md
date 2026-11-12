@@ -80,55 +80,64 @@ Every `.ns4p`, `.ns4l`, `.ns4y`, `.ns4n`, `.ns4o`, and `.ns4t` file begins with 
 
 Empirical comparison between `Organ Preset/Bank 1/B3 Basic.ns4o` and `Live/Bank 1/Live 1.ns4l` (and factory `.ns4p` programs) shows that a full `.ns4p` program embeds the exact Organ, Piano, and Synth preset bitstreams:
 
-1. **Global Program Header (`0x30..0x5C`, 45 bytes):**
-   - Master Clock BPM, Vibrato/Transpose, Split Point enables (3 split points: Low, Mid, High) and crossfade widths (`Off`, `Small`, `Large`).
-   - Layer Scene I and Layer Scene II active bitmasks (7 bits each: `Organ A/B`, `Piano A/B`, `Synth A/B/C`).
-   - Global Master Compressor amount and mode.
-2. **Organ Section (`0x5D..0xE3`, 135 bytes):**
+1. **Global Program Header (`0x30..0x5C`, 45 bytes, tag `0x2C`):**
+   - Split Zone enables, split note indices (`0..9 -> [41, 48, 53, 60, 65, 72, 77, 84, 89, 96]`), crossfade widths (`Off`, `Small`, `Large`), and `MasterClockRate` (`30 + u8` BPM).
+   - `SectionEnable_I` (`284..287`, 3b `[Org, Pno, Syn]`) and `SectionEnable_II` (`287..290`, 3b `[Org, Pno, Syn]`) combined with each section's per-layer enables to derive the 7-bit `scene_1_mask` and `scene_2_mask`.
+2. **Organ Section (`0x5D..0xE3`, 135 bytes, tag `0x11`):**
    - Matches the 135-byte payload of `.ns4o` (`0x30..0xB7` of an `.ns4o` file):
-   - Signature header `11 27 fb fb fb ff f7 f7 f7` followed by Organ model (`B3`, `Vox`, `Farf`, `Pipe1`, `Pipe2`), Layer A & Layer B 9-drawbar arrays (nibbles `0..=8`), percussion switches, vibrato/chorus selector, and per-layer Organ FX + Rotary 122 parameters.
-3. **Piano Section (`0xE4..0x176`, 147 bytes):**
-   - Matches the 147-byte structure of `.ns4n` for Piano Layers A and B (piano category, bank/sample hash ID, timbre preset, string resonance enable, pedal noise enable, dynamic compression, and per-layer Piano FX).
-4. **Synth Section (`0x177..0x363`, 493 bytes):**
-   - Matches the 493-byte structure of `.ns4y` across Synth Layers A, B, and C (oscillator category, waveform/wavetable ID, FM/detune, ZDF filter type/cutoff/resonance/kb-track, ADR envelopes, LFOs, arpeggiator, and per-layer Synth FX).
+   - Two `0x03` Organ Layer sub-blocks (bits `144..391` and `392..639`), Organ Level A/B `7b` morph parameters, Rotary 122 (`enabled`, `speed`, `drive`), `VibratoTypeB3` (`0..5 -> V1, C1, V2, C2, V3, C3`), and 1× shared `0x36` Organ FX block (bytes `80..135`).
+3. **Piano Section (`0xE4..0x176`, 147 bytes, tag `0x0C`):**
+   - Matches the 147-byte structure of `.ns4n`: two `0x0B` Piano Layer sub-blocks (bits `104..199` and `200..295`), Level A/B `7b` morphs, and 2× `0x36` Piano FX blocks (bytes `37..92` and `92..147`).
+4. **Synth Section (`0x177..0x363`, 493 bytes, tag `0x1E`):**
+   - Matches the 493-byte structure of `.ns4y`: Level/Pan A/B/C, three `0x32` Synth Layer blocks (bits `248`, `656`, `1064`, stride `408` bits), three `0x2F` Synth Sound blocks (bits `1472`, `1856`, `2240`, stride `384` bits), and 3× `0x36` Synth FX blocks (bytes `328..383`, `383..438`, `438..493`).
 
-### 4.1 Bit-Field Decoding & Mapping Table
+### 4.1 Hardware Bitstream & Morph Encoding (OS v1.66)
 
-Implemented in [`crates/nord-core/src/cbin.rs`](../../crates/nord-core/src/cbin.rs) (`BitReader`, `BitWriter`, `ProgramDecoded`) and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py):
+Implemented in [`crates/nord-core/src/cbin/presets.rs`](../../crates/nord-core/src/cbin/presets.rs) (`BitReader`, `BitWriter`, `ProgramDecoded`) and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py):
 
-#### Organ Payload (`135` Bytes)
-- **Signature (`0..71` bits):** Fixed 9-byte sequence `11 27 FB FB FB FF F7 F7 F7`.
-- **Model (`72..74` bits, 3 bits):** `0 = B3`, `1 = Vox`, `2 = Farfisa`, `3 = Pipe1`, `4 = Pipe2`.
-- **Percussion (`75..78` bits, 4 bits):** `[on: 1b, soft: 1b, fast: 1b, third: 1b]`.
-- **Vibrato/Chorus (`79..82` bits, 4 bits):** `[on: 1b, type: 3b]` (`0..5` -> `V1, V2, V3, C1, C2, C3`).
-- **Rotary 122 (`83..91` bits, 9 bits):** `[speed: 2b]` (`0=Stop, 1=Slow, 2=Fast`) + `[drive: 7b]` (`0..127` -> `0.0..10.0`).
-- **Layer A (`92..138` bits, 47 bits):** `[enabled: 1b, level: 7b, octave: 3b (-2..+2), drawbars: 9 * 4b (0..8)]`.
-- **Layer B (`139..185` bits, 47 bits):** `[enabled: 1b, level: 7b, octave: 3b (-2..+2), drawbars: 9 * 4b (0..8)]`.
+#### `4W+3` Morph Encoding (MSB-first)
+Morphable parameters of bit width `W` occupy `4W + 3` bits:
+- `base: W` bits (`0..=max_val`, where `max_val = (1 << W) - 1` or `8` for drawbars).
+- `wheel_delta: W+1` bits, `aftertouch_delta: W+1` bits, `ctrl_pedal_delta: W+1` bits, each stored biased by `+max_val` (`zero = max_val`, i.e., `8` for `W=4` drawbars, `127` for `W=7`, `16383` for `W=14` Delay Rate; signed normalized delta = `(raw - max_val) / max_val`).
 
-#### Piano Payload (`147` Bytes)
-- **Signature (`0..71` bits):** Fixed 9-byte sequence `0C 27 1B FB FB FD A7 F7 F7`.
-- **Layer A & Layer B (each 37 bits):**
-  - `enabled: 1b`, `level: 7b`, `octave: 3b (-2..+2)`
-  - `category: 3b` (`Grand, Upright, Electric, Clav, Digital, Misc`)
-  - `model_id: 8b`, `timbre: 3b` (`Off, Soft, Mid, Bright, Dyno1, Dyno2`), `touch: 2b` (`Light, Med, Heavy`)
-  - `string_res: 1b`, `pedal_noise: 1b`, `soft_release: 1b`, `dyn_comp: 2b (0..3)`, `unison: 2b (0..3)`.
+#### Global Program Header (`0x2C`, `45` Bytes)
+- `0..8`: block tag `0x2C`.
+- `8`: `split_enabled` (1b); `9..12`: `split_zone_enabled[0..3]` (3×1b).
+- `12..24`: 3×4b split note indices (`[41, 48, 53, 60, 65, 72, 77, 84, 89, 96]`).
+- `24..30`: 3×2b crossfade width (`0=Off, 1=Small, 2=Large`).
+- `35..43`: `MasterClockRate` (8b; BPM = `30 + val`).
+- `284..287`: `SectionEnable_I` (`bit2=Org, bit1=Pno, bit0=Syn`); `287..290`: `SectionEnable_II`.
 
-#### Synth Payload (`493` Bytes)
-- **Signature (`0..71` bits):** Fixed 9-byte sequence `1E 08 71 BF BF BF D2 7F 7F`.
-- **Layer A, B, C (each 83 bits):**
-  - `enabled: 1b`, `level: 7b`, `octave: 3b (-2..+2)`
-  - `osc_mode: 2b` (`Analog, Wavetable, FM, Sample`), `waveform: 2b` (`Saw, Pulse, Triangle, Sine`), `wave_id: 8b`, `detune: 7b` (`0..10.0`)
-  - `filter_model: 3b` (`LP12, LP24, Ladder24, BP, HP`), `cutoff: 7b` (`20 Hz..20 kHz`), `resonance: 7b`, `drive: 7b`, `kb_track: 2b`
-  - `env_attack: 7b` (`1..5000 ms`), `env_decay: 7b` (`10..10000 ms`), `env_release: 7b` (`10..10000 ms`)
-  - `lfo_rate: 7b` (`0.1..30 Hz`), `arp_enabled: 1b`, `arp_bpm: 8b` (`30..300 BPM`).
+#### Organ Block (`0x11`, `135` Bytes = 2×`0x03` + `0x36`)
+- `0..8`: `0x11`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`.
+- `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
+- `80`: `rotary_enabled` (1b); `81..83`: `leslie_speed` (`0|2=Stop, 1=Slow, 3=Fast`); `92..99`: `rotary_drive` (7b); `130..133`: `VibratoTypeB3` (`0..5 -> V1, C1, V2, C2, V3, C3`).
+- `0x03` Layers at bit `144` (A) and `392` (B): `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2`); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
+- Bytes `80..135`: `0x36` Organ FX chain.
 
-#### Global Program Header (`45` Bytes)
-- **Signature (`0..7` bits):** Fixed byte `0x2C`.
-- **Master Tempo (`8..16` bits, 9 bits):** `30..300 BPM`.
-- **Master Compressor (`17..23` bits, 7 bits):** `0.0..10.0`.
-- **Transpose (`24..27` bits, 4 bits):** `-6..+6` semitones.
-- **Split Zones (`28..55` bits, 28 bits):** `split_enabled: 1b`, 3x `[split_note: 7b, crossfade: 2b (Off/Small/Large)]`.
-- **Layer Scenes (`56..69` bits, 14 bits):** `scene_1_mask: 7b`, `scene_2_mask: 7b` (`Organ A/B, Piano A/B, Synth A/B/C`).
+#### Piano Block (`0x0C`, `147` Bytes = 2×`0x0B` + 2×`0x36`)
+- `0..8`: `0x0C`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`; `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
+- `0x0B` Layers at bit `104` (A) and `200` (B): `+12..+16` signed 4b `octave`; `+18..+21` `category` (`0..5`: Grand, Upright, Electric, Clav, Digital, Misc); `+21..+26` `model_id`; `+28..+60` 32b `name_hash` (OS v1.66 `ARM0 @ 0x0a5a44` big-endian-chunk MurmurHash2 over the `.npno` stem); `+60..+62` `variation`; `+62..+64` `acoustic_level` bitmask (`bit 1 = string_res`, `bit 0 = soft_release`); `+64` `pedal_noise`; `+65..+67` `unison`; `+67..+69` `dyn_comp`; `+69` reserved pad bit; `+70..+73` `timbre` (`0=Off, 1=Soft, 2=Mid, 3|6|7=Bright, 4=Dyno1, 5=Dyno2`); `+73..+75` `kb_touch` (`0=Medium`, `1=Light`, `2=Heavy`, factory `MED` default `0` verified against OS v1.66 `.ns4p` files & 4K hardware LED captures).
+- Bytes `37..92` & `92..147`: `0x36` Piano FX chains A & B.
+
+#### Synth Block (`0x1E`, `493` Bytes = 3×`0x32` + 3×`0x2F` + 3×`0x36`)
+- `0..8`: `0x1E`; `10..13`: `enable_i[C:B:A]`; `15..18`: `enable_ii[C:B:A]`.
+- `18, 49, 80`: `level_{a,b,c}` (`W=7` morphs); `111, 142, 173`: `pan_{a,b,c}` (7b).
+- `0x32` Layer blocks (`248, 656, 1064`, stride `408`), block-relative bits: `+8` `is_osc_mode` (1=Osc, 0=Sample); `+26..+58` 32b `sample_id` (`nord_name_hash` over `.nsmp4` stem); `+62..+66` `octave` (4b two's complement, `-2..+2`); `+72..+75` `vibrato_mode` (`0 none, 1 ON, 2 DLY, 3 WHL, 4 A.T., 5 PED`); `+77` `legato`; `+78` `mono`; `+79..+81` `voice_priority` (`0 none, 1 LO, 2 HI`); `+81..+88` `glide` (7b, panel `0..10` = `raw*10/127`); `+135` `arp_run`; `+175..+206` `arp_rate` (`W=7` morph, `30..300 BPM`); `+306..+308` `unison` (`0..3`); `+372..+377` `vibrato_delay` (5b, `0.1 + 2.9*raw/29` s).
+- `0x2F` Sound blocks (`1472, 1856, 2240`, stride `384`), block-relative bits: `+10..+12` `osc_type` (`0 ANALOG, 1 FM-H, 2 FM-I, 3 WAVE`); `+15..+18` `osc_category` (ANALOG: `PURE, SUB OSC, SYNC, SHAPE, SHAPE SINE, MULTI, SUPER, MISC`; WAVE: `BELLS/TINES, ACOUSTIC, DIGITAL, ORGAN, KEYS`; FM: letters); `+19..+25` `osc_wave` (6b, index inside the category; FM-H = ratio, FM-I = `raw-12`); `+25..+56` `osc_ctrl` (`W=7` morph); `+56..+63` `pitch_fine` (7b signed, cents); `+63..+69` `pitch_coarse` (6b signed, semitones); `+71/+78/+85` osc env A/D/R (`3×7b`); `+92..+99` `osc_env_amt` (7b signed, `/6` = panel `-10..10`) + `+99/+107/+115` wheel/A.T./pedal deltas (8b); `+123` `osc_env_to_pitch`; `+124` `osc_env_velocity`; `+127..+129` `lfo_target` (`0 off, 1 OSC CTRL, 2 PITCH, 3 FILTER`); `+129..+132` `lfo_shape` (`0 triangle, 1 saw (ramp down), 2 inv saw (ramp up), 3 square, 4 S/H`); `+132` `lfo_mst_clk`; `+133..+164` `lfo_rate` (`W=7` morph, `LFO_RATE_HZ_TABLE`: `0.03 Hz..523 Hz`); `+164..+195` `lfo_amount` (`W=7` morph); `+195/+202/+209` amp ADR (`3×7b`, OS v1.66 curves `ENV_ATTACK_MS_TABLE` `0.5 ms..45 s`, `ENV_DECAY_MS_TABLE` `3 ms..43 s / 127=Hold`, release shares the decay table); `+216..+218` `amp_velocity` (`0..3`); `+218..+221` `filter_type` (`0 LP12, 1 LP24, 2 LPM, 3 LPHP, 4 BP, 5 HP`); `+221..+252` `filter_freq` (`W=7` morph, `FILTER_CUTOFF_HZ_TABLE`: `14 Hz..32 kHz`); `+252..+283` `filter_res` (`W=7` morph); `+283..+285` `kb_track`; `+285..+287` `filter_drive`; `+287..+318` `filter_env_amt` (`W=7` morph, **unipolar** `0..10`); `+318/+325/+332` filter ADR (`3×7b`, same curves as amp); `+339` `filter_velocity`; `+340` `filter_on`; `+341..+348` `vibrato_rate` (7b, `2 + 6*raw/127` Hz); `+348..+354` `vibrato_amount` (6b, `10*raw/50`).
+- **Provenance (order/widths VERIFIED against firmware, absolute offsets EMPIRICAL):** `python tools/ns4_fw_order_check.py target/fw_unpacked/bank0_CODE.bin` checks our field order and widths against the firmware `Buffer_kSynLay` / `Buffer_kSynSnd` name tables (0 problems). Absolute offsets: the offsets above come from the third-party ns4decode map (MIT, Randy 2024) converted with `bit = (byte-1)*8 + (bit-1) - 3000 - block_base`. Evidence: `python tools/ns4_crosscheck.py --program regressionTest.ns4p --csv regressionTest_synth.csv --corpus <factory>.ns4b` reports 75/75 fields equal to ns4decode's CSV for the regression program and 0 range violations over 1152 factory layers; `tools/ns4_bitscan.py` independently located the filter ADR (`+318`), osc ADR (`+71`), amp velocity (`+216`) and unison (`0x32 +306`) from the data alone; the firmware confirms the wave-name lists and their order (`docs/research/synth-0x2f-ns4decode-crosscheck.md`). Value scales for glide, vibrato, osc env amount and the unison cents are ASSUMED. Round trip stays lossless: `pack()` rewrites only the fields above and keeps every other bit from the raw payload.
+- **Backup Hash Resolution (`backup.rs`, `engine.rs`, `nord-gui/src/library.rs`):** `nord_name_hash(stem)` and `Ns4BackupArchive::resolve_program_sounds(&prog)` auto-resolve Piano A/B `.npno` and Synth A/B/C `.nsmp4` banks from `.ns4b` archives when opening a `.ns4p` program (`find_piano_by_hash`, `find_sample_by_id`, `load_program_from_backup`).
+- Bytes `328..383`, `383..438`, `438..493`: `0x36` Synth FX chains A, B, C.
+
+#### Per-Layer FX Block (`0x36`, `55` Bytes = `440` Bits)
+- `0..8`: `0x36`; `8`: `mod1_on`; `9`: `mod1_sync`; `10..41`: `mod1_rate` (`W=7` morph); `41..72`: `mod1_amt` (`W=7` morph); `72..76`: `mod1_type` (`0..11`: AutoPan Soft/Hard, Trem Soft/Hard, RingMod/St, A-Wah Cry/Env, Wah LFO/Pedal, Pump LFO/Pedal).
+- `76`: `mod2_on`; `77..108`: `mod2_rate` (`W=7` morph); `108..139`: `mod2_amt` (`W=7` morph); `139..143`: `mod2_type` (`0..11`: Phaser I/II, Flanger St/Mono, Chorus Analog, Vibe St/Mono, Ensemble St/Mono, Spin Treble/Bass/Both).
+- `143`: `amp_eq_on`; `144..151`, `151..158`, `158..165`: signed 7b EQ Treble/Mid/Bass (`* 0.25` dB, `-15..+15 dB`); `165..196`: `mid_freq` (`W=7` morph); `196..227`: `drive` (`W=7` morph); `408..417`: `amp_type_new`.
+- `231`: `comp_on`; `232..239`: `comp_amt` (7b); `239`: `comp_fast`.
+- `240`: `delay_on`; `241`: `delay_sync`; `242..301`: `delay_rate` (`W=14` morph, `zero=16383`); `301..332`: `delay_mix` (`W=7` morph); `332..334`: `delay_mode`; `334`: `ping_pong`; `335`: `fb_filter`; `336..367`: `delay_fb` (`W=7` morph); `367..371`: `fb_fx_type`.
+- `371`: `reverb_on`; `372..403`: `reverb_amt` (`W=7` morph); `403..405`: `reverb_color`; `405..408`: `reverb_type` (`0..5`: Spring, Booth, Room, Stage, Hall, Cathedral).
+
+> All decoded structs retain their original `raw_payload` bytes when packed back, guaranteeing bit-identical round-tripping for unedited fields and reserved firmware state.
 
 ### 4.2 CLI Patch Conversion & Inspection
 
@@ -163,39 +172,32 @@ The Windows updater (`Update Nord Stage 4 OS v1.66.exe`) embeds the firmware pay
 ### Image Segment Table (`+0x00` of each Image)
 
 Each image begins with a 20-byte sub-header (`version` = `0x0064` = `100`, `segment_count` = `3` at `+0x10` BE), followed by three 44-byte (`0x2C`) segment descriptors:
-1. **`SRAM`**: Target SRAM load address, size, and CRC.
-2. **`CODE`**: Compressed/executable code region metadata.
-3. **`ARM0`**: Primary ARM host controller image.
+1. **`SRAM`**: Target SRAM load address, size, and one's-complement checksum (uncompressed).
+2. **`CODE`**: **LZO1X**-compressed ARM926EJ-S & SHARC executable memory image (`target_address = 0xC0000000`).
+3. **`ARM0`**: Primary ARM host controller bootstrap/stub image (uncompressed).
 
-Within the `CODE` / `ARM0` data payload of Image 0 (around `0x003CF040`), the embedded Analog Devices SHARC DSP cores are indexed by their module tags:
+Segment `data_offset` values are relative to each bank's base offset in the firmware container:
+- **Bank 0 (Image 0):** relative to `header_size` (`0x0020`).
+- **Bank 1 (Image 1):** relative to `image1_offset` (`header_size + image0_size`, `0x368FA6` in OS v1.66).
+
+Within the decompressed `CODE` payload of Image 0 (and mirrored references in the container), the embedded Analog Devices SHARC DSP cores are indexed by their module tags:
 - **`DSPF`** (`DSPFxCore1 L1 bl.0`): Effects & Piano Resonance DSP core.
 - **`DSPO`** (`DSPOrg`): Organ Physical Modeling & Rotary Speaker DSP core.
 - **`DSPS`** (`DSPSyn`): 3-Layer Nord Wave 2 Synth DSP core.
 
-### 5.1 Clavia 16-Bit LZ Stream Compression (`CODE` Segments)
+### 5.1 Clavia LZO1X Stream Compression (`CODE` Segments)
 
-The `CODE` segments inside OS firmware images are compressed using Clavia's proprietary 16-bit LZ sliding-window scheme (`crates/nord-core/src/firmware.rs`).
+The `CODE` segments inside OS firmware images are compressed using standard **LZO1X** (`crates/nord-core/src/firmware.rs`), verified bit-exact against both OS v1.66 banks:
+- **Bank 0 `CODE`:** `0x358D45` compressed bytes &rarr; `5,499,504` (`0x53EA70`) decompressed bytes, checksum `0xDE902503` (`OK`).
+- **Bank 1 `CODE`:** `0x0642D1` compressed bytes &rarr; `798,912` (`0x0C30C0`) decompressed bytes, checksum `0xFBB813F8` (`OK`).
 
-#### 16-Bit Match Token Bitfield Layout (Little-Endian `u16`)
-
-```text
- 15                                      3   2        0
-┌─────────────────────────────────────────┬────────────┐
-│ Distance in History Buffer (13 bits)    │ Length - 2 │
-│ Range: 1 .. 8191 bytes                  │ 3 bits     │
-│ (distance = token >> 3)                 │ 2..9 bytes │
-└─────────────────────────────────────────┴────────────┘
-```
-
-- **Bits 2..0 (3 bits):** Match length minus 2 (`length = (token & 0x07) + 2`), encoding lengths from `2` to `9` bytes.
-- **Bits 15..3 (13 bits):** Sliding-window back-reference distance (`distance = token >> 3`), allowing lookup up to `8,191` bytes behind the current write cursor.
-
-#### Stream Framing & Flag Bytes
-Stream framing groups up to 8 operations per 1-byte header:
-- **Flag Bit = `1`:** 1 uncompressed literal byte follows.
-- **Flag Bit = `0`:** 1 16-bit match token (2 little-endian bytes) follows.
-- **Initial Extended Literal Run:** At stream start, a `0x00, L` sequence encodes an extended literal run of `17 + L` bytes (e.g. `00 1B` for the 44-byte ARM926EJ-S reset stub).
-- Overlapping runs (where `length > distance`) dynamically repeat bytes in run-length fashion.
+#### LZO1X Token Encoding Summary
+- **First byte (`t > 17`):** Initial literal run of `t - 17` bytes at stream start.
+- **`0..15` (`M1` / literal run):** `t == 0` encodes an extended literal run (`18 + sum(0xFF * 255) + next_nonzero` bytes; e.g. `00 1B` = `18 + 27 = 45` bytes for the ARM926EJ-S exception vectors + constant pool header); `1..=15` encodes a short M1 back-reference when preceded by a match, or a `3 + t` literal run otherwise.
+- **`16..31` (`M4` / EOF):** `length = (t & 7)` (extended if `0`), `offset = 16384 + ((t & 8) << 11) + ((le16 >> 2) & 0x3FFF)`; `offset == 16384` (`11 00 00`) marks end-of-stream.
+- **`32..63` (`M3`):** `length = (t & 31)` (extended if `0`) `+ 2`, `offset = 1 + ((le16 >> 2) & 0x3FFF)`.
+- **`64..255` (`M2`):** `length = ((t >> 5) - 1)`, `offset = 1 + ((t >> 2) & 7) + (next_byte << 3)` (`1..=2048` bytes).
+- **Trailing literal nibble:** The low 2 bits (`last & 0x03`) of the two-byte match operand supply `0..=3` trailing literal bytes after every M2/M3/M4 match; an M2 match uses `last = next_byte` in the same way? Specifically, `t & 0x03` of the first M2 byte (`byte0 & 3`) gives trailing literals, whereas M3/M4 use the low 2 bits of the 16-bit LE operand's low byte (`op0 & 3`).
 
 #### Checksum Algorithm
 Each segment descriptor stores a 32-bit one's-complement byte checksum:
@@ -204,56 +206,63 @@ checksum = 0xFFFFFFFF - (sum(segment_bytes) & 0xFFFFFFFF)
 ```
 For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file segment payload. For compressed segments (`CODE`), the checksum is computed over the fully decompressed memory image at runtime (`target_address = 0xC0000000`).
 
-#### Rust API (`crates/nord-core/src/firmware.rs`)
+#### Rust API (`crates/nord-core/src/firmware.rs`) & CLI
 - `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
-- `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareContainer::bank_base(&self, bank: u8) -> Result<usize, String>`
+- `FirmwareContainer::extract_segment(&self, bank: u8, name: &str, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>` (Bank 0 base `0x20`)
+- `FirmwareSegment::extract_payload_from(&self, bank_base: usize, raw: &[u8]) -> Result<Vec<u8>, String>`
 - `FirmwareSegment::verify_checksum(&self, payload: &[u8]) -> bool`
 - `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
 - `FirmwareContainer::segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment>`
 - `DspEngineType` (`Organ`, `Synth`, `Effects`, `Routing`, `CoreIdentifier`)
 - `DspPartition` (full partition descriptors with engine categorization)
+- CLI: `ns4 inspect <fw_bin> --verify --unpack <out_dir>` verifies every segment's checksum and extracts `bank{0,1}_{SRAM,CODE,ARM0}.bin`.
 
-### 5.2 Nord Piano (`.npno`) Binary Specification & 4-Bit DPCM Audio Codec
+### 5.2 Nord Piano (`.npno`) Binary Specification & `CNSP` Fixed-LPC Audio Codec
 
-Nord Piano files (`.npno`) store high-fidelity multisampled acoustic, electric, and digital pianos inside a 48-byte `CBIN` container header (`kind = "npno"`):
+Nord Piano files (`.npno`) store multisampled acoustic, electric, clavinet, harpsichord, and digital pianos inside a 48-byte `CBIN` container header (`kind = "npno"`), documented in full in [nsmp4-and-npno-cnsp-codec.md](../research/nsmp4-and-npno-cnsp-codec.md).
 
 #### Layout of `.npno` Header & Tables
 - `0x0000..0x0030`: 48-byte `CBIN` container header (`tag = "npno"`).
-- `0x002C`: `CNSP` sub-header signature.
-- `0x0048..0x0068`: Short instrument name (ASCII, 32 bytes).
-- `0x0068..0x0088`: Long instrument name (ASCII, 32 bytes).
-- `0x00B8..0x0138`: 128-byte lookup table mapping every MIDI note (`0..127`) to its multisample root key.
-- `0x01C8..0x0248`: 128-byte lookup table of signed 8-bit integers (`i8`) representing micro-cents fine-tuning calibration per key.
+- `0x002C..0x0030`: `CNSP` sub-header base (`CNSP` offset base = `0x2C`).
+- `0x0048..0x0068`: Short instrument name (ASCII, 32 bytes); `0x0068..0x0088`: Long instrument name (ASCII, 32 bytes).
+- `0x00B8..0x0138`: 128-byte lookup table mapping every MIDI note (`0..127`) to its sampled root key (`0xFF` = out of range).
+- `0x01B8..0x0238`: 128-byte lookup table of signed 8-bit integers (`i8`) encoding fine-tuning calibration (`tuning_cents`).
 - `0x0238..0x02B8`: 128-byte lookup table of velocity tier boundaries per key.
-- `0x0760..`: Multisample stroke descriptor table (`data_offset`, `data_size`, `loop_start`, `loop_end`).
+- `0x064A` (`u16 BE`): channel count (`1` mono, `2` stereo); `0x064C` (`u16 BE`): `nstrokes`.
+- `0x064E..0x074E`: 128 `u16 BE` stroke counts per MIDI key (`sum == nstrokes`), assigning sequential records in the stroke table to their sampled `root_key`.
+- `0x0756..`: `nstrokes` fixed-stride `0x76` (`118`) byte stroke records:
+  - `+0x08..+0x0C` (`u32 BE`): `CNSP`-relative offset (file offset = `0x2C + off`).
+  - `+0x0C..+0x0E` (`u16 BE`): `(flags_hi << 8) | vel_low` (`0` normal, `1` damper-down, `2` release/key-off).
+  - `+0x0E..+0x12` (`u32 BE`): decoded sample frame count `total_frames` (`~35,000 Hz` storage rate).
+  - `+0x12..+0x14` (`u16 BE`): page count (`npages`).
+  - `+0x14..+0x1C` (`4 x i16 BE`) & `+0x1C..+0x24` (`4 x i16 BE`): Page 0 initial fixed-LPC history `(h[-4]..h[-1])` for L and R channels.
 
-#### 4-Bit Differential PCM Audio Codec (`AVCSmpDecode`)
-Audio payloads encode two 4-bit signed delta samples per byte:
-```text
-byte = (sample_hi << 4) | (sample_lo & 0x0F)
-s[n] = s[n-1] + delta * scale
-```
-- `sample_hi`: High nibble (`(byte >> 4) & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
-- `sample_lo`: Low nibble (`byte & 0x0F`), sign-extended (`0x8..0xF` &rarr; `-8..-1`).
-- Compression ratio: 4:1 vs 16-bit PCM, 6:1 vs 24-bit PCM.
+#### Paged `1022 * channels`-Byte Fixed-LPC Audio Codec
+- Page header `[b0, b1]`: `b0` tracks encoder attenuation (`0..=47`, unscaled on decode), `order = b1 >> 5` (`0..=4`), `nbits = b1 & 0x0F` (`3..=14`).
+- Payload (`1020 * channels + 2*(channels-1)` bytes = `1020 B` mono / `2042 B` stereo) packs signed `nbits` two's-complement LPC residuals in **LSB-first bit order across `u16 BE` words** (interleaved `[L, R]` when `channels == 2`), using standard FLAC fixed-LPC orders `0..=4`.
+- Pages overlap by **64 frames** (`p > 0` continues with the history 64 frames prior to the end of page `p - 1` and drops the redundant 64 overlap frames).
+- Normalized PCM scales `y as f32 / 8192.0` (`±7782` typical integer peak).
 
 #### Rust API (`crates/nord-core/src/cbin/piano_sample.rs`)
 - `NpnoInstrument::parse(bytes: &[u8]) -> Result<NpnoInstrument, String>`
 - `NpnoInstrument::root_key_for_note(&self, note: u8) -> Option<u8>`
 - `NpnoInstrument::cents_detune_for_note(&self, note: u8) -> i8`
-- `decode_4bit_dpcm(raw_payload: &[u8], scale: f32) -> Vec<f32>`
-- `encode_4bit_dpcm(pcm: &[f32], scale: f32) -> Vec<u8>`
+- `decode_npno_stroke(raw_payload: &[u8], channels: u16, npages: u16, total_frames: usize, init_left: [i16; 4], init_right: [i16; 4]) -> Result<(Vec<f32>, Vec<f32>), String>`
+- `encode_npno_stroke(left: &[f32], right: Option<&[f32]>, nbits: u8, order: u8) -> ([i16; 4], [i16; 4], u16, Vec<u8>)` (synthetic fixture encoder)
 
-### 5.3 NSMP Sample Library Metadata (`.nsmp4`)
+### 5.3 NSMP Sample Library Format & Fixed-LPC Audio Codec (`.nsmp4`)
 
-The `.nsmp4`/`nsmp` assets store the `NSMP` marker at offset `0x2C`, then a 12-byte prefix at `0x30..0x3B`. The current metadata parser starts its tagged chunk stream at `0x3C`. Each chunk has a 4-byte tag, a big-endian `u32` chunk ID, a big-endian `u32` payload length, and that many payload bytes. The parser checks chunk bounds and rejects incomplete trailing headers.
+The `.nsmp4`/`nsmp` assets store the `NSMP` marker at offset `0x2C`, a 12-byte prefix at `0x30..0x3B`, and a big-endian tagged chunk stream starting at `0x3C` (`tag: [u8; 4]`, `chunk_id: u32 BE`, `length: u32 BE`, `payload`). See [nsmp4-and-npno-cnsp-codec.md](../research/nsmp4-and-npno-cnsp-codec.md).
 
-The parser currently recognizes:
+Recognized chunks and layout:
+- `\0hdr`: instrument name at payload offset `10` (up to 32 bytes) and author at `74` (up to 32 bytes).
+- `\0map`: a 128-entry table of 10-byte records starting at offset `6`, followed by 16-byte zone records starting at `0x524` (`vel_max`, `root_key`, `key_high`, `key_low`, `stroke_id`, `vel_min`).
+- `\0stk`: 68-byte header (`stroke_id` at `+0x00`, `root_key` at `+0x05`, `u16 BE` `sample_rate` in Hz at `+0x06`, `channels` (`1`/`2`) at `+0x08`, `u32` flash-word boundaries `w1..w4` at `+0x12/+0x1B/+0x24/+0x2D`, one-shot flags at `+0x29..+0x2B`, gain dB at `+0x39`), zero-word padding to the first non-zero 32-bit BE frame header `w`, and variable-length fixed-LPC frames (`ns = w & 0x3FFF`, `order = (w >> 14) & 7`, `loop_mark = (w >> 18) & 1`, `nbits = ((w >> 19) & 0xF) + 1`, `fl = (w >> 23) & 1`) packing `wpc = (spc * nbits + 31) / 32` MSB-first `u32 BE` words per channel (word-interleaved L/R pairs for stereo). Sustained sounds (`payload[0x29..0x2B] == [0, 0]`) loop seamlessly across `[s3, total_frames]`. See [`cbin::sample`](../../crates/nord-core/src/cbin/sample.rs).
 
-- `\0hdr`: name at payload offset 10 (up to 32 bytes); the parser also attempts to read an author string at offset 74 (up to 32 bytes), which is not yet independently confirmed.
-- `\0map`: a 128-entry table of 10-byte records starting at offset 6, followed by 16-byte zone records starting at `0x524`.
-- `\0stk`: stroke ID in the first four payload bytes; payload audio remains opaque.
+### 5.4 `.ns4b` Backup Archive Reader (`crates/nord-core/src/cbin/backup.rs`)
 
-These offsets are an initial metadata mapping based on the locally inspected `Kalimba_KG 4.1.nsmp4` sample from the factory backup and deterministic synthetic fixtures. They are not a complete NSMP or sample-audio specification. The parser preserves no raw chunk data in its high-level result, and does not decode audio. See [`cbin::sample`](../../crates/nord-core/src/cbin/sample.rs).
+`.ns4b` archives are standard PKZIP files whose entries use method `0` (`ZIP_STORED`). `Ns4BackupArchive` parses ZIP central-directory/local-header records without external runtime dependencies so users can list and load `.npno`, `.nsmp4`, and `.ns4p` entries directly from a legally owned `.ns4b` archive or extracted folder.

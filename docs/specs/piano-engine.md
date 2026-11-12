@@ -45,8 +45,8 @@ Each Piano layer offers selectable spectral contours modeled via 2nd-order biqua
 ## 4. Advanced String Resonance (Modal Sympathetic DSP)
 
 When `String Resonance` is active on an Acoustic `Grand` or `Upright` model:
-1. **Damper Pedal Down (`CC64 >= 64`):** A bank of 12 tuned modal harmonic resonators (covering the fundamental and low overtones of the soundboard harp) is excited by the audio output of struck notes ($g_{\text{res}} \approx -21\text{ dB}$, decay $T_{60} \approx 4.5\text{ s}$).
-2. **Undamped Held Notes (Pedal Up):** Any key held silently (or after note decay) keeps its individual string resonator undamped; striking a lower note whose 2nd, 3rd, or 4th harmonic matches the held key's fundamental excites sympathetic ringing on that specific pitch.
+1. **Damper Pedal Down (`CC64 >= 64`):** A bank of 12 tuned modal harmonic resonators (covering the fundamental and low overtones of the soundboard harp) is excited by the audio output of struck notes ($g_{\text{res}} \approx -21\text{ dB}$, decay $T_{60} \approx 4.5\text{ s}$) and summed with balanced alternating stereo panning (`0.72 / 0.28`, avoiding anti-phase cancellation).
+2. **Undamped Held Notes (Pedal Up):** Any key held silently (or after note decay) keeps its pitch-class (`midi_note % 12`) resonator undamped across octaves; striking a note excites sympathetic ringing in held strings without artificial high-frequency ringing.
 
 Each resonator is implemented as a 2-pole high-$Q$ bandpass/comb resonator with frequency-dependent damping:
 
@@ -56,11 +56,14 @@ $$
 
 ---
 
-## 5. Dynamic Pedal Noise (`Piano Pedal` in Firmware)
+## 5. Dynamic Pedal Noise (`Piano Pedal` in Firmware) & Unison / Dyn Comp
 
-When `Pedal Noise` is enabled and `CC64` changes rapidly:
-- **Damper Lift (Note-On of Pedal):** Velocity of pedal depression ($\Delta\text{CC64} / \Delta t$) scales a short low-passed mechanical thump ($f_c = 140\text{ Hz}$) plus an airy felt-release brush transient, exciting the sympathetic string resonator bank.
-- **Damper Drop (Pedal Release):** Generates a damped felt thud ($f_c = 95\text{ Hz}$, $\tau = 65\text{ ms}$) as all dampers return to the strings.
+When `Pedal Noise` is enabled and `CC64`, `CC66`, or `CC67` transitions:
+- **Damper Lift (`CC64 >= 64`):** Velocity of pedal depression scales a low-passed mechanical felt thump ($f_c = 140\text{ Hz}$) plus an airy felt-release brush transient (`pedal_brush_env`) exciting the sympathetic string resonator bank (using filtered impulse transients without synthetic sine chirps).
+- **Damper Drop (`CC64 < 64`):** Generates a deeper damped felt thud ($f_c = 95\text{ Hz}$).
+- **Sostenuto (`CC66`):** Captures notes currently active at pedal-down (`sostenuto_held`) until pedal release and triggers a lighter mechanical rod transient ($f_c = 120\text{ Hz}$).
+- **Una Corda / Soft (`CC67`):** Softens hammer strike excitation ($0.76\times$ gain, $0.90\times$ post-shaping) and triggers rail-shift noise ($f_c = 160\text{ Hz}$).
+- **Piano `UNISON` (`1, 2, 3`) & `DYN COMP` (`1, 2, 3`):** `unison` adds symmetric stereo hammer/string detune (`3.5`, `7.0`, `11.5` cents) across active voices; `dyn_comp` compresses strike velocity curves and applies fast output dynamic leveling.
 
 ---
 
@@ -81,19 +84,16 @@ Upon receiving MIDI `NoteOff` or Damper Pedal Release (`CC64 < 64`), the vibrati
 
 Implemented in [`crates/nord-core/src/piano.rs`](../../crates/nord-core/src/piano.rs) (`NpnoSound`, `LoadedPianoStroke`).
 
-When a pre-decoded `.npno` instrument is loaded via `PianoLayer::set_sound`:
-1. **Zone and Detuning Lookup:**
-   The struck MIDI note index ($n \in [0, 127]$) resolves its assigned multisample stroke via `key_map[n]` and its signed calibration detune via `tuning_cents[n]`.
+When a pre-decoded `.npno` or open SFZ/WAV (`NpnoSound::from_sfz_str` / `from_sfz_path`, `parse_wav_mono` 8/16/24/32-bit mono/stereo) instrument is loaded via `PianoLayer::set_sound`:
+1. **Zone, Velocity, Damper & Release Lookup (`NpnoSound::select_stroke_with_damper`):**
+   Multi-velocity `.npno` strokes and SFZ `<region>` zones (`lovel..=hivel`, `lokey..=hikey`, `trigger=release`) are deduplicated in RAM (`Arc<[f32]>`). In `.npno` banks, byte `+0x0D` (`vel_low`) encodes descending attenuation (`0 = fff` loudest/brightest down to `max_att = ppp` softest/warmest); zones are sorted descending and partitioned across `0..=127`. When `damper_pedal_down` is active, `.npno` `kind = 1` (`NPNO_STROKE_DAMPER`) sympathetic harp strokes are selected ahead of dry `kind = 0` strokes. Held sampled voices preserve their natural recorded decay envelope (`v.env = 1.0`) until note-off or sample end, while key-off events spawn matching release (`kind = 2` / `trigger=release`) samples without heap allocation. For `.npno` files, `key_map[n]` and `tuning_cents[n]` resolve root mapping and stretch tuning directly.
 2. **Pitch Transposition Ratio:**
    The fractional playback speed increment per engine sample frame is calculated as:
    $$
    r = 2^{\frac{(n - n_{\text{root}}) + \frac{c}{100}}{12}}, \qquad \text{sample\_step} = r \cdot \frac{f_{\text{s, stroke}}}{f_{\text{s, engine}}}
    $$
-3. **Linear Fractional Sample Interpolation:**
-   To guarantee clean, anti-aliased transposition without DSP buffer clicks or heap allocations during real-time rendering:
-   $$
-   x[t] = x[k] + \mathrm{frac} \cdot (x[k+1] - x[k]), \qquad k = \lfloor \text{sample\_pos} \rfloor, \quad \mathrm{frac} = \text{sample\_pos} - k
-   $$
+3. **4-Point Cubic Catmull-Rom Sample Interpolation:**
+   All fractional sample lookups (including `35 kHz -> 48 kHz` `.npno` hardware sample-rate conversion and semitone transposition) evaluate a zero-allocation 4-point Catmull-Rom cubic spline across `[p_{k-1}, p_k, p_{k+1}, p_{k+2}]` to avoid linear-interpolation high-frequency roll-off and imaging.
 4. **Resilient Fallback:**
    If no sample is loaded, or if the note is outside the mapped multisample zones, the engine smoothly falls back to the mathematical harmonic oscillator bank.
 
@@ -101,8 +101,8 @@ When a pre-decoded `.npno` instrument is loaded via `PianoLayer::set_sound`:
 
 ## 8. Polyphonic Voice Stealing Priority
 
-When note-on events exceed the pre-allocated voice capacity (`MAX_PIANO_VOICES = 24` per layer):
-1. **Note Match:** If an existing voice is already sounding the exact same MIDI note, it is re-triggered with updated velocity and envelope.
+When note-on events exceed the pre-allocated voice capacity (`MAX_PIANO_VOICES = 64` per layer):
+1. **Same-Note Retrigger:** If sustaining voices are already sounding the exact same MIDI note, they are transitioned into rapid felt damping while a free slot is allocated via `allocate_voice_slot(None)` so the previous strike decays cleanly without zero-sample hard clicks.
 2. **Free Voice:** The first inactive voice (`!v.active`) is selected.
 3. **Priority Stealing:** If all voices are occupied, the allocator computes a stealing score:
    $$

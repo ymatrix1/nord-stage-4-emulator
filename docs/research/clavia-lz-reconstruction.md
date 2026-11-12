@@ -2,57 +2,59 @@
 
 - **Target:** Nord Stage 4 Firmware (AM1705 Host OS, `CODE` segments)
 - **Source:** `Update Nord Stage 4 OS v1.66.exe` (PE Resource 101, offset `0x79CB30`, Image 1 `0xC42C`..`0x706FE`, Image 0 `0xFF54`..`0x368C9A`)
-- **Status:** Verified token format, state machine structure (LZO/LZSS variant with literal-match alternation), and ARM926EJ-S startup code disassembly.
+- **Status:** **Solved bit-exact (standard LZO1X).** Full-stream decompression verified 100% against both OS v1.66 `CODE` banks (`0xDE902503` and `0xFBB813F8`), plus ARM926EJ-S startup code disassembly.
 
 ---
 
 ## 1. Physical Location and Segment Memory Map
 
-Resource 101 (`4,037,080` bytes) embeds dual firmware banks (Image 0 and Image 1):
+Resource 101 (`4,037,080` bytes) embeds dual firmware banks (Image 0 and Image 1). Segment `data_offset` values in the descriptor table are relative to each bank's base offset (`header_size = 0x20` for Bank 0; `image1_offset = 0x368FA6` for Bank 1):
 
-| Segment | Offset in Image 1 | File Offset (v1.66) | Compressed Size | Target Address | Expanded Size |
+| Segment | Offset in Image 1 | File Offset (v1.66) | Size in Image | Target Address | Expanded Size |
 |---|---|---|---|---|---|
 | `SRAM` | `0x0002D4` | `0x36927A` | `49,496` B (`0xC158`) | `0x80000000` | Uncompressed |
-| `CODE` | `0x00C42C` | `0x3753D2` | `410,322` B (`0x642D2`)| `0xC0000000` | `798,912` B (`0xC30C0`, 1.946x) |
+| `CODE` | `0x00C42C` | `0x3753D2` | `410,321` B (`0x642D1`, LZO1X) | `0xC0000000` | `798,912` B (`0xC30C0`, 1.947x) |
 | `ARM0` | `0x0706FE` | `0x3D96A4` | `820` B (`0x0334`) | `0xFFFF0020` | Uncompressed |
 
 Image 0 (Main Operating System Bank):
 
-| Segment | Offset in Image 0 | File Offset (v1.66) | Compressed Size | Target Address | Expanded Size |
+| Segment | Offset in Image 0 | File Offset (v1.66) | Size in Image | Target Address | Expanded Size |
 |---|---|---|---|---|---|
 | `SRAM` | `0x0002D4` | `0x79CE04` | `64,640` B (`0xFC80`) | `0x80000000` | Uncompressed |
-| `CODE` | `0x00FF54` | `0x7ACB84` | `3,509,574` B (`0x358D46`)| `0xC0000000` | `5,499,504` B (`0x53EA70`, 1.567x) |
+| `CODE` | `0x00FF54` | `0x7ACB84` | `3,509,573` B (`0x358D45`, LZO1X) | `0xC0000000` | `5,499,504` B (`0x53EA70`, 1.567x) |
 | `ARM0` | `0x368C9A` | `0xB057CA` | `748` B (`0x02EC`) | `0xFFFF0020` | Uncompressed |
 
----
-
-## 2. Verified Token Bit Structure
-
-By comparing the compressed `CODE` stream against the known ARM926EJ-S startup sequence, we proved the exact 16-bit match token layout:
-
-### 16-bit Match Token (`(byte1 << 8) | byte0` Little-Endian):
-```text
-Bit 15 .. Bit 3: Distance / Offset in history buffer (13 bits, range 1..8191)
-Bit  2 .. Bit 0: Match Length - 2 (3 bits, range 0..7 -> lengths 2..9 bytes)
-                 OR Trailing Literal Count in hybrid LZO-style state machine.
-```
-
-### Mathematical Proof:
-1. At offset `0x39`: `cd 02` -> `0x02cd` (little-endian 16-bit word):
-   - `0x02cd & 0x07` = `0b101` = 5 -> `length = 5 + 2 = 7 bytes`
-   - `0x02cd >> 3` = `0x59` = 89 bytes distance.
-   - Resulting plaintext: `00 80 e3 00 f0 21 e1` (exactly 7 bytes of ARM instruction bytes `orr r0, r0, #mode; msr cpsr_c, r0`).
-
-2. At offset `0x36`: `ed 02` -> `0x02ed`:
-   - `0x02ed & 0x07` = `0b101` = 5 -> `length = 5 + 2 = 7 bytes`
-   - `0x02ed >> 3` = `0x5d` = 93 bytes distance.
-   - Difference in distance: `93 - 89 = 4 bytes` (exactly the 4-byte displacement of one 32-bit ARM instruction!).
+*(Note: `0x00C42C + 0x0642D1 = 0x0706FD` + 1 byte alignment = `0x0706FE`; similarly `0x00FF54 + 0x358D45 = 0x368C99` + 1 byte alignment = `0x368C9A`.)*
 
 ---
 
-## 3. Disassembly of the Initial 44-Byte ARM Reset Stub
+## 2. Verified Compression Format: Standard LZO1X
 
-The `CODE` segment begins with uncompressed literal ARM instructions from offset `0x02` to `0x2E` initializing the AM1705 CPU:
+Full-stream verification proved that Clavia's `CODE` compressor is **standard LZO1X** (the initial hypothesis of a custom 16-bit `(dist << 3) | (len - 2)` codec was superseded once we observed the trailing-literal bits and `11 00 00` EOF marker):
+
+1. **Initial Literal Run (`00 1B`):**
+   - When the first stream byte `t <= 17` and `t == 0`, LZO1X emits `3 + 15 + 0x1B = 45` literal bytes (`offset 0x02..0x2F`), NOT 44. That 45th literal byte (`0x1f`, part of the ARM immediate `bic r0, r0, #0x1f`) is immediately followed by `0x00` at offset `0x2F` and then M2/M3 tokens.
+2. **M2 Short Matches (`t >= 64`):**
+   - `length = ((t >> 5) - 1)` (3..8 bytes)
+   - `trailing_literals = t & 0x03` (0..3 literals immediately after the match)
+   - `distance = 1 + ((t >> 2) & 0x07) + (next_byte << 3)` (`1..2048` bytes)
+   - Example at offset `0x36`: `[ed 02]` = `M2`:
+     - `0xED >> 5 = 7` -> `length = 7 - 1 = 6` bytes
+     - `0xED & 0x03 = 1` trailing literal (`0x17` for `msr cpsr_c`)
+     - `distance = 1 + ((0xED >> 2) & 7) + (0x02 << 3) = 1 + 3 + 16 = 20` bytes!
+   - Example at offset `0x39`: `[cd 02]` = `M2`:
+     - `0xCD >> 5 = 6` -> `length = 6 - 1 = 5` bytes
+     - `0xCD & 0x03 = 1` trailing literal
+     - `distance = 1 + ((0xCD >> 2) & 7) + (0x02 << 3) = 1 + 3 + 16 = 20` bytes!
+3. **M3 Matches (`32 <= t < 64`), M4 Matches & EOF (`16 <= t < 32`), and M1 / Extended Literal Runs (`t < 16`):**
+   - End-of-stream is signaled by the standard LZO1X M4 sentinel `11 00 00` (`offset == 16384`).
+   - Both OS v1.66 `CODE` banks terminate cleanly at `11 00 00` and produce exact runtime byte lengths and checksums.
+
+---
+
+## 3. Disassembly of the Initial 45-Byte ARM Reset Stub
+
+The `CODE` segment begins with 45 uncompressed literal bytes (`0x02..0x2F`) initializing the AM1705 ARM926EJ-S CPU (`11` 32-bit instructions + first byte of the 12th):
 
 ```arm
 mrs r0, CPSR
@@ -65,27 +67,15 @@ mrc p15, 0, r0, c1, c0, 0  ; Read CP15 Control Register
 orr r0, r0, #0x1000        ; Enable Instruction Cache (bit 12)
 mcr p15, 0, r0, c1, c0, 0  ; Write CP15 Control Register
 mrs r0, CPSR
-bic r0, r0, #0x1F          ; Clear ARM processor mode bits
+bic r0, r0, #0x1F          ; Clear ARM processor mode bits (last literal byte = 0x1F)
 ```
-
-The 2-byte prefix `00 1B` initiates the stream with a 44-byte literal block ($17 + 0x1B = 17 + 27 = 44$ bytes), matching the LZO extended literal run convention.
 
 ---
 
 ## 4. Mode Setup Loop & Stack Pointer Literal Pool
 
-Following the reset stub, the compressor initializes the stack pointers across ARM modes (`0x13`, `0x17`, `0x1b`, `0x12`, `0x11`, `0x1f`). Each mode takes 7 bytes in the stream to emit 12 bytes of ARM machine code:
-
-```text
-Stream Offset   Bytes                       Expanded Output (12 Bytes)
-0x36            [17] [cd 02] [60] [29 4d 00] -> Abort mode SP setup (60 d0 9f e5)
-0x3D            [1b] [cd 02] [50] [29 4d 00] -> Undefined mode SP setup (50 d0 9f e5)
-0x44            [12] [cd 02] [40] [29 4d 00] -> IRQ mode SP setup (40 d0 9f e5)
-0x4B            [11] [cd 02] [30] [29 4d 00] -> FIQ mode SP setup (30 d0 9f e5)
-0x52            [1f] [cd 02] [20] ...        -> System mode SP setup (20 d0 9f e5)
-```
-
-The 4-byte values `60 29 4d 00` (`0x004D2960`), `50 29 4d 00` (`0x004D2950`), `40 29 4d 00` (`0x004D2940`), and `30 29 4d 00` (`0x004D2930`) represent the stack base addresses decremented by `0x10` (16 bytes) per mode in the literal pool.
+Following the reset stub, LZO1X M2/M3 tokens reconstruct the stack pointer initialization across ARM modes (`0x13`, `0x17`, `0x1b`, `0x12`, `0x11`, `0x1f`) and jump to SRAM:
+- `[ed 02] [17]` + `[cd 02] [60]` ... emits Abort (`0x17`, SP literal `0x004D2960`), Undefined (`0x1b`, `0x004D2950`), IRQ (`0x12`, `0x004D2940`), FIQ (`0x11`, `0x004D2930`), and System (`0x1f`, `0x004D2920`) mode setup instructions.
 
 At offset `0x5C`..`0x6F`, literal instructions execute the jump to the main SRAM initialization routine:
 ```arm
@@ -129,24 +119,28 @@ bx r0
 
 ## 6. Reference Implementation & Tests
 
-Implemented in Rust within `crates/nord-core/src/firmware.rs`:
+Implemented in Rust within `crates/nord-core/src/firmware.rs` and exposed in `crates/nord-core/src/bin/ns4.rs`:
 - `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
 - `FirmwareSegment::extract_payload(&self, raw: &[u8]) -> Result<Vec<u8>, String>`
+- `FirmwareSegment::extract_payload_from(&self, bank_base: usize, raw: &[u8]) -> Result<Vec<u8>, String>`
 - `FirmwareSegment::verify_checksum(&self, payload: &[u8]) -> bool`
 - `FirmwareContainer::parse(bytes: &[u8]) -> Result<Self, String>`
+- `FirmwareContainer::bank_base(&self, bank: u8) -> Result<usize, String>`
+- `FirmwareContainer::extract_segment(&self, bank: u8, name: &str, raw: &[u8]) -> Result<Vec<u8>, String>`
 - `FirmwareContainer::segment(&self, name: &str) -> Option<&FirmwareSegment>`
 - `FirmwareContainer::segment_in_bank(&self, bank: u8, name: &str) -> Option<&FirmwareSegment>`
 - `DspEngineType` & `DspPartition`
 
 ### Test Coverage
-- `test_clavia_lz_roundtrip_synthetic`: lossless bit-exact round-trip.
-- `test_clavia_lz_token_bit_structure`: verifies mathematical bitfield formula.
-- `test_clavia_lz_all_match_lengths_2_through_9`: tests every valid match length.
-- `test_clavia_lz_extended_literal_run`: verifies initial `00 1B` 44-byte reset stub unpacking.
-- `test_clavia_lz_bounds_protection`: validates resistance against distance 0, buffer overrun, and truncated tokens.
+- `test_clavia_lz_roundtrip_synthetic`: lossless LZO1X round-trip.
+- `test_clavia_lz_token_bit_structure`: verifies exact ARM926EJ-S LZO1X `00 1B` + M2/M3 prefix unpacking.
+- `test_clavia_lz_all_match_lengths_3_through_8`: tests all LZO1X M2 match lengths (`3..=8`) and trailing literals.
+- `test_clavia_lz_extended_literal_run`: verifies `00 1B` 45-byte extended literal run unpacking.
+- `test_clavia_lz_bounds_protection` & `test_clavia_lz_truncated_token_error`: validates bounds protection and truncated stream errors.
+- `test_clavia_lz_empty_and_single_byte`: checks empty and 1..3-byte edge cases.
+- `test_extract_payload_bounds`, `test_extract_payload_code_segment_decompression`, and `test_extract_segment_respects_bank_base_offsets`: validates segment extraction across Bank 0 (`0x20`) and Bank 1 (`image1_offset`).
 - `test_calculate_checksum_and_verify`: validates one's-complement byte checksum algorithm.
-- `test_dsp_partitions_all_engines`: verifies full DSP partition categorization across Organ, Synth, Effects, Routing, and Core identifiers.
-- `test_extract_payload_code_segment_decompression`: validates segment-level extraction.
-- `test_parse_firmware_container_and_sharc_tags`: validates dual-bank container header, segment discovery, and SHARC DSP partition discovery.
+- `test_dsp_partitions_all_engines` & `test_parse_firmware_container_and_sharc_tags`: validates dual-bank container header, segment discovery, and SHARC DSP partition discovery.
+- `test_cli_inspect_firmware_container` & `test_cli_inspect_firmware_verify_and_unpack`: validates `ns4 inspect --verify --unpack`.

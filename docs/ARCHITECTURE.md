@@ -67,6 +67,7 @@ nord-stage-4-emulator/
 │   ├── rules/                  # Project rules (docs, testing, DSP, evidence, git)
 │   └── skills/                 # Reusable agent workflows
 ├── crates/
+│   ├── nord-sharc/             # ADSP-214xx (SHARC) VISA decoder + `sharc-disasm`; Track B test-oracle core (docs/specs/sharc-core.md)
 │   └── nord-core/              # Pure Rust DSP + CBIN/Firmware parser + CLI
 │       ├── Cargo.toml
 │       └── src/
@@ -80,11 +81,14 @@ nord-stage-4-emulator/
 │           ├── fx.rs           # Per-layer 5-slot FX pipeline + Master Compressor & Clock
 │           ├── midi.rs         # Nord Stage 4 MIDI CC map & message router
 │           ├── engine.rs       # 7-layer multitimbral Stage4Engine coordinator
+│           ├── render.rs       # Offline MIDI-timeline renderer + 32-bit float WAV writer (A/B benchmark loop)
 │           └── bin/
 │               └── ns4.rs      # CLI binary for preset/backup inspection & offline render
 ├── tools/
 │   ├── check_tests.py          # CI ratchet ensuring every source file has unit tests
+│   ├── crop_panel.py           # Panel & keybed texture cropper from reference photos
 │   ├── ns4_inspect.py          # Python CBIN / .ns4b / firmware analysis toolkit
+│   ├── video_ref.py            # YouTube/local hardware video ROI, WAV & spectral comparator
 │   ├── test-baseline.txt       # Ratchet baseline (0 uncovered files)
 │   └── tests/                  # Pytest suite covering all Python tools
 └── docs/

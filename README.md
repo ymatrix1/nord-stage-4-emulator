@@ -83,3 +83,9 @@ Before opening a pull request:
 - Read [AGENTS.md](AGENTS.md) and [.agents/rules/](.agents/rules/) for project conventions.
 - Tasks are tracked with [beans](https://github.com/hmans/beans) in [`.beans/`](.beans/).
 - Every source file in `crates/` and `tools/` must have unit tests (`python tools/check_tests.py` enforces 0 uncovered files in CI).
+
+---
+
+## Disclaimer
+
+The developers of `nord-stage-4-emulator` are not affiliated, associated, endorsed by, or in any way officially connected with Nord Keyboards / Clavia DMI AB, or any of its subsidiaries or its affiliates. The official Nord Keyboards website can be found at https://www.nordkeyboards.com. The names Nord and Clavia as well as related names, marks, emblems and images are registered trademarks of their respective owners.
