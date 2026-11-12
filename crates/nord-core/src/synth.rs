@@ -597,16 +597,23 @@ pub struct SynthLayer {
     pub filter_env_decay_sec: f32,
     pub filter_env_release_sec: f32,
     /// Velocity -> filter envelope depth (`0..1`; `0` = velocity ignored).
+    /// ASSUMED: peak = `1 - amount * (1 - velocity)` (linear); plausible for a
+    /// velocity-scaled depth; confirm by comparing filter sweep depth at vel 40 vs 127 on hardware.
     pub filter_env_vel_amount: f32,
 
     // Voice mode
     /// Stereo unison width: `0` = off, `1`/`2`/`3` = 3.5 / 7.0 / 11.5 cents.
+    /// ASSUMED: cents copied from the Piano unison widths (`docs/specs/piano-engine.md`), not measured
+    /// on Synth; confirm by recording Synth Unison 1/2/3 and measuring beat rate.
     pub unison: u8,
     pub mono: bool,
     pub legato: bool,
-    /// Glide (portamento) time constant in seconds; `0` = off.
+    /// Glide (portamento) one-pole time constant in seconds; `0` = off.
+    /// ASSUMED: exponential slew (`1 - exp(-1/(fs*tau))`) with tau = the glide time; confirm by
+    /// recording a glide between two notes and fitting the pitch curve.
     pub glide_sec: f32,
     /// Octave offset in octaves (`-3..=3`).
+    /// ASSUMED: range clamp of +/-3 octaves; confirm against the panel Octave Shift range.
     pub octave_offset: i8,
     last_freq_hz: f32,
 
@@ -820,6 +827,7 @@ impl SynthLayer {
             target_freq_hz: freq,
             fenv: 0.0,
             fenv_attack_done: false,
+            // ASSUMED: 0.31 start phase offset only decorrelates the unison side voices.
             uni_phase: [0.0, 0.31],
             uni_supersaw: [SUPERSAW_PHASE_INITS; 2],
             phase: 0.0,
@@ -1045,6 +1053,7 @@ impl SynthLayer {
             2 => 7.0,
             _ => 11.5,
         };
+        // ASSUMED: side voices at -/+ `uni_cents`, mixed 50/50 with the centre per channel.
         let uni_ratio = 2.0f32.powf(uni_cents / 1200.0);
 
         for v in &mut self.voices {
@@ -1231,6 +1240,7 @@ impl SynthLayer {
                 1.0
             };
             let env_scale = if self.filter_env_amount.abs() > 1e-4 {
+                // ASSUMED (inherited, no recorded source): +/-3 octaves of cutoff at full env amount.
                 2.0f32.powf(self.filter_env_amount.clamp(-1.0, 1.0) * 3.0 * filter_env_level)
             } else {
                 1.0

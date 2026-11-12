@@ -8,3 +8,4 @@
 | **OQ4** | Bit offsets for Synth Wavetable index inside `.ns4y` (541 B)? | Comparing `1 Osc Saw Bass.ns4y` vs `12db Pad.ns4y` across all 384 synth presets (`tools/ns4_inspect.py`). |
 | **OQ5** | Should WebAssembly + WebMIDI browser demo deploy automatically to Cloudflare Pages or GitHub Pages? | Once Phase 6 UI lands, can deploy static WASM bundle with COOP/COEP headers. |
 | **OQ6** | Open-source license choice for repository release? | MIT / Apache-2.0 dual license vs GPL-3.0-or-later (note: `nih-plug` VST3 wrapper uses GPLv3 if VST3 is enabled; CLAP + Standalone can stay MIT/Apache-2.0 or MPL-2.0). |
+| **OQ-synth-0x2F** | Bit offsets for Synth LFO shape/destination, Unison, Mono/Legato/Glide, Octave, velocity-to-filter inside `0x2F` (unmapped: `+56..+133`, `+216..+218`, `+339..+384`)? Filter ADR curve identity vs amp ADR tables? | `tools/ns4_bitscan.py` correlation against preset behaviour; SHARC/ARM envelope tables; hardware recordings. |

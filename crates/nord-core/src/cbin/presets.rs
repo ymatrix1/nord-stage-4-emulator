@@ -1334,8 +1334,11 @@ impl PianoPresetDecoded {
 
 /// Decoded single Synth layer configuration (`0x32` Layer + `0x2F` Sound).
 ///
-/// Filter envelope ADR is decoded from `0x2F +318..+339` (corpus-verified with
-/// `tools/ns4_bitscan.py`, curves assumed equal to the amp ADR tables). The other
+/// Filter envelope ADR offset `0x2F +318..+339`: EMPIRICAL: located by
+/// `python tools/ns4_bitscan.py ".reference/Nord Stage 4 Factory Restore RevK v1.66.ns4b" --hist 318:7:3`
+/// over 1152 Sound blocks (see `docs/research/synth-0x2f-filter-env-adr.md`); no firmware
+/// byte-for-byte check. Curves reuse the amp ADR tables: ASSUMED, confirm via the filter-env
+/// time on hardware. The other
 /// trailing "engine-side" fields (velocity-to-filter, LFO shape/destination, unison,
 /// mono/legato/glide) have no verified bit offsets yet: they are not read from or
 /// written to the bitstream (unpack yields defaults, the raw payload preserves the

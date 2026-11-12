@@ -475,7 +475,9 @@ impl Stage4Engine {
         synth.kb_track = dec.kb_track.min(3);
         synth.attack_sec = (dec.env_attack_ms / 1000.0).clamp(0.0005, 45.0);
         synth.decay_sec = (dec.env_decay_ms / 1000.0).clamp(0.003, 45.0);
-        // ADR amp envelope: decay falls to silence while held; `Hold` (>= 44 s) sustains at full.
+        // ASSUMED: ADR amp envelope; finite decay falls to silence while held, `Hold` (>= 44 s)
+        // sustains at full (replaces the old unsourced 0.6). Confirm by recording a held note at
+        // Decay = 2 s on hardware and checking the level after the decay time.
         synth.sustain_level = if dec.env_decay_ms >= 44_000.0 || !dec.env_decay_ms.is_finite() {
             1.0
         } else {
