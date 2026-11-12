@@ -21,6 +21,12 @@ CBIN_HEADER_SIZE = 48
 SYNTH_PAYLOAD_LEN = 493
 SOUND_BASES = (1472, 1856, 2240)
 SOUND_BITS = 384
+LAYER_BASES = (248, 656, 1064)
+LAYER_BITS = 408
+BLOCKS = {
+    "sound": (SOUND_BASES, SOUND_BITS),  # 0x2F
+    "layer": (LAYER_BASES, LAYER_BITS),  # 0x32
+}
 
 
 def to_bits(payload: bytes) -> str:
@@ -28,12 +34,18 @@ def to_bits(payload: bytes) -> str:
     return "".join(f"{b:08b}" for b in payload)
 
 
-def sound_blocks(payload: bytes) -> list[str]:
-    """Returns the three 384-bit `0x2F` Sound blocks (layers A, B, C) of a synth payload."""
+def synth_blocks(payload: bytes, kind: str = "sound") -> list[str]:
+    """Three per-layer blocks (A, B, C): `sound` = 384-bit 0x2F, `layer` = 408-bit 0x32."""
     if len(payload) < SYNTH_PAYLOAD_LEN:
         raise ValueError(f"synth payload too short: {len(payload)} < {SYNTH_PAYLOAD_LEN}")
+    bases, width = BLOCKS[kind]
     bits = to_bits(payload[:SYNTH_PAYLOAD_LEN])
-    return [bits[b : b + SOUND_BITS] for b in SOUND_BASES]
+    return [bits[b : b + width] for b in bases]
+
+
+def sound_blocks(payload: bytes) -> list[str]:
+    """Returns the three 384-bit `0x2F` Sound blocks (layers A, B, C) of a synth payload."""
+    return synth_blocks(payload, "sound")
 
 
 def load_ns4y_dir(path: Path) -> dict[str, bytes]:
@@ -58,11 +70,48 @@ def load_presets(path: Path) -> dict[str, bytes]:
     return load_ns4b(path) if path.suffix.lower() == ".ns4b" else load_ns4y_dir(path)
 
 
-def collect_blocks(presets: dict[str, bytes]) -> list[str]:
+def collect_blocks(presets: dict[str, bytes], kind: str = "sound") -> list[str]:
     blocks: list[str] = []
     for payload in presets.values():
-        blocks.extend(sound_blocks(payload))
+        blocks.extend(synth_blocks(payload, kind))
     return blocks
+
+
+def associate(
+    rows: list[tuple[str, str]], pattern: str, start: int, end: int, widths=(1, 2, 3), top: int = 6
+) -> list[tuple[float, int, int, int, int]]:
+    """Bit windows whose value over-represents in rows whose name matches `pattern`.
+
+    `rows` = (preset_name, block_bits). Returns (diff, start, width, value, count) best first,
+    where diff = P(value | name matches) - P(value | name does not match).
+    """
+    import re
+
+    pos = [b for n, b in rows if re.search(pattern, n, re.I)]
+    neg = [b for n, b in rows if not re.search(pattern, n, re.I)]
+    if not pos or not neg:
+        return []
+    out: list[tuple[float, int, int, int, int]] = []
+    for a in range(start, end):
+        for w in widths:
+            if a + w > end:
+                continue
+            pc = collections.Counter(int(b[a : a + w], 2) for b in pos)
+            nc = collections.Counter(int(b[a : a + w], 2) for b in neg)
+            for v, n in pc.items():
+                if n >= 3:
+                    out.append((n / len(pos) - nc[v] / len(neg), a, w, v, n))
+    out.sort(reverse=True)
+    return out[:top]
+
+
+def named_rows(presets: dict[str, bytes], kind: str = "sound") -> list[tuple[str, str]]:
+    """(preset stem, block bits) per layer block."""
+    rows: list[tuple[str, str]] = []
+    for name, payload in presets.items():
+        stem = name.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        rows.extend((stem, b) for b in synth_blocks(payload, kind))
+    return rows
 
 
 def bit_counts(blocks: list[str]) -> list[int]:
@@ -114,6 +163,14 @@ def fraction_equal(blocks: list[str], start: int, width: int, value: int) -> flo
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Scan Synth 0x2F bit fields across a preset corpus.")
     p.add_argument("path", type=Path, help=".ns4b archive or directory of .ns4y files")
+    p.add_argument("--block", choices=sorted(BLOCKS), default="sound", help="0x2F or 0x32 block")
+    p.add_argument(
+        "--assoc",
+        action="append",
+        default=[],
+        metavar="REGEX:START:END",
+        help="bit windows correlated with preset names matching REGEX",
+    )
     p.add_argument("--map", action="store_true", help="print 64-bit-per-row variation map")
     p.add_argument(
         "--hist",
@@ -124,12 +181,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = p.parse_args(argv)
 
-    blocks = collect_blocks(load_presets(args.path))
+    presets = load_presets(args.path)
+    blocks = collect_blocks(presets, args.block)
     print(f"{len(blocks)} Sound blocks")
     if args.map:
         m = bit_map(blocks)
         for i in range(0, len(m), 64):
             print(f"{i:3d} {m[i : i + 64]}")
+    if args.assoc:
+        rows = named_rows(presets, args.block)
+        for spec in args.assoc:
+            rx, a, e = spec.rsplit(":", 2)
+            for diff, st, w, v, n in associate(rows, rx, int(a), int(e)):
+                print(f"{rx}: @{st} w{w} val={v} n={n} diff={diff:.2f}")
     for spec in args.hist:
         parts = [int(x) for x in spec.split(":")]
         start, width = parts[0], parts[1]

@@ -2,7 +2,8 @@
 //!
 //! Spec: `docs/specs/cbin-and-presets.md`
 
-use super::presets::{OrganPresetDecoded, PianoPresetDecoded, ProgramDecoded, SynthPresetDecoded};
+use super::presets::{OrganPresetDecoded, PianoPresetDecoded, ProgramDecoded};
+use super::synth_preset::SynthPresetDecoded;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

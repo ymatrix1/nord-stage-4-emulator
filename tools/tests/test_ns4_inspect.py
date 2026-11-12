@@ -270,6 +270,9 @@ def test_decode_hardware_bitfields_and_fx():
     assert syn["layer_a"]["arp_enabled"] is True
     assert syn["layer_a"]["filter_type"] == 1
     assert syn["layer_a"]["filter_env_adr_idx"] == [24, 61, 33]
+    raw = syn["layer_a"]["raw_fields"]
+    assert raw["filter_env_attack"] == 24 and raw["filter_type"] == 1
+    assert raw["octave"] == 0 and raw["unison"] == 0
 
     full_prog = bytes(glb_buf) + bytes(org_buf) + bytes(pno_buf) + bytes(syn_buf)
     prog_dec = decode_cbin_payload("ns4p", full_prog)

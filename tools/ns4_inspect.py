@@ -15,6 +15,8 @@ import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import ns4_synth_fields as synth_fields
+
 CBIN_MAGIC = b"CBIN"
 CBIN_HEADER_SIZE = 48
 
@@ -422,6 +424,11 @@ def _decode_synth_layer(
     flt_freq, flt_freq_m = r.read_morph(sound_base + 221, 7, 127)
     flt_res, _ = r.read_morph(sound_base + 252, 7, 127)
     cutoff_hz = round(80.0 * (200.0 ** (flt_freq / 127.0)), 1)
+    bits = synth_fields.to_bits(r.data)
+    raw_fields = {
+        f.name: synth_fields.read_field(bits, layer_base if f.block == "layer" else sound_base, f)
+        for f in synth_fields.FIELDS
+    }
     r.set_bit_pos(sound_base + 318)
     fenv_adr = [r.read_bits(7) for _ in range(3)]
 
@@ -442,6 +449,7 @@ def _decode_synth_layer(
         "filter_cutoff_morph": flt_freq_m,
         "filter_resonance": round((flt_res / 127.0) * 0.95, 3),
         "filter_env_adr_idx": fenv_adr,
+        "raw_fields": raw_fields,
         "arp_enabled": arp_run,
         "arp_bpm": round(30.0 + (arp_rate / 127.0) * 270.0, 1),
     }

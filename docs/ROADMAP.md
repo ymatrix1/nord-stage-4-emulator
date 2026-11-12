@@ -49,6 +49,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Map bit offsets inside the 135-byte `.ns4o` Organ payload (Model `B3`/`Vox`/`Farf`/`Pipe1`/`Pipe2`, Layer A/B 9-drawbar nibbles, Percussion switches, Vibrato `V1..C3`, Rotary speed/drive)
 - [x] Map bit offsets inside the 147-byte `.ns4n` Piano payload (Category, Model hash ID, Timbre `Soft`/`Mid`/`Bright`/`Dyno1`/`Dyno2`, `KB Touch`, `String Res`, `Ped Noise`, `Unison`, `Dyn Comp`)
 - [x] Map bit offsets inside the 493-byte `.ns4y` Synth payload (`SAMPLES`/`ANALOG`/`WAVETABLE`/`FM` mode, Waveform/Table ID, Detune, Filter Type/Cutoff/Res/Drive/KB-Track, ADR Envelopes, LFO, Arpeggiator)
+- [x] Synth `0x32`/`0x2F` full parameter map (LFO shape/target, Mono/Legato/priority, Glide, Unison, Octave, pitch, osc/filter/amp ADR + velocity, vibrato, osc type/category/wave) decoded, packed and wired into the DSP; cross-checked with `tools/ns4_crosscheck.py` (EMPIRICAL, firmware verification tracked in OQ7)
 - [x] Map global 45-byte `.ns4p` header (`0x30..0x5C`: Split points, Crossfade widths, Scene I/II masks, Master Clock BPM, Morph slots)
 - [x] `ns4 convert <file.ns4p> --to-json` / `--from-json` human-readable patch converter and `.ns4p` → `Stage4Engine` preset loader
 - [x] Hardware-exact OS v1.66 `Buffer_*` bitfields (`0x2C`, `0x11`/`0x03`, `0x0C`/`0x0B`, `0x1E`/`0x32`/`0x2F`), `0x36` per-layer FX chains, and `4W+3` Morph encoding (`zero = max_val`) wired into `Stage4Engine::apply_program`, `Stage4PanelState::apply_program`, and `tools/ns4_inspect.py` (`ns4-bnct`)

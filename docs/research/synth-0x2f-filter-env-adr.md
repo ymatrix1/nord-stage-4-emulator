@@ -2,6 +2,7 @@
 
 **Checked:** 2026-11-11
 **Sources:** `.reference/Nord Stage 4 Factory Restore RevK v1.66.ns4b` (384 `.ns4y` synth presets = 1152 `0x2F` Sound blocks, layers A/B/C); `tools/ns4_bitscan.py`.
+**Update 2026-11-11:** offsets confirmed by the ns4decode map and regression program, see `synth-0x2f-ns4decode-crosscheck.md`. Status stays EMPIRICAL.
 **Question:** Where are the dedicated filter envelope Attack/Decay/Release fields inside the 384-bit `0x2F` Sound block?
 
 ## Method

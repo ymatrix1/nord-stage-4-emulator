@@ -352,7 +352,7 @@ impl Ns4BackupArchive {
         let piano_b = self
             .find_piano_by_hash(prog.piano.layer_b.name_hash)
             .map(|e| e.name.clone());
-        let resolve_synth = |layer: &super::presets::SynthLayerDecoded| {
+        let resolve_synth = |layer: &super::synth_preset::SynthLayerDecoded| {
             if layer.osc_mode == crate::synth::SynthOscMode::Sample {
                 self.find_sample_by_id(layer.sample_id)
                     .map(|e| e.name.clone())

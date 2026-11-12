@@ -79,3 +79,22 @@ This resolves the 4-stage feedback loop algebraically on every sample without in
 - **Mod / Filter Envelope (ADR):** Dedicated bipolar/unipolar envelope modulating Osc Pitch, Osc Shape/FM, and Filter Cutoff.
 - **LFO:** 5 waveforms (`Triangle`, `Saw`, `InvSaw`, `Square`, `SampleHold`), exponential rate curve (`LFO_RATE_HZ_TABLE`: $0.03\text{ Hz}..523\text{ Hz}$), routable to Pitch (Vibrato), Osc Mod, and Filter Cutoff; lockable to `MasterClock` divisions (`1/1` to `1/32T`).
 - **Arpeggiator:** `Up`, `Down`, `UpDown`, `Random`, `Poly` modes. `Poly` triggers the held chord together; the other modes allocate each step through the regular polyphonic voice allocator. `Random` uses a seeded pseudo-random sequence so rendering is deterministic. The current rate control advances on sixteenth-note steps.
+
+## 6. Voice Modes, Modulation and Decoded-Parameter Wiring
+
+`crates/nord-core/src/synth_params.rs` (`apply_decoded_layer`) maps the decoded `0x32`/`0x2F` fields (see `docs/specs/cbin-and-presets.md`) onto `SynthLayer`. Status tags follow `.agents/rules/provenance-in-code.md`.
+
+| Panel feature | Engine behaviour | Status |
+|---|---|---|
+| Mono / Legato | Mono = one voice; Legato = mono + envelopes keep running on overlapping keys. Panel has separate LEDs; `legato` implies `mono`. | EMPIRICAL (manual p.35) |
+| Voice priority | `LO` ignores keys above the lowest held key, `HI` ignores keys below the highest; release falls back to the lowest/highest remaining key. | EMPIRICAL (manual p.35) |
+| Glide | Constant-rate (seconds per octave); Mono glides every note, Legato only between overlapping notes. Knob `0..10` maps to `(k/10)^2 * 2 s` per octave. | rate law EMPIRICAL (manual), scale ASSUMED |
+| Unison `1/2/3` | Two extra detuned oscillators panned L/R at `3.5 / 7.0 / 11.5` cents (Analog and Wavetable). | ASSUMED (cents copied from Piano unison) |
+| Octave shift | `-2..+2` octaves applied to the note frequency, key tracking uses the played note. | EMPIRICAL |
+| Pitch fine / coarse | Cents and semitones added to the note frequency. | EMPIRICAL (ranges from corpus: fine +/-17, coarse +/-24) |
+| Amp ADR | Decay falls to silence while held; `Hold` (127) sustains at full. Velocity setting `0..3` scales sensitivity `n/3`. | ADR EMPIRICAL (manual), scale ASSUMED |
+| Filter ADR | Dedicated envelope (`filter_env_dedicated`); `filter velocity` on = depth follows velocity. `filter_on = false` bypasses the filter. | EMPIRICAL |
+| Oscillator ADR | Modulates Osc Ctrl (wavetable position / FM index) or pitch with `osc_env_to_pitch`; `osc_env_velocity` scales depth by velocity. Amount `-1..1`. | EMPIRICAL structure, depth ASSUMED (+/-12 semitones, +/-0.5 Osc Ctrl) |
+| LFO | 5 shapes (`triangle, saw down, saw up, square, S/H`), destinations `Osc Ctrl / Pitch / Filter / Off`. Master-clock sync is decoded but the free-running rate is used. | EMPIRICAL |
+| Vibrato | Modes `ON`, `DLY` (per-voice fade-in after the delay) and controller modes via `vibrato_ctrl`; depth `0..10` maps to `0..100` cents. | structure EMPIRICAL, depth ASSUMED |
+| Oscillator select | `osc_type`/`category`/`wave` map to Analog VA waveforms, FM ratio index, or a flat index over the 46 WAVE waves (`cbin/synth_osc.rs`). | field layout EMPIRICAL; wave-name order confirmed in firmware; wave audio ASSUMED (synthetic 64-table bank) |
