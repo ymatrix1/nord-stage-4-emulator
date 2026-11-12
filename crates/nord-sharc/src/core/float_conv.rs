@@ -72,10 +72,9 @@ pub fn to_int(a: u64, scale: i32, toward_zero: bool, mode: Mode) -> Out {
         Class::Nan => {
             return Out {
                 v: 0xFFFF_FFFF,
-                an: true,
-                ai: true,
+                ai: true, // VERIFIED: AI only, no AN
                 ..Out::default()
-            }
+            };
         }
         Class::Inf => return overflow(x.neg),
         Class::Zero => {
@@ -118,6 +117,8 @@ pub fn to_int(a: u64, scale: i32, toward_zero: bool, mode: Mode) -> Out {
         az: v == 0,
         an: v >> 31 == 1,
         av: false, // VERIFIED: the exact -2^31 result is not an overflow
+        // VERIFIED (simulator): a nonzero input that converts to zero latches STKY AUS
+        au: v == 0,
         ..Out::default()
     }
 }

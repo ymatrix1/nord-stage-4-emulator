@@ -158,7 +158,7 @@ pub fn round_pack(neg: bool, e2: i32, m: u128, sticky: bool, mode: Mode, narrow:
     }
     let width: i32 = if narrow { 24 } else { 32 };
     let msb = 127 - m.leading_zeros() as i32;
-    let mut exp = e2 + msb;
+    let mut exp = e2.saturating_add(msb);
     let shift = msb + 1 - width;
     let mut mant = if shift > 0 {
         let sh = shift as u32;
