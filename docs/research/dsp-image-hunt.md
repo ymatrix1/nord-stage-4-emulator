@@ -231,6 +231,14 @@ Hypothesis (ASSUMED, untested): the bank 1 table lists six core images (`DSPFxCo
 
 Reading: the blocks are not addressed by absolute pointers, so they are reached by base plus offset or are copied as a whole to a peripheral from a loop that uses a table elsewhere (for example the flash tool in bank 1, which programs the SPI flash; the SHARCs then boot from that flash, per the hardware reference). That would explain why the update carries the code as VISA: the OS update may write it to the SPI flash. Untested: trace the bank 1 `Flash Tool` / `Update Image Log` routines (`bank1_CODE@0x919F4`, `0x91A88`) for a copy from `0xC0440000..`.
 
+### 5.8 Shifter and multifunction compute fields; more on the sender
+
+`tools/sharc_visa.py` now also decodes the shifter opcodes (Table 12-11) and the multifunction fields (multiplier + ALU from Table 12-12, multiplier + dual ALU; layouts from the compute-field diagrams in chapter 12). Compute fields that stay raw in the six large blocks of v1.64: 70 (was 4,207). Coverage: 94.2% of the 56,663 instructions have a decoded type, 94.1% decode fully including compute. Examples seen in the blocks: `R9 = DM(60, I2), R1 = R1 * R5 (SSF)`, `R1 = DM(I4, M2), R0 = R0 * R12 (SSF)` (a multiply-accumulate-style filter loop body).
+
+Raw instructions left (3,299): `??` with first byte `0x02` (1,103; type not in the opcode diagrams read so far), `21/22` with extra bits set (742), 19a (479), 1a (391), 9b (222), 7b (181), 1b (56), 10a (46), 6a (23), 7a (22), 16a (9).
+
+Sender: `DSP Comm` (`0x6CA48`) has more than 1,000 `bl` call sites across `bank0_CODE`, so it is the generic parameter-write path (confirms section 5.7). It does not carry the code blocks. The strings near `0x5263A8..0x527278` ("Piano Flash Error", "Sample Flash Error", "DSP/Chip fail") belong to piano/sample flash handling, not to a DSP loader. The path that puts these blocks into the SHARCs is still unidentified.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications

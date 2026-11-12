@@ -229,6 +229,87 @@ def mult_text(opcode: int, rn: int, rx: int, ry: int) -> str | None:
     return f"{reg} = {acc}R{rx} * R{ry} {mod}"
 
 
+SHIFT_OPS = {
+    0x00: "R{n} = LSHIFT R{x} BY R{y}",
+    0x20: "R{n} = R{n} OR LSHIFT R{x} BY R{y}",
+    0x04: "R{n} = ASHIFT R{x} BY R{y}",
+    0x24: "R{n} = R{n} OR ASHIFT R{x} BY R{y}",
+    0x08: "R{n} = ROT R{x} BY R{y}",
+    0xC4: "R{n} = BCLR R{x} BY R{y}",
+    0xC0: "R{n} = BSET R{x} BY R{y}",
+    0xC8: "R{n} = BTGL R{x} BY R{y}",
+    0xCC: "BTST R{x} BY R{y}",
+    0x44: "R{n} = FDEP R{x} BY R{y}",
+    0x4C: "R{n} = FDEP R{x} BY R{y} (SE)",
+    0x64: "R{n} = R{n} OR FDEP R{x} BY R{y}",
+    0x6C: "R{n} = R{n} OR FDEP R{x} BY R{y} (SE)",
+    0x40: "R{n} = FEXT R{x} BY R{y}",
+    0x48: "R{n} = FEXT R{x} BY R{y} (SE)",
+    0x80: "R{n} = EXP R{x}",
+    0x84: "R{n} = EXP R{x} (EX)",
+    0x88: "R{n} = LEFTZ R{x}",
+    0x8C: "R{n} = LEFTO R{x}",
+    0x90: "R{n} = FPACK F{x}",
+    0x94: "F{n} = FUNPACK R{x}",
+    0x74: "BITDEP R{x} BY R{y}",
+    0x50: "R{n} = BITEXT R{x}",
+    0x58: "R{n} = BITEXT R{x} (NU)",
+    0x70: "R{n} = BFFWRP1",
+}
+# Table 12-12, multifunction multiplier + ALU (opcode = compute bits 21..16).
+MULALU_OPS = {
+    0b000100: "Rm = Rxm * Rym (SSFR), Ra = Rxa + Rya",
+    0b000101: "Rm = Rxm * Rym (SSFR), Ra = Rxa - Rya",
+    0b000110: "Rm = Rxm * Rym (SSFR), Ra = (Rxa + Rya)/2",
+    0b001000: "MRF = MRF + Rxm * Rym (SSF), Ra = Rxa + Rya",
+    0b001001: "MRF = MRF + Rxm * Rym (SSF), Ra = Rxa - Rya",
+    0b001010: "MRF = MRF + Rxm * Rym (SSF), Ra = (Rxa + Rya)/2",
+    0b001100: "Rm = MRF + Rxm * Rym (SSFR), Ra = Rxa + Rya",
+    0b001101: "Rm = MRF + Rxm * Rym (SSFR), Ra = Rxa - Rya",
+    0b001110: "Rm = MRF + Rxm * Rym (SSFR), Ra = (Rxa + Rya)/2",
+    0b010000: "MRF = MRF - Rxm * Rym (SSF), Ra = Rxa + Rya",
+    0b010001: "MRF = MRF - Rxm * Rym (SSF), Ra = Rxa - Rya",
+    0b010010: "MRF = MRF - Rxm * Rym (SSF), Ra = (Rxa + Rya)/2",
+    0b010100: "Rm = MRF - Rxm * Rym (SSFR), Ra = Rxa + Rya",
+    0b010101: "Rm = MRF - Rxm * Rym (SSFR), Ra = Rxa - Rya",
+    0b010110: "Rm = MRF - Rxm * Rym (SSFR), Ra = (Rxa + Rya)/2",
+    0b011000: "Fm = Fxm * Fym, Fa = Fxa + Fya",
+    0b011001: "Fm = Fxm * Fym, Fa = Fxa - Fya",
+    0b011010: "Fm = Fxm * Fym, Fa = FLOAT Rxa BY Rya",
+    0b011011: "Fm = Fxm * Fym, Ra = FIX Fxa BY Rya",
+    0b011100: "Fm = Fxm * Fym, Fa = (Fxa + Fya)/2",
+    0b011101: "Fm = Fxm * Fym, Fa = ABS Fxa",
+    0b011110: "Fm = Fxm * Fym, Fa = MAX (Fxa, Fya)",
+    0b011111: "Fm = Fxm * Fym, Fa = MIN (Fxa, Fya)",
+}
+
+
+def multi_text(c: int) -> str | None:
+    """Multifunction compute fields (bit 22 set): multiplier + ALU, multiplier + dual ALU."""
+    if not bits(c, 22, 22):
+        return None
+    xm, ym = bits(c, 7, 6), 4 + bits(c, 5, 4)
+    xa, ya = 8 + bits(c, 3, 2), 12 + bits(c, 1, 0)
+    rm, ra = bits(c, 15, 12), bits(c, 11, 8)
+    if bits(c, 21, 21):  # 1 1x: multiplier and dual ALU
+        k = "F" if bits(c, 20, 20) else "R"
+        rs = bits(c, 19, 16)
+        return (
+            f"{k}{rm} = {k}{xm} * {k}{ym}, {k}{ra} = {k}{xa} + {k}{ya}, {k}{rs} = {k}{xa} - {k}{ya}"
+        )
+    text = MULALU_OPS.get(bits(c, 21, 16))
+    if text is None:
+        return None
+    fl = text.startswith("Fm")
+    k = "F" if fl else "R"
+    out = text.replace("Rxm", f"{k}{xm}").replace("Fxm", f"F{xm}")
+    out = out.replace("Rym", f"{k}{ym}").replace("Fym", f"F{ym}")
+    out = out.replace("Rxa", f"{k}{xa}").replace("Fxa", f"F{xa}")
+    out = out.replace("Rya", f"{k}{ya}").replace("Fya", f"F{ya}")
+    out = out.replace("Rm", f"R{rm}").replace("Fm", f"F{rm}")
+    return out.replace("Ra =", f"R{ra} =").replace("Fa =", f"F{ra} =")
+
+
 def compute_text(c: int) -> str:
     """Text for a 23-bit compute field (ALU, multiplier and dual ALU decoded; else raw)."""
     if c == 0:
@@ -242,6 +323,12 @@ def compute_text(c: int) -> str:
         return f"{k}{bits(c, 15, 12)} = {k}{rx} - {k}{ry}, {k}{rn} = {k}{rx} + {k}{ry}"
     if cu == 1:
         text = mult_text(opcode, rn, rx, ry)
+        if text:
+            return text
+    if cu == 2 and opcode in SHIFT_OPS:
+        return SHIFT_OPS[opcode].format(n=rn, x=rx, y=ry)
+    if bits(c, 22, 22):
+        text = multi_text(c)
         if text:
             return text
     unit = {0: "ALU", 1: "MUL", 2: "SHIFT"}.get(cu, "MULTI")

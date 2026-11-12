@@ -95,3 +95,11 @@ def test_compute_units():
     assert v.mult_text(0x00, 0, 1, 2) is None
     assert v.compute_text((0b0000111 << 16) | 0x4321) == "R4 = R2 - R1, R3 = R2 + R1"
     assert v.compute_text(0x4E4321).startswith("MULTI?")
+
+
+def test_shifter_and_multifunction_compute():
+    assert v.compute_text(0x200312) == "R3 = LSHIFT R1 BY R2"
+    assert v.compute_text(0x445666) == "R5 = R1 * R6 (SSFR), R6 = R9 + R14"
+    assert v.compute_text(0x635666) == "R5 = R1 * R6, R6 = R9 + R14, R3 = R9 - R14"
+    assert v.compute_text(0x585666) == "F5 = F1 * F6, F6 = F9 + F14"
+    assert v.multi_text(0x0) is None  # bit 22 clear: not a multifunction field
