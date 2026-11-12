@@ -44,6 +44,9 @@ Layer Synth/Piano/Organ Output (Stereo)
   - `Bass`: Low-shelf @ $100\text{ Hz}$ ($\pm 15\text{ dB}$)
   - `Mid`: Peaking bell with sweepable frequency ($200\text{ Hz}..8\text{ kHz}$, $\pm 15\text{ dB}$, $Q = 1.0$)
   - `Treble`: High-shelf @ $4\text{ kHz}$ ($\pm 15\text{ dB}$)
+  - **Implementation:** RBJ 2nd-order biquads (transposed DF-II, per channel, stereo preserved; coefficients computed in `f64`, redesigned only when a parameter changes). Shelf `Q = 1/sqrt(2)`; Mid `Q = firmware_q(64) = 1.018`. Cabinet voicings use 2nd-order Butterworth HP/LP plus a peaking mid band.
+  - **Resonance scale (`firmware_q`):** `Q(idx) = 0.1 * 100^(idx/127)`, `idx 0..127`; matches the 128 `f32` entries at `0x2f970c` in OS v1.66 `bank0_CODE.bin` (max rel. error 6.4e-8).
+- **Morph (`Wheel` / `A.T.` / `CtrlPed`):** `LayerFxChain::apply_morph` is called per frame by `Stage4Engine::render_frame`. Morphable: `mod1_rate`, `mod1_amount`, `mod2_rate`, `mod2_amount`, `eq_mid_freq`, `amp_drive`, `delay_mix`, `delay_feedback`, `reverb_amount`. Value = `clamp(base + W*dW + P*dP + A*dA, 0, 1)`; slots disabled in the program are not morphed. `delay_rate` morph (14-bit) is not wired yet.
 
 ### 2.4 Slot 4 — Delay
 

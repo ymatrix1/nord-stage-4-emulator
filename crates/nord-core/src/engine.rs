@@ -572,6 +572,79 @@ impl Stage4Engine {
         } else {
             0.0
         };
+        Self::apply_fx_morph(fx, dec);
+    }
+
+    /// Loads `Wheel` / `A.T.` / `CtrlPed` morph bases and deltas; disabled slots stay un-morphed.
+    fn apply_fx_morph(fx: &mut LayerFxChain, dec: &crate::cbin::FxDecoded) {
+        fn set(
+            slot: &mut crate::morph::MorphParameter,
+            on: bool,
+            base: f32,
+            d: crate::cbin::MorphDeltas,
+        ) {
+            *slot = crate::morph::MorphParameter::new(base.clamp(0.0, 1.0));
+            if on {
+                slot.delta_wheel = d.wheel;
+                slot.delta_aftertouch = d.aftertouch;
+                slot.delta_pedal = d.ctrl_pedal;
+            }
+        }
+        let m = &mut fx.morph;
+        set(
+            &mut m.mod1_rate,
+            dec.mod1_enabled,
+            dec.mod1_rate,
+            dec.mod1_rate_morph,
+        );
+        set(
+            &mut m.mod1_amount,
+            dec.mod1_enabled,
+            dec.mod1_amount,
+            dec.mod1_amount_morph,
+        );
+        set(
+            &mut m.mod2_rate,
+            dec.mod2_enabled,
+            dec.mod2_rate,
+            dec.mod2_rate_morph,
+        );
+        set(
+            &mut m.mod2_amount,
+            dec.mod2_enabled,
+            dec.mod2_amount,
+            dec.mod2_amount_morph,
+        );
+        set(
+            &mut m.eq_mid_freq,
+            dec.amp_enabled,
+            dec.eq_mid_freq_norm,
+            dec.eq_mid_freq_morph,
+        );
+        set(
+            &mut m.amp_drive,
+            dec.amp_enabled,
+            dec.amp_drive / 10.0,
+            dec.amp_drive_morph,
+        );
+        set(
+            &mut m.delay_mix,
+            dec.delay_enabled,
+            dec.delay_mix,
+            dec.delay_mix_morph,
+        );
+        set(
+            &mut m.delay_feedback,
+            dec.delay_enabled,
+            dec.delay_feedback,
+            dec.delay_feedback_morph,
+        );
+        set(
+            &mut m.reverb_amount,
+            dec.reverb_enabled,
+            dec.reverb_amount,
+            dec.reverb_amount_morph,
+        );
     }
 
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
@@ -621,6 +694,7 @@ impl Stage4Engine {
         let mut mix_r = 0.0f32;
 
         for (i, raw) in raw_layers.into_iter().enumerate() {
+            self.fx_chains[i].apply_morph(&self.morph_controllers);
             let [fx_l, fx_r] = self.fx_chains[i].process_frame_with_bpm(raw, self.master_clock.bpm);
             let gain = self.layer_levels[i].evaluate(&self.morph_controllers);
             mix_l += fx_l * gain;
@@ -1102,5 +1176,28 @@ mod tests {
             Some("Samp Lib/Guitar/Ac Guitar Finger_ST Mart 4.1.nsmp4")
         );
         assert_eq!(eng2.synth_b.loaded_sample_name(), Some("Pad1"));
+    }
+
+    #[test]
+    fn test_fx_morph_loaded_from_program_and_applied_per_frame() {
+        let mut prog = crate::cbin::ProgramDecoded::default();
+        prog.organ.fx.reverb_enabled = true;
+        prog.organ.fx.reverb_amount = 0.2;
+        prog.organ.fx.reverb_amount_morph = crate::cbin::MorphDeltas {
+            wheel: 0.5,
+            aftertouch: 0.0,
+            ctrl_pedal: 0.0,
+        };
+        prog.organ.fx.delay_enabled = false;
+        prog.organ.fx.delay_mix_morph.wheel = 1.0;
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.apply_program(&prog);
+        engine.morph_controllers.mod_wheel = 1.0;
+        engine.render_frame();
+        assert!((engine.fx_chains[0].reverb_mix - 0.7).abs() < 1e-4);
+        assert!(
+            engine.fx_chains[0].delay_mix.abs() < 1e-6,
+            "disabled slot must not be morphed"
+        );
     }
 }
