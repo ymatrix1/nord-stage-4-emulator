@@ -18,6 +18,7 @@ use crate::synth_wavetable::{sample_wavetable, wavetable_bank};
 
 mod arp;
 mod sample_osc;
+pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 mod voice_alloc;
 
 #[cfg(test)]
@@ -369,6 +370,8 @@ pub struct SynthLayer {
 
     // Pre-decoded multisample instrument (`SAMPLES` mode)
     sample_sound: Option<Arc<SynthSampleSound>>,
+    /// Shared sinc kernels for `SAMPLES` playback, built at construction (TD-08).
+    sinc_kernels: Arc<crate::sinc::SincKernelSet>,
 
     // 16 Polyphonic Voices
     voices: [SynthVoice; MAX_SYNTH_VOICES],
@@ -452,6 +455,7 @@ impl SynthLayer {
             arp_rng: 0xA341_316C,
 
             sample_sound: None,
+            sinc_kernels: sample_osc::shared_sinc_kernels(),
 
             voices: [SynthVoice::default(); MAX_SYNTH_VOICES],
         }
@@ -761,6 +765,7 @@ impl SynthLayer {
                     if let Some((sound, z_idx)) = sample_sound.zip(v.sample_zone_idx) {
                         if let Some(zone) = sound.zones.get(z_idx) {
                             let (sl, sr) = Self::render_sample_zone_stereo(
+                                &self.sinc_kernels,
                                 zone,
                                 &mut v.sample_pos,
                                 v.sample_step * f64::from(pitch_mod),
