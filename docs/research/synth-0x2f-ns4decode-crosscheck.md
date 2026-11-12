@@ -77,6 +77,10 @@ Scanned `bank0_CODE.bin` for monotonic `f32` arrays of 16..1000 entries, then co
 
 Other 128/129-entry curves in `0x2f7000..0x2fbf00` and `0x453c44..` (`0.0093 .. 3.76`, `0.1 .. 10`, ...) belong to DSP filter/Q/compressor curves studied in `sharc-dsp-and-preset-hash-teardown.md`, not to the program bitstream.
 
+## ARM display-string tables (OQ7, part 4)
+
+The five `0x53abe4..0x53b3e4` "tables" in `bank0_CODE.bin` are arrays of 128 pointers to 8-byte **display strings** (`"0.5 ms"`, `"748 ms"`, `"43 s"`/`"Inf"`, `"14 Hz"`..`"32 kHz"`, `"0.03 Hz"`..`"523 Hz"`), not DSP values. `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin` compares them with `ENV_ATTACK/DECAY/RELEASE_MS_TABLE`, `FILTER_CUTOFF_HZ_TABLE` and `LFO_RATE_HZ_TABLE`: 128/128 entries match for every table within the rounding of the displayed digits, so those five inherited tables are now `VERIFIED` as *displayed* values. The scales that act on the sound (glide rate, unison detune, osc-env pitch depth, velocity curves, filter-env depth) are applied by the SHARC DSP images, which are stored on the mainboard SPI flash and are not part of the update file (`sharc-dsp-and-preset-hash-teardown.md` section 2.1). ARM0 only holds the display strings and the translation tables it sends over DSP-Comm.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).

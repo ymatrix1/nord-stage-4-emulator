@@ -100,6 +100,7 @@ pub(super) fn prepare_buffer(raw_payload: &[u8], expected_len: usize, block_tag:
 }
 
 /// Exact 128-step hardware Synth Env Attack curve (ms) from NS4 OS v1.66 (`0x53abe4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
 pub const ENV_ATTACK_MS_TABLE: [f32; 128] = [
     0.5, 0.6, 0.7, 0.9, 1.1, 1.3, 1.5, 1.8, 2.1, 2.5, 3.0, 3.5, 4.0, 4.7, 5.5, 6.3, 7.3, 8.4, 9.7,
     11.0, 13.0, 14.0, 16.0, 19.0, 21.0, 24.0, 27.0, 31.0, 34.0, 39.0, 43.0, 49.0, 54.0, 61.0, 68.0,
@@ -114,6 +115,7 @@ pub const ENV_ATTACK_MS_TABLE: [f32; 128] = [
 ];
 
 /// Exact 128-step hardware Synth Env Decay curve (ms) from NS4 OS v1.66 (`0x53ade4`; idx 127 = Hold).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
 pub const ENV_DECAY_MS_TABLE: [f32; 128] = [
     3.0, 3.5, 4.0, 4.6, 5.3, 6.0, 6.9, 7.9, 9.0, 10.0, 12.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0,
     26.0, 29.0, 33.0, 36.0, 41.0, 45.0, 50.0, 55.0, 61.0, 68.0, 75.0, 82.0, 91.0, 100.0, 110.0,
@@ -129,9 +131,11 @@ pub const ENV_DECAY_MS_TABLE: [f32; 128] = [
 ];
 
 /// Exact 128-step hardware Synth Env Release curve (ms) from NS4 OS v1.66 (`0x53afe4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
 pub const ENV_RELEASE_MS_TABLE: [f32; 128] = ENV_DECAY_MS_TABLE;
 
 /// Exact 128-step hardware Synth Filter Cutoff curve (Hz) from NS4 OS v1.66 (`0x53b1e4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
 pub const FILTER_CUTOFF_HZ_TABLE: [f32; 128] = [
     14.0, 15.0, 15.0, 16.0, 17.0, 18.0, 19.0, 21.0, 22.0, 23.0, 24.0, 26.0, 27.0, 29.0, 31.0, 33.0,
     35.0, 37.0, 39.0, 41.0, 44.0, 46.0, 49.0, 52.0, 55.0, 58.0, 62.0, 65.0, 69.0, 73.0, 78.0, 82.0,
@@ -146,6 +150,7 @@ pub const FILTER_CUTOFF_HZ_TABLE: [f32; 128] = [
 ];
 
 /// Exact 128-step hardware Synth LFO Rate curve (Hz) from NS4 OS v1.66 (`0x53b3e4`).
+/// VERIFIED: the displayed value of all 128 steps = firmware display-string table at the same address (bank0_CODE.bin pointer array of 8-byte strings), checked by `python tools/ns4_fw_tables.py target/fw_unpacked/bank0_CODE.bin`, 0 mismatches within display rounding. The DSP-side value behind the display is not read from firmware.
 pub const LFO_RATE_HZ_TABLE: [f32; 128] = [
     0.03, 0.03, 0.03, 0.04, 0.04, 0.04, 0.05, 0.05, 0.05, 0.06, 0.06, 0.07, 0.07, 0.08, 0.09, 0.09,
     0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.19, 0.2, 0.22, 0.24, 0.26, 0.28, 0.3, 0.32,
