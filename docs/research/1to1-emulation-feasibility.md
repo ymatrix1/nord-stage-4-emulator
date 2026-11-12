@@ -6,7 +6,7 @@
 
 | Blocker | Result | Status |
 |---|---|---|
-| DSP images encrypted? | **100% Not Encrypted.** Custom LZ algorithm reverse-engineered against ARM startup code (13-bit distance + 3-bit length bit packing) | **Solved / Not Encrypted** |
+| DSP images encrypted? | Not encrypted as far as tested, but the compression result covers the **ARM** sections only. **No SHARC image is in the update at all** ([dsp-image-hunt.md](dsp-image-hunt.md)); `DSP*` names are region labels in the bank 1 flash tool. DSP code stays in board SPI flash | **Not in container** |
 | Boot ROMs | Not obtainable without hardware; not in the update package | **Blocked** |
 | Central unknown chip / buses | Not identifiable from the photos; web sources are generic and speculate an FPGA | **Open** |
 | Sample codec (`CNSP`) | Opaque payload, no sub-structure found (section 3) | **Open** |
@@ -18,7 +18,7 @@
 Method: signature scan, zlib trial decode at every header hit, entropy map in 64 KB steps, and a printable-string count against a byte-shuffled control.
 
 - No gzip, xz, bzip2, zip or lz4 signatures. The 76 `lzma`-style and 31 zlib-style hits are chance 2 to 3 byte matches; **0 zlib streams decode**.
-- Entropy map: first 64 KB is about 1.1 (empty); most of `0x010000..0x3BFFFF` is 7.1 to 7.7 bits per byte; the loader table area near `0x3CF040` drops to about 5.5 and has readable strings.
+- Entropy map: first 64 KB is about 1.1 (empty); most of `0x010000..0x3BFFFF` is 7.1 to 7.7 bits per byte; the area near `0x3CF040` drops to about 5.5 and has readable strings (packed bank 1 `CODE` literals; it is not a DSP loader, see [dsp-image-hunt.md](dsp-image-hunt.md)).
 - Printable strings in the high-entropy region exceed the shuffled control by 1x to 5x but contain no meaningful text, which is what structured compressed data produces.
 - The beginning of the `CODE` segment decodes as ARM instructions (for example `msr cpsr_c`), so at least the start of the host image is plain.
 
@@ -45,7 +45,7 @@ Method: signature scan, zlib trial decode at every header hit, entropy map in 64
 
 ## 4. Verdict
 
-1:1 low-level emulation is **not currently feasible**: boot ROMs are unavailable, DSP images are unreadable, the sample codec is unknown, and no SHARC simulator exists. None of that is proven impossible, so Track B stays a research option, not a plan. The shipping engine remains the high-level Rust implementation (Track A).
+1:1 low-level emulation is **not currently feasible**: boot ROMs are unavailable, DSP images are not in the update (board SPI flash, see [dsp-image-hunt.md](dsp-image-hunt.md)), the sample codec is unknown, and no SHARC simulator exists. None of that is proven impossible, so Track B stays a research option, not a plan. The shipping engine remains the high-level Rust implementation (Track A).
 
 ## 6. Deeper analysis of the firmware containers
 
