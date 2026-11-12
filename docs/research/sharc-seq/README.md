@@ -18,3 +18,5 @@ It needs CCES 2.12.1 with an active licence (never touched) and re-runs itself u
 `../sharc-loops.md`: `cc21k -proc ADSP-21489 -si-revision any -g -O0 -o x.dxe x.asm x.c`.
 
 Stack probe: `gen_stack_probe.py`, `stack_fixture.txt`, `stack_measured.txt`, `stack_names.json`; findings `../sharc-stacks.md`, check `stack_measured.rs`.
+
+SIMD: `gen_simd_probe.py`, `simd_fixture.txt`, `simd_measured.txt`, `simd_names.json`; results in `../sharc-simd.md`, check in `crates/nord-sharc/src/core/simd_measured.rs`.
