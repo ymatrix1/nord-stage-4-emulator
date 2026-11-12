@@ -77,6 +77,16 @@ Jazz Guitar II after these fixes: width 0.16 (was 0.13; hardware 0.96), presence
 
 Even a four times louder, fully crossfaded reverb gives a flat width profile (0.4..0.6) while the hardware peaks at 400..1000 Hz with width above 1 (anti-phase content) and stays mono below 120 Hz. Remaining hypotheses: an effect stage that inverts one channel in the mid band (stereo Mod 1 variation, wide Chorus pedal at high mix), the Jazz layer routing (Layers B/C are off in the program), or post-processing in the video. One clip cannot separate these. Separate, manual-documented discrepancy found on the way: the manual (p.52) says the reverb Dry/Wet knob is fully wet at its maximum, while our `process_reverb` keeps 78 % dry at maximum (`1 - 0.22 * mix`).
 
+## Cabinet voicings per manual (emulator minus hardware, 3 clips)
+
+| Clip (amp mode) | 3..8 kHz before -> after | 8..20 kHz before -> after | centroid before -> after |
+|---|---|---|---|
+| Tiny Transistor (organ, Small II) | +3.3 -> +1.6 dB | +6.2 -> +2.9 dB | +27 -> +46 Hz |
+| Jazz Guitar II (synth, Twin) | -11.3 -> -6.9 dB | -16.0 -> +0.4 dB | -190 -> -175 Hz |
+| Vintage Vox J3 (organ, Twin) | +5.5 -> +10.3 dB | -8.4 -> +9.5 dB | +28 -> +130 Hz |
+
+The new voicings (Twin/JC treble shelf, modelled variations) follow the manual and improve two of three clips. The Vox J3 organ gets worse because the emulator's Vox organ is already brighter than the hardware: rendered with the amp switched off it is +4.3 dB (3..8 kHz) and +3.2 dB (8..20 kHz) above the hardware recording that includes the Twin, which is impossible if the Twin only adds treble and the organ source were right. So the organ source is too bright (separate bean). Magnitudes (+6 dB shelf etc.) are fitted by eye to one non-organ clip: ASSUMED.
+
 ## Caveats found while working
 
 - The player touches knobs, sliders and the mod wheel during clips (OLED pop-ups such as `Filter Frequency 5.6 kHz`, `Level Synth A Off`). Renders with fixed controls therefore differ from hardware in those windows. Follow-up: detect OLED pop-ups (`scenes --rows 0,1`) and the wheel position to drive CC events.

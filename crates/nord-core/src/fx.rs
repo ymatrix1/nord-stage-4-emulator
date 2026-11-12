@@ -488,7 +488,8 @@ pub struct LayerFxChain {
     cab_lp: Biquad,
     cab_hp: Biquad,
     cab_mid: Biquad,
-    cab_cache: Option<AmpCabinet>,
+    cab_shelf: Biquad,
+    cab_cache: Option<(AmpCabinet, bool)>,
     flt_a: Biquad,
     flt_b: Biquad,
     /// Last designed `[mode, freq_hz, res]` for LP24/HP24 (`NaN` forces first design).
@@ -571,6 +572,7 @@ impl LayerFxChain {
             cab_lp: Biquad::identity(),
             cab_hp: Biquad::identity(),
             cab_mid: Biquad::identity(),
+            cab_shelf: Biquad::identity(),
             cab_cache: None,
             flt_a: Biquad::identity(),
             flt_b: Biquad::identity(),
@@ -752,32 +754,45 @@ impl LayerFxChain {
             r = (drv * r).tanh();
         }
 
-        // Cabinet voicing: 2nd-order Butterworth HP + LP and a peaking mid band.
-        // ASSUMED: all cabinet Hz/gain values below are inherited from the old 1-pole code (no firmware/recording source).
+        // Cabinet voicing: 2nd-order Butterworth HP + LP, a peaking mid band and a treble shelf.
+        // Direction VERIFIED by the vendor manual (v1.6X p.51): Twin and JC boost the treble range
+        // (especially non-variation); Twin variation = less treble boost and a different mid; JC variation
+        // = reduced treble and a different mid; Small = Wurlitzer 200A internal speaker, variation = an even
+        // smaller amp/speaker. ASSUMED: every Hz and dB value below (no firmware source; one-clip checks only,
+        // see docs/research/hardware-audio-reference-fx.md).
         let cab = matches!(
             self.amp_cabinet,
             AmpCabinet::Small | AmpCabinet::Jc | AmpCabinet::Twin
         );
         if cab {
-            if self.cab_cache != Some(self.amp_cabinet) {
-                let (lp_hz, hp_hz, mid_hz, mid_gain) = match self.amp_cabinet {
-                    AmpCabinet::Small => (3400.0, 140.0, 900.0, 0.45f32),
-                    AmpCabinet::Jc => (6500.0, 70.0, 2800.0, 0.35),
-                    _ => (5200.0, 65.0, 650.0, -0.30),
-                };
+            let key = (self.amp_cabinet, self.amp_variation);
+            if self.cab_cache != Some(key) {
+                let var = self.amp_variation;
+                // (hp_hz, lp_hz, mid_hz, mid_db, shelf_hz, shelf_db)
+                let (hp_hz, lp_hz, mid_hz, mid_db, shelf_hz, shelf_db) =
+                    match (self.amp_cabinet, var) {
+                        (AmpCabinet::Twin, false) => (65.0, 14_000.0, 650.0, -2.5, 3000.0, 6.0),
+                        (AmpCabinet::Twin, true) => (65.0, 12_000.0, 900.0, 1.0, 3000.0, 2.0),
+                        (AmpCabinet::Jc, false) => (70.0, 14_000.0, 2800.0, 2.5, 3000.0, 6.0),
+                        (AmpCabinet::Jc, true) => (70.0, 9_000.0, 1800.0, 1.5, 3000.0, -3.0),
+                        (_, false) => (140.0, 3400.0, 900.0, 3.2, 3000.0, 0.0),
+                        (_, true) => (220.0, 2600.0, 1100.0, 2.0, 3000.0, 0.0),
+                    };
                 let fs = self.sample_rate;
                 self.cab_hp
                     .set(BiquadKind::HighPass, hp_hz, fs, EQ_SHELF_Q, 0.0);
                 self.cab_lp
                     .set(BiquadKind::LowPass, lp_hz, fs, EQ_SHELF_Q, 0.0);
-                let mid_db = 20.0 * (1.0 + mid_gain).log10();
                 self.cab_mid.set(BiquadKind::Peak, mid_hz, fs, 1.0, mid_db);
-                self.cab_cache = Some(self.amp_cabinet);
+                self.cab_shelf
+                    .set(BiquadKind::HighShelf, shelf_hz, fs, EQ_SHELF_Q, shelf_db);
+                self.cab_cache = Some(key);
             }
             for (ch, sig) in [&mut l, &mut r].into_iter().enumerate() {
                 let x = self.cab_hp.process(ch, *sig);
                 let x = self.cab_lp.process(ch, x);
-                *sig = self.cab_mid.process(ch, x);
+                let x = self.cab_mid.process(ch, x);
+                *sig = self.cab_shelf.process(ch, x);
             }
         } else {
             self.cab_cache = None;
@@ -1709,5 +1724,48 @@ mod tests {
             nonzero > 20,
             "diffusion must smear the repeat, got {nonzero}"
         );
+    }
+
+    fn cab_chain(mode: AmpCabinet, var: bool) -> LayerFxChain {
+        let mut fx = LayerFxChain::new(48_000.0);
+        fx.reverb_model = ReverbModel::Off;
+        fx.amp_cabinet = mode;
+        fx.amp_variation = var;
+        fx
+    }
+
+    /// Level at 6 kHz relative to 500 Hz (dB): the treble character of a cabinet.
+    fn treble_tilt_db(mode: AmpCabinet, var: bool) -> f32 {
+        let hi = tone_gain_db(&mut cab_chain(mode, var), 6000.0);
+        let lo = tone_gain_db(&mut cab_chain(mode, var), 500.0);
+        hi - lo
+    }
+
+    #[test]
+    fn test_cabinets_follow_manual_treble_direction() {
+        let twin = treble_tilt_db(AmpCabinet::Twin, false);
+        let twin_v = treble_tilt_db(AmpCabinet::Twin, true);
+        let jc = treble_tilt_db(AmpCabinet::Jc, false);
+        let jc_v = treble_tilt_db(AmpCabinet::Jc, true);
+        let small = treble_tilt_db(AmpCabinet::Small, false);
+        let small_v = treble_tilt_db(AmpCabinet::Small, true);
+        // Twin and JC boost the treble; variations boost less (Twin) or reduce it (JC)
+        assert!(twin > 3.0 && jc > 3.0, "twin {twin} jc {jc}");
+        assert!(twin_v < twin - 2.0, "twin var {twin_v} vs {twin}");
+        assert!(jc_v < jc - 6.0 && jc_v < 0.0, "jc var {jc_v} vs {jc}");
+        // Small is a small speaker (rolls off the treble); variation is smaller still
+        assert!(
+            small < 0.0 && small_v < small - 1.0,
+            "small {small} var {small_v}"
+        );
+    }
+
+    #[test]
+    fn test_cabinet_variation_switch_redesigns_filters() {
+        let mut fx = cab_chain(AmpCabinet::Twin, false);
+        let a = tone_gain_db(&mut fx, 6000.0);
+        fx.amp_variation = true;
+        let b = tone_gain_db(&mut fx, 6000.0);
+        assert!(b < a - 2.0, "variation must lower the treble: {a} -> {b}");
     }
 }
