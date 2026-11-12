@@ -60,3 +60,24 @@ def test_normalize_source_path(monkeypatch):
     assert vr.normalize_source_path("https://youtu.be/abc") == "https://youtu.be/abc"
     monkeypatch.setattr(vr.sys, "platform", "linux")
     assert vr.normalize_source_path("/c/dev/x") == "/c/dev/x"
+
+
+def test_segment_stable_frames_splits_on_change_and_drops_blips():
+    a = np.zeros((6, 8, 8), dtype=np.uint8)
+    b = np.full((6, 8, 8), 200, dtype=np.uint8)
+    blip = np.full((1, 8, 8), 255, dtype=np.uint8)
+    stack = np.concatenate([a, blip, a, b])  # blip between identical segments is ignored
+    segs = vr.segment_stable_frames(stack, step_s=1.0, min_len_s=2.0)
+    assert segs == [(0.0, 13.0), (13.0, 19.0)]
+    assert vr.segment_stable_frames(np.zeros((0, 4, 4)), 1.0) == []
+
+
+def test_segment_stable_frames_detects_small_text_change_without_drift():
+    base = np.zeros((10, 20, 40), dtype=np.uint8)
+    drift = base.copy()
+    for k in range(10):
+        drift[k] += k  # slow global drift must not split
+    assert vr.segment_stable_frames(drift, 1.0, min_len_s=2.0) == [(0.0, 10.0)]
+    edit = np.concatenate([base[:5], base[5:].copy()])
+    edit[5:, 5:15, 5:30] = 255  # ~ 12 % of pixels change (a text edit)
+    assert vr.segment_stable_frames(edit, 1.0, min_len_s=2.0) == [(0.0, 5.0), (5.0, 10.0)]

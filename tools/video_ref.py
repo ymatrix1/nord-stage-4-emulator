@@ -638,8 +638,11 @@ def build_storyboard(
     roi: str = "oled_zoom",
     cols: int = 6,
     panel_box_norm: tuple[float, float, float, float] | None = None,
+    timestamps: Sequence[float] | None = None,
 ) -> Path:
-    """Samples frames from ``video_path`` every ``step_s`` and renders a labeled ROI grid."""
+    """Renders a labeled ROI grid at ``timestamps`` (or every ``step_s`` from ``start_s``)."""
+    if timestamps is not None:
+        return _storyboard_at(video_path, output_path, list(timestamps), roi, cols, panel_box_norm)
     if step_s <= 0.0:
         raise ValueError("Storyboard step_s must be > 0")
     if end_s is None:
@@ -649,12 +652,22 @@ def build_storyboard(
     if end_s < start_s:
         raise ValueError("Storyboard end_s must be >= start_s")
 
-    timestamps: list[float] = []
+    stamps: list[float] = []
     cur = start_s
     while cur <= end_s + 1e-6:
-        timestamps.append(cur)
+        stamps.append(cur)
         cur += step_s
+    return _storyboard_at(video_path, output_path, stamps, roi, cols, panel_box_norm)
 
+
+def _storyboard_at(
+    video_path: Path,
+    output_path: Path,
+    timestamps: list[float],
+    roi: str,
+    cols: int,
+    panel_box_norm: tuple[float, float, float, float] | None,
+) -> Path:
     work_dir = output_path.parent / f".storyboard_tmp_{output_path.stem}"
     tile_paths: list[tuple[float, Path]] = []
     try:
@@ -672,6 +685,214 @@ def build_storyboard(
     finally:
         if work_dir.exists():
             shutil.rmtree(work_dir, ignore_errors=True)
+
+
+SCENE_W = 192
+
+
+def segment_stable_frames(
+    frames: Any,
+    step_s: float,
+    pixel_delta: float = 40.0,
+    changed_fraction: float = 0.02,
+    min_len_s: float = 1.5,
+) -> list[tuple[float, float]]:
+    """Splits a ``(n, h, w)`` grayscale stack into segments of unchanged content.
+
+    Each frame is compared with the segment's *reference* frame (not the previous one, so slow
+    drift cannot hide a change). A frame differs when more than ``changed_fraction`` of its pixels
+    moved by more than ``pixel_delta`` (0..255). A new segment starts only if the change persists
+    for the next frame too, so one-frame blips (blinking cursor, camera noise) are ignored.
+    Segments shorter than ``min_len_s`` are dropped. Returns ``[(start_s, end_s)]``.
+    """
+    import numpy as np
+
+    arr = np.asarray(frames, dtype=np.float32)
+    n = arr.shape[0]
+    if n == 0:
+        return []
+
+    def differs(i: int, ref: Any) -> bool:
+        return float((np.abs(arr[i] - ref) > pixel_delta).mean()) > changed_fraction
+
+    starts = [0]
+    ref = arr[0]
+    i = 1
+    while i < n:
+        if differs(i, ref) and (i + 1 >= n or differs(i + 1, ref)):
+            starts.append(i)
+            ref = arr[i]
+            i += 1
+        i += 1
+    bounds = [*starts, n]
+    out: list[tuple[float, float]] = []
+    for lo, hi in zip(bounds, bounds[1:], strict=False):
+        if (hi - lo) * step_s >= min_len_s:
+            out.append((lo * step_s, hi * step_s))
+    return out
+
+
+_HW_DECODER_CACHE: dict[str, bool] = {}
+
+
+def has_cuvid_av1() -> bool:
+    """True when this ffmpeg exposes the NVDEC AV1 decoder (``av1_cuvid``)."""
+    if "av1_cuvid" not in _HW_DECODER_CACHE:
+        try:
+            out = subprocess.run(
+                [_require_binary("ffmpeg"), "-hide_banner", "-decoders"],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+            _HW_DECODER_CACHE["av1_cuvid"] = "av1_cuvid" in out
+        except (OSError, subprocess.CalledProcessError):
+            _HW_DECODER_CACHE["av1_cuvid"] = False
+    return _HW_DECODER_CACHE["av1_cuvid"]
+
+
+def decode_gray_frames(
+    video_path: Path,
+    start_s: float,
+    duration_s: float,
+    step_s: float,
+    norm_box: tuple[float, float, float, float],
+    out_w: int,
+    out_h: int,
+    gpu: bool | None = None,
+) -> Any:
+    """Decodes a normalized crop as a ``(n, out_h, out_w)`` uint8 gray stack, one frame per step.
+
+    Uses NVDEC (``av1_cuvid`` + ``scale_cuda``) when available and ``gpu`` is not ``False``;
+    a failing GPU run falls back to software decoding.
+    """
+    import numpy as np
+
+    ffmpeg = _require_binary("ffmpeg")
+    x0, y0, x1, y1 = norm_box
+    crop = f"crop=iw*{x1 - x0:.5f}:ih*{y1 - y0:.5f}:iw*{x0:.5f}:ih*{y0:.5f}"
+    tail = f"{crop},scale={out_w}:{out_h},format=gray"
+    use_gpu = has_cuvid_av1() if gpu is None else gpu
+    attempts = []
+    if use_gpu:
+        attempts.append(
+            (
+                ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-c:v", "av1_cuvid"],
+                f"fps=1/{step_s},scale_cuda=2560:-2,hwdownload,format=nv12,{tail}",
+            )
+        )
+    attempts.append(([], f"fps=1/{step_s},{tail}"))
+    last: Exception | None = None
+    for pre, vf in attempts:
+        try:
+            proc = subprocess.run(
+                [
+                    ffmpeg,
+                    "-v",
+                    "error",
+                    *pre,
+                    "-ss",
+                    f"{start_s:.3f}",
+                    "-t",
+                    f"{duration_s:.3f}",
+                    "-i",
+                    str(video_path),
+                    "-an",
+                    "-vf",
+                    vf,
+                    "-f",
+                    "rawvideo",
+                    "-",
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as exc:
+            last = exc
+            continue
+        buf = np.frombuffer(proc.stdout, dtype=np.uint8)
+        n = buf.size // (out_w * out_h)
+        return buf[: n * out_w * out_h].reshape(n, out_h, out_w)
+    raise RuntimeError(f"ffmpeg frame decode failed: {last}")
+
+
+def detect_scene_segments(
+    video_path: Path,
+    start_s: float = 0.0,
+    end_s: float | None = None,
+    step_s: float = 0.5,
+    roi: str = "oled_zoom",
+    pixel_delta: float = 40.0,
+    changed_fraction: float = 0.05,
+    min_len_s: float = 3.0,
+    panel_box_norm: tuple[float, float, float, float] | None = None,
+    workers: int = 4,
+    rows: tuple[float, float] = (0.0, 0.4),
+) -> list[tuple[float, float]]:
+    """Finds time ranges where the ``roi`` (default: program OLED) shows unchanged content.
+
+    ``rows`` selects the vertical band of the ROI that is compared: the default top 40 % holds the
+    program title (program changes), ``(0, 1)`` also catches parameter pop-ups in the lower lines.
+    The range is split into ``workers`` chunks decoded in parallel (NVDEC when available).
+    """
+    import tempfile
+    from concurrent.futures import ThreadPoolExecutor
+
+    import numpy as np
+
+    ffmpeg = _require_binary("ffmpeg")
+    if end_s is None:
+        meta = probe_video(video_path)
+        end_s = float(meta.get("format", {}).get("duration", start_s + 300.0))
+    with tempfile.TemporaryDirectory() as tmp:
+        probe_png = Path(tmp) / "probe.png"
+        mid = start_s + 0.5 * (end_s - start_s)
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-ss",
+                f"{mid:.3f}",
+                "-i",
+                str(video_path),
+                "-frames:v",
+                "1",
+                str(probe_png),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        im = Image.open(probe_png)
+        w, h = im.size
+        if panel_box_norm is not None:
+            nx0, ny0, nx1, ny1 = panel_box_norm
+            panel = (int(nx0 * w), int(ny0 * h), int(nx1 * w), int(ny1 * h))
+        else:
+            panel = detect_red_panel_box(im)
+        x0, y0, x1, y1 = compute_roi_pixel_box((w, h), panel, roi)
+    norm_box = (x0 / w, y0 / h, x1 / w, y1 / h)
+    out_h = max(8, int(round(SCENE_W * (y1 - y0) / (x1 - x0))))
+
+    total = end_s - start_s
+    per = max(step_s, math.ceil(total / max(1, workers) / step_s) * step_s)
+    spans = []
+    cur = start_s
+    while cur < end_s - 1e-6:
+        spans.append((cur, min(per, end_s - cur)))
+        cur += per
+
+    def run(span: tuple[float, float]) -> Any:
+        return decode_gray_frames(video_path, span[0], span[1], step_s, norm_box, SCENE_W, out_h)
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        parts = list(pool.map(run, spans))
+    frames = np.concatenate([p for p in parts if len(p)], axis=0)
+    r0, r1 = int(rows[0] * frames.shape[1]), max(1, int(rows[1] * frames.shape[1]))
+    frames = frames[:, r0:r1, :]
+    segs = segment_stable_frames(frames, step_s, pixel_delta, changed_fraction, min_len_s)
+    return [(start_s + a, start_s + b) for a, b in segs]
 
 
 def read_wav_stereo(path: Path) -> tuple[int, list[float], list[float]]:
@@ -1096,6 +1317,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_ana = sub.add_parser("analyze", help="Analyze loudness, stereo width, and 6-band spectrum.")
     p_ana.add_argument("wav", help="Path to WAV audio file.")
 
+    p_sc = sub.add_parser(
+        "scenes",
+        help="Find time ranges where the program OLED is unchanged (one per program/edit).",
+    )
+    p_sc.add_argument("source", help="YouTube URL, video ID, alias, or local video path.")
+    p_sc.add_argument("--start", default="0")
+    p_sc.add_argument("--end")
+    p_sc.add_argument("--step", type=float, default=0.5)
+    p_sc.add_argument("--pixel-delta", type=float, default=40.0)
+    p_sc.add_argument("--changed-fraction", type=float, default=0.05)
+    p_sc.add_argument("--min-len", type=float, default=3.0)
+    p_sc.add_argument(
+        "--rows", default="0,0.4", help="Vertical band of the ROI to compare, e.g. 0,1."
+    )
+    p_sc.add_argument("--workers", type=int, default=4)
+    p_sc.add_argument("--roi", default="oled_zoom")
+    p_sc.add_argument("--storyboard", help="Write a labeled grid PNG of each segment start.")
+    p_sc.add_argument("--cols", type=int, default=6)
+
     p_notes = sub.add_parser(
         "notes",
         help="Detect played notes from audio and confirm them with fingertips in the video.",
@@ -1191,6 +1431,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                     f"{st.get('codec_name')} {st.get('width', '')}x{st.get('height', '')} "
                     f"{st.get('sample_rate', '')}"
                 )
+        return 0
+
+    if args.command == "scenes":
+        video_path, _vid = resolve_video(args.source)
+        segs = detect_scene_segments(
+            video_path,
+            start_s=parse_timestamp(args.start),
+            end_s=parse_timestamp(args.end) if args.end else None,
+            step_s=args.step,
+            roi=args.roi,
+            pixel_delta=args.pixel_delta,
+            changed_fraction=args.changed_fraction,
+            min_len_s=args.min_len,
+            workers=args.workers,
+            rows=tuple(float(v) for v in args.rows.split(",")),  # type: ignore[arg-type]
+        )
+        if args.storyboard:
+            build_storyboard(
+                video_path,
+                Path(args.storyboard),
+                roi=args.roi,
+                cols=args.cols,
+                timestamps=[a + min(1.5, 0.5 * (b - a)) for a, b in segs],
+            )
+        if args.json:
+            print(json.dumps([{"start_s": a, "end_s": b} for a, b in segs], indent=2))
+        else:
+            for a, b in segs:
+                print(f"{format_timestamp(a)} - {format_timestamp(b)}  ({b - a:.0f}s)")
         return 0
 
     if args.command == "notes":

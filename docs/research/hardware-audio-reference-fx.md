@@ -6,7 +6,7 @@
 
 ## Method
 
-1. **Program to timestamp:** `video_ref.py storyboard --roi oled_zoom --step 15` tiles the OLED; program names (A:11 ... A:63) are read from the tiles. A:25 *Sidechain Whl II* is at 10:00 to 10:45.
+1. **Program to timestamp:** `video_ref.py scenes <video> --storyboard out.png` compares the OLED title rows against each segment's reference frame (changed-pixel fraction, persistence check, NVDEC decode in 4 parallel chunks, ~2 min for the 41 min video) and finds every program change; names are read from the storyboard tiles. Result: `docs/research/data/video_part_a_programs.json` (72 entries, A:11 .. A:88) and the raw segments in `video_part_a_scenes.json`. An earlier 15 s sampling missed programs shown for less than 15 s and the last minute.
 2. **Played notes:** `video_ref.py notes <video> --at 10:05 --duration 20 --events-out ev.json`.
    - Audio: Hann STFT (8192/2048), harmonic-sum salience over MIDI 28..100, iterative pick-and-suppress (max 8 notes/frame), temporal smoothing into events. EMPIRICAL/heuristic; validated only on synthetic tones (`tools/tests/test_audio_notes.py`).
    - Video: skin mask on the cropped keyboard strip, fingertip = local minimum of topmost skin pixel per column, mapped to the 73-key geometry (E1..E7). Geometry constants measured by eye on one frame (+-1 key).
