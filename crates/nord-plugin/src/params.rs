@@ -70,6 +70,10 @@ pub struct Stage4Params {
     #[id = "aftertouch"]
     pub aftertouch: FloatParam,
 
+    /// Morph assignment depths (Wheel / Pedal / Aftertouch) per layer level and synth cutoff.
+    #[nested(id_prefix = "morph", group = "Morph Assign")]
+    pub morph_assign: crate::morph_assign::MorphAssignParams,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -282,6 +286,7 @@ impl Default for Stage4Params {
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_step_size(0.01),
+            morph_assign: crate::morph_assign::MorphAssignParams::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -539,6 +544,9 @@ impl Stage4Params {
             };
         }
 
+        // Morph assignments (depths only; base values are written below)
+        self.morph_assign.sync_to_engine(engine);
+
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();
         engine.morph_controllers.control_pedal = self.control_pedal.value();
@@ -698,5 +706,32 @@ mod tests {
         assert_eq!(engine.piano_a.timbre, PianoTimbre::Mid);
         assert_eq!(engine.synth_a.osc_mode, SynthOscMode::Analog);
         assert_eq!(engine.synth_a.cutoff_hz, 2500.0);
+    }
+
+    #[test]
+    fn test_morph_assign_flows_through_sync() {
+        let mut params = Stage4Params::default();
+        params.morph_assign.layer_level.targets[0] =
+            crate::morph_assign::MorphDeltaParams::with_defaults(0.0, 0.0, -0.5);
+        let mut engine = Stage4Engine::new(44100.0);
+        params.sync_to_engine(&mut engine);
+        assert_eq!(engine.layer_levels[0].delta_aftertouch, -0.5);
+        assert!((engine.layer_levels[0].base - 0.8 * 0.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_all_param_ids_unique_including_morph_assign() {
+        let params = Stage4Params::default();
+        let ids: Vec<String> = params
+            .param_map()
+            .into_iter()
+            .map(|(id, _, _)| id)
+            .collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), ids.len(), "duplicate host parameter IDs");
+        assert!(ids.contains(&"morph_level_wheel_1".to_string()));
+        assert!(ids.contains(&"morph_cutoff_at_3".to_string()));
     }
 }

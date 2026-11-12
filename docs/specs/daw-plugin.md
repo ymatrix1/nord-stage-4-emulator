@@ -8,6 +8,7 @@
 
 - Global controls include master level, BPM, compressor amount, scene selection, split enable, three split notes, and three split crossfade widths.
 - Organ A and B each expose nine drawbars. Shared organ, piano, and synth controls map into their respective engine layers.
+- Morph assignment: `morph_assign` (module `morph_assign.rs`) exposes signed Wheel / Pedal / Aftertouch depths (`-1.0..=1.0`, default `0.0`) for the 7 layer levels (`morph_level_{wheel,pedal,at}_1..7`, order Organ A/B, Piano A/B, Synth A/B/C) and the 3 synth cutoff slots (`morph_cutoff_{wheel,pedal,at}_1..3`). `sync_to_engine()` writes only the deltas; the base values stay owned by the level / cutoff parameters. Depth range and default are `ASSUMED` (engine delta domain); hardware depth scaling is unverified.
 - Parameter IDs are stable strings declared on `Stage4Params`; parameter ranges provide clamping in the host parameter system.
 - `sync_to_engine()` maps split crossfade values 0, 1, and 2 to Off, Small, and Large. Split note values are MIDI notes 0–127.
 

@@ -9,6 +9,7 @@
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
 pub mod midi;
+pub mod morph_assign;
 pub mod params;
 pub mod state;
 
