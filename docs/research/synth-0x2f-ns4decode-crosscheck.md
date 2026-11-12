@@ -169,6 +169,20 @@ Reading, with the container result above (no recognisable DSP code in the update
 
 Next: trace the ARM routines for glide (`Edt_Syn_kGlideRate`, id `0x103`), vibrato delay (`Edt_Syn_kVibDly`) and unison (`Edt_Syn_kOscUnison`) to the point where they are converted to the value sent to the DSP.
 
+## Detune tables found in ARM data (2026-11-12)
+
+`python tools/fw_ratio_scan.py target/fw_unpacked/bank0_CODE.bin` finds clusters of f32 pitch ratios that are whole or half cents from unity:
+
+| Where | Content | Reading |
+|---|---|---|
+| `0x2f9ee8..0x2f9f70` (inside the DSP parameter-table area right after the `0.1..10` Q scale at `0x2f970c`) | a **4 x 4 detune table**, rows = levels `0..3`, columns = 4 voices: level 0 `0 0 0 0`; level 1 `+2 -2 0 0` cents; level 2 `+4 -4 -1.32 +1.33` cents (`1.002313 0.997692 0.999236 1.000770`); level 3 `+6 -6 -2 +2` cents (`1.003472 0.996540 0.998845 1.001156`). A second copy of the `+2..+6` pairs follows at `0x2f9f5c` | strong candidate for **Unison levels 1/2/3** (4 levels, more voices per level, "level 1 = subtle dual-oscillator detune", matches the manual wording). Not yet attributed to Synth vs Piano: the table is uploaded as data (no pointer words reference it, it is indexed from a base) |
+| `0x1ca2a0..0x1ca304` literal pool, used by three unrolled copies of one routine (`0x1c94cc`, `0x1c9a8c`, `0x1ca034`) | partner-voice pitch ratios `+/-5, +/-15, +/-25, +/-35, +/-45, +/-55, +/-65, +/-75` cents (16 values) written into 6 per-voice parameter blocks (`0xC0546628 + n*0x30`, via `0xc0062e10(ptr, slot, ratio)`, slots 6..) | multi-voice detune offsets for a voice mode with many partners, probably the **sample "Enhanced Unison" / ensemble** copies (manual: "multiple slightly detuned and stereo panned copies"); level mapping unknown |
+| `0x506434` / `0x506bf8` | `-0.5, -2, -4.5, -8` cents (and mirrored) | looks like a quadratic spread (`-0.5 n^2`), purpose unknown |
+
+Status: **EMPIRICAL candidates, not attributed.** Our engine still uses `3.5 / 7.0 / 11.5` cents (ASSUMED, copied from Piano). If the `0x2f9ee8` table is the Synth unison table the cents per level are `2 / 4 / 6` with extra voices at `0 / 1.3 / 2` cents; the oscillator count per level is also visible (2, 4, 4 voices). A Piano origin is equally possible (v0.94 changelog: "Adjustments to Piano Unison detune values").
+
+Next: find the DSP-upload routine that copies `0x2f9ee8` (base + level*16) to the SHARC and identify the engine it belongs to; compare with the `Edt_Syn_kOscUnison` (id) and `Edt_Pno_k...` unison sender.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
