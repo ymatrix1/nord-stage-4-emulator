@@ -1,0 +1,165 @@
+//! `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--trace N]`: run a flat SRAM image from a
+//! short-word entry address, optionally scripting device registers and printing the last N pcs.
+//!
+//! Prints the number of executed instructions, the final program counter and, when the run stops
+//! early, the faulting instruction in the listing format of `sharc-disasm`. Use the images written
+//! by `python tools/ns4_dsp_ldr.py IMG --sram DIR` and the section entry value (for example
+//! `0x1211E3` for the FX image).
+use nord_sharc::core::{Core, Fault};
+use nord_sharc::visa::{classify, decode_text, Insn};
+use std::process::ExitCode;
+
+fn parse_number(s: &str) -> Option<u64> {
+    match s.strip_prefix("0x") {
+        Some(hex) => u64::from_str_radix(hex, 16).ok(),
+        None => s.parse().ok(),
+    }
+}
+
+fn run(args: &[String]) -> Result<String, String> {
+    let mut positional = Vec::new();
+    let mut devices = Vec::new();
+    let mut trace = 0usize;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--dev" => {
+                let spec = it.next().ok_or("--dev needs ADDR=VALUE")?;
+                let (addr, value) = spec.split_once('=').ok_or("--dev needs ADDR=VALUE")?;
+                devices.push((
+                    parse_number(addr).ok_or("bad --dev address")? as u32,
+                    parse_number(value).ok_or("bad --dev value")? as u32,
+                ));
+            }
+            "--trace" => {
+                trace = parse_number(it.next().ok_or("--trace needs N")?).ok_or("bad --trace")?
+                    as usize;
+            }
+            _ => positional.push(a.clone()),
+        }
+    }
+    let [image, entry, max_steps] = positional.as_slice() else {
+        return Err(
+            "usage: sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--trace N]".to_string(),
+        );
+    };
+    let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
+    let entry = parse_number(entry).ok_or("bad ENTRY")? as u32;
+    let max_steps = parse_number(max_steps).ok_or("bad MAX_STEPS")?;
+    let mut core = Core::new(&data);
+    core.pc = entry;
+    for (addr, value) in devices {
+        core.preset_device(addr, value);
+    }
+    let mut recent = std::collections::VecDeque::with_capacity(trace + 1);
+    let mut fault = None;
+    if trace == 0 {
+        fault = core.run(max_steps);
+    } else {
+        while core.steps < max_steps {
+            recent.push_back(core.pc);
+            if recent.len() > trace {
+                recent.pop_front();
+            }
+            if let Err(f) = core.step() {
+                fault = Some(f);
+                break;
+            }
+        }
+    }
+    let mut out = format!(
+        "steps {} pc 0x{:x} device reads {} writes {}
+",
+        core.steps, core.pc, core.device_reads, core.device_writes
+    );
+    if trace > 0 {
+        let list: Vec<String> = recent.iter().map(|p| format!("{p:x}")).collect();
+        out.push_str(&format!(
+            "last pcs: {}
+",
+            list.join(" ")
+        ));
+    }
+    match fault {
+        None => out.push_str("stopped at the step limit"),
+        Some(Fault::Unimplemented { pc, parcels }) => {
+            let (kind, len) = classify(parcels[0], Some(parcels[1]));
+            let insn = Insn { kind, parcels, len };
+            out.push_str(&format!(
+                "unimplemented at 0x{pc:x}: {} {}",
+                kind.name(),
+                decode_text(&insn)
+            ));
+        }
+        Some(Fault::BadAddress { pc, address }) => {
+            out.push_str(&format!("bad data address 0x{address:x} at pc 0x{pc:x}"));
+        }
+    }
+    Ok(out)
+}
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match run(&args) {
+        Ok(text) => {
+            println!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runs_a_tiny_image_and_reports_the_stop_reason() {
+        let path = std::env::temp_dir().join("nord_sharc_run_test.bin");
+        let mut image = vec![0u8; 0x24_0000 + 16];
+        // at short-word 0x120000 (byte 0x240000): NOP, then an unimplemented Type 6a word
+        for (k, p) in [0x0001u16, 0x8000, 0x0000, 0x0000].iter().enumerate() {
+            image[0x24_0000 + 2 * k..0x24_0000 + 2 * k + 2].copy_from_slice(&p.to_le_bytes());
+        }
+        std::fs::write(&path, &image).unwrap();
+        let p = path.to_string_lossy().to_string();
+        let text = run(&[p.clone(), "0x120000".into(), "10".into()]).unwrap();
+        assert!(text.contains("steps 1 pc 0x120001"), "{text}");
+        assert!(text.contains("unimplemented at 0x120001"), "{text}");
+        let limited = run(&[p.clone(), "0x120000".into(), "1".into()]).unwrap();
+        assert!(limited.contains("stopped at the step limit"));
+        assert!(run(&[p.clone(), "zz".into(), "1".into()]).is_err());
+        assert!(run(std::slice::from_ref(&p)).is_err());
+        let traced = run(&[
+            p.clone(),
+            "0x120000".into(),
+            "10".into(),
+            "--trace".into(),
+            "3".into(),
+        ])
+        .unwrap();
+        assert!(traced.contains("last pcs: 120000 120001"), "{traced}");
+        let dev = run(&[
+            p.clone(),
+            "0x120000".into(),
+            "1".into(),
+            "--dev".into(),
+            "0x3108d008=5".into(),
+        ])
+        .unwrap();
+        assert!(dev.contains("device reads 0"));
+        assert!(run(&[
+            p.clone(),
+            "0".into(),
+            "1".into(),
+            "--dev".into(),
+            "oops".into()
+        ])
+        .is_err());
+        assert!(run(&[p, "0".into(), "1".into(), "--trace".into()]).is_err());
+        std::fs::remove_file(path).ok();
+    }
+}

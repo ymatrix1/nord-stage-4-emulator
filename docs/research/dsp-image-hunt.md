@@ -578,6 +578,34 @@ Reading: reset jumps to the entry, interrupts are disabled, two initialisation r
 
 Both the loop target `0x800003` and similar `DO`/jump operands show that the 24-bit address field of `DO`/`JUMP` can be PC-relative or flagged; the decoder prints the raw field for `DO`.
 
+### 5.21 Running the start-up code: the cores reach their main loops
+
+The execution core `crates/nord-sharc/src/core.rs` (spec milestones M2 and M3) runs the flat SRAM images directly from the section entry value. Tool: `sharc-run IMAGE ENTRY MAX_STEPS [--dev ADDR=VALUE]... [--trace N]` (`cargo run -p nord-sharc --bin sharc-run --release`).
+
+```bash
+python tools/ns4_dsp_ldr.py DIR/dsp_image_0_FX.bin --sram SRAM        # core1_sram.bin, core2_sram.bin
+sharc-run SRAM/core1_sram.bin 0x1211E3 5000000 --dev 0x3108d008=5 --trace 3
+```
+
+Results (v1.66, 5,000,000 steps, `--dev 0x3108d008=5`): all four tested sections run their start-up and settle in a loop; none stops on an unimplemented instruction.
+
+| Section | Start-up instructions before the main loop (approx.) | Main loop |
+|---|---|---|
+| FX Core1 | about 900 | polls the peripheral register `0x3108C06C`, bit `0x400` (`BIT TST USTAT1 0x400; IF NOT_TF JUMP`) |
+| FX Core2 | about 740 | polls the data word `DM(0xC02C2)` for non-zero (`R3 = R3 + 1; R0 = DM(0xC02C2); PASS; IF EQ JUMP`) |
+| ORG Core1 | about 710 | polls the peripheral register `0x3108D008` until its low bits equal 5, later `0x3108C06C` |
+| ORG Core2 | about 610 | polls `DM(0xB00E2)` for non-zero, same loop shape as FX Core2 |
+
+What the start-up code does (from the traces): interrupts off, `MODE1` set-up, initialisation of the modify and length registers (`M0 = 0`, `M1 = 1`, `M2 = 2`, `M7 = -1`, `L`/`B` cleared), memory clearing in `DO ... UNTIL LCE` loops, calls of two init routines, writes of external-port DMA pointers into IOP registers (`DM(0x3E018..0x3E01F) = 0x20000000, 0x20080000, 0x200BA984, 0x20100000, 0x28240000, ...`, the external windows of 5.17), then a wait on a status register.
+
+**Host interface (ASSUMED reading).** The Core2 main loops poll one data word and, when it is non-zero, copy `R0`, `R1` and `R2` to three consecutive slots (`DM(0xB62A3)`, `DM(0xB62A5)`, `DM(0xB62A7)` in FX) and continue with command handling: a mailbox written by the ARM through the external port. This is where the parameter messages of milestone M5 enter the DSP.
+
+**Device registers.** Accesses outside internal SRAM and the IOP window (for example `0x3108C06C`, `0x3108D004`, `0x3108D008`) go to a sparse device store that returns scripted or previously written values (`Core::preset_device`). They are peripherals or external-bus windows that are not modelled.
+
+**Speed.** The core executes straight from the raw parcels (no decoded objects, no strings, no allocation per step): 50,000,000 instructions in about 0.56 s of wall time in a release build, roughly 100 million instructions per second.
+
+**Not yet modelled** (execution stops with a fault naming the instruction): multifunction and shifter compute, SIMD (the PEy register file), delayed branches, `RECIPS`/`RSQRTS` (the hardware seed table is unknown), indirect jumps, interrupts, DMA, 40-bit extended precision. Float results use IEEE single precision with round to nearest (ASSUMED).
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
