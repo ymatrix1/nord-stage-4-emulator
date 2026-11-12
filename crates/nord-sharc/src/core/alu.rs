@@ -1,5 +1,5 @@
 //! ALU, float and short (16-bit) compute operations of [`Core`].
-use super::{f32_of, Core};
+use super::Core;
 use crate::visa::bits;
 
 /// Compute unit and opcode of a Type 2c short op, and whether it is binary (`Rn = Rn op Rx`) or
@@ -38,32 +38,17 @@ fn short_op(op: u64) -> Option<ShortOp> {
 }
 
 impl Core {
-    pub(super) fn set_arith_flags(&mut self, result: u32, float: bool) {
-        self.flags.az = if float {
-            f32_of(result) == 0.0
-        } else {
-            result == 0
-        };
-        self.flags.an = if float {
-            f32_of(result) < 0.0
-        } else {
-            (result as i32) < 0
-        };
+    pub(super) fn set_arith_flags(&mut self, result: u32) {
+        self.flags.az = result == 0;
+        self.flags.an = (result as i32) < 0;
     }
 
     /// Writes a fixed-point result to `Rn` and updates AZ and AN.
     #[inline]
     pub(super) fn set_fixed(&mut self, n: usize, v: u32) {
         self.r[n] = v;
-        self.set_arith_flags(v, false);
-    }
-
-    /// Writes a float result to `Fn` and updates AZ and AN.
-    #[inline]
-    pub(super) fn set_float(&mut self, n: usize, v: f32) {
-        let bits = v.to_bits();
-        self.r[n] = bits;
-        self.set_arith_flags(bits, true);
+        self.fx.clear(n);
+        self.set_arith_flags(v);
     }
 
     /// Executes a 23-bit compute field. Returns false when the operation is not modelled.
@@ -82,8 +67,6 @@ impl Core {
             bits(c, 3, 0) as usize,
         );
         let (rx, ry) = (self.r[x], self.r[y]);
-        let (fx, fy) = (f32_of(rx), f32_of(ry));
-        let scale = || 2f32.powi(ry as i32);
         match (cu, op) {
             (0, 0x01) => {
                 self.flags.ac = rx.overflowing_add(ry).1;
@@ -137,36 +120,8 @@ impl Core {
                 let lim = (ry as i32).wrapping_abs();
                 self.set_fixed(n, (rx as i32).clamp(lim.wrapping_neg(), lim) as u32);
             }
-            (0, 0x81) => self.set_float(n, fx + fy),
-            (0, 0x82) => self.set_float(n, fx - fy),
-            (0, 0x89) => self.set_float(n, (fx + fy) / 2.0),
-            (0, 0x8A) => {
-                self.flags.az = fx == fy;
-                self.flags.an = fx < fy;
-            }
-            (0, 0x91) => self.set_float(n, (fx + fy).abs()),
-            (0, 0x92) => self.set_float(n, (fx - fy).abs()),
-            (0, 0xA1) | (0, 0xA5) => self.set_float(n, fx),
-            (0, 0xA2) => self.set_float(n, -fx),
-            (0, 0xB0) => self.set_float(n, fx.abs()),
-            (0, 0xBD) => self.set_float(n, fx * scale()),
-            (0, 0xC1) => {
-                if fx == 0.0 || !fx.is_finite() {
-                    return false;
-                }
-                self.set_fixed(n, (((rx >> 23) & 0xFF) as i32 - 127) as u32);
-            }
-            (0, 0xC9) => self.set_fixed(n, fx.round_ties_even() as i32 as u32),
-            (0, 0xCA) => self.set_float(n, rx as i32 as f32),
-            (0, 0xCD) => self.set_fixed(n, fx.trunc() as i32 as u32),
-            (0, 0xD9) => self.set_fixed(n, (fx * scale()).round_ties_even() as i32 as u32),
-            (0, 0xDA) => self.set_float(n, rx as i32 as f32 * scale()),
-            (0, 0xDD) => self.set_fixed(n, (fx * scale()).trunc() as i32 as u32),
-            (0, 0xE0) => self.set_float(n, fx.copysign(fy)),
-            (0, 0xE1) => self.set_float(n, fx.min(fy)),
-            (0, 0xE2) => self.set_float(n, fx.max(fy)),
-            (0, 0xE3) => self.set_float(n, fx.clamp(-fy.abs(), fy.abs())),
-            (1, 0x30) => self.set_float(n, fx * fy),
+            (1, 0x30) => self.float_mul(n, x, y),
+            (0, op) if op >= 0x80 && self.float_alu(op, n, x, y) => {}
             (0, op) if matches!(op >> 4, 0x7 | 0xF) && self.dual_add_sub(c) => {}
             (1, op) if self.fixed_mult(op, n, x, y) => {}
             (2, op) if self.shifter(op, n, x, y) => {}
@@ -217,10 +172,6 @@ mod tests {
         assert!(c.compute((0xBD << 12) | (7 << 8) | (3 << 4) | 1)); // SCALB F3 by R1 (7)
         assert_eq!(f32::from_bits(c.r[7]), 3.0 * 128.0);
         assert!(!c.compute(0x40_3000), "there is no MR3 transfer");
-        assert!(
-            !c.compute((0xC4 << 12) | (1 << 8)),
-            "RECIPS seed table is unknown"
-        );
     }
 
     #[test]
