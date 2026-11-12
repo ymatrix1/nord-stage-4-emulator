@@ -684,15 +684,19 @@ mod tests {
         // Non-critical event drops immediately when full
         assert!(!handle.send_midi(mod_wheel));
 
-        // Spawn a background consumer that drains the queue after 10ms
+        // Spawn a background consumer synchronized before the 25 ms send_timeout window
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let barrier_bg = std::sync::Arc::clone(&barrier);
         let drain_thread = std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            barrier_bg.wait();
+            std::thread::sleep(std::time::Duration::from_millis(2));
             let _ = rx.recv();
             let _ = rx.recv();
             rx
         });
 
         // Critical lifecycle event (NoteOff) waits for drainage and succeeds!
+        barrier.wait();
         let note_off = MidiEvent::NoteOff {
             channel: 0,
             note: 60,
