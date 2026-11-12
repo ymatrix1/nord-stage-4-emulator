@@ -268,7 +268,7 @@ The differences are structured constants, not code changes:
 
 - `USTAT1 = 0x200c0000` (D, F) vs `USTAT1 = 0x20080000` (E), and `USTAT1 = 0x200fa984` vs `0x200ba984`: one bit (bit 18) of a user-status value differs. D and F agree, E differs.
 - Memory addresses with bit 7 flipped: `DM(0xb97c28a4, I5) = M4` (D) vs `M3 = DM(0xb97c2824, I6)` (E); `PM(0x28a40070, I12) = B0` vs `PM(0x28240070, I12) = B0`; `MODE2 = PM(0x28a4002c, I13)` vs `...2824002c...`. The index register changes with it (`I5` vs `I6`).
-- A 50-instruction hunk in each pair (same size) that I did not decode further.
+- One large hunk at each end of the block: the head (145 instructions in D, 50 in E, tiled as `21/22` and odd forms such as `0000 0b3e 0000` repeated) is data, not code, and differs per copy; the tail has start-up style code (`JUMP 0x125dad`, `BIT SET IMASK 0x800`, `BIT CLR IMASK 0x8`, `BIT CLR MODE1 0x202000`), i.e. interrupt-mask and mode setup. So each block starts with a per-instance data header and ends with initialisation code.
 
 Reading (ASSUMED): D, E and F are one program assembled for different instances (core or bank variants) with a few per-instance constants. That fits the bank 1 table, which lists a Core1 and a Core2 image per DSP. It does not yet say which of Fx, Organ or Synth a given copy belongs to. The tidy single-bit differences are also evidence that the decoder reads the fields correctly (a wrong field split would not produce clean one-bit deltas).
 
