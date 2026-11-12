@@ -232,7 +232,7 @@ pub fn mult_text(opcode: u64, rn: u64, rx: u64, ry: u64) -> Option<String> {
             };
             return Some(format!(
                 "{sat} ({}{})",
-                if opcode & 1 == 1 { 'U' } else { 'S' },
+                if opcode & 1 == 1 { 'S' } else { 'U' },
                 fi
             ));
         }
@@ -251,7 +251,7 @@ pub fn mult_text(opcode: u64, rn: u64, rx: u64, ry: u64) -> Option<String> {
             };
             return Some(format!(
                 "{reg} ({}F)",
-                if opcode & 1 == 1 { 'U' } else { 'S' }
+                if opcode & 1 == 1 { 'S' } else { 'U' }
             ));
         }
         return None;
@@ -288,8 +288,10 @@ pub fn multi_text(c: u64) -> Option<String> {
     if bits(c, 21, 21) == 1 {
         let k = if bits(c, 20, 20) == 1 { 'F' } else { 'R' };
         let rs = bits(c, 19, 16);
+        // ADI prints the product of the fixed-point triple with its format `(SSFR)`
+        let fmt = if k == 'F' { "" } else { " (SSFR)" };
         return Some(format!(
-            "{k}{rm} = {k}{xm} * {k}{ym}, {k}{ra} = {k}{xa} + {k}{ya}, {k}{rs} = {k}{xa} - {k}{ya}"
+            "{k}{rm} = {k}{xm} * {k}{ym}{fmt}, {k}{ra} = {k}{xa} + {k}{ya}, {k}{rs} = {k}{xa} - {k}{ya}"
         ));
     }
     let text = mulalu_template(bits(c, 21, 16))?;
@@ -370,7 +372,7 @@ mod tests {
         assert_eq!(compute_text(0x445666), "R5 = R1 * R6 (SSFR), R6 = R9 + R14");
         assert_eq!(
             compute_text(0x635666),
-            "R5 = R1 * R6, R6 = R9 + R14, R3 = R9 - R14"
+            "R5 = R1 * R6 (SSFR), R6 = R9 + R14, R3 = R9 - R14"
         );
         assert_eq!(compute_text(0x585666), "F5 = F1 * F6, F6 = F9 + F14");
         assert_eq!(
