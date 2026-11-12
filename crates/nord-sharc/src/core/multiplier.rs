@@ -5,7 +5,8 @@
 //! with extreme accumulator presets, SAT, RND and the transfers):
 //! * the product of the two operands (signed or unsigned per the format letters) is shifted left
 //!   by one only for the fractional **signed x signed** format, the MR is 80 bits and wraps;
-//! * the `R` formats round half to even at bit 32 (the low 32 bits become zero);
+//! * the fractional `R` formats round half to even at bit 32 (the low 32 bits become zero); the
+//!   integer `R` forms (SSIR, UUIR ...) do not round;
 //! * `Rn = ...` stores MR0 (integer formats) or MR1 (fractional formats) **without saturation**
 //!   and leaves MRF/MRB unchanged; the multiplier never touches AZ/AN;
 //! * MN is the sign of the 80-bit result; MV is set when it does not fit 32 bits (integer) or 64
@@ -73,9 +74,8 @@ impl Core {
         }
         let (sy, sx) = ((op >> 5) & 1 == 1, (op >> 4) & 1 == 1);
         let (frac, sel, round) = ((op >> 3) & 1 == 1, (op >> 1) & 3, op & 1 == 1);
-        if round && !frac {
-            return false;
-        }
+        // VERIFIED: the integer `R` formats (SSIR ...) behave exactly like the plain integer ones
+        let round = round && frac;
         let operand = |v: u32, signed: bool| {
             if signed {
                 v as i32 as i128
@@ -250,10 +250,10 @@ mod tests {
         c.r[2] = 0x4000_0000;
         assert!(c.compute(mult_word(0x79, 3, 1, 2)));
         assert_eq!(c.r[3], 0);
-        assert!(
-            !c.compute(mult_word(0x71, 3, 1, 2)),
-            "integer rounding is not modelled"
-        );
+        c.r[1] = 3;
+        c.r[2] = 5;
+        assert!(c.compute(mult_word(0x71, 3, 1, 2)), "SSIR is SSI");
+        assert_eq!(c.r[3], 15);
     }
 
     #[test]
