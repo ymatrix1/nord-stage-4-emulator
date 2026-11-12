@@ -24,6 +24,11 @@ impl ExtFile {
         self.lo[n] = 0;
     }
 
+    /// Register `to` receives the 32-bit value of `from`; it keeps the extension if `from` has one.
+    fn copy(&mut self, from: usize, to: usize) {
+        (self.tag[to], self.lo[to]) = (self.tag[from], self.lo[from]);
+    }
+
     /// Takes the extension of register `n` from another snapshot of the file.
     pub fn take(&mut self, from: &ExtFile, n: usize) {
         (self.tag[n], self.lo[n]) = (from.tag[n], from.lo[n]);
@@ -39,6 +44,16 @@ impl Core {
             0
         };
         (u64::from(self.r[n]) << 8) | u64::from(lo)
+    }
+
+    /// `Ureg = Ureg` transfer. VERIFIED on the simulator (`docs/research/sharc-round/`): a move
+    /// between data registers keeps the 40-bit extension; any other destination drops it.
+    pub(super) fn move_ureg(&mut self, dst: u8, src: u8) {
+        let v = self.read_ureg(src);
+        self.write_ureg(dst, v);
+        if src < 16 && dst < 16 {
+            self.fx.copy(usize::from(src), usize::from(dst));
+        }
     }
 
     fn set_f40(&mut self, n: usize, v: u64) {
@@ -154,6 +169,20 @@ mod tests {
         c.mode1 = MODE1_RND32;
         assert!(c.compute(word(0x81, 3, 1, 2)));
         assert_eq!(c.f40(3) & 0xFF, 0);
+    }
+
+    #[test]
+    fn register_move_keeps_the_extension() {
+        let mut c = Core::new(&[]);
+        setf(&mut c, 1, 1.0);
+        setf(&mut c, 2, f32::from_bits(0x3380_0000));
+        assert!(c.compute(word(0x81, 3, 1, 2)));
+        c.move_ureg(7, 3); // R7 = R3
+        assert_eq!(c.f40(7), c.f40(3));
+        assert_eq!(c.f40(7) & 0xFF, 0x80);
+        c.move_ureg(0x10, 3); // I0 = R3 is not a data register
+        c.move_ureg(7, 0x10); // R7 = I0 has no extension
+        assert_eq!(c.f40(7) & 0xFF, 0);
     }
 
     #[test]

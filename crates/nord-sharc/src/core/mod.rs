@@ -25,6 +25,8 @@ mod dualmove;
 mod exec;
 mod float;
 mod float_conv;
+#[cfg(test)]
+mod float_measured;
 mod float_misc;
 mod float_ops;
 mod float_seeds;
