@@ -678,6 +678,21 @@ The six peeks load into `ureg 0x7A`, which the decoder names `IRPTL`; the compar
 
 `sharc-run --set REG=VALUE` presets `R`/`I`/`M`/`L`/`B` registers. With `--set I8=0x12538C` (the first record's code pointer) the failing `CALL (M8, I8)` at `0x12730E` enters that routine and the run continues 844 steps further (496,183 steps, 95 skipped ops) before the next indirect call stops it at address 0 (call stack `127abd`). So the module records carry the routine each pass calls; which instruction should load `I8` from the record is still open.
 
+### 5.28 The Type 15b register field is misdecoded (open)
+
+Evidence from the ORG Core2 listing (90,858 lines, `sharc-disasm IMG 0x240000 0x2C0000`), counting the 7-bit register code (bits 22..16) of each instruction type, by group (`code >> 4`):
+
+| Type | group 0 (R) | group 1 (I) | groups 2-5 (M, L, B, S) | group 6 | group 7 |
+|---|---|---|---|---|---|
+| 14a (direct address) | 482 | 371 | 15 | 3 | 28 |
+| 17a (immediate 32) | 677 | 231 | 11 | 1 | 8 |
+| 17b (immediate 16) | 232 | 0 | 32 | 3 | 2 |
+| **15b (`DM(<data7>, Ia)`)** | 423 | 115 | 1 | **1,193** | **801** |
+
+Types 14a, 17a and 17b load R and I registers almost exclusively, as expected. Type 15b puts 79% of its 2,533 transfers into codes `0x60..0x7F`, which the decoder prints as system registers (`FADDR` 283, `PC` 79, `PCSTK` 78, `IRPTL` 73, `LADDR`, `CURLCNTR`, `EMUCLK2`, `PX`, `TPERIOD`, ...). A program does not load data into `PC` or `PCSTK` hundreds of times, and no group 2-4 register (M, L, B) appears at all, so the 15b field split (`DATA7` bits 29..23, `UREG` bits 22..16, ASSUMED in `visa/decode.rs` and `tools/sharc_visa.py`) or the meaning of codes `0x6n`/`0x7n` in this form is wrong. Weak support for "code `0x6n` is `Rn`": for loads (D = 0) the register with the same low nibble is used in the next six instructions in 46% of group 6 cases against 29% for an unrelated register (group 0, known R registers: 50% against 24%; group 7: 40% against 30%). Stronger structural evidence: the six unrolled peeks at `0x24BCFE..0x24BD5A` load `DM(0, I1)` into code `0x7A` and then compare `R0`, so the loaded register must be `R0` in that instruction, which a plain `Rn = nibble` rule does not give (nibble 10).
+
+Consequence for the oracle: `write_ureg` ignores unlisted system registers, so these loads currently drop their data, which can explain the missing `I8` and the failed processing pass of 5.27. Next: find the real 15b field layout (compare the 32-bit form with the Type 15a layout `101 G I D L UREG DATA` and its `G` bit; test candidate splits by checking that `R0` is loaded in the six-peek loop), then fix `tools/sharc_visa.py`, `visa/decode.rs` and `core/moves.rs` together.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
