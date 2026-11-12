@@ -9,9 +9,9 @@ import ns4_synth_kernels as k  # noqa: E402
 
 def test_window_and_sinc_basics():
     assert k.sinc(0) == 1.0 and abs(k.sinc(1)) < 1e-12 and abs(k.sinc(2)) < 1e-12
-    assert abs(k.blackman(0) - 1.0) < 1e-12
-    assert k.blackman(6.0) == 0.0 and k.blackman(-7.0) == 0.0
-    assert abs(k.blackman(3.0) - 0.34) < 1e-12  # 0.42 + 0 + 0.08 cos(pi) -> 0.34
+    assert abs(k.window(0) - 1.0) < 1e-12  # the coefficients sum to 1
+    assert k.window(6.0) == 0.0 and k.window(-7.0) == 0.0
+    assert abs(k.window(3.0) - (0.4231 - 0.0778)) < 1e-12  # cos(pi/2) = 0, cos(pi) = -1
 
 
 def test_model_block_layout():
@@ -19,7 +19,7 @@ def test_model_block_layout():
     assert len(b) == k.BLOCK == 3072
     assert abs(b[5 * 256] - 1.0) < 1e-12  # tap 5, phase 0 is the sinc peak
     assert abs(b[6 * 256]) < 1e-12  # tap 6, phase 0 is a zero crossing
-    assert abs(b[5 * 256 + 128] - k.sinc(0.5) * k.blackman(0.5)) < 1e-12
+    assert abs(b[5 * 256 + 128] - k.sinc(0.5) * k.window(0.5)) < 1e-12
 
 
 def test_fit_cutoff_recovers_each_cutoff():

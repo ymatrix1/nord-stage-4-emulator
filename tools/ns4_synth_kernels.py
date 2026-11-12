@@ -4,11 +4,12 @@
 The image holds six blocks of 3072 float32 values (12 taps x 256 phases, stored `[tap][phase]`).
 Model fitted to the data (docs/research/dsp-image-hunt.md 5.15):
 
-    value[tap][phase] = sinc(fc * d) * blackman(d),  d = tap - 5 - phase / 256,  |d| < 6
-    blackman(d) = 0.42 + 0.5 cos(pi d / 6) + 0.08 cos(2 pi d / 6)
+    value[tap][phase] = sinc(fc * d) * window(d),  d = tap - 5 - phase / 256,  |d| < 6
+    window(d) = 0.4231 + 0.4991 cos(pi d / 6) + 0.0778 cos(2 pi d / 6)
 
-with a cutoff `fc` per block. The per-phase tap sum (DC gain) is `1 / fc`, so `fc` follows from the
-block sum without any search.
+with a cutoff `fc` per block. The window is a three-term cosine sum fitted jointly to all six blocks
+(rms 3.6e-5, max 8.8e-5); the textbook Blackman window (0.42, 0.5, 0.08) is 10x further off.
+The per-phase tap sum (DC gain) is `1 / fc`, so `fc` follows from the block sum without any search.
 
     python tools/ns4_synth_kernels.py dsp_image_3_SY1SY2.bin
 """
@@ -32,12 +33,15 @@ def sinc(x: float) -> float:
     return 1.0 if abs(x) < 1e-12 else math.sin(math.pi * x) / (math.pi * x)
 
 
-def blackman(d: float, half_width: float = HALF_WIDTH) -> float:
-    """Blackman window centred on 0 and zero outside `|d| >= half_width`."""
+WINDOW = (0.4231, 0.4991, 0.0778)  # EMPIRICAL: least-squares fit to the firmware table, sum 1.0
+
+
+def window(d: float, half_width: float = HALF_WIDTH) -> float:
+    """Three-term cosine-sum window centred on 0 and zero outside `|d| >= half_width`."""
     if abs(d) >= half_width:
         return 0.0
     a = math.pi * d / half_width
-    return 0.42 + 0.5 * math.cos(a) + 0.08 * math.cos(2 * a)
+    return WINDOW[0] + WINDOW[1] * math.cos(a) + WINDOW[2] * math.cos(2 * a)
 
 
 def model_block(fc: float) -> list[float]:
@@ -46,7 +50,7 @@ def model_block(fc: float) -> list[float]:
     for tap in range(TAPS):
         for phase in range(PHASES):
             d = tap - CENTER_TAP - phase / PHASES
-            out.append(sinc(fc * d) * blackman(d))
+            out.append(sinc(fc * d) * window(d))
     return out
 
 
