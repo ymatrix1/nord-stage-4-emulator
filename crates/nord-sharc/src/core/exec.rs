@@ -84,6 +84,7 @@ impl Core {
             Kind::T21 if d.w == 0 => {}
             Kind::T2a | Kind::T2b | Kind::T2c => self.exec_compute(&d)?,
             Kind::T6n => self.exec_shift_imm(&d)?,
+            Kind::T6a => self.exec_shift_move(&d)?,
             Kind::T1a | Kind::T1b => self.exec_dual_move(&d)?,
             Kind::T8a | Kind::T9a | Kind::T9b | Kind::T11a | Kind::T11c | Kind::T12a => {
                 next = self.exec_flow(&d, next)?;
@@ -187,7 +188,7 @@ mod tests {
 
     #[test]
     fn faulting_step_leaves_state_untouched() {
-        let mut c = core_with(&[0x8000, 0x0000, 0x0000]);
+        let mut c = core_with(&[0xd70a, 0x3c23, 0xd70a]);
         let before = (c.pc, c.steps);
         assert!(c.step().is_err());
         assert_eq!((c.pc, c.steps), before);

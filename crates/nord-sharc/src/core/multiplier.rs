@@ -64,6 +64,39 @@ impl Core {
 }
 
 impl Core {
+    /// `Rn = MRxF|MRxB` and `MRxF|MRxB = Rn` (compute bit 22 set, bits 21..20 clear, operation
+    /// code = bits 19..12: low two bits select MR0/MR1/MR2, bit 2 the background register, bit 4
+    /// a write). VERIFIED by reading all 256 codes from ADI's disassembler (docs 5.36). A read of
+    /// MR2 is sign-extended from its 16 bits; a write to MR1 sign-extends into MR2; a write to MR0
+    /// leaves the upper bits alone (programming reference 3-14).
+    pub(super) fn mr_transfer(&mut self, op: u64, n: usize) -> bool {
+        let (field, background, write) =
+            ((op & 3) as usize, (op >> 2) & 1 == 1, (op >> 4) & 1 == 1);
+        if field == 3 || op & !0x17 != 0 {
+            return false;
+        }
+        let reg = usize::from(background);
+        let v = self.mr[reg];
+        if !write {
+            self.r[n] = match field {
+                0 => v as u32,
+                1 => (v >> 32) as u32,
+                _ => (((v >> 64) as i16) as i32) as u32,
+            };
+            return true;
+        }
+        let r = i128::from(self.r[n]);
+        let low = v & 0xFFFF_FFFF;
+        let low64 = v & 0xFFFF_FFFF_FFFF_FFFF;
+        let new = match field {
+            0 => (v & !0xFFFF_FFFFi128) | r,
+            1 => i128::from(self.r[n] as i32) << 32 | low,
+            _ => i128::from(self.r[n] as u16 as i16) << 64 | low64,
+        };
+        self.mr[reg] = (new << 48) >> 48;
+        true
+    }
+
     /// `Rn|MRx = SAT MRx (SI|UI|SF|UF)` and `Rn|MRx = RND MRx (SF|UF)` (opcode class 0).
     ///
     /// ASSUMED: the saturated 80-bit maxima are the usual ones (fractional positive
@@ -200,6 +233,36 @@ mod tests {
             !c.compute(mult_word(0x12, 5, 0, 0)),
             "integer RND is not an operation"
         );
+    }
+
+    /// ADI: compute `mr1f=r3` (op 0x11), `r3=mr0f` (0x00), `r3=mr2f` (0x02), `mr0b=r3` (0x14).
+    #[test]
+    fn mr_registers_transfer_to_and_from_the_register_file() {
+        let word = |op: u64, n: u64| (4 << 20) | (op << 12) | (n << 8) | (n << 4) | n;
+        let mut c = Core::new(&[]);
+        c.mr[0] = (0x1234i128 << 64) | (0xAAAA_BBBBi128 << 32) | 0xCCCC_DDDD;
+        assert!(c.compute(word(0x00, 3)));
+        assert_eq!(c.r[3], 0xCCCC_DDDD, "MR0F is the low 32 bits");
+        assert!(c.compute(word(0x01, 3)));
+        assert_eq!(c.r[3], 0xAAAA_BBBB);
+        assert!(c.compute(word(0x02, 3)));
+        assert_eq!(c.r[3], 0x1234, "MR2F is 16 bits");
+        // MR2 is sign-extended when read
+        c.mr[0] = -1;
+        assert!(c.compute(word(0x02, 4)));
+        assert_eq!(c.r[4], 0xFFFF_FFFF);
+        // writing MR1 sign-extends into MR2 and keeps MR0
+        c.mr[1] = 0x55;
+        c.r[3] = 0x8000_0001;
+        assert!(c.compute(word(0x15, 3)));
+        assert_eq!(c.mr[1] >> 32, -(0x7FFF_FFFFi128), "sign-extended MR2:MR1");
+        assert_eq!(c.mr[1] & 0xFFFF_FFFF, 0x55);
+        // writing MR0 leaves the rest
+        c.mr[0] = 0x7777i128 << 32;
+        c.r[3] = 9;
+        assert!(c.compute(word(0x10, 3)));
+        assert_eq!(c.mr[0], (0x7777i128 << 32) | 9);
+        assert!(!c.compute(word(0x03, 3)), "there is no MR3");
     }
 
     #[test]

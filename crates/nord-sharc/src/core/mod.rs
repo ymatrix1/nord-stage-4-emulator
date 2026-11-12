@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn unimplemented_instruction_is_reported_not_guessed() {
-        let mut c = core_with(&[0x8000, 0x0000, 0x0000]);
+        let mut c = core_with(&[0xd70a, 0x3c23, 0xd70a]);
         assert!(matches!(
             c.step(),
             Err(Fault::Unimplemented { pc: 0x12_0000, .. })
@@ -335,8 +335,8 @@ mod tests {
 
     #[test]
     fn lenient_mode_skips_unmodelled_compute_and_counts_it() {
-        // type 2a word `IF TRUE F1 = FPACK F2` (shifter op 0x90, not modelled) at short-word 0
-        let parcels = [0x013eu16, 0x0029, 0x0112, 0x0000];
+        // type 2a word `IF TRUE F1 = RECIPS F2` (ALU op 0xC4, seed table unknown, not modelled)
+        let parcels = [0x013eu16, 0x000c, 0x4120, 0x0000];
         let mut strict = core_at_zero(&parcels);
         assert!(strict.step().is_err());
         let mut c = core_at_zero(&parcels);

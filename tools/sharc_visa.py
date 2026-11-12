@@ -345,10 +345,20 @@ MULALU_OPS = {
 }
 
 
+def mr_transfer_text(op: int, n: int) -> str | None:
+    """`Rn = MR1F` / `MR1F = Rn` (operation code bits 19..12, register bits 11..8), docs 5.36."""
+    if op & 3 == 3 or op & ~0x17:
+        return None
+    mr = f"MR{op & 3}{'B' if op & 4 else 'F'}"
+    return f"{mr} = R{n}" if op & 16 else f"R{n} = {mr}"
+
+
 def multi_text(c: int) -> str | None:
     """Multifunction compute fields (bit 22 set): multiplier + ALU, multiplier + dual ALU."""
     if not bits(c, 22, 22):
         return None
+    if bits(c, 21, 17) == 0:
+        return mr_transfer_text(bits(c, 19, 12), bits(c, 11, 8))
     xm, ym = bits(c, 7, 6), 4 + bits(c, 5, 4)
     xa, ya = 8 + bits(c, 3, 2), 12 + bits(c, 1, 0)
     rm, ra = bits(c, 15, 12), bits(c, 11, 8)
@@ -421,7 +431,6 @@ def _mem_move(w: int, name: str, iff: str) -> str:
 
 # Instruction forms whose type is known from the diagrams but whose operand fields are not decoded.
 TYPE_ONLY = {
-    "6a": "shift immediate",
     "10a": "jump + dual move + compute",
 }
 
@@ -465,7 +474,9 @@ def decode(parcels: tuple[int, ...]) -> str:
         # swapped split put 79% of the transfers into system registers.
         data = bits(w, 22, 16)
         data -= 128 if data & 0x40 else 0
-        ea = f"DM({data}, I{bits(w, 43, 41)})"
+        # G bit 37: program memory with the DAG2 index (ADI `i5=pm(0x8,i9)`), 1,400 samples
+        space, bank = ("PM", 8) if bits(w, 37, 37) else ("DM", 0)
+        ea = f"{space}({data}, I{bits(w, 43, 41) + bank})"
         u = ureg_name(bits(w, 29, 23))
         return f"{ea} = {u}" if bits(w, 40, 40) else f"{u} = {ea}"
     if name == "3c":
@@ -503,6 +514,17 @@ def decode(parcels: tuple[int, ...]) -> str:
         if name == "7a" and bits(w, 22, 0):
             text += f", {compute_text(bits(w, 22, 0))}"
         return text
+    if name == "6a":
+        # shift fields of the 0x02 form plus a post-modify data move (docs 5.36)
+        bank = 8 if bits(w, 32, 32) else 0
+        move = _dual_half(
+            "PM" if bank else "DM",
+            bits(w, 31, 31),
+            bits(w, 43, 41) + bank,
+            bits(w, 40, 38) + bank,
+            bits(w, 26, 23),
+        )
+        return f"{iff}{shift_imm_text(w)}, {move}"
     if name == "6n":
         return f"{iff}{shift_imm_text(w)}"
     if name == "19a":
