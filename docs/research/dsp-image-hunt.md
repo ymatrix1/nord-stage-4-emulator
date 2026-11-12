@@ -526,6 +526,33 @@ python tools/sharc_visa.py SRAM/core1_sram.bin 0x2423c6 0x2423f0   # entry 0x121
 
 The external window (`0x20xxxxxx`) is not mapped yet. Candidates are the SDRAM address space of the datasheet (Table 6/7, bank 0 starts at `0x00200000`); the zero-fill blocks of 409,600 B (FX), 240,000 B (ORG) and 655,360 B (PNO Core1) are delay or work RAM there.
 
+### 5.19 What the SHARC code uses (scope for a core model)
+
+Tool: `tools/sharc_census.py` (tests in `tools/tests/test_sharc_census.py`). It decodes the code spans (found with `sharc_visa.sweep` on each core's flat SRAM image) of every core section of the FX, PNO and ORG images and counts instruction types and normalised operations (registers become `X`, numbers `#`).
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DIR
+python tools/sharc_census.py DIR --top 70
+```
+
+Result (v1.66): **66,305 instructions in 6 core sections** (FX 7,438 + 6,451, PNO 5,718 + 15,567, ORG 15,562 + 15,569); 4,933 (7%) still have operands the decoder keeps raw; 1,144 distinct normalised operations.
+
+| Group | Operations seen (count) |
+|---|---|
+| Float arithmetic | multiply (13,515, plus 383 with modifiers), add (9,314), subtract (4,372), `PASS` (911), `CLIP` (1,355), `COPYSIGN` (339), `ABS` (310), `MAX` (179), `(a+b)/2` (185), `RECIPS` (177), `COMP` (410) |
+| Conversion | `FLOAT` (1,203), `FIX` (830) |
+| Integer and bit | `AND` (152), `FDEP` (258), `MODIFY` (525), register moves and immediate loads (4,218 and 4,779) |
+| Memory | `DM(...)` loads and stores with immediate offset or `(I, M)` pre/post modify (about 14,000), `PM(...)` (about 214), direct `DM(addr)` (about 3,900) |
+| Control | `DO ... UNTIL LCE` loops (328), `CALL` (204), `RTS` (429), `NOP` (393) |
+| System | `BIT SET/CLR/TST` on `USTAT1`, `MODE1`, `MODE2`, `ASTATx`; `FADDR`, `CURLCNTR` and `LCNTR` moves; `Dreg <-> CDreg swap` (SIMD, 144) |
+
+Observations that matter for a core model:
+
+- **SIMD is used.** `MODE1` bit 21 (PEY enable) and bit 13 (`ALUSAT`) are set and cleared dozens of times (`BIT SET/CLR MODE1 0x200000`: 21 and 23 times; `0x2000`: 12 and 21 times), `S` registers and the `Dreg <-> CDreg` swap occur. The core needs the second processing element (PEy) and the complementary registers from the start.
+- **Start-up** begins with `BIT CLR MODE1 0x1000`. In the register table of the Programming Reference MODE1 bit 12 is the global interrupt enable (`IRPTEN`), so the code disables interrupts first.
+- **Float is the dominant data type**; integer work is address and bit manipulation plus `FIX`/`FLOAT`. The rounding mode (`RND32`, MODE1 bit 16) and the 40-bit extended precision matter for bit-exactness and have to be taken from the Programming Reference when the core is written.
+- **Status words are written constantly** (`BIT SET USTAT1`, `MMASK` stores); they probably signal the ARM or the other DSPs through memory. No interrupt or DMA set-up is visible in the instruction mix.
+
 Not done: a run-by-run check of the new `0x440000+` runs for SHARC opcodes, and v1.60 / v1.62 (not available).
 
 ## Implications
