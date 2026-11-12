@@ -106,6 +106,13 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
    - Center graphic: Real-time anti-aliased waveform / wavetable / FM operator visualization + primary parameter readout (`Super Saw`, `DETUNE: 3.4`).
    - Bottom bar: 4 inverted/outlined soft-label tabs (`ANALOG`, `SUPER`, `1 (6)`, `WAVE`) controlled by the 3 encoders below the screen.
 
+### 4.6 Known discrepancies (open, Phase 6b `ns4-xc5n`)
+
+| Item | This spec says | Manual / evidence | Status |
+|---|---|---|---|
+| Morph target display (§4.4) | Amber glowing arc around the knob | Manual p.11: green Morph LEDs at the bottom-left of the knob show morph assignment | Spec wrong; renderer to follow the manual (B8, [D15](../DECISIONS.md#d15-hybrid-baked-sprite--egui-painter-25d-rendering)) |
+| Fader LED ladder (§4.1) | 11 segments | Not yet checked against manual p.11 | `ASSUMED`; verify in B2 ([control inventory](control-inventory.md)) |
+
 ---
 
 ## 5. Responsive Layout Modes (Plugin vs Standalone)

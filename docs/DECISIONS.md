@@ -18,6 +18,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D10](#d10-every-source-file-ships-unit-tests-enforced-in-ci) | 2026-11-10 | Every source file ships unit tests enforced by `tools/check_tests.py` | accepted |
 | [D11](#d11-dual-target-delivery-daw-plugin-clap--vst3-and-standalone-application) | 2026-11-10 | Dual-target delivery: DAW Plugin (`CLAP` + `VST3`) AND Standalone application | accepted |
 | [D12](#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression) | 2026-11-11 | Pursue Track B reverse engineering for `CNSP` sample codec and full LZ firmware decompression | accepted |
+| [D15](#d15-hybrid-baked-sprite--egui-painter-25d-rendering) | 2026-11-12 | Hybrid baked-sprite + egui painter 2.5D rendering | proposed |
 
 ---
 
@@ -155,3 +156,18 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** The map agrees with independent data (bitscan found the same offsets; corpus values stay in legal ranges) and unblocks real decoding of LFO, voice mode, glide, octave and oscillator selection (resolves OQ4).
 - **Alternatives:** Keep guessing from preset names (ambiguous); disassemble the `ARM0` preset parser (large effort, tracked in OQ7).
 - **Impact:** `SynthLayerDecoded` gains the decoded fields; `pack()` rewrites only mapped fields and preserves all other bits; scales that ns4decode does not define stay `ASSUMED`.
+
+---
+
+## Proposed Decisions
+
+### D15. Hybrid baked-sprite + egui painter 2.5D rendering
+
+- **Status:** proposed 2026-11-12
+- **Context:** Phase 6b ([ROADMAP](ROADMAP.md#phase-6b-11-hardware-parity--25d-panel-ns4-xc5n)) needs a 2.5D panel (depth, shadows, materials) shared by the standalone app and the plugin editor. `nord-gui` is `eframe` on the `glow` (OpenGL) backend; the plugin editor will use `nih_plug_egui`, which runs on `baseview` + OpenGL. Drawing is GUI-thread only and must never lock the engine.
+- **Decision:** An `xtask` baker (`xtask bake-panel`, `tiny-skia`, deterministic) produces the static layers as sprites: chassis, slate, silkscreen and materials. Art is original, not photo crops. It emits 1x and 2x sets with content hashes. egui draws the dynamic layers: rotated knob caps with a fixed light overlay, LED glow, OLED pixels, text and Morph LEDs. One top-left light for the whole panel; a per-element height token drives shadow offset and blur. Textures upload once; repaint at most 60 Hz and only on change.
+- **Why:** Baked sprites give material quality an immediate-mode painter cannot reach cheaply. The egui painter keeps dynamic state exact and runs on both OpenGL hosts without custom GPU code. Deterministic baking with hashes keeps assets reproducible and testable by the golden-image harness (B6).
+- **Alternatives:**
+  - A. egui painter only: simplest, but flat materials, and per-frame cost rises with gradient/shadow meshes.
+  - B. wgpu shader callbacks: rejected. `nord-gui` is `eframe`/`glow` and `nih_plug_egui` uses `baseview`/OpenGL, so a wgpu path would need a second backend in both hosts.
+- **Impact:** New `xtask bake-panel` command and committed atlases with hashes; `crates/nord-panel` render modules (`theme`, `material`, `shadow`, `atlas`, per-widget painters); spec [visual-style-and-panel.md](specs/visual-style-and-panel.md) updates in B7/B8. `nord-panel` must use the egui version `nih_plug_egui` pins (OQ12).
