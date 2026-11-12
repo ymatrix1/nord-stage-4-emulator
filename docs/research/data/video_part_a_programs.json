@@ -1,0 +1,341 @@
+{
+ "video": "_zksT69H30c",
+ "note": "Program changes read from the OLED (tools/video_ref.py scenes). first_seen_s is the sample time of the first stable frame (+-2 s). Revisits (A:51/52/58) are listed again.",
+ "programs": [
+  {
+   "first_seen_s": 6,
+   "program": "A:11",
+   "name": "NS4 Palette"
+  },
+  {
+   "first_seen_s": 47,
+   "program": "A:12",
+   "name": "Classic 75 Mk I"
+  },
+  {
+   "first_seen_s": 146,
+   "program": "A:13",
+   "name": "Felt Upright"
+  },
+  {
+   "first_seen_s": 234,
+   "program": "A:14",
+   "name": "B3 Chords n Solo"
+  },
+  {
+   "first_seen_s": 272,
+   "program": "A:15",
+   "name": "Hybrid Str Whl"
+  },
+  {
+   "first_seen_s": 287,
+   "program": "A:16",
+   "name": "Horizon Whl"
+  },
+  {
+   "first_seen_s": 370,
+   "program": "A:17",
+   "name": "Dual Gates"
+  },
+  {
+   "first_seen_s": 401,
+   "program": "A:18",
+   "name": "Shoreline Whl"
+  },
+  {
+   "first_seen_s": 426,
+   "program": "A:21",
+   "name": "White Grand"
+  },
+  {
+   "first_seen_s": 462,
+   "program": "A:22",
+   "name": "Classic Wurly"
+  },
+  {
+   "first_seen_s": 500,
+   "program": "A:23",
+   "name": "Pearl Upright"
+  },
+  {
+   "first_seen_s": 544,
+   "program": "A:24",
+   "name": "B3 Jazz Split"
+  },
+  {
+   "first_seen_s": 594,
+   "program": "A:25",
+   "name": "Sidechain Whl II"
+  },
+  {
+   "first_seen_s": 634,
+   "program": "A:26",
+   "name": "Sine-Saw Plk Whl"
+  },
+  {
+   "first_seen_s": 682,
+   "program": "A:27",
+   "name": "4 Osc Funk Bass"
+  },
+  {
+   "first_seen_s": 730,
+   "program": "A:28",
+   "name": "Boxxx"
+  },
+  {
+   "first_seen_s": 802,
+   "program": "A:31",
+   "name": "The Long Dark Whl"
+  },
+  {
+   "first_seen_s": 824,
+   "program": "A:32",
+   "name": "Glowing Amber"
+  },
+  {
+   "first_seen_s": 858,
+   "program": "A:33",
+   "name": "Bubbles Mk I"
+  },
+  {
+   "first_seen_s": 890,
+   "program": "A:34",
+   "name": "B3 Praise Split"
+  },
+  {
+   "first_seen_s": 938,
+   "program": "A:35",
+   "name": "M Lead Pad Split"
+  },
+  {
+   "first_seen_s": 990,
+   "program": "A:36",
+   "name": "Aeon Pad"
+  },
+  {
+   "first_seen_s": 1056,
+   "program": "A:37",
+   "name": "Strings Trem Whl"
+  },
+  {
+   "first_seen_s": 1090,
+   "program": "A:38",
+   "name": "Space Drama II"
+  },
+  {
+   "first_seen_s": 1128,
+   "program": "A:41",
+   "name": "Bright Imperial"
+  },
+  {
+   "first_seen_s": 1138,
+   "program": "A:42",
+   "name": "Rich Tines Mk I"
+  },
+  {
+   "first_seen_s": 1168,
+   "program": "A:43",
+   "name": "Grand Pad"
+  },
+  {
+   "first_seen_s": 1204,
+   "program": "A:44",
+   "name": "80s Sci-Fi"
+  },
+  {
+   "first_seen_s": 1240,
+   "program": "A:45",
+   "name": "Hybrid Brass"
+  },
+  {
+   "first_seen_s": 1265,
+   "program": "A:46",
+   "name": "Leaky Stabs II"
+  },
+  {
+   "first_seen_s": 1317,
+   "program": "A:47",
+   "name": "Silver Rush"
+  },
+  {
+   "first_seen_s": 1370,
+   "program": "A:48",
+   "name": "Mega Line Whl"
+  },
+  {
+   "first_seen_s": 1406,
+   "program": "A:51",
+   "name": "Bright Felt"
+  },
+  {
+   "first_seen_s": 1428,
+   "program": "A:52",
+   "name": "Stereo Wah Clav"
+  },
+  {
+   "first_seen_s": 1476,
+   "program": "A:53",
+   "name": "Soft Padding Whl"
+  },
+  {
+   "first_seen_s": 1504,
+   "program": "A:54",
+   "name": "B3 Shade"
+  },
+  {
+   "first_seen_s": 1544,
+   "program": "A:55",
+   "name": "Texas Nights J3"
+  },
+  {
+   "first_seen_s": 1571,
+   "program": "A:56",
+   "name": "Pinky Lead"
+  },
+  {
+   "first_seen_s": 1617,
+   "program": "A:57",
+   "name": "12dB Sweep"
+  },
+  {
+   "first_seen_s": 1642,
+   "program": "A:58",
+   "name": "Mm-Oh Choir Whl"
+  },
+  {
+   "first_seen_s": 1684,
+   "program": "A:51",
+   "name": "Bright Felt"
+  },
+  {
+   "first_seen_s": 1700,
+   "program": "A:52",
+   "name": "Stereo Wah Clav"
+  },
+  {
+   "first_seen_s": 1702,
+   "program": "A:58",
+   "name": "Mm-Oh Choir Whl"
+  },
+  {
+   "first_seen_s": 1706,
+   "program": "A:61",
+   "name": "Velvet Grand"
+  },
+  {
+   "first_seen_s": 1739,
+   "program": "A:62",
+   "name": "Shimmer Upright"
+  },
+  {
+   "first_seen_s": 1778,
+   "program": "A:63",
+   "name": "Classic Wah Clav"
+  },
+  {
+   "first_seen_s": 1808,
+   "program": "A:64",
+   "name": "Tiny Transistor"
+  },
+  {
+   "first_seen_s": 1841,
+   "program": "A:65",
+   "name": "Momentum Whl"
+  },
+  {
+   "first_seen_s": 1898,
+   "program": "A:66",
+   "name": "Crunch Synth"
+  },
+  {
+   "first_seen_s": 1931,
+   "program": "A:67",
+   "name": "Phat 3 Osc MiniM"
+  },
+  {
+   "first_seen_s": 1953,
+   "program": "A:68",
+   "name": "Acoustic Guitar"
+  },
+  {
+   "first_seen_s": 1984,
+   "program": "A:71",
+   "name": "J3 Open Sky"
+  },
+  {
+   "first_seen_s": 2016,
+   "program": "A:72",
+   "name": "Rude Mk II"
+  },
+  {
+   "first_seen_s": 2035,
+   "program": "A:73",
+   "name": "Tines Layer"
+  },
+  {
+   "first_seen_s": 2075,
+   "program": "A:74",
+   "name": "B3 Old Forest"
+  },
+  {
+   "first_seen_s": 2100,
+   "program": "A:75",
+   "name": "Filter Bank Ld"
+  },
+  {
+   "first_seen_s": 2150,
+   "program": "A:76",
+   "name": "Oo Pad Whl"
+  },
+  {
+   "first_seen_s": 2177,
+   "program": "A:77",
+   "name": "The Gospel II"
+  },
+  {
+   "first_seen_s": 2248,
+   "program": "A:78",
+   "name": "Jazz Guitar II"
+  },
+  {
+   "first_seen_s": 2296,
+   "program": "A:81",
+   "name": "Believer"
+  },
+  {
+   "first_seen_s": 2327,
+   "program": "A:82",
+   "name": "Phase Twin Mk I"
+  },
+  {
+   "first_seen_s": 2344,
+   "program": "A:83",
+   "name": "Digi Keys Pad"
+  },
+  {
+   "first_seen_s": 2358,
+   "program": "A:84",
+   "name": "Vintage Vox J3"
+  },
+  {
+   "first_seen_s": 2372,
+   "program": "A:85",
+   "name": "Intense Score"
+  },
+  {
+   "first_seen_s": 2396,
+   "program": "A:86",
+   "name": "Silk Pad"
+  },
+  {
+   "first_seen_s": 2418,
+   "program": "A:87",
+   "name": "Smooth Lead"
+  },
+  {
+   "first_seen_s": 2443,
+   "program": "A:88",
+   "name": "Spin EP"
+  }
+ ]
+}

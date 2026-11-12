@@ -112,6 +112,68 @@ pub fn parse_notes(s: &str) -> Result<Vec<u8>, String> {
     Ok(notes)
 }
 
+/// Parses note events written by `tools/video_ref.py notes --events-out`.
+///
+/// Accepts `{"events": [{"midi", "onset_s", "offset_s", "confirmed"?, "strength"?}]}` or a bare array.
+/// With `confirmed_only`, events whose `confirmed` field is `false` are skipped. Velocity is
+/// `velocity` for every note. Returns the timed events and the last note-off frame.
+pub fn parse_note_events(
+    json: &str,
+    sample_rate: f32,
+    velocity: u8,
+    confirmed_only: bool,
+) -> Result<(Vec<TimedEvent>, usize), String> {
+    let v: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| format!("invalid --events JSON: {e}"))?;
+    let arr = v
+        .get("events")
+        .unwrap_or(&v)
+        .as_array()
+        .ok_or_else(|| "--events JSON must be an array or {\"events\": [...]}".to_string())?;
+    let mut out = Vec::new();
+    let mut last = 0usize;
+    for e in arr {
+        let note = e
+            .get("midi")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|&n| n <= 127)
+            .ok_or_else(|| format!("event without valid 'midi': {e}"))? as u8;
+        let on = e.get("onset_s").and_then(serde_json::Value::as_f64);
+        let off = e.get("offset_s").and_then(serde_json::Value::as_f64);
+        let (on, off) = on
+            .zip(off)
+            .filter(|(a, b)| *a >= 0.0 && b > a)
+            .ok_or_else(|| format!("event needs 0 <= onset_s < offset_s: {e}"))?;
+        if confirmed_only && e.get("confirmed").and_then(serde_json::Value::as_bool) == Some(false)
+        {
+            continue;
+        }
+        let on_f = (on * f64::from(sample_rate)).round() as usize;
+        let off_f = (off * f64::from(sample_rate)).round() as usize;
+        out.push(TimedEvent {
+            frame: on_f,
+            event: MidiEvent::NoteOn {
+                channel: 0,
+                note,
+                velocity,
+            },
+        });
+        out.push(TimedEvent {
+            frame: off_f,
+            event: MidiEvent::NoteOff {
+                channel: 0,
+                note,
+                velocity: 0,
+            },
+        });
+        last = last.max(off_f);
+    }
+    if out.is_empty() {
+        return Err("no note events to render".to_string());
+    }
+    Ok((out, last))
+}
+
 /// Parses a CC event spec `"controller:value@frame"` (e.g. `"64:127@0"` = sustain down).
 pub fn parse_cc_spec(s: &str) -> Result<(u8, u8, usize), String> {
     let bad = || format!("invalid --cc '{s}' (expected controller:value@frame, e.g. 64:127@0)");
@@ -132,6 +194,43 @@ mod tests {
 
     fn read_u32(b: &[u8], at: usize) -> u32 {
         u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn test_parse_note_events_json() {
+        let js = r#"{"events":[
+            {"midi":60,"onset_s":0.5,"offset_s":1.0,"confirmed":true},
+            {"midi":64,"onset_s":0.0,"offset_s":2.0,"confirmed":false}]}"#;
+        let (ev, last) = parse_note_events(js, 48_000.0, 90, false).unwrap();
+        assert_eq!(ev.len(), 4);
+        assert_eq!(ev[0].frame, 24_000);
+        assert_eq!(last, 96_000);
+        assert!(matches!(
+            ev[0].event,
+            MidiEvent::NoteOn {
+                note: 60,
+                velocity: 90,
+                ..
+            }
+        ));
+        let (only, _) = parse_note_events(js, 48_000.0, 90, true).unwrap();
+        assert_eq!(only.len(), 2, "confirmed_only drops unconfirmed events");
+        assert!(parse_note_events("[]", 48_000.0, 90, false).is_err());
+        assert!(parse_note_events(
+            r#"[{"midi":200,"onset_s":0,"offset_s":1}]"#,
+            48_000.0,
+            90,
+            false
+        )
+        .is_err());
+        assert!(parse_note_events(
+            r#"[{"midi":60,"onset_s":1,"offset_s":1}]"#,
+            48_000.0,
+            90,
+            false
+        )
+        .is_err());
+        assert!(parse_note_events("{", 48_000.0, 90, false).is_err());
     }
 
     #[test]

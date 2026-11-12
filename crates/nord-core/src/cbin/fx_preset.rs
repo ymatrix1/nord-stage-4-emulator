@@ -173,6 +173,12 @@ impl FxDecoded {
     }
 
     /// Maps hardware `Edt_Effects_kFx2Type` (0..=11) into `Mod2Type`.
+    ///
+    /// VERIFIED (order): UI strings at `0x2cc5d4..0x2cc668` of OS v1.66 `bank0_CODE.bin` list
+    /// Phaser I/II, Flanger Stereo/Mono, Chorus (one string shared elsewhere)/Analog, Vibe Stereo/Mono,
+    /// Ensemble Stereo/Mono, Spin Treble/Bass. EMPIRICAL (numeric index, `ns4decode` `FXmod2mode`):
+    /// `0/1` PHAS, `2/3` FLANG, `4/5` CHOR, `6/7` VIBE, `8/9` ENS, `10/11` SPIN (odd = variation).
+    /// ASSUMED: Ensemble is rendered as Chorus and Spin as Vibe (no dedicated DSP yet).
     pub fn mod2_type(&self) -> Mod2Type {
         if !self.mod2_enabled {
             return Mod2Type::Off;
@@ -180,30 +186,81 @@ impl FxDecoded {
         match self.mod2_type_raw {
             0 | 1 => Mod2Type::Phaser,
             2 | 3 => Mod2Type::Flanger,
-            4 | 7 | 8 => Mod2Type::Chorus,
-            5 | 6 | 9..=11 => Mod2Type::Vibe,
+            4 | 5 | 8 | 9 => Mod2Type::Chorus,
+            6 | 7 | 10 | 11 => Mod2Type::Vibe,
             _ => Mod2Type::Chorus,
         }
     }
 
-    /// Maps hardware `Edt_Effects_kRvbType` (0..=5) into `ReverbModel`.
+    /// Full 4-bit reverb type `0..=11`: 3 bits in `reverb_type_raw` plus the low bit stored as the
+    /// top bit of the 9-bit `amp_type_new` field (bit 408 of the block).
+    ///
+    /// EMPIRICAL: bit layout from `ns4decode` (`FX reverb type` = bits 405..=408).
+    pub fn reverb_type4(&self) -> u8 {
+        (self.reverb_type_raw << 1) | ((self.amp_type_new >> 8) & 1) as u8
+    }
+
+    /// Reverb variation flag (`Spring2`, `Booth Predelay`, `Room Predelay`, `Stage/Hall/Cathedral Chorale`).
+    ///
+    /// VERIFIED (order): UI strings at `0x2cc89c..0x2cc918`; EMPIRICAL (index): `ns4decode`.
+    pub fn reverb_variation(&self) -> bool {
+        (self.reverb_type4() & 1) != 0
+    }
+
+    /// Maps the hardware reverb type (`0 Spring, 1 Booth, 2 Room, 3 Stage, 4 Hall, 5 Cathedral`, each
+    /// with a variation) into `ReverbModel`.
     pub fn reverb_model(&self) -> ReverbModel {
         if !self.reverb_enabled {
             return ReverbModel::Off;
         }
-        match self.reverb_type_raw {
-            0 | 1 => ReverbModel::Booth,
+        match self.reverb_type4() >> 1 {
+            0 => ReverbModel::Spring,
+            1 => ReverbModel::Booth,
             2 => ReverbModel::Room,
             3 => ReverbModel::Stage,
             4 => ReverbModel::Hall,
-            5 => ReverbModel::Cathedral,
-            _ => ReverbModel::Stage,
+            _ => ReverbModel::Cathedral,
         }
     }
 
-    /// Computes EQ Mid center frequency in Hz (`200..8000 Hz`).
+    /// Delay `Analog` flag (bit 332 of the block).
+    ///
+    /// EMPIRICAL (`ns4decode` `FX delay normal/analog`): the 2-bit `delay_mode` field is
+    /// `[analog, ping-pong]`, MSB first.
+    pub fn delay_analog_on(&self) -> bool {
+        (self.delay_mode & 0b10) != 0
+    }
+
+    /// Delay `Ping Pong` flag (bit 333 of the block); see [`Self::delay_analog_on`].
+    pub fn delay_ping_pong_on(&self) -> bool {
+        (self.delay_mode & 0b01) != 0
+    }
+
+    /// Delay feedback filter type `0..=3` = Bypass, Low-pass, High-pass, Band-pass.
+    ///
+    /// VERIFIED (order): UI strings `Bypass/Low-pass/High-pass/Band-pass` at `0x2cc7f8..0x2cc818`.
+    /// EMPIRICAL (bits 334..=335, `ns4decode` `FX delay filter type`): stored in the two bits that
+    /// `delay_ping_pong` and `delay_fb_filter` are decoded from.
+    pub fn delay_filter_type(&self) -> u8 {
+        (u8::from(self.delay_ping_pong) << 1) | u8::from(self.delay_fb_filter)
+    }
+
+    /// Computes EQ Mid center frequency in Hz (`200..8000 Hz`) from the 128-step hardware table.
     pub fn eq_mid_freq_hz(&self) -> f32 {
-        200.0 * 40.0f32.powf(self.eq_mid_freq_norm.clamp(0.0, 1.0))
+        crate::fx::eq_freq_hz_from_norm(self.eq_mid_freq_norm)
+    }
+
+    /// Amp Sim / EQ mode (`0..=9`): off, Twin, Twin II, JC, JC II, Small, Small II, To Rotary, LP24, HP24.
+    ///
+    /// EMPIRICAL: the mode is the low 4 bits of `amp_type_new` (bits 413..=416 of the block); identical to
+    /// third-party `ns4decode` `FX amp sim/EQ mode` on 10 factory programs covering modes 0..=9.
+    pub fn amp_mode(&self) -> u8 {
+        (self.amp_type_new & 0x0F) as u8
+    }
+
+    /// `LP24`/`HP24` resonance `0.0..=10.0` carried by the Mid knob (`ns4decode`: `10 * (60 + signed) / 120`).
+    pub fn amp_filter_res(&self) -> f32 {
+        (10.0 * (60.0 + self.eq_mid_db * 4.0) / 120.0).clamp(0.0, 10.0)
     }
 
     /// Computes Delay time in milliseconds (`20..2000 ms`).
@@ -502,5 +559,58 @@ mod tests {
         assert!(unpacked.delay_ping_pong);
         assert!((unpacked.reverb_amount_morph.wheel - 0.25).abs() < 0.02);
         assert!((unpacked.reverb_amount_morph.aftertouch + 0.1).abs() < 0.02);
+    }
+
+    #[test]
+    fn test_fx_enum_helpers_follow_hardware_tables() {
+        let mut fx = FxDecoded {
+            mod2_enabled: true,
+            reverb_enabled: true,
+            ..FxDecoded::default()
+        };
+        // Mod 2: 0/1 PHAS, 2/3 FLANG, 4/5 CHOR, 6/7 VIBE
+        for (raw, want) in [
+            (0, Mod2Type::Phaser),
+            (3, Mod2Type::Flanger),
+            (5, Mod2Type::Chorus),
+            (7, Mod2Type::Vibe),
+            (9, Mod2Type::Chorus),
+            (11, Mod2Type::Vibe),
+        ] {
+            fx.mod2_type_raw = raw;
+            assert_eq!(fx.mod2_type(), want, "raw {raw}");
+        }
+        // Reverb: 4-bit type = (raw3 << 1) | top bit of amp_type_new
+        fx.reverb_type_raw = 3;
+        fx.amp_type_new = 0;
+        assert_eq!(
+            (fx.reverb_type4(), fx.reverb_model(), fx.reverb_variation()),
+            (6, ReverbModel::Stage, false)
+        );
+        fx.amp_type_new = 0x100 | 33;
+        assert_eq!((fx.reverb_type4(), fx.reverb_variation()), (7, true));
+        assert_eq!(fx.amp_mode(), 1, "low 4 bits stay the amp mode");
+        fx.reverb_type_raw = 0;
+        fx.amp_type_new = 0;
+        assert_eq!(fx.reverb_model(), ReverbModel::Spring);
+        fx.reverb_type_raw = 1;
+        assert_eq!(fx.reverb_model(), ReverbModel::Booth);
+        fx.reverb_enabled = false;
+        assert_eq!(fx.reverb_model(), ReverbModel::Off);
+        // Delay: mode = [analog, ping-pong]; filter type = [ping_pong, fb_filter]
+        fx.delay_mode = 0b10;
+        assert!(fx.delay_analog_on() && !fx.delay_ping_pong_on());
+        fx.delay_mode = 0b01;
+        assert!(!fx.delay_analog_on() && fx.delay_ping_pong_on());
+        for (pp, flt, want) in [
+            (false, false, 0),
+            (false, true, 1),
+            (true, false, 2),
+            (true, true, 3),
+        ] {
+            fx.delay_ping_pong = pp;
+            fx.delay_fb_filter = flt;
+            assert_eq!(fx.delay_filter_type(), want);
+        }
     }
 }

@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 
 const SAMPLE_RATE: f32 = 48_000.0;
-const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b>] [--wav <out.wav>] [--note N | --notes 60,64,67] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame]...";
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
@@ -245,15 +245,24 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                     .and_then(|idx| args.get(idx + 1))
             };
             let mut engine = Stage4Engine::new(SAMPLE_RATE);
+            let mut sound_refs: Option<nord_core::cbin::ProgramSoundRefs> = None;
 
             if let Some(backup_path) = flag("--backup") {
                 let archive = nord_core::cbin::Ns4BackupArchive::open(backup_path)
                     .map_err(|e| e.to_string())?;
                 let mut file = fs::File::open(backup_path)
                     .map_err(|e| format!("failed to open {backup_path}: {e}"))?;
-                engine
-                    .load_program_with_sounds_from_backup(&archive, &mut file, path)
-                    .map_err(|e| e.to_string())?;
+                let (_, refs) = if let Some(pf) = flag("--program-file") {
+                    let bytes = fs::read(pf).map_err(|e| format!("failed to read {pf}: {e}"))?;
+                    engine
+                        .load_program_bytes_with_sounds_from_backup(&archive, &mut file, &bytes)
+                        .map_err(|e| e.to_string())?
+                } else {
+                    engine
+                        .load_program_with_sounds_from_backup(&archive, &mut file, path)
+                        .map_err(|e| e.to_string())?
+                };
+                sound_refs = Some(refs);
             } else {
                 let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;
                 let cbin = CbinFile::parse(&bytes).map_err(|e| e.to_string())?;
@@ -261,8 +270,10 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 engine.apply_program(&prog);
             }
 
+            let events_path = flag("--events");
             let notes = match flag("--notes") {
                 Some(v) => render::parse_notes(v)?,
+                None if events_path.is_some() => Vec::new(),
                 None => vec![flag("--note")
                     .and_then(|v| v.parse::<u8>().ok())
                     .unwrap_or(60)],
@@ -272,7 +283,7 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 .transpose()?
                 .unwrap_or(100)
                 .min(127);
-            let frames = flag("--frames")
+            let mut frames = flag("--frames")
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(4096);
             let hold = flag("--hold")
@@ -306,6 +317,21 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                     },
                 });
             }
+            if let Some(ep) = events_path {
+                let json = fs::read_to_string(ep)
+                    .map_err(|e| format!("failed to read {ep}: {e}"))?;
+                let confirmed_only = args.iter().any(|a| a == "--confirmed-only");
+                let (evs, last) = render::parse_note_events(
+                    &json,
+                    SAMPLE_RATE,
+                    velocity,
+                    confirmed_only,
+                )?;
+                events.extend(evs);
+                if flag("--frames").is_none() {
+                    frames = last + (SAMPLE_RATE as usize);
+                }
+            }
             for &note in &notes {
                 events.push(render::TimedEvent {
                     frame: 0,
@@ -336,6 +362,10 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                  Peak amplitude: {peak:.4}
                  RMS level: {rms:.4}"
             );
+            if let Some(r) = &sound_refs {
+                out.push_str(&format!("
+Sounds: {r:?}"));
+            }
             if let Some(wav_path) = flag("--wav") {
                 let wav = render::encode_wav_f32_stereo(SAMPLE_RATE as u32, &left, &right);
                 fs::write(wav_path, &wav)
