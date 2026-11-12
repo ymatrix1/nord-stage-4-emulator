@@ -68,7 +68,7 @@ Skills live in `.agents/skills/`; `.claude/skills` points there.
 
 ## Layout
 
-`crates/nord-core/` Rust DSP & `CBIN`/firmware parser + `ns4` CLI · `tools/` Python inspection CLI (`ns4_inspect.py`) & test ratchet (`check_tests.py`) · `docs/` PRD, ROADMAP, ARCHITECTURE, DECISIONS, `specs/`, `research/` · `.agents/` rules & skills · `.beans/` tracked tasks
+`crates/nord-core/` Rust DSP & `CBIN`/firmware parser + `ns4` CLI · `crates/nord-sharc/` SHARC VISA decoder (Track B oracle) · `tools/` Python inspection CLI (`ns4_inspect.py`) & test ratchet (`check_tests.py`) · `docs/` PRD, ROADMAP, ARCHITECTURE, DECISIONS, `specs/`, `research/` · `.agents/` rules & skills · `.beans/` tracked tasks
 
 ## Checks before pushing
 

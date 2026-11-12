@@ -38,7 +38,7 @@ Instruction decoding for all used forms is a prerequisite. `tools/sharc_visa.py`
 
 | Milestone | Acceptance |
 |---|---|
-| M1 decoder | Full operand decoding into a Rust enum; round trip against the `tools/sharc_visa.py` listings on all code spans |
+| M1 decoder | Full operand decoding into a Rust enum; round trip against the `tools/sharc_visa.py` listings on all code spans. **Status:** `crates/nord-sharc/src/visa.rs` ports the Python decoder (type, length and text for every form the Python tool decodes) and its `sharc-disasm` output is identical to the Python listing on about 970,000 instruction lines of four core SRAM images; still open: structured operands (an enum) for the execution core and the forms the Python tool leaves raw |
 | M2 core | Registers, DAGs, loops and calls; one unit test per instruction from the semantics in the manual |
 | M3 start-up | Run the entry code of each core section until it reaches its idle loop with no unknown instruction |
 | M4 routine test | Call one pure routine (for example a biquad or the sinc interpolation) with test vectors and match the expected result |
