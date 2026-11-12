@@ -192,6 +192,18 @@ Next: find the DSP-upload routine that copies `0x2f9ee8` (base + level*16) to th
 
 Decision: the engine keeps `3.5 / 7.0 / 11.5` cents (ASSUMED). Candidates to test on hardware: unison level 1 = `+/-2` cents (two voices), level 2 = `+/-4` and `+/-1.33`, level 3 = `+/-6` and `+/-2` (four voices), measured with `tools/sweep_analyze.py unison`.
 
+## Older-model service manuals as evidence (2026-11-12)
+
+Files in `.reference/`: `785351857-Nord-Stage-Service-Manual-v1-1.pdf` and `pdf-nord-stage-3-service-manual-overview_compress.pdf` are **the same file** (identical MD5; title `stage_servicemanual_1.1.doc`, 20 pages). It is the service manual of the **original Nord Stage (88/76/Compact, 2005)**, not the Stage 3 and not the Stage 4; there is no Stage 4 service manual in the folder. The Electro 2 and Stage 2 guides are separate older models.
+
+What they say about architecture (none gives synth parameter scales, no glide / unison / detune numbers):
+
+- Original Stage: "five DSPs U16-U20, controlled by a host processor", "boot code for the host processor in the BootPROM", "**OS and piano samples are stored in a Flash memory**"; the test program checks "the five DSPs, including external memory and communication between DSPs" and reports `ERR: Uxx boot (DSP not starting)`.
+- Electro 2: "four DSPs controlled by a host processor", "OS and sampled sounds stored in FLASH circuits".
+- Stage 2 guide: "OS and all samples are stored in the flashes", flashes controlled by one of two DSPs; boot-problem recovery = erase flashes, install OS first, then restore samples.
+
+Reading: in earlier Nord designs the **host boots the DSPs from the OS held in flash** ("DSP not starting"). The Stage 4 has the same strings (`DSP Boot Error`, `DSP/Chip fail`), so the DSP code is plausibly part of the OS image after all. This weakens the earlier "the DSP code is not shipped by OS updates" reading in the container-accounting section: it stays true that we find no recognisable DSP code in the unpacked `CODE`, but the architecture precedent says it should be there. Open: either it is stored in a form we do not recognise (for example inside the 1.2 MB audio-like block, or in another packing), or Stage 4 DSPs boot from a separate flash. Ring Mod optimisation in the v1.54 changelog also points to updatable DSP code.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
