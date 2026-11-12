@@ -7,6 +7,7 @@ mono/stereo WAV with a *Pure Sine* oscillator and the filter off, then:
     python tools/sweep_analyze.py glide     glide_k5.wav
     python tools/sweep_analyze.py vibrato   vibrato_amt5.wav
     python tools/sweep_analyze.py unison    unison2_c6.wav --f0 1046.5
+    python tools/sweep_analyze.py unison    clip.wav --f0 392 --harmonic 10
     python tools/sweep_analyze.py excursion osc_env_pitch_amt5.wav
     python tools/sweep_analyze.py level     amp_vel3_v064.wav --from 0.5 --to 2.0
 
@@ -180,10 +181,16 @@ def main(argv: list[str] | None = None) -> int:
     u = sub.add_parser("unison")
     u.add_argument("wav", type=Path)
     u.add_argument("--f0", type=float, required=True, help="played note frequency in Hz")
+    u.add_argument(
+        "--harmonic",
+        type=int,
+        default=1,
+        help="analyse this harmonic of f0 (detune in cents is the same, peaks spread wider)",
+    )
     args = p.parse_args(argv)
     rate, mono = load_mono(args.wav)
     if args.cmd == "unison":
-        result = unison_spread(mono, rate, args.f0)
+        result = unison_spread(mono, rate, args.f0 * args.harmonic)
     elif args.cmd == "level":
         result = {"rms_dbfs": rms_dbfs(mono, rate, args.t0, args.t1)}
     else:

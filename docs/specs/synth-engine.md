@@ -89,7 +89,7 @@ This resolves the 4-stage feedback loop algebraically on every sample without in
 | Mono / Legato | Mono = one voice; Legato = mono + envelopes keep running on overlapping keys. Panel has separate LEDs; `legato` implies `mono`. | EMPIRICAL (manual p.35) |
 | Voice priority | `LO` ignores keys above the lowest held key, `HI` ignores keys below the highest; release falls back to the lowest/highest remaining key. | EMPIRICAL (manual p.35) |
 | Glide | Constant-rate (seconds per octave); Mono glides every note, Legato only between overlapping notes. Knob `0..10` maps to `(k/10)^2 * 2 s` per octave. | rate law EMPIRICAL (manual), scale ASSUMED |
-| Unison `1/2/3` | Two extra detuned oscillators panned L/R at `3.5 / 7.0 / 11.5` cents (Analog and Wavetable). | ASSUMED (cents copied from Piano unison) |
+| Unison `1/2/3` | Partner voices with no centre voice: `1` = `-2/+2` cents, `2` = `-4/-1.32/+1.33/+4`, `3` = `-6/-2/+2/+6`; each voice mostly in one channel (weak channel `0.43`). Analog and Wavetable. | **VERIFIED** ratios (firmware `0x2f9ee8`), **EMPIRICAL** voice count / panning (hardware video, `docs/research/synth-0x2f-ns4decode-crosscheck.md`); overall level ASSUMED |
 | Octave shift | `-2..+2` octaves applied to the note frequency, key tracking uses the played note. | EMPIRICAL |
 | Pitch fine / coarse | Cents and semitones added to the note frequency. | EMPIRICAL (ranges from corpus: fine +/-17, coarse +/-24) |
 | Amp ADR | Decay falls to silence while held; `Hold` (127) sustains at full. Velocity setting `0..3` scales sensitivity `n/3`. | ADR EMPIRICAL (manual), scale ASSUMED |

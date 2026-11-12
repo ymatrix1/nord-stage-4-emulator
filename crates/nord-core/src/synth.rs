@@ -6,7 +6,9 @@ use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 
 pub use crate::synth_sample::{LoadedSynthSample, SampleTimbre, SynthSampleSound};
-use crate::synth_tables::lfo_pitch_semitones;
+use crate::synth_tables::{
+    lfo_pitch_semitones, UNISON_VOICES, UNISON_VOICE_COUNT, UNISON_WEAK_CHANNEL_GAIN,
+};
 pub use crate::synth_types::{
     ArpMode, FilterModel, LfoDestination, LfoShape, NotePriority, SynthOscMode, VaWaveform,
     VibratoMode,
@@ -64,6 +66,16 @@ pub const FM_RATIOS: [f32; 16] = [
     2.5,
     3.5,
 ];
+
+/// Left/right gains of a unison voice: full level in its strong channel, `weak` in the other.
+#[inline]
+fn unison_pan(strong_left: bool, weak: f32, norm: f32) -> (f32, f32) {
+    if strong_left {
+        (norm, norm * weak)
+    } else {
+        (norm * weak, norm)
+    }
+}
 
 /// 2-point Polynomial Band-Limited Step (`PolyBLEP`) anti-aliasing residual.
 #[inline]
@@ -140,6 +152,9 @@ impl ZdfFilter {
     }
 }
 
+/// ASSUMED: start phases of the four unison voices; they only decorrelate the voices.
+pub(crate) const UNISON_START_PHASES: [f32; 4] = [0.0, 0.31, 0.57, 0.83];
+
 /// Roland/Nord 7-saw detune spread coefficients relative to fundamental.
 const SUPERSAW_DETUNES: [f32; 7] = [
     -0.11002313,
@@ -179,8 +194,8 @@ pub struct SynthVoice {
     /// Seconds since note-on (vibrato delay).
     pub age_sec: f32,
     /// Unison detuned oscillator phases (low, high).
-    pub uni_phase: [f32; 2],
-    pub uni_supersaw: [[f32; 7]; 2],
+    pub uni_phase: [f32; 4],
+    pub uni_supersaw: [[f32; 7]; 4],
     pub supersaw_phases: [f32; 7],
     pub amp_env: f32,
     pub filter: ZdfFilter,
@@ -212,8 +227,8 @@ impl Default for SynthVoice {
             oenv: 0.0,
             oenv_attack_done: false,
             age_sec: 0.0,
-            uni_phase: [0.0, 0.31],
-            uni_supersaw: [SUPERSAW_PHASE_INITS; 2],
+            uni_phase: UNISON_START_PHASES,
+            uni_supersaw: [SUPERSAW_PHASE_INITS; 4],
             supersaw_phases: SUPERSAW_PHASE_INITS,
             amp_env: 0.0,
             filter: ZdfFilter::default(),
@@ -268,9 +283,10 @@ pub struct SynthLayer {
     pub filter_env_vel_amount: f32,
 
     // Voice mode
-    /// Stereo unison width: `0` = off, `1`/`2`/`3` = 3.5 / 7.0 / 11.5 cents.
-    /// ASSUMED: cents copied from the Piano unison widths (`docs/specs/piano-engine.md`), not measured
-    /// on Synth; confirm by recording Synth Unison 1/2/3 and measuring beat rate.
+    /// Unison setting `0..=3`. EMPIRICAL + firmware-VERIFIED voices: `1` = -2/+2 cents, `2` =
+    /// -4/-1.32/+1.33/+4, `3` = -6/-2/+2/+6, no centre voice, each voice mostly in one channel;
+    /// see `synth_tables::UNISON_VOICES`. Applies to Analog and Wavetable modes; FM and Sample
+    /// modes ignore it (Sample unison uses a different detune set, unmodelled).
     pub unison: u8,
     pub mono: bool,
     pub legato: bool,
@@ -501,14 +517,16 @@ impl SynthLayer {
         self.vib_phase =
             (self.vib_phase + TAU * self.vibrato_rate_hz.clamp(0.1, 20.0) * inv_fs) % TAU;
         let vib_sin = self.vib_phase.sin();
-        let uni_cents = match self.unison {
-            0 => 0.0,
-            1 => 3.5,
-            2 => 7.0,
-            _ => 11.5,
+        let uni_level = usize::from(self.unison.min(3));
+        let uni_count = UNISON_VOICE_COUNT[uni_level];
+        // Per voice gains: constant power over the partner voices, measured weak-channel leakage.
+        let uni_voice_gain = if uni_count > 0 {
+            1.0 / (uni_count as f32).sqrt()
+        } else {
+            0.0
         };
-        // ASSUMED: side voices at -/+ `uni_cents`, mixed 50/50 with the centre per channel.
-        let uni_ratio = 2.0f32.powf(uni_cents / 1200.0);
+        let weak = UNISON_WEAK_CHANNEL_GAIN;
+        let pan_norm = 1.0 / (1.0 + weak * weak).sqrt();
 
         for v in &mut self.voices {
             if !v.active {
@@ -622,26 +640,17 @@ impl SynthLayer {
 
             let (raw_osc_l, raw_osc_r) = match self.osc_mode {
                 SynthOscMode::Analog => {
-                    let c = Self::render_va(
-                        self.waveform,
-                        self.supersaw_detune,
-                        self.pulse_width,
-                        self.lfo_dest,
-                        self.lfo_amount,
-                        lfo_val,
-                        t,
-                        dt,
-                        eff_freq,
-                        inv_fs,
-                        &mut v.supersaw_phases,
-                    );
-                    if self.unison > 0 {
-                        let mut side = [0.0f32; 2];
-                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
-                            let f_k = eff_freq * ratio;
+                    if uni_count > 0 {
+                        let mut acc = (0.0f32, 0.0f32);
+                        for (k, voice) in UNISON_VOICES[uni_level][..uni_count]
+                            .iter()
+                            .copied()
+                            .enumerate()
+                        {
+                            let f_k = eff_freq * voice.ratio;
                             let dt_k = (f_k * inv_fs).clamp(1e-5, 0.49);
                             let t_k = v.uni_phase[k];
-                            side[k] = Self::render_va(
+                            let s_k = Self::render_va(
                                 self.waveform,
                                 self.supersaw_detune,
                                 self.pulse_width,
@@ -655,26 +664,53 @@ impl SynthLayer {
                                 &mut v.uni_supersaw[k],
                             );
                             v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                            let (gl, gr) = unison_pan(voice.strong_left, weak, pan_norm);
+                            acc.0 += s_k * uni_voice_gain * gl;
+                            acc.1 += s_k * uni_voice_gain * gr;
                         }
-                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                        (acc.0, Some(acc.1))
                     } else {
-                        (c, None)
+                        (
+                            Self::render_va(
+                                self.waveform,
+                                self.supersaw_detune,
+                                self.pulse_width,
+                                self.lfo_dest,
+                                self.lfo_amount,
+                                lfo_val,
+                                t,
+                                dt,
+                                eff_freq,
+                                inv_fs,
+                                &mut v.supersaw_phases,
+                            ),
+                            None,
+                        )
                     }
                 }
                 SynthOscMode::Wavetable => {
-                    let c = sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt);
-                    if self.unison > 0 {
-                        let mut side = [0.0f32; 2];
-                        for (k, ratio) in [1.0 / uni_ratio, uni_ratio].into_iter().enumerate() {
-                            let dt_k = (eff_freq * ratio * inv_fs).clamp(1e-5, 0.49);
+                    if uni_count > 0 {
+                        let mut acc = (0.0f32, 0.0f32);
+                        for (k, voice) in UNISON_VOICES[uni_level][..uni_count]
+                            .iter()
+                            .copied()
+                            .enumerate()
+                        {
+                            let dt_k = (eff_freq * voice.ratio * inv_fs).clamp(1e-5, 0.49);
                             let t_k = v.uni_phase[k];
-                            side[k] =
+                            let s_k =
                                 sample_wavetable(bank, self.wavetable_index, wt_pos, t_k, dt_k);
                             v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                            let (gl, gr) = unison_pan(voice.strong_left, weak, pan_norm);
+                            acc.0 += s_k * uni_voice_gain * gl;
+                            acc.1 += s_k * uni_voice_gain * gr;
                         }
-                        (0.5 * c + 0.5 * side[0], Some(0.5 * c + 0.5 * side[1]))
+                        (acc.0, Some(acc.1))
                     } else {
-                        (c, None)
+                        (
+                            sample_wavetable(bank, self.wavetable_index, wt_pos, t, dt),
+                            None,
+                        )
                     }
                 }
                 SynthOscMode::Fm => {

@@ -136,3 +136,16 @@ def test_rms_dbfs_levels_and_cli(tmp_path: Path, capsys):
     write_wav(wav, loud)
     assert sa.main(["level", str(wav), "--from", "0.1", "--to", "0.9"]) == 0
     assert "rms_dbfs" in capsys.readouterr().out
+
+
+def test_cli_unison_harmonic_option(tmp_path: Path, capsys):
+    f0, cents = 392.0, 4.0
+    voices = [f0 * 2 ** (-cents / 1200), f0 * 2 ** (cents / 1200)]
+    n = 1 << 16
+    sig = [0.3 * sum(math.sin(2 * math.pi * 10 * f * i / RATE) for f in voices) for i in range(n)]
+    wav = tmp_path / "uni.wav"
+    write_wav(wav, [x / 2 for x in sig])
+    assert sa.main(["unison", str(wav), "--f0", "392", "--harmonic", "10"]) == 0
+    out = capsys.readouterr().out
+    spread = float(out.split("spread_cents:")[1].split()[0])
+    assert spread == pytest.approx(8.0, abs=0.1)

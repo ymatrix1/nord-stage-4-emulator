@@ -204,6 +204,24 @@ What they say about architecture (none gives synth parameter scales, no glide / 
 
 Reading: in earlier Nord designs the **host boots the DSPs from the OS held in flash** ("DSP not starting"). The Stage 4 has the same strings (`DSP Boot Error`, `DSP/Chip fail`), so the DSP code is plausibly part of the OS image after all. This weakens the earlier "the DSP code is not shipped by OS updates" reading in the container-accounting section: it stays true that we find no recognisable DSP code in the unpacked `CODE`, but the architecture precedent says it should be there. Open: either it is stored in a form we do not recognise (for example inside the 1.2 MB audio-like block, or in another packing), or Stage 4 DSPs boot from a separate flash. Ring Mod optimisation in the v1.54 changelog also points to updatable DSP code.
 
+## Unison measured on a real Stage 4 (2026-11-12): firmware table confirmed
+
+Source: Audible Genius, "Nord Stage 4 Lesson Pack - Unison" (YouTube `qde8OVkL6RI`, 4K, 5:47; hardware Stage 4, dry `Pure Saw`, Synth A only), saved locally in `.reference/audible-genius-nord-4/` (git-ignored). Audio extracted at 48 kHz; sustained single notes found automatically (autocorrelation, stable pitch for 1.5 s or more; `G4`, `C4`, `C5`), then Hann-windowed 2^19-point FFT around harmonic 10 (the detune in cents is identical at every harmonic: 3, 6 and 10 give the same spread, so it is a pitch ratio, not a frequency offset).
+
+| Clip time | Unison setting (order of the lesson) | Peaks (cents around the centre) | Spread |
+|---|---|---|---|
+| 19.4-21.3 s | 1 | `-2.0, +2.0` | 4.0 |
+| 30.7-33.1 s | 2 | `-4.0, -1.33, +1.34, +4.0` | 8.0 |
+| 37.6-39.9 s and 42.3-44.0 s | 3 | `-5.98, -2.01, +1.99, +5.98` | 12.0 |
+
+- This equals the 4 x 4 firmware table at `bank0_CODE.bin @0x2f9ee8` (`0.998845/1.001156`, `0.997692/0.999236/1.000770/1.002313`, `0.99654/0.998845/1.001156/1.003472`) to 0.02 cent: **the table is the Synth unison table and the earlier Piano-derived `3.5/7/11.5` cents were wrong for Synth**.
+- No centre voice (no peak at 0 cents).
+- Stereo: each voice is strong in one channel and `0.43..0.45` of that in the other (left channel strong voices: setting 1 `+2`; setting 2 `-1.33, +4`; setting 3 `-2, +6`; the right channel holds the mirror set).
+- Later clip segments (116-290 s, other waveforms, detune and Super Saw demos) were not used: they mix waveform detune with unison.
+- Reproduce: `python tools/sweep_analyze.py unison <segment.wav> --f0 392 --harmonic 10` on the cut segment.
+
+Engine: `crates/nord-core/src/synth_tables.rs` now holds `UNISON_VOICES` (ratios from the firmware, panning from the recording) and `synth.rs` renders the partner voices for Analog and Wavetable; the unit test `unison_partner_voices_land_on_the_measured_cents_and_channels` checks the rendered spectrum of each setting. Overall unison level (gain per voice) is still ASSUMED.
+
 ## Status
 
 - Wave **names and within-category order**: confirmed by firmware strings (command above, no numeric indices in strings).
