@@ -28,7 +28,9 @@ pub const FW_Q_STEPS: usize = 128;
 
 /// Firmware log-scale resonance: `Q(idx) = 0.1 * 100^(idx / 127)` (`0.1 .. 10.0`).
 ///
-/// Verified against all 128 `f32` entries at `0x2f970c` (max relative error `6.4e-8`).
+/// VERIFIED: all 128 `f32` entries at `0x2f970c` of OS v1.66 `bank0_CODE.bin`, max rel. error `6.4e-8`.
+/// Check: Python `struct.unpack('<128f')` vs formula (see `docs/research/sharc-dsp-and-preset-hash-teardown.md`);
+/// unit test `test_firmware_q_table_endpoints_and_monotonic` pins endpoints only.
 #[inline]
 pub fn firmware_q(idx: usize) -> f32 {
     let i = idx.min(FW_Q_STEPS - 1) as f64;
@@ -149,13 +151,13 @@ impl Biquad {
     }
 }
 
-/// Bass shelf corner (Hz).
+/// Bass shelf corner (Hz). ASSUMED: inherited from the old 1-pole code and `effects-and-routing.md`; no firmware or recording check.
 const EQ_BASS_HZ: f32 = 100.0;
-/// Treble shelf corner (Hz).
+/// Treble shelf corner (Hz). ASSUMED: same as bass corner, unverified.
 const EQ_TREBLE_HZ: f32 = 4000.0;
-/// Shelf slope `Q` (Butterworth-like `1/sqrt(2)`).
+/// Shelf slope `Q` (Butterworth-like `1/sqrt(2)`). ASSUMED: textbook default; firmware shelf shape unknown.
 const EQ_SHELF_Q: f32 = std::f32::consts::FRAC_1_SQRT_2;
-/// Mid peak `Q` (firmware table index 64, `~1.02`).
+/// Mid peak `Q` index. ASSUMED: scale is VERIFIED (`firmware_q`), but index 64 (`Q~1.02`) is chosen to match the spec's `Q = 1.0`, not read from firmware.
 const EQ_MID_Q_IDX: usize = 64;
 
 /// Reads a linearly interpolated delayed sample from a circular buffer.
@@ -606,7 +608,8 @@ impl LayerFxChain {
             r = (drv * r).tanh();
         }
 
-        // Cabinet voicing: 2nd-order Butterworth HP + LP and a peaking mid band
+        // Cabinet voicing: 2nd-order Butterworth HP + LP and a peaking mid band.
+        // ASSUMED: all cabinet Hz/gain values below are inherited from the old 1-pole code (no firmware/recording source).
         if self.amp_cabinet != AmpCabinet::Off {
             if self.cab_cache != Some(self.amp_cabinet) {
                 let (lp_hz, hp_hz, mid_hz, mid_gain) = match self.amp_cabinet {
