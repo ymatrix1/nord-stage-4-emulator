@@ -208,3 +208,21 @@ def test_cli_spectrum_and_chord_use_the_oracle_words(tmp_path, monkeypatch, caps
     argv = ["chord", str(sram), "--exe", "x", "--arm", str(arm), "--frames", "4096", "--root", "34"]
     assert ob.main(argv) == 0
     assert "wheel 34" in capsys.readouterr().out
+
+
+def test_golden_vectors_are_deterministic_and_follow_the_closed_form():
+    words = ob.golden_vectors()
+    assert len(words) == ob.GOLDEN_FRAMES and len(words[0]) == len(ob.GOLDEN_INCS)
+    assert words == ob.golden_vectors()
+    table = ob.x_table_words().reshape(4096, 2)[:, 0].view("<f4")
+    step = int(ob.fracmul(np.array([ob.GOLDEN_INCS[0]], dtype=np.uint32), ob.DEFAULT_TUNE)[0])
+    idx = step >> 20
+    assert words[0][0] == int(table[idx].view("<u4"))
+    # x(pi/2) = 1 + 0.1122 - 0.01585 * 0... : cos(2t)=-1, cos(3t)=0, cos(4t)=1, cos(5t)=0
+    assert abs(float(table[1024]) - (1 + 0.1122 - 0.00631)) < 1e-6
+
+
+def test_cli_golden_prints_rust_constants(capsys):
+    assert ob.main(["golden"]) == 0
+    out = capsys.readouterr().out
+    assert "pub(super) const INCS: [u32; 6]" in out and "X_BITS: [[u32; 6]; 24]" in out

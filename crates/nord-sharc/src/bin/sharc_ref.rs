@@ -8,6 +8,8 @@
 //! a reference render of the Rust engine.
 #[path = "sharc_ref/exec.rs"]
 mod exec;
+#[path = "sharc_ref/isr.rs"]
+mod isr;
 #[path = "sharc_ref/out.rs"]
 mod out;
 #[path = "sharc_ref/script.rs"]

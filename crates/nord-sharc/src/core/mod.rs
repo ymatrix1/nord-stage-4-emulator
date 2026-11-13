@@ -47,6 +47,7 @@ mod interrupts;
 #[cfg(test)]
 mod irq_scenarios;
 mod isa;
+mod longword;
 #[cfg(test)]
 mod loops_measured;
 mod memory;

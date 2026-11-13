@@ -131,3 +131,16 @@ The table is built once (`SmpKernel::shared()`, called in `PianoLayer::new`); `r
 `PianoLayer::sample_interp` selects the path: `SmpQ31` (default, hardware parity) or `Cubic` (Catmull-Rom). Measured worst-case error of interpolating a sine at fractional positions (kernel vs Catmull-Rom, Python model in the research note): 0.05 fs -71 / -66 dB, 0.10 fs -55 / -47 dB, 0.15 fs -50 / -35 dB, 0.20 fs -55 / -27 dB, 0.25 fs -36 / -19 dB, 0.30 fs -22 / -14 dB. The unit test `test_sine_tone_error_against_ideal_and_cubic` pins the kernel below the cubic error at 0.2 fs. Like the hardware, the kernel is a fixed interpolator with no anti-alias filtering for upward transposition.
 
 `piano/smp_unpack.rs` models the voice-loop residual unpacker (LSB-first, 16 payload bits per 32-bit word, `FEXT`/`FDEP (SE)`, widths 1..16) and the 4-tap integer predictor; tests prove it equals `cbin::sample` decoding of the same synthetic residuals for widths 1..16 and orders 0..4.
+
+## 10. Candidate: firmware detuned oscillator bank as string resonance (not implemented)
+
+Status: **candidate, ASSUMED, not implemented.** The PNO Core1 routine `0x122620` is a 184-element phase-accumulator wavetable bank: 92 fixed chromatic pitches, each in two copies detuned by about 1.89 cent rms, no per-note state, notes act only through ARM-written weights ([organ-tonewheel-bank](../research/organ-tonewheel-bank.md), algorithm VERIFIED by oracle; the mix stage `0x12268F` is not reproduced). The module chain installs it from the PNO piano state machine and from no ORG/Core2 module id ([pno-module-chain](../research/pno-module-chain.md), branch `research/pno-module-chain`).
+
+| Observation | Fits string resonance |
+|---|---|
+| Fixed pitch ladder of 92 semitones, always running | sympathetic strings exist for every key regardless of notes held |
+| Two copies per pitch, spread about 2 cent | unison-style detuned string pair |
+| ARM has `Edt_Sys_kStringResonanceLevel` (`0xC02D57D0`) next to `Edt_Sys_kToneWheelMode` (`0xC02D57F0`) | a level control for such a bank exists |
+| Role judgement | about 65 % string resonance, about 35 % B3 tonewheels (ASSUMED) |
+
+The modal resonators of section 4 are the shipped model; this bank would replace them only after the ARM weight writer or a running capture confirms the role. Open items stay in `docs/OPEN-QUESTIONS.md` and TD-04.

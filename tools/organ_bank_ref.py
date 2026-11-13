@@ -11,6 +11,7 @@ Spec: docs/research/organ-tonewheel-bank.md. The model reproduces the SHARC orac
 
     python tools/organ_bank_ref.py defaults  target/fw_unpacked/bank0_CODE.bin
     python tools/organ_bank_ref.py compare   SRAM/core1_sram.bin --exe target/release/sharc-bank
+    python tools/organ_bank_ref.py golden    # Rust golden vectors (synthetic table, no firmware)
     python tools/organ_bank_ref.py spectrum  SRAM/core1_sram.bin --exe target/release/sharc-bank
 
 `SRAM/core1_sram.bin` comes from `tools/ns4_dsp_ldr.py DIR/dsp_image_1_PNO.bin --sram SRAM`.
@@ -89,6 +90,33 @@ class ToneBank:
         """One routine call = two frames; returns (x, y) as 368-word arrays like the oracle."""
         frames = [self.frame(inc_words) for _ in range(FRAMES_PER_CALL)]
         return (np.concatenate([f[0] for f in frames]), np.concatenate([f[1] for f in frames]))
+
+
+# Closed-form x waveform of the bank (docs/research/organ-tonewheel-bank.md section 1), the table
+# the Rust engine builds (crates/nord-core/src/organ/firmware_bank.rs). The firmware table itself
+# is local-only; golden vectors use this synthetic copy so no firmware data is committed.
+X_COS_COEFFS = (-0.1122, -0.01585, -0.00631, -0.00398)
+GOLDEN_INCS = (0x02000000, 0x02468ACF, 0xE0000001, 0x0633E000, 0x00001235, 0x7FFFFFFF)
+GOLDEN_FRAMES = 24
+
+
+def x_table_words() -> np.ndarray:
+    """4096 (x, y) float pairs as u32 words; x = closed form at 2 pi i / 4096, y = 0."""
+    t = 2 * np.pi * np.arange(4096) / 4096
+    x = np.sin(t) + sum(c * np.cos((k + 2) * t) for k, c in enumerate(X_COS_COEFFS))
+    pairs = np.zeros((4096, 2), dtype="<f4")
+    pairs[:, 0] = x.astype("<f4")
+    return pairs.view("<u4").reshape(-1)
+
+
+def golden_vectors(
+    incs: tuple[int, ...] = GOLDEN_INCS, frames: int = GOLDEN_FRAMES, tune: int = DEFAULT_TUNE
+) -> list[list[int]]:
+    """x words per frame for the first len(incs) elements (rest of the 184 stay at inc 0)."""
+    bank = ToneBank(x_table_words(), tune=tune)
+    inc = np.zeros(ELEMENTS, dtype=np.uint32)
+    inc[: len(incs)] = incs
+    return [[int(w) for w in bank.frame(inc)[0][: len(incs)]] for _ in range(frames)]
 
 
 def default_increments(arm: bytes) -> np.ndarray:
@@ -209,6 +237,18 @@ def cmd_defaults(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_golden(args: argparse.Namespace) -> int:
+    """Print the Rust constants of crates/nord-core/src/organ/bank_golden.rs."""
+    print(f"pub(super) const INCS: [u32; {len(GOLDEN_INCS)}] = [")
+    print("    " + ", ".join(f"0x{v:08X}" for v in GOLDEN_INCS) + ",")
+    print("];")
+    print(f"pub(super) const X_BITS: [[u32; {len(GOLDEN_INCS)}]; {GOLDEN_FRAMES}] = [")
+    for row in golden_vectors():
+        print("    [" + ", ".join(f"0x{w:08X}" for w in row) + "],")
+    print("];")
+    return 0
+
+
 def cmd_compare(args: argparse.Namespace) -> int:
     image = args.sram
     blob = Path(image).read_bytes()
@@ -271,6 +311,8 @@ def main(argv: list[str] | None = None) -> int:
     d = sub.add_parser("defaults")
     d.add_argument("arm")
     d.set_defaults(fn=cmd_defaults)
+    g = sub.add_parser("golden")
+    g.set_defaults(fn=cmd_golden)
     c = sub.add_parser("compare")
     c.add_argument("sram")
     c.add_argument("--exe", required=True)
