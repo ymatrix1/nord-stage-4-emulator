@@ -138,5 +138,5 @@ The ports live in `crates/nord-core/src/fx/` (`fw_delay.rs`, `fw_amp_drive.rs`, 
 ## Follow-ups
 
 * Decode the ARM writers of the context words (`kDlyTime`, `kDlyFeedback`, LFO rate, filter cutoff / resonance) so that targets and states can be named and the ports wired as selectable effect classes.
-* Model the second delay variants `0x1208AF` and `0x120AB5`, the reverb multi-tap lists (`0x123ABE` / `0x123C0F`, `0x12314A` / `0x12329B`, `0x123DDA` / `0x123466`) and the phaser `0x12379B` with the same tools; `fx_pe.py` already covers the instruction forms they use except `RSQRTS`.
+* The delay time words of the ring variant `0x120AB5` are decoded in [fx-delay-time](fx-delay-time.md) (oracle impulse measurements, no instruction-level model yet). Model the second delay variants `0x1208AF` and `0x120AB5`, the reverb multi-tap lists (`0x123ABE` / `0x123C0F`, `0x12314A` / `0x12329B`, `0x123DDA` / `0x123466`) and the phaser `0x12379B` with the same tools; `fx_pe.py` already covers the instruction forms they use except `RSQRTS`.
 * Record real context words of an installed instance (ARM emulation of `Edt_Effects_*` handlers, [arm-fw-emulation](arm-fw-emulation.md)) and add them as an end-to-end check of the ports.

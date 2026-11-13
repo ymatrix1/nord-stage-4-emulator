@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 
 const SAMPLE_RATE: f32 = 48_000.0;
-const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame]...";
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--firmware-fx]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
@@ -269,6 +269,17 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 let prog = cbin.decode_program().map_err(|e| e.to_string())?;
                 engine.apply_program(&prog);
             }
+
+            nord_core::render_opts::apply_firmware_options(
+                &mut engine,
+                flag("--tone-source")
+                    .map(|v| nord_core::render_opts::parse_tone_source(v))
+                    .transpose()?,
+                flag("--filter-engine")
+                    .map(|v| nord_core::render_opts::parse_filter_engine(v))
+                    .transpose()?,
+                args.iter().any(|a| a == "--firmware-fx"),
+            );
 
             let events_path = flag("--events");
             let notes = match flag("--notes") {
@@ -533,6 +544,39 @@ mod tests {
         assert!(res.contains("RMS level"));
 
         let _ = fs::remove_file(ns4p_path);
+    }
+
+    #[test]
+    fn test_cli_render_patch_firmware_flags() {
+        let raw = ProgramDecoded::default()
+            .to_cbin_file(0, 1)
+            .unwrap()
+            .to_bytes();
+        let ns4p = env::temp_dir().join("ns4_rp_fwflags.ns4p");
+        fs::write(&ns4p, &raw).unwrap();
+        let s = |x: &str| x.to_string();
+        let base = |extra: &[&str]| {
+            let mut a = vec![
+                s("ns4"),
+                s("render-patch"),
+                ns4p.to_string_lossy().to_string(),
+                s("--frames"),
+                s("512"),
+            ];
+            a.extend(extra.iter().map(|x| s(x)));
+            run_cli(&a)
+        };
+        assert!(base(&[
+            "--tone-source",
+            "vox",
+            "--filter-engine",
+            "firmware",
+            "--firmware-fx"
+        ])
+        .is_ok());
+        assert!(base(&["--tone-source", "bogus"]).is_err());
+        assert!(base(&["--filter-engine", "bogus"]).is_err());
+        let _ = fs::remove_file(ns4p);
     }
 
     #[test]

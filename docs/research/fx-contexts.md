@@ -121,7 +121,7 @@ Closed forms are in `tools/fx_forms.py` and checked against `fx-param-fits.csv` 
 | (constant on clock write) | `c[0x16] = 10850`, `c[0x19] = 30.199293` | | VERIFIED words |
 | (default) | `c[0x24] = 1.5`, `c[0x25] = 0.25` (ratio clamp), `a1 = 0.998553`, `a2 = 0.309717` | | VERIFIED words |
 
-Reading of `c[0x15]` (ASSUMED): a **delay time in samples** at 48 kHz, longest `61438` (1.28 s, clamped for `v <= 128`) to `868` (18 ms): the id is a *rate*, so the time falls as `v` grows. **Wiring blocker**: `c[0x15]`, `c[0x16]` and `c[0x19]` are outside the field table of the modelled `0x1206B0` (it reads the read and write offsets `c[0x10..0x13]`, which the DSP's helper `0x120D15` or the variants `0x1208AF`, `0x120AB5` derive from the time). The Rust `FwDelay` therefore needs the variants (not modelled) before the time can drive it; feedback, mix and the feedback-all-pass words can be set directly now.
+**Decoded in [fx-delay-time](fx-delay-time.md):** `c[0x15]` is the delay tap in samples at 48 kHz, `c[0x15] = min(61438, floor(43.402339 k))` with `k` the fractional index of `v` in a 1501-entry threshold list (VERIFIED, 264 values), `c[0x16]` the previous tap, `c[0x19]` the cross-fade step (`-32768` then `+30.199`), and the echo of an input comes `trunc(c[0x15]) + 2` samples later (oracle, ring variant `0x120AB5`). `0x1206B0` and `0x1208AF` read `c[0x10..0x13]`, not these words; `0x120D15` is the ring clear helper. The delay time is wired behind `FirmwareFx::delay_time`; the full ring variant is not ported to `FwDelay`.
 
 ### 5.2 Drive stage `0x1228CF` (module `0xC04438D8#0`, Amp unit; "table LFO" of fx-routine-models s4)
 
@@ -172,7 +172,7 @@ Only `Edt_OrgCom_kEffectsLeslieDrv` reaches a state row: list `0xC02BB76C#0` wor
 |---|---|---|
 | Enable ids (`kFx1Enable`, `kFx2Enable`, `kAmpEnable`, `kCmpEnable`, `kDlyEnable`, `kRvbEnable`, `kLeslieEnable`) | no DSP message in 2 M instructions; the handler (`0xC010E774..`) queues a command in the part's list (`[part + 0xC8]`, node `{-1, counter}` of 8 bytes) | run the part's command consumer (the main loop does not reach it in the window) |
 | `kCmpResponse`, `kDlyMode`, `kDlyFbkPingPong` | words identical for every value | read the handler's branch; probably gated by the `Edt_Com_k*Global` ids, which no store owns (`value_cell` is None in all 22 stores) |
-| Delay time words `c[0x15]`, `c[0x16]`, `c[0x19]` | section 5.1 | model `0x1208AF`, `0x120AB5`, `0x120D15` |
+| ~~Delay time words `c[0x15]`, `c[0x16]`, `c[0x19]`~~ | decoded: [fx-delay-time](fx-delay-time.md) | remaining: enable path (`c[0x14]`, ring words), tempo sync, loop period |
 | Reverb | types 2..5 and 7..11 write 54 words at DM `0x9500A..` (outside the state rows), types 0 and 1 write module `0xC02BB54C#0` | join the `0x95xxx` table to the multi-tap module `0xC0441AC4`; `kRvbColor` value 2 rewrites the 54 table words |
 | Organ units L3 / L9 differ from piano and synth in word counts of some types (for example Fx1 type 2: 3 against 5 words) | `fx-type-modules.csv` | compare the base state of the units |
 | Other 1000 table-shaped series of `fx-param-fits.csv` | most are Amp type re-sends | fit with a wider family (piecewise exponential) |
@@ -185,7 +185,7 @@ The exported stages take the firmware's context words (`from_words`, `set_value(
 2. **Compressor** (`MasterBus::set_fw_compressor`): fill `c[-0x1B] = -36 v / 127`, `c[-0x1C] = 1 + 5.72 (v/127)^2` from `kCmpAmt`; keep the attack pair `(0.102071, 1.0)` and release pair `(4.607e-4, 0.04)` as `VERIFIED` defaults. Closes the `kCmpAmt` item of [fx-type-map](fx-type-map.md) s7; `kCmpResponse` stays open.
 3. **Amp**: `FwLfo` becomes the drive stage (`c[-0x20] = v / 127`) behind the cabinet FIR (`amp_eq.rs`), `FwResonant2/4` the tone stack (words from `fx-param-fits.csv`: a 13-point table per word, interpolate linearly in dB). Rename `FwLfo` to a drive-stage name in the same change.
 4. **Fx1 types 2, 3 / Fx2 phaser** (`FwAllpass`): `RATE = 12800 + 16384 v`, wet `v / 254`, dry `1 - v / 254`; counter source is a per-call increment of the 2-frame block.
-5. **Delay**: `FwDelay` takes `g_in`, `g_d`, `m_ll`, `m_rr`, `a1`, `a2` directly from `kDlyMix` / `kDlyFbkAmt`; the time needs the unmodelled variants (section 5.1), so keep the current `delay.rs` time path and feed only gains and feedback until then.
+5. **Delay**: `FwDelay` takes `g_in`, `g_d`, `m_ll`, `m_rr`, `a1`, `a2` directly from `kDlyMix` / `kDlyFbkAmt`; the time law is wired as `FirmwareFx::delay_time` (`fw_delay_time.rs`, [fx-delay-time](fx-delay-time.md)); the ring variant `0x120AB5` is not ported to `FwDelay` yet.
 6. **Type tables**: encode `fx-type-modules.csv` as `const TYPE_MODULE: [(slot, type, module_id); N]`; two types per module, one stage object per module and a parameter set per type (as the Amp already does).
 7. Tests: golden tests per `(id, v)` point against the committed series (`fx-param-fits.csv` samples are float32 words), `render_hash` unchanged while the stages stay opt-in.
 
@@ -198,7 +198,7 @@ The exported stages take the firmware's context words (`from_words`, `set_value(
 ## Follow-ups
 
 1. Enable gating and the command consumer (section 7), then re-run `fx_clients.py --slots` with the effects enabled to see the active-state words (delay time, reverb).
-2. Model `0x1208AF / 0x120AB5 / 0x120D15` and wire the delay time.
+2. ~~Model `0x1208AF / 0x120AB5 / 0x120D15` and wire the delay time.~~ Time law decoded and wired ([fx-delay-time](fx-delay-time.md)); a bit-exact model of `0x120AB5` is still open.
 3. Reverb table at DM `0x9500A..` against the multi-tap module.
 
 ## Reproduce
