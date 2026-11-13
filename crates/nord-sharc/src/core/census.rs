@@ -27,6 +27,8 @@ struct Setup {
     code: Vec<(u32, Vec<u16>)>,
     dm: Vec<(u32, Vec<u32>)>,
     watch: Vec<(u32, usize)>,
+    /// A `plus` header line: run on a SHARC+ core (`Core::sharc_plus`).
+    plus: bool,
 }
 
 fn one_case(
@@ -40,6 +42,7 @@ fn one_case(
     let sym = |n: &str| f.sym(n).ok_or_else(|| format!("fixture lacks sym {n}"));
     let (slot, st, res, scr_a) = (sym("_slot")?, sym("_st")?, sym("_res")?, sym("_scr")?);
     let mut c = Core::new(&[]);
+    c.sharc_plus = setup.plus;
     f.load(&mut c)?;
     for (addr, ps) in &setup.code {
         for (i, p) in ps.iter().enumerate() {
@@ -164,6 +167,7 @@ pub fn run_cases(fixture: &str, cases: &str) -> Result<String, String> {
         match head.as_slice() {
             [] => {}
             ["scr", rest @ ..] => scr = words(rest),
+            ["plus"] => setup.plus = true,
             ["code", a, hex] => {
                 let ps = (0..hex.len() / 4)
                     .map(|i| u16::from_str_radix(&hex[4 * i..4 * i + 4], 16).unwrap_or(NOP))

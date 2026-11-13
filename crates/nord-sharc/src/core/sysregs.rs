@@ -25,6 +25,11 @@ const STKY_WRITABLE: u32 = 0xF81F_FFFF;
 /// ASTATy bits kept besides the flag set: VERIFIED (same cases) every bit of a random write reads
 /// back, unlike ASTATx where bits 15..17 and 19..23 do not stick.
 const ASTAT_Y_EXTRA: u32 = !(0x3F | 7 << 11 | 1 << 18);
+/// SHARC+ (ADSP-21571 cycle-accurate simulator, 120 random write/read-back cases, `docs/research/sharc-plus.md`):
+/// ASTATx and ASTATy both keep bits 0..=13, 18 and 24..=31 (SF, bit 14, does not stick), STKYx keeps
+/// bits 0-2, 5-9, 17-20 and STKYy bits 0-2, 5-9, 17, 18 besides the read-only stack-status bits.
+const ASTAT_EXTRA_PLUS: u32 = 0x1F << 6 | 0xFF00_0000;
+const STKY_WRITABLE_PLUS: [u32; 2] = [0x3E7 | 0x1E_0000, 0x3E7 | 0x6_0000];
 /// Sticky arithmetic bits and the interrupt they latch: fixed overflow, float overflow, float
 /// underflow, float invalid (PRM Table 4-57, vectors 33-36).
 const EXCEPTIONS: [(u32, u8); 4] = [
@@ -93,23 +98,32 @@ fn astat_unpack(v: u32, old: Flags, mask: u32) -> (Flags, u32) {
     (f, v & mask)
 }
 
-fn extra_mask(y: usize) -> u32 {
-    if y == 1 {
-        ASTAT_Y_EXTRA
-    } else {
-        ASTAT_EXTRA
+fn extra_mask(plus: bool, y: usize) -> u32 {
+    match (plus, y) {
+        (true, _) => ASTAT_EXTRA_PLUS,
+        (false, 1) => ASTAT_Y_EXTRA,
+        (false, _) => ASTAT_EXTRA,
     }
 }
 
 impl Core {
+    /// Writable STKY bits of element `y`: the ADSP-21489 simulator and the ADSP-21571 (SHARC+) one differ.
+    fn stky_writable(&self, y: usize) -> u32 {
+        if self.sharc_plus {
+            STKY_WRITABLE_PLUS[y]
+        } else {
+            STKY_WRITABLE
+        }
+    }
+
     pub(super) fn astat(&self, y: usize) -> u32 {
         let f = if y == 0 { self.flags } else { self.flags_y };
-        astat_pack(f, self.sys.astat_extra[y], extra_mask(y))
+        astat_pack(f, self.sys.astat_extra[y], extra_mask(self.sharc_plus, y))
     }
 
     pub(super) fn set_astat(&mut self, y: usize, v: u32) {
         let old = if y == 0 { self.flags } else { self.flags_y };
-        let (f, extra) = astat_unpack(v, old, extra_mask(y));
+        let (f, extra) = astat_unpack(v, old, extra_mask(self.sharc_plus, y));
         if y == 0 {
             self.flags = f;
         } else {
@@ -121,7 +135,7 @@ impl Core {
     /// Records arithmetic exception bits in STKYx (`y` = false) or STKYy and latches the matching
     /// `FIXI`/`FLTOI`/`FLTUI`/`FLTII` interrupt (every event latches again, PRM A-21).
     pub fn note_arith_exception(&mut self, y: bool, sticky: u32) {
-        self.sys.stky[usize::from(y)] |= sticky & STKY_WRITABLE;
+        self.sys.stky[usize::from(y)] |= sticky & self.stky_writable(usize::from(y));
         for (mask, vector) in EXCEPTIONS {
             if sticky & mask != 0 {
                 self.raise_interrupt(vector);
@@ -130,7 +144,7 @@ impl Core {
     }
 
     fn stky(&self, y: usize) -> u32 {
-        let mut v = self.sys.stky[y] & (STKY_WRITABLE | SSOV | LSOV);
+        let mut v = self.sys.stky[y] & (self.stky_writable(y) | SSOV | LSOV);
         let depth = self.pc_depth();
         v |= if depth == 0 { PCEM } else { 0 };
         v |= if depth >= PC_STACK_DEPTH { PCFL } else { 0 };
@@ -210,8 +224,9 @@ impl Core {
             5 => self.sys.flags_reg = v,
             6 | 7 => self.set_astat(n - 6, v),
             8 | 9 => {
-                let keep = self.sys.stky[n - 8] & !STKY_WRITABLE;
-                self.sys.stky[n - 8] = keep | v & STKY_WRITABLE;
+                let w = self.stky_writable(n - 8);
+                let keep = self.sys.stky[n - 8] & !w;
+                self.sys.stky[n - 8] = keep | v & w;
             }
             10 => self.write_irptl(v),
             11 => {
@@ -370,5 +385,24 @@ mod tests {
         assert_eq!(c.read_ureg(0x76), 0xFF04_7FFF);
         c.write_ureg(0x77, 0xFFFF_FFFF);
         assert_eq!(c.read_ureg(0x77), 0xFFFF_FFFF);
+    }
+
+    #[test]
+    fn sharc_plus_keeps_other_system_register_bits() {
+        // ADSP-21571 simulator, 120 write/read-back cases
+        let mut c = Core::new(&[]);
+        c.sharc_plus = true;
+        c.write_ureg(0x76, 0xFFFF_FFFF);
+        c.write_ureg(0x77, 0xFFFF_FFFF);
+        assert_eq!(c.read_ureg(0x76), 0xFF04_3FFF);
+        assert_eq!(
+            c.read_ureg(0x77),
+            0xFF04_3FFF,
+            "ASTATy: bit 14 and 15..17, 19..23 do not stick"
+        );
+        c.write_ureg(0x78, 0xFFFF_FFFF);
+        c.write_ureg(0x79, 0xFFFF_FFFF);
+        assert_eq!(c.read_ureg(0x78), 0x1E_03E7 | 0x0540_0000);
+        assert_eq!(c.read_ureg(0x79), 0x06_03E7 | 0x0540_0000);
     }
 }
