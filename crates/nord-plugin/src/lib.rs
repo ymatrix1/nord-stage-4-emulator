@@ -16,6 +16,7 @@ pub mod param_snapshot;
 pub mod params;
 pub mod piano_params;
 pub mod state;
+pub mod synth_params;
 
 use nih_plug::prelude::*;
 use nord_core::engine::Stage4Engine;
