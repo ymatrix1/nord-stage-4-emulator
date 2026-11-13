@@ -50,6 +50,8 @@ Findings:
 - **The output is not proportional to `DM(0xB44C0)`**: with the same messages and `0xB44C0 = 2.0` the peak is 0.0155 instead of 0.0095 (ratio 1.63, not 2), so a second branch of comparable size reaches the output. That is the filtered branch of the processor tail: FIR 1 (33 taps `DM 0x95471..`), FIR 2 (61 + 14 taps), both programmed by the engine constructor `0xC002187C` ([b3-generator](b3-generator.md) section 4, [organ-farfisa-bass](organ-farfisa-bass.md) section 2). Without the constructor messages the pass is silent at any dry gain (run: 40,000 frames of exact zeros with `0xB44C0 = 1.0` and the model install only).
 - The dry gain `DM(0xB44C0)` stays ASSUMED at 1.0: the ARM writer was not found (OQ16), and the ratio above shows that the Rust dry path alone cannot be calibrated against it.
 
+Correction ([organ-b3-tail](organ-b3-tail.md)): 8.2 dB of this gap was the replay (`organ_fb_pass.py` sends the bank engine's direct key-down words, `A W` 0.0125 for C4 8', not the MIDI key path words 0.0329), the rest is the tail, now modelled as a frequency response.
+
 Verdict: `B3Wheels` is not made the B3 default. What is verified is the per-wheel factors (`A`, `W`, the fold into wheels 12..88, no velocity). What is missing is the processor tail: the 108 taps from the constructor (firmware data) and their ARM writer.
 
 ## 3. Vox chord against the oracle

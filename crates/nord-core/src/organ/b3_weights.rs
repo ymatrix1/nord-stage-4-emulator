@@ -15,10 +15,10 @@ use super::{OrganLayer, OrganModel, ToneWheelSource};
 /// Dry gain of the B3 processor, `DM(0xB44C0)`.
 ///
 /// ASSUMED: 1.0. No ARM message writes it in any capture (`docs/research/organ-farfisa-bass.md`
-/// section 1: the B3 is silent at 0 and sounds at 1.0). The oracle chord does **not** equal
-/// `A * W * wheel` at this gain: the processor adds a filtered branch (the 33 / 61 / 14 tap tables
-/// of the engine constructor, not modelled), 12.7 to 31.8 dB below the dry sum at 130..590 Hz
-/// (`docs/specs/organ-engine.md` section 3.1.6), so the B3 path stays opt-in. The ARM writer is OQ16.
+/// section 1: the B3 is silent at 0 and sounds at 1.0). The oracle output at this gain equals
+/// `A * W * wheel` times the processor tail's frequency response `G(f)` (`b3_tail.rs`, applied in
+/// the wheel tables, measured with the dry gain at 1.0), so the tail table is only valid for this
+/// value. The ARM writer is OQ16.
 pub const DRY_GAIN: f32 = 1.0;
 
 /// ASSUMED: weights ramp to their targets in 2 ms (the firmware weight writes are instantaneous;
