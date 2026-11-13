@@ -33,6 +33,7 @@ Arithmetic follows `tools/sharc40.py` (40-bit registers, 32-bit significand, tru
 
 from __future__ import annotations
 
+import math
 from fractions import Fraction
 
 import sharc40 as s
@@ -251,3 +252,112 @@ def process(
         y2, lane.a2, lane.b2, lane.c2 = section(y1, lane.a2, lane.b2, lane.c2, g, k, limit)
         out.append(s.st(y2))
     return out
+
+
+def section_bp(
+    u: Fraction, a_w: int, c_w: int, x_w: int, g: Fraction, k: Fraction, limit: Fraction
+):
+    """Section of `0x125913`: same recursion, the output is the clipped band state a'.
+
+    Memory layout differs from `section`: previous input at `I3 - 6` (`I3` for section 2), the
+    low state c at `I3 - 8` (`I3 - 2`), a at `I3 - 10` (`I3 - 4`). Returns (out, a', c', x').
+    """
+    a, c, xp = s.ld(a_w), s.ld(c_w), s.ld(x_w)
+    mid = favg(u, xp)
+    c_new = s.fadd(s.fmul(a, g), c)
+    v = s.fsub(s.fsub(mid, c_new), s.fmul(a, k))
+    a_new = s.clip(s.fadd(a, s.fmul(g, v)), limit)
+    return a_new, s.st(a_new), s.st(c_new), s.st(u)
+
+
+def process_bp(
+    lane: Lane, coefs: tuple[int, int, int], xs: list[int], limit_word: int = 0x3F800000
+):
+    """Stage `0x125913` (two band-pass sections); `lane.b1`, `lane.c1` hold c1 and x1 words."""
+    cin, g, k = (s.ld(w) for w in coefs)
+    limit = s.ld(limit_word)
+    out: list[int] = []
+    for xw in xs:
+        u1 = s.fmul(s.ld(xw), cin)
+        y1, lane.a1, lane.b1, lane.c1 = section_bp(u1, lane.a1, lane.b1, lane.c1, g, k, limit)
+        y2, lane.a2, lane.b2, lane.c2 = section_bp(y1, lane.a2, lane.b2, lane.c2, g, k, limit)
+        out.append(s.st(y2))
+    return out
+
+
+def hp_scale(g_word: int, k_word: int) -> Fraction:
+    """Extra prologue of `0x125A50`: `h = 1 - g^2 / 4 - g k / 2` (40-bit register `f4`)."""
+    g, k = s.ld(g_word), s.ld(k_word)
+    f5 = s.fmul(HALF, s.fmul(k, g))
+    f6 = s.fmul(Fraction(1, 4), s.fmul(g, g))
+    return s.fsub(ONE, s.fadd(f6, f5))
+
+
+def section_hp(u: Fraction, a_w: int, c_w: int, g: Fraction, k: Fraction, h: Fraction, limit):
+    """Section of `0x125A50`: returns (v, a', c'); v = u h - c' - k a is the section output."""
+    a, c = s.ld(a_w), s.ld(c_w)
+    c_new = s.fadd(s.fmul(a, g), c)
+    v = s.fsub(s.fsub(s.fmul(u, h), c_new), s.fmul(a, k))
+    a_new = s.clip(s.fadd(a, s.fmul(g, v)), limit)
+    return v, s.st(a_new), s.st(c_new)
+
+
+def process_hp(
+    lane: Lane, coefs: tuple[int, int, int], xs: list[int], limit_word: int = 0x3F800000
+):
+    """Stage `0x125A50`: two high-pass sections, no input averaging (a at -10/-4, c at -8/-2)."""
+    cin, g, k = (s.ld(w) for w in coefs)
+    h = hp_scale(coefs[1], coefs[2])
+    limit = s.ld(limit_word)
+    out: list[int] = []
+    for xw in xs:
+        u1 = s.fmul(s.ld(xw), cin)
+        y1, lane.a1, lane.b1 = section_hp(u1, lane.a1, lane.b1, g, k, h, limit)
+        y2, lane.a2, lane.b2 = section_hp(y1, lane.a2, lane.b2, g, k, h, limit)
+        out.append(s.st(y2))
+    return out
+
+
+def section_gk(r: float, p: float) -> tuple[float, float]:
+    """`g = 2 R N`, `k = P N`, `N = 1 / sqrt(1 + R P + R^2)` in double precision."""
+    n = (1.0 + r * p + r * r) ** -0.5
+    return 2.0 * r * n, p * n
+
+
+def lp_section_gain(g: float, k: float, w: float) -> float:
+    """|H| of one `0x12566E` section at the angular frequency `w` (radians per sample).
+
+    Derived from the section equations (z-domain, input averaging included):
+    `H(z) = g^2 (z + 1)^2 / (4 z (z^2 - (2 - g^2 - g k) z + 1 - g k))`, DC gain 1.
+    """
+    z = complex(math.cos(w), math.sin(w))
+    den = z * z - (2.0 - g * g - g * k) * z + (1.0 - g * k)
+    return abs(g * g * (z + 1.0) ** 2 / (4.0 * z * den))
+
+
+def lp4_gain(r: float, p: float, f: float, cin: float = 1.0) -> float:
+    """Gain of the two-section low pass at `f` cycles per sample (clip not active)."""
+    g, k = section_gk(r, p)
+    return cin * lp_section_gain(g, k, 2.0 * math.pi * f) ** 2
+
+
+def lp4_features(r: float, p: float, steps: int = 20000) -> dict[str, float]:
+    """Resonance peak (gain relative to DC, frequency) and the first -3 dB frequency of the LP4.
+
+    The analog prototype is `1 / (s^2 + P s + 1)` per section with the bilinear mapping
+    `s = (z - 1) / (R (z + 1))`: nominal cutoff `atan(R) / pi` cycles per sample, `Q = 1 / P`.
+    """
+    best, f_pk, f3 = 0.0, 0.0, None
+    for i in range(1, steps):
+        f = 0.5 * i / steps
+        m = lp4_gain(r, p, f)
+        if m > best:
+            best, f_pk = m, f
+        if f3 is None and i > 1 and m < 2**-0.5 and f > f_pk:
+            f3 = f
+    return {
+        "nominal": math.atan(r) / math.pi,
+        "peak_gain": best,
+        "peak_f": f_pk,
+        "f_3db": f3 or 0.5,
+    }
