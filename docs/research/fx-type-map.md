@@ -10,7 +10,7 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 
 | Question | Result | Tag |
 |---|---|---|
-| Is there a table `type index -> routine pc`? | **No such table exists in the ARM.** Routines are bound to module objects (and to the 12 unit instances), not to type values. A type value reaches the DSP as **data** (coefficient sets, FIR taps) or as a **mode word** (section 5). | VERIFIED for the Amp unit (`probe`, `modules`); open for the four Edt type ids |
+| Is there a table `type index -> routine pc`? | **No such table was found in the ARM image** (static scan, section 5). Routines are bound to module objects (and to the 12 unit instances), not to type values. A type value reaches the DSP as **data** (coefficient sets, FIR taps) or as a **mode word** (section 5). | VERIFIED for the Amp unit (`probe`, `modules`); open for the four Edt type ids |
 | Module to routine map | 100 of 100 FX code records of [fx-chain-install](fx-chain-install.md) s2 belong to one of **28 descriptor lists** (33 lists in all, 5 hold only state tables). Section 2. | VERIFIED (`inventory`) |
 | What is a module object | An enum property: value `+0x40`, previous value `+8`, parent `+0x38`, descriptor slice `+0x34`; vtable slot 7 `SetValue` (`0xC02237D0`), slot 6 range getter, slot 24 change handler (called by the commit `0xC0223708` when the value changed). Section 3. | VERIFIED (disassembly, `modules`) |
 | Type switches run | 3 handlers of the Amp unit: the 10-way layer switch (`0xC021D064`, [fx-chain-install](fx-chain-install.md) s5), a 12-way handler (`0xC020506C`, module `+0x54`) that sends biquad sets and a FIR, and a mode-word handler (`0xC01F4844`, module `+0x5C`). Section 4 and 5. | VERIFIED (`probe`) |
@@ -111,6 +111,44 @@ So for the Amp unit **the type never selects a routine pointer**: the libraries 
 `0xC01155EC (unit, mode, L, &{0, x, 0x10}, flag, ..., part-linked pointers)` is called by the part constructor `0xC01177AC (part, layer, x, mode)` (twice, L from `part + 0x5AC4/0x5AC8`: 3 and 9, 4 and 10, 6 and 7 or 0 and ... by mode). Its first call `0xC0014068` builds a module block through the part object (`[part + 0x5000 + 0x5F8 + 4 k]`, vtable `[part + 0xD0]`), and with a part built from zeroed memory it enters a clear loop with a garbage element count (`0xC0014454`) after 200 M instructions. The part constructor needs the store, program-object and port objects of the booted application ([arm-organ-messages](arm-organ-messages.md) s8, s9). The Fx ids are subscribed in `0xC0117A40..0xC0118100` (`0xC00D57F0 (part, id)`), but the handler that forwards an id to a module is behind the same object graph.
 
 Next steps, in order: (1) reach the steady state of `arm_boot_full.boot_full` (task-join loops, [arm-organ-messages](arm-organ-messages.md) s9), then re-run `tools/arm_sweep.py` with `Edt_Effects_k*Type` and compare the message streams for types 0..11; (2) or build the part object by hand: `0xC0014068` needs `part` fields `+0x5F8..`, `+0xD0` (vtable with `[vt+0xC]`), and valid counts at `[part+0xD0]`.
+
+## 7. Reference model of the compressor gain computer `0x120630` (VERIFIED against the oracle)
+
+```bash
+cargo build -p nord-sharc --release
+python tools/fx_routine_models.py check compressor core2_sram.bin --scenarios 500 --seed 21
+# compressor 0x120630: 500/500 scenarios bit-identical (outputs and context words)
+# golden scenario (6 blocks, state carried): identical
+python tools/fx_routine_models.py golden compressor > crates/nord-core/src/fx/tests_compressor_golden.rs
+```
+
+`tools/fx_routine_models.py::compressor_0x120630` transliterates the routine over a flat memory dict. 2,100 random scenarios (seeds 5, 7, 8, 9, 11, 21; finite floats, signed and zero inputs, aliased frame offsets, both `GT` branches) plus the 6-block golden scenario give **0 differing words** in the 8 block words and the 26 context words (`I1 - 0x20 .. I1 - 0x07`). Tests: `tools/tests/test_fx_routine_models.py` (the 48 golden output words are recorded from the oracle).
+
+Two facts the transliteration needed, both **VERIFIED** by the mismatches they removed:
+
+* The pass sets `MODE1` `PEYEN` and `BDCST1` (`MODE1 |= 0xE00000`). A load through `I1` is **broadcast** (`PEy` gets the `PEx` word); a load through `I4` is a pair `(word, word + 1)`. The routine uses `I1` for parameters and `I4` (`= I1`) for per-channel state.
+* All four frame loads precede the four stores, so aliased offsets (`M3 = M4 = 2`) read the old data.
+
+Data flow (per block of 4 stereo frames; left = `PEx`, right = `PEy`; `P` = linked peak):
+
+| Step | Equation | Words (offset from `I1`) |
+|---|---|---|
+| Peak | `p_c = max |x|` over the 4 frames, `P = max(p_L, p_R)` | frames at `I0 + 0, 2, M3, M4` |
+| Level | `level_c = max(P, P r + (L - L r))`, stored back | `L` pair `-0x11`, release `r` pair `-0x1E` |
+| Makeup | `B_c = T_c + (B_c - T_c) k`, stored back; both elements use the **left** word of `B` afterwards | target `T` pair `-0x1C`, `B` pair `-0x1A`, `k` `-0x09` |
+| Log | `lg = ((e + 1) + MANT * 2^s) * K` with `s = -31` gives `e + frac` (`level = 2^e (1 + frac)`) | `s` `-0x0D`, `K` `-0x0B` |
+| Excess | `o = max(lg, thr) - thr`; `c = a` if `o > E` else `r`; `E' = o c + (E - E c)`, stored back | threshold pair `-0x19` (**its left word is the right word of `B`**), attack `a` pair `-0x20`, `E` pair `-0x0F` |
+| Reduction | `q = max(E'_L w_L, E'_R w_R) * g` (linked), `t = FIX(q, 2^f)` | slope `w` pair `-0x17`, `g` `-0x15`, `f` `-0x0C` (31 gives Q31) |
+| Gain | `G = bits(T0 - T0 t + T1 t)` with the fractional `SSF` product (floor of `2ab` over `2^32`), read as a float | `T0` `-0x0A`, `T1` `-0x14` (1.0 and 0.5 give a piecewise `2^-t`) |
+| Output | `y = x B_L G` for both channels | block in place |
+
+Units: the level, threshold and excess are in log2 (octave) units of the block peak (`level` is a linear amplitude); `t` is the fraction of one octave of gain removed when `T0 = 1.0`, `T1 = 0.5`; the smoothing coefficients are one-pole weights per block (4 frames, 83 us at 48 kHz): `0.9908` is the same constant as the ORG and delay smoothers ([fx-dsp-map](fx-dsp-map.md) s5), so `k = 0.9908` is a likely `makeup` value (ASSUMED).
+
+Not decoded: which ARM words fill the context (`Edt_Effects_kCmpAmt` 0..127 default 95, `kCmpResponse` 0/1), so the numeric defaults of a real instance are unknown. In the Rust port (`fx/fw_compressor.rs`) the algorithm is VERIFIED and every parameter value is ASSUMED.
+
+Rust parity: `FwCompressor` reproduces the oracle golden vector with a worst relative output error of 2.1e-7 (f32 arithmetic against 40-bit registers and truncating stores); `MasterBus::set_fw_compressor(Some(..))` swaps it in for the peak-envelope compressor with a 4-frame latency. Default off: `render_hash` is `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0` before and after.
+
+Other routines asked for (delay `0x1206B0`, LFO `0x1228CF`, phaser all-pass `0x122C39`, resonant filter `0x1243F4`) are **not modelled yet**. Their listings interleave two or three dependent chains per instruction group (multi-function `f12=f2*f4, f2=f8+f12`, averages `(f14+f2)/2`, `CLIP`, `RECIPS`, 16-bit `FPACK`); the next step is a listing driven generator of the transliteration (the compressor needed the `BDCST1` and load-order facts above, which such a generator would take from the listing).
 
 ## Implications
 

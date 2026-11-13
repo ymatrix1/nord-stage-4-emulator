@@ -7,7 +7,7 @@
 //! fraction (a piecewise `2^-x`) and multiplies the 4 frames by `makeup * gain`.
 //!
 //! VERIFIED: `tools/fx_routine_models.py` reproduces the routine word for word against the
-//! `sharc-fx` oracle (900 random scenarios, 0 differing words, plus a 6-block golden scenario);
+//! `sharc-fx` oracle (2,100 random scenarios, 0 differing words, plus a 6-block golden scenario);
 //! `tests_compressor_golden.rs` holds that golden vector and this port matches it to
 //! [`GOLDEN_TOLERANCE`] (f32 arithmetic here, 40-bit registers and truncating stores there).
 //! The context layout below is the firmware's (offsets from `I1`); the left threshold word is the

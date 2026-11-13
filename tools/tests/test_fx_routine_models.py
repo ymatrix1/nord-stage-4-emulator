@@ -134,3 +134,4 @@ def test_golden_rust_lists_the_three_arrays():
     for name in ("INPUT", "OUTPUT", "CONTEXT", "CONTEXT_IN"):
         assert f"CMP_GOLDEN_{name}" in text
     assert "0xbe9f2e14" in text
+    assert "#[test]" in text and text.startswith("//! Firmware parity")
