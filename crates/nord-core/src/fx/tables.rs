@@ -9,6 +9,22 @@ pub(super) const EQ_SHELF_Q: f32 = std::f32::consts::FRAC_1_SQRT_2;
 /// Mid peak `Q` index. ASSUMED: scale is VERIFIED (`firmware_q`), but index 64 (`Q~1.02`) is chosen to match the spec's `Q = 1.0`, not read from firmware.
 pub(super) const EQ_MID_Q_IDX: usize = 64;
 
+/// EQ gain per preset count (dB) used to decode and encode the signed 7-bit `eq_*` fields.
+///
+/// ASSUMED: `0.25 dB` (+-60 counts = +-15 dB, the factory range and the manual's +-15 dB). The step
+/// of the DSP gain ladder is VERIFIED, see [`EQ_GAIN_DB_PER_COUNT_LADDER`]; that the preset count
+/// indexes that ladder one to one is not (no ARM writer decoded, `docs/research/preset-dsp-map.md`
+/// section 4.2). Switching to the ladder step is a one-line change here (TD-10): +-60 counts move
+/// by 0.05 dB (15.00 to 15.05 dB), and tests that expect exact multiples of 0.25 dB change.
+pub const EQ_GAIN_DB_PER_COUNT: f32 = 0.25;
+
+/// Step of the DSP gain ladder `2^((j - 353) / 24)` in dB: `20 log10(2) / 24 = 0.250858`.
+///
+/// VERIFIED: `DM 0xB05EB` of the PNO and ORG images, all 354 low entries within 1.25 cents of the
+/// closed form (`docs/research/preset-dsp-map.md` section 4.2); pinned here by
+/// `eq_gain_step_constants_differ_by_a_third_of_a_percent`.
+pub const EQ_GAIN_DB_PER_COUNT_LADDER: f32 = 6.020_6 / 24.0;
+
 /// EQ Mid / Amp-filter frequency steps (`0..=127`, Hz).
 ///
 /// EMPIRICAL: values as displayed by the hardware (OLED) and transcribed in third-party `ns4decode`
@@ -96,6 +112,20 @@ pub fn delay_sync_beats_from_index(idx: usize) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn eq_gain_step_constants_differ_by_a_third_of_a_percent() {
+        let exact = 20.0 * 2f64.log10() / 24.0;
+        assert!((f64::from(EQ_GAIN_DB_PER_COUNT_LADDER) - exact).abs() < 1e-6);
+        let rel = (EQ_GAIN_DB_PER_COUNT_LADDER / EQ_GAIN_DB_PER_COUNT - 1.0).abs();
+        assert!(
+            (rel - 0.0034).abs() < 1e-4,
+            "relative step difference {rel}"
+        );
+        // 60 counts: 15.00 dB (assumed step) against 15.05 dB (ladder step)
+        let gap = 60.0 * (EQ_GAIN_DB_PER_COUNT_LADDER - EQ_GAIN_DB_PER_COUNT);
+        assert!((gap - 0.05).abs() < 0.005, "gap at +-15 dB {gap}");
+    }
     use crate::fx::{DelaySubdivision, LayerFxChain};
 
     #[test]

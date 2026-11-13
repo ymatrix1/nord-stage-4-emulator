@@ -121,3 +121,17 @@ def test_oracle_command_line_names_the_routine_and_the_data():
     assert args[args.index("--calls") + 1] == "2"
     assert f"1:{fx.IN_ADDR:#x}=" in " ".join(args)
     assert fx.find_binary("x/sharc-fx") == Path("x/sharc-fx")
+
+
+def test_golden_vectors_have_the_documented_shape_and_are_deterministic():
+    g = fx.golden_vectors()
+    n = fx.GOLDEN_BLOCKS * fx.FRAMES
+    assert len(g["left"]) == len(g["right"]) == n and len(g["states"]) == 4 * fx.STAGES
+    assert g == fx.golden_vectors()
+    assert tuple(fx.from_bits(w) for w in fx.COEF_WORDS) == COEF
+
+
+def test_golden_rust_lists_every_word_as_hex():
+    text = fx.golden_rust()
+    assert "GOLDEN_LEFT: [u32; 64]" in text and "GOLDEN_STATES: [u32; 12]" in text
+    assert text.count("0x") == 64 + 64 + 12
