@@ -240,6 +240,14 @@ piano_pedal_noise|1|1.000000
 piano_string_res|1|1.000000
 piano_timbre|4|0.250000
 piano_touch|2|0.000000
+pianox_dyn_comp_1|3|0.000000
+pianox_dyn_comp_2|3|0.000000
+pianox_octave_1|4|0.500000
+pianox_octave_2|4|0.500000
+pianox_soft_release_1|1|0.000000
+pianox_soft_release_2|1|0.000000
+pianox_unison_1|3|0.000000
+pianox_unison_2|3|0.000000
 rotary_drive|cont|0.000000
 rotary_speed_fast|1|0.000000
 split_1_crossfade|2|0.000000

@@ -82,6 +82,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fxsel", group = "Layer FX Selectors")]
     pub layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank,
 
+    /// Per-layer Piano Soft Release, Unison, Dyn Comp and Octave Shift.
+    #[nested(id_prefix = "pianox", group = "Piano Layers")]
+    pub piano_layers: crate::piano_params::PianoLayerBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -297,6 +301,7 @@ impl Default for Stage4Params {
             morph_assign: crate::morph_assign::MorphAssignParams::default(),
             layer_fx: crate::fx_params::LayerFxBank::default(),
             layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank::default(),
+            piano_layers: crate::piano_params::PianoLayerBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -558,6 +563,7 @@ impl Stage4Params {
         self.morph_assign.sync_to_engine(engine);
         self.layer_fx.sync_to_engine(engine);
         self.layer_fx_selectors.sync_to_engine(engine);
+        self.piano_layers.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();

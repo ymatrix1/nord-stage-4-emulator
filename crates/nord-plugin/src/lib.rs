@@ -14,6 +14,7 @@ pub mod midi;
 pub mod morph_assign;
 pub mod param_snapshot;
 pub mod params;
+pub mod piano_params;
 pub mod state;
 
 use nih_plug::prelude::*;
