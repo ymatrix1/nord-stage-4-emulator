@@ -10,7 +10,7 @@ Implemented in [`crates/nord-core/src/organ/`](../../crates/nord-core/src/organ/
 |---|---|
 | `mod.rs` | `OrganLayer` state, `note_on`/`note_off`, `render_frame` signal chain |
 | `types.rs` | enums (`OrganModel`, `ScannerMode`, `RotarySpeed`, `ToneWheelSource`), gear table, rotary constants |
-| `firmware_bank.rs` | `ToneBank`: PNO Core1 oscillator-bank arithmetic, x table, `fracmul`, `phase_step` |
+| `firmware_bank.rs` | `ToneBank`: PNO Core1 oscillator-bank arithmetic (92 wheels, mono bus output and the two firmware lanes), x table, `fracmul`, `phase_step`, `cycles_per_frame` |
 | `tonewheel.rs` | gear frequencies, pickup calibration, 91-wheel generator (firmware or legacy source) |
 | `drawbar.rs` | drawbar offsets, firmware level curve (`drawbar_gain`, `DrawbarLaw`, TD-10), foldback |
 | `vibrato_bank.rs` | 12-TET ladder (`wheel_hz`, Fine Tune), 184-entry detune table, group gains, copy weights |
@@ -69,7 +69,7 @@ Source: [organ-tonewheel-bank](../research/organ-tonewheel-bank.md) (oracle run,
 | Step | `step = round(f / fs * 2^32)` (firmware: `fracmul(inc, tune)`, `f = fs * step / 2^32`) | VERIFIED relation; `f` is the 12-TET ladder of section 3.1.2 |
 | Accumulate | `phase = (phase + step) mod 2^32` (`u32`), before the table read | VERIFIED |
 | Index | `idx = phase >> 20`, 4096 entries, no interpolation | VERIFIED |
-| Waveform | `x = sin t - 0.1122 cos 2t - 0.01585 cos 3t - 0.00631 cos 4t - 0.00398 cos 5t` (harmonics 0, -19.0, -36.0, -44.0, -48.0 dB), `T[i] = x(2 pi i / 4096)` built once in `new` | VERIFIED harmonics, table phase origin ASSUMED |
+| Waveform | `x = sin t - sum_h 10^(dB_h/20) cos h t`, h = 2..5 at -19, -36, -44, -48 dB (coefficients 0.112202, 0.0158489, 0.00630957, 0.00398107), `T[i] = x(2 pi i / 4096)` built once in `new` | VERIFIED: least-squares fit of the firmware table, max error 7.8e-8, sine terms and h >= 6 below 1e-8 (so the phase origin is VERIFIED too); [organ-oracle-audio](../research/organ-oracle-audio.md) s4 |
 | Role | the x wave on every B3 wheel, replacing the sine and the extra low-wheel harmonics | ASSUMED (about 70 % organ tone source) |
 
 Every other model keeps the float-phase sine path; `Legacy` on `B3` is selected by setting `OrganLayer::tonewheel_source`. The pickup calibration and crosstalk stay `ASSUMED`. Tests: `firmware_bank::tests` (closed form at chosen steps, harmonic levels, `fracmul` rounding, detune table steps), `bank_golden::tests` (Rust bank vs the Python model, vectors from `python tools/organ_bank_ref.py golden`, synthetic table, no firmware data).
@@ -85,13 +85,28 @@ The ARM routine `0xC022D9F0(this, level)` programs the 184 increments from a tab
 | Reading of the detune | vibrato / chorus ensemble effect, replacing the earlier constant `-0.945 / +0.945` cent pair (`COPY_SPREAD_CENTS`, removed) | ASSUMED |
 | Pitch anchor | wheel 0 = MIDI 24 (C1), A4 = 440 Hz; the organ is equal tempered, not Hammond gear-ratio tuned (the gear table above applies to `Legacy` only) | ASSUMED |
 | Fine Tune | `OrganLayer::fine_tune_cents`, multiplies every frequency by `2^(cents/1200)`; clamped to the firmware tune table range -400..+381 cent (the Fine Tune handler writes the bank rate `DM 0xC27C5`) | range VERIFIED, mapping ASSUMED |
-| Copy mix | `OrganLayer::detuned_copies` selects the table. Weights = gains 5, 6 normalised to unit sum: exact `[1, 0]`, detuned `[0.5, 0.5]`; groups 7, 8 are not modelled | gains VERIFIED, mapping and normalisation ASSUMED |
+| Copy mix | `OrganLayer::detuned_copies` selects the table. The mix stage applies the lane matrix `out_x = g5 tx + g8 ty`, `out_y = g6 ty + g7 tx` (`vibrato_bank::lane_matrix`, [3.1.3](#313-mix-stage-of-the-bank-oracle-chain)); the mono bus uses its mean: exact `[1, 0]`, detuned `[0.5625, 0.5625]` (+1.02 dB against exact for equal copies). `ToneBank::advance_lanes` gives both lanes (not routed to the stereo path) | matrix VERIFIED, mono mean is a modelling choice, int-to-float `raw / 2^23` ASSUMED |
 
-Tests: `vibrato_bank::tests` (12-TET step 100 cent, A4 anchor, Fine Tune, table statistics and spot values from the CSV rows, weights), `firmware_bank::tests::detuned_copies_follow_the_cent_table`, `tonewheel::tests::fine_tune_retunes_the_firmware_bank`.
+Tests: `vibrato_bank::tests` (12-TET step 100 cent, A4 anchor, Fine Tune, table statistics and spot values from the CSV rows, weights, lane matrix, smoother), `firmware_bank::tests::detuned_copies_follow_the_cent_table`, `tonewheel::tests::fine_tune_retunes_the_firmware_bank`.
 
-**Render change** (`render_hash`, 2,240,000 bytes): before this change (default `Legacy`) `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a`; after (default `Firmware`, 12-TET pitches, firmware drawbar curve) `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0`. Only the engine timeline (its organ layers) and the standalone organ segment change; synth, sample, piano and FX segments are bit-identical.
+**Render change** (`render_hash`, 2,240,000 bytes): before this change (default `Legacy`) `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a`; after (default `Firmware`, 12-TET pitches, firmware drawbar curve) `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0`; after the exact x-table levels of the oracle-audio change `d98808bd1597f99ffee7b247cb9785ab62a441941fb6b92312575ddbf73b7b75` (max sample difference 2.0e-6). Only the engine timeline (its organ layers) and the standalone organ segment change; synth, sample, piano and FX segments are bit-identical.
 
 - **Pickup Calibration (`B3` vs `B3 Bass`):** Standard `B3` tapers the bottom 12 complex wheels (`0.74..0.94`) and softens upper wheels above `tw 60` (`1.0..0.84`). `B3 Bass` boosts low wheels `0..24` (`1.32..1.05`) for prominent pedal/bass weight.
+
+### 3.1.3 Mix stage of the bank (oracle chain)
+
+The bank output (184 elements) goes through the PNO Core1 mix stage `0x12268F` (one record per set, four sets; [organ-oracle-audio](../research/organ-oracle-audio.md) s3, run by `sharc-organ`, `tools/organ_oracle_audio.py`). All items VERIFIED by poking the real routine in the SHARC oracle unless marked.
+
+| Item | Value |
+|---|---|
+| Weights | `weight[i] = a[i] wB[i] + b[i] wA[i]`, `i` = 0..91 (92 wheels), applied to elements `2i` (copy 0) and `2i + 1` (copy 1); `a = DM 0x9594F + i`, `b = 0x95AE2 + i`, `wB = 0x957DE + i`, `wA = 0x9566E + i` (set 0; strides `0x65`, `0x64`, `0x5C` per set) |
+| Lanes | `tx = sum weight[i] x[2i]`, `ty = sum weight[i] x[2i+1]`; `out_x = L (g5 tx + g8 ty)`, `out_y = L (g6 ty + g7 tx)`; `g5 = DM 0x959AF`, `g6 = 0x959B0`, `g8 = 0x95B3E`, `g7 = 0x95B3F`, `L = 0x95B42` |
+| Smoothing | gains and level states move `s = 0.01 t + 0.99 s` per frame (steady level 0.999983 of the target) |
+| Group gains | `(g5, g6, g7, g8)` = `(0x7FFFFF, 0, 0x7FFFFF, 0)` exact (both lanes = copy 0), `(0x600000, 0x600000, 0x300000, 0x300000)` detuned (`/ 2^23`: ASSUMED conversion) |
+| Python model agreement | 1.6e-5 (exact) / 1.8e-5 (detuned) relative rms over 16,384 frames of a chord |
+| Writer of `a`, `b`, `wB`, `wA` | ARM code not found; footage offsets, foldback and the drawbar curve as final gain stay ASSUMED |
+
+Engine status: the 92 wheels exist in `ToneBank` (`BANK_WHEELS`); the layer feeds 91 to the drawbar buses. Rust against oracle on a C4 E4 G4 chord with drawbars 888000000: partials within -0.19..+0.11 dB, SNR 37.7 dB (exact) / 37.6 dB (detuned) after one gain; residue = ASSUMED pickup calibration; overall level 0.0792x (ASSUMED `0.08` bus scale). Tests: `bank_mix_golden::tests`, `firmware_bank::tests`.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 

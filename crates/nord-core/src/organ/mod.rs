@@ -16,14 +16,22 @@ mod vibrato_bank;
 
 #[cfg(test)]
 mod bank_golden;
+#[cfg(test)]
+mod bank_mix_golden;
 
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
-pub use firmware_bank::{build_x_table, firmware_wave_x, fracmul, phase_step, ToneBank};
+pub use firmware_bank::{
+    build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate, phase_step,
+    ToneBank, DEFAULT_TUNE_WORD,
+};
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
     ROTARY_BASS_HORN_BALANCES, ROTARY_CROSSOVER_HZ,
 };
-pub use vibrato_bank::{wheel_hz, DETUNE_CENTS, GAINS_DETUNED, GAINS_EXACT};
+pub use vibrato_bank::{
+    gain_value, lane_matrix, smooth, wheel_hz, BANK_WHEELS, DETUNE_CENTS, GAINS_DETUNED,
+    GAINS_EXACT,
+};
 
 use drawbar::{foldback_tonewheel, DRAWBAR_OFFSETS};
 use std::f32::consts::TAU;
