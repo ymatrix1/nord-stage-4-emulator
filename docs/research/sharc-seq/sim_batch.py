@@ -97,6 +97,7 @@ def main():
             T.SetBreakpointAtAddress(0, exit_a)
             T.Run(0, True)
         for k, (parcels, state, chunks) in enumerate(cases):
+            print('case %d (%.0fs)' % (k, time.time() - t0), file=sys.stderr, flush=True)
             if a.target != '21571':
                 T.LoadProgram(0, dxe, False)   # fresh memory and registers: Reset is slow and leaves no program
                 T.SetBreakpointAtAddress(0, exit_a)
@@ -110,6 +111,7 @@ def main():
                 T.SetMemory(0, pm_id, addr, n, 1, bytearray(bytes.fromhex(hexp)))
             for addr, ws in setup['dm'] + chunks:
                 T.SetMemory(0, dm_id, addr, len(ws), 1, bytearray(words_bytes(ws)))
+            print('  poked (%.0fs)' % (time.time() - t0), file=sys.stderr, flush=True)
             if a.target == '21571':
                 T.SetMemory(0, dm_id, done, 1, 1, bytearray(4))
                 # Run(wait) blocks until the exit breakpoint; a watchdog halts a case that never gets there
@@ -151,6 +153,7 @@ def main():
                 T.GetMemory(0, dm_id, addr, n, 1, wb)
                 ws += struct.unpack('>%dI' % n, bytes(wb))
             out.write(' '.join('%08X' % w for w in ws) + '\n')
+            out.flush()
     finally:
         T.Disconnect()
         out.close()

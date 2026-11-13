@@ -30,6 +30,9 @@ python docs/research/sharc-seq/routine_diff.py IMG/dsp_image_1_PNO.bin 0 12268F 
 ```
 (probe: `gen_census_probe.py OUT --plus && cc21k -proc ADSP-21571 -si-revision any -g -O0 -o OUT/cens21.dxe OUT/cens.asm OUT/cens.c`). `routine_diff.py` gained `--reg NAME=HEX` and `--rand-float LO:HI`; `sim_batch.py` runs each 21571 case with `Run(wait)` under a watchdog (`--case-timeout`).
 
+### Post stage 0x12272D and output stage 0x1229B3 on the 21571 simulator: not yet compared (stall)
+`routine_diff.py --scenario post|output` feeds the inputs of `tools/organ_post_ref.py` (`synthetic_inputs`, `output_inputs`; contiguous words coalesced into one write, `--watch` ranges `0xE0000..0xE2FFF`, `0xB0000..0xB1FFF` read back) to both machines. The pokes work (4 s per case; `sim_batch.py` prints `case k` / `poked` to stderr), but **`Run` of the post stage never returns on the simulator**: 25+ minutes, and the 60 s `--case-timeout` watchdog (`Halt` from a timer thread) did not recover it either; no case completed (attempts with 6 and 20 cases). The mix stage with the same harness completes in about 5 s per case, so the stall is specific to the routine's inputs or code path (open: circular-buffer registers of the random start state, an MMR read, or a polling loop). Next: run the post stage from the exact `sharc-chain` state (not a random register file), bisect with breakpoints inside `0x12272D..0x1229B2`, and keep the model side (`organ_post_oracle.py verify`, bit-exact against the Rust oracle) as the reference until then.
+
 ## Implications
 The bank routine is not yet verified. Everything before the loop exit matches, so the multiplier, `FEXT`, dual-memory and SIMD paths it uses are consistent with the instruction-level census (`sharc-census-diff.md`).
 

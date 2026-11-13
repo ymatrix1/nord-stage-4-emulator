@@ -47,6 +47,8 @@ def main():
     ap.add_argument('--mode1', type=lambda s: int(s, 16), default=0xE10000, help='MODE1 at the call')
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--i1', type=lambda s: int(s, 16), default=None, help='set I1 to this DM address')
+    ap.add_argument('--scenario', choices=['post', 'output'], help='inputs from tools/organ_post_ref.py (synthetic_inputs / output_inputs, seed = --seed + case)')
+    ap.add_argument('--watch', action='append', default=[], help='LO:HI: DM words read back (no random fill)')
     ap.add_argument('--reg', action='append', default=[], help='NAME=HEX: set a register of the start state (i0, i2, m1, ...)')
     ap.add_argument('--rand-float', action='append', default=[], help='LO:HI: fill with random floats in [-4, 4) instead of random words')
     a = ap.parse_args()
@@ -66,7 +68,7 @@ def main():
         lo, hi = rng(r)
         words = struct.unpack('<%dI' % (hi - lo), mem[lo * 4:hi * 4])
         lines.append('dm %x %s' % (lo, ' '.join('%08X' % w for w in words)))
-    for r in a.rand + a.rand_float:
+    for r in a.rand + a.rand_float + a.watch:
         lo, hi = rng(r)
         lines.append('watch %x %d' % (lo, hi - lo))
     syms = {l.split()[1]: int(l.split()[2], 16) for l in open(a.fixture) if l.startswith('sym ')}
@@ -80,6 +82,18 @@ def main():
             k, v = kv.split('=')
             st[names.index(k)] = int(v, 16)
         chunks = ''
+        if a.scenario:
+            import organ_post_ref as pr
+            pk = pr.synthetic_inputs(a.seed + _) if a.scenario == 'post' else pr.output_inputs(a.seed + _)
+            run = []   # contiguous addresses go into one chunk (one simulator write)
+            for ad in sorted(pk):
+                if not run or ad != run[-1][0] + 1:
+                    run.append([ad, []])
+                else:
+                    run[-1][0] = ad
+                run[-1][1].append(pk[ad] & 0xFFFFFFFF)
+            for last, ws in run:
+                chunks += ' | %x %s' % (last - len(ws) + 1, ' '.join('%08X' % w for w in ws))
         for r in a.rand_float:
             lo, hi = rng(r)
             words = ['%08X' % struct.unpack('<I', struct.pack('<f', rnd.uniform(-4, 4)))[0] for _ in range(hi - lo)]
