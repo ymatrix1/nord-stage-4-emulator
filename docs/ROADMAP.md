@@ -99,6 +99,7 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Piano `UNISON` (`1`, `2`, `3` subtle hammer-detune width) and `DYN COMP` (`1`, `2`, `3` dynamic range compression)
 - [x] Polyphony steal priority algorithm (recycling decaying released voices and quietest sustaining voices before active sounding notes)
 - [x] Hardware-parity sampler interpolation: exact SMP 6-tap x 256-phase Q31 kernel (`piano/q31_kernel.rs`, Hamming-windowed sinc, bit-exact closed form) behind `SampleInterp`, plus the SMP unpacker/predictor model (`piano/smp_unpack.rs`)
+- [x] SMP compressed-voice replay on the oracle: record layout of the `0x1C07D8` loop decoded, real `.npno` pages (mono and stereo, widths 5..12, orders 1..3) played through the SMP image and equal to the Rust model bit for bit (`piano/smp_voice.rs`, `piano/smp_page.rs`, `docs/research/smp-voice.md`); `SmpKernel::interpolate_hw` is the integer-exact variant
 
 ---
 

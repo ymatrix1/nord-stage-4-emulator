@@ -131,6 +131,7 @@ impl Runner {
                 addr,
                 count,
                 stride,
+                part,
             } => {
                 let mut words = Vec::with_capacity(*count);
                 for k in 0..*count as u32 {
@@ -139,7 +140,7 @@ impl Runner {
                         .core
                         .dm_read(a)
                         .map_err(|a| format!("bad capture address 0x{a:x}"))?;
-                    words.push(f32::from_bits(w));
+                    words.push(part.pick(w));
                 }
                 self.series_mut(name).samples.extend(words);
             }

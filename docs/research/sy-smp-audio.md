@@ -14,7 +14,7 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 | Audio against the engine, sine, 240 frames, kernel 0, ratio 0.625 | `SincKernelSet` + the DSP's 40-bit rules: max abs error **2.98e-8**, SNR 150.5 dB, 186 of 240 frames bit-exact. Plain f32 accumulation: 5.96e-8, 143.2 dB. With the oracle's own kernel table and the 40-bit rules: **0 error, 240 of 240 bit-exact** (both channels) | VERIFIED |
 | Audio against the engine, real factory sample (128 frames of "Weltmeister 4 Accordion_PS 4.1"), ratio 0.8749 | engine + 40-bit: max 5.96e-8, 144.9 dB, 136 of 240 bit-exact; engine + f32: 1.19e-7, 139.0 dB; oracle table + 40-bit: **0 error, 240 of 240 bit-exact** | VERIFIED |
 | Oracle bug found and fixed | long-word (`(LW)`) accesses were executed as 32-bit: the frame clear left the right channel uncleared (every ISR added to it), and the 64-bit voice masks lost their high word. Now modelled for Types 14a, 15a, 15b, 3a, 3b | VERIFIED (ADI listing, 6 unit tests, 58 `(LW)` sites in the two images) |
-| SMP | Audio interrupt, FIFO and status poll run under the same harness (SMP FIFO base `0x92196`); the voice loop `0x1C07D8` executes on an empty record without a fault. **The CNSP voice replay is not done**: the record fields of the loop (section 7) are read from the listing but not yet driven or compared | partly done |
+| SMP | Audio interrupt, FIFO and status poll run under the same harness (SMP FIFO base `0x92196`); the voice loop `0x1C07D8` plays real CNSP piano pages bit-exactly against the Rust model, see [smp-voice](smp-voice.md) | VERIFIED |
 
 What the harness does not model: the external-port DMA that refills the 128-frame source ring from SDRAM and the unpacker family that decodes it (section 5), and the ARM-side initialisation script (section 5). The ring is pre-filled and the refill bookkeeping word is held above its threshold.
 
@@ -99,10 +99,10 @@ Re-checked after the change: the FX, ORG and PNO start-ups and the SMP start-up 
 | FIFO | ring base `0x92196` (SY: `0x93046`); same pair format and handler table `DM(0x92182..)` (same 16 entries); maximum pairs per interrupt `DM(0x92419) = 16`; `msg 0xA0000 0x1234` stores through it (`tools/oracle_scenarios/smp_dispatch.scn`) | VERIFIED |
 | Status poll | the ISR waits for bit `0x40` of `DM(0x5201)` (an IOP register); the harness sets it with `poke 0x5201 0x40` | VERIFIED |
 | Voice lists | voice counts `DM(0x9268B)` (compressed voices, loop at `0x1C07D8`) and `DM(0x9268A)` (second loop, listing `0x3810C8`), list pointer `DM(0x9268C)` (initially `0x92534`); history ring `B5` with `L5 = 0x10`, packed stream ring `B1` with `L1 = 0x100`, kernel base `R14 = 0xE3400`, `M11 = 0x100` | VERIFIED (listing) |
-| Record fields read by the loop (`I3` signed offsets) | `-30` and `-28` and `-27` (position arithmetic: `R0 = rec[-28] * rec[-30] (UUI) - rec[-27]`, low 4 bits = bit offset, next 8 bits = word index), `-26` stream ring base (`B1`), `-25` history ring base (`B5`), `-24` and `-29`/`-31` (64-bit phase accumulator, kernel phase = top 8 bits of `-29`), `-19` residual width (`<< 6` is the `FEXT` length), `-17` predictor coefficient table (`I9`, four taps), `-32`, `+0`, `+1` (left and right gain), `+4` (last output), pointer at `+0x36` (mix bus `I7`) | EMPIRICAL (instruction reading) |
+| Record fields read by the loop (`I3` signed offsets) | `-30` and `-28` and `-27` (position arithmetic: `R0 = rec[-28] * rec[-30] (UUI) - rec[-27]`, low 4 bits = bit offset, next 8 bits = word index), `-26` stream ring base (`B1`), `-25` history ring base (`B5`), `-24` and `-29`/`-31` (64-bit phase accumulator, kernel phase = top 8 bits of `-29`), `-19` residual width (`<< 6` is the `FEXT` length), `-17` predictor coefficient table (`I9`, four taps), `-32`, `+0`, `+1` (left and right gain), `+4` (last output), pointer at `-18` (mix bus `I7`; first read as `+0x36`, corrected in [smp-voice](smp-voice.md)) | VERIFIED in [smp-voice](smp-voice.md) |
 | Loop executes | one voice with an all-zero record runs the whole loop without a fault and adds 0 to the bus | VERIFIED (`smp_dispatch.scn`: `poke 0x9268B 1`, list entry `0x9B000`) |
 
-Not done (follow-up): assign the record fields from the Rust reference (`piano/smp_unpack.rs` `pack_units`, `decode_block`; `piano/q31_kernel.rs`), build a record from a packed CNSP stream, run N interrupts and compare the bus with the Rust path as in section 1.
+Done in [smp-voice](smp-voice.md): the record fields, a real packed CNSP page driven through the loop, and a bit-exact comparison with the Rust model (the bus pointer is record word `-18`, not `+0x36`; that note above was a misreading of an earlier `M6`).
 
 ## 8. Reproduce
 
@@ -140,6 +140,6 @@ cargo test -p nord-core --test oracle_sy_voice
 ## Follow-ups
 
 1. Decode the ARM initialisation script (`0xC0503600 ..`) and replay it: this supplies the unpacker pointer table `DM(0x95C7C)` and the pitch table, so the ring can be refilled by the firmware's own unpackers from a packed stream in DM and the `rec+0x10` poke can go.
-2. SMP: drive one compressed voice (section 7) and compare against `piano/smp_unpack.rs` + `piano/q31_kernel.rs`.
+2. ~~SMP: drive one compressed voice~~ Done: [smp-voice](smp-voice.md).
 3. Find which `e` the ARM writes for each MIDI note and the kernel selector (`rec+0x3B`).
 4. Check LW in SIMD mode on the ADI simulator (method of [sharc-float](sharc-float.md)).

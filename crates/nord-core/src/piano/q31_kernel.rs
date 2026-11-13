@@ -21,6 +21,8 @@
 use std::f64::consts::PI;
 use std::sync::OnceLock;
 
+/// Decoded-integer units per float PCM unit (`y / 8192`, the CNSP decoders' scale).
+pub const Y_PER_UNIT: f32 = 8192.0;
 /// Number of kernel taps (history samples read per output sample).
 pub const TAPS: usize = 6;
 /// Number of fractional phases (`frac >> 24` of the 32-bit position fraction).
@@ -130,24 +132,44 @@ impl SmpKernel {
 
     /// Interpolated value of `pcm` at fractional index `pos`, or `None` outside the stream
     /// (`pos < 0` or `pos >= len`). Samples beyond either end repeat the edge sample (ASSUMED:
-    /// the hardware ring buffer is fed by the unpacker and the end handling is not in the loop).
+    /// the hardware ring buffer is fed by the unpacker and the end handling is not in the loop;
+    /// the oracle voice starts from a zero history, `docs/research/smp-voice.md` section 6).
     #[inline]
     pub fn interpolate(&self, pcm: &[f32], pos: f64) -> Option<f32> {
-        let len = pcm.len();
-        if len == 0 || pos < 0.0 {
-            return None;
-        }
-        let n = pos as usize;
-        if n >= len {
-            return None;
-        }
-        let phase = Self::phase_of(pos - n as f64);
-        let last = len - 1;
+        let (n, phase) = Self::locate(pcm.len(), pos)?;
+        let last = pcm.len() - 1;
         let mut taps = [0f32; TAPS];
         for (t, v) in taps.iter_mut().enumerate() {
             *v = pcm[(n + t).saturating_sub(2).min(last)];
         }
         Some(self.mac_f32(&taps, phase))
+    }
+
+    /// Like [`Self::interpolate`] but with the DSP's integer arithmetic for integer-valued PCM
+    /// (`pcm = y / 8192`, as the CNSP decoders produce): the taps are `y`, the sum is
+    /// [`Self::mac_q31`] (rounded to a whole `y`), so the result is a multiple of `1/8192`.
+    /// VERIFIED: equals the oracle's `R2 = MRF (SSFR)` of the SMP voice loop in 1,200 of 1,200
+    /// frames (`smp_voice_ref`, `docs/research/smp-voice.md`); the f32 path differs from it by up
+    /// to half a `y` unit (0.5/8192, SNR about 66 dB on a piano stroke).
+    #[inline]
+    pub fn interpolate_hw(&self, pcm: &[f32], pos: f64) -> Option<f32> {
+        let (n, phase) = Self::locate(pcm.len(), pos)?;
+        let last = pcm.len() - 1;
+        let mut taps = [0i32; TAPS];
+        for (t, v) in taps.iter_mut().enumerate() {
+            *v = (pcm[(n + t).saturating_sub(2).min(last)] * Y_PER_UNIT).round() as i32;
+        }
+        Some(self.mac_q31(&taps, phase) as f32 / Y_PER_UNIT)
+    }
+
+    /// Integer index and kernel phase of read position `pos`, `None` outside the stream.
+    #[inline]
+    fn locate(len: usize, pos: f64) -> Option<(usize, usize)> {
+        if len == 0 || pos < 0.0 {
+            return None;
+        }
+        let n = pos as usize;
+        (n < len).then(|| (n, Self::phase_of(pos - n as f64)))
     }
 }
 
@@ -291,5 +313,24 @@ mod tests {
             "kernel {e_smp} should beat cubic {e_cub} at 0.2"
         );
         assert!(e_smp < 0.02, "{e_smp}");
+    }
+
+    #[test]
+    fn test_interpolate_hw_is_the_integer_mac_and_within_half_a_unit_of_f32() {
+        let k = kernel();
+        let y: Vec<i32> = (0..64).map(|i| ((i * 7919) % 4001) - 2000).collect();
+        let pcm: Vec<f32> = y.iter().map(|&v| v as f32 / Y_PER_UNIT).collect();
+        for pos in [3.0, 3.5, 10.123, 40.99, 62.25] {
+            let hw = k.interpolate_hw(&pcm, pos).unwrap();
+            let n = pos as usize;
+            let taps: [i32; 6] = std::array::from_fn(|t| y[(n + t).saturating_sub(2).min(63)]);
+            let want = k.mac_q31(&taps, SmpKernel::phase_of(pos - n as f64));
+            assert_eq!(hw, want as f32 / Y_PER_UNIT, "pos {pos}");
+            let f = k.interpolate(&pcm, pos).unwrap();
+            assert!((hw - f).abs() <= 0.5001 / Y_PER_UNIT, "pos {pos}: {hw} {f}");
+        }
+        assert!(k.interpolate_hw(&pcm, -1.0).is_none());
+        assert!(k.interpolate_hw(&pcm, 64.0).is_none());
+        assert!(k.interpolate_hw(&[], 0.0).is_none());
     }
 }
