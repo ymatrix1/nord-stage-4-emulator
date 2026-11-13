@@ -11,7 +11,7 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 | Question | Result | Tag |
 |---|---|---|
 | Are the effect clients missing in the steady state? | **No.** The boot builds all of them: 6 FX *parts* (1 organ, 2 piano, 3 synth) with **12 FX unit objects** (`L = 0..11`, two per part). They are not registered in the dispatcher's client list (10 entries), which is why [arm-organ-messages](arm-organ-messages.md) s10 found no value cell for Fx2, Dly, Rvb, Cmp and Leslie. Nothing has to be constructed by hand; `tools/fx_clients.py` finds the units and drives `0xC00CC4F0(unit, 0, id, &value)` through them. | VERIFIED (hooks on `0xC01177A8` / `0xC01155EC` during `boot_to_main_loop`) |
-| Does the type value select a routine? | **Yes, a module, in pairs.** Fx1 type `2k, 2k+1` and Fx2 type `2k, 2k+1` (types 4, 5 of Fx2 are single) share one module (descriptor list of [fx-type-map](fx-type-map.md) s2) and differ by data; the delay always owns the delay module and the feedback-effect type adds a second module. Table in section 4. This corrects [fx-type-map](fx-type-map.md) s5 ("no type to routine table"): the table exists as the **set of context rows the type handler writes**, not as a pointer array. | VERIFIED (195 type switches) |
+| Does the type value select a routine? | **Yes, a module, in pairs.** Fx1 type `2k, 2k+1` and Fx2 type `2k, 2k+1` (types 4, 5 of Fx2 are single) share one module (descriptor list of [fx-type-map](fx-type-map.md) s2) and differ by data; the delay always owns the delay module and the feedback-effect type adds a second module. Table in section 4. This corrects [fx-type-map](fx-type-map.md) s5 ("no type to routine table"): the table exists as the **set of context rows the type handler writes**, not as a pointer array. | VERIFIED (58 type values on the 3 unit kinds, `fx-type-modules.csv`) |
 | Context words | A DM word `w` of the state row `b` is the model word `c[w - b - 0x20]` (section 3). 746 non-constant series of (id, value) to context word are in `fx-param-fits.csv`. | VERIFIED (field positions agree with the delay model on 12 words) |
 | Value scale | Continuous ids (range 12 or more) are read as **Q16.16**: the cell must hold `v << 16`. With the raw value every amount word is `65536` times too small. | VERIFIED (section 2) |
 | Closed forms found | Delay mix and feedback, compressor threshold and makeup, all-pass rate and cross-fade, Amp drive (`tools/fx_forms.py`, tested against the committed series). | VERIFIED |
@@ -47,7 +47,7 @@ The state-table row of a unit (`module + 4`) is allocated per `L`: 12-row tables
 
 The registry default cell reads `0x40` raw in the settled snapshot (`kFx1Amt` default 64), so the value cells seen by `value_cell` are not yet in handler units when the firmware has not run its setter; `tools/fx_clients.py::cell_word` writes `v << 16` for ids whose range is 12 or more and `v` for enums and flags.
 
-Why the 82 silent ids of [arm-organ-messages](arm-organ-messages.md) s10.3 were silent: the sweep only visited the 10 dispatcher clients. Through the units: `python tools/fx_clients.py CODE.bin SRAM.bin --cache settled.snap --units 3 --slots capture.csv` (about 12 min per unit, `--window 300000`). 6 slots x 12 types x up to 9 ids; each value is applied in ascending order from the state after the type switch.
+Why the 82 silent ids of [arm-organ-messages](arm-organ-messages.md) s10.3 were silent: the sweep only visited the 10 dispatcher clients. Through the units: `python tools/fx_clients.py CODE.bin SRAM.bin --cache settled.snap --units 3 --slots capture.csv` (20 to 30 min per unit with three runs in parallel). 7 slots, up to 12 types each and up to 9 ids per slot; each value is applied in ascending order from the state after the type switch.
 
 ## 3. From a DM word to a context word (VERIFIED)
 
@@ -77,7 +77,7 @@ Routines are the core 2 pcs of [fx-chain-install](fx-chain-install.md) s2 (core 
 
 | Slot | Type | Module (list#entry) | Core 2 routines | Note |
 |---|---|---|---|---|
-| Fx1 | 0, 1 | `0xC02BAF54#1` (run 1) | `0x122D93` | 3 or 5 words |
+| Fx1 | 0, 1 | `0xC02BAF54#1` (run 1) | `0x122D93` | |
 | Fx1 | 2, 3 | `0xC02BB030#1` (run 32) | `0x122C39` (all-pass, modelled) | |
 | Fx1 | 4, 5 | `0xC02BB10C#1` (run 23) | `0x1239D0` | cross-fade `v / 127` |
 | Fx1 | 6, 7 | `0xC0279290#0` (run 11) | `0x123E9B` | |
@@ -99,7 +99,7 @@ Routines are the core 2 pcs of [fx-chain-install](fx-chain-install.md) s2 (core 
 | Dly (feedback fx) | 9 | + `0xC0441A18#2` (runs 27, 28) | `0x1230CA` | |
 | Dly (feedback fx) | 10, 11 | + `0xC0441AC4#2` (runs 9, 10) | `0x12314A`, `0x12329B`, `0x123466` | multi-tap packed delay |
 | Rvb | 0, 1 | `0xC02BB54C#0` (run 41), 39 words | `0x12417E`, `0x12435C` | |
-| Rvb | 2..11 | **no state row**: 40 to 60 words at DM `0x9500A..` (table) | | section 7 |
+| Rvb | 2..5, 7..11 (6 is the default and sends nothing) | **no state row**: 54 words at DM `0x9500A .. 0xB1C2C` (a coefficient table) plus the routing set of `0xC02BB44C#0` | | section 7 |
 | Amp | 1..6 | `0xC0442A94#0..2` (FIR + IIR), `0xC04438D8#0` (drive), pan `0xC02BB10C`, `0xC02BB2C4`; piano and synth add `0xC02BB54C`, `0xC04437B0`, `0xC04438D8#2` | `0x122A1D`, `0x122B1D` | 130 FIR words ([fx-type-map](fx-type-map.md) s4) |
 | Amp | 7, 8, 9 | `0xC02BB10C#1`, `0xC02BB2C4#1`; piano and synth add `0xC04437B0#0`, `0xC04438D8#2`, `0xC044398C#0` | | link words and a few coefficients |
 
@@ -137,7 +137,7 @@ So the "phase" of s4 is the **drive amount** and the table pointers `c[-0x15]`, 
 |---|---|---|
 | `kAmpTreble` (-60..60) | `c[-0x1B]` (target `F`), `c[-0x1C]` (target `E`) | `F`: `-0.822 (-60)`, `-0.350 (-15)`, `0 (0)`, `0.530 (15)`, `1.340 (30)`, `2.579 (45)`, `4.474 (60)`; `E` flat above 0 (`-0.541`), `-0.899 (-60)` below: a high shelf whose boost is `F` |
 | `kAmpBass` (-60..60) | `c[-0x20]` (target `A`) = the same curve as treble `F`; `c[-0x14]` (smoother `a`): `0.0144` above 0 up to `0.0782` at -60 | low shelf |
-| `kAmpMid` (-60..60) | `c[-0x17]`, `c[-0x18]`, `c[-0x1F]` (`C`, `D`, `B`), `0xC044398C#0 c[-0x1C], c[-0x1B]` | mid band gain |
+| `kAmpMid` (-60..60) | `c[-0x17]`, `c[-0x18]`, `c[-0x1F]` (`C`, `D`, `B`), `0xC044398C#0 c[-0x1C], c[-0x1D]` | mid band gain |
 | `kAmpMidFreq` (0..127) | `c[-0x17]`, `c[-0x1F]` (`0.6999 ... 0.6995`, `0.0287 ... 0.0301` at 0..2), `0xC044398C#0 c[-0x20]` (`6.2e-5 ... 1.0`, exponential in `v`) | mid centre frequency |
 
 Mapping to the model names of [fx-routine-models](fx-routine-models.md) s6 is EMPIRICAL (position only). Series samples: `fx-param-fits.csv` (slot Amp, type 7..9).
@@ -158,9 +158,9 @@ Reading (ASSUMED): the 32-bit counter advances by `RATE` each call of 2 frames x
 |---|---|---|
 | `kCmpAmt` (0..127) | `c[-0x1B]` (right makeup target = threshold word, log2 level) | `-36 v / 127` |
 | `kCmpAmt` | `c[-0x1C]` (makeup target `T`) | `1 + 5.72 (v / 127)^2` (1.0 .. 6.72) |
-| `kCmpResponse` (0, 1) | `c[-0x20] = 0.102071`, `c[-0x1F] = 1.0`, `c[-0x1E] = 4.607e-4`, `c[-0x1D] = 0.04` | **identical for both values** (the id does not change these words in any state tried) |
+| `kCmpResponse` (0, 1) | attack pair `c[-0x20], c[-0x1F]` = `0.102071, 1.0`; release pair `c[-0x1E], c[-0x1D]` = `4.607e-4, 0.04` | **identical for both values** (the id does not change these words in any state tried) |
 
-`c[-0x20]` is the attack weight `a`, `c[-0x1E]` the release `r`, `c[-0x1D]` a smoothing constant; the model names are EMPIRICAL (position). So `kCmpAmt` is solved (threshold and makeup); `kCmpResponse` is not (section 7).
+The pair names follow the model of [fx-type-map](fx-type-map.md) s7 (attack `a` at `-0x20`, release `r` at `-0x1E`) and are EMPIRICAL (position). So `kCmpAmt` is solved (threshold and makeup); `kCmpResponse` is not (section 7).
 
 ## 6. Leslie
 
@@ -173,7 +173,7 @@ Only `Edt_OrgCom_kEffectsLeslieDrv` reaches a state row: list `0xC02BB76C#0` wor
 | Enable ids (`kFx1Enable`, `kFx2Enable`, `kAmpEnable`, `kCmpEnable`, `kDlyEnable`, `kRvbEnable`, `kLeslieEnable`) | no DSP message in 2 M instructions; the handler (`0xC010E774..`) queues a command in the part's list (`[part + 0xC8]`, node `{-1, counter}` of 8 bytes) | run the part's command consumer (the main loop does not reach it in the window) |
 | `kCmpResponse`, `kDlyMode`, `kDlyFbkPingPong` | words identical for every value | read the handler's branch; probably gated by the `Edt_Com_k*Global` ids, which no store owns (`value_cell` is None in all 22 stores) |
 | Delay time words `c[0x15]`, `c[0x16]`, `c[0x19]` | section 5.1 | model `0x1208AF`, `0x120AB5`, `0x120D15` |
-| Reverb | types 2..11 write 40..60 words at DM `0x9500A..` (outside the state rows), types 0 and 1 write module `0xC02BB54C#0` | join the `0x95xxx` table to the multi-tap module `0xC0441AC4`; `kRvbColor` writes 1080 table words |
+| Reverb | types 2..5 and 7..11 write 54 words at DM `0x9500A..` (outside the state rows), types 0 and 1 write module `0xC02BB54C#0` | join the `0x95xxx` table to the multi-tap module `0xC0441AC4`; `kRvbColor` value 2 rewrites the 54 table words |
 | Organ units L3 / L9 differ from piano and synth in word counts of some types (for example Fx1 type 2: 3 against 5 words) | `fx-type-modules.csv` | compare the base state of the units |
 | Other 1000 table-shaped series of `fx-param-fits.csv` | most are Amp type re-sends | fit with a wider family (piecewise exponential) |
 
@@ -182,7 +182,7 @@ Only `Edt_OrgCom_kEffectsLeslieDrv` reaches a state row: list `0xC02BB76C#0` wor
 The exported stages take the firmware's context words (`from_words`, `set_value(offset, f32)`), so the wiring is a table of `(slot, type) -> stage + word fills`:
 
 1. **New `fx/fw_map.rs`** with `enum FwStage { Delay(FwDelay), Allpass(FwAllpass), Drive(FwLfo), Tone2(FwResonant2), Tone4(FwResonant4), Compressor(FwCompressor) }` and a function `fn set_param(&mut self, id: EdtId, v: f32)` that applies the closed forms of `tools/fx_forms.py` (port them as `const fn`s next to the fields; every constant tagged per [provenance-in-code](../../.agents/rules/provenance-in-code.md): words `VERIFIED` with the series file as source, roles `EMPIRICAL`).
-2. **Compressor** (`MasterBus::set_fw_compressor`): fill `c[-0x1B] = -36 v / 127`, `c[-0x1C] = 1 + 5.72 (v/127)^2` from `kCmpAmt`; keep attack `0.102071`, release `4.607e-4`, smoothing `0.04` as `VERIFIED` defaults. Closes the `kCmpAmt` item of [fx-type-map](fx-type-map.md) s7; `kCmpResponse` stays open.
+2. **Compressor** (`MasterBus::set_fw_compressor`): fill `c[-0x1B] = -36 v / 127`, `c[-0x1C] = 1 + 5.72 (v/127)^2` from `kCmpAmt`; keep the attack pair `(0.102071, 1.0)` and release pair `(4.607e-4, 0.04)` as `VERIFIED` defaults. Closes the `kCmpAmt` item of [fx-type-map](fx-type-map.md) s7; `kCmpResponse` stays open.
 3. **Amp**: `FwLfo` becomes the drive stage (`c[-0x20] = v / 127`) behind the cabinet FIR (`amp_eq.rs`), `FwResonant2/4` the tone stack (words from `fx-param-fits.csv`: a 13-point table per word, interpolate linearly in dB). Rename `FwLfo` to a drive-stage name in the same change.
 4. **Fx1 types 2, 3 / Fx2 phaser** (`FwAllpass`): `RATE = 12800 + 16384 v`, wet `v / 254`, dry `1 - v / 254`; counter source is a per-call increment of the 2-frame block.
 5. **Delay**: `FwDelay` takes `g_in`, `g_d`, `m_ll`, `m_rr`, `a1`, `a2` directly from `kDlyMix` / `kDlyFbkAmt`; the time needs the unmodelled variants (section 5.1), so keep the current `delay.rs` time path and feed only gains and feedback until then.
