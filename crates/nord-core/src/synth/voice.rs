@@ -10,6 +10,10 @@ pub struct SynthVoice {
     pub note: u8,
     pub velocity: f32,
     pub gain: f32,
+    /// Gain target latched at the control tick (`gain_dezip.rs`).
+    pub gain_target: f32,
+    /// Smoothed gain applied when the de-zipper is on.
+    pub gain_state: f32,
     pub freq_hz: f32,
     pub phase: f32,
     pub mod_phase: f32,
@@ -48,6 +52,8 @@ impl Default for SynthVoice {
             note: 0,
             velocity: 0.8,
             gain: 1.0,
+            gain_target: 1.0,
+            gain_state: 0.0,
             freq_hz: 440.0,
             phase: 0.0,
             mod_phase: 0.0,

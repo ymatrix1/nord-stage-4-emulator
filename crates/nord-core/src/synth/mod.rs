@@ -18,14 +18,20 @@ use crate::synth_wavetable::{sample_wavetable, wavetable_bank};
 
 mod arp;
 mod dsp;
+mod gain_dezip;
+mod hw_saw;
 mod render;
 mod sample_osc;
 use dsp::unison_pan;
 pub use dsp::{poly_blep, ZdfFilter, FM_RATIOS};
+pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
+pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 pub use voice::SynthVoice;
 #[cfg(test)]
 mod tests_envelope;
+#[cfg(test)]
+mod tests_hw_saw_golden;
 #[cfg(test)]
 mod tests_osc_lfo;
 mod voice;
@@ -105,6 +111,11 @@ pub struct SynthLayer {
     pub sample_rate: f32,
     pub osc_mode: SynthOscMode,
     pub waveform: VaWaveform,
+    /// Saw shape of `Saw` / `SuperSaw` (default `Classic`; `Firmware` is the `0x12501F` model).
+    pub saw_model: SawModel,
+    /// Smooth the voice gain like the SY DSP (default off, see `gain_dezip.rs`).
+    pub gain_dezipper: bool,
+    ctrl_counter: u32,
     pub pulse_width: f32,
     pub fm_amount: f32,
     pub fm_ratio: f32,
@@ -217,6 +228,9 @@ impl SynthLayer {
             sample_rate: sample_rate.max(8000.0),
             osc_mode: SynthOscMode::Analog,
             waveform: VaWaveform::Saw,
+            saw_model: SawModel::Classic,
+            gain_dezipper: false,
+            ctrl_counter: 0,
             pulse_width: 0.5,
             fm_amount: 0.35,
             fm_ratio: 2.0,
