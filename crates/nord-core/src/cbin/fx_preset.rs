@@ -5,7 +5,7 @@
 use super::bitstream::{BitReader, BitWriter};
 use super::container::CbinError;
 use super::presets::*;
-use crate::fx::{Mod1Type, Mod2Type, ReverbModel};
+use crate::fx::{Mod1Type, Mod2Type, ReverbModel, EQ_GAIN_DB_PER_COUNT};
 use serde::{Deserialize, Serialize};
 
 /// Decoded hardware per-layer FX chain block (`0x36`, 55 bytes = 440 bits).
@@ -260,7 +260,7 @@ impl FxDecoded {
 
     /// `LP24`/`HP24` resonance `0.0..=10.0` carried by the Mid knob (`ns4decode`: `10 * (60 + signed) / 120`).
     pub fn amp_filter_res(&self) -> f32 {
-        (10.0 * (60.0 + self.eq_mid_db * 4.0) / 120.0).clamp(0.0, 10.0)
+        (10.0 * (60.0 + self.eq_mid_db / EQ_GAIN_DB_PER_COUNT) / 120.0).clamp(0.0, 10.0)
     }
 
     /// Delay time step `0..=127`: the top 7 bits of the 14-bit `Delay Time` field.
@@ -304,9 +304,9 @@ impl FxDecoded {
         let mod2_type_raw = r.read_bits(4)? as u8;
 
         let amp_enabled = r.read_bool()?;
-        let eq_treble_db = decode_signed(r.read_bits(7)?, 7) as f32 * 0.25;
-        let eq_mid_db = decode_signed(r.read_bits(7)?, 7) as f32 * 0.25;
-        let eq_bass_db = decode_signed(r.read_bits(7)?, 7) as f32 * 0.25;
+        let eq_treble_db = decode_signed(r.read_bits(7)?, 7) as f32 * EQ_GAIN_DB_PER_COUNT;
+        let eq_mid_db = decode_signed(r.read_bits(7)?, 7) as f32 * EQ_GAIN_DB_PER_COUNT;
+        let eq_bass_db = decode_signed(r.read_bits(7)?, 7) as f32 * EQ_GAIN_DB_PER_COUNT;
         let (eq_mid_freq_raw, eq_mid_freq_morph) = read_morph(&mut r, 165, 7, 127)?;
         let (amp_drive_raw, amp_drive_morph) = read_morph(&mut r, 196, 7, 127)?;
 
@@ -430,17 +430,29 @@ impl FxDecoded {
         w.write_bool(self.amp_enabled)?;
         w.write_bits(
             encode_signed(
-                (self.eq_treble_db * 4.0).round().clamp(-60.0, 60.0) as i32,
+                (self.eq_treble_db / EQ_GAIN_DB_PER_COUNT)
+                    .round()
+                    .clamp(-60.0, 60.0) as i32,
                 7,
             ),
             7,
         )?;
         w.write_bits(
-            encode_signed((self.eq_mid_db * 4.0).round().clamp(-60.0, 60.0) as i32, 7),
+            encode_signed(
+                (self.eq_mid_db / EQ_GAIN_DB_PER_COUNT)
+                    .round()
+                    .clamp(-60.0, 60.0) as i32,
+                7,
+            ),
             7,
         )?;
         w.write_bits(
-            encode_signed((self.eq_bass_db * 4.0).round().clamp(-60.0, 60.0) as i32, 7),
+            encode_signed(
+                (self.eq_bass_db / EQ_GAIN_DB_PER_COUNT)
+                    .round()
+                    .clamp(-60.0, 60.0) as i32,
+                7,
+            ),
             7,
         )?;
         write_morph(

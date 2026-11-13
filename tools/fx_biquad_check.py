@@ -18,6 +18,9 @@ store to memory keeping the upper 32 bits of the register (truncation toward zer
 
     cargo build -p nord-sharc --release
     python tools/fx_biquad_check.py SRAM/core2_sram.bin
+
+`--golden` needs no firmware image: it prints the reference model's results for a fixed input as
+Rust source (`crates/nord-core/src/fx/tests_biquad_golden.rs`; derived values only).
 """
 
 from __future__ import annotations
@@ -214,11 +217,64 @@ def scenario() -> tuple[list[list[tuple[Fraction, Fraction]]], list[Fraction]]:
     return blocks, states
 
 
+#: Golden vector shape: GOLDEN_BLOCKS blocks of FRAMES stereo frames, STAGES stages, `COEF_WORDS`.
+GOLDEN_BLOCKS = 16
+#: Butterworth low pass at fs/4 as read from PM 0x9437A (b0 b1 b2 a1 a2 as float32 words).
+COEF_WORDS = (0x3E95F619, 0x3F15F619, 0x3E95F612, 0, 0x3E2FB0D5)
+
+
+def golden_vectors() -> dict[str, list[int]]:
+    """Float32 words of the reference cascade for the fixed input the Rust test regenerates.
+
+    Input n (0-based) is `((37 n + 11) % 64) / 64 - 0.5` left and `((53 n + 5) % 61) / 64 - 0.5`
+    right (exact in float32); initial states are those of `scenario`.
+    """
+    n_frames = GOLDEN_BLOCKS * FRAMES
+    frames = [
+        (
+            Fraction((37 * n + 11) % 64, 64) - Fraction(1, 2),
+            Fraction((53 * n + 5) % 61, 64) - Fraction(1, 2),
+        )
+        for n in range(n_frames)
+    ]
+    states = scenario()[1]
+    coef = tuple(from_bits(w) for w in COEF_WORDS)
+    out: list[tuple[Fraction, Fraction]] = []
+    for b in range(GOLDEN_BLOCKS):
+        out += reference_cascade(frames[b * FRAMES : (b + 1) * FRAMES], coef, states)
+    return {
+        "left": [word(o[0]) for o in out],
+        "right": [word(o[1]) for o in out],
+        "states": [word(v) for v in states],
+    }
+
+
+def golden_rust() -> str:
+    """`golden_vectors` as Rust `const` arrays of `u32` words."""
+    lines = []
+    for name, words in golden_vectors().items():
+        lines.append(f"pub(super) const GOLDEN_{name.upper()}: [u32; {len(words)}] = [")
+        lines += [
+            "    " + ", ".join(f"{w:#010x}" for w in words[i : i + 6]) + ","
+            for i in range(0, len(words), 6)
+        ]
+        lines.append("];")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    p.add_argument("image", help="FX Core1 or Core2 flat SRAM image (tools/ns4_dsp_ldr.py --sram)")
+    p.add_argument(
+        "image", nargs="?", help="FX Core1 or Core2 flat SRAM image (tools/ns4_dsp_ldr.py --sram)"
+    )
     p.add_argument("--bin", help="path of sharc-fx (default target/release)")
+    p.add_argument("--golden", action="store_true", help="print golden vectors as Rust, no image")
     args = p.parse_args(argv)
+    if args.golden:
+        print(golden_rust())
+        return 0
+    if not args.image:
+        p.error("image is required unless --golden is given")
     blocks, states = scenario()
     cmd = [str(find_binary(args.bin))] + oracle_args(args.image, blocks, states)
     run = subprocess.run(cmd, capture_output=True, text=True, check=False)

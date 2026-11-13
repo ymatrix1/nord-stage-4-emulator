@@ -104,3 +104,32 @@ Consequence for Jazz Guitar II (A:78): Mod 2 = `VIBE variation` is a *mono* vibe
 After summing all 7 active layers:
 1. **Master Compressor:** RMS/Peak feed-forward stereo bus compressor (`Amount` $0..10$, `Fast` mode $\tau_{\text{atk}} = 1.5\text{ ms}$ / `Normal` mode $\tau_{\text{atk}} = 12\text{ ms}$, ratio $3.5:1$, automatic makeup gain).
 2. **Post-DAC Reconstruction Filter:** Models the hardware Burr-Brown `PCM1791A` DAC (`U44`/`U45`) + `NJM4580M` dual op-amp active output stage ([research](../research/hardware-architecture.md)).
+
+## 4. Firmware parity of the biquad arithmetic
+
+Code: `crates/nord-core/src/fx/biquad.rs` (`ext40_ref`, `FW_BUTTERWORTH_FS4_WORDS`, test-only) and
+`fx/tests_biquad_golden.rs`.
+
+| Item | Rust | Status |
+|---|---|---|
+| Form | transposed direct form II, `y = b0 x + s1; s1 = b1 x - a1 y + s2; s2 = b2 x - a2 y` | VERIFIED (FX routine `0x120FDB`, [fx-dsp-map](../research/fx-dsp-map.md) section 6) |
+| Firmware arithmetic | `ext40_ref::stage`: every product and sum rounded to 32 significant bits, ties to even (`sinc::ext40::round_sig`); output sample and block-end state stored as the upper 32 bits (truncation to 24 bits); state loaded and stored once per block of 4 frames and stage | VERIFIED: 64 + 64 output words and 12 state words identical to the exact-arithmetic model of `tools/fx_biquad_check.py`, which matches the oracle word for word |
+| Fast default | `Biquad::process`: plain `f32`, no extra rounding model, real-time safe | engine path, unchanged |
+| Fast vs reference | SNR of the engine `f32` path against the reference, 3 cascaded sections, 8192 samples of noise plus a sine | 135.7 dB (test floor 125 dB) |
+| Coefficients | Butterworth low pass at `fs / 4`: `b0 0.292893, b1 0.585786, b2 0.292893 (7 ulp off b0), a1 0, a2 0.171573` | VERIFIED (PM `0x9437A`, same filter at `0x9437F`) |
+
+Golden vectors: `python tools/fx_biquad_check.py --golden` prints the Rust arrays (derived words only, no
+firmware code); the test regenerates the input in integer arithmetic.
+
+The Rust master bus (section 3) has no counterpart of the firmware's 4-biquad master IIR (end of the FX pass):
+the Butterworth set above is recorded as a test constant only. The compressor, delays, LFOs and resonant
+filters stay as they were (`ASSUMED` or `EMPIRICAL` per their doc comments); the firmware routine classes
+are listed in [fx-dsp-map](../research/fx-dsp-map.md) and not ported.
+
+### 4.1 EQ gain per count
+
+`EQ_GAIN_DB_PER_COUNT = 0.25 dB` (`fx/tables.rs`, `ASSUMED`) is the single place that decodes and encodes the
+7-bit `eq_*` fields (`cbin/fx_preset.rs`). The DSP gain ladder step is `EQ_GAIN_DB_PER_COUNT_LADDER = 20 log10(2) / 24 =
+0.250858 dB` (`VERIFIED`, closed form). They differ by 0.34 %, which is 0.05 dB at +-60 counts (15.00 against 15.05 dB). The
+link from a preset count to the ladder is not decoded, so the Rust step stays 0.25 dB and the factory range stays +-15 dB
+exactly; switching is a one-line change (TD-10).
