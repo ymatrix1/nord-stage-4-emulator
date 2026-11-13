@@ -20,19 +20,23 @@ def test_diff_metric_zero_for_identical_and_positive_otherwise():
     assert C.diff_metric(a, Image.new("RGB", (4, 4), (110, 50, 25)))["mad"] > 3
 
 
-def test_features_point_inside_the_reference_frame():
-    for name, ((x, y), spec) in C.FEATURES.items():
+def test_features_cover_every_reference_style_inside_the_frame():
+    feats = C.features()
+    for name, ((x, y), spec) in feats.items():
         assert 0 < x < 1961 and 0 < y < 1185, name
-        assert spec[0] in {"knob", "cap", "button", "tile"}, name
+        assert spec[0] in {"refknob", "cap", "sprite", "tri", "tile"}, name
+    assert sum(n.startswith("button_") for n in feats) >= 15
+    assert {"knob_master", "knob_drive", "tri_organ_model", "tri_vib_chorus"} <= set(feats)
+    assert feats["knob_master"][1][2] == 61  # pointer 127 deg clockwise
 
 
 def test_build_and_main(tmp_path, capsys):
     ref = tmp_path / "ref.png"
     Image.new("RGB", (1961, 1185), (50, 60, 70)).save(ref)
     sheet, metrics = C.build(ref)
-    assert set(metrics) == set(C.FEATURES)
+    assert set(metrics) == set(C.features())
     assert sheet.width > 2 * 2 * 192
     out = tmp_path / "sheet.png"
     assert C.main(["--ref", str(ref), "--out", str(out)]) == 0
-    assert out.exists() and "master_knob" in capsys.readouterr().out
+    assert out.exists() and "knob_master" in capsys.readouterr().out
     assert C.main([]) == 2

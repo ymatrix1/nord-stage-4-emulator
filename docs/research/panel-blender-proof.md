@@ -1,17 +1,18 @@
-# Research: Blender panel proof v3 (matched to the Organ section reference)
+# Research: Blender panel proof v3/v4 (matched to the Organ section reference)
 
 - **Checked date:** 2026-11-13 (v1 2026-11-12, PR 84; v2 PR 109; v3 matches the renders feature by feature against one reference image)
-- **Sources:** `assets/blender/build_proof.py` (stages), `proof_scene.py` (camera, light, world), `proof_materials.py`, `proof_geom.py`, `parts_knob.py`, `parts_cap.py`, `parts_button.py`, `parts_plate.py` (scene), `tools/panel_assets.py` (pack, seamless tiles, hash, sizes), `tools/panel_preview.py` (composition), `tools/panel_compare.py` (look comparison and metric), `assets/panel/theme_samples.json` (measured numbers), [D15](../DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering), [D16](../DECISIONS.md), [visual-style-and-panel.md](../specs/visual-style-and-panel.md). The owner's private reference is a 1961 x 1185 render of the Master Level, Rotary Speaker and Organ section. It was read only for proportions, positions, colour numbers and material response; no pixels or geometry are used or committed (D16).
+- **Sources:** `assets/blender/build_proof.py` (stages), `proof_scene.py` (camera, light, world), `proof_materials.py`, `proof_geom.py`, `parts_knob.py`, `parts_cap.py`, `parts_button.py`, `parts_plate.py` (scene), `tools/panel_assets.py` (pack, seamless tiles, hash, sizes), `tools/panel_preview.py` (composition), `tools/panel_compare.py` (look comparison and metric), `assets/panel/theme_samples.json` (measured numbers), [D15](../DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering), [D16](../DECISIONS.md), [visual-style-and-panel.md](../specs/visual-style-and-panel.md). The owner's private reference is a 1961 x 1185 render of the Master Level, Rotary Speaker and Organ section. In v3 it was read only for proportions, positions, colour numbers and material response (D16). In v4, under D17, buttons, triangle selectors, knob bodies, the DRIVE scale and plate textures are cut from its pixels; the file itself is never committed.
 - **Question:** how close can scripted, original Blender sprites get to that reference at the same feature scale, and what do they cost at 1x and 2x?
 
 ## Reproduce
 
 ```bash
 python tools/panel_assets.py render    # Blender 5.2 headless -> assets/panel/proof/_raw (git-ignored)
-python tools/panel_assets.py pack      # filmstrips, seamless tiles, manifest.json, size report
+python tools/panel_refbake.py --ref <NS4-Panel-organ.png>   # reference-derived sprites (D17)
+python tools/panel_assets.py pack      # filmstrips, manifest.json, size report
 python tools/panel_assets.py preview   # assets/panel/proof/preview_2x.png from the committed layers
 python tools/panel_assets.py verify    # CI-safe: committed PNGs match manifest hashes
-python tools/panel_compare.py --ref <NS4-Panel-organ.png> --out .reference/panel-compare-v3.png
+python tools/panel_compare.py --ref <NS4-Panel-organ.png> --out .reference/panel-compare-v4.png
 ```
 
 `BLENDER=<path>` overrides the install path. Look development: `blender -b --factory-startup -P assets/blender/build_proof.py -- --out <dir> --quick [--only knob,caps,buttons,plates]` renders 2x only, 48 samples, six knob frames (about 25 s). Blender output is not bit-identical across machines, so the committed PNGs are the source of truth; packing and the seamless step are deterministic (tested).
@@ -23,7 +24,50 @@ python tools/panel_compare.py --ref <NS4-Panel-organ.png> --out .reference/panel
 3. Colours. Medians of flat patches (`theme_samples.json`), and the material gains are solved by rendering, taking the median of the same flat face and multiplying the linear albedo by target / rendered until each channel lands (`GAIN` in `proof_materials.py`).
 4. Look. Each part was iterated by side-by-side at 2x zoom (ours left, reference right) plus mean absolute difference (MAD) per feature crop.
 
-## What changed from v2 and why
+## v4: every knob and button style, reference-derived (D17)
+
+The owner widened the scope to every knob and button style on the reference, and lifted D16 for this task ([D17](../DECISIONS.md#d17-panel-proof-sprites-may-be-derived-from-the-reference-render)). `tools/panel_refbake.py` cuts the reference-derived sprites using `assets/panel/ref_crops.json` (boxes and centres). Blender still renders what must move or have its own layer: the knob pointers (one 64-frame filmstrip per knob, cap as holdout) and the knob shadows.
+
+Inventory of the reference (wells found as dark connected regions, then checked by eye):
+- 2 knobs: Master Level and DRIVE, which are the same cap.
+- 15 buttons in 5 looks: black on the silver header, black on slate, black on red, grey on slate, grey on red. The octave pair shares one well.
+- 2 triangle selector matrices: ORGAN MODEL (2x3, pointing left and right) and VIB/CHORUS (3x2, pointing up and down).
+
+KB ZONE, ON and the other round lights are LEDs (dynamic layer, out of scope).
+
+Provenance: rows marked "reference" are `REFERENCE-DERIVED (D17)`; Blender rows keep their v3 tags.
+
+| Style (instance) | Source | 2x px | 1x / 2x bytes | MAD | Still differs |
+|---|---|---|---|---|---|
+| Master Level knob | body cut from the DRIVE cap (same part), Blender pointer + shadow, Blender ring | 192x192 | 4,684 / 66,856 (body) | 23.1 | ring is the full 270 deg track, the reference shows only the lit part (value layer); "MASTER LEVEL" label out of scope; pointer bend a little softer |
+| DRIVE knob + numeral scale | body and numerals cut from the reference, Blender pointer + shadow | 192x192 | 4,684 / 66,856 (body) | 14.9 | flutes do not turn with the pointer (static body); part of the "2" is hidden by the reference pointer; "DRIVE" / "ON" labels and LED out of scope |
+| `button_organ_on` (black, silver header) | reference crop incl. well | 135x71 | 3,188 / 9,982 | 0.83 | up state only; resampling only |
+| `button_vib_chorus` (black, slate) | reference crop incl. well | 136x76 | 3,434 / 10,751 | 0.74 | up state only; resampling only |
+| `button_perc_volume` (black, slate) | reference crop incl. well | 136x75 | 3,334 / 10,739 | 0.72 | up state only; resampling only |
+| `button_perc_decay` (black, slate) | reference crop incl. well | 137x75 | 3,419 / 10,846 | 0.75 | up state only; resampling only |
+| `button_perc_harmonic` (black, slate) | reference crop incl. well | 137x75 | 3,368 / 10,844 | 0.76 | up state only; resampling only |
+| `button_organ_model` (black, slate) | reference crop incl. well | 136x76 | 3,383 / 10,740 | 0.69 | up state only; resampling only |
+| `button_vib_on` (grey, slate) | reference crop incl. well | 137x76 | 3,577 / 11,475 | 1.12 | up state only; resampling only |
+| `button_perc_on` (grey, slate) | reference crop incl. well | 137x76 | 3,596 / 11,512 | 1.16 | up state only; resampling only |
+| `button_aux_a_onoff` (grey, slate) | reference crop incl. well | 137x76 | 3,538 / 11,474 | 1.03 | up state only; resampling only |
+| `button_aux_b_onoff` (grey, slate) | reference crop incl. well | 137x76 | 3,544 / 11,328 | 1.05 | up state only; resampling only |
+| `button_rotary_organ` (grey, red) | reference crop incl. well | 136x69 | 3,164 / 10,172 | 1.31 | up state only; resampling only |
+| `button_stop_mode` (black, red (STOP MODE / ANGLE)) | reference crop incl. well | 135x74 | 3,082 / 9,572 | 0.56 | up state only; resampling only |
+| `button_rotary_speed` (black, red (SLOW / FAST)) | reference crop incl. well | 135x75 | 3,035 / 9,450 | 0.56 | up state only; resampling only |
+| `button_preset_sync` (black, slate (PRESET / SYNC)) | reference crop incl. well | 137x78 | 3,362 / 10,617 | 0.57 | up state only; resampling only |
+| `button_octave_shift` (black pair in one well, slate) | reference crop incl. well | 271x79 | 6,236 / 19,795 | 0.54 | up state only; resampling only |
+| `tri_organ_model` selector matrix + lit overlay | reference crop; lit cell replaced by an unlit cell; overlay = red light of the lit cell | 61x123 | 2,828 / 8,506 | 1.62 | right and down lit overlays are mirrors of left and up |
+| `tri_vib_chorus` selector matrix + lit overlay | reference crop; lit cell replaced by an unlit cell; overlay = red light of the lit cell | 121x60 | 2,645 / 8,057 | 1.64 | right and down lit overlays are mirrors of left and up |
+| Drawbar caps black / white, layer cap grey | Blender (original, v3) | 192x320, 192x192 | | 24 / 31 / 32 | as listed for v3 below (not cut from the reference: the caps overlap LED ladders and slots there) |
+| Plate tiles red / slate / silver | quilted from clean reference patches (24 px windows, each shifted to the measured colour), seamless | 256x256 | 24,053 / 85,951 (red) | 7 / 12 / 12 | panel-wide lighting gradient is not in a tile; MAD includes text and slot edges next to the patch |
+
+MAD (mean absolute difference, 0..255) compares ours with the same reference area at 2x. For reference crops it measures only resampling (about 0.5 to 1.6). The knob rows include the ring, labels and LEDs, which are out of scope.
+
+Sizes with the full style set: the proof set is 837 KB (1x) / 2.63 MB (2x) PNG. The full-panel estimate assumes 6 knob styles and 15 button styles, each button getting two more states later: 2.17 MB / 6.51 MB PNG, and 15.5 MB / 61.9 MB RGBA in GPU memory. The private comparison sheet is `.reference/panel-compare-v4.png`.
+
+Knob lean (v4 finding): on the reference, the DRIVE pointer sits 5.5 px below the base centre, so the optical axis is above the left column of knobs. The render is cropped off-centre vertically, and the v3 assumption that the axis sits at the image centre (`ASSUMED`) was wrong for y. The reference knobs now use lean y +1.0 / +1.4 u (`EMPIRICAL`).
+
+## v3: what changed from v2 and why
 
 | Owner remark / measured gap | v3 |
 |---|---|
@@ -48,7 +92,7 @@ python tools/panel_compare.py --ref <NS4-Panel-organ.png> --out .reference/panel
 | Knob | base 0.8 u, height 0.4 u, 20 flutes, top face 0.74 R, pointer 0.11 of the diameter | `EMPIRICAL` except height (`ASSUMED`) |
 | Materials | procedural only; gains solved per material against `theme_samples.json` | `EMPIRICAL` |
 
-## Sizes (committed PNG, 8-bit RGBA)
+## Sizes of the v3 set (superseded by the v4 numbers above; v3 button and plate sprites were replaced)
 
 | Asset | 1x px | 1x bytes | 2x px | 2x bytes |
 |---|---|---|---|---|
@@ -77,7 +121,7 @@ Full-panel estimate (`ASSUMED`: 4 knob styles, each one more filmstrip; button d
 
 v2 was 1.82 MB / 5.13 MB PNG; the rise is the new sprites (scale layer, layer cap, buttons, two more tiles) and the visible plate grain.
 
-## How close, and what is still different
+## v3: how close the Blender parts are, and what is still different
 
 Private comparison sheet (not committed): `.reference/panel-compare-v3.png`, ten rows, ours left and the reference right at the same feature scale, 2x zoom. Mean absolute difference per crop (0..255, includes background, text and LEDs that are out of scope, so it is a trend number, not a score):
 

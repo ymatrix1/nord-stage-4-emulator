@@ -113,14 +113,18 @@ def test_size_report_scales_with_resolution(tmp_path):
     for v in rep["per_scale"].values():
         assert v["full_panel_png_bytes"] > v["shared_sprite_set_png_bytes"] > 0
         assert v["full_panel_rgba_bytes"] > v["shared_sprite_set_rgba_bytes"]
-        assert set(v["sprite_png_bytes"]) == set(P.SPRITES)
+        assert set(v["sprite_png_bytes"]) == {*P.FILMSTRIPS, *P.SPRITES, *P.ref_sprites()}
+        assert v["button_styles"] == len([n for n in P.ref_sprites() if n.startswith("button_")])
+        assert v["knob_styles"] >= len(P.FILMSTRIPS)
 
 
 def test_lean_table_covers_every_sprite_class():
     assert P.CAM_HEIGHT_U > 5
-    assert set(P.LEAN) >= {"knob", "drawbar", "layer", "button", "plate"}
+    assert set(P.LEAN) >= {"knob", "drawbar", "layer", "plate"}
+    assert {f"knob_{k}" for k in P.REF_KNOBS} <= set(P.LEAN)
     assert P.LEAN["plate"] == (0.0, 0.0)
-    assert set(P.TILES) <= set(P.SPRITES)
+    assert set(P.TILES) <= set(P.ref_sprites())
+    assert not set(P.SPRITES) & set(P.ref_sprites())  # each sprite has one source
 
 
 def test_committed_manifest_matches_files():
@@ -141,12 +145,12 @@ def _alpha(name: str):
 
 
 def test_sprites_fit_their_frames():
-    """Caps, buttons and layers have a transparent margin: nothing is clipped by the frame."""
+    """Caps and layers have a transparent margin: nothing is clipped by the frame."""
     for name in P.SPRITES:
-        if name in P.TILES or name == "plate_slate_slot":
+        if name == "plate_slate_slot":
             continue
         alpha = _alpha(f"{name}_2x.png")
-        if name.endswith("_shadow"):  # catcher layer: faint everywhere, dark only near the cap
+        if "shadow" in name:  # catcher layer: faint everywhere, dark only near the cap
             w, h = alpha.size
             side = w // 3  # skip the middle third: the slot recess itself darkens the catcher
             boxes = [
@@ -165,7 +169,7 @@ def test_sprites_fit_their_frames():
 
 def test_sprite_silhouettes_match_between_scales():
     """1x and 2x describe the same silhouette: the 2x bbox is twice the 1x bbox (+-3 px)."""
-    for name in ("drawbar_cap_black", "drawbar_cap_white", "layer_cap_grey", "button_grey"):
+    for name in ("drawbar_cap_black", "drawbar_cap_white", "layer_cap_grey"):
         b1, b2 = _alpha(f"{name}_1x.png").getbbox(), _alpha(f"{name}_2x.png").getbbox()
         assert all(abs(2 * a - b) <= 3 for a, b in zip(b1, b2)), name
 
@@ -210,7 +214,6 @@ CALIBRATED = (
     ("drawbar_cap_white_2x.png", "cap_white_top", (80, 135, 110, 170), 6),
     ("drawbar_cap_black_2x.png", "cap_black_top", (80, 135, 110, 170), 8),
     ("layer_cap_grey_2x.png", "cap_grey_top", (80, 80, 110, 100), 8),
-    ("button_grey_2x.png", "button_grey_pill", (70, 40, 90, 56), 6),
 )
 
 
@@ -236,6 +239,7 @@ def test_blender_scripts_share_constants_parse_and_stay_small():
     assert "P.knob_angle_deg" in src and "P.KNOB_FRAMES" in src and "P.LEAN" in src
     files = sorted(blender.glob("*.py"))
     assert {f.name for f in files} >= {"build_proof.py", "proof_scene.py", "parts_knob.py"}
+    assert "P.REF_KNOBS" in src
     for f in files:
         text = f.read_text(encoding="utf-8")
         ast.parse(text)  # bpy is unavailable outside Blender; syntax only

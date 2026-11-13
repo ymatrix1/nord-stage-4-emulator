@@ -1,5 +1,6 @@
-"""Headless Blender scene for the Phase 6b B7 proof: knob + ring + scale, drawbar and layer
-caps, pill buttons, plate tiles.
+"""Headless Blender scene for the Phase 6b B7 proof: generic knob + ring, pointer and shadow
+layers for the reference knobs, drawbar and layer caps, the slotted plate. Buttons, triangle
+selectors, knob bodies, the DRIVE scale and plate tiles come from tools/panel_refbake.py (D17).
 
 Run (Blender 5.2, no GUI, no add-ons):
 
@@ -10,10 +11,10 @@ or `python tools/panel_assets.py render`. Writes raw frames to <dir>; `tools/pan
 stitches, makes the tiles seamless and hashes them. Modules: proof_scene.py (camera, light),
 proof_materials.py (materials), parts_*.py (geometry).
 
-ORIGINAL ART (D16): all geometry is authored from primitives and all materials are procedural.
-Nothing is imported, traced or sampled from any photo or model of the hardware. The owner's
-reference images were used only to read proportions and colour numbers
-(assets/panel/theme_samples.json).
+Original art (D16) for everything rendered here: geometry from primitives, procedural
+materials, nothing imported. Proportions and colours are numbers measured on the owner's
+reference (assets/panel/theme_samples.json); reference-derived pixels are only used by
+tools/panel_refbake.py under D17.
 """
 
 from __future__ import annotations
@@ -27,7 +28,6 @@ import bpy
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parents[1] / "tools")]
 import panel_assets as P  # noqa: E402  (shared constants, no bpy)
-import parts_button as B  # noqa: E402
 import parts_cap as C  # noqa: E402
 import parts_knob as K  # noqa: E402
 import parts_plate as PL  # noqa: E402
@@ -46,25 +46,49 @@ def fresh(scale: int, name: str, lean: str) -> dict:
     return m
 
 
+def _turn(fluted, turned, pitch, frame: int) -> None:
+    rot = -math.radians(P.knob_angle_deg(frame))  # frame angle is clockwise
+    for o in fluted:
+        o.rotation_euler[2] = rot - 0.4 * pitch  # centres a flute facet under the pointer
+    for o in turned:
+        o.rotation_euler[2] = rot
+
+
+def _frames():
+    return QUICK_FRAMES if QUICK else range(P.KNOB_FRAMES)
+
+
 def render_knob(out: Path, scale: int) -> None:
-    """Cap and its shadow per frame (plate is a shadow catcher, not drawn), then the arc ring
-    and the numbered scale as their own flat layers."""
+    """Generic knob style: cap and its shadow per frame (plate is a shadow catcher, not drawn),
+    then the arc ring as its own flat layer."""
     m = fresh(scale, "knob", "knob")
     S.flags(PL.plate(M.catcher_mats(), "red"), catcher=True)
     fluted, turned, pitch = K.knob_cap(m)
-    mesh_rot0 = -0.4 * pitch  # centres a flute facet under the pointer
-    for i in QUICK_FRAMES if QUICK else range(P.KNOB_FRAMES):
-        rot = -math.radians(P.knob_angle_deg(i))  # frame angle is clockwise
-        for o in fluted:
-            o.rotation_euler[2] = rot + mesh_rot0
-        for o in turned:
-            o.rotation_euler[2] = rot
+    for i in _frames():
+        _turn(fluted, turned, pitch, i)
         S.render(P.frame_path(out, scale, i))
-    for name, make in (("knob_ring", K.knob_ring), ("knob_scale", K.knob_scale)):
-        make(fresh(scale, name, "plate"))
-        cy = bpy.context.scene.cycles
-        cy.use_denoising, cy.samples = False, 64  # flat diffuse decal: converges clean
-        S.render(out / f"{name}_{scale}x.png")
+    K.knob_ring(fresh(scale, "knob_ring", "plate"))
+    cy = bpy.context.scene.cycles
+    cy.use_denoising, cy.samples = False, 64  # flat diffuse decal: converges clean
+    S.render(out / f"knob_ring_{scale}x.png")
+
+
+def render_ref_knobs(out: Path, scale: int) -> None:
+    """Per reference knob (D17): the cap body is cut from the reference by panel_refbake, so
+    Blender renders only what turns, the pointer (cap as holdout, so it hides behind the cap),
+    and the cap's shadow on the plate, both at that knob's own lean."""
+    for name in P.REF_KNOBS:
+        m = fresh(scale, f"knob_shadow_{name}", f"knob_{name}")
+        S.flags(PL.plate(M.catcher_mats(), "red"), catcher=True)
+        fluted, turned, pitch = K.knob_cap(m)
+        S.flags(fluted + turned, holdout=True)
+        S.render(out / f"knob_shadow_{name}_{scale}x.png")
+        m = fresh(scale, f"pointer_{name}", f"knob_{name}")
+        fluted, turned, pitch = K.knob_cap(m)
+        S.flags(fluted, holdout=True)
+        for i in _frames():
+            _turn(fluted, turned, pitch, i)
+            S.render(P.frame_path(out, scale, i, f"pointer_{name}"))
 
 
 def render_caps(out: Path, scale: int) -> None:
@@ -86,19 +110,8 @@ def render_caps(out: Path, scale: int) -> None:
         S.render(out / f"{name}_{scale}x.png")
 
 
-def render_buttons(out: Path, scale: int) -> None:
-    for color in ("grey", "black"):
-        m = fresh(scale, f"button_{color}", "button")
-        B.button(m, f"btn_{color}", f"btn_{color}_pill")
-        S.render(out / f"button_{color}_{scale}x.png")
-
-
 def render_plates(out: Path, scale: int) -> None:
-    for name, key in (("plate_red", "red"), ("plate_slate", "slate"), ("plate_silver", "silver")):
-        PL.plate(fresh(scale, name, "plate"), key)
-        cy = bpy.context.scene.cycles
-        cy.use_denoising, cy.samples = False, 256  # the denoiser would smear the fine grain
-        S.render(out / f"{name}_{scale}x.png")
+    """Only the slotted slate plate; the tiles are cut from the reference (D17)."""
     C.plate_slot(fresh(scale, "plate_slate_slot", "plate"))
     S.render(out / f"plate_slate_slot_{scale}x.png")
 
@@ -106,8 +119,8 @@ def render_plates(out: Path, scale: int) -> None:
 STAGES = {
     "plates": render_plates,
     "knob": render_knob,
+    "ref_knobs": render_ref_knobs,
     "caps": render_caps,
-    "buttons": render_buttons,
 }
 
 

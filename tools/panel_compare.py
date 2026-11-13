@@ -11,6 +11,7 @@ committed; only the measured numbers in `assets/panel/theme_samples.json` are.
 
 from __future__ import annotations
 
+import json
 import math
 import sys
 from pathlib import Path
@@ -18,22 +19,19 @@ from pathlib import Path
 import numpy as np
 import panel_assets as P
 import panel_preview as V
+import panel_refbake as R
 from PIL import Image
 
-OUT = P.ROOT / ".reference" / "panel-compare-v3.png"
+OUT = P.ROOT / ".reference" / "panel-compare-v4.png"
 # EMPIRICAL: reference px per Blender unit (knob base 103.4 px = 0.8 u). Our 2x sprites have
 # 128 px per unit, so reference crops are scaled by 128 / 129.
 REF_PX_PER_U = 129.0
-# EMPIRICAL: feature centres on the 1961 x 1185 reference (base centre of each control, read
-# from circle fits and silhouette extents) and the knob frame whose pointer matches it.
-FEATURES = {
-    "master_knob": ((132.3, 173.2), ("knob", 59, "knob_ring")),
-    "drive_knob": ((132.0, 485.0), ("knob", 10, "knob_scale")),
+# EMPIRICAL: centres of the Blender-only features on the 1961 x 1185 reference (base centre of
+# each control, from silhouette extents and a small correlation search).
+CAP_FEATURES = {
     "drawbar_black": ((656.0, 972.0), ("cap", "drawbar_cap_black")),
     "drawbar_white": ((954.0, 1006.0), ("cap", "drawbar_cap_white")),
     "layer_grey": ((311.0, 242.0), ("cap", "layer_cap_grey")),
-    "button_grey": ((134.0, 684.0), ("button", "grey")),
-    "button_black": ((131.0, 881.0), ("button", "black")),
     "plate_red": ((200.0, 300.0), ("tile", "plate_red")),
     "plate_slate": ((640.0, 400.0), ("tile", "plate_slate")),
     "plate_silver": ((1400.0, 85.0), ("tile", "plate_silver")),
@@ -41,14 +39,41 @@ FEATURES = {
 TILE_VIEW = (96, 48)  # 2x px of plate shown in a row (small: the reference bands are thin)
 
 
+def features(crops: dict | None = None) -> dict:
+    """Every compared feature: name -> (reference centre, how to compose ours). Knobs, buttons
+    and triangle selectors come from `assets/panel/ref_crops.json`, one row per instance."""
+    crops = crops or json.loads(P.REF_CROPS.read_text(encoding="utf-8"))
+    out = {}
+    for name, k in crops["knobs"].items():
+        frame = round((k["pointer_deg"] + 135) / 270 * (P.KNOB_FRAMES - 1))
+        out[f"knob_{name}"] = (tuple(k["centre"]), ("refknob", name, frame))
+    for name, (x0, y0, x1, y1) in crops["buttons"].items():
+        out[f"button_{name}"] = (((x0 + x1) / 2, (y0 + y1) / 2), ("sprite", f"button_{name}"))
+    for name, t in crops["triangles"].items():
+        x0, y0, x1, y1 = t["box"]
+        out[f"tri_{name}"] = (((x0 + x1) / 2, (y0 + y1) / 2), ("tri", name, t))
+    out.update(CAP_FEATURES)
+    return out
+
+
 def ours(proof: Path, spec: tuple, scale: int = 2) -> Image.Image:
     kind = spec[0]
-    if kind == "knob":
-        return V.composed_knob(proof, spec[1], scale, spec[2])
+    if kind == "refknob":
+        return V.composed_ref_knob(proof, spec[1], spec[2], scale)
     if kind == "cap":
         return V.composed_cap(proof, spec[1], scale)
-    if kind == "button":
-        return V.composed_button(proof, spec[1], scale)
+    if kind == "sprite":
+        return Image.open(proof / f"{spec[1]}_{scale}x.png").convert("RGBA")
+    if kind == "tri":  # unlit matrix with the lit overlay where the reference LED is on
+        t = spec[2]
+        base = Image.open(proof / f"tri_{spec[1]}_{scale}x.png").convert("RGBA")
+        lit = Image.open(proof / f"tri_lit_{t['dir']}_{scale}x.png").convert("RGBA")
+        cell = R.cell_box(t["box"], t["grid"], *t["lit"])
+        k = P.PX_PER_UNIT * scale / REF_PX_PER_U
+        base.alpha_composite(
+            lit, (round((cell[0] - t["box"][0]) * k), round((cell[1] - t["box"][1]) * k))
+        )
+        return base
     tile = Image.open(proof / f"{spec[1]}_{scale}x.png").convert("RGBA")
     return V.centre_crop(tile, *TILE_VIEW)
 
@@ -79,7 +104,7 @@ def build(ref_path: Path, proof: Path = P.PROOF_DIR, zoom: int = 2):
     """Return (sheet, metrics). Each row: ours | reference, both upscaled by `zoom`."""
     ref = Image.open(ref_path).convert("RGB")
     rows, metrics = [], {}
-    for name, (centre, spec) in FEATURES.items():
+    for name, (centre, spec) in features().items():
         a = ours(proof, spec)
         b = ref_crop(ref, centre, a.size)
         metrics[name] = diff_metric(a, b)

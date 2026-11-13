@@ -4,7 +4,8 @@
 Pipeline (Blender is a development dependency only; CI never renders):
 
     python tools/panel_assets.py render      # headless Blender -> assets/panel/proof/_raw
-    python tools/panel_assets.py pack        # stitch filmstrips, seamless tiles, manifest, sizes
+    python tools/panel_refbake.py --ref <reference.png>   # reference-derived sprites (D17)
+    python tools/panel_assets.py pack        # stitch filmstrips, manifest, sizes
     python tools/panel_assets.py preview     # assets/panel/proof/preview_2x.png
     python tools/panel_assets.py verify      # check committed PNGs against the manifest (CI-safe)
 
@@ -48,38 +49,55 @@ CAM_HEIGHT_U = 13.5
 # Level knob, 16' drawbar cap, layer fader A cap, ORGAN button. Plates are flat (no lean).
 LEAN = {
     "knob": (6.57, -1.5),
+    # EMPIRICAL: the DRIVE pointer sits 5.5 px below the base centre on the reference, so the
+    # optical axis is above that knob (the reference is cropped off-centre vertically).
+    "knob_master": (6.57, 1.0),
+    "knob_drive": (6.57, 1.4),
     "drawbar": (1.3, 2.97),
     "layer": (5.29, -2.73),
     "button": (6.59, 0.70),
     "plate": (0.0, 0.0),
 }
 
-# Single sprites (not the knob filmstrip): name -> (1x width, 1x height) in px.
+# Blender-rendered single sprites: name -> (1x width, 1x height) in px.
 SPRITES = {
     "knob_ring": (96, 96),  # white arc, separate layer (Master Level style)
-    "knob_scale": (96, 96),  # numerals 0..10, separate layer (DRIVE style)
+    "knob_shadow_master": (96, 96),  # shadow of the reference-derived Master Level cap
+    "knob_shadow_drive": (96, 96),
     "drawbar_cap_black": (96, 160),
     "drawbar_cap_white": (96, 160),
     "drawbar_shadow": (96, 160),  # shared by both drawbar colours
     "layer_cap_grey": (96, 96),
     "layer_shadow": (96, 96),
-    "button_grey": (80, 48),  # up state, well included
-    "button_black": (80, 48),
-    "plate_red": (128, 128),  # seamless tiles
-    "plate_slate": (128, 128),
-    "plate_silver": (128, 128),
     "plate_slate_slot": (128, 256),  # drawbar slot on slate, not a tile
 }
-TILES = ("plate_red", "plate_slate", "plate_silver")
+# Knobs whose cap body is cut from the reference (D17); each gets a Blender pointer filmstrip.
+REF_KNOBS = ("master", "drive")
+FILMSTRIPS = ("knob_filmstrip", *(f"pointer_{k}" for k in REF_KNOBS))
+TILES = ("plate_red", "plate_slate", "plate_silver")  # reference-derived, seamless
+REF_CROPS = ROOT / "assets" / "panel" / "ref_crops.json"
+
+
+def ref_sprites(crops: dict | None = None) -> list[str]:
+    """Names of the sprites `tools/panel_refbake.py` cuts from the reference (D17)."""
+    crops = crops or json.loads(REF_CROPS.read_text(encoding="utf-8"))
+    names = [f"button_{b}" for b in crops["buttons"]]
+    names += [f"tri_{t}" for t in crops["triangles"]]
+    names += sorted({f"tri_lit_{t['dir']}" for t in crops["triangles"].values()})
+    names += [f"knob_body_{k}" for k in crops["knobs"]] + ["knob_scale", *TILES]
+    return names
+
+
 DRAWBAR_COLORS = ("black", "white")
 
 # ASSUMED: control counts until B2 (ns4-3n0d) verifies them against the manual; chosen from a
 # rough read of the reference photo (3 sections x ~12 knobs, 9+9 drawbars, 3 layer faders).
 PANEL_ESTIMATE = {"knobs": 45, "faders": 30, "buttons": 150}
-# ASSUMED: distinct knob styles (each needs its own filmstrip): small, medium, large, encoder.
-KNOB_STYLES = 4
-# ASSUMED: button down and lit states are not rendered yet; each colour will need two more
-# sprites of the up-state size.
+# ASSUMED: distinct knob styles on the whole panel (each needs its own filmstrip): the two
+# reference knobs (Master Level, DRIVE) plus the generic style and three more sizes elsewhere.
+KNOB_STYLES = 6
+# ASSUMED: button down and lit states are not rendered yet; each button sprite will need two
+# more of the same size.
 BUTTON_EXTRA_STATES = 2
 
 
@@ -90,8 +108,8 @@ def knob_angle_deg(frame: int) -> float:
     return -KNOB_SWEEP_DEG / 2 + KNOB_SWEEP_DEG * frame / (KNOB_FRAMES - 1)
 
 
-def frame_path(raw: Path, scale: int, frame: int) -> Path:
-    return raw / f"knob_{scale}x" / f"f{frame:03d}.png"
+def frame_path(raw: Path, scale: int, frame: int, strip: str = "knob") -> Path:
+    return raw / f"{strip}_{scale}x" / f"f{frame:03d}.png"
 
 
 def sha256(path: Path) -> str:
@@ -111,14 +129,14 @@ def save_png(img, out: Path) -> None:
     img.save(out, format="PNG", optimize=True, compress_level=9)
 
 
-def stitch_filmstrip(raw: Path, scale: int, out: Path) -> None:
-    """Pack the 64 knob frames into an 8x8 grid PNG (row-major, frame 0 top-left)."""
+def stitch_filmstrip(raw: Path, scale: int, out: Path, strip: str = "knob") -> None:
+    """Pack 64 frames into an 8x8 grid PNG (row-major, frame 0 top-left)."""
     from PIL import Image
 
     edge = KNOB_FRAME_PX * scale
     sheet = Image.new("RGBA", (edge * KNOB_GRID, edge * KNOB_GRID), (0, 0, 0, 0))
     for i in range(KNOB_FRAMES):
-        with Image.open(frame_path(raw, scale, i)) as im:
+        with Image.open(frame_path(raw, scale, i, strip)) as im:
             if im.size != (edge, edge):
                 raise ValueError(f"frame {i} is {im.size}, expected {(edge, edge)}")
             sheet.paste(im.convert("RGBA"), ((i % KNOB_GRID) * edge, (i // KNOB_GRID) * edge))
@@ -147,8 +165,7 @@ def make_seamless(img):
 def asset_names() -> list[str]:
     names = []
     for s in SCALES:
-        names.append(f"knob_filmstrip_{s}x.png")
-        names += [f"{n}_{s}x.png" for n in SPRITES]
+        names += [f"{n}_{s}x.png" for n in (*FILMSTRIPS, *SPRITES, *ref_sprites())]
     return names
 
 
@@ -187,19 +204,23 @@ def size_report(manifest: dict, estimate: dict | None = None) -> dict:
     def px(name: str) -> int:
         return f[name]["width"] * f[name]["height"]
 
+    buttons = [n for n in ref_sprites() if n.startswith("button_")]
     for s in SCALES:
         knob = f"knob_filmstrip_{s}x.png"
-        shared = [knob] + [f"{n}_{s}x.png" for n in SPRITES]
-        extra = (KNOB_STYLES - 1) * px(knob) + BUTTON_EXTRA_STATES * sum(
-            px(f"button_{c}_{s}x.png") for c in ("grey", "black")
+        singles = [*SPRITES, *ref_sprites()]
+        shared = [f"{n}_{s}x.png" for n in (*FILMSTRIPS, *singles)]
+        extra = (KNOB_STYLES - len(FILMSTRIPS)) * px(knob) + BUTTON_EXTRA_STATES * sum(
+            px(f"{b}_{s}x.png") for b in buttons
         )
         out["per_scale"][f"{s}x"] = {
+            "knob_styles": KNOB_STYLES,
+            "button_styles": len(buttons),
             "knob_filmstrip_png_bytes": f[knob]["bytes"],
-            "sprite_png_bytes": {n: f[f"{n}_{s}x.png"]["bytes"] for n in SPRITES},
+            "sprite_png_bytes": {n: f[f"{n}_{s}x.png"]["bytes"] for n in (*FILMSTRIPS, *singles)},
             "shared_sprite_set_png_bytes": sum(f[n]["bytes"] for n in shared),
             "shared_sprite_set_rgba_bytes": 4 * sum(px(n) for n in shared),
             "full_panel_png_bytes": sum(f[n]["bytes"] for n in shared)
-            + (KNOB_STYLES - 1) * f[knob]["bytes"],
+            + (KNOB_STYLES - len(FILMSTRIPS)) * f[knob]["bytes"],
             "full_panel_rgba_bytes": 4 * (sum(px(n) for n in shared) + extra),
         }
     return out
@@ -230,17 +251,15 @@ def render(raw: Path = RAW_DIR) -> None:
 
 
 def pack(raw: Path = RAW_DIR, proof: Path = PROOF_DIR) -> dict:
-    from PIL import Image
-
+    """Stitch the Blender filmstrips and copy the Blender sprites; the reference-derived
+    sprites are already written by panel_refbake.py. Then rebuild the manifest."""
     for s in SCALES:
-        stitch_filmstrip(raw, s, proof / f"knob_filmstrip_{s}x.png")
+        for strip in FILMSTRIPS:
+            name = "knob" if strip == "knob_filmstrip" else strip
+            stitch_filmstrip(raw, s, proof / f"{strip}_{s}x.png", name)
         for name in SPRITES:
             src = raw / f"{name}_{s}x.png"
-            if name in TILES:
-                with Image.open(src) as im:
-                    save_png(make_seamless(im), proof / src.name)
-            else:
-                (proof / src.name).write_bytes(src.read_bytes())
+            (proof / src.name).write_bytes(src.read_bytes())
     manifest = build_manifest(proof)
     (proof / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest

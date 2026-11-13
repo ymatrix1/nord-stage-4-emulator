@@ -34,10 +34,10 @@ def test_composites_are_opaque():
     """Plate + layer + part composites cover their whole frame."""
     imgs = [
         V.composed_knob(P.PROOF_DIR, 0),
-        V.composed_knob(P.PROOF_DIR, 10, layer="knob_scale"),
+        V.composed_ref_knob(P.PROOF_DIR, "drive", 10),
         V.composed_cap(P.PROOF_DIR, "drawbar_cap_white"),
         V.composed_cap(P.PROOF_DIR, "layer_cap_grey"),
-        V.composed_button(P.PROOF_DIR, "black", plate="plate_slate"),
+        V.composed_ref_knob(P.PROOF_DIR, "master", 59),
     ]
     for img in imgs:
         assert img.getchannel("A").getextrema() == (255, 255)
@@ -47,10 +47,11 @@ def test_composites_are_opaque():
 def test_knob_frame_matches_grid_cell():
     e = P.KNOB_FRAME_PX * 2
     assert V.knob_frame(P.PROOF_DIR, 63).size == (e, e)
+    assert V.strip_frame(P.PROOF_DIR, 5, 2, "pointer_master").size == (e, e)
 
 
 def test_compose_preview_covers_all_groups():
     sheet = V.compose_preview()
     e = P.KNOB_FRAME_PX * 2
-    assert sheet.width >= 6 * e  # five ring frames and one scale frame
+    assert sheet.width >= 7 * e  # six reference knob frames and one generic
     assert sheet.height > e + 2 * P.SPRITES["drawbar_cap_black"][1]

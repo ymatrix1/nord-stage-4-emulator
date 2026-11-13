@@ -34,19 +34,37 @@ def centre_crop(img: Image.Image, w: int, h: int) -> Image.Image:
     return img.crop((cx - w // 2, cy - h // 2, cx - w // 2 + w, cy - h // 2 + h))
 
 
-def knob_frame(proof: Path, frame: int, scale: int = 2) -> Image.Image:
+def strip_frame(proof: Path, frame: int, scale: int = 2, strip: str = "knob_filmstrip"):
     e = P.KNOB_FRAME_PX * scale
-    strip = _open(proof, "knob_filmstrip", scale)
+    sheet = _open(proof, strip, scale)
     col, row = frame % P.KNOB_GRID, frame // P.KNOB_GRID
-    return strip.crop((col * e, row * e, (col + 1) * e, (row + 1) * e))
+    return sheet.crop((col * e, row * e, (col + 1) * e, (row + 1) * e))
+
+
+def knob_frame(proof: Path, frame: int, scale: int = 2) -> Image.Image:
+    return strip_frame(proof, frame, scale)
 
 
 def composed_knob(proof: Path, frame: int, scale: int = 2, layer: str = "knob_ring"):
-    """Red plate, the ring or scale layer, then the knob frame (shadow baked in)."""
+    """Generic knob: red plate, the ring or scale layer, then the Blender frame (with shadow)."""
     e = P.KNOB_FRAME_PX * scale
     bg = tiled(_open(proof, "plate_red", scale), e, e)
     bg.alpha_composite(_open(proof, layer, scale))
     bg.alpha_composite(knob_frame(proof, frame, scale))
+    return bg
+
+
+REF_KNOB_LAYER = {"master": "knob_ring", "drive": "knob_scale"}
+
+
+def composed_ref_knob(proof: Path, name: str, frame: int, scale: int = 2) -> Image.Image:
+    """Reference knob (D17): red plate, ring or scale, Blender shadow, the cap body cut from
+    the reference, then the Blender pointer frame on top."""
+    e = P.KNOB_FRAME_PX * scale
+    bg = tiled(_open(proof, "plate_red", scale), e, e)
+    for n in (REF_KNOB_LAYER[name], f"knob_shadow_{name}", f"knob_body_{name}"):
+        bg.alpha_composite(_open(proof, n, scale))
+    bg.alpha_composite(strip_frame(proof, frame, scale, f"pointer_{name}"))
     return bg
 
 
@@ -58,13 +76,6 @@ def composed_cap(proof: Path, name: str, scale: int = 2) -> Image.Image:
     shadow = "layer_shadow" if name.startswith("layer") else "drawbar_shadow"
     for n in (shadow, name):
         bg.alpha_composite(_open(proof, n, scale))
-    return bg
-
-
-def composed_button(proof: Path, color: str, scale: int = 2, plate: str = "plate_red"):
-    w, h = (v * scale for v in P.SPRITES[f"button_{color}"])
-    bg = tiled(_open(proof, plate, scale), w, h)
-    bg.alpha_composite(_open(proof, f"button_{color}", scale))
     return bg
 
 
@@ -84,17 +95,21 @@ def stack(rows: list[list[Image.Image]], gap: int = 8) -> Image.Image:
 
 
 def compose_preview(proof: Path = P.PROOF_DIR, scale: int = 2) -> Image.Image:
-    """Proof sheet: knob frames with ring and one with the DRIVE scale; drawbar, layer and
-    button sprites; the three seamless tiles (1x) repeated 2 x 2 to show they wrap."""
-    knobs = [composed_knob(proof, f, scale) for f in PREVIEW_FRAMES]
-    knobs.append(composed_knob(proof, 9, scale, layer="knob_scale"))
+    """Proof sheet: reference knobs at three angles each and the generic knob; drawbar and
+    layer caps; every button; triangle selectors; the seamless tiles (1x, 2 x 2)."""
+    knobs = [composed_ref_knob(proof, n, f, scale) for n in P.REF_KNOBS for f in (0, 32, 63)]
+    knobs.append(composed_knob(proof, 32, scale))
     caps = [composed_cap(proof, f"drawbar_cap_{c}", scale) for c in P.DRAWBAR_COLORS]
     caps.append(composed_cap(proof, "layer_cap_grey", scale))
-    btns = [composed_button(proof, c, scale) for c in ("grey", "black")]
-    btns += [composed_button(proof, c, scale, "plate_slate") for c in ("grey", "black")]
-    col = stack([[b] for b in btns], 4)
+    names = P.ref_sprites()
+    buttons = [_open(proof, n, scale) for n in names if n.startswith("button_")]
+    rows = [knobs, caps]
+    for i in range(0, len(buttons), 5):
+        rows.append(buttons[i : i + 5])
+    tris = [_open(proof, n, scale) for n in names if n.startswith("tri_") and "_lit_" not in n]
+    tris += [_open(proof, n, scale) for n in names if n.startswith("tri_lit_")]
     tiles = []
     for t in P.TILES:  # 1x tiles repeated 2 x 2: enough to show the wrap, keeps the sheet small
         tile = _open(proof, t, 1)
         tiles.append(tiled(tile, tile.width * 2, tile.height * 2))
-    return stack([knobs, caps + [col], tiles])
+    return stack(rows + [tris, tiles])

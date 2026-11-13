@@ -36,8 +36,6 @@ GAIN = {
     "cap_black": (0.38, 0.307, 0.24),
     "cap_white": (1.059, 1.05, 1.039),
     "cap_grey": (1.418, 1.407, 1.368),
-    "btn_grey": (0.991, 0.977, 0.968),
-    "btn_black": (0.118, 0.118, 0.06),
     "ring": (1.08, 1.08, 1.06),
     "knob_side": (1.8, 1.8, 1.8),
     "knob_top": (0.7, 0.66, 0.6),
@@ -190,18 +188,6 @@ def mats() -> dict[str, bpy.types.Material]:
             spec=0.6,
             grain=0.5,
             grain_scale=200,
-        ),
-        "btn_grey": material(
-            "btn_grey", u["button_grey_base"], 0.4, gain=GAIN["btn_grey"], spec=0.5
-        ),
-        "btn_grey_pill": material(
-            "btn_grey_pill", u["button_grey_pill"], 0.35, gain=GAIN["btn_grey"], spec=0.6
-        ),
-        "btn_black": material(
-            "btn_black", u["button_black_base"], 0.4, gain=GAIN["btn_black"], spec=0.6
-        ),
-        "btn_black_pill": material(
-            "btn_black_pill", u["button_black_pill"], 0.35, gain=GAIN["btn_black"], spec=0.5
         ),
     }
 

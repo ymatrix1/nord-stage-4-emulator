@@ -7,15 +7,33 @@
       "width": 768,
       "height": 768
     },
+    "pointer_master_1x.png": {
+      "sha256": "8fa24d215ddca6e7328c2155ae866d7f10e29f4e1a5ff6137345e42b37012987",
+      "bytes": 80722,
+      "width": 768,
+      "height": 768
+    },
+    "pointer_drive_1x.png": {
+      "sha256": "0d5d2e5f3e2ab21b64cd7f830b4b9b784f84642265d1e5aac0eff638bf7a6436",
+      "bytes": 81498,
+      "width": 768,
+      "height": 768
+    },
     "knob_ring_1x.png": {
       "sha256": "129be4060f41c65798f6dcb7b22f3be5e9021480becd897699749430b557f0ed",
       "bytes": 5321,
       "width": 96,
       "height": 96
     },
-    "knob_scale_1x.png": {
-      "sha256": "ca88395eab28100349e55b5d00ae6b8715c0c1e78ef95cbb3710c7d80d6e3856",
-      "bytes": 4238,
+    "knob_shadow_master_1x.png": {
+      "sha256": "a32ec6ee965251f7298f23b4dea82316798adb1a5158d0d4e3f03c5d005ffc32",
+      "bytes": 5780,
+      "width": 96,
+      "height": 96
+    },
+    "knob_shadow_drive_1x.png": {
+      "sha256": "df919a0110fa15278a857228bed579cfcabccea57154de9c2e2359af15d9170e",
+      "bytes": 5776,
       "width": 96,
       "height": 96
     },
@@ -49,45 +67,177 @@
       "width": 96,
       "height": 96
     },
-    "button_grey_1x.png": {
-      "sha256": "801ed0d042ceef2949eabf0d3065666b7e9450dde754588efa0151f8a8b95cb9",
-      "bytes": 4526,
-      "width": 80,
-      "height": 48
-    },
-    "button_black_1x.png": {
-      "sha256": "a58618174bb0c42a6c7efdf2bf46de49d4343521b7e3115fcff774d8120a38c3",
-      "bytes": 4003,
-      "width": 80,
-      "height": 48
-    },
-    "plate_red_1x.png": {
-      "sha256": "9e7fce609e2d8d1eb0823f4dd44335b022ade227e8966a18885bed21c59ff467",
-      "bytes": 22820,
-      "width": 128,
-      "height": 128
-    },
-    "plate_slate_1x.png": {
-      "sha256": "694a0c9f107667acedc11716f19e9acaf3276dbd7627d5e8734d716731dd6bf5",
-      "bytes": 17967,
-      "width": 128,
-      "height": 128
-    },
-    "plate_silver_1x.png": {
-      "sha256": "65dbd2dfc765a026049658102f8174010ed229045227a369d0f634d5d50d9e3e",
-      "bytes": 22541,
-      "width": 128,
-      "height": 128
-    },
     "plate_slate_slot_1x.png": {
       "sha256": "240447fe569fb50d8245330958b9513e2087163c2f153b3b5e6906bbd0f6456a",
       "bytes": 34285,
       "width": 128,
       "height": 256
     },
+    "button_organ_on_1x.png": {
+      "sha256": "29c80386c8117055db86dc1d286febba76afe8668af269942fffaabd98d2147b",
+      "bytes": 3188,
+      "width": 67,
+      "height": 35
+    },
+    "button_vib_chorus_1x.png": {
+      "sha256": "83fbac1f24655d2de025f7abbc3db116d21c9c25b159bf18384cf5c81ba038b2",
+      "bytes": 3434,
+      "width": 68,
+      "height": 38
+    },
+    "button_perc_volume_1x.png": {
+      "sha256": "d1f07ee1c5877585554342a31bc7f8aea4b075424e462e16ccb035bf5d37c1c5",
+      "bytes": 3334,
+      "width": 68,
+      "height": 37
+    },
+    "button_perc_decay_1x.png": {
+      "sha256": "e97eb5631ecebf4cfc2b3f9c5cd2a356a4d58f021fb370ca1913c2acb8213264",
+      "bytes": 3419,
+      "width": 68,
+      "height": 37
+    },
+    "button_perc_harmonic_1x.png": {
+      "sha256": "28e2585dd390be154cd9fc04c95b45f351d1b95c893048c6602ac1b373bebd0a",
+      "bytes": 3368,
+      "width": 68,
+      "height": 37
+    },
+    "button_organ_model_1x.png": {
+      "sha256": "58c84dc55a65e990f64ba33b99250eeb90ad501be4ea00f27572a397b790f3d7",
+      "bytes": 3383,
+      "width": 68,
+      "height": 38
+    },
+    "button_vib_on_1x.png": {
+      "sha256": "fa28342859b5f87982ac8adae951ee1be20dc77f211fb423a3ee227af2d24831",
+      "bytes": 3577,
+      "width": 68,
+      "height": 38
+    },
+    "button_perc_on_1x.png": {
+      "sha256": "b6051cee2fa05f383cab6ffe798dc0c08f90dbb481a7fdaa764d3cb9ca8624f2",
+      "bytes": 3596,
+      "width": 68,
+      "height": 38
+    },
+    "button_aux_a_onoff_1x.png": {
+      "sha256": "f55f940e8cf547dd8f23ff82836ae8571ce4f50ef8dd39e96df221e2817bd6d3",
+      "bytes": 3538,
+      "width": 68,
+      "height": 38
+    },
+    "button_aux_b_onoff_1x.png": {
+      "sha256": "9bc8d64d1c0b2e34d31850041faeee9ce710302febb6a57d8eecfb69f1f5e672",
+      "bytes": 3544,
+      "width": 68,
+      "height": 38
+    },
+    "button_rotary_organ_1x.png": {
+      "sha256": "f99189c2de0818a84f2f6237279615ebb23146c9c214b8e920bcc66e2a390261",
+      "bytes": 3164,
+      "width": 68,
+      "height": 34
+    },
+    "button_stop_mode_1x.png": {
+      "sha256": "c22b42bcb9e728fe419ce7d9682a7200bf6aa22c5cd25bb0df7c96faba44f7b4",
+      "bytes": 3082,
+      "width": 67,
+      "height": 37
+    },
+    "button_rotary_speed_1x.png": {
+      "sha256": "55599300f2685992b5f26df95cdb593e1be6e46f034e405ff1d790c1dd46c856",
+      "bytes": 3035,
+      "width": 67,
+      "height": 37
+    },
+    "button_preset_sync_1x.png": {
+      "sha256": "6405a6ac65c7d874e5f16fd5c34d6280513670e834a188a0b62f224ab4c2de00",
+      "bytes": 3362,
+      "width": 68,
+      "height": 39
+    },
+    "button_octave_shift_1x.png": {
+      "sha256": "a33f6001868298ee7125dedd038b2931b64f8fffbc4eead4356aa9339b0c8d11",
+      "bytes": 6236,
+      "width": 135,
+      "height": 39
+    },
+    "tri_organ_model_1x.png": {
+      "sha256": "9def9baa561189daeb839bf329334d92272ba957fe9d7b0bd51bc42f7b4afcfe",
+      "bytes": 2828,
+      "width": 30,
+      "height": 61
+    },
+    "tri_vib_chorus_1x.png": {
+      "sha256": "ec9b77900551c4a32b3a98a0a49b7558ff315611d3ce30218c820f0029c78bdc",
+      "bytes": 2645,
+      "width": 60,
+      "height": 30
+    },
+    "tri_lit_left_1x.png": {
+      "sha256": "16fce6c0d90c2781a5c78146bd82cda2e69d3c90b6eee27e85717923bd22107a",
+      "bytes": 603,
+      "width": 15,
+      "height": 20
+    },
+    "tri_lit_up_1x.png": {
+      "sha256": "975e53e7bcf59dae3bf0624136d2b1f984134b348c13597ea406f58180253bdf",
+      "bytes": 549,
+      "width": 20,
+      "height": 15
+    },
+    "knob_body_master_1x.png": {
+      "sha256": "e1f5a6f1605c7d9d3089825f68b8c279618fec58cc113bbc16af10c4db612322",
+      "bytes": 4684,
+      "width": 96,
+      "height": 96
+    },
+    "knob_body_drive_1x.png": {
+      "sha256": "e1f5a6f1605c7d9d3089825f68b8c279618fec58cc113bbc16af10c4db612322",
+      "bytes": 4684,
+      "width": 96,
+      "height": 96
+    },
+    "knob_scale_1x.png": {
+      "sha256": "7376c06ab8f4bc148db46b63e43ffeec2b69584b6fd98555fdb7eff1988e5fc7",
+      "bytes": 3110,
+      "width": 96,
+      "height": 96
+    },
+    "plate_red_1x.png": {
+      "sha256": "c7e3514698bc02c2ddcc97f7896d0045b12f58d6c6341f439b00d68bf5d92335",
+      "bytes": 24053,
+      "width": 128,
+      "height": 128
+    },
+    "plate_slate_1x.png": {
+      "sha256": "5f9ad96dae3784769954e18f241d85e1c9d055dddc6be2c3ec26022c6b8d4db7",
+      "bytes": 21039,
+      "width": 128,
+      "height": 128
+    },
+    "plate_silver_1x.png": {
+      "sha256": "83fd79c3e41ad4d838aaad474d8fa512d49966153c87cf404ff66249f688f21f",
+      "bytes": 21103,
+      "width": 128,
+      "height": 128
+    },
     "knob_filmstrip_2x.png": {
       "sha256": "c70e354b1ed18fa597153f1ef5fa7ef0e33c1ba58cb919da64e27a269a1f5281",
       "bytes": 1293106,
+      "width": 1536,
+      "height": 1536
+    },
+    "pointer_master_2x.png": {
+      "sha256": "f4a50a29b339c50ba7a92d0d9c3bce2219a8db6178569033b02c81917020b5e5",
+      "bytes": 234493,
+      "width": 1536,
+      "height": 1536
+    },
+    "pointer_drive_2x.png": {
+      "sha256": "f47d5afbc90010fe6eddc7f5da05b07c953a0594b08b2508f44b66d5ac9419f2",
+      "bytes": 235114,
       "width": 1536,
       "height": 1536
     },
@@ -97,9 +247,15 @@
       "width": 192,
       "height": 192
     },
-    "knob_scale_2x.png": {
-      "sha256": "3c4ae11aeda9d6a43bd0a472e1bce9396ae7add4b9f25657496b360504dca0a1",
-      "bytes": 11893,
+    "knob_shadow_master_2x.png": {
+      "sha256": "886283c82a316556022fae2fd150bd4bafe194e01ede6d9f879be7d4a2f16db3",
+      "bytes": 15407,
+      "width": 192,
+      "height": 192
+    },
+    "knob_shadow_drive_2x.png": {
+      "sha256": "957f9b631e412fbb0ba234aa2910be0cbb69bcb0c423f744fa21a9dd63a6de5e",
+      "bytes": 15347,
       "width": 192,
       "height": 192
     },
@@ -133,41 +289,161 @@
       "width": 192,
       "height": 192
     },
-    "button_grey_2x.png": {
-      "sha256": "82397dc2aa059e378b99df3a80d9cb36a4e36900acfc56ddcb0ca758787100d3",
-      "bytes": 12764,
-      "width": 160,
-      "height": 96
-    },
-    "button_black_2x.png": {
-      "sha256": "aca612089e6f327f7bde8068a9170c1e82cf1412cf5ba27c19f66060200468ae",
-      "bytes": 11910,
-      "width": 160,
-      "height": 96
-    },
-    "plate_red_2x.png": {
-      "sha256": "5d61531bfa095797d7179bb73ff3ba85ebb8dc498a37229cba62583b1e760c69",
-      "bytes": 86350,
-      "width": 256,
-      "height": 256
-    },
-    "plate_slate_2x.png": {
-      "sha256": "c477138fb962e0454f31ff39acc606342517bb189aaf2f343d0cbdf0c34ea954",
-      "bytes": 75574,
-      "width": 256,
-      "height": 256
-    },
-    "plate_silver_2x.png": {
-      "sha256": "328f44453ad3223ef82cae5872ac102ba264628e335c426d8889cba43af116a1",
-      "bytes": 87398,
-      "width": 256,
-      "height": 256
-    },
     "plate_slate_slot_2x.png": {
       "sha256": "5506a6e702c2872853c6d342bbe1a6811616a5708ec0692566a5d0dbbfe7801c",
       "bytes": 133736,
       "width": 256,
       "height": 512
+    },
+    "button_organ_on_2x.png": {
+      "sha256": "eb7f5be454149b9987355acdc518dacdfd40d08249d72d4d7eb7e80a79c16b19",
+      "bytes": 9982,
+      "width": 135,
+      "height": 71
+    },
+    "button_vib_chorus_2x.png": {
+      "sha256": "a6f3ec89f74a4ce5e37d98398faa654f718d97b349cbf3b4bcfbbd30f2eeaee1",
+      "bytes": 10751,
+      "width": 136,
+      "height": 76
+    },
+    "button_perc_volume_2x.png": {
+      "sha256": "bfae944f443cf12aaf9b4293d7a2b840a7f168fbdb9f4cf317af5c269008f09b",
+      "bytes": 10739,
+      "width": 136,
+      "height": 75
+    },
+    "button_perc_decay_2x.png": {
+      "sha256": "ac7c9c5aaab1824f22bb11575e5e1ce2d9463cdd29141b9cb18e32f0469ab089",
+      "bytes": 10846,
+      "width": 137,
+      "height": 75
+    },
+    "button_perc_harmonic_2x.png": {
+      "sha256": "107e34c2d2a7e77ebfab75151b14ad68fe3e14bd616fa1bfde6215fab1d3ea53",
+      "bytes": 10844,
+      "width": 137,
+      "height": 75
+    },
+    "button_organ_model_2x.png": {
+      "sha256": "d12d2d89d9cfd852b728049223ef78bce0a1f41824668c20c5854f98a3e7b4dc",
+      "bytes": 10740,
+      "width": 136,
+      "height": 76
+    },
+    "button_vib_on_2x.png": {
+      "sha256": "ed4d292266908de1d3b847cc546739102591c11495c9e4e405dde0372d6b61ee",
+      "bytes": 11475,
+      "width": 137,
+      "height": 76
+    },
+    "button_perc_on_2x.png": {
+      "sha256": "86efec5fb240cf4b19ccf17b46ab2b14b24cf4dd023764465a7ca02fd5e055f6",
+      "bytes": 11512,
+      "width": 137,
+      "height": 76
+    },
+    "button_aux_a_onoff_2x.png": {
+      "sha256": "5f93b7afb2480919e3b4841c288e3865680d798d34b1137713945d5647763ce6",
+      "bytes": 11474,
+      "width": 137,
+      "height": 76
+    },
+    "button_aux_b_onoff_2x.png": {
+      "sha256": "9c83fbcd34584c5789d351dfdc4d80c6fb38fd0452c3e31d6bfde6fca4eea3fb",
+      "bytes": 11328,
+      "width": 137,
+      "height": 76
+    },
+    "button_rotary_organ_2x.png": {
+      "sha256": "2b5ddf02029c803ce9eef715c8def8f54ef538fb83268cf22023f74648fb34f4",
+      "bytes": 10172,
+      "width": 136,
+      "height": 69
+    },
+    "button_stop_mode_2x.png": {
+      "sha256": "b5052a776903ad82a53d4304e1342f51bfdd011ca74c23508436ab44ee97c0db",
+      "bytes": 9572,
+      "width": 135,
+      "height": 74
+    },
+    "button_rotary_speed_2x.png": {
+      "sha256": "23e0202fde5c8b7ce671973a28fb1663ae98c2f0ca60915f9bdc60c8245a1ce8",
+      "bytes": 9450,
+      "width": 135,
+      "height": 75
+    },
+    "button_preset_sync_2x.png": {
+      "sha256": "57097cc10d1ae5b62d56f48bb6ff5d0c20d00e12346ce32215571e26a7387f03",
+      "bytes": 10617,
+      "width": 137,
+      "height": 78
+    },
+    "button_octave_shift_2x.png": {
+      "sha256": "7868309729936c6f4ea0f89a5b88fb2309d8e3c8c8ae4b370f24c1ce121f39f9",
+      "bytes": 19795,
+      "width": 271,
+      "height": 79
+    },
+    "tri_organ_model_2x.png": {
+      "sha256": "4a2005de0c9155b42d85746fe56347c7672ce8e45a8546a69510f0b8622f268c",
+      "bytes": 8506,
+      "width": 61,
+      "height": 123
+    },
+    "tri_vib_chorus_2x.png": {
+      "sha256": "f2ab2e550a22bdc9c256576dd7b6667a8629a75bcab5452dbbfa22efe99fc376",
+      "bytes": 8057,
+      "width": 121,
+      "height": 60
+    },
+    "tri_lit_left_2x.png": {
+      "sha256": "ba3ab47c02936b63b5c639de09ade52484fba24f129b80a8ff29cff65690f25f",
+      "bytes": 2263,
+      "width": 30,
+      "height": 41
+    },
+    "tri_lit_up_2x.png": {
+      "sha256": "3ea855f36104ca68828688ee1f90f962340191b53a9c50ee9df2ad1945188ccb",
+      "bytes": 2158,
+      "width": 40,
+      "height": 30
+    },
+    "knob_body_master_2x.png": {
+      "sha256": "db98aa8c8c4f2043324d06b93e0dd8fe6673d0e38aefaaf806fdfd9cdc108375",
+      "bytes": 66856,
+      "width": 192,
+      "height": 192
+    },
+    "knob_body_drive_2x.png": {
+      "sha256": "db98aa8c8c4f2043324d06b93e0dd8fe6673d0e38aefaaf806fdfd9cdc108375",
+      "bytes": 66856,
+      "width": 192,
+      "height": 192
+    },
+    "knob_scale_2x.png": {
+      "sha256": "3e5faf2e98f42f98a0db4732e5611987df07d07e3ca664dfa312b54bedc94c8a",
+      "bytes": 4141,
+      "width": 192,
+      "height": 192
+    },
+    "plate_red_2x.png": {
+      "sha256": "60ecc6c435516dbf1dc4d509a0dd6cabc5b0ef12f86d26b4d22e176fc1d88973",
+      "bytes": 85951,
+      "width": 256,
+      "height": 256
+    },
+    "plate_slate_2x.png": {
+      "sha256": "8b55afd0848f358b7ea6b98e8a9c2c4c23219ddb27678f7fdcd162bc9346fc0b",
+      "bytes": 78311,
+      "width": 256,
+      "height": 256
+    },
+    "plate_silver_2x.png": {
+      "sha256": "7233a1795eb5314fae708307ce99a69b9ac692f69e045054ea52b29d905ef9e0",
+      "bytes": 84411,
+      "width": 256,
+      "height": 256
     }
   }
 }
