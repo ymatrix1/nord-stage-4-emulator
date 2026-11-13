@@ -79,13 +79,19 @@ pub enum RotarySpeed {
 }
 
 /// Source of the `B3` tonewheel waveform and phase arithmetic.
+///
+/// Default is [`ToneWheelSource::Legacy`]: the algorithm of the `Firmware` bank is VERIFIED against
+/// the SHARC oracle, but its ROLE as the organ tone source is ASSUMED and disputed (about 65 %
+/// piano string resonance, 35 % `B3` tonewheels; the bank is installed by the PNO Core1 piano
+/// state machine, by no ORG/Core2 module id). The organ tone source is still unlocated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ToneWheelSource {
     /// PNO Core1 oscillator-bank parity: `u32` phase, `phase >> 20` into the 4096-point firmware
-    /// `x` table, no interpolation (`docs/research/organ-tonewheel-bank.md`).
-    #[default]
+    /// `x` table, no interpolation (`docs/research/organ-tonewheel-bank.md`). Opt-in: algorithm
+    /// VERIFIED, role as organ tonewheels ASSUMED/disputed.
     Firmware,
-    /// Pre-bank waveform: float phase, sine plus ad hoc low-wheel harmonics.
+    /// Pre-bank waveform: float phase, sine plus ad hoc low-wheel harmonics (ASSUMED).
+    #[default]
     Legacy,
 }
 
@@ -97,7 +103,7 @@ mod tests {
     fn gear_table_and_defaults() {
         assert_eq!(HAMMOND_GEAR_RATIOS.len(), 12);
         assert_eq!(HAMMOND_GEAR_RATIOS[9], (88, 64));
-        assert_eq!(ToneWheelSource::default(), ToneWheelSource::Firmware);
+        assert_eq!(ToneWheelSource::default(), ToneWheelSource::Legacy);
         assert_eq!(ScannerMode::default(), ScannerMode::Off);
         assert_eq!(ROTARY_CROSSOVER_HZ, 800.0);
         assert_eq!(ROTARY_BASS_HORN_BALANCES[0], (0.70, 0.30));
