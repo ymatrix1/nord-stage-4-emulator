@@ -62,6 +62,20 @@ REGISTRY_GLOBAL = 0xC055B0A0
 # VERIFIED: global pointer to the dispatcher that layer constructors register their client in.
 DISPATCHER_GLOBAL = 0xC055B160
 
+# VERIFIED (run): the edit controller constructor `0xC00FB85C` has built the dispatcher
+# (`[0xC055B160]`), the registry and the per-layer program objects `[G + 0x17C + 4 n]` once the
+# instruction at this address is reached; the layer constructor then runs without a null call.
+G_CTOR_PROGRESS = 0xC00FC9F4
+# VERIFIED (run): drawbar change handler, its pointer-to-member callback, the record update
+# routine and the sender that converts an int to a float and writes `0x28000000 + 4 w` to PNO.
+DRAWBAR_HANDLER = 0xC011AB8C
+DRAWBAR_CALLBACK = 0xC022AB2C
+RECORD_UPDATE = 0xC00BE348
+PNO_SENDER = 0xC001FF18
+RECORD_DIRTY = 0x6C
+RECORD_BUSY = 0x6D
+RECORD_DRAWBARS = 0x40  # byte offset of the nine drawbar words in the engine record
+
 # Harness-only regions.
 EDIT_CTX = 0x98000000
 EDIT_CTX_SIZE = 0x100000
@@ -195,12 +209,28 @@ class BootResult:
 
 
 def boot(emu: ae.ArmEmu, max_insns: int = 400_000_000, chunk: int = 50_000) -> BootResult:
-    """Run the application constructor thunk for at most `max_insns` instructions.
+    """Run the application constructor thunk for at most `max_insns` instructions."""
+    return boot_until(emu, 0, max_insns, chunk)
 
-    Low memory (the null-call guard) is re-zeroed between chunks: code that stores through a null
-    `this` would otherwise leave data that later null reads treat as vtables.
+
+def boot_until(
+    emu: ae.ArmEmu, stop_pc: int, max_insns: int = 400_000_000, chunk: int = 50_000
+) -> BootResult:
+    """Like `boot`, but stop as soon as the instruction at `stop_pc` is about to execute.
+
+    `BootResult.history` is `[stop_pc]` when that happened. Low memory (the null-call guard) is
+    re-zeroed between chunks: code that stores through a null `this` would otherwise leave data
+    that later null reads treat as vtables.
     """
     zeros = bytes(LOW_MEMORY)
+    hit: list[int] = []
+    if stop_pc:
+
+        def stop(uc, address, _size, _user) -> None:  # noqa: ANN001
+            hit.append(address)
+            uc.emu_stop()
+
+        emu.uc.hook_add(emu._u.UC_HOOK_CODE, stop, begin=stop_pc, end=stop_pc)
     pc = APP_THUNK
     emu.set_reg(13, ae.STACK_TOP - 0x1000)
     emu.set_reg(14, ae.SENTINEL)
@@ -216,9 +246,9 @@ def boot(emu: ae.ArmEmu, max_insns: int = 400_000_000, chunk: int = 50_000) -> B
         done += chunk
         pc = emu.reg(15)
         emu.uc.mem_write(0, zeros)
-        if pc == ae.SENTINEL:
+        if pc == ae.SENTINEL or hit:
             break
-    return BootResult(pc, emu.reg(14), done, error, len(emu.null_calls), len(emu.messages))
+    return BootResult(pc, emu.reg(14), done, error, len(emu.null_calls), len(emu.messages), hit)
 
 
 # ----- edit registry --------------------------------------------------------------------------
@@ -338,3 +368,39 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# ----- drawbar path ---------------------------------------------------------------------------
+def dispatcher(emu: ae.ArmEmu) -> int:
+    """The dispatcher object `G` the firmware itself built (`[0xC055B160]`)."""
+    return emu.read32(DISPATCHER_GLOBAL)
+
+
+def program_objects(emu: ae.ArmEmu, count: int = 8) -> list[int]:
+    """Per-layer program objects `[G + 0x17C + 4 n]` (0 where the firmware built none)."""
+    g = dispatcher(emu)
+    return [emu.read32(g + 0x17C + 4 * n) for n in range(count)]
+
+
+def set_drawbar(emu: ae.ArmEmu, handler: int, event: int, k: int, value: int, scratch: int) -> None:
+    """Call the real change handler `0xC011AB8C(handler, event, 0x16D + k, &q16)`.
+
+    `value` is the 0..8 drawbar level; the firmware passes it as Q16.16, so `scratch` receives
+    `value << 16`. The handler stores the integer into the engine record and sets its dirty byte.
+    """
+    emu.write32(scratch, value << 16)
+    emu.call(DRAWBAR_HANDLER, handler, event, 0x16D + k, scratch, max_insns=100_000)
+
+
+def read_drawbar_record(emu: ae.ArmEmu, record: int) -> list[int]:
+    """The nine drawbar words of an engine record (word `0x10 + k`)."""
+    base = record + RECORD_DRAWBARS
+    return [emu.read32(base + 4 * k) for k in range(9)]
+
+
+def run_record_update(emu: ae.ArmEmu, record: int) -> list[ae.Message]:
+    """Run `0xC00BE348(record)` with the busy byte set and return the messages it sent."""
+    emu.write_bytes(record + RECORD_BUSY, b"")
+    emu.clear_messages()
+    emu.call(RECORD_UPDATE, record, max_insns=5_000_000)
+    return emu.messages
