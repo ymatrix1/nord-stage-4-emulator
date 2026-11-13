@@ -23,9 +23,16 @@
 ///   ASSUMED. **Latency 4 frames (83 us at 48 kHz)** on that layer; the stage runs even when
 ///   `comp_enabled` is false (amount 0, unity) so every layer of the mix keeps the same latency.
 ///
-/// Not switchable yet, because the audio path needs words or tables that are not decoded: the Amp
-/// drive stage (`FwAmpDrive`, tables are firmware data), the tone stack (`FwToneStack2`, base words
-/// of the Amp type switch), the all-pass (`FwAllpass`, Fx1 type to engine `Mod1Type` map) and the
+/// * `amp`: the Twin, Twin II, JC, JC II, Small and Small II amps run the firmware drive stage
+///   ([`super::FwAmpDrive`] with the real tables and the words of `kAmpTypeNew`, `kAmpDrive` =
+///   `127 * drive / 10`) instead of the engine's `tanh` drive and RBJ cabinet voicing. Words,
+///   tables and algorithm VERIFIED against the oracle (`tests_amp_golden.rs`); **latency 4 frames**
+///   on that layer. The firmware's cabinet FIR and the organ unit's tone routines are not
+///   modelled, so the engine's 3-band EQ still follows; To Rotary, LP24 and HP24 keep the engine
+///   path (their type switch sends no drive stage words).
+///
+/// Not switchable yet, because the audio path needs words or tables that are not decoded: the
+/// tone stack (`FwToneStack2`, base words of the Amp type switch), the all-pass (`FwAllpass`, Fx1 type to engine `Mod1Type` map) and the
 /// delay line itself (`FwDelay` / the ring variant `0x120AB5`: ring length and routing words).
 /// Their parameter fills exist as `fw_params::set_*`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -38,6 +45,8 @@ pub struct FirmwareFx {
     pub delay_time: bool,
     /// Reverb mix law of `kRvbAmt`.
     pub reverb_mix: bool,
+    /// Firmware Amp drive stage with the `kAmpTypeNew` words (Twin, JC, Small families).
+    pub amp: bool,
 }
 
 impl FirmwareFx {
@@ -47,6 +56,7 @@ impl FirmwareFx {
         compressor: false,
         delay_time: false,
         reverb_mix: false,
+        amp: false,
     };
 
     /// Every switch on.
@@ -55,6 +65,7 @@ impl FirmwareFx {
         compressor: true,
         delay_time: true,
         reverb_mix: true,
+        amp: true,
     };
 }
 
@@ -66,7 +77,7 @@ mod tests {
     fn default_is_off_and_all_turns_every_switch_on() {
         assert_eq!(FirmwareFx::default(), FirmwareFx::OFF);
         let all = std::hint::black_box(FirmwareFx::ALL);
-        assert!(all.delay_laws && all.compressor && all.delay_time && all.reverb_mix);
+        assert!(all.delay_laws && all.compressor && all.delay_time && all.reverb_mix && all.amp);
         assert_ne!(all, FirmwareFx::OFF);
     }
 }
