@@ -14,6 +14,8 @@ mod reverb;
 mod support;
 mod tables;
 #[cfg(test)]
+mod tests_biquad_golden;
+#[cfg(test)]
 mod tests_chain;
 #[cfg(test)]
 mod tests_delay;

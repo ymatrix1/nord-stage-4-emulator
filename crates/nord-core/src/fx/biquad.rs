@@ -128,6 +128,55 @@ impl Biquad {
     }
 }
 
+/// Butterworth low pass at `fs / 4` read from the FX DSP image (`b0 b1 b2 a1 a2`, float32 words).
+///
+/// VERIFIED: PM `0x9437A` (the coefficients routine `0x120FDB` reads at `I9`), checked by
+/// `tools/fx_biquad_check.py` (`--golden` regenerates the vectors) and the test
+/// `ext40_reference_matches_the_firmware_golden_vectors`, 0 differing words. The design values are
+/// `b0 = b2 = 0.292893`, `b1 = 0.585786`, `a1 = 0`, `a2 = 0.171573` (`docs/research/fx-dsp-map.md`
+/// section 6); `b2` differs from `b0` by 7 ulp in the image, kept as found. The set at `0x9437F`
+/// is the same filter. Not a stage of the Rust chain: the master bus has no 4-biquad IIR.
+#[cfg(test)]
+pub(super) const FW_BUTTERWORTH_FS4_WORDS: [u32; 5] =
+    [0x3E95_F619, 0x3F15_F619, 0x3E95_F612, 0, 0x3E2F_B0D5];
+
+/// The DSP routine's transposed direct form II arithmetic, bit for bit (test-only reference).
+///
+/// VERIFIED: 40-bit register model of `0x120FDB` (`tools/fx_biquad_check.py`): every product and sum
+/// rounded to 32 significant bits, ties to even (`round_sig`); the stage reads and writes memory
+/// words, so the output sample and the final state are truncated to 24 significant bits. Not the
+/// render path (f64 ops, slow); [`Biquad::process`] is the fast f32 default.
+#[cfg(test)]
+pub(super) mod ext40_ref {
+    use crate::sinc::ext40::round_sig;
+
+    /// Register-format rounding: 32 significant bits, nearest even.
+    fn reg(v: f64) -> f64 {
+        round_sig(v, 32, false)
+    }
+
+    /// Memory-store truncation: upper 32 bits of the register (24 significant bits).
+    fn store(v: f64) -> f64 {
+        round_sig(v, 24, true)
+    }
+
+    /// One stage over `x` in place. `state` is `[s1, s2]` as memory words, loaded once and stored
+    /// once per call (the routine does this per block of 4 frames).
+    pub(in crate::fx) fn stage(x: &mut [f32], c: &[f32; 5], state: &mut [f32; 2]) {
+        let [b0, b1, b2, a1, a2] = c.map(f64::from);
+        let (mut s1, mut s2) = (f64::from(state[0]), f64::from(state[1]));
+        for v in x.iter_mut() {
+            let xi = f64::from(*v);
+            let y = reg(reg(b0 * xi) + s1);
+            let t = reg(reg(b1 * xi) + s2);
+            s1 = reg(t - reg(a1 * y));
+            s2 = reg(reg(b2 * xi) - reg(a2 * y));
+            *v = store(y) as f32;
+        }
+        *state = [store(s1) as f32, store(s2) as f32];
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
