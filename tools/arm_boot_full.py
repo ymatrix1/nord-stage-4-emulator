@@ -47,6 +47,9 @@ TEXT_MEASURE = (0xC001B9D0,)
 # 0x14-byte objects. The poll breaker feeds `0x3F0077` (4.1 M objects, exhausts the heap). Stub:
 # answer 0 (ASSUMED: "nothing to allocate" is a legal slave answer).
 SPI_TRANSFER = 0xC0066E64
+# VERIFIED (run): `cmp r5, #0` before the object allocation loop; r5 is the slave answer count
+# (still garbage after the stub above: -1 observed). Forced to 0 by `install_ui_stubs`.
+SPI_COUNT_CHECK = 0xC02281F0
 HIGH_PAGE = 0xFFFF0000
 
 
@@ -70,6 +73,12 @@ def install_ui_stubs(emu: ae.ArmEmu, extra: tuple[int, ...] = ()) -> None:
         return 0
 
     emu.add_stub(SPI_TRANSFER, spi_transfer)
+    emu.uc.hook_add(
+        emu._u.UC_HOOK_CODE,
+        lambda _uc, _a, _s, _u: emu.set_reg(5, 0),
+        begin=SPI_COUNT_CHECK,
+        end=SPI_COUNT_CHECK,
+    )
     for addr in (*TEXT_MEASURE, *extra):
         emu.add_stub(addr, lambda _e: 0)
     # A null font table dereference computes `0xFFFFFFFC`; give it a zero page instead of a fault.

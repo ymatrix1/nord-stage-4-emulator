@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     r = bf.boot_full(emu, ns.boot_insns)
     print(f"boot stopped pc={r.pc:#x} after {r.instructions} error={r.error!r}", flush=True)
     emu.install_dsp_ports()
-    layer = ab.construct_organ_layer(emu)
+    layer = ab.construct_organ_layer(emu, dispatcher=ab.dispatcher(emu))
     ids = load_ids(ns.params, ns.filter)
     rows = sweep(emu, layer + STORE_OFFSET, layer + SCRATCH_OFFSET, ids, (1, 2))
     text = rows_csv(rows)
