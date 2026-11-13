@@ -147,6 +147,68 @@ So the velocity law is `X(velocity)` (key- and class-independent here) plus the 
 
 **Stop point.** `piano/velocity_curve.rs` computes `X`, `T`, the stroke level offset from a `.npno` record and the stroke choice for a given threshold list. A level for any note from the parsed `.npno` alone additionally needs the threshold conversion (binder `0xC00A3988`), the multi-stage selection of the grand / upright formats and the three per-key bytes. The model was therefore **not** wired into `PianoLayer`; the default render (`render_hash 25baa387...`) is untouched.
 
+## 9. The full chain from the file (VERIFIED run; opt-in model `piano/npno_level.rs`)
+
+Every field below was matched against the structures the firmware builds from the same `.npno` (backup offsets; the loader reads them `0x84` further on in the device layout).
+
+| Quantity | Source in the file | Evidence |
+|---|---|---|
+| Root key of a note | `keymap[note]` at `0xB8` (128 bytes, `0xFF` unmapped) | block index of the firmware key table = root |
+| Records per root | big-endian halfword block at `0x648`: `hw[2]` = total records, `hw[3 + root]` = records of that root; records follow in ascending root order | firmware counts `P + 0x14 + 12 * root`; lists equal for 3 of 3 sounds |
+| Stroke layer | record byte `4`, `& 3` (0 / 1 / 2) | 402 of 402 Bright Grand records |
+| Level offset `rec[0x5E]` | record big-endian `i16` at `0x34` | 38 of 38 Clavinet records, all sweeps |
+| List threshold | record byte `0x74` (the loader copies it to `rec + 0x5B`; `0xC00AB2CC`, binder `0xC00A3C28`) | every `(record, threshold)` pair of the firmware key blocks of Clavinet, Bright Grand and Amber Upright (1547 pairs) equals the file byte |
+| Record threshold byte `F` | record byte `0x33` (`rec + 0x5A`) | used by the layer-1 pre-selection |
+| `b1[note]` | signed byte at `0x138 + note` | firmware `P2 + note + 0xF3` |
+| `b2[note]` | signed byte at `0x3B8 + note` (all zero in the three sounds) | firmware `P2 + note + 0x3F3` |
+| `b3` | signed byte at `0x438` (40 / 49 / 49) | firmware `P2 + 0x473` |
+
+The earlier "threshold differs from the file by -8" finding was a misreading: thresholds are the byte at `0x74`, not the halfword at `+4`. `b1` and `b2` are indexed by the **note** (`this + 0x10`), not by the root (the level call argument is the root): with the root the Amber Upright disagreed at notes 72 and 84, with the note all 24 key-sweep cases of the three sounds match (`b1 + b2 + b3 == 40 / 49 / 49 + b1[note]`).
+
+**Selection (VERIFIED).** The firmware starts several voices per note-on; each runs the selector `0xC00A2A54` with position `p = clamp(T(velocity) + this[0x34], 0, 249)` and picks, in the list of its layer (`this[0x20]`) for the note's root, the record with the largest threshold not above `p` (the first record when none qualifies):
+
+| Voice | layer | `this[0x34]` bias | seen in |
+|---|---|---|---|
+| main voice (`this[0x4C] = 1`) | 0 | 0 | every sound (the only voice of the Clavinet) |
+| extra first voice (`this[0x4C] = 4`) | 0 | 20 | Bright Grand, Wurlitzer |
+| extra first voice | 1 | 0 | Amber Upright |
+
+So the first level call of the earlier sweeps (section 6 and 7) was the extra voice: the stroke offsets seen there for the grand (bias 20) and the upright (layer 1) are reproduced by exactly these parameters (146 of 146 sweep runs, now computed from the file lists). Which voices a sound gets (bias 20 or layer 1) follows the layers present in the file (grand: layers 0 and 2; upright: 0, 1, 2) but the exact trigger was not decoded; for the model they are caller supplied.
+
+**Validation with new random cases** (24 random notes 30..100 and velocities 1..127 per sound, a state snapshot per case, all level calls recorded; `tools/arm_piano_load.py` hooks):
+
+| Sound | Main voice (last call) | First voice |
+|---|---|---|
+| Clavinet D6 | 24 of 24 | none (single voice) |
+| Bright Grand | 24 of 24 | 24 of 24 as `bias 20` or `main` (identical where the two lists agree) |
+| Amber Upright | 24 of 24 | 23 of 24 (`layer 1` or `main`; 1 case matched no candidate) |
+| Wurlitzer 1 (class 3) | 24 of 24 | 24 of 24 as `bias 20` or `main` |
+
+Main voice: **96 of 96**; extra voices 71 of 72. The unmatched upright case was not analysed.
+
+**Rust.** `piano/npno_level.rs` parses the fields above from the raw `.npno` bytes (`NpnoLevel::parse`), `main_voice_q23(note, velocity)` returns the Q23 amplitude of the main voice and `amplitude_q23(note, velocity, layer, bias)` any voice. It is validated by synthetic images that carry the root-60 lists of the three swept sounds (`(rec[0x5E], threshold)` and key sums, derived values only) and reproduces the swept amplitudes of all three sounds (`X_SWEEP` velocities for the Clavinet, every 4th velocity plus 127 for the others). `NpnoSound::firmware_level` holds it for `.npno` sounds and `PianoLayer::firmware_velocity_level` (default `false`) switches the note-on gain to `main_voice_q23(note, v) / main_voice_q23(note, 127)` (the existing touch / compressor / una corda scaling stays; the multisample velocity shaping is skipped because the firmware law already contains the hammer dynamics). **It was not made the default**: the model is only the main voice's level (the extra voices and the absolute scale are not mixed) and the SMP loudness chain after the level word is not part of the engine, so the default render and its hash are unchanged.
+
+**Open.** The trigger of the extra voices (bias 20 / layer 1 / layer 2), the one unmatched upright case, the other formats (version words `2 / 5`, `[this + 0x20] != 0` branches), `b2` (zero in all swept sounds, source assumed from the loader copy `0xC00B8848`), and the mapping from the Q23 level word to the engine's output gain.
+
+## 10. Extra voices, gain word, and the decision on the default (VERIFIED run / EMPIRICAL)
+
+**Extra voice rule (VERIFIED, 96 of 96 random notes on four sounds).** The file byte `0x44` (class) decides whether a note-on starts a first extra voice: classes 1, 2, 3, 5, 6 (EGrand, EP1, Wurlitzer 1, Bright / Velvet Grand, Amber Upright) do, classes 4, 7, 14, 15, 16 (Clavinet D6, harpsichord, DigiGrand, Ballad EP, Marimba, Vibraphone) have the main voice only. The extra voice is on **layer 1** when the root has layer-1 strokes (Velvet Grand, Amber Upright), at the position `F` = record byte `0x33` of the main voice's record (the two-stage selection of `0xC00A2A54`: the plain velocity position matched only 22 of 24 upright notes, `F` matches 24 of 24, which also resolves the one unmatched case of section 9); otherwise on layer 0 at `T + 20` (EGrand, Bright Grand, EP1, Wurlitzer; the `+20` is `this[0x34]`, the voice object field `+8`). `NpnoLevel::voices(note, velocity)` returns the voice levels in call order (extra voice first); full-note lists equal the firmware's level calls 96 of 96 (Clavinet 24, Bright Grand 24, Amber Upright 24, Wurlitzer 24). All 38 factory files carry the version word `0x464`, so the firmware branches for the words 2 and 5 never run on them (not modelled); `this[0x20] != 0` occurs only as the extra layer-1 voice.
+
+**Gain word (VERIFIED, two velocities).** The ARM writes the float `level_q23 / 2^23` of a voice to the SMP voice record (DM `0x9252A`; Clavinet D6 velocity 20: `0x3CC68BC0` = 0.0242 = 203311 / 2^23, velocity 100: `0x3E800000` = 0.25 = 2097152 / 2^23). The SMP scales the decoded stroke by that gain (`smp-voice.md`: unity gain gives `bus = y << 17`, engine amplitude `bus / 2^30` = `y / 8192`), so the voice gain on the engine's integer PCM (`y / 8192`) is `level_q23 / 2^23`, absolute, not relative to velocity 127. Further SMP-side slews (the other float words of the record, `0.979`, `1.0`) were not traced; the master and mix scaling after the bus are those of the engine.
+
+**Engine opt-in.** `NpnoSound::firmware_velocity_gain` is now this absolute main-voice gain. The engine still plays one stroke chosen by its own zones; playing the extra voice needs a second voice with its own stroke (the record index is in `VoiceLevel::record`) and was not done, so the opt-in underestimates sounds of the two-voice classes.
+
+**Emulator against hardware (`tools/emu_vs_hw.py --only piano_dry`, Velvet Grand, A:61, 25 s, local video; variant `firmware-piano-level` = `ns4 render-patch --firmware-piano-level`):**
+
+| Variant | RMS dB (emu - hw) | centroid Hz | 6-band max | score |
+|---|---|---|---|---|
+| default | +11.8 | -61 | +6.1 (air, excluded) / +5.6 brilliance | 3.00 |
+| firmware-piano-level | +6.5 | -64 | +5.5 brilliance | 3.02 |
+
+The firmware gain brings the level 5.3 dB closer to the hardware recording (the performance velocity is unknown and the audio is lossy YouTube audio, so the absolute value is shape evidence only); the spectral shape is unchanged.
+
+**Decision: not the default.** The criteria were main voice, extra voices and the gain mapping verified across sounds. The levels (main + extra voices, 96 of 96) and the gain word are verified, but the engine does not yet play the extra voice (a second stroke per note on five classes), the SMP slews after the level word are not modelled, and the legacy render golden covers velocity shaping that the firmware law replaces; flipping the default would change every `.npno` piano render without the extra voice that the same law requires. The switch stays opt-in (`PianoLayer::firmware_velocity_level`, `ns4 render-patch --firmware-piano-level`); `render_hash` is unchanged.
+
 ## Implications
 
 - The chain load -> select (bind) -> note-on -> voice start -> level method now runs on real firmware code with two library stubs and one DSP-ready hook; velocity reaches the level method as `X` and as the stroke record choice.

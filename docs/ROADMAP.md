@@ -105,6 +105,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Hardware-parity sampler interpolation: exact SMP 6-tap x 256-phase Q31 kernel (`piano/q31_kernel.rs`, Hamming-windowed sinc, bit-exact closed form) behind `SampleInterp`, plus the SMP unpacker/predictor model (`piano/smp_unpack.rs`)
 - [x] SMP compressed-voice replay on the oracle: record layout of the `0x1C07D8` loop decoded, real `.npno` pages (mono and stereo, widths 5..12, orders 1..3) played through the SMP image and equal to the Rust model bit for bit (`piano/smp_voice.rs`, `piano/smp_page.rs`, `docs/research/smp-voice.md`); `SmpKernel::interpolate_hw` is the integer-exact variant
 - [x] Firmware velocity -> level law traced by running the real firmware with a stubbed sound library (`tools/arm_piano_load.py`): `n = rec[0x5E] + 2X + 60 - sum(b)`, `X(velocity)` table and `level_q23` verified; opt-in model `piano/velocity_level.rs` (not in the default render; [research](research/piano-sound-load.md))
+- [x] Level of any note/velocity computed from the parsed `.npno` (`piano/npno_level.rs`): stroke selection, `rec[0x5E]`, `b1..b3`, `X`; 96 of 96 random main-voice cases on four sounds; opt-in `PianoLayer::firmware_velocity_level` / `ns4 render-patch --firmware-piano-level` (default off, render unchanged; extra-voice rule and gain word verified; [research](research/piano-sound-load.md))
 
 ---
 
@@ -210,7 +211,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] B3 pitch ladder (bit exact) and wheel tables as opt-in `ToneWheelSource::B3Wheels` ([organ-engine](specs/organ-engine.md) s3.1.6)
 - [x] Vox chord end to end in the oracle (`sharc-pass`)
 - [x] B3: per-key footage weights and per-wheel amplitudes from the captured key-down, frame rate settled ([organ-keydown-weights](research/organ-keydown-weights.md))
-- [ ] B3: processor tail (`DM 0x95471..0x954E5` constructor taps, dry gain writer); then make `B3Wheels` the B3 default (oracle chord is 12.7 to 31.8 dB below the Rust dry sum)
+- [x] B3: processor tail as an oracle-measured amplitude response (`b3_tail.rs`, [organ-b3-tail](research/organ-b3-tail.md))
+- [ ] B3: dry gain writer, tail phase, multi-write `A`, drawbar sweep; then make `B3Wheels` the B3 default (3 chords: 10 / 8 / 6 of 13 / 13 / 11 lines within 1 dB; hardware clip mid band -11.9 dB)
 - [x] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with the captured key-down weights (four footage rows per key, no velocity), 9.9 cent offset explained ([organ-keydown-weights](research/organ-keydown-weights.md))
 - [ ] Vox default: oscillator start phases (two chord lines 3.4 / 2.1 dB off), sine bank rows 84..95, amp stage and brightness (`ns4-58cz`)
 - [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
