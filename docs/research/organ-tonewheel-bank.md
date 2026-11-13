@@ -8,6 +8,8 @@
 
 Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by a command in this note, **EMPIRICAL** = structure or fit, **ASSUMED** = reading of a purpose.
 
+> **Update (2026-11-13):** the mix stage was driven with the real record layout in [organ-oracle-audio](organ-oracle-audio.md): all **92** weights (elements 0..183) are used (the "91 pairs, 92nd spare" reading of s5 came from a synthetic record), the weights/gains/level layout is decoded and a Python model reproduces the oracle chain to 1.8e-5. The x table coefficients are exactly `-10^(dB/20)` for -19, -36, -44, -48 dB.
+
 ## 1. Short answer
 
 | Question | Result | Status |

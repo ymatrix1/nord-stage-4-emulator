@@ -15,70 +15,11 @@
 //! --dump ADDR:COUNT print data words after the last call
 //! ```
 //! Numbers accept `0x` hex or decimal; `ADDR` is a normal-word data address.
-use nord_sharc::core::Core;
+use nord_sharc::harness::{boot_pno, call_once, parse_number, parse_script, register_code};
 use std::process::ExitCode;
 
 /// Words of one output array per call: two frames of `0xB8`.
 const ARRAY_WORDS: u32 = 0x170;
-
-fn parse_number(s: &str) -> Option<u64> {
-    match s.strip_prefix("0x") {
-        Some(hex) => u64::from_str_radix(hex, 16).ok(),
-        None => s.parse().ok(),
-    }
-}
-
-fn register_code(name: &str) -> Option<u8> {
-    let group = match name.get(..1)? {
-        "R" => 0,
-        "I" => 1,
-        "M" => 2,
-        "L" => 3,
-        "B" => 4,
-        _ => return None,
-    };
-    let n: u8 = name.get(1..)?.parse().ok().filter(|n| *n < 16)?;
-    Some((group << 4) | n)
-}
-
-/// Pokes of a script: `(call, address, value)` sorted by call.
-fn parse_script(text: &str) -> Result<Vec<(u64, u32, u32)>, String> {
-    let mut out = Vec::new();
-    for line in text.lines() {
-        let line = line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        let f: Vec<&str> = line.split_whitespace().collect();
-        let [call, addr, value] = f.as_slice() else {
-            return Err(format!("bad script line: {line}"));
-        };
-        out.push((
-            parse_number(call).ok_or("bad call")?,
-            parse_number(addr).ok_or("bad address")? as u32,
-            parse_number(value).ok_or("bad value")? as u32,
-        ));
-    }
-    out.sort_by_key(|p| p.0);
-    Ok(out)
-}
-
-/// Runs the routine once; returns the number of steps or an error text.
-fn call_once(core: &mut Core, call: u32, ret: u32, limit: u64) -> Result<u64, String> {
-    core.pc = call;
-    let start = core.steps;
-    while core.pc != ret {
-        if core.steps - start > limit {
-            return Err(format!(
-                "no return after {limit} steps (pc 0x{:x})",
-                core.pc
-            ));
-        }
-        core.step()
-            .map_err(|f| format!("fault at pc 0x{:x}: {f:?}", core.pc))?;
-    }
-    Ok(core.steps - start)
-}
 
 fn run(args: &[String]) -> Result<String, String> {
     let mut image = None;
@@ -136,21 +77,7 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let image = image.ok_or("usage: sharc-bank IMAGE [options]; see the module docs")?;
     let data = std::fs::read(&image).map_err(|e| format!("{image}: {e}"))?;
-    let mut core = Core::new(&data);
-    core.pc = entry;
-    for (addr, value) in [
-        (0x28ac_0380u32, 1u32),
-        (0x3108_d008, 5),
-        (0x3108_c06c, 0x400),
-        (0x3108_c00c, 4),
-    ] {
-        core.preset_device(addr, value);
-    }
-    core.set_flag_input(1, true);
-    if let Some(f) = core.run(boot) {
-        return Err(format!("boot fault: {f:?}"));
-    }
-    core.mode1 |= mode1;
+    let mut core = boot_pno(&data, entry, boot, mode1)?;
     for (code, value) in registers {
         core.write_ureg(code, value);
     }
@@ -213,28 +140,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn script_lines_parse_and_sort() {
-        let p = parse_script("5 0x10 0x20 # c\n\n1 0x11 7\n").unwrap();
-        assert_eq!(p, vec![(1, 0x11, 7), (5, 0x10, 0x20)]);
-        assert!(parse_script("1 2\n").is_err());
-    }
-
-    #[test]
-    fn register_names_map_to_universal_codes() {
-        assert_eq!(register_code("M10"), Some(0x2A));
-        assert_eq!(register_code("X1"), None);
-    }
-
-    #[test]
     fn a_missing_image_is_an_error() {
         assert!(run(&["/nonexistent/image.bin".to_string()]).is_err());
-    }
-
-    #[test]
-    fn a_call_that_never_reaches_the_stop_pc_reports_it() {
-        let image = vec![0u8; 0x24_0000 + 16];
-        let mut core = Core::new(&image);
-        let r = call_once(&mut core, 0x120000, 0x7FFFFF, 50);
-        assert!(r.is_err(), "{r:?}");
     }
 }

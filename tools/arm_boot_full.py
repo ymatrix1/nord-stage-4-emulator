@@ -14,7 +14,8 @@
     uv run --with unicorn python tools/arm_boot_full.py target/fw_unpacked/bank0_CODE.bin \
         target/fw_unpacked/bank0_SRAM.bin --insns 3000000000
 
-Evidence and limits: `docs/research/arm-organ-messages.md` section 9.
+Evidence and limits: `docs/research/arm-organ-messages.md` section 9. `boot_full` stops after a
+fixed instruction budget; `arm_steady.boot_to_main_loop` stops at the main event loop instead.
 """
 
 from __future__ import annotations

@@ -42,6 +42,7 @@ def main():
     ap.add_argument('--rand', action='append', default=[])
     ap.add_argument('--code', default='122600:122900', help='short-word range copied from the image (must be free in the probe)')
     ap.add_argument('--target', default='21489', choices=['21489', '21571'], help='simulator (21571 = SHARC+, ~140 s start-up)')
+    ap.add_argument('--rand-ptr', default=None, help='LO:HI: fill the --rand ranges with addresses in this range instead of random words')
     ap.add_argument('--cases', type=int, default=20)
     ap.add_argument('--mode1', type=lambda s: int(s, 16), default=0xE10000, help='MODE1 at the call')
     ap.add_argument('--seed', type=int, default=1)
@@ -54,7 +55,7 @@ def main():
     rnd = random.Random(a.seed)
     names = cd.layout()
     scr = [rnd.getrandbits(32) for _ in range(cd.SCR_WORDS)]
-    lines = ['scr ' + ' '.join('%08X' % w for w in scr)]
+    lines = (['plus'] if a.target == '21571' else []) + ['scr ' + ' '.join('%08X' % w for w in scr)]
     code_lo, code_hi = rng(a.code)
     code = mem[code_lo * 2:code_hi * 2]
     parcels = struct.unpack('<%dH' % (len(code) // 2), code)
@@ -76,7 +77,12 @@ def main():
         chunks = ''
         for r in a.rand:
             lo, hi = rng(r)
-            chunks += ' | %x %s' % (lo, ' '.join('%08X' % rnd.getrandbits(32) for _ in range(hi - lo)))
+            if a.rand_ptr:
+                plo, phi = rng(a.rand_ptr)
+                words = ['%08X' % rnd.randrange(plo, phi) for _ in range(hi - lo)]
+            else:
+                words = ['%08X' % rnd.getrandbits(32) for _ in range(hi - lo)]
+            chunks += ' | %x %s' % (lo, ' '.join(words))
         lines.append(CALL_PARCELS + ' ' + ' '.join('%08X' % w for w in st) + chunks)
     cases = os.path.join(a.work, 'rcases.txt')
     open(cases, 'w').write('\n'.join(lines) + '\n')

@@ -95,7 +95,9 @@ class ToneBank:
 # Closed-form x waveform of the bank (docs/research/organ-tonewheel-bank.md section 1), the table
 # the Rust engine builds (crates/nord-core/src/organ/firmware_bank.rs). The firmware table itself
 # is local-only; golden vectors use this synthetic copy so no firmware data is committed.
-X_COS_COEFFS = (-0.1122, -0.01585, -0.00631, -0.00398)
+# VERIFIED: -10^(dB/20) for the levels -19, -36, -44, -48 dB; fit of the firmware table x
+# (docs/research/organ-oracle-audio.md section 4), max error 7.8e-8.
+X_COS_COEFFS = tuple(-(10 ** (db / 20)) for db in (-19.0, -36.0, -44.0, -48.0))
 GOLDEN_INCS = (0x02000000, 0x02468ACF, 0xE0000001, 0x0633E000, 0x00001235, 0x7FFFFFFF)
 GOLDEN_FRAMES = 24
 

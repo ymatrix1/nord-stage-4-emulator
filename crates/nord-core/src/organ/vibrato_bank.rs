@@ -94,17 +94,58 @@ pub fn copy_ratio(w: usize, c: usize, detuned: bool) -> f64 {
     }
 }
 
-/// Mix weights of the two copies, from the firmware group gains 5 and 6 normalised to unit sum.
+/// Number of wheels the firmware mix stage weights: index `i` feeds elements `2 i` and `2 i + 1`.
 ///
-/// The gains are VERIFIED ([`GAINS_EXACT`], [`GAINS_DETUNED`]); that groups 5 and 6 weight the
-/// two x copies and groups 7, 8 another path (not modelled) is ASSUMED, as is the normalisation
-/// that keeps the level equal across the vibrato switch (the raw gains would raise the detuned
-/// case by up to 3.5 dB). Exact: `[1, 0]` (the identical second copy is not run), detuned
-/// `[0.5, 0.5]`.
+/// VERIFIED: poking the real mix stage `0x12268F` in the oracle (`sharc-organ`,
+/// `docs/research/organ-oracle-audio.md` section 3): weight index 0..=91 each add `x[2 i]` to
+/// lane x and `x[2 i + 1]` to lane y with weight 1.0; the old "91 pairs, the 92nd is a spare"
+/// reading came from a synthetic record whose scalar tail was zero.
+pub const BANK_WHEELS: usize = 92;
+
+/// Conversion of an ARM group gain (24-bit integer) to the float the mix stage multiplies by.
+///
+/// ASSUMED: `value / 2^23` (so `0x600000` is 0.75). The oracle shows that the DSP words are plain
+/// floats with 1.0 as unity; the ARM-side conversion `0xC001FF18` was not decoded further.
+pub fn gain_value(raw: u32) -> f32 {
+    raw as f32 / 8_388_608.0
+}
+
+/// Lane matrix `[[x <- copy 0, x <- copy 1], [y <- copy 0, y <- copy 1]]` of the mix stage for the
+/// group gains `[g5, g6, g7, g8]`: `out_x = g5 tx + g8 ty`, `out_y = g6 ty + g7 tx`, where
+/// `tx`, `ty` are the weighted sums of copy 0 (even elements) and copy 1 (odd elements).
+///
+/// VERIFIED: steady-state oracle runs with `(g5, g6, g7, g8) = (0.75, 0.75, 0.375, 0.375)` give
+/// `(0.750, 0.375)` for a unit in copy 0 and `(0.375, 0.750)` for a unit in copy 1, and
+/// `(1, 0, 1, 0)` gives `(1, 1)` and `(0, 0)`; `tools/organ_oracle_audio.py verify` reproduces a
+/// 16,384-frame chord to 1.8e-5 relative rms in both modes. Which DSP word each gain index lands
+/// on (`0x959AF`, `0x959B0`, `0x95B3F`, `0x95B3E`) is VERIFIED by poking.
+pub fn lane_matrix(gains: [u32; 4]) -> [[f32; 2]; 2] {
+    let [g5, g6, g7, g8] = gains.map(gain_value);
+    [[g5, g8], [g7, g6]]
+}
+
+/// Mix weights of the two copies for a mono output: the mean of the two lanes of [`lane_matrix`].
+///
+/// Exact: `[1, 0]` (lane x = lane y = copy 0). Detuned: `[0.5625, 0.5625]` (lanes
+/// `0.75 a + 0.375 b` and `0.375 a + 0.75 b`, so the detuned ensemble is 1.02 dB louder than the
+/// exact one for equal copies; the old normalised `[0.5, 0.5]` hid that). VERIFIED arithmetic
+/// ([`lane_matrix`]); the mono mean is a modelling choice, the stereo spread is not routed.
 pub fn copy_weights(detuned: bool) -> [f32; 2] {
     let g = if detuned { GAINS_DETUNED } else { GAINS_EXACT };
-    let (a, b) = (g[0] as f32, g[1] as f32);
-    [a / (a + b), b / (a + b)]
+    let m = lane_matrix(g);
+    [(m[0][0] + m[1][0]) / 2.0, (m[0][1] + m[1][1]) / 2.0]
+}
+
+/// One-pole smoothing factor of the mix-stage gain and level states: `s = 0.01 t + 0.99 s`.
+///
+/// VERIFIED: the constants `0x3C23D70A` (0.01) and `0x3F7D70A3` (0.99) sit at DM `0x959AB..0x959AE`
+/// and the states move exactly so per frame (oracle, one call with sentinel words); the steady
+/// level is 0.999983 of the target (float rounding of the fixed point).
+pub const SMOOTH_KEEP: f32 = 0.99;
+
+/// Advances a mix-stage state one frame towards `target` (post-update value is the one used).
+pub fn smooth(state: f32, target: f32) -> f32 {
+    (1.0 - SMOOTH_KEEP) * target + SMOOTH_KEEP * state
 }
 
 #[cfg(test)]
@@ -183,9 +224,28 @@ mod tests {
         assert_eq!(copy_ratio(5, 1, false), 1.0);
         let r = copy_ratio(1, 1, true);
         assert!((cents(r, 1.0) - f64::from(DETUNE_CENTS[3])).abs() < 1e-9);
-        assert_eq!(copy_weights(false), [1.0, 0.0]);
-        assert_eq!(copy_weights(true), [0.5, 0.5]);
+        assert!((copy_weights(false)[0] - 1.0).abs() < 1e-6 && copy_weights(false)[1] == 0.0);
+        assert_eq!(copy_weights(true), [0.5625, 0.5625]);
         assert!((f64::from(GAINS_DETUNED[0]) / f64::from(GAINS_EXACT[0]) - 0.75).abs() < 1e-6);
         assert!((f64::from(GAINS_DETUNED[2]) / f64::from(GAINS_EXACT[0]) - 0.375).abs() < 1e-6);
+    }
+
+    #[test]
+    fn lane_matrix_reproduces_the_oracle_steady_state() {
+        let m = lane_matrix(GAINS_DETUNED);
+        assert_eq!(m, [[0.75, 0.375], [0.375, 0.75]]);
+        let e = lane_matrix(GAINS_EXACT);
+        assert!((e[0][0] - 1.0).abs() < 1e-6 && (e[1][0] - 1.0).abs() < 1e-6);
+        assert_eq!((e[0][1], e[1][1]), (0.0, 0.0));
+    }
+
+    #[test]
+    fn smoother_approaches_the_target_like_the_firmware_state() {
+        let mut s = 0.0f32;
+        for _ in 0..4000 {
+            s = smooth(s, 1.0);
+        }
+        assert!((s - 1.0).abs() < 1e-4, "{s}");
+        assert!((smooth(0.0, 1.0) - 0.01).abs() < 1e-6);
     }
 }

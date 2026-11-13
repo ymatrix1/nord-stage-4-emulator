@@ -171,3 +171,7 @@ To add a module (ORG tonewheel, PNO string, FX reverb): write the scenario with 
 2. Decode the second FIR pass (mask words) with an input that makes it observable (two-position scenario).
 3. ~~Add Stage A (voice start, rate and gain slewing: `0x1C07B0`, ISR step 3) to a scenario so gain and step come from firmware, not from the script.~~ Done in [sy-smp-audio.md](sy-smp-audio.md): real FIFO messages and audio interrupt, gain and step from the firmware, 240 of 240 frames bit-exact with the oracle table.
 4. ORG tonewheel and FX scenarios on the same format, starting from the `sharc-org` pass entries.
+
+## See also
+
+The organ tone source (PNO Core1 bank `0x122620` + mix stage `0x12268F`) has its own oracle-versus-engine note with the `sharc-organ` harness: [organ-oracle-audio](organ-oracle-audio.md).
