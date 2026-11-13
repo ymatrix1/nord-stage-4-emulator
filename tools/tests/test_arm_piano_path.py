@@ -121,3 +121,32 @@ def test_return_address_detection_and_stack_scan() -> None:
     stack = {0x100: pp.LOAD_BASE + 8, 0x104: 7, 0x108: pp.LOAD_BASE + 4}
     got = pp.stack_return_candidates(code, lambda a: stack.get(a, 0), 0x100, 0x10)
     assert got == [(0, pp.LOAD_BASE + 4), (8, pp.LOAD_BASE)]
+
+
+def test_level_table_formula_and_octave_reduction() -> None:
+    lt = pp.synthetic_level_table()
+    assert len(lt) == 61
+    assert lt[0] == 0x7FFFFF
+    assert lt[60] == 0x400000
+    assert pp.level_table_error(lt) == 0
+    assert pp.level_q23(0, lt) == 0x7FFFFF
+    assert pp.level_q23(-5, lt) == 0x7FFFFF
+    assert pp.level_q23(60, lt) == 0x400000
+    assert pp.level_q23(61, lt) == lt[1] >> 1
+    assert pp.level_q23(120, lt) == 0x400000 >> 1
+    # 30 steps = half an octave = -3.01 dB
+    assert pp.level_q23(30, lt) / 0x7FFFFF == pytest.approx(2**-0.5, abs=1e-6)
+
+
+def test_level_table_reads_the_words_at_the_table_address() -> None:
+    lt = pp.synthetic_level_table()
+    off = pp.LEVEL_TABLE - pp.LOAD_BASE
+    buf = bytearray(off + 4 * 61)
+    struct.pack_into("<61i", buf, off, *lt)
+    assert pp.level_table(bytes(buf)) == lt
+
+
+def test_pitch_cents_terms() -> None:
+    assert pp.pitch_cents(60, 60, 0, 0, 0, 0) == -400
+    assert pp.pitch_cents(64, 60, 0, 0, 0, 0) == 0
+    assert pp.pitch_cents(64, 60, 7, 3, 5, -2) == -1
