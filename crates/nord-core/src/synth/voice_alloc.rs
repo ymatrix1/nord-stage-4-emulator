@@ -115,6 +115,8 @@ impl SynthLayer {
             note,
             velocity: vel_norm,
             gain: gain.clamp(0.0, 1.0),
+            gain_target: gain.clamp(0.0, 1.0),
+            gain_state: self.voices[idx].gain_state,
             freq_hz: glide_from,
             target_freq_hz: freq,
             fenv: 0.0,

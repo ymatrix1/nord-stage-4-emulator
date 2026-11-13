@@ -1,11 +1,15 @@
 //! Per-sample rendering of `SynthLayer`: LFO, envelopes, oscillators, filter and mix.
 
+use super::hw_saw::saw_wave;
 use super::*;
 
 impl SynthLayer {
     /// Renders a single stereo frame `[left, right]` across all 16 polyphonic voices.
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        if self.gain_dezipper {
+            self.control_tick();
+        }
 
         // 1. Advance LFO
         self.lfo_phase = (self.lfo_phase + TAU * self.lfo_rate_hz * inv_fs) % TAU;
@@ -83,6 +87,12 @@ impl SynthLayer {
         };
         let weak = UNISON_WEAK_CHANNEL_GAIN;
         let pan_norm = 1.0 / (1.0 + weak * weak).sqrt();
+
+        let dezip_pole = if self.gain_dezipper {
+            gain_pole_for(self.sample_rate)
+        } else {
+            0.0
+        };
 
         for v in &mut self.voices {
             if !v.active {
@@ -214,6 +224,7 @@ impl SynthLayer {
                             let t_k = v.uni_phase[k];
                             let s_k = Self::render_va(
                                 self.waveform,
+                                self.saw_model,
                                 self.supersaw_detune,
                                 self.pulse_width,
                                 self.lfo_dest,
@@ -235,6 +246,7 @@ impl SynthLayer {
                         (
                             Self::render_va(
                                 self.waveform,
+                                self.saw_model,
                                 self.supersaw_detune,
                                 self.pulse_width,
                                 self.lfo_dest,
@@ -318,6 +330,7 @@ impl SynthLayer {
                     } else {
                         let va = Self::render_va(
                             self.waveform,
+                            self.saw_model,
                             self.supersaw_detune,
                             self.pulse_width,
                             self.lfo_dest,
@@ -368,7 +381,12 @@ impl SynthLayer {
             };
             let amp_vel = (1.0 - self.amp_velocity.clamp(0.0, 1.0))
                 + self.amp_velocity.clamp(0.0, 1.0) * v.velocity;
-            let env_gain = v.amp_env * amp_vel * v.gain * 0.25;
+            let voice_gain = if self.gain_dezipper {
+                v.smoothed_gain(dezip_pole)
+            } else {
+                v.gain
+            };
+            let env_gain = v.amp_env * amp_vel * voice_gain * 0.25;
             mix_l += filtered_l * env_gain;
             if let Some(osc_r) = raw_osc_r {
                 let filtered_r = if self.filter_on {
@@ -396,6 +414,7 @@ impl SynthLayer {
     #[inline]
     fn render_va(
         waveform: VaWaveform,
+        saw_model: SawModel,
         supersaw_detune: f32,
         pulse_width: f32,
         lfo_dest: LfoDestination,
@@ -408,7 +427,7 @@ impl SynthLayer {
         supersaw_phases: &mut [f32; 7],
     ) -> f32 {
         match waveform {
-            VaWaveform::Saw => (2.0 * t - 1.0) - poly_blep(t, dt),
+            VaWaveform::Saw => saw_wave(saw_model, t, dt),
             VaWaveform::SuperSaw => {
                 let mut sum = 0.0f32;
                 let detune_scale = supersaw_detune.clamp(0.0, 1.0);
@@ -416,7 +435,7 @@ impl SynthLayer {
                     let f_osc = eff_freq * (1.0 + det * detune_scale * 0.08);
                     let dt_i = (f_osc * inv_fs).clamp(1e-5, 0.49);
                     let p_i = supersaw_phases[i];
-                    let saw = (2.0 * p_i - 1.0) - poly_blep(p_i, dt_i);
+                    let saw = saw_wave(saw_model, p_i, dt_i);
                     sum += saw;
                     supersaw_phases[i] = (p_i + dt_i) % 1.0;
                 }

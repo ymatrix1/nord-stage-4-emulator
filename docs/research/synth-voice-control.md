@@ -119,8 +119,8 @@ Comparison with `docs/specs/synth-engine.md` s3: the spec's PolyBLEP is one incr
 
 ## 8. Rust parity to-do (`crates/nord-core/src/synth/`, not edited here)
 
-1. **VA saw** (`synth/`, spec s3): replace the one-increment PolyBLEP by the model of section 5 (`d(t)`, width two increments, falling orientation, `g(inc)` fade above 0.1152 cycles per sample). Test against the 512-point grid of `tools/synth_saw_model.py`. Pulse and triangle shapes: ASSUMED to be sums or shifted copies of the same helper (`R10` is a phase offset, `R6` an amplitude); verify the two-call stage `0x1215FB` and a pulse-width stage in the oracle before changing them.
-2. **Voice gain smoothing**: one-pole `s' = t + 0.979 (s - t)` per output frame on the voice gain (0.98 ms at 48 kHz). Control updates at 1 kHz (timer irq 22, ASSUMED 1 ms).
+1. **VA saw** (done, opt-in `SawModel::Firmware`, spec s3.1): replace the one-increment PolyBLEP by the model of section 5 (`d(t)`, width two increments, falling orientation, `g(inc)` fade above 0.1152 cycles per sample). Test against the 512-point grid of `tools/synth_saw_model.py`. Pulse and triangle shapes: ASSUMED to be sums or shifted copies of the same helper (`R10` is a phase offset, `R6` an amplitude); verify the two-call stage `0x1215FB` and a pulse-width stage in the oracle before changing them.
+2. **Voice gain smoothing** (done, opt-in `SynthLayer::gain_dezipper`, `synth/gain_dezip.rs`): one-pole `s' = t + 0.979 (s - t)` per output frame on the voice gain (0.98 ms at 48 kHz). Control updates at 1 kHz (timer irq 22, ASSUMED 1 ms).
 3. **Filter placement**: the filter is a per-strip stage selected by strip word 1; the four siblings `0x12566E, 0x1257B2, 0x125913, 0x125A50` are the type variants (the ARM sends only `0x12566E` in the idle state; the selection by `Edt_Syn_kFltType` was not observed). Model after extracting the equations (section 9, item 1). Until then keep the ZDF ladder of the spec, but note the firmware **clips every stage** (`CLIP f10 BY f8` per pole) and normalises with `RSQRTS`.
 4. **Coefficient tables** at ORG core 2 `DM(0xB0D0F)` and `DM(0xB1015)` (8-bit index, 24-bit fraction, linear interpolation): first families, 0..127: `A[i] = 1.0` for `i < 64`, `A[i] = 0.99 (128 - i) / 64` for `64 <= i < 128` (max error 2.1e-7); `B[i] = 0.70710678 (128 - i) / 64` for `38 <= i < 128` (max error 4.7e-7), `B[0] = 2.0` falling smoothly to `B[37] = 1.01086` (no closed form fitted); second families from 129: `A2[j] = 1.98 (128 - j) / 128` (max error 3.4e-7) and `B2[j]` rising from `0.0019885` (ratio per step falls from 1.0594 to 1.022) to `1.0` at `j = 128` with a linear last 24 steps of 0.02174 (`tan(u0 2^(j/12))` does not fit: 14 % off at `j = 96`). Role (damping, drive, cutoff prewarp) not assigned.
 5. **Envelopes**: keep `ENV_*_MS_TABLE` (display strings, [synth-0x2f-filter-env-adr](synth-0x2f-filter-env-adr.md)); the DSP-side law is unknown. The only ARM-side integer rate table found (`0xC02FB054`, 0.30 dB per step) is not shown to be the envelope.
@@ -143,7 +143,7 @@ Comparison with `docs/specs/synth-engine.md` s3: the spec's PolyBLEP is one incr
 ## Follow-ups
 
 1. Section 9 items 1 and 4 (filter equations, key-down series).
-2. Port the saw to `crates/nord-core/src/synth/` with `VERIFIED` tags and the grid test (lane owner of `synth/`).
+2. Done as opt-in `SawModel::Firmware` (`synth/hw_saw.rs`, grid golden `tests_hw_saw_golden.rs`); making it the default needs the open points of spec section 3.1 (which stage the `Saw` wave selects).
 3. Run `arm_edit_capture.py` again after a key-down harness exists, so the ADR words carry values.
 
 ## Reproduce
