@@ -2,21 +2,58 @@
 //!
 //! Spec: `docs/ARCHITECTURE.md`, `docs/specs/effects-and-routing.md`, `docs/specs/morph-and-zones.md`
 
-use crate::fx::{AmpCabinet, DelayFilterMode, LayerFxChain, MasterBus, MasterClock, ReverbColor};
+use crate::fx::{
+    AmpCabinet, DelayFilterMode, FxMorphSet, LayerFxChain, MasterBus, MasterClock, ReverbColor,
+};
 use crate::midi::{cc, MidiEvent};
-use crate::morph::{KeybedSplitRouter, LayerId, LayerSceneState, MorphControllers, MorphParameter};
+use crate::morph::{
+    KeybedSplitRouter, LayerId, LayerSceneState, MorphControllers, MorphParameter, MorphSource,
+};
 use crate::organ::{OrganLayer, RotarySpeed};
 use crate::piano::PianoLayer;
 use crate::synth::SynthLayer;
 
+pub use aux_kb::{AuxKb, AuxVelocityCurve, NoteRoute};
+pub use extern_out::{ExternLayer, ExternState, MidiOut, MidiOutQueue, MIDI_OUT_CAPACITY};
+pub use pedals::{
+    ControlFunc, FootSwitchFunc, PedalSource, PedalState, RightPedal, RotorFunc, SwellFunc,
+    B3_SWELL_FLOOR, HALF_PEDAL_MIN,
+};
+
+mod aux_kb;
+mod clipboard;
+mod extern_out;
+mod fx_params;
+mod layer_init;
+mod live_slots;
 mod midi_dispatch;
+mod morph_clip;
+mod pedals;
 mod program;
 mod program_fx;
+mod program_ops;
+mod section_edit;
 mod sharing;
+mod snapshot;
+#[cfg(test)]
+mod tests_extern;
+#[cfg(test)]
+mod tests_pedals;
 #[cfg(test)]
 mod tests_program;
 #[cfg(test)]
 mod tests_routing;
+mod undo;
+
+pub use clipboard::{Clip, ClipboardError, LayerClip};
+pub use fx_params::FxParams;
+pub use layer_init::LayerInitTarget;
+pub use live_slots::{LiveSlots, LIVE_SLOT_COUNT};
+pub use morph_clip::MorphClip;
+pub use program_ops::{PROGRAM_LEVEL_DB_RANGE, TRANSPOSE_RANGE};
+pub use section_edit::Section;
+pub use snapshot::ProgramState;
+pub use undo::UndoOp;
 #[cfg(test)]
 mod tests_sharing;
 
@@ -51,7 +88,24 @@ pub struct Stage4Engine {
     pub global_midi_channel: Option<u8>,
     /// Optional direct MIDI channel for each layer; these notes bypass keybed splits.
     pub layer_midi_channels: [Option<u8>; 7],
+    /// Aux KB (auxiliary keyboard) configuration.
+    pub aux_kb: AuxKb,
+    /// Pedals, pitch stick and per-layer SUSTPED / PSTICK routing.
+    pub pedals: PedalState,
+    /// Extern layer settings and the outgoing MIDI queue.
+    pub extern_out: ExternState,
     note_hold_counts: [[[u8; 7]; 128]; 16],
+    /// Per-program transpose in semitones (`-6..=6`, manual p.40).
+    transpose: i8,
+    /// Transpose each held `(channel, note)` key started with, so note-off matches note-on.
+    held_transpose: [[i8; 128]; 16],
+    /// Program Levels offset in dB (manual p.46) and its linear gain (`1.0` when `0 dB`).
+    program_level_db: f32,
+    program_gain: f32,
+    /// Copy/Paste buffer; survives program changes. Control thread only.
+    pub clipboard: Option<Clip>,
+    /// Single-level Undo snapshot. Control thread only.
+    pub undo: undo::UndoSlot,
 }
 
 impl Stage4Engine {
@@ -80,7 +134,16 @@ impl Stage4Engine {
             master_clock: MasterClock::default(),
             global_midi_channel: Some(0),
             layer_midi_channels: [None; 7],
+            aux_kb: AuxKb::default(),
+            pedals: PedalState::default(),
+            extern_out: ExternState::default(),
             note_hold_counts: [[[0; 7]; 128]; 16],
+            transpose: 0,
+            held_transpose: [[0; 128]; 16],
+            program_level_db: 0.0,
+            program_gain: 1.0,
+            clipboard: None,
+            undo: undo::UndoSlot::default(),
         }
     }
 
@@ -118,7 +181,7 @@ impl Stage4Engine {
             self.synth_c.cutoff_hz = cut_c;
         }
 
-        let raw_layers = [
+        let mut raw_layers = [
             self.organ_a.render_frame(),
             self.organ_b.render_frame(),
             self.piano_a.render_frame(),
@@ -127,6 +190,7 @@ impl Stage4Engine {
             self.synth_b.render_frame(),
             self.synth_c.render_frame(),
         ];
+        self.apply_organ_swell(&mut raw_layers);
 
         let mut mix_l = 0.0f32;
         let mut mix_r = 0.0f32;
@@ -136,7 +200,7 @@ impl Stage4Engine {
         for (i, raw) in raw_layers.into_iter().enumerate() {
             self.fx_chains[i].apply_morph(&self.morph_controllers);
             let [fx_l, fx_r] = self.fx_chains[i].process_frame_with_bpm(raw, self.master_clock.bpm);
-            let gain = self.layer_levels[i].evaluate(&self.morph_controllers);
+            let gain = self.layer_levels[i].evaluate(&self.morph_controllers) * self.program_gain;
             // TO ROTARY (Piano / Synth layers): the mono sum after the fader feeds the shared rotary.
             if i >= 2 && self.fx_chains[i].amp_cabinet == AmpCabinet::ToRotary {
                 rot_in += 0.5 * (fx_l + fx_r) * gain;
@@ -157,6 +221,11 @@ impl Stage4Engine {
             [mix_l, mix_r] = self.global_reverb.process_reverb_frame([mix_l, mix_r]);
         }
 
+        let volume = self.pedals.volume_gain();
+        if volume != 1.0 {
+            mix_l *= volume;
+            mix_r *= volume;
+        }
         self.master_bus.process_frame([mix_l, mix_r])
     }
 
@@ -176,6 +245,7 @@ impl Stage4Engine {
     /// Processes an interleaved or dual-channel block in place with zero heap allocations.
     pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
         let frames = left.len().min(right.len());
+        self.extern_sync_volume();
         self.apply_fx_sharing();
         for i in 0..frames {
             let [l, r] = self.render_frame();
