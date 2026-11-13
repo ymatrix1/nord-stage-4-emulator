@@ -104,6 +104,33 @@ Run one velocity per process: a second note in the same run blocks (the DSP link
 - **X(velocity): EMPIRICAL.** X falls from 170 (v = 1) to 0 (v = 127) with local slopes of -2, -2, -1.75, -1.75, -1.5, -1.5, -1.375, -1.375, -1.25, -1.375, -1.125 (per velocity step between the sample points), i.e. multiples of 1/8: a table, not a formula. A quadratic `X = 171.4 - 2.007 v + 0.00551 v^2` fits v = 1..80 within 1.06 index steps (0.11 dB); a cubic within 0.40. X is not the whole velocity effect: the stroke record changes too (`rec[0x5E]` 36 -> 56 at v = 88 and -> 66 at v = 112), i.e. the velocity layer picks a different stroke record whose level offset is 20 / 30 steps higher (2.0 / 3.0 dB) while X continues to fall. The total index `rec + 2X + 20` runs from 396 (v = 1) to 86 (v = 127), a range of 310 steps = 31.1 dB.
 - Where X is computed (the caller of `0xC00A1EB4` is `0xC00A8580`, inside the voice-frame method `0xC00A8370`) and whether the curve differs per class or per file was not traced; only Clavinet D6 was swept.
 
+## 7. Where X comes from, three sounds, per-key sums (VERIFIED run / EMPIRICAL fit)
+
+**Origin of X (EMPIRICAL, disassembly + write watch).** The level method is called from the voice-frame method `0xC00A8370` (return site `0xC00A8580`); `X` is the second output of the stroke selector (slot 1 of the class table, `0xC00A2A54`), computed as `clamp((this[0x28] + this[0x30]) [>> 2 when P[0x44] != 0], 0, 249)`. `this[0x28]` is written by the voice-init function `0xC00AA520` (`0xC00AA6BC`):
+
+```text
+T = curve[curveId][r8]           curveId = [ctx + 0x1C] (11), table 0xC0532664 + (curveId << 10), r8 = internal velocity 0..1023
+X = clamp(d + (((128 - c) * T) >> 7), 0, 249)        (c, d) = bytes at 0xC02A1208 + 0xB80 + 2 * zone  (0x13, 0x00 for zone 1)
+stroke selection index = T                            ([this + 0x24]; thresholds against the stroke records pick the layer)
+```
+
+Check, Clavinet at velocity 64: `r8 = 203`, `T = 78`, `X = (109 * 78) >> 7 = 66` (matches). Velocity 1 / 64 / 127 give `r8 = 17 / 203 / 656` and `T = 200 / 78 / 0`: `r8` is a convex function of the MIDI velocity computed before the voice frame (queue consumer, not traced). `curveId` and the zone were 11 and 1 for all three sounds in the default program.
+
+**Sweeps.** One process per sound; after the first note a snapshot is restored for each velocity (the harness cannot play two notes in a row, see below). Notes 60, velocities 1..127 (Clavinet D6 every odd velocity plus the 17 runs of section 6; Bright Grand and Amber Upright every 4th plus 127):
+
+| Item | Result |
+|---|---|
+| `X(velocity)` | identical for the three sounds at every common velocity (0 differences in 32 and 27 common points): 170 at 1, 66 at 64, 36 at 88, 9 at 112, 0 from 121 up |
+| Level law | the stored amplitude equals `level_q23(rec + 2X + 60 - sum(b))` in every run with one constant `sum(b)` per sound at note 60 (40, 49, 54): 146 of 146 runs |
+| Stroke offset `rec[0x5E]` | a step function of velocity, file specific: Clavinet 36 / 56 / 66 (steps between velocities 85..87 and 107..109), Bright Grand -10 / -1 / -2 / 8 / 19 / 26 / 34 (steps near 61, 69, 81, 93, 101, 117), Amber Upright -1 / 8 / 18 / 28 / 36 / 44 / 43 (steps near 49, 69, 77, 89, 109, 117) |
+| Notes 24..108 step 12 at velocity 64 | `X` 66 for every note and sound; `rec[0x5E]` varies with the note (Clavinet 55, 11, 29, 36, 82, 79, 137, 147: it is the level of the selected stroke, i.e. of the root key), and the key byte sum varies too: Clavinet 40 at every swept note, Bright Grand 49 / 49 / 45 / 49 / 63 / 49 / 49 / 49, Amber Upright 49 / 49 / 49 / 54 / 63 / 58 / 19 / 49 |
+
+So the velocity law is `X(velocity)` (key- and class-independent here) plus the stroke offset of the selected stroke record; both feed the proven level law. `piano/velocity_level.rs` holds the `X` table, the stroke step tables of the three sounds (note 60 only), the per-key sums and the interpolation helpers (opt-in).
+
+**Playing several notes (fixed).** The second note-on blocked in `0xC00B64D8` (voice status read): it calls `0xC0066E64` (stubbed, returns 0 bytes) and repeats until the word at `[sp + 0x14]` is non-zero; the first note read stack garbage. `install_dsp_ready` now also writes 1 at `0xC00B658C`. A second note then starts, but its level call was not reached within 40 + 20 ticks and the main loop idled with no parser calls, so the sweeps use a state snapshot per velocity (about 4 s each). A full model of the SMP status handshake is still open.
+
+**Not derived.** The internal velocity `r8(v)` (a table or curve of the MIDI velocity), the stroke-record thresholds that pick the velocity layer, how `rec[0x5E]` is built from the file's 118-byte stroke records (the raw file halfword at `+0x5E` is `128` in the Clavinet records, so the loader converts it), and the three per-key bytes from the file.
+
 ## Implications
 
 - The chain load -> select (bind) -> note-on -> voice start -> level method now runs on real firmware code with two library stubs and one DSP-ready hook; velocity reaches the level method as `X` and as the stroke record choice.
@@ -111,7 +138,7 @@ Run one velocity per process: a second note in the same run blocks (the DSP link
 
 ## Follow-ups
 
-1. Trace the origin of X: read the caller `0xC00A8580` and the velocity-to-X table (sampled above), check whether it lives in the information block (per file) or in the firmware, and sweep a grand and an upright.
-2. Sweep the key (b1 + b2 + b3 per key) and the layers `rec[0x5E]` for notes 24..96 to get the per-key level offsets.
+1. Derive `r8(velocity)` (queue consumer between `0xC0085630` and the key event) and the stroke-record thresholds, then compute `rec[0x5E]` and the three key bytes from the `.npno` records instead of sweeping.
+2. Sweep every key and layer to replace the interpolation (the key byte sum is not smooth: 19 at note 96 for one upright).
 3. Find which sound class selects `0xC00A1D5C` (rows 1..3).
 4. A second note blocks in the same process: model the DSP link handshake properly (pin and timing of `0xC006CCBC`).

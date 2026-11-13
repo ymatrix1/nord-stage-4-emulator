@@ -168,3 +168,13 @@ def test_level_amplitude_saturates_and_clamps():
     assert pl.level_amplitude(-5) == 0x7FFFFF
     assert pl.level_amplitude(60) == 0x400000
     assert pl.level_amplitude(600) == 0x800000 >> 10
+
+
+def test_dsp_ready_also_reports_the_voice_status_word():
+    emu = make_emu()
+    pl.install_dsp_ready(emu)
+    sp = ae.STACK_TOP - 0x2000
+    emu.set_reg(13, sp)
+    emu.write32(sp + 0x14, 0)
+    emu.run(pl.STATUS_POLL_PC, pl.STATUS_POLL_PC + 4, max_insns=4)
+    assert emu.read32(sp + 0x14) == pl.STATUS_READY

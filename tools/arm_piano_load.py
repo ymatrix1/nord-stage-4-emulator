@@ -61,6 +61,12 @@ CORE0 = 0x90BF5400
 # input bit `(halfword >> pin) & 1 == expected` and gives up only after 4800 timer counts; with
 # the interrupt-driven timer of the harness that is 4800 ticks, so the first send blocks forever.
 GPIO_POLL_PC = 0xC006CD60
+# EMPIRICAL (disassembly of `0xC00B64D8`, pc `0xC00B658C`): the voice allocation reads a status
+# word from the SMP through `0xC0066E64(port, link, cmd, out)` and repeats until it is non-zero.
+# The harness stub returns 0 and leaves the word on the stack, so a second note spun forever
+# (the first one read stack garbage). The word is the `[sp + 0x14]` slot loaded at this pc.
+STATUS_POLL_PC = 0xC00B658C
+STATUS_READY = 1
 # D + 0xC: 2 loads the header block only (object state 2), 0 reads the 38 stroke records too.
 KIND_HEADER_ONLY = 2
 KIND_FULL = 0
@@ -140,7 +146,11 @@ def install_dsp_ready(emu: ae.ArmEmu) -> None:
     def hook(_uc, _address, _size, _user) -> None:  # noqa: ANN001
         emu.set_reg(3, (emu.reg(1) & 1) << (emu.reg(12) & 31))
 
+    def status(_uc, _address, _size, _user) -> None:  # noqa: ANN001
+        emu.write32(emu.reg(13) + 0x14, STATUS_READY)
+
     emu.uc.hook_add(emu._u.UC_HOOK_CODE, hook, begin=GPIO_POLL_PC, end=GPIO_POLL_PC)
+    emu.uc.hook_add(emu._u.UC_HOOK_CODE, status, begin=STATUS_POLL_PC, end=STATUS_POLL_PC)
 
 
 # VERIFIED (run, `docs/research/piano-sound-load.md` section 5): the level method of the piano
