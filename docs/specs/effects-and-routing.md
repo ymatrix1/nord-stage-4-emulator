@@ -158,6 +158,20 @@ Code: `fx/fw_compressor.rs` (`FwCompressor`, context offsets in `fw_compressor_c
 | Parameter values | `FwCompressor::new()`: unity makeup, threshold far above any level (no reduction), `k = 0.9908`, `T0 = 1.0`, `T1 = 0.5` | ASSUMED; the ARM words behind `kCmpAmt` (0..127, default 95) and `kCmpResponse` are not decoded |
 | Bus position and latency | replaces the peak-envelope compressor when set; 4 frames of latency (block collection) | ASSUMED position; default off, `render_hash` unchanged (`cb8d83b7...`) |
 
+### 4.0b Firmware routine ports: delay, table LFO, all-pass, resonant filters (opt-in)
+
+Code: `fx/fw_delay.rs` (`FwDelay`, `DelayIo`), `fx/fw_lfo.rs` (`FwLfo`, `LfoTables`), `fx/fw_allpass.rs`
+(`FwAllpass`), `fx/fw_resonant.rs` (`FwResonant2`, `FwResonant4`), shared `fx/fw_words.rs` and
+`fx/fw_short_float.rs`; golden vectors `fx/tests_{delay,lfo,allpass,resonant}_golden.rs`. Equations, field tables and
+the verification record: [fx-routine-models](../research/fx-routine-models.md).
+
+| Item | Rust | Status |
+|---|---|---|
+| Algorithms | the five FX routines `0x1206B0`, `0x1228CF`, `0x122C39`, `0x1243F4`, `0x124497` as straight-line f32 code over the firmware's context words | VERIFIED: models equal the oracle on 2,200 to 4,600 random scenarios each and register for register on the trace |
+| Precision | f32 (the DSP uses 40-bit registers and truncating stores) | worst relative error against the golden vectors 3e-6 (resonant), 3e-6 (all-pass), 1.5e-5 (LFO), below 1e-6 (delay), packed delay words exact |
+| Wiring | exported types only; not part of `LayerFxChain` or `MasterBus` | the ARM words that fill the contexts are undecoded, default `render_hash` unchanged |
+| Parameter values | none shipped (`Default` is an all-zero context) | ASSUMED roles of the words (EMPIRICAL where an equation shows the role) |
+
 Module map of the FX library (which module owns which routine pcs, 28 ARM descriptor lists for all 100 code
 records) and the finding that the Amp unit's type values are coefficient data and a mode word, not routine
 pointers, are in [fx-type-map](../research/fx-type-map.md). Parity to-do list: (1) map `Edt_Effects_kFx1Type`,
