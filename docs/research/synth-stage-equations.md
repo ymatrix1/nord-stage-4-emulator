@@ -193,6 +193,8 @@ Status: items 2 to 5 and the rate-table lookups of item 6 are ported as opt-in p
 
 ## 9. Open points
 
+> Update: points 1 (strip word to `R`: word 3, closed) and 3 (the ADR generator: record chain in the pass) are answered in [synth-adr-and-strip-law](synth-adr-and-strip-law.md); point 2 has the `0x1257B2` pole table; point 5 (`kFltType`) stays open.
+
 1. Strip word -> `R` / `W28` for the filter channel (needs a state where the channel is active; the sweeps of strip 0 and 6 word 2 did not move `R`).
 2. Decode `0x1257B2` and `0x1253BD` (run them with the same driver; 6 fields, 3 tables).
 3. The ADSR generator and its time base (which routine reads `DM(0xC0E21..)`).

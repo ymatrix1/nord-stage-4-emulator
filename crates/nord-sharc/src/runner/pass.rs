@@ -105,6 +105,8 @@ pub fn run_pass(core: &mut Core, cfg: &PassConfig) -> PassReport {
     // the host's trigger write is not a core store
     core.watch_hits.clear();
     core.watch_addrs.clear();
+    core.rwatch_hits.clear();
+    core.rwatch_on = true;
     let start = core.steps;
     let mut end = PassEnd::StepLimit;
     let mut visited = std::collections::BTreeSet::new();
@@ -125,6 +127,7 @@ pub fn run_pass(core: &mut Core, cfg: &PassConfig) -> PassReport {
             break;
         }
     }
+    core.rwatch_on = false;
     PassReport {
         steps: core.steps - start,
         end,

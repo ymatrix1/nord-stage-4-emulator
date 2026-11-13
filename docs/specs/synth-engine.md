@@ -49,7 +49,7 @@ d(t) = \begin{cases} -(1 - t/2)^2 & 0 \le t < 2 \\ +(1 + t/2)^2 & -2 < t < 0 \\ 
 y = g(i)\,\bigl(1 - 2p + d(t)\bigr)
 $$
 
-$g(i) = C\,(B + \operatorname{clip}(A - 2i, \pm B))$ with $A = 0.3456062$, $B = 0.1152021$, $C = 4.3401995$ (image words `0x3EB0F34D`, `0x3DEBEF11`, `0x408AE2EA`): $g = 1$ up to $i = 0.1152$ and fades linearly to silence at $i = 0.2304$ cycles per sample (5.0 kHz to 10.0 kHz at the SY frame rate of 43,402 Hz, [dsp-frame-rate](../research/dsp-frame-rate.md) s3.4: `B * F = 5000.04`, `A * F = 15000.12`; the engine currently applies the increments at the engine rate, 5.5 kHz to 11.1 kHz at 48 kHz, TD in the research follow-ups; a `SuperSaw` partner above that is silent too).
+$g(i) = C\,(B + \operatorname{clip}(A - 2i, \pm B))$ with $A = 0.3456062$, $B = 0.1152021$, $C = 4.3401995$ (image words `0x3EB0F34D`, `0x3DEBEF11`, `0x408AE2EA`): $g = 1$ up to $i = 0.1152$ and fades linearly to silence at $i = 0.2304$ cycles per sample (5.0 kHz to 10.0 kHz at the SY frame rate of 43,402 Hz, [dsp-frame-rate](../research/dsp-frame-rate.md) s3.4: `B * F = 5000.04`, `A * F = 15000.12`; `Firmware` applies the increments at the engine rate, 5.5 kHz to 11.1 kHz at 48 kHz; `SawModel::FirmwareSy` (strip chain, section 4.2) applies the knee at the SY rate; a `SuperSaw` partner above that is silent too).
 
 | | `Classic` (default) | `Firmware` |
 |---|---|---|
@@ -132,7 +132,26 @@ Evidence: `tests_fw_filter_golden.rs` (3 rows x 3 stages x 48 samples, generated
 
 **Envelope rate tables** (`synth/fw_env_rates.rs`): the DSP-side coefficient of an ADR strip word is a table lookup, index = byte 3 of the word clipped to $\pm 0.5$ (-64..64): `attack_coeff` (0.0922 at -64, 4.5e-5 at 0, 1.0e-6 at +64) for the three attack words and `decay_release_coeff` (`1 - c` is 0.0683 at -64, 1.43e-4 at 0, 5.0e-6 at +64) for decay and release. The words are VERIFIED (oracle sweep); that a coefficient is the per-pass rate of a one pole and that a pass is one sample are ASSUMED, and the segment generator that consumes them is not located, so the engine envelopes still use the display times and the tables are exposed only as lookups (`attack_time_passes` runs 10.9 to 1.0e6 passes).
 
-Not done: `0x1257B2` and `0x1253BD`, the strip word to `R` law, the `kFltType` to stage selection (research section 9). The default stays `Zdf` (TD-11).
+**Envelope generator and cutoff law** ([synth-adr-and-strip-law](../research/synth-adr-and-strip-law.md), opt-in, unwired): the generator runs in the ORG core 2 pass as a chain of records $[a, b, thr, link]$, one step per pass: $y' = y a + b$, $y' \ge thr$ (and $y' = 0$ with a restart when $thr < 0$), $y' \le 1$ with the pointer moving to `link` at the clamp. The attack record is $[1, c_A, 0]$ (linear ramp), the decay record $[1 - c_D, 0, 0.5]$ (exponential decay to the sustain level 0.5), the release record $[1 - c_R, 0, 0]$. VERIFIED bit-exact on three oracle scenarios (`synth/fw_adr_chain.rs`: 32-bit-significand register rounding, truncating store). The strip word 3 sets the cutoff coefficient: $R = \operatorname{clamp}(0.36083 + 0.0079301\,i, 0, 1.0111)$, $i$ the signed top byte of the word (clip $\pm$0x6A000000) with linear interpolation on the low 24 bits (`synth/fw_strip_cutoff.rs`, 19 oracle pairs within 3.3e-6); $f_c = f_s rctan(R) / \pi$. Open: the controller trigger protocol and time base of the generator, the knob to word map.
+
+Not done: `0x1257B2` and `0x1253BD`, the `kFltType` to stage selection (research section 9). The default stays `Zdf` (TD-11).
+
+### 4.2 Firmware strip chain (`SynthLayer::chain = FirmwareStrip`, opt-in)
+
+Per voice, in the order of the Core2 strip ([synth-strip-path](../research/synth-strip-path.md)); default `SynthChain::Legacy` leaves every path above unchanged (`render_hash` `25baa387...e7b59a`).
+
+| Stage | Rust | Law | Status |
+|---|---|---|---|
+| Saw | `SawModel::FirmwareSy` | section 3.1 with the fade knee at `inc * fs / F` (5.0 kHz in Hz at any engine rate) | VERIFIED wave, knee rate VERIFIED ([dsp-frame-rate](../research/dsp-frame-rate.md)) |
+| Waveform | decoded `Triangle` of ANALOG category 3 (SHAPE) plays as the saw (`osc_shape_category`) | hardware note has a 2nd harmonic 3.6 dB under the fundamental | ASSUMED |
+| Envelopes | `strip_path.rs`: amp and filter chains of records `[a, b, thr]` stepped once per pass (`fw_adr_step`), gate off starts the release record | linear attack `cA(idx)`, decay `a(idx)` to `thr` = sustain level, release `a(idx)` to 0 | records VERIFIED bit exact (15 passes x 2 scenarios against the oracle); mapping below ASSUMED |
+| Cutoff | `strip_map.rs`: panel Hz -> word 3 (`R` ramp inverse) -> `fw_strip_cutoff_r` -> Hz, saturating at 10.9 kHz | `R = clamp(0.36083 + 0.0079301 i, 0, 1.0111)` | law VERIFIED, mapping ASSUMED |
+| Filter | `fw_filter.rs` (section 4.1), forced regardless of `filter_engine` | LP4 / BP4 / HP4 | VERIFIED |
+| Gain | `gain_dezip.rs` (section 3.2), forced on | pole `0.979` per SY frame | VERIFIED |
+
+Mapping of panel values (all ASSUMED, `strip_map.rs`): one pass is `STRIP_PASS_FRAMES = 2` SY frames (rate tables then span 0.50 ms .. 46 s attack and tau 0.67 ms .. 9.2 s decay, the panel ranges times 0.18); attack seconds = time to full scale of the linear ramp; decay and release time constants = 0.18 x the displayed time; the integer table index is the one whose `1 / c` is nearest in log (tables repeat a value 5 to 6 times, so times resolve to a factor of 3). Hold (>= 44 s) = index 64 with `thr = 1`.
+
+Oracle end to end (`tools/synth_strip_e2e.py`, example `synth_strip_e2e`, Smooth Lead panel): envelope level words 15 of 15 equal in two scenarios, cutoff `R` error 3.5e-6, filter output error 7.5e-7 absolute. Hardware video, Smooth Lead (`tools/emu_vs_hw.py --only synth_lead`): presence band -16.5 -> -9.0 dB, RMS delta -6.4 -> +3.8 dB, score 4.93 -> 4.05; the rest is a cutoff scale or filter envelope depth (base 500 Hz: -2.3 dB, score 1.82) that the video cannot separate from the performer's controls. `render-patch --synth-chain strip` selects it. Default stays `Legacy` (TD-11).
 
 ---
 

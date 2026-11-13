@@ -25,7 +25,8 @@
      "variants": [
        {"label": "default", "flags": []},
        {"label": "fw-filter", "flags": ["--filter-engine", "firmware"]},
-       {"label": "fw-filter+fx", "flags": ["--filter-engine", "firmware", "--firmware-fx"]}]},
+       {"label": "fw-filter+fx", "flags": ["--filter-engine", "firmware", "--firmware-fx"]},
+       {"label": "strip", "flags": ["--synth-chain", "strip"]}]},
     {"id": "fx_amp", "entry": "Program/Bank A/Tiny Transistor.ns4p", "engine": "organ Farfisa + Small II amp + reverb", "at_s": 1812, "duration_s": 25,
      "variants": [
        {"label": "default", "flags": []},

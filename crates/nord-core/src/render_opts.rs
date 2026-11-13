@@ -4,7 +4,7 @@
 use crate::engine::Stage4Engine;
 use crate::fx::FirmwareFx;
 use crate::organ::ToneWheelSource;
-use crate::synth::FilterEngine;
+use crate::synth::{FilterEngine, SynthChain};
 
 /// Parses a `--tone-source` value: `default | legacy | firmware | vox | b3wheels`.
 pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
@@ -28,6 +28,26 @@ pub fn parse_filter_engine(v: &str) -> Result<FilterEngine, String> {
         _ => Err(format!(
             "invalid --filter-engine '{v}' (expected zdf|firmware)"
         )),
+    }
+}
+
+/// Parses a `--synth-chain` value: `legacy | strip`.
+pub fn parse_synth_chain(v: &str) -> Result<SynthChain, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "legacy" | "default" => Ok(SynthChain::Legacy),
+        "strip" | "firmware" => Ok(SynthChain::FirmwareStrip),
+        _ => Err(format!(
+            "invalid --synth-chain '{v}' (expected legacy|strip)"
+        )),
+    }
+}
+
+/// Selects the per-voice chain of every synth layer (`None` leaves the engine untouched).
+pub fn apply_synth_chain(engine: &mut Stage4Engine, chain: Option<SynthChain>) {
+    if let Some(c) = chain {
+        engine.synth_a.chain = c;
+        engine.synth_b.chain = c;
+        engine.synth_c.chain = c;
     }
 }
 
@@ -66,6 +86,18 @@ mod tests {
         assert!(parse_tone_source("x").is_err());
         assert_eq!(parse_filter_engine("firmware"), Ok(FilterEngine::Firmware));
         assert!(parse_filter_engine("x").is_err());
+    }
+
+    #[test]
+    fn synth_chain_parses_and_applies_to_every_layer() {
+        assert_eq!(parse_synth_chain("strip"), Ok(SynthChain::FirmwareStrip));
+        assert_eq!(parse_synth_chain("Legacy"), Ok(SynthChain::Legacy));
+        assert!(parse_synth_chain("x").is_err());
+        let mut e = Stage4Engine::new(48_000.0);
+        apply_synth_chain(&mut e, None);
+        assert_eq!(e.synth_b.chain, SynthChain::Legacy);
+        apply_synth_chain(&mut e, Some(SynthChain::FirmwareStrip));
+        assert!(e.synth_a.strip_chain() && e.synth_b.strip_chain() && e.synth_c.strip_chain());
     }
 
     #[test]
