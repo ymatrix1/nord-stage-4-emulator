@@ -8,7 +8,7 @@
 use super::Core;
 
 /// A parsed fixture.
-pub(super) struct Fixture {
+pub struct Fixture {
     pub entry: u32,
     pub exit: u32,
     pub out: u32,
@@ -17,10 +17,12 @@ pub(super) struct Fixture {
     /// Parcels as the core stores them (little-endian halves).
     code: Vec<(u32, Vec<u8>)>,
     dm: Vec<(u32, u32)>,
+    /// Named addresses (`sym NAME ADDR` lines), e.g. the census probe's `_slot`.
+    pub syms: Vec<(String, u32)>,
 }
 
 impl Fixture {
-    pub(super) fn parse(text: &str) -> Fixture {
+    pub fn parse(text: &str) -> Fixture {
         let hex = |s: &str| u32::from_str_radix(s, 16).unwrap_or(0);
         let mut f = Fixture {
             entry: 0,
@@ -30,6 +32,7 @@ impl Fixture {
             fill: 0,
             code: Vec::new(),
             dm: Vec::new(),
+            syms: Vec::new(),
         };
         for line in text.lines().filter(|l| !l.starts_with('#')) {
             let t: Vec<&str> = line.split_whitespace().collect();
@@ -49,15 +52,33 @@ impl Fixture {
                     f.code.push((hex(a), b));
                 }
                 ["dm", a, w] => f.dm.push((hex(a), hex(w))),
+                ["sym", n, a] => f.syms.push(((*n).to_string(), hex(a))),
                 _ => {}
             }
         }
         f
     }
 
+    /// Address of the named symbol.
+    pub fn sym(&self, name: &str) -> Option<u32> {
+        self.syms.iter().find(|(n, _)| n == name).map(|(_, a)| *a)
+    }
+
+    /// Writes the fixture's code and data into `c` without running it.
+    pub fn load(&self, c: &mut Core) -> Result<(), String> {
+        for (a, bytes) in &self.code {
+            let o = *a as usize * 2;
+            c.sram[o..o + bytes.len()].copy_from_slice(bytes);
+        }
+        for (a, w) in &self.dm {
+            c.dm_write(*a, *w).map_err(|e| format!("dm write {e:x}"))?;
+        }
+        Ok(())
+    }
+
     /// Loads the fixture into `c`, runs from `entry` to `exit` (at most `max_steps`
     /// instructions) and returns the output array.
-    pub(super) fn run(&self, c: &mut Core, max_steps: usize) -> Result<Vec<u32>, String> {
+    pub fn run(&self, c: &mut Core, max_steps: usize) -> Result<Vec<u32>, String> {
         for (a, bytes) in &self.code {
             let o = *a as usize * 2;
             c.sram[o..o + bytes.len()].copy_from_slice(bytes);
@@ -90,7 +111,7 @@ impl Fixture {
 }
 
 /// The measured output array of a probe (one hex word per line).
-pub(super) fn measured(text: &str) -> Vec<u32> {
+pub fn measured(text: &str) -> Vec<u32> {
     text.lines()
         .filter_map(|l| u32::from_str_radix(l.trim().trim_start_matches("0x"), 16).ok())
         .collect()

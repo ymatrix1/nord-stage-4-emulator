@@ -16,9 +16,15 @@ use super::{Core, Flags};
 pub(super) const MMASK_RESET: u32 = 1 << 21;
 /// ASTAT bits the flag set does not model: AS, AI, MN, MV, MU, MI, AF (4-10), SF (14), CACC (24-31).
 const ASTAT_EXTRA: u32 = 0x1F << 6 | 1 << 14 | 0xFF00_0000;
-/// STKY bits a program can write: AUS AVS AOS (0-2), AIS MOS MVS MUS MIS (5-9), CB7S CB15S IIRA
-/// U64MA (17-20).
-const STKY_WRITABLE: u32 = 0x3E7 | 0x1E_0000;
+/// STKY bits a program can write.
+///
+/// VERIFIED (census diff, `docs/research/sharc-census-diff.md`): STKYx and STKYy both keep bits
+/// 0..=20 and 27..=31 of a random value written by `STKY = R0` (7 106 cases); bits 21..=26 are
+/// the read-only stack status bits.
+const STKY_WRITABLE: u32 = 0xF81F_FFFF;
+/// ASTATy bits kept besides the flag set: VERIFIED (same cases) every bit of a random write reads
+/// back, unlike ASTATx where bits 15..17 and 19..23 do not stick.
+const ASTAT_Y_EXTRA: u32 = !(0x3F | 7 << 11 | 1 << 18);
 /// Sticky arithmetic bits and the interrupt they latch: fixed overflow, float overflow, float
 /// underflow, float invalid (PRM Table 4-57, vectors 33-36).
 const EXCEPTIONS: [(u32, u8); 4] = [
@@ -54,7 +60,7 @@ impl SysState {
     }
 }
 
-fn astat_pack(f: Flags, extra: u32) -> u32 {
+fn astat_pack(f: Flags, extra: u32, mask: u32) -> u32 {
     let b = |x: bool, n: u32| u32::from(x) << n;
     b(f.az, 0)
         | b(f.av, 1)
@@ -66,10 +72,10 @@ fn astat_pack(f: Flags, extra: u32) -> u32 {
         | b(f.sz, 12)
         | b(f.ss, 13)
         | b(f.tf, 18)
-        | extra & ASTAT_EXTRA
+        | extra & mask
 }
 
-fn astat_unpack(v: u32, old: Flags) -> (Flags, u32) {
+fn astat_unpack(v: u32, old: Flags, mask: u32) -> (Flags, u32) {
     let t = |n: u32| v >> n & 1 == 1;
     let f = Flags {
         az: t(0),
@@ -84,18 +90,26 @@ fn astat_unpack(v: u32, old: Flags) -> (Flags, u32) {
         ss: t(13),
         ..old
     };
-    (f, v & ASTAT_EXTRA)
+    (f, v & mask)
+}
+
+fn extra_mask(y: usize) -> u32 {
+    if y == 1 {
+        ASTAT_Y_EXTRA
+    } else {
+        ASTAT_EXTRA
+    }
 }
 
 impl Core {
     pub(super) fn astat(&self, y: usize) -> u32 {
         let f = if y == 0 { self.flags } else { self.flags_y };
-        astat_pack(f, self.sys.astat_extra[y])
+        astat_pack(f, self.sys.astat_extra[y], extra_mask(y))
     }
 
     pub(super) fn set_astat(&mut self, y: usize, v: u32) {
         let old = if y == 0 { self.flags } else { self.flags_y };
-        let (f, extra) = astat_unpack(v, old);
+        let (f, extra) = astat_unpack(v, old, extra_mask(y));
         if y == 0 {
             self.flags = f;
         } else {
@@ -117,14 +131,12 @@ impl Core {
 
     fn stky(&self, y: usize) -> u32 {
         let mut v = self.sys.stky[y] & (STKY_WRITABLE | SSOV | LSOV);
-        if y == 1 {
-            return v & 0x3E7;
-        }
         let depth = self.pc_depth();
         v |= if depth == 0 { PCEM } else { 0 };
         v |= if depth >= PC_STACK_DEPTH { PCFL } else { 0 };
         v |= if self.sys.status.is_empty() { SSEM } else { 0 };
         v |= if self.loops.is_empty() { LSEM } else { 0 };
+        // VERIFIED (census diff, `census_diff.py`): STKYy shows the same stack status bits as STKYx
         v
     }
 
@@ -332,5 +344,31 @@ mod tests {
         assert!(c.raise_interrupt(17)); // P6I
         c.mode1 |= 0;
         assert_eq!(c.pending_vector(), Some(17));
+    }
+
+    #[test]
+    fn stkyy_shows_the_stack_status_bits_like_stkyx() {
+        // census diff: a fresh core reads 0x05400000 (PCEM, SSEM, LSEM) from STKY and STKYy
+        let c = Core::new(&[]);
+        assert_eq!(c.read_ureg(0x78), 0x0540_0000);
+        assert_eq!(c.read_ureg(0x79), 0x0540_0000);
+    }
+
+    #[test]
+    fn sticky_and_astaty_keep_the_bits_the_simulator_keeps() {
+        // census diff: random words written to STKYx, STKYy, ASTATx and ASTATy read back like this
+        let mut c = Core::new(&[]);
+        for code in [0x78u8, 0x79] {
+            c.write_ureg(code, 0xFFFF_FFFF);
+            assert_eq!(
+                c.read_ureg(code),
+                0xF81F_FFFF | 0x0540_0000,
+                "bits 0..20, 27..31 + status"
+            );
+        }
+        c.write_ureg(0x76, 0xFFFF_FFFF);
+        assert_eq!(c.read_ureg(0x76), 0xFF04_7FFF);
+        c.write_ureg(0x77, 0xFFFF_FFFF);
+        assert_eq!(c.read_ureg(0x77), 0xFFFF_FFFF);
     }
 }

@@ -19,6 +19,8 @@ impl Core {
         self.fx.clear(n);
         let f = &mut self.flags;
         (f.az, f.an, f.av, f.ac, f.as_) = (r == 0, (r as i32) < 0, av, ac, as_);
+        // VERIFIED (census diff, 11 cases): a fixed-point ALU operation clears AI
+        f.ai = false;
         if av {
             self.note_arith_exception(false, STKY_AOS);
         }
@@ -84,6 +86,7 @@ impl Core {
                 self.shift_cacc(greater);
                 let f = &mut self.flags;
                 (f.az, f.an, f.av, f.ac, f.as_) = (rx == ry, less, false, false, false);
+                f.ai = false; // VERIFIED (census diff, 67 cases): a fixed compare clears AI
             }
             0x21 => self.fixed_plain(n, rx),
             0x22 => self.fixed_sub(n, 0, rx, 1),
@@ -185,5 +188,26 @@ mod tests {
         assert!(!c.flags.ac && !c.flags.av && !c.flags.as_);
         assert!(c.compute(word(0x0A, 0, 1, 2)));
         assert!(!c.flags.az && !c.flags.an);
+    }
+
+    #[test]
+    fn a_fixed_alu_operation_clears_ai() {
+        // census diff: `R12 = R12 AND R13` and `PASS` with a random ASTAT that had AI set
+        let mut c = Core::new(&[]);
+        c.flags.ai = true;
+        (c.r[1], c.r[2]) = (6, 3);
+        assert!(c.compute((0x40 << 12) | (3 << 8) | (1 << 4) | 2)); // R3 = R1 AND R2
+        assert_eq!(c.r[3], 2);
+        assert!(!c.flags.ai);
+    }
+
+    #[test]
+    fn a_fixed_compare_clears_ai() {
+        // census diff: `COMP(R0, R1)` with AI set from an earlier float operation
+        let mut c = Core::new(&[]);
+        c.flags.ai = true;
+        (c.r[1], c.r[2]) = (6, 3);
+        assert!(c.compute((0x0A << 12) | (1 << 4) | 2));
+        assert!(!c.flags.ai);
     }
 }

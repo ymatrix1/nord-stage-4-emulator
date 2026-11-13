@@ -50,7 +50,7 @@ impl Core {
             insn: Insn { kind, parcels, len },
             w,
             cond_ok: self.cond(bits(w, 37, 33)),
-            cond_y: self.simd() && self.cond_for(self.flags_y, bits(w, 37, 33)),
+            cond_y: self.simd() && self.cond_for(true, bits(w, 37, 33)),
         }
     }
 

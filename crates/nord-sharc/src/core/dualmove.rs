@@ -28,7 +28,20 @@ impl Core {
         if d.kind() == Kind::T1a {
             // no condition field in this type: bits 37..33 are data, so run on both elements
             let c = bits(w, 22, 0);
+            // VERIFIED (census diff, 340 cases): a multiplier-plus-ALU compute in this form leaves
+            // MN, MV, MU, MI (ASTAT bits 6..9) and the sticky bits MOS..MIS (STKY 6..9) as they
+            // were; a multiplier-only compute updates them as usual
+            let keep = (self.sys.astat_extra, self.sys.stky);
             self.on_each_pe(d, true, true, |core| core.compute(c))?;
+            if bits(c, 22, 22) == 1 {
+                const MULT: u32 = 0xF << 6;
+                for y in 0..2 {
+                    let e = &mut self.sys.astat_extra[y];
+                    *e = *e & !MULT | keep.0[y] & MULT;
+                    let k = &mut self.sys.stky[y];
+                    *k = *k & !MULT | keep.1[y] & MULT;
+                }
+            }
         }
         self.mem_transfer_with(d, dm_addr, dm_reg, dm_write, dm_captured)?;
         self.mem_transfer_with(d, pm_addr, pm_reg, pm_write, pm_captured)?;

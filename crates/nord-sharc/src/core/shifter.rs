@@ -28,7 +28,7 @@ fn shift(v: u32, s: i32, arithmetic: bool) -> u32 {
         } else {
             v << s
         }
-    } else if -s >= 32 {
+    } else if s.unsigned_abs() >= 32 {
         if arithmetic {
             ((v as i32) >> 31) as u32
         } else {
@@ -203,7 +203,18 @@ impl Core {
     }
 
     /// [`Core::shifter`] with the operand values given (register or immediate form).
+    ///
+    /// VERIFIED (census diff, 600+ cases of ASHIFT, LSHIFT, FEXT, FDEP, BTGL, BCLR, FPACK, FUNPACK,
+    /// EXP ...): every shifter operation clears SF (ASTAT bit 14).
     fn shifter_op(&mut self, op: u64, n: usize, rx: u32, ry: u32) -> bool {
+        let ok = self.shifter_unit(op, n, rx, ry);
+        if ok {
+            self.sys.astat_extra[0] &= !(1 << 14);
+        }
+        ok
+    }
+
+    fn shifter_unit(&mut self, op: u64, n: usize, rx: u32, ry: u32) -> bool {
         let old = self.r[n];
         let (len, pos) = ((ry >> 6) & 63, ry & 63);
         let bit = ry as i32;
@@ -505,5 +516,23 @@ mod tests {
         c.r[1] = 0x4000_0000;
         assert!(c.compute(word(0x84, 3, 1, 2)));
         assert_eq!(c.r[3], 1, "EXP (EX) reports the ALU overflow bit");
+    }
+
+    #[test]
+    fn a_shift_count_of_i32_min_does_not_overflow() {
+        // census diff: a random shift count reached `-s` with s = i32::MIN and panicked
+        assert_eq!(shift(0x8000_0000, i32::MIN, true), u32::MAX);
+        assert_eq!(shift(0x8000_0000, i32::MIN, false), 0);
+        assert_eq!(shift(1, i32::MAX, false), 0);
+    }
+
+    #[test]
+    fn a_shifter_operation_clears_sf() {
+        // census diff: ASHIFT, FEXT, FDEP ... clear ASTAT bit 14
+        let mut c = Core::new(&[]);
+        c.sys.astat_extra[0] = 1 << 14;
+        c.r[1] = 3;
+        assert!(c.shifter(0x00, 2, 1, 1)); // R2 = LSHIFT R1 BY R1
+        assert_eq!(c.sys.astat_extra[0] >> 14 & 1, 0);
     }
 }

@@ -102,7 +102,7 @@ impl Core {
     /// Whether the termination condition `code` holds on PEx (and PEy in SIMD mode).
     fn term_holds(&self, code: u8) -> bool {
         let c = u64::from(code);
-        self.cond(c) && (!self.simd() || self.cond_for(self.flags_y, c))
+        self.cond(c) && (!self.simd() || self.cond_for(true, c))
     }
 
     /// End-of-instruction bookkeeping of the innermost arithmetic loop for the instruction at

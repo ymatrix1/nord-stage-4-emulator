@@ -30,6 +30,14 @@ impl ExtFile {
     }
 }
 
+/// The captured source of a register transfer (see [`Core::capture_move`]).
+pub(super) struct MoveSrc {
+    v: u32,
+    ext: Option<(u32, u8)>,
+    comp: u32,
+    comp_ext: Option<(u32, u8)>,
+}
+
 impl Core {
     /// The 40-bit float in register `n`.
     pub(super) fn f40(&self, n: usize) -> u64 {
@@ -63,41 +71,77 @@ impl Core {
     /// `Ureg = Ureg` transfer. VERIFIED on the simulator (`docs/research/sharc-round/`,
     /// `sharc-flags/`): a move between data registers, R or S, keeps the 40-bit extension; any other
     /// destination drops it.
+    #[cfg(test)]
     pub(super) fn move_ureg(&mut self, dst: u8, src: u8) {
-        let v = self.read_ureg(src);
-        let ext = self.ext_slot(src);
-        self.write_ureg(dst, v);
-        if let (Some(e), true) = (ext, self.ext_slot(dst).is_some()) {
-            self.put_ext_slot(dst, e);
-        }
-        if self.simd() && dst < 16 {
-            self.move_ureg_pey(dst, src, v);
-        }
-        if self.simd() && src < 16 && (dst == 0x76 || dst == 0x78) {
-            // VERIFIED (`simd_measured.rs`): `ASTAT = Rn` also loads ASTATy from `Sn` (the probe clears
-            // both with `ASTAT = R6`). ASSUMED the same for STKY.
-            self.write_ureg(dst + 1, self.s[src as usize]);
+        let cap = self.capture_move(src);
+        self.apply_move(dst, src, &cap);
+    }
+
+    /// Reads the source of a register transfer: the value, its extension, and the value of the
+    /// PEy complement (read together because a compute in the same instruction sees the old
+    /// registers).
+    pub(super) fn capture_move(&self, src: u8) -> MoveSrc {
+        let n = usize::from(src & 15);
+        let (comp, comp_ext) = match src >> 4 {
+            0 => (self.s[n], self.ext_slot(0x50 | src)),
+            5 => (self.r[n], self.ext_slot(src & 15)),
+            // ASSUMED for STKY (ASTAT measured): the complement is STKYy
+            7 if src == 0x76 || src == 0x78 => (self.read_ureg(src + 1), None),
+            _ => (self.read_ureg(src), None),
+        };
+        MoveSrc {
+            v: self.read_ureg(src),
+            ext: self.ext_slot(src),
+            comp,
+            comp_ext,
         }
     }
 
-    /// SIMD `Rn = Ureg`: PEy's `Sn` takes the complement of the source.
+    /// Writes a captured transfer to `dst`. In SIMD mode the PEy side moves too:
     ///
-    /// VERIFIED (`simd_measured.rs`): `Rn = Rm` also copies `Sm` to `Sn`, and `Rn = ASTAT` loads
-    /// `Sn` with ASTATy (the probe reads ASTAT after every operation of both elements).
-    /// ASSUMED: STKY likewise pairs with STKYy, and any other source register is broadcast
-    /// (`Sn = Rn`, as for the immediate loads); no firmware path depends on it.
-    fn move_ureg_pey(&mut self, dst: u8, src: u8, v: u32) {
-        let n = dst as usize;
-        if src < 16 {
-            let ext = self.ext_slot(0x50 | src);
-            self.s[n] = self.s[src as usize];
-            if let (Some(e), true) = (ext, self.ext_slot(0x50 | dst).is_some()) {
-                self.put_ext_slot(0x50 | dst, e);
+    /// VERIFIED (`simd_measured.rs`, census diff): `Rn = Rm` also copies `Sm` to `Sn`, `Sn = Rm`
+    /// also copies `Sm` to `Rn` (every data register has an opposite-element twin), `Rn = ASTAT`
+    /// loads `Sn` with ASTATy and `ASTAT = Rn` loads ASTATy from `Sn`. ASSUMED: STKY likewise
+    /// pairs with STKYy, and a source that is no data register is broadcast (`Sn = Rn`, as for the
+    /// immediate loads).
+    #[cfg(test)]
+    pub(super) fn apply_move(&mut self, dst: u8, src: u8, cap: &MoveSrc) {
+        self.apply_move_if(dst, src, cap, true, true);
+    }
+
+    /// [`Core::apply_move`] with a condition per element (VERIFIED, census diff: in SIMD mode
+    /// `IF cc Sn = Rm` follows PEy's condition and `IF cc Rn = Rm` PEx's).
+    pub(super) fn apply_move_if(
+        &mut self,
+        dst: u8,
+        src: u8,
+        cap: &MoveSrc,
+        x_ok: bool,
+        y_ok: bool,
+    ) {
+        if x_ok {
+            self.write_ureg(dst, cap.v);
+            if let (Some(e), true) = (cap.ext, self.ext_slot(dst).is_some()) {
+                self.put_ext_slot(dst, e);
             }
-        } else if src == 0x76 || src == 0x78 {
-            self.s[n] = self.read_ureg(src + 1);
-        } else {
-            self.s[n] = v;
+        }
+        if !self.simd() || !y_ok {
+            return;
+        }
+        let twin = match dst >> 4 {
+            0 => Some(0x50 | dst),
+            5 => Some(dst & 15),
+            7 if (dst == 0x76 || dst == 0x78) && src < 0x60 && src & 0x80 == 0 => Some(dst + 1),
+            _ => None,
+        };
+        if let Some(t) = twin {
+            if t >> 4 == 7 && src >> 4 != 0 && src >> 4 != 5 {
+                return; // only a data register carries a PEy value into ASTATy/STKYy
+            }
+            self.write_ureg(t, cap.comp);
+            if let (Some(e), true) = (cap.comp_ext, self.ext_slot(t).is_some()) {
+                self.put_ext_slot(t, e);
+            }
         }
     }
 
