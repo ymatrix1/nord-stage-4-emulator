@@ -126,13 +126,17 @@ To keep every label legible on standard 1080p/1440p/4K monitors and inside DAW p
 
 ## 6. Baked sprite proof (B7, Phase 6b)
 
-First measured output of the D15 baker: one knob filmstrip and one fader cap with a separate shadow, rendered by `assets/blender/build_proof.py`, committed under `assets/panel/proof/` with SHA-256 hashes in `manifest.json` (`python tools/panel_assets.py verify`). Details and sizes: [panel-blender-proof.md](../research/panel-blender-proof.md).
+Measured output of the D15 baker: a knob filmstrip with a separate arc-ring layer, three fader cap sprites (black, white, grey) with one shared shadow layer, and two plates, rendered by `assets/blender/build_proof.py`, committed under `assets/panel/proof/` with SHA-256 hashes in `manifest.json` (`python tools/panel_assets.py verify`). Colours and proportions come from numbers measured on the owner's private reference images, stored in [`assets/panel/theme_samples.json`](../../assets/panel/theme_samples.json) (no pixels, D16). Details, sizes and what still differs from the hardware: [panel-blender-proof.md](../research/panel-blender-proof.md).
 
 | Item | Value | Tag |
 |---|---|---|
-| Knob filmstrip | 64 frames, 8x8 grid, frame 96 px (1x) / 192 px (2x), pointer -135 to +135 deg clockwise | rotation `EMPIRICAL` (rotary scale on reference photo, measurement only) |
-| Fader cap | 96 px / 192 px sprite, separate shadow sprite of the same size | `ASSUMED` geometry (original) |
-| Light | one top-left sun, elevation about 55 deg | `ASSUMED`, D15 |
-| Camera | orthographic, 14 deg tilt toward player | `ASSUMED` |
-| Size, one of each asset | 420 KB (1x), 1.28 MB (2x) PNG | measured |
-| Full-panel estimate (4 knob styles, 3 fader styles) | 1.56 MB (1x), 4.62 MB (2x) PNG | counts `ASSUMED` until B2 |
+| Knob filmstrip | 64 frames, 8x8 grid, frame 96 px (1x) / 192 px (2x), transparent (composes on any plate), pointer -135 to +135 deg clockwise | rotation `EMPIRICAL` (rotary scale on reference, measurement only) |
+| Knob arc ring | own transparent layer, 270 deg, thin start to thick end, outer 1.25 x cap radius | proportions `EMPIRICAL` |
+| Fader caps | black, white, grey; 96 px / 192 px; one shadow sprite of the same size shared by all | shape `ASSUMED` (original), proportions `EMPIRICAL` |
+| Plate colours | red (134, 31, 41), slate (55, 64, 76) sampled from the reference; rendered within 6 per channel | `MEASURED` (see note) |
+| Light | one top-left sun, elevation about 61 deg, soft | `ASSUMED`, D15 |
+| Camera | orthographic, 30 deg tilt toward player | `ASSUMED` |
+| Size, one knob style + all caps + plates | 503 KB (1x), 1.47 MB (2x) PNG | measured |
+| Full-panel estimate (4 knob styles) | 1.82 MB (1x), 5.13 MB (2x) PNG | counts `ASSUMED` until B2 |
+
+Note: the sampled colours differ from the §2 tokens (red (134, 31, 41) vs `#8E1B1F`; slate (55, 64, 76) vs `#323D47`). The sprites follow the samples; which one becomes the theme token is open for B8.
