@@ -8,8 +8,8 @@
 use super::weights::{wheel_of, UNIT_WEIGHT};
 use super::{vibrato_bank::wheel_hz, OrganLayer, OrganModel, ToneWheelSource, WeightMode};
 
-/// Rate at which wheel 0 has the cycles per frame of the firmware increment (`organ_ref` default).
-const FRAME_RATE: f32 = 43_156.4;
+/// DSP frame rate (VERIFIED, `docs/research/dsp-frame-rate.md`): weight smoothing is per frame.
+const FRAME_RATE: f32 = super::FIRMWARE_FRAME_RATE_HZ as f32;
 
 /// Layer with everything but the tonewheel drawbar path off.
 fn layer(mode: WeightMode) -> OrganLayer {

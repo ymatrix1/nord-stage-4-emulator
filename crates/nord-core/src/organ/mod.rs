@@ -5,6 +5,8 @@
 //! `vibrato_bank` (12-TET ladder, detune table, group gains), `tonewheel` (91-wheel
 //! generator), `keyclick`, `scanner`, `rotary`.
 
+mod b3_keys;
+mod b3_weights;
 mod b3_wheels;
 mod drawbar;
 mod drawbar_sum;
@@ -21,6 +23,7 @@ mod types;
 mod vibrato_bank;
 mod vibrato_link;
 mod vox_bank;
+mod vox_keys;
 mod vox_layer;
 mod vox_output;
 mod vox_shaper;
@@ -43,9 +46,10 @@ mod vox_golden;
 #[cfg(test)]
 mod weight_tests;
 
+pub use b3_keys::{A_CAPTURED_WHEELS as B3_A_CAPTURED_WHEELS, WHEEL_GAIN as B3_WHEEL_GAIN};
 pub use b3_wheels::{
-    base_step as b3_base_step, note_hz as b3_note_hz, note_step as b3_note_step, B3Wheels,
-    WHEEL_GAIN as B3_WHEEL_GAIN,
+    base_step as b3_base_step, firmware_note_hz as b3_firmware_note_hz, note_hz as b3_note_hz,
+    note_step as b3_note_step, B3Wheels, ARM_FINE_WORD as B3_ARM_FINE_WORD,
 };
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
 pub use farfisa_wheels::{
@@ -53,8 +57,8 @@ pub use farfisa_wheels::{
     ROWS as FARFISA_ROWS,
 };
 pub use firmware_bank::{
-    build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate, phase_step,
-    ToneBank, DEFAULT_TUNE_WORD,
+    build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate,
+    implied_frame_rate_at, phase_step, ToneBank, ARM_DEFAULT_TUNE_WORD, DEFAULT_TUNE_WORD,
 };
 pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
 pub use types::{
@@ -132,6 +136,7 @@ pub struct OrganLayer {
     tone_bank: ToneBank,
     vox: vox_source::VoxSource,
     b3_wheels: B3Wheels,
+    b3_weights: b3_weights::B3Weights,
     b3_synced: (f32, f32),
     farfisa_wheels: FarfisaWheels,
     farfisa_synced: (f32, f32),
@@ -208,6 +213,7 @@ impl OrganLayer {
             tone_bank,
             vox: vox_source::VoxSource::new(sample_rate),
             b3_wheels: B3Wheels::new(),
+            b3_weights: b3_weights::B3Weights::new(sample_rate),
             b3_synced: (0.0, f32::NAN),
             farfisa_wheels: FarfisaWheels::new(),
             farfisa_synced: (0.0, f32::NAN),
@@ -252,6 +258,7 @@ impl OrganLayer {
             }
             self.held_notes[idx] = true;
             self.note_gains[idx] = gain.clamp(0.0, 1.0);
+            self.b3_weights.mark();
             self.weight_state.key_down(
                 idx as u8,
                 velocity_for_gain(gain),
@@ -275,6 +282,7 @@ impl OrganLayer {
         let idx = (note as usize).min(127);
         if self.held_notes[idx] {
             self.held_notes[idx] = false;
+            self.b3_weights.mark();
             self.weight_state.key_up(idx as u8);
             self.active_key_count = self.active_key_count.saturating_sub(1);
             let click_scale = match self.model {
@@ -301,6 +309,7 @@ impl OrganLayer {
 
         if self.active_key_count == 0
             && !(self.weight_mode == WeightMode::Firmware && self.weight_state.active())
+            && !(self.b3_weights_active() && self.b3_weights.active())
             && self.click_env < 1e-6
             && self.click_bp_state[0].abs() < 1e-6
         {

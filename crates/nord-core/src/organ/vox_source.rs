@@ -4,9 +4,10 @@
 //! Spec: `docs/specs/organ-engine.md` section 3.1.7. The output stage `0x1229B3` forms
 //! `T = sum_k w_k Y_k` over the 84 note signals (the 12 sine buckets carry weight 0 here, see the
 //! spec) and passes it through the three sections. The weights are delivered by the ARM
-//! (`0xC0224468`, `docs/research/pno-full-pass.md` section 6); the key to oscillator map and the
-//! per-key weights are not decoded, so a held key `n` drives oscillator `n - 24` with weight
-//! 1.0 times its velocity gain (ASSUMED, the map used by the oracle runs of the research notes).
+//! (`0xC0224468`, `docs/research/pno-full-pass.md` section 6); the key to row map and the per-key
+//! weights are `vox_keys` (VERIFIED against the captured key-down, `docs/research/keydown-zones.md`
+//! section 5): a held key `n` drives the rows `fold(n - 36 + I[slot])` with the default level
+//! slots and no velocity.
 
 use super::vox_bank::{VoxBank, NOTES};
 use super::vox_output::VoxOutput;

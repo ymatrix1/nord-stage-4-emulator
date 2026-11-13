@@ -115,6 +115,7 @@ impl WeightState {
 
 #[cfg(test)]
 mod tests {
+    use super::super::lane_mix::FIRMWARE_FRAME_RATE_HZ;
     use super::super::weights::{a_key_down, a_update, UNIT_WEIGHT};
     use super::*;
 
@@ -130,7 +131,7 @@ mod tests {
 
     #[test]
     fn key_down_ramps_with_the_fast_coefficient_and_key_up_with_the_slow_one() {
-        let fs = 43_156.4;
+        let fs = FIRMWARE_FRAME_RATE_HZ as f32;
         let mut s = WeightState::new(fs, D888);
         let mut held = [false; 128];
         held[60] = true;
@@ -156,7 +157,7 @@ mod tests {
 
     #[test]
     fn drawbar_change_is_a_full_update_and_chords_add() {
-        let fs = 43_156.4;
+        let fs = FIRMWARE_FRAME_RATE_HZ as f32;
         let mut s = WeightState::new(fs, D888);
         let mut held = [false; 128];
         for n in [60usize, 64, 67] {
