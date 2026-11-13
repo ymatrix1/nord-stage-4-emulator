@@ -77,42 +77,66 @@ def clean_windows(mask: np.ndarray, patch: int, step: int = 3) -> list[tuple[int
     return out
 
 
-def quilt(a: np.ndarray, windows, size: int, patch: int, seed: int = 0, mean=None) -> np.ndarray:
-    """Cover size x size with random clean patches, cross-faded where they overlap. Each patch
-    is shifted to `mean` (default: the median patch colour), so only the fine grain is kept."""
+def quilt(
+    a: np.ndarray,
+    windows,
+    size: int,
+    patch: int,
+    seed: int = 0,
+    mean=None,
+    overlap: int = 4,
+    tries: int = 12,
+) -> np.ndarray:
+    """Image quilting on a torus: cells of (patch - overlap) px, each filled with the clean
+    reference patch (of `tries` random ones) that best agrees with its already placed
+    neighbours in the overlap, blended only across that narrow overlap. Indices wrap, so the
+    tile is seamless by construction and the grain keeps its full contrast. Each patch is
+    shifted to `mean` (default: the median patch colour) to drop lighting blotches."""
     if not windows:
         raise ValueError("no clean window for the tile")
+    step = patch - overlap
+    if size % step:
+        raise ValueError(f"tile {size} is not a multiple of the cell {step}")
     rng = np.random.default_rng(seed)
-    ramp = np.minimum(np.arange(patch) + 1, patch - np.arange(patch)).astype(np.float64)
-    w2 = np.outer(ramp, ramp)[..., None]
-    acc = np.zeros((size + patch, size + patch, 3))
-    wsum = np.zeros((size + patch, size + patch, 1))
-    step = patch // 2
     if mean is None:
         mean = np.median([a[y : y + patch, x : x + patch].mean(axis=(0, 1)) for x, y in windows], 0)
-    for y in range(0, size + 1, step):
-        for x in range(0, size + 1, step):
-            sx, sy = windows[rng.integers(len(windows))]
-            p = a[sy : sy + patch, sx : sx + patch]
-            p = p - p.mean(axis=(0, 1)) + mean  # keep the grain, drop lighting blotches
-            acc[y : y + patch, x : x + patch] += p * w2
-            wsum[y : y + patch, x : x + patch] += w2
-    return (acc / np.maximum(wsum, 1e-9))[:size, :size]
+    # best-fit choice favours flat patches; keep only patches with typical grain contrast
+    grain = np.array([a[y : y + patch, x : x + patch].std() for x, y in windows])
+    lo, hi = np.percentile(grain, [35, 90])
+    windows = [w for w, g in zip(windows, grain) if lo <= g <= hi] or windows
+    ramp = np.ones(patch)
+    ramp[:overlap] = (np.arange(overlap) + 0.5) / overlap
+    ramp[-overlap:] = ramp[:overlap][::-1]
+    w2 = np.outer(ramp, ramp)[..., None]
+    acc = np.zeros((size, size, 3))
+    wsum = np.zeros((size, size, 1))
+    idx = np.arange(patch)
+    for y in range(0, size, step):
+        for x in range(0, size, step):
+            rows, cols = (y + idx) % size, (x + idx) % size
+            have = wsum[np.ix_(rows, cols)][..., 0] > 0
+            cur = acc[np.ix_(rows, cols)] / np.maximum(wsum[np.ix_(rows, cols)], 1e-9)
+            best, best_err = None, None
+            for k in rng.integers(len(windows), size=tries):
+                sx, sy = windows[k]
+                p = a[sy : sy + patch, sx : sx + patch]
+                p = p - p.mean(axis=(0, 1)) + mean  # keep the grain, drop lighting blotches
+                err = ((p - cur)[have] ** 2).sum() if have.any() else 0.0
+                if best_err is None or err < best_err:
+                    best, best_err = p, err
+            acc[np.ix_(rows, cols)] += best * w2
+            wsum[np.ix_(rows, cols)] += w2
+    return acc / np.maximum(wsum, 1e-9)
 
 
 def plate_tile(ref: Image.Image, target, tol: float, seed: int = 0) -> Image.Image:
+    """Seamless tile of the plate grain, quilted from clean reference patches (no blending of
+    the whole tile, so the grain keeps the reference contrast)."""
     a = np.asarray(ref.convert("RGB"), dtype=np.float64)
-    patch = 24
+    patch = 20
     windows = clean_windows(clean_mask(a, target, tol), patch)
-    img = Image.fromarray(
-        np.clip(
-            np.rint(quilt(a, windows, TILE_2X, patch, seed, np.asarray(target, dtype=np.float64))),
-            0,
-            255,
-        ).astype(np.uint8),
-        "RGB",
-    )
-    return P.make_seamless(img)
+    tile = quilt(a, windows, TILE_2X, patch, seed, np.asarray(target, dtype=np.float64))
+    return Image.fromarray(np.clip(np.rint(tile), 0, 255).astype(np.uint8), "RGB").convert("RGBA")
 
 
 # ---------------------------------------------------------------- triangle selectors
@@ -306,8 +330,9 @@ def bake(ref_path: Path, proof: Path = P.PROOF_DIR, crops: dict | None = None) -
     ref = Image.open(ref_path).convert("RGB")
     k = crops["ref_px_per_unit"]
     two_x: dict[str, Image.Image] = {}
-    for name, box in crops["buttons"].items():
-        two_x[f"button_{name}"] = at_scale(crop(ref, box), 2, k)
+    for name, (x0, y0, x1, y1) in crops["buttons"].items():
+        # the well boxes include the anti-aliased step to the plate: inset 1 px
+        two_x[f"button_{name}"] = at_scale(crop(ref, (x0 + 1, y0 + 1, x1 - 1, y1 - 1)), 2, k)
     for name, spec in crops["triangles"].items():
         base, lit = triangle_layers(ref, spec)
         two_x[f"tri_{name}"] = at_scale(base, 2, k)
