@@ -118,6 +118,8 @@ Strip word 0 = `((DM(...) & 0x7F) << 24) | id` with `id = bank0_CODE@0x2FA050[ty
 | word 1 table (7) | `0x1253BD`, `0x12566E`, `0x12549D` (182 instr, 77 mul, 10 `fext/fdep`), `0x1257B2`, `0x125913`, `0x125A50`, `0x125B79` (null) | 96..182 instr, const `3.0` | B-stage modules (delay-line module `0x12549D` of [org-stage-map](org-stage-map.md) s3) |
 
 Observations (EMPIRICAL): 29 of the 56 distinct routines (all but the stubs and the small stages) carry the constant family `0.3456, 0.1152, 4.3402` (or twice that, `0.6912, 0.2304, 2.1701`; `0.1152 * 4.3402 * 2 = 1`), so the 74 types are one parametrised filter family (type = filter model) and not 74 independent algorithms. The names of the EQ/filter models (`Edt_*`) are not joined to the type index; `0x1206BE`, `0x123900`, `0x12082F`, `0x120C68`, `0x124C3A` of [org-stage-map](org-stage-map.md) are **not** in the ARM tables: they are routines of the ORG-only image or helpers (the ARM never names them).
+**Update 2026-11-13 ([synth-voice-control](synth-voice-control.md) s5):** the three constants `0.3456, 0.1152, 4.3402` are the high-pitch fade and shaping of a **band-limited saw** (helper `0x12501F`, executed in the oracle, 5.9e-8 agreement), not a filter design. Read the word-0 stages carrying them as oscillator waveform stages; the strip word-1 modules (`0x12566E` and siblings) are the filter side.
+
 
 ## 6. Piano program versus organ program (what is and is not established)
 
