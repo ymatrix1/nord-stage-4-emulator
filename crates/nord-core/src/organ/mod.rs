@@ -39,13 +39,14 @@ mod vox_golden;
 mod weight_tests;
 
 pub use b3_wheels::{
-    base_step as b3_base_step, note_hz as b3_note_hz, note_step as b3_note_step, B3Wheels,
+    base_step as b3_base_step, firmware_note_hz as b3_firmware_note_hz, note_hz as b3_note_hz,
+    note_step as b3_note_step, B3Wheels, ARM_FINE_WORD as B3_ARM_FINE_WORD,
     WHEEL_GAIN as B3_WHEEL_GAIN,
 };
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
 pub use firmware_bank::{
-    build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate, phase_step,
-    ToneBank, DEFAULT_TUNE_WORD,
+    build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate,
+    implied_frame_rate_at, phase_step, ToneBank, ARM_DEFAULT_TUNE_WORD, DEFAULT_TUNE_WORD,
 };
 pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
 pub use types::{
