@@ -220,6 +220,14 @@ def prepare_segment(seg: dict[str, Any], video: str, work: Path, tools: Path) ->
     return wav, events
 
 
+def filter_events(events: Path, lo: int, hi: int, out: Path) -> Path:
+    """Writes a copy of `events` that keeps only the notes `lo <= midi <= hi` (a key-zone cut)."""
+    doc = json.loads(events.read_text(encoding="utf-8"))
+    doc["events"] = [e for e in doc["events"] if lo <= e["midi"] <= hi]
+    out.write_text(json.dumps(doc), encoding="utf-8")
+    return out
+
+
 def note_onsets(events: Path, confirmed_only: bool = False) -> list[float]:
     """Onset times of the detected notes (video-confirmed ones only when requested)."""
     ev = json.loads(events.read_text(encoding="utf-8"))["events"]
@@ -235,6 +243,9 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
         if args.only and seg["id"] not in args.only:
             continue
         hw_wav, events = prepare_segment(seg, args.video, work, tools)
+        if args.note_range:
+            lo, hi = args.note_range
+            events = filter_events(events, lo, hi, work / seg["id"] / f"events_{lo}_{hi}.json")
         onsets = note_onsets(events, args.confirmed_only)
         suffix = "_conf" if args.confirmed_only else ""
         rows = []
@@ -306,6 +317,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--confirmed-only", action="store_true", help="Replay video-confirmed notes only."
     )
     p.add_argument("--only", nargs="*", help="Segment ids to run.")
+    p.add_argument(
+        "--note-range",
+        nargs=2,
+        type=int,
+        metavar=("LO", "HI"),
+        help="Replay only the detected notes LO..HI (a key-zone cut, MIDI numbers).",
+    )
     return p
 
 

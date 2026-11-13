@@ -206,7 +206,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
 - [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
 - [x] Corrected B3 tail ported with regenerated chord tests, oracle chords within 0.54 dB and video mid -1.1 dB ([b3-tail-bootstate](research/b3-tail-bootstate.md)); `B3Wheels` stays opt-in (RMS +8.0 dB)
-- [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] B3 clip gap decomposed: layer B (section II off in the program) and notes outside the zone cause the sub and most of the RMS gap; Farfisa sounds in the oracle with the key-down words ([organ-output-level](research/organ-output-level.md))
+- [ ] Engine: honour section I / II and zone flags for organ layers, then re-run `emu_vs_hw.py --only organ_b3`; Farfisa processor port; layer level law; Vox level word; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 

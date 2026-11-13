@@ -123,3 +123,13 @@ def test_apply_edits_sets_dotted_and_indexed_fields_and_rejects_unknown():
     assert doc == {"organ": {"drawbars_b": [8, 0, 8], "fx": {"reverb_enabled": False}}}
     with pytest.raises(KeyError):
         ev.apply_edits(doc, {"organ.fx.nope": 1})
+
+
+def test_filter_events_keeps_the_note_range(tmp_path):
+    src = tmp_path / "ev.json"
+    events = [{"midi": m, "onset_s": float(m)} for m in (40, 48, 60, 64, 70)]
+    src.write_text(json.dumps({"start_s": 1.0, "events": events}))
+    out = ev.filter_events(src, 48, 64, tmp_path / "f.json")
+    doc = json.loads(out.read_text())
+    assert [e["midi"] for e in doc["events"]] == [48, 60, 64]
+    assert doc["start_s"] == 1.0
