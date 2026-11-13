@@ -47,7 +47,7 @@ fn delay_mix_law_fades_dry_out_and_the_send_in() {
     let run = |mix: f32| {
         let mut fx = chain(FirmwareFx {
             delay_laws: true,
-            compressor: false,
+            ..FirmwareFx::OFF
         });
         fx.delay_enabled = true;
         fx.delay_time_ms = 20.0;
@@ -77,8 +77,8 @@ fn delay_mix_law_fades_dry_out_and_the_send_in() {
 #[test]
 fn firmware_compressor_delays_four_frames_and_is_unity_when_disabled() {
     let mut fx = chain(FirmwareFx {
-        delay_laws: false,
         compressor: true,
+        ..FirmwareFx::OFF
     });
     let out = render(&mut fx, 16, |i| if i == 0 { 0.25 } else { 0.0 });
     assert!(
@@ -117,8 +117,8 @@ fn firmware_compressor_is_silent_for_silence_and_stable_for_loud_and_quiet_input
 fn firmware_compressor_amount_changes_the_level_of_a_loud_tone() {
     let rms = |amount: f32| {
         let mut fx = chain(FirmwareFx {
-            delay_laws: false,
             compressor: true,
+            ..FirmwareFx::OFF
         });
         fx.comp_enabled = true;
         fx.comp_amount = amount;
