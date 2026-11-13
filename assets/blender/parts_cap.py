@@ -19,21 +19,19 @@ from proof_geom import box, loft
 # stray 4-vertex quads near the tip are not part of the cap and are dropped.
 CAP_W = 0.80
 CAP_PROFILE = (
-    (0.00, 0.02),
+    (0.00, 0.10),
     (0.20, 0.36),
     (0.79, 0.36),
-    (0.84, 0.42),
-    (0.99, 1.03),
+    (1.00, 1.03),
     (1.24, 1.04),
-    (1.30, 0.95),
-    (1.37, 0.40),
-    (1.40, 0.36),
+    (1.38, 0.38),
     (1.587, 0.36),
 )
 CAP_LEN_SCALE = 1.03  # EMPIRICAL: silhouette fit against the reference (model 1.587 u long)
 CAP_FRONT = -0.878  # nose tip, 0.06 u toward the back: the leaned render then fits the reference
 CAP_TAPER = 0.03  # model: top of the block 0.78 against a 0.80 base, walls upright
-CAP_BEVEL = 0.05  # model: corner radius about 0.05 u
+CAP_BEVEL = 0.07  # EMPIRICAL: owner photos, block edges and nose join are soft (about 0.07 u)
+CAP_SEGMENTS = 10  # smooth round-over
 CAP_FLIP = True  # model orientation, nose away from the player (silhouette IoU 0.884 vs 0.868)
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
 FOOT_WALL = 0.03  # ASSUMED: upright strip at the foot of every wall
@@ -67,7 +65,9 @@ def fader_cap(m, key):
     rings = [_section(sign * (CAP_FRONT + d * CAP_LEN_SCALE), z, top) for d, z in CAP_PROFILE]
     if CAP_FLIP:
         rings.reverse()
-    return [loft("cap_body", rings, m[key], smooth=True, bevel=CAP_BEVEL, segments=6)]
+    cap = loft("cap_body", rings, m[key], smooth=True, bevel=CAP_BEVEL, segments=CAP_SEGMENTS)
+    cap.modifiers["bevel"].use_clamp_overlap = False  # short foot wall must not cap it
+    return [cap]
 
 
 def layer_cap(m, key):

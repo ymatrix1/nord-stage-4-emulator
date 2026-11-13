@@ -186,3 +186,6 @@ rear ledge. Plan length stretched by 1.03 and moved 0.06 u back to fit the refer
 
 Implications: photo-estimated shapes were off by up to 40 % in height; measure from the model.
 Follow-ups: rounder block edges (model radius about 0.05 u), per-cap lean check on the white cap.
+
+Round-over (same review): bevel 0.07 u, 10 segments, overlap clamp off (the 0.03 u foot wall otherwise
+clamped it to nothing), tip end face 0.10 u tall. Silhouette IoU after rounding: black 0.950, white 0.914.
