@@ -227,7 +227,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] FX delay time law: `kDlyRateClkDiv` to the tap word and the oracle echo law, opt-in `FirmwareFx::delay_time` ([fx-delay-time](research/fx-delay-time.md))
 - [x] FX Amp type words (`kAmpTypeNew` 1..6) decoded, the Amp drive stage verified against the oracle with the real context and tables and wired behind `FirmwareFx::amp` (opt-in, Vox: mid +8.0 to -2.5 dB, level +11.4 dB without the cabinet); Leslie drive found to be `v / 127` into a null-stub row ([fx-type-map](research/fx-type-map.md) s8, s9)
 - [ ] Amp cabinet (`0x122A1D / 0x122B1D`: FIR plus 12 biquads) and the organ unit tone routines, then re-measure Vox; Leslie drive nonlinearity (ORG image)
-- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); reverb network and Leslie still open
+- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); the reverb half-rate wrapper `0x12417E` / `0x12435C` is modelled and ported (`FwRvbWrap`, not wired); the reverb core `0x123F61` and Leslie still open
 - [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); the reverb tables (`ns4-ca0i`); the delay time law (`kDlyRateClkDiv`, [fx-delay-time](research/fx-delay-time.md)) is decoded and wired behind `FirmwareFx::delay_time`
 - [ ] Enable gating and the command consumer ([fx-contexts](research/fx-contexts.md) s7; wiring plan s8), then sweep the four type ids with the effects enabled
 

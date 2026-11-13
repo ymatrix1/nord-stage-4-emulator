@@ -21,6 +21,7 @@ pub mod fw_delay_time;
 mod fw_drive_tables;
 pub mod fw_map;
 mod fw_params;
+mod fw_rvb_wrap;
 mod fw_short_float;
 mod fw_stage;
 mod fw_tone_stack;
@@ -64,6 +65,8 @@ mod tests_lfo_golden;
 mod tests_master_golden;
 #[cfg(test)]
 mod tests_resonant_golden;
+#[cfg(test)]
+mod tests_rvb_wrap_golden;
 mod types;
 
 pub use biquad::*;
@@ -77,6 +80,7 @@ pub use fw_params::{
     compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,
     set_tone_stack, CMP_SLOPE,
 };
+pub use fw_rvb_wrap::{mix2 as fw_rvb_mix2, FwRvbWrap};
 pub use fw_tone_stack::{ctx as fw_tone_stack_ctx, FwToneStack2, FwToneStack4};
 pub use master::MasterBus;
 pub use tables::*;
