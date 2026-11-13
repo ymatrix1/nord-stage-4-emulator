@@ -10,6 +10,7 @@ impl SynthLayer {
         waveform: VaWaveform,
         saw_model: SawModel,
         supersaw_detune: f32,
+        measured: bool,
         pulse_width: f32,
         lfo_dest: LfoDestination,
         lfo_amount: f32,
@@ -18,10 +19,21 @@ impl SynthLayer {
         dt: f32,
         eff_freq: f32,
         inv_fs: f32,
-        supersaw_phases: &mut [f32; 7],
+        supersaw_phases: &mut [f32; SUPERSAW_VOICES],
     ) -> f32 {
         match waveform {
             VaWaveform::Saw => saw_wave(saw_model, t, dt, inv_fs),
+            VaWaveform::SuperSaw if measured => {
+                let d = supersaw_detune.clamp(0.0, 1.0) * 10.0;
+                let mut sum = 0.0f32;
+                for (i, ph) in supersaw_phases.iter_mut().enumerate() {
+                    let f_osc = eff_freq * supersaw_voice_ratio(i, d);
+                    let dt_i = (f_osc * inv_fs).clamp(1e-5, 0.49);
+                    sum += saw_wave(saw_model, *ph, dt_i, inv_fs);
+                    *ph = (*ph + dt_i) % 1.0;
+                }
+                sum * (1.0 / SUPERSAW_VOICES as f32)
+            }
             VaWaveform::SuperSaw => {
                 let mut sum = 0.0f32;
                 let detune_scale = supersaw_detune.clamp(0.0, 1.0);
@@ -54,11 +66,12 @@ mod tests {
     use super::*;
 
     fn wave(w: VaWaveform, model: SawModel, t: f32) -> f32 {
-        let mut ph = [0.0f32; 7];
+        let mut ph = [0.0f32; SUPERSAW_VOICES];
         SynthLayer::render_va(
             w,
             model,
             0.3,
+            false,
             0.5,
             LfoDestination::FilterCutoff,
             0.0,
