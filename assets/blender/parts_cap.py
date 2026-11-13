@@ -1,7 +1,8 @@
 """Drawbar / layer-fader cap and its slotted plate for the B7 proof (runs inside Blender).
 
 Original art (D16): geometry authored from primitives (lofted sections); shapes follow the
-owner's photos of the real parts. Sizes are numbers measured on the owner's private reference (1 u = 129 reference px, see parts_knob.REF_PX_PER_U).
+owner's photos of the real parts. Sizes are numbers measured on the owner's private
+reference (1 u = 129 reference px, see parts_knob.REF_PX_PER_U).
 """
 
 from __future__ import annotations
@@ -18,12 +19,13 @@ CAP_BACK, CAP_FRONT = 0.90, -0.89
 CAP_HT, CAP_HN = 0.50, 0.26  # ASSUMED heights (photo ratio about 2 : 1)
 BLOCK_FRONT = -0.18  # base of the block's sloped front face
 BLOCK_TOP_FRONT = 0.02  # top edge of that face
-NOSE_TOP_FRONT, NOSE_CHAMFER_Z = -0.66, 0.08  # front chamfer of the nose
-# EMPIRICAL (reference, every drawbar): the nose is narrower than the block and offset left
-NOSE_X = (-0.42, 0.18)
-FOOT_H = 0.12  # ASSUMED: low base under the nose, full width
-CAP_TAPER = 0.18  # EMPIRICAL: block top is about 0.82 of its base width (photo, front view)
-CAP_BEVEL = 0.07
+NOSE_TOP_FRONT = -0.62  # front edge of the nose top
+# EMPIRICAL (reference, every drawbar): the nose top face spans this, left of centre; its
+# right wall slopes down to the full-width base
+NOSE_TOP_X = (-0.39, 0.12)
+BASE_H = 0.10  # EMPIRICAL: low base band seen in front of the nose (reference)
+CAP_TAPER = 0.12  # EMPIRICAL: block top is about 0.88 of its base width (photo, front view)
+CAP_BEVEL = 0.09
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
 # Layer-fader cap EMPIRICAL from its photo: a frustum, top smaller than the base on all sides,
 # rounded edges. Base 96 x 74 reference px.
@@ -34,42 +36,30 @@ LAYER_BEVEL = 0.07
 SLOT_W, SLOT_LEN, SLOT_DEPTH, PLATE_T = 0.17, 3.4, 0.16, 0.2
 
 
-def _section(y, z, top_frac, x0=-CAP_W / 2, x1=CAP_W / 2):
-    """Trapezoid cross-section at y between x0 and x1, `top_frac` of that width on top."""
-    c, hb = (x0 + x1) / 2, (x1 - x0) / 2
-    ht, zl = hb * top_frac, CAP_LIFT
-    return [(c - hb, y, zl), (c + hb, y, zl), (c + ht, y, zl + z), (c - ht, y, zl + z)]
-
-
-def _frac(z):
-    return 1.0 - CAP_TAPER * z / CAP_HT
+def _section(y, z, top_x):
+    """Cross-section at y: full cap width at the bottom, the top edge between `top_x`."""
+    hb, zl = CAP_W / 2, CAP_LIFT
+    return [(-hb, y, zl), (hb, y, zl), (top_x[1], y, zl + z), (top_x[0], y, zl + z)]
 
 
 def fader_cap(m, key):
-    """Drawbar cap: flange, tall rear block with sloped sides and front, long lower nose with
-    a chamfered front, lofted from back to front. `key` picks the material."""
+    """Drawbar cap, one loft from back to front over a full-width base: tall rear block with
+    tapered sides and a sloped front, then the lower nose whose top face is narrower and to
+    the left because its right wall slopes steeply (reference and photos)."""
     ht, hn = CAP_HT, CAP_HN
-    w = (-CAP_W / 2, CAP_W / 2)
+    blk = (-CAP_W / 2 * (1 - CAP_TAPER), CAP_W / 2 * (1 - CAP_TAPER))
+    base = (-CAP_W / 2 + 0.02, CAP_W / 2 - 0.02)
     secs = [
-        (CAP_BACK, ht * 0.86, *w),
-        (CAP_BACK - 0.08, ht, *w),
-        (BLOCK_TOP_FRONT, ht, *w),
-        (BLOCK_FRONT, hn, *NOSE_X),
-        (NOSE_TOP_FRONT, hn, *NOSE_X),
-        (CAP_FRONT, NOSE_CHAMFER_Z, *NOSE_X),
+        (CAP_BACK, ht * 0.86, blk),
+        (CAP_BACK - 0.08, ht, blk),
+        (BLOCK_TOP_FRONT, ht, blk),
+        (BLOCK_FRONT, hn, NOSE_TOP_X),
+        (NOSE_TOP_FRONT, hn, NOSE_TOP_X),
+        (NOSE_TOP_FRONT - 0.05, BASE_H, base),  # nose front drops onto the low base
+        (CAP_FRONT, BASE_H, base),
     ]
-    rings = [_section(y, z, _frac(z), x0, x1) for y, z, x0, x1 in secs]
-    body = loft("cap_body", rings, m[key], smooth=False, bevel=CAP_BEVEL, segments=8)
-    # the nose sits on a low full-width foot that ends with the nose (seen right of the nose)
-    foot = loft(
-        "cap_foot",
-        [_section(y, FOOT_H, 0.97) for y in (BLOCK_FRONT + 0.1, CAP_FRONT)],
-        m[key],
-        smooth=False,
-        bevel=0.02,
-        segments=3,
-    )
-    return [body, foot]
+    rings = [_section(y, z, tx) for y, z, tx in secs]
+    return [loft("cap_body", rings, m[key], smooth=False, bevel=CAP_BEVEL, segments=8)]
 
 
 def layer_cap(m, key):
