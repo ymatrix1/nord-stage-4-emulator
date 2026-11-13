@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFilter
 # out further on the left. Columns outside are never cap (keeps the LED ladders out).
 HALF_LEFT, HALF_RIGHT = 64, 56
 # EMPIRICAL: rows of rounded top corners on the caps (2x px).
-CORNER_ROWS = 12
+CORNER_ROWS = 22
 # EMPIRICAL: luminance of clean slate around the drawbars, the zero of the shadow layer.
 SLATE_LUM = 62.0
 # EMPIRICAL: offset (x, y px) of the cap's shadow under the top-left light, read on the
@@ -139,6 +139,18 @@ def _spread(a: np.ndarray, src: np.ndarray, radius: float) -> np.ndarray:
     return num / np.maximum(den, 1e-3)[..., None]
 
 
+def smooth_alpha(m: np.ndarray, sigma: float = 2.0, k: int = 4) -> np.ndarray:
+    """Anti-aliased alpha from a ragged pixel mask: open away 1-2 px nubs, blur, threshold at
+    k-times resolution and box-downsample, so edges are straight and corners round (EMPIRICAL:
+    sigma 2 px rounds corners like the reference caps, about 4 px radius)."""
+    img = Image.fromarray(m.astype(np.uint8) * 255)
+    img = img.filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(5))
+    img = img.filter(ImageFilter.GaussianBlur(sigma))
+    big = img.resize((m.shape[1] * k, m.shape[0] * k), Image.BICUBIC)
+    big = big.point(lambda v: 255 if v >= 128 else 0)
+    return np.asarray(big.resize((m.shape[1], m.shape[0]), Image.BOX), dtype=np.float64) / 255
+
+
 def matte(a: np.ndarray, m: np.ndarray, band: int = 2) -> tuple[np.ndarray, np.ndarray]:
     """(alpha 0..1, colour) with a smooth edge: in a band around the mask outline, alpha is the
     position of each pixel between the local cap colour and the local plate colour, and the
@@ -199,7 +211,14 @@ def cap_layers(ref: Image.Image, centre, size, kind: str) -> tuple[Image.Image, 
     a = ref_window(ref, centre, size)
     m = cap_mask(a, kind)
     rgb = clean_edge_glow(a, m)
-    alpha, rgb = matte(rgb, m)
+    alpha = smooth_alpha(m)
+    solid = Image.fromarray((alpha >= 0.999).astype(np.uint8) * 255)
+    rim = ~(np.asarray(solid.filter(ImageFilter.MinFilter(5))) > 0)  # 2 px inside the edge
+    edge = rim | ~m  # reference pixels there still mix in the dark slate: recolour them
+    core = (
+        np.asarray(Image.fromarray(m.astype(np.uint8) * 255).filter(ImageFilter.MinFilter(7))) > 0
+    )
+    rgb = np.where(edge[..., None], _spread(rgb, core, 3.0), rgb)  # cap colour on the rim
     soft = (alpha * 255).astype(np.uint8)
     cap = Image.fromarray(np.dstack([np.clip(rgb, 0, 255), soft]).astype(np.uint8), "RGBA")
     lum = a @ np.array([0.2126, 0.7152, 0.0722])
@@ -216,8 +235,9 @@ def cap_layers(ref: Image.Image, centre, size, kind: str) -> tuple[Image.Image, 
     top = np.nonzero(m.any(axis=1))[0].min() if m.any() else 0
     cols = np.arange(m.shape[1])[None, :]
     w = m.shape[1]
-    inside = (rows > top + 12) & (cols >= w / 2 - HALF_LEFT - 8) & (cols <= w / 2 + HALF_RIGHT + 12)
     bottom = np.nonzero(m.any(axis=1))[0].max() if m.any() else 0
+    upper = top + 0.3 * (bottom - top)  # no shadow beside the top block (LED ladders there)
+    inside = (rows > upper) & (cols >= w / 2 - HALF_LEFT - 8) & (cols <= w / 2 + HALF_RIGHT + 12)
     hug &= rows < bottom - 6  # below the cap the dark contact shadow is real: keep it
     region = (np.asarray(grown) > 0) & inside & ~hug & ~m
     dark = np.clip((SLATE_LUM - smooth) / SLATE_LUM * 1.2, 0, 0.85) * region

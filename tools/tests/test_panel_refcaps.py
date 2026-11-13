@@ -76,3 +76,13 @@ def test_matte_ignores_bluish_label_next_to_the_cap():
     m[10:30, 10:30] = True
     alpha, rgb = RC.matte(a, m)
     assert alpha[7, 20] == 0 and alpha[20, 20] == 1
+
+
+def test_smooth_alpha_removes_nubs_and_antialiases():
+    m = np.zeros((60, 60), bool)
+    m[10:50, 10:50] = True
+    m[20:22, 50:52] = True  # 2 px nub
+    m[30, 10] = False  # ragged notch
+    al = RC.smooth_alpha(m)
+    assert al[30, 30] == 1 and al[21, 51] == 0 and al[30, 10] > 0.5
+    assert 0 < al[30, 9] < 1 or 0 < al[30, 10] < 1 or 0 < al[30, 49] < 1  # soft edge
