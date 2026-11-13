@@ -2,6 +2,7 @@
 
 - **Checked:** 2026-11-13
 - **Sources (local, never committed):** `Nord Stage 4 Factory Restore RevK v1.66.ns4b`, the Part A demo video (`NEW NORD STAGE 4 ... [_zksT69H30c].webm`), ORG core 2 image (`tools/ns4_dsp_ldr.py`), `sharc-org`; `tools/emu_vs_hw.py`, `tools/synth_strip_e2e.py`, example `synth_strip_e2e`, `ns4 render-patch --synth-chain strip`. Builds on [synth-adr-and-strip-law](synth-adr-and-strip-law.md), [synth-stage-equations](synth-stage-equations.md), [synth-voice-control](synth-voice-control.md), [dsp-frame-rate](dsp-frame-rate.md), [emulator-vs-hardware-audio](emulator-vs-hardware-audio.md).
+- **Updated:** 2026-11-13 (section 6: wave stage probe, key-down velocity, default decision)
 - **Question:** Can the verified synth firmware pieces (saw, ADR record chain, strip-law cutoff, four-pole filter, gain de-zipper) run as one per-voice chain, does the chain agree with the oracle end to end, and what explains the Smooth Lead gap (presence 1.5 to 3 kHz -16.5 dB, level -6.4 dB) against the hardware video?
 
 Tags follow `.agents/rules/provenance-in-code.md`. Audio is lossy YouTube audio of a live performance with knob moves that are not replayed: band numbers are shape evidence, not bit-exactness.
@@ -74,6 +75,25 @@ Findings, in the order they were ruled in or out (renders with `examples/zz_prob
 - The waveform fix is a guess from one program: ASSUMED, not VERIFIED, and `render_hash` of the classic chain must stay (`25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a`, checked).
 - The video score moved from 4.93 to 4.05 only; the remaining gap depends on controls that are not replayed.
 
+## 6. Wave stage probe, key-down velocity and the default decision (follow-up PR `feat/synth-wave-stages`)
+
+**Which strip stage does a Wave select? Not decided by the edit ids.** `tools/synth_wave_probe.py` drives `Edt_Syn_kOscWave` through the real layer client of the booted v1.66 host firmware for the grid `kMode {0, 1} x kOscBank {0..3} x kOscCat {0, 3, 7} x kOscWave {0, 6, 127}` (value cells of mode, bank and category written first, 72 points, [data/synth-wave-probe.csv](data/synth-wave-probe.csv)): strip word 0 is `0x061215FB` at every point (the earlier sweep of five wave values at the default state agrees). So the ARM sender `0xC01CC85C` (`type = [this + 0xC8]`, `word 0 = ((byte & 0x7F) << 24) | table[type]`, table `0xC02FA050`, 74 ids) is re-sent by the wave, category, bank and mode ids but its type index stays 2 (stage `0x1215FB`). Whatever writes `[this + 0xC8]` is not a store of the edit-id handlers: a scan of all `str [rN, #0xC8]` sites of the OS image finds 198, none inside the strip class that was tied to the synth (the nearby ones are constructor field initialisers at `0xC01E5794`, `0xC01EDC00`, `0xC01EDE08`, `0xC01EEB1C`). The preset load / sound select apply path is the next suspect and needs a loaded program in the harness. Consequence: the stage of SHAPE, SUB OSC, SYNC and the SAMPLE / WAVE banks is **still unidentified**, so none of their waveforms can be modelled bit exactly, and the Python and Rust models of this task were **not written** (no stage to anchor them on; a model fitted to the single 3.6 dB second-harmonic reading would be a guess). The decoded `Triangle` of SHAPE wave 0 keeps playing as the firmware saw in the strip chain (ASSUMED, section 4).
+
+**Key-down gain series.** Byte 1 of the key word is `0x80 + g(vel)` with `g` a saturating S-curve of the curve-6 table value (`floor(127 s(c / 600))`, `s` = smoothstep, 97 of 127 exact, max error 1; [keydown-zones](keydown-zones.md) s7). The exact 127-entry `g` list is `KEY_VELOCITY_G` (`synth/key_velocity.rs`, equal to the ARM run, checked by `tools/synth_velocity.py --check`). The strip chain now scales the voice by `g / 127` (`SynthLayer::strip_key_velocity`, default on, no effect on the legacy chain). That the DSP applies `g / 127` as a linear amplitude is ASSUMED: mid velocities get much softer than the linear law (velocity 64: 0.25 instead of 0.50).
+
+**Re-run (3), `tools/emu_vs_hw.py --only synth_lead --confirmed-only`, `--synth-chain strip`:** sub -0.9, low -1.2, mid +1.5, presence **-9.0**, brilliance -7.6 dB, centroid -113 Hz, RMS **+3.8 dB**, score 4.05 (identical to section 4: the render velocity is 100, `g(100) / 127 = 0.77` against the linear 0.79, -0.2 dB).
+
+**Decision (D22 bar): stay opt-in.** Criteria and status:
+
+| Criterion | Status |
+|---|---|
+| Oracle stage check exact (envelope words, cutoff `R`, filter output) | met (section 3) |
+| Video presence within about 3 dB | **failed**: -9.0 dB, the oscillator source of SHAPE is the open stage above |
+| Video RMS within about 3 dB | **failed**: +3.8 dB |
+| Panel to word mappings, `kFltType` map, controller protocol | ASSUMED / open (OQ22) |
+
+`render_hash` of the classic chain is unchanged (`25baa387...e7b59a`); `SynthChain::Legacy` stays the default.
+
 ## Implications
 
 - The strip chain is the better opt-in for A:87 type programs (presence +7.5 dB, level in line with the other engines) and is the right place to add further firmware stages.
@@ -82,7 +102,7 @@ Findings, in the order they were ruled in or out (renders with `examples/zz_prob
 
 ## Follow-ups
 
-1. Decode which strip stage (word 0) a SHAPE / SUB OSC / SYNC wave installs, then replace the `Triangle` placeholder with the real shape (OQ22).
+1. Decode which strip stage (word 0) a SHAPE / SUB OSC / SYNC wave installs (section 6: not the edit ids; find the writer of `[strip object + 0xC8]` in the program-load path, e.g. a write watch while a program is applied in the harness, then run the stage in `sharc-org` with an initialised frame), then replace the `Triangle` placeholder with the real shape (OQ22).
 2. Capture strip words for a loaded preset (ARM harness plus key-down, `research/keydown-zones`) to replace the cutoff, rate index and resonance mappings of section 2.
 3. Run the installer route (strip word to index with the controller modulation) over more than 15 passes by writing the ADR strip words instead of poking records.
 4. Re-run `tools/emu_vs_hw.py` with `--synth-chain strip` on other synth programs (A:25 lead, pads) before any default flip; the committed JSON has the Smooth Lead row only.

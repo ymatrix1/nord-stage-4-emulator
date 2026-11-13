@@ -15,8 +15,11 @@ impl SynthLayer {
             self.control_tick();
         }
 
+        self.update_hold();
+
         // 1. Advance LFO
-        self.lfo_phase = (self.lfo_phase + TAU * self.lfo_rate_hz * inv_fs) % TAU;
+        let lfo_hz = self.lfo_hz();
+        self.lfo_phase = (self.lfo_phase + TAU * lfo_hz * inv_fs) % TAU;
         let lfo_val = match self.lfo_shape {
             LfoShape::Triangle => 1.0 - 4.0 * ((self.lfo_phase / TAU) - 0.5).abs(),
             LfoShape::Saw => 2.0 * (self.lfo_phase / TAU) - 1.0,
@@ -29,7 +32,7 @@ impl SynthLayer {
                 }
             }
             LfoShape::SampleAndHold => {
-                if self.lfo_phase < (TAU * self.lfo_rate_hz * inv_fs) {
+                if self.lfo_phase < (TAU * lfo_hz * inv_fs) {
                     self.lfo_sh_val = ((self.lfo_phase * 1234.56).sin() * 43_758.547).fract();
                 }
                 self.lfo_sh_val
@@ -56,6 +59,12 @@ impl SynthLayer {
                 2.0f32.powf(lfo_pitch_semitones(self.lfo_amount) * lfo_val / 12.0)
             }
             _ => 1.0,
+        };
+        // Pitch stick: exactly 1.0 (no powf) while the stick is centred.
+        let pitch_mod = if self.bend_cents == 0.0 {
+            pitch_mod
+        } else {
+            pitch_mod * 2.0f32.powf(self.bend_cents / 1200.0)
         };
 
         let bank = wavetable_bank();
@@ -442,8 +451,14 @@ impl SynthLayer {
                     self.sample_rate,
                 )
             };
+            // Strip chain: the ARM key word carries `g(vel)` (ASSUMED linear level, `key_velocity.rs`).
+            let vel_level = if strip.is_some() && self.strip_key_velocity {
+                key_velocity_gain(v.velocity)
+            } else {
+                v.velocity
+            };
             let amp_vel = (1.0 - self.amp_velocity.clamp(0.0, 1.0))
-                + self.amp_velocity.clamp(0.0, 1.0) * v.velocity;
+                + self.amp_velocity.clamp(0.0, 1.0) * vel_level;
             let voice_gain = if dezip {
                 v.smoothed_gain(dezip_pole)
             } else {
@@ -472,6 +487,10 @@ impl SynthLayer {
             }
         }
 
+        if self.arp_mode == ArpMode::Gate {
+            let g = self.perf.gate_level;
+            return [mix_l * g, mix_r * g];
+        }
         [mix_l, mix_r]
     }
 }

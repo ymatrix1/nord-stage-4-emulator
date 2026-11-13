@@ -25,7 +25,9 @@ mod fw_filter_tables;
 mod fw_strip_cutoff;
 mod gain_dezip;
 mod hw_saw;
+mod key_velocity;
 mod measured;
+mod perf;
 mod render;
 mod render_va;
 mod sample_osc;
@@ -44,11 +46,15 @@ pub use fw_filter::{
 pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
 pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
 pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
+pub use key_velocity::{
+    key_velocity_g, key_velocity_g_fit, key_velocity_gain, KEY_CURVE_SATURATION, KEY_VELOCITY_G,
+};
 pub use measured::{
     supersaw_outer_cents, supersaw_voice_ratio, ENV_DECAY_TAU_FRACTION_MEASURED,
     FILTER_ENV_OCTAVES_MEASURED, OSC_ENV_PITCH_OCTAVES_MEASURED, SUPERSAW_OUTER_CENTS,
     SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
 };
+pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 use strip_map::strip_cutoff_hz;
 pub use strip_map::{
@@ -65,6 +71,8 @@ mod tests_fw_filter_golden;
 mod tests_hw_saw_golden;
 #[cfg(test)]
 mod tests_osc_lfo;
+#[cfg(test)]
+mod tests_perf;
 #[cfg(test)]
 mod tests_strip;
 mod voice;
@@ -157,6 +165,9 @@ pub struct SynthLayer {
     pub osc_shape_category: bool,
     /// Per-voice signal chain (default `Legacy`; `FirmwareStrip` is `strip_path.rs`).
     pub chain: SynthChain,
+    /// Strip chain only: voice level from the key-down velocity series `g(vel) / 127` instead of the
+    /// linear velocity (`key_velocity.rs`, default on; no effect on the legacy chain).
+    pub strip_key_velocity: bool,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -234,6 +245,8 @@ pub struct SynthLayer {
     pub vibrato_delay_sec: f32,
     /// Controller value `0..1` for `Wheel`/`Aftertouch`/`Pedal` vibrato modes.
     pub vibrato_ctrl: f32,
+    /// Live pitch-stick offset in cents, set by the engine pedal router (`0.0` = no bend).
+    pub bend_cents: f32,
     vib_phase: f32,
     /// Octave offset in octaves (`-3..=3`).
     /// ASSUMED: range clamp of +/-3 octaves; confirm against the panel Octave Shift range.
@@ -259,6 +272,8 @@ pub struct SynthLayer {
     held_gains: [f32; 128],
     arp_active_notes: [Option<u8>; MAX_SYNTH_VOICES],
     arp_rng: u32,
+    /// Gate, Pattern, KB Hold, KB Sync and Master Clock sync (`perf.rs`).
+    pub perf: PerfState,
 
     // Pre-decoded multisample instrument (`SAMPLES` mode)
     sample_sound: Option<Arc<SynthSampleSound>>,
@@ -280,6 +295,7 @@ impl SynthLayer {
             saw_model: SawModel::Classic,
             gain_dezipper: false,
             chain: SynthChain::Legacy,
+            strip_key_velocity: true,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,
@@ -332,6 +348,7 @@ impl SynthLayer {
             vibrato_depth_cents: 0.0,
             vibrato_delay_sec: 0.0,
             vibrato_ctrl: 0.0,
+            bend_cents: 0.0,
             vib_phase: 0.0,
             octave_offset: 0,
             last_freq_hz: 0.0,
@@ -353,6 +370,7 @@ impl SynthLayer {
             held_gains: [1.0; 128],
             arp_active_notes: [None; MAX_SYNTH_VOICES],
             arp_rng: 0xA341_316C,
+            perf: PerfState::default(),
 
             sample_sound: None,
             sinc_kernels: sample_osc::shared_sinc_kernels(),

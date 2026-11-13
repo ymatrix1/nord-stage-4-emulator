@@ -1,4 +1,6 @@
-# B3 processor tail `0x121E2B`: the frequency response seen from the ring words
+# B3 processor tail `0x121E2B`: the frequency response seen from the ring words
+
+> **Superseded (2026-11-13):** the table, chord and hardware numbers below were measured on an oracle state that lacked the ARM boot messages. The tail is now the table of [b3-tail-bootstate](b3-tail-bootstate.md) (7 to 26 dB higher, smooth); this note keeps the method and the earlier results for the record.
 
 **Checked:** 2026-11-13
 **Sources (local, never committed):** the PNO image `SRAM/core1_sram.bin`, `sharc-pass` and `sharc-disasm` (`crates/nord-sharc`; listing of `0x121E2B..0x122293`, 453 VISA instructions), `tools/organ_fb_pass.py script --model 0` (ARM engine constructor, model install and key-down of the keys), [organ-keydown-weights](organ-keydown-weights.md), [keydown-zones](keydown-zones.md), [b3-generator](b3-generator.md). New derived table: [b3-tail-gain.csv](data/b3-tail-gain.csv) (`tools/organ_b3_proc.py`). No firmware bytes are recorded.

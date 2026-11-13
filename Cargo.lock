@@ -2224,8 +2224,13 @@ dependencies = [
  "image",
  "midir 0.10.4",
  "nord-core",
+ "nord-panel",
  "serde",
 ]
+
+[[package]]
+name = "nord-panel"
+version = "0.1.0"
 
 [[package]]
 name = "nord-plugin"
