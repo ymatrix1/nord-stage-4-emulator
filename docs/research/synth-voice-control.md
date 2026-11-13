@@ -114,6 +114,7 @@ Comparison with `docs/specs/synth-engine.md` s3: the spec's PolyBLEP is one incr
 |---|---|
 | MIDI note on written to the UART2 receive ring (`0x90165770`, buffer `0x90165780`, size `0x1000`, head `+8`) for channels 1..4, then 12 ticks | 0 messages: nothing reads the ring in the idle main loop (read watch on the ring over 60 M instructions: 0 reads). The MIDI consumer is not polled; it needs the receive notification the UART handler `0x80000434` does not post in this state |
 | `0xC01EC690(engine, hdr, record {0, 60, 100, 0...}, kind)` for the six engines, kinds 1, 2, 4 | one message during the call for kind 2 only, nothing in the following 6 M instructions: the records are posted but the layer / voice allocation state of a loaded preset is missing |
+| Running the stages inside the ORG core 2 pass (`sharc-org`) | The pass calls the six strip stages through records `DM(0xC13A6 + 0x28 s)` (`I8 = DM(0,I7)`, call at `0x127008..0x1270C7`; default stage `0x12538C`; the ARM words `DM(0xC13A9)` and `DM(0xC13AC)` of the sweep are fields +3 and +6 of the record of strip 0). `--poke 1:0xC13A6=0x1215fb` (and `0x12566E`, `0x120CD0`) installs the stage in strict mode without a fault (pass cost +205, +126, +151 instructions), but the frame behind `I2 = DM(0xB2EF8)` is not initialised in the harness, so the stage writes `0xFFFFFFFF` into its buffers; no usable output |
 | Reading values from the sweep | idle state (section 3, value dependence) |
 
 ## 8. Rust parity to-do (`crates/nord-core/src/synth/`, not edited here)
