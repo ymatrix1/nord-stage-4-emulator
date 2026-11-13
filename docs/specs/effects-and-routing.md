@@ -4,7 +4,7 @@
 
 Specifies the 7 independent per-layer effects pipelines (`Organ A`, `Organ B`, `Piano A`, `Piano B`, `Synth A`, `Synth B`, `Synth C`), the global Master Compressor, and the Master Clock.
 
-Implemented in [`crates/nord-core/src/fx.rs`](../../crates/nord-core/src/fx.rs) and [`crates/nord-core/src/engine.rs`](../../crates/nord-core/src/engine.rs).
+Implemented in [`crates/nord-core/src/fx/`](../../crates/nord-core/src/fx/mod.rs) and [`crates/nord-core/src/engine/`](../../crates/nord-core/src/engine/mod.rs).
 
 ---
 

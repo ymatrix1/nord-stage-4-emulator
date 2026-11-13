@@ -4,7 +4,7 @@
 
 Defines the binary file formats used by the Nord Stage 4 (`product_id=46`) for programs, engine presets, system settings, factory/user backups (`.ns4b`), and OS firmware updates (`Update Nord Stage 4 OS v1.66`).
 
-Implemented in [`crates/nord-core/src/cbin.rs`](../../crates/nord-core/src/cbin.rs), [`crates/nord-core/src/firmware.rs`](../../crates/nord-core/src/firmware.rs), and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py).
+Implemented in [`crates/nord-core/src/cbin/`](../../crates/nord-core/src/cbin/mod.rs), [`crates/nord-core/src/firmware/`](../../crates/nord-core/src/firmware/mod.rs), and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py).
 
 ---
 
@@ -187,7 +187,7 @@ Within the decompressed `CODE` payload of Image 0 (and mirrored references in th
 
 ### 5.1 Clavia LZO1X Stream Compression (`CODE` Segments)
 
-The `CODE` segments inside OS firmware images are compressed using standard **LZO1X** (`crates/nord-core/src/firmware.rs`), verified bit-exact against both OS v1.66 banks:
+The `CODE` segments inside OS firmware images are compressed using standard **LZO1X** (`crates/nord-core/src/firmware/lz.rs`), verified bit-exact against both OS v1.66 banks:
 - **Bank 0 `CODE`:** `0x358D45` compressed bytes &rarr; `5,499,504` (`0x53EA70`) decompressed bytes, checksum `0xDE902503` (`OK`).
 - **Bank 1 `CODE`:** `0x0642D1` compressed bytes &rarr; `798,912` (`0x0C30C0`) decompressed bytes, checksum `0xFBB813F8` (`OK`).
 
@@ -206,7 +206,7 @@ checksum = 0xFFFFFFFF - (sum(segment_bytes) & 0xFFFFFFFF)
 ```
 For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file segment payload. For compressed segments (`CODE`), the checksum is computed over the fully decompressed memory image at runtime (`target_address = 0xC0000000`).
 
-#### Rust API (`crates/nord-core/src/firmware.rs`) & CLI
+#### Rust API (`crates/nord-core/src/firmware/lz.rs`) & CLI
 - `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
