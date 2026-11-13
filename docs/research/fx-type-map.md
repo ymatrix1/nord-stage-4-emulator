@@ -152,6 +152,57 @@ Rust parity: `FwCompressor` reproduces the oracle golden vector with a worst rel
 
 The delay `0x1206B0`, the table LFO `0x1228CF`, the all-pass `0x122C39` and the resonant filters `0x1243F4` / `0x124497` are modelled the same way (instruction-level transliterations checked against the oracle word for word and, through a new `sharc-fx --trace`, register for register); equations, tools and Rust ports are in [fx-routine-models](fx-routine-models.md).
 
+## 8. Amp types decoded: `kAmpTypeNew` words, the drive stage with the real tables (2026-11-13)
+
+```bash
+uv run --with unicorn --with capstone python tools/fx_clients.py CODE.bin SRAM.bin --cache target/settled.snap \
+    --slots amp.csv --slot Amp --units 3 --types-only            # about 1 min
+python tools/fx_amp_types.py extract amp.csv --out docs/research/data/fx-amp-types.csv
+python tools/fx_amp_types.py golden FX_core2_sram.bin PNO_core1_sram.bin > crates/nord-core/src/fx/tests_amp_golden.rs
+cargo test -p nord-core --lib fx::fw_amp
+```
+
+**The type id.** `Edt_Effects_kAmpTypeNew` is 0..9 = the amp mode of the program (`amp_type_new & 15`: 1 Twin, 2 Twin II, 3 JC, 4 JC II, 5 Small, 6 Small II, 7 To Rotary, 8 LP24, 9 HP24). The Vox program's raw value 289 is `0x121`: mode 1 (Twin); bit 8 is the reverb type bit (`fx_preset.rs`). VERIFIED (the words below follow the value; 6 of 9 modes carry drive stage words).
+
+**What a type sends (core 1, organ unit L3, `I1 = 0xC018A`).** `fx-amp-types.csv` holds every word that lands in the drive stage context (`0xC016A..0xC019F`, module `0xC04438D8#0`, routine `0x1228CF` on core 2 and `0x123243` on core 1):
+
+| Context word | Value | Reading |
+|---|---|---|
+| `c[-0xD]`, `c[-0xB]` | `128.0`, `10.0` for every type | `G1` scale, `G2` offset |
+| `c[-0xC]` | `16.0` (types 1, 2, 3, 5, 6), **`-3.0` (type 4, JC II)** | `G2` slope: `G2 = B(phase) (phase slope + offset)` |
+| `c[7..=0xB]` | type 1 `2.8102 -4.7603 2.0653 -1.4660 0.5811`; type 2 `1 -1.9693 0.9698 -1.9693 0.9698`; type 3 `11.1813 -19.6849 8.7030 -1.1254 0.3470`; type 4 `0.9932 -1.9722 0.9796 -1.9722 0.9728`; type 5 identity; type 6 `1.6311 -3.2623 1.6311 -1.9174 0.9206` | section 1 `b0 b1 b2 a1 a2` |
+| `c[0x10..=0x14]` | type 1 `2.7632 -5.3429 2.6158 -1.3357 0.3447`; type 2 `3.0030 -5.8949 2.9173 -1.6843 0.6915`; type 3 `0.7055 -1.3993 0.6938 -1.9990 0.9991`; type 4 `3.2727 -6.4303 3.1744 -1.8372 0.8420`; type 5 identity; type 6 `0.0586 0.1172 0.0586 -1.2035 0.4379` | section 2 |
+| states `c[-6..-3]`, `c[3..6]`, `c[0xC..0xF]` | 0 | state reset |
+| types 7, 8, 9 | no words in this context | To Rotary, LP24, HP24 use other modules |
+
+These are the six "cases" of [fx-chain-install](fx-chain-install.md) s5 (case `k` = type `k + 1`). **Correction:** that note and `fw_coeffs::amp_fw_case_for` read case 5 (the `1.63 / 0.0586` high-pass and low-pass pair) as `Small`; the type value shows it is **Small II** (type 6), and `Small` (type 5) installs identity sections. `amp_fw_case_for` is opt-in and unchanged here (TD-10).
+
+**Cabinet words of the same switch (not used).** Types 1 and 2 send a 105 tap FIR (`0x969D9..0x96A41`), types 3 and 4 130 taps, types 5 and 6 99 taps (module `0xC0442A94`, routines `0x122A1D / 0x122B1D`), a 12 set biquad bank at `0xE3702..0xE374D` (stride 6) and a length word. Twin and Twin II share the cabinet, as do JC / JC II and Small / Small II, so each pair differs only in the two drive sections. This cabinet is the speaker model; it has no Rust port.
+
+**Tables and static words.** The drive stage reads three tables through the context pointers `ctx[-0x15] = 0xE0802` (`A`, 129 entries), `ctx[-0x14] = 0xE0883` (`B`, 129) and `ctx[2] = 0xE0200` (`C`, signed 10 bit index, 1025 entries). The PNO DSP image core 1 holds them (the same words are in the FX and ORG images) together with the context template of two stage instances (stride 54 words): high-pass `p = 0.99822`, `q = -0.99644`, `FIX` scale 31, mix bound `1.0`, shaper bound `0.99999994`, loop count 2 (two blocks of two frames: the routine runs once per 4 frames). `A` rises 0.0037 to 0.698, `B` falls 0.126 to 0.0033 irregularly, `C` is asymmetric (the positive half saturates at +0.31, the negative half reaches -1.0): measured data without a closed form (`fw_drive_tables.rs`). VERIFIED (dump through `sharc-fx`).
+
+**Oracle check (VERIFIED).** `fx/tests_amp_golden.rs` is recorded from `sharc-fx` running the FX core 2 copy of `0x1228CF` (the copy `tools/fx_model_lfo.py` is verified on, 3,600 scenarios) with the real context (template + type words + `kAmpDrive`) and the real tables on a seeded two tone signal, 24 calls with the state carried. `FwAmpDrive` with `fw_drive_tables.rs` and `fw_amp_types.rs` reproduces it: Twin at `kAmpDrive 14` worst difference 1.4e-6 of the output peak, JC at `kAmpDrive 100` 1.7e-4 (f32 against 40 bit registers). The PNO core 1 copy of the routine was not executed (its pass context is not reachable with the harness); equality of both copies is ASSUMED (the same library code relocated). The drive law is `phase = kAmpDrive / 127` (smoothed per call), indexing `A` and `B` and the mix `clip(20 phase, 1)`.
+
+**Opt-in wiring.** `FirmwareFx::amp` (also set by `FirmwareFx::ALL` and `render-patch --firmware-fx`): Twin, Twin II, JC, JC II, Small and Small II run `FwAmpStage` (4 frame latency) in place of the engine `tanh` drive and RBJ cabinet; the 3-band EQ and compressor that follow are the engine's; To Rotary, LP24 and HP24 keep the engine path. Default and `render_hash` unchanged (`25baa387...`).
+
+**Vox before / after** (`tools/emu_vs_hw.py --spec docs/research/data/emu_vs_hw_amp_vox.json`, segment `organ_vox`, bands in dB re RMS, emulator minus hardware, 8 to 20 kHz not scored):
+
+| Variant | sub | low | mid | pres | brill | centroid Hz | RMS | score |
+|---|---|---|---|---|---|---|---|---|
+| `vox` (engine amp) | -0.1 | +1.4 | +8.0 | -4.9 | -5.5 | -624 | +0.2 | 3.98 |
+| `vox_noamp` | +1.4 | +0.5 | +8.1 | -7.4 | -11.7 | -979 | -1.3 | 5.82 |
+| `vox_fwamp` (`--firmware-fx`) | +2.5 | -0.9 | -2.5 | -9.6 | -3.0 | +1728 | +11.6 | 3.69 |
+
+Reading: the firmware drive stage alone is **not** a better amp. The mid excess drops (+8.0 to -2.5) and brilliance rises (-5.5 to -3.0), but presence falls (-4.9 to -9.6), the level rises 11.4 dB (the Twin sections have a gain of about +12 dB and there is no cabinet to take it back) and the centroid overshoots (+1728 Hz, the unscored air band +28 dB): the missing cabinet FIR (the speaker roll-off) and the organ unit's tone routines are the other half of the amp. The composite score improves slightly (3.98 to 3.69) for the wrong reasons. The switch therefore stays opt-in; the next step is the cabinet routine `0x122A1D / 0x122B1D` (FIR plus 12 biquads, state in PM) with the words above.
+
+**Stop point.** Done: type to word decode (6 of 9 modes), table dump, oracle-verified drive stage with the real context, opt-in wiring, Vox measurement. Not done: the cabinet FIR and biquad bank model, the organ unit's tone routines (`0xC02BB10C#1`, `0xC02BB2C4#1`, routines `0x124344 / 0x1239D0`, `0x124270 / 0x1238FC`) and the amp output level staging.
+
+## 9. Leslie drive: what the firmware does (investigation, stop point)
+
+`Edt_OrgCom_kEffectsLeslieDrv` (0..127) writes `v / 127` into two DM words of the organ unit's row on the PNO DSP chip core 1 (`0xB2F2D`, `0xB2F31`, ARM writer `0xC0062D54`; captured with `fx_clients.py --slots leslie.csv --slot Leslie --units 3`: words `0x3C010204` at `v = 1` up to `0x3F800000` at `v = 127`, exactly `v / 127`). The rows at `0xB2F29..0xB2F31` carry the routine pointer `0x12637B`, which in the PNO core 1 image is a two instruction null stub (`NOP`, `RTS`). So **no code of the FX / PNO library reads the Leslie drive**: the rotor, horn, crossover and drive run elsewhere (the ARM tick state machine and the ORG image, [fx-contexts](fx-contexts.md) s6). VERIFIED: `d = v / 127` and the stub. Not found: the nonlinearity, its gain or any level staging. The engine's `tanh((1 + 3 drive) x)` (`organ/rotary.rs`, +18.4 dB small signal at drive 2.44; `rotary_drive` is the same fraction times 10, `organ_preset.rs`) has no firmware counterpart to port, so (B) stops here and the engine rotary is unchanged.
+
+Fix proposal (not implemented; `organ/` is outside this change): make the rotary drive independent of the bus scale by dividing by its small signal gain, `tanh(g x) / g` with `g = 1 + 3 drive`, behind an opt-in switch next to `--tone-source`. The unity small signal gain removes the +18.4 dB that compensates the Legacy level and keeps the clipping shape. Evidence to collect first: the Leslie preamp in the ORG image (search the organ chip for the drive state words and a clip table) or a hardware recording with the rotary off and on.
+
 ## Implications
 
 * The effect library is fully partitioned into 28 modules; each routine has an owner in the ARM (section 2). A Rust parity effort can name its blocks by module instead of by pc.
@@ -163,3 +214,4 @@ The delay `0x1206B0`, the table LFO `0x1228CF`, the all-pass `0x122C39` and the 
 1. Close the part constructor chain of section 6 and sweep the four type ids.
 2. Decode the unit's other change handlers (the classes of section 2 whose slot 24 is not a no-op: `0xC01F222C`, `0xC01F06C0`, `0xC01F3BC4`, `0xC0212A18`, `0xC021A6B8`, `0xC01F9668`, `0xC01FA51C`, `0xC01FCBC8`, `0xC0218A38`, `0xC01EAC40`) with bare module objects built like `probe`.
 3. Raise the 12 x 14-row table gates of `0xC020506C` (types 4..6, 8..11) with a real directory.
+4. Model the amp cabinet `0x122A1D / 0x122B1D` (s8) and the organ tone routines; find the Leslie drive nonlinearity (s9).
