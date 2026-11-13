@@ -140,6 +140,38 @@ def variant_flags(var: dict[str, Any], confirmed_only: bool) -> list[str]:
     return [*var.get("flags", []), *(["--confirmed-only"] if confirmed_only else [])]
 
 
+def apply_edits(doc: Any, edits: dict[str, Any]) -> None:
+    """Sets dotted-path values (`organ.fx.reverb_enabled`, `organ.drawbars_b[3]`) in a JSON."""
+    for path, value in edits.items():
+        node = doc
+        parts = path.replace("]", "").replace("[", ".").split(".")
+        for key in parts[:-1]:
+            node = node[int(key)] if isinstance(node, list) else node[key]
+        last = parts[-1]
+        if isinstance(node, list):
+            node[int(last)] = value
+        else:
+            if last not in node:
+                raise KeyError(f"program has no field '{path}'")
+            node[last] = value
+
+
+def edited_program(
+    ns4: str, entry: str, backup: str, work: Path, label: str, edits: dict[str, Any]
+) -> Path:
+    """Extracts `entry`, applies `edits` to its JSON form and returns the rebuilt `.ns4p`."""
+    exe = str(Path(ns4).resolve())
+    work.mkdir(parents=True, exist_ok=True)
+    src, js, out = work / "orig.ns4p", work / f"{label}.json", work / f"{label}.ns4p"
+    run([exe, "backup", backup, "--extract", entry, str(src)])
+    run([exe, "convert", str(src), "--to-json", str(js)])
+    doc = json.loads(js.read_text(encoding="utf-8"))
+    apply_edits(doc, edits)
+    js.write_text(json.dumps(doc), encoding="utf-8")
+    run([exe, "convert", str(js), "--to-ns4p", str(out)])
+    return out
+
+
 def run(cmd: Sequence[str]) -> str:
     return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
 
@@ -208,6 +240,17 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
         rows = []
         for var in seg["variants"]:
             emu = work / seg["id"] / f"emu_{var['label']}{suffix}.wav"
+            flags = variant_flags(var, args.confirmed_only)
+            if var.get("edits"):
+                prog = edited_program(
+                    args.ns4,
+                    seg["entry"],
+                    args.backup,
+                    work / seg["id"],
+                    var["label"],
+                    var["edits"],
+                )
+                flags = [*flags, "--program-file", str(prog)]
             run(
                 render_cmd(
                     args.ns4,
@@ -216,7 +259,7 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
                     events,
                     emu,
                     seg.get("velocity", 100),
-                    variant_flags(var, args.confirmed_only),
+                    flags,
                 )
             )
             m = segment_metrics(hw_wav, emu, onsets)

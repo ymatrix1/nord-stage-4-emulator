@@ -58,6 +58,24 @@ pub fn apply_piano_level(engine: &mut Stage4Engine, on: bool) {
     engine.piano_b.firmware_velocity_level = on;
 }
 
+/// Parses an `--b3-tail` value: `on | off`.
+pub fn parse_on_off(name: &str, v: &str) -> Result<bool, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "on" | "true" | "1" => Ok(true),
+        "off" | "false" | "0" => Ok(false),
+        _ => Err(format!("invalid {name} '{v}' (expected on|off)")),
+    }
+}
+
+/// Selects the B3 processor-tail response of both organ layers' `B3Wheels` source (`None` leaves
+/// the engine untouched).
+pub fn apply_b3_tail(engine: &mut Stage4Engine, tail: Option<bool>) {
+    if let Some(on) = tail {
+        engine.organ_a.set_b3_tail(on);
+        engine.organ_b.set_b3_tail(on);
+    }
+}
+
 /// Applies the opt-in firmware switches to every layer of `engine`.
 pub fn apply_firmware_options(
     engine: &mut Stage4Engine,
@@ -84,6 +102,26 @@ pub fn apply_firmware_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn b3_tail_switch_parses_and_changes_the_b3_wheels_render() {
+        assert_eq!(parse_on_off("--b3-tail", "Off"), Ok(false));
+        assert_eq!(parse_on_off("--b3-tail", "on"), Ok(true));
+        assert!(parse_on_off("--b3-tail", "x").is_err());
+        let render = |tail: Option<bool>| {
+            let mut e = Stage4Engine::new(48_000.0);
+            apply_firmware_options(&mut e, Some(ToneWheelSource::B3Wheels), None, false);
+            apply_b3_tail(&mut e, tail);
+            e.organ_a.note_on(60);
+            e.organ_a.rotary_enabled = false;
+            (0..4_000)
+                .map(|_| e.organ_a.render_frame()[0])
+                .collect::<Vec<f32>>()
+        };
+        let (on, off) = (render(None), render(Some(false)));
+        assert_eq!(on, render(Some(true)));
+        assert!(on.iter().zip(&off).any(|(a, b)| (a - b).abs() > 1e-4));
+    }
 
     #[test]
     fn parses_values_and_rejects_unknown() {

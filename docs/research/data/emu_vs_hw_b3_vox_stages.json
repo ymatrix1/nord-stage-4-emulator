@@ -1,0 +1,45 @@
+{
+  "video": "_zksT69H30c",
+  "note": "Stage ablation of the B3 and Vox segments for tools/emu_vs_hw.py (docs/research/b3-vox-video-gap.md). 'edits' set program JSON fields (ns4 convert round trip) and pass the result as --program-file; flags are render-patch flags.",
+  "segments": [
+    {
+      "id": "organ_b3",
+      "entry": "Program/Bank A/B3 Chords n Solo.ns4p",
+      "engine": "organ B3 (A: 80808 2 oct+2, B: 888635 1 5, rotary slow, vibrato 5, reverb 0.22)",
+      "at_s": 238,
+      "duration_s": 25,
+      "variants": [
+        {"label": "default", "flags": []},
+        {"label": "bw_tail", "flags": ["--tone-source", "b3wheels"]},
+        {"label": "bw_notail", "flags": ["--tone-source", "b3wheels", "--b3-tail", "off"]},
+        {"label": "bw_tail_norotary", "flags": ["--tone-source", "b3wheels"], "edits": {"organ.rotary_enabled": false}},
+        {"label": "bw_tail_noreverb", "flags": ["--tone-source", "b3wheels"], "edits": {"organ.fx.reverb_enabled": false}},
+        {"label": "bw_tail_novibrato", "flags": ["--tone-source", "b3wheels"], "edits": {"organ.vibrato_on": false, "organ.vibrato_on_b": false}},
+        {"label": "bw_tail_nolayerb", "flags": ["--tone-source", "b3wheels"], "edits": {"organ.layer_b_enabled": false}},
+        {"label": "bw_tail_dry", "flags": ["--tone-source", "b3wheels"], "edits": {"organ.rotary_enabled": false, "organ.fx.reverb_enabled": false, "organ.vibrato_on": false, "organ.vibrato_on_b": false}},
+        {"label": "bw_notail_dry", "flags": ["--tone-source", "b3wheels", "--b3-tail", "off"], "edits": {"organ.rotary_enabled": false, "organ.fx.reverb_enabled": false, "organ.vibrato_on": false, "organ.vibrato_on_b": false}},
+        {"label": "legacy_dry", "flags": [], "edits": {"organ.rotary_enabled": false, "organ.fx.reverb_enabled": false, "organ.vibrato_on": false, "organ.vibrato_on_b": false}},
+        {"label": "bw_tail_firmware-fx", "flags": ["--tone-source", "b3wheels", "--firmware-fx"]}
+      ]
+    },
+    {
+      "id": "organ_vox",
+      "entry": "Program/Bank A/Vintage Vox J3.ns4p",
+      "engine": "organ Vox (drawbars 888422034, Twin amp 289 drive 1.1, bass -3 dB, delay ping-pong, reverb 0.24, mod2 type 6)",
+      "at_s": 2360,
+      "duration_s": 11,
+      "variants": [
+        {"label": "default", "flags": []},
+        {"label": "vox", "flags": ["--tone-source", "vox"]},
+        {"label": "vox_noamp", "flags": ["--tone-source", "vox"], "edits": {"organ.fx.amp_enabled": false}},
+        {"label": "vox_nodelay", "flags": ["--tone-source", "vox"], "edits": {"organ.fx.delay_enabled": false}},
+        {"label": "vox_noreverb", "flags": ["--tone-source", "vox"], "edits": {"organ.fx.reverb_enabled": false}},
+        {"label": "vox_nomod2", "flags": ["--tone-source", "vox"], "edits": {"organ.fx.mod2_enabled": false}},
+        {"label": "vox_noeq", "flags": ["--tone-source", "vox"], "edits": {"organ.fx.eq_bass_db": 0.0}},
+        {"label": "vox_dry", "flags": ["--tone-source", "vox"], "edits": {"organ.fx.amp_enabled": false, "organ.fx.delay_enabled": false, "organ.fx.reverb_enabled": false, "organ.fx.mod2_enabled": false, "organ.fx.eq_bass_db": 0.0}},
+        {"label": "legacy_dry", "flags": [], "edits": {"organ.fx.amp_enabled": false, "organ.fx.delay_enabled": false, "organ.fx.reverb_enabled": false, "organ.fx.mod2_enabled": false, "organ.fx.eq_bass_db": 0.0}},
+        {"label": "vox_firmware-fx", "flags": ["--tone-source", "vox", "--firmware-fx"]}
+      ]
+    }
+  ]
+}

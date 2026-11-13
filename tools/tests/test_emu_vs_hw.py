@@ -115,3 +115,11 @@ def test_main_stops_when_inputs_missing(tmp_path, capsys):
     )
     assert rc == 2
     assert "nothing downloaded" in capsys.readouterr().err
+
+
+def test_apply_edits_sets_dotted_and_indexed_fields_and_rejects_unknown():
+    doc = {"organ": {"drawbars_b": [8, 8, 8], "fx": {"reverb_enabled": True}}}
+    ev.apply_edits(doc, {"organ.fx.reverb_enabled": False, "organ.drawbars_b[1]": 0})
+    assert doc == {"organ": {"drawbars_b": [8, 0, 8], "fx": {"reverb_enabled": False}}}
+    with pytest.raises(KeyError):
+        ev.apply_edits(doc, {"organ.fx.nope": 1})
