@@ -51,6 +51,10 @@ SMP_COMM = 4
 PITCH_TABLE = 0xC02A6168
 PITCH_LEN = 1200
 CODE_END = 0x279000
+# VERIFIED (`level_table_error`): 61 words `round(2^23 * 2^(-n/60))`, `n = 0` saturated to 0x7FFFFF,
+# at ARM `0xC02A1A08` (`0xC02A1208 + 0x800`), read by the level procedure `0xC00A1D5C`.
+LEVEL_TABLE = 0xC02A1A08
+LEVEL_STEPS_PER_OCTAVE = 60
 # Q24 ratio cap before the `<< 8` of the step writer (`mvn r1, #0xff000000`).
 STEP_CAP = 0x00FFFFFF
 # EMPIRICAL (disassembly of 0xC011A87C, the piano layer's handler of ids 0x42..0x45): the fixed
@@ -116,6 +120,48 @@ def synthetic_pitch_table() -> list[int]:
     return [round(2**24 * 2 ** (-n / PITCH_LEN)) for n in range(PITCH_LEN + 1)] + [0]
 
 
+def level_table(code: bytes) -> list[int]:
+    """The 61 words at `LEVEL_TABLE`."""
+    return list(struct.unpack_from("<61i", code, LEVEL_TABLE - LOAD_BASE))
+
+
+def synthetic_level_table() -> list[int]:
+    return [min(round(2**23 * 2 ** (-n / LEVEL_STEPS_PER_OCTAVE)), 0x7FFFFF) for n in range(61)]
+
+
+def level_table_error(table: list[int]) -> int:
+    """Largest `|table[n] - round(2^23 * 2^(-n/60))|`, `n = 1..60` (0 for the firmware table)."""
+    return max(
+        abs(table[n] - round(2**23 * 2 ** (-n / LEVEL_STEPS_PER_OCTAVE))) for n in range(1, 61)
+    )
+
+
+def level_q23(index: int, table: list[int]) -> int:
+    """Amplitude (Q23) of the level procedure `0xC00A1D5C` for attenuation `index` (1/60 octave).
+
+    EMPIRICAL (disassembly 0xC00A1D5C..0xC00A1DE8): `index = max(0, S.i16[0x5E] + 2 * X + 60 - b1
+    - b2 - b3)` with three signed per-key bytes; while `index > 60` subtract 60 and count an octave;
+    result `table[index] >> octaves`. `X` (the velocity-derived call-frame word) is not traced.
+    """
+    index = max(index, 0)
+    octaves = 0
+    while index > LEVEL_STEPS_PER_OCTAVE:
+        index -= LEVEL_STEPS_PER_OCTAVE
+        octaves += 1
+    return table[index] >> octaves
+
+
+def pitch_cents(key: int, root: int, fine: int, key_tune: int, extra: int, engine: int) -> int:
+    """Pitch offset in cents of the procedure `0xC00A1C60` before `step_frac`.
+
+    EMPIRICAL (disassembly): `100 * (key - root - 4) - fine` (`fine` = unsigned byte `S[0x5C]`)
+    `+ key_tune` (signed byte per key) `+ extra` (voice word `+0x14`, plus a table term for modes
+    1 and 2) `+ engine` (`E[0x24] + E[0x28]` + the global at `0xC0539580`). The `4` and the
+    contents of `engine` are not decoded.
+    """
+    return 100 * (key - root - 4) - fine + key_tune + extra + engine
+
+
 def step_frac(cents: int, table: list[int]) -> int:
     """`step_frac` word (record field -31) that `0xC00B7B68` sends for a pitch offset `cents <= 0`.
 
@@ -167,7 +213,7 @@ def stack_return_candidates(
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("what", choices=["fields", "pitch"])
+    ap.add_argument("what", choices=["fields", "pitch", "level"])
     ap.add_argument("image", type=Path)
     ns = ap.parse_args(argv)
     code = ns.image.read_bytes()
@@ -175,6 +221,11 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         print("field,literal_at,function")
         for f, a, fn in field_table(code):
             print(f"{f},{a:#x},{fn:#x}")
+        return 0
+    if ns.what == "level":
+        lt = level_table(code)
+        print(f"max |error| vs round(2^23 * 2^(-n/60)), n = 1..60: {level_table_error(lt)}")
+        print(f"table[0] = {lt[0]:#x}, table[60] = {lt[60]:#x}")
         return 0
     table = pitch_table(code)
     print(f"entries {len(table)}, max |error| {pitch_table_error(table):.4f} (Q24 units)")
