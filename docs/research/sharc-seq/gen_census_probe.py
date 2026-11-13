@@ -1,6 +1,7 @@
 """Single-slot probe for the firmware instruction census diff (see ../sharc-census-diff.md).
 
-usage: python gen_census_probe.py <outdir>   -> <outdir>/cens.asm, cens.c, cens.json
+usage: python gen_census_probe.py <outdir> [--plus]   -> <outdir>/cens.asm, cens.c, cens.json
+(--plus: ADSP-2157x build, C symbol `probe.`, restart loop for the cycle-accurate simulator)
 
 The probe loads a complete core state from the DM table `_st` (R, S, I, M, L, B, MODE1, ASTAT x/y,
 STKY x/y, MR), runs ONE patchable instruction slot (`_slot`, 3 parcels + 3 nops), then dumps the
@@ -18,15 +19,15 @@ SYS = ['mode1', 'astat', 'astaty', 'stky', 'stkyy', 'mr0f', 'mr1f', 'mr2f', 'mr0
 N_STATE = sum(n for _, n in REGS) + len(SYS)
 
 
-def main(outdir):
+def main(outdir, plus=False):
     names = []
     for p, n in REGS:
         names += ['%s%d' % (p, k) for k in range(n)]
     names += SYS
     asm = ['/* census-diff probe */', '#include <asm_sprt.h>', '.section/dm seg_dmda;', '.global _st;', '.global _res;',
            '.global _scr;', '.global _done;', '.var _done;', '.var _st[%d];' % N_STATE, '.var _res[%d];' % N_STATE, '.var _scr[512];',
-           '.section/pm seg_pmco;', '.global _probe;', '.global _slot;', '.global _probe_exit;', '_probe:',
-           '    leaf_entry;', '    bit clr mode1 0x200000;', '    nop;', '    nop;']
+           '.section/pm seg_pmco;', '.global %s;' % ('probe.' if plus else '_probe'), '.global _slot;', '.global _probe_exit;',
+           ('probe.:' if plus else '_probe:'), '    leaf_entry;', '_restart:', '    bit clr mode1 0x200000;', '    nop;', '    nop;']
     k = 0
     # data and index registers, scalar (SIMD off): S registers are loaded as ordinary universal registers
     for p, n in REGS:
@@ -64,7 +65,9 @@ def main(outdir):
             asm += ['    r0 = %s;' % s]
         asm.append('    dm(_res+%d) = r0;' % k)
         k += 1
-    asm += ['    r0 = 0xD0E5;', '    dm(_done) = r0;', '_probe_exit:', '    leaf_exit;', '._probe.end:']
+    # SHARC+ (--plus): the debugger cannot set PC, so the exit breakpoint is followed by a jump back to the loader
+    tail = ['_probe_exit:', '    nop;', '    jump _restart;', '    nop;', '    nop;'] if plus else ['_probe_exit:']
+    asm += ['    r0 = 0xD0E5;', '    dm(_done) = r0;'] + tail + ['    leaf_exit;', ('.probe..end:' if plus else '._probe.end:')]
     os.makedirs(outdir, exist_ok=True)
     open(os.path.join(outdir, 'cens.asm'), 'w').write('\n'.join(asm) + '\n')
     open(os.path.join(outdir, 'cens.c'), 'w').write(
@@ -74,4 +77,4 @@ def main(outdir):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    main(sys.argv[1], '--plus' in sys.argv[2:])

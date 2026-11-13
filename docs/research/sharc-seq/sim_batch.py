@@ -83,15 +83,19 @@ def main():
         buf_res = bytearray(4 * a.n_state)
         buf_scr = bytearray(4 * SCR_WORDS)
         flag = bytearray(4)
-        for k, (parcels, state, chunks) in enumerate(cases):
-            T.LoadProgram(0, dxe, False)   # fresh memory and registers: Reset is slow and leaves no program
-            if a.target == '21571':   # the SHARC+ simulator may still be running after the load
-                try:
-                    T.Halt(0, True)
-                except RuntimeError:
-                    pass
-                T.RemoveAllBreakpoints(0)
+        if a.target == '21571':
+            # The cycle-accurate SHARC+ simulator needs about 140 s to get through the C runtime start-up,
+            # so the program is loaded and run to the probe exit once; every case then restarts the
+            # probe (SetRegister(PC) is ignored by the SHARC+ simulator, so the 21571 probe ends in `jump _restart`:
+            # resuming from the exit breakpoint runs the next case).
+            T.LoadProgram(0, dxe, False)
+            T.RemoveAllBreakpoints(0)
             T.SetBreakpointAtAddress(0, exit_a)
+            T.Run(0, True)
+        for k, (parcels, state, chunks) in enumerate(cases):
+            if a.target != '21571':
+                T.LoadProgram(0, dxe, False)   # fresh memory and registers: Reset is slow and leaves no program
+                T.SetBreakpointAtAddress(0, exit_a)
             ps = [int(parcels[i:i + 4], 16) for i in range(0, len(parcels), 4)]
             ps += [0x0001] * (SLOT_PARCELS - len(ps))
             T.SetMemory(0, dm_id, st, len(state), 1, bytearray(words_bytes(state)))
@@ -102,7 +106,11 @@ def main():
                 T.SetMemory(0, pm_id, addr, n, 1, bytearray(bytes.fromhex(hexp)))
             for addr, ws in setup['dm'] + chunks:
                 T.SetMemory(0, dm_id, addr, len(ws), 1, bytearray(words_bytes(ws)))
-            T.Run(0, False)
+            if a.target == '21571':
+                T.SetMemory(0, dm_id, done, 1, 1, bytearray(4))
+                T.Run(0, True)
+            else:
+                T.Run(0, False)
             t1 = time.time()
             while True:   # the state reads HALTED until the run starts: wait for the done flag instead
                 try:
