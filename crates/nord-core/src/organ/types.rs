@@ -135,6 +135,12 @@ pub enum ToneWheelSource {
     /// stage `0x12272D` and output stage `0x1229B3`, installed by firmware model 1. Applies to
     /// [`OrganModel::Vox`] only; other models fall back to their default source.
     Vox,
+    /// B3 generator `0x121BBE` of PNO core 1: the firmware pitch ladder (12 oscillators, octave
+    /// doubling, `ssfr` rounding; VERIFIED to 2.5e-11 against the oracle) and the measured wheel
+    /// tables, one wheel per note. Opt-in: the per-key weights and per-note amplitudes of the
+    /// firmware are not modelled yet (`docs/research/b3-generator.md`). Applies to `B3` only; the
+    /// other models fall back to `Legacy`.
+    B3Wheels,
 }
 
 impl ToneWheelSource {
@@ -147,6 +153,7 @@ impl ToneWheelSource {
             (Self::Vox, OrganModel::Vox) => Self::Vox,
             (Self::Vox, m) => m.default_tone_source(),
             (Self::Firmware, OrganModel::Vox | OrganModel::Farfisa) => Self::Legacy,
+            (Self::B3Wheels, m) if !matches!(m, OrganModel::B3) => Self::Legacy,
             (explicit, _) => explicit,
         }
     }

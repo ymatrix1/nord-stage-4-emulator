@@ -5,6 +5,7 @@
 //! `vibrato_bank` (12-TET ladder, detune table, group gains), `tonewheel` (91-wheel
 //! generator), `keyclick`, `scanner`, `rotary`.
 
+mod b3_wheels;
 mod drawbar;
 mod drawbar_sum;
 mod firmware_bank;
@@ -27,6 +28,8 @@ mod weight_state;
 mod weights;
 
 #[cfg(test)]
+mod b3_source_tests;
+#[cfg(test)]
 mod bank_golden;
 #[cfg(test)]
 mod bank_mix_golden;
@@ -35,6 +38,10 @@ mod vox_golden;
 #[cfg(test)]
 mod weight_tests;
 
+pub use b3_wheels::{
+    base_step as b3_base_step, note_hz as b3_note_hz, note_step as b3_note_step, B3Wheels,
+    WHEEL_GAIN as B3_WHEEL_GAIN,
+};
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
 pub use firmware_bank::{
     build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate, phase_step,
@@ -115,6 +122,8 @@ pub struct OrganLayer {
     synced_fine_cents: f32,
     tone_bank: ToneBank,
     vox: vox_source::VoxSource,
+    b3_wheels: B3Wheels,
+    b3_synced: (f32, f32),
     lane_mixer: LaneMixer,
     weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
@@ -187,6 +196,8 @@ impl OrganLayer {
             synced_fine_cents: 0.0,
             tone_bank,
             vox: vox_source::VoxSource::new(sample_rate),
+            b3_wheels: B3Wheels::new(),
+            b3_synced: (0.0, f32::NAN),
             lane_mixer: LaneMixer::new(sample_rate),
             weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],

@@ -165,6 +165,20 @@ Output: `out_lane = L * sum_w wA[w] * bus_lane[w]` through the 91 wheel buses of
 
 Against the oracle (`python tools/organ_weight_compare.py`, ARM key-down / key-off messages poked into `sharc-organ` with the mix smoothers started on their targets, `organ_ref --weights firmware`, C4 E4 G4 at 888000000, 43,156 Hz): level 1.0000x on both lanes, attack and release envelope within 0.1 % of peak, steady SNR 44.5 dB (57 dB in the first 2,000 frames; the residue grows with time: bank phase drift of the 12-TET ladder against the exact increment words, not the weights). `Legacy` was 0.0792x and 37.7 dB against the same chord with unit weights. The absolute loudness of `Firmware` is `0.0153` per key and drawbar at `L = 1`, 14.4 dB below `Legacy` (`0.0153 / 0.08`): `L` (`0x95B42`) and anything downstream of the mix stage are unknown, so the default stays `Legacy` and `weight_level` is the free parameter. Tests: `weights::tests` (formula, curve, velocities, chords, step responses of both `a`, rate independence), `weight_state::tests`, `weight_tests` (all 128 x 9 entries of `organ-key-wheel-map.csv`, oracle partials, velocity ratio 508 / 1008, release, attack ramp, mode switch), `tools/tests/test_organ_weight_compare.py`.
 
+### 3.1.6 B3 generator wheels (`ToneWheelSource::B3Wheels`, `b3_wheels.rs`)
+
+Opt-in tone source of the `B3` model, from the PNO core 1 generator `0x121BBE` ([b3-generator](../research/b3-generator.md), [b3-tone-source](../research/b3-tone-source.md)). One wheel per MIDI note (wheel `w` = note `24 + w`), `u32` phase, per-note table with linear interpolation.
+
+| Item | Law | Tag |
+|---|---|---|
+| Phase step per DSP call | `((PHASE_INC[n % 12] * 0x3F000000 + 2^30) >> 31) << (n / 12)`, `PHASE_INC` = `DM 0x95172..0x9517D` | VERIFIED (81 oracle-fitted ring frequencies, max relative error 2.5e-11; `tools/organ_b3_gen.py scan`, test `steps_match_the_oracle_fits`) |
+| Ladder | 12-TET to 0.94 cent (the fifth is 1.4983, not 1.5) | VERIFIED |
+| Hz anchor | every C exact 12-TET, `A4 = 440` Hz; the DSP frame rate behind it is known to 1.6 % only (43,829 vs 43,156.4 Hz) | ASSUMED |
+| Wheel tables | notes < 40: `DM 0xB314B`, 40..47: `0xB31CC`, 48 and up: `0xB324D`, as 12-harmonic fits (reconstruction error 4.2e-3, 6e-7, 7e-7) | VERIFIED (oracle series equal `A * table`, residual 3e-8) |
+| Per-note amplitude `A` (`B3_WHEEL_GAIN`) | ARM key-down float at `DM 0x95122 + note - 36`; exposed, **not applied** | EMPIRICAL |
+
+Not modelled (why it stays opt-in): per-key weights `W(key, footage)` (taper bytes `0x25..0xFF`), the amplitude `A` with its key dependence, the percussion on the shared wheels, the scanner line-box tail (`DM 0x95471..`) of the processor. The existing drawbar bus, percussion, key click, scanner and rotary run unchanged on the wheel outputs with a flat pickup (1.0, no `pickup_calibration`). The default render hash is unchanged (`render_hash`: 25baa387b0219c08 before and after).
+
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
 Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps). The level law is the firmware curve (`drawbar::drawbar_gain`, `DrawbarLaw::Firmware`): the edit value `0..=8` maps through the integer table `bank0_CODE@0xC02B0EC0` to the 7-bit values `0, 3, 6, 13, 22, 39, 62, 87, 127`, i.e. `0` (off), -32.5, -26.5, -19.8, -15.2, -10.3, -6.2, -3.3, 0 dB re full scale (VERIFIED table, [arm-organ-messages](../research/arm-organ-messages.md) section 7; that `value / 127` is the final DSP gain is ASSUMED, TD-10). The old `level / 8` stays selectable as `DrawbarLaw::Linear`. `0` = $-\infty\text{ dB}$:
