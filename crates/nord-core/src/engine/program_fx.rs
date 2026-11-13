@@ -52,6 +52,8 @@ impl Stage4Engine {
         fx.comp_fast = dec.comp_fast;
         fx.delay_enabled = dec.delay_enabled;
         fx.delay_time_ms = dec.delay_time_ms();
+        // 14 bit `kDlyRateClkDiv` value for the opt-in firmware time law (`FirmwareFx::delay_time`).
+        fx.delay_rate_raw = Some((dec.delay_rate_norm.clamp(0.0, 1.0) * 16383.0).round() as u16);
         fx.delay_clock_sync = dec.delay_clock_sync;
         fx.delay_sync_beats = dec.delay_clock_sync.then(|| dec.delay_sync_beats());
         fx.delay_analog = dec.delay_analog_on();
