@@ -133,3 +133,9 @@ def test_filter_events_keeps_the_note_range(tmp_path):
     doc = json.loads(out.read_text())
     assert [e["midi"] for e in doc["events"]] == [48, 60, 64]
     assert doc["start_s"] == 1.0
+
+
+def test_variant_velocity_prefers_variant_then_segment_then_100():
+    assert ev.variant_velocity({}, {}) == 100
+    assert ev.variant_velocity({"velocity": 90}, {}) == 90
+    assert ev.variant_velocity({"velocity": 90}, {"velocity": 64}) == 64

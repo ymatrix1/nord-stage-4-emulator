@@ -135,6 +135,11 @@ def render_cmd(
     ]
 
 
+def variant_velocity(seg: dict[str, Any], var: dict[str, Any]) -> int:
+    """Replay velocity of a variant: its own ``velocity``, else the segment's, else 100."""
+    return int(var.get("velocity", seg.get("velocity", 100)))
+
+
 def variant_flags(var: dict[str, Any], confirmed_only: bool) -> list[str]:
     """Render flags of a variant, plus ``--confirmed-only`` when requested."""
     return [*var.get("flags", []), *(["--confirmed-only"] if confirmed_only else [])]
@@ -269,7 +274,7 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
                     args.backup,
                     events,
                     emu,
-                    seg.get("velocity", 100),
+                    variant_velocity(seg, var),
                     flags,
                 )
             )
