@@ -192,6 +192,26 @@ def mats() -> dict[str, bpy.types.Material]:
     }
 
 
+def projected(name: str, image_path) -> bpy.types.Material:
+    """Unlit material showing `image_path` in screen space (window coordinates), i.e. the
+    reference crop projected from the render camera onto whatever geometry it hits (D17)."""
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    emit = nt.nodes.new("ShaderNodeEmission")
+    coord = nt.nodes.new("ShaderNodeTexCoord")
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(str(image_path), check_existing=True)
+    tex.extension = "EXTEND"
+    tex.interpolation = "Cubic"
+    nt.links.new(coord.outputs["Window"], tex.inputs["Vector"])
+    nt.links.new(tex.outputs["Color"], emit.inputs["Color"])
+    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+    return mat
+
+
 def catcher_mats() -> dict[str, bpy.types.Material]:
     """Plain diffuse stand-ins for shadow-catcher grounds: the grain of the real plates would
     otherwise leak into the shadow alpha and bloat the PNGs."""

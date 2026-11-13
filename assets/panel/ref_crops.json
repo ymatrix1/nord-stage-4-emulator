@@ -35,8 +35,8 @@
     "plate_silver": {"target": [181, 192, 206], "tol": 30}
   },
   "caps": {
-    "drawbar_cap_black": {"centre": [656, 972], "kind": "black", "size": [96, 160]},
-    "drawbar_cap_white": {"centre": [954, 1006], "kind": "white", "size": [96, 160]},
-    "layer_cap_grey": {"centre": [311, 242], "kind": "grey", "size": [96, 96]}
+    "drawbar_cap_black": {"centre": [658.5, 967.5], "kind": "black", "size": [96, 160]},
+    "drawbar_cap_white": {"centre": [952.5, 1006], "kind": "white", "size": [96, 160]},
+    "layer_cap_grey": {"centre": [311, 243.5], "kind": "grey", "size": [96, 96]}
   }
 }

@@ -58,31 +58,10 @@ def test_cap_mask_keeps_cap_and_drops_slot_strips():
     assert not m[107, 215]  # LED
 
 
-def test_cap_layers_white_and_black():
-    for rgb, kind in (((232, 230, 226), "white"), ((57, 53, 50), "black")):
-        cap, shadow = RC.cap_layers(_scene(rgb), (150, 200), (300, 400), kind)
-        ca, sa = np.asarray(cap), np.asarray(shadow)
-        assert ca[150, 150, 3] == 255 and ca[20, 50, 3] == 0, kind
-        assert ca[150, 150, :3].tolist() == list(rgb), kind
-        assert sa[258, 160, 3] > 40, kind  # darkened slate below the cap becomes shadow
-        assert sa[20, 50, 3] == 0, kind  # clean slate far away casts nothing
-
-
-def test_matte_ignores_bluish_label_next_to_the_cap():
-    a = np.zeros((40, 40, 3)) + (52, 62, 75)
-    a[:8] = (181, 192, 206)  # silver label strip above
-    a[10:30, 10:30] = (232, 230, 226)  # cap
-    m = np.zeros((40, 40), bool)
-    m[10:30, 10:30] = True
-    alpha, rgb = RC.matte(a, m)
-    assert alpha[7, 20] == 0 and alpha[20, 20] == 1
-
-
-def test_smooth_alpha_removes_nubs_and_antialiases():
-    m = np.zeros((60, 60), bool)
-    m[10:50, 10:50] = True
-    m[20:22, 50:52] = True  # 2 px nub
-    m[30, 10] = False  # ragged notch
-    al = RC.smooth_alpha(m)
-    assert al[30, 30] == 1 and al[21, 51] == 0 and al[30, 10] > 0.5
-    assert 0 < al[30, 9] < 1 or 0 < al[30, 10] < 1 or 0 < al[30, 49] < 1  # soft edge
+def test_projection_texture_fills_around_the_cap_with_cap_colour():
+    tex = RC.projection_texture(_scene(), (150, 200), (300, 400), "white")
+    a = np.asarray(tex, dtype=np.float64)
+    assert tex.size == (300, 400)
+    assert a[150, 150].tolist() == [232, 230, 226]  # the cap as in the reference
+    assert a[20, 50].min() > 150  # slate far away replaced by a light cap colour
+    assert a[20, 150].min() > 150  # and so is the slot

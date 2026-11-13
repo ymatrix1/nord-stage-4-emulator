@@ -57,6 +57,11 @@ LEAN = {
     "layer": (5.29, -2.73),
     "button": (6.59, 0.70),
     "plate": (0.0, 0.0),
+    # EMPIRICAL: per cap, from where it sits on the reference; the optical axis is about
+    # 290 px above the image centre (DRIVE knob lean), tuned against the cap silhouettes.
+    "drawbar_cap_black": (2.56, 5.2),
+    "drawbar_cap_white": (0.2, 5.5),
+    "layer_cap_grey": (5.29, -0.45),
 }
 
 # Blender-rendered single sprites: name -> (1x width, 1x height) in px.
@@ -65,6 +70,13 @@ SPRITES = {
     "knob_shadow_master": (96, 96),  # shadow of the reference-derived Master Level cap
     "knob_shadow_drive": (96, 96),
     "plate_slate_slot": (128, 256),  # drawbar slot on slate, not a tile
+    # caps: 3D geometry textured by projecting the reference from the cap's camera (D17)
+    "drawbar_cap_black": (96, 160),
+    "drawbar_shadow_black": (96, 160),
+    "drawbar_cap_white": (96, 160),
+    "drawbar_shadow_white": (96, 160),
+    "layer_cap_grey": (96, 96),
+    "layer_shadow_grey": (96, 96),
 }
 # Knobs whose cap body is cut from the reference (D17); each gets a Blender pointer filmstrip.
 REF_KNOBS = ("master", "drive")
@@ -79,8 +91,6 @@ def ref_sprites(crops: dict | None = None) -> list[str]:
     names = [f"button_{b}" for b in crops["buttons"]]
     names += [f"tri_{t}" for t in crops["triangles"]]
     names += sorted({f"tri_lit_{t['dir']}" for t in crops["triangles"].values()})
-    for cap in crops.get("caps", {}):
-        names += [cap, cap.replace("_cap_", "_shadow_")]
     names += [f"knob_body_{k}" for k in crops["knobs"]] + ["knob_scale", *TILES]
     return names
 

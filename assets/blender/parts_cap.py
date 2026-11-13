@@ -12,16 +12,17 @@ from proof_geom import box, loft, mesh_obj
 
 # EMPIRICAL: white drawbar cap on the reference is 100 px wide and 231 px long; the lower nose
 # block is narrower (85 px), shifted left, and ends in a chamfer that reads as a 30 px band.
-CAP_W = 0.78
+CAP_W = 0.85  # EMPIRICAL: fitted to the reference cap silhouettes (IoU), was 0.78
 CAP_BACK, CAP_FRONT = 0.90, -0.89
 # ASSUMED: top block, nose and front skirt heights (only the lean and shading show them).
 CAP_HT, CAP_HN, CAP_HS = 0.50, 0.30, 0.04
+SKIRT_H = 0.16  # ASSUMED: lower body height (only its outline is measured)
 NOSE_X = (-0.45, 0.16)  # EMPIRICAL: nose left / right edge (black 16' cap, 4x zoom read)
 CAP_TAPER = 0.05  # EMPIRICAL: side walls lean in by this fraction of the width at the top
 CAP_BEVEL = 0.07  # EMPIRICAL: soft rounded edges, larger than v2's 0.03
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
 # EMPIRICAL: grey layer-fader cap on the reference is 96 px wide and 74 px long.
-LAYER_W, LAYER_L = 0.75, 0.57
+LAYER_W, LAYER_L = 0.69, 0.585  # EMPIRICAL: silhouette fit (was 0.75 x 0.57)
 LAYER_H = 0.34  # ASSUMED
 LAYER_BEVEL = 0.09  # EMPIRICAL: the layer cap reads as a rounder, pillowy block
 # EMPIRICAL: slot is about 22 px wide on the reference, 0.22 of the cap width.
@@ -81,9 +82,11 @@ def fader_cap(m, key):
     )
     skirt = _extrude_profile(
         "cap_skirt",
-        [(-0.60, 0.0), (-0.60, hs + 0.05), (-0.70, hs + 0.05), (CAP_FRONT, 0.0)],
-        -half + 0.01,
-        half - 0.04,
+        # EMPIRICAL: the lower body runs full width under and right of the nose down to the
+        # front (silhouette fit on the reference)
+        [(-0.08, 0.0), (-0.08, SKIRT_H), (CAP_FRONT + 0.03, SKIRT_H), (CAP_FRONT, 0.0)],
+        -half,
+        half,
         m[key],
         hs,
     )

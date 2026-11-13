@@ -324,7 +324,9 @@ def knob_scale(ref: Image.Image, centre, body_alpha: np.ndarray) -> Image.Image:
 # ---------------------------------------------------------------- driver
 
 
-def bake(ref_path: Path, proof: Path = P.PROOF_DIR, crops: dict | None = None) -> list[str]:
+def bake(
+    ref_path: Path, proof: Path = P.PROOF_DIR, crops: dict | None = None, raw: Path = P.RAW_DIR
+) -> list[str]:
     """Write every reference-derived sprite at 2x (reference scale) and 1x; return names."""
     crops = crops or load_crops()
     ref = Image.open(ref_path).convert("RGB")
@@ -345,9 +347,11 @@ def bake(ref_path: Path, proof: Path = P.PROOF_DIR, crops: dict | None = None) -
             alpha = np.asarray(body.getchannel("A"), dtype=np.float64) / 255
             two_x["knob_scale"] = knob_scale(ref, spec["centre"], alpha)
     for name, spec in crops.get("caps", {}).items():
+        # caps are 3D renders (assets/blender/parts_cap.py) textured by projecting these
+        # reference crops from the cap's camera; the texture is a render input, not a sprite
         size = tuple(2 * v for v in spec["size"])
-        cap, shadow = RC.cap_layers(ref, spec["centre"], size, spec["kind"])
-        two_x[name], two_x[cap_shadow_name(name)] = cap, shadow
+        tex = RC.projection_texture(ref, spec["centre"], size, spec["kind"])
+        P.save_png(tex, raw / f"proj_{name}.png")
     for seed, (name, spec) in enumerate(crops["tiles"].items()):
         two_x[name] = plate_tile(ref, spec["target"], spec["tol"], seed)
     for name, img in two_x.items():

@@ -43,6 +43,42 @@
       "width": 128,
       "height": 256
     },
+    "drawbar_cap_black_1x.png": {
+      "sha256": "f04f6de64ba1355fb1db05c1b8b80410856f9c508b4f727f6d403eb9cdd2284c",
+      "bytes": 10000,
+      "width": 96,
+      "height": 160
+    },
+    "drawbar_shadow_black_1x.png": {
+      "sha256": "2da55216e83f5938fce1c7092d756544e980b08ff1f8decce27be3df26a5cc96",
+      "bytes": 8413,
+      "width": 96,
+      "height": 160
+    },
+    "drawbar_cap_white_1x.png": {
+      "sha256": "50e922fa334458567db21636cf6655a421de0289a7d854fd5052c1a32969b80e",
+      "bytes": 10324,
+      "width": 96,
+      "height": 160
+    },
+    "drawbar_shadow_white_1x.png": {
+      "sha256": "8fdb09a8ddb1c64fa13609cab41117ebc17cf183d1a2f33b218336e057808077",
+      "bytes": 8539,
+      "width": 96,
+      "height": 160
+    },
+    "layer_cap_grey_1x.png": {
+      "sha256": "fc80c3891ccf0bd22fea20ce6c7babee2bbb84f92929a276e9e2041114dad37d",
+      "bytes": 5096,
+      "width": 96,
+      "height": 96
+    },
+    "layer_shadow_grey_1x.png": {
+      "sha256": "f7ca573f8f674f079f2c5f434cf02dd35993097998e71a9d1fbd5bd2c8f56ead",
+      "bytes": 5915,
+      "width": 96,
+      "height": 96
+    },
     "button_organ_on_1x.png": {
       "sha256": "a2b8f4b610a053b3d6e06bbe310ee1b13f2d240e21f1ff897655925ccbfd1012",
       "bytes": 3027,
@@ -157,42 +193,6 @@
       "width": 20,
       "height": 15
     },
-    "drawbar_cap_black_1x.png": {
-      "sha256": "dd6ae52073d52c1da204db64870a98b8ab03f480f8c3e0ab254a5d82086c2740",
-      "bytes": 8259,
-      "width": 96,
-      "height": 160
-    },
-    "drawbar_shadow_black_1x.png": {
-      "sha256": "44e4b820fd8bec673236dfab1bd77895c9388966b4eb7b2cebce0039d2c68003",
-      "bytes": 1318,
-      "width": 96,
-      "height": 160
-    },
-    "drawbar_cap_white_1x.png": {
-      "sha256": "a5c38f5f37ede423f55fd0a8e8e298d8abac07ca0e695768ea821f3d7ebefa40",
-      "bytes": 9135,
-      "width": 96,
-      "height": 160
-    },
-    "drawbar_shadow_white_1x.png": {
-      "sha256": "afd2e34f569883b5dba64f89c45fa2c957d0c97d4668e624a5778e145dd704de",
-      "bytes": 1178,
-      "width": 96,
-      "height": 160
-    },
-    "layer_cap_grey_1x.png": {
-      "sha256": "d952a738698a3fc2c9e3ebce7458a6a5a3fa54d680c9ca589f640659a5e2f47b",
-      "bytes": 3822,
-      "width": 96,
-      "height": 96
-    },
-    "layer_shadow_grey_1x.png": {
-      "sha256": "dc27fad77f41cef2c60b2a4c7ed9966c3d7bb2ae1e1b4c3530654ac8c651ee60",
-      "bytes": 784,
-      "width": 96,
-      "height": 96
-    },
     "knob_body_master_1x.png": {
       "sha256": "182cc80e3829e518a3cddf36683cd4c28f7f0de18af6c0e0e49f030c9b839993",
       "bytes": 4642,
@@ -270,6 +270,42 @@
       "bytes": 164847,
       "width": 256,
       "height": 512
+    },
+    "drawbar_cap_black_2x.png": {
+      "sha256": "0f88b7ee471c9c7b7f7841e0d693de719be629f0e29b952cf6693ae5653650ff",
+      "bytes": 32142,
+      "width": 192,
+      "height": 320
+    },
+    "drawbar_shadow_black_2x.png": {
+      "sha256": "f56eec696a44794748f2cd80cca329bf64fe707140609d10cef1de0ce05bfdf2",
+      "bytes": 23680,
+      "width": 192,
+      "height": 320
+    },
+    "drawbar_cap_white_2x.png": {
+      "sha256": "9b7f2a3eacfa4b43e3e3688012beae464b0d469c78f3d3a8b0c0f5ff7f68bac8",
+      "bytes": 32708,
+      "width": 192,
+      "height": 320
+    },
+    "drawbar_shadow_white_2x.png": {
+      "sha256": "90990cf63e46931f1e12da464da8be21479f87bdacc78bcf7179a2ed79568b09",
+      "bytes": 23686,
+      "width": 192,
+      "height": 320
+    },
+    "layer_cap_grey_2x.png": {
+      "sha256": "e0d01872107dc376da11f53cfd231368c2c577d0d1c605cdc10dfba78fb20fbf",
+      "bytes": 14596,
+      "width": 192,
+      "height": 192
+    },
+    "layer_shadow_grey_2x.png": {
+      "sha256": "8843c73e0693d2970852eeb4bd665b2968198ff4537ef8217fbb3a9341f2a94a",
+      "bytes": 15956,
+      "width": 192,
+      "height": 192
     },
     "button_organ_on_2x.png": {
       "sha256": "450eb40661882a55b6399deeccdaddf8c320698907e10acce9b90c915687f71d",
@@ -384,42 +420,6 @@
       "bytes": 2158,
       "width": 40,
       "height": 30
-    },
-    "drawbar_cap_black_2x.png": {
-      "sha256": "ba4739886652da7926f77d7585e18cc260d95d4283f9b583395aee309d33be14",
-      "bytes": 29030,
-      "width": 192,
-      "height": 320
-    },
-    "drawbar_shadow_black_2x.png": {
-      "sha256": "10dbbec4ff71fcd8c7f97f3a03d696d039dc25eaac581cb146e2b76f1952aea5",
-      "bytes": 2930,
-      "width": 192,
-      "height": 320
-    },
-    "drawbar_cap_white_2x.png": {
-      "sha256": "32bce7debc7a0d72a1dfcfa623138894ec89581117d36355bdb5f5c8360ef6b7",
-      "bytes": 31639,
-      "width": 192,
-      "height": 320
-    },
-    "drawbar_shadow_white_2x.png": {
-      "sha256": "a6a811118928ed6740abf1ccbdc7867312897c4b45a33c0adaff132795833688",
-      "bytes": 2603,
-      "width": 192,
-      "height": 320
-    },
-    "layer_cap_grey_2x.png": {
-      "sha256": "c15bbca94a864d080161e8e8a7123c0e15ed9ba14aaadbd91a11060f1847a552",
-      "bytes": 12328,
-      "width": 192,
-      "height": 192
-    },
-    "layer_shadow_grey_2x.png": {
-      "sha256": "f50d74048e4f6f396bcf843b36dd0b6d2a0a332c0ab160800838413023b2444c",
-      "bytes": 1737,
-      "width": 192,
-      "height": 192
     },
     "knob_body_master_2x.png": {
       "sha256": "5006731afe5d651c7f295b0fec66b3444d45b41b9d9072892042c7ef2e59b8ba",

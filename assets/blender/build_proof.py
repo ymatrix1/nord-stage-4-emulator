@@ -92,6 +92,31 @@ def render_ref_knobs(out: Path, scale: int) -> None:
             S.render(P.frame_path(out, scale, i, f"pointer_{name}"))
 
 
+CAPS = {
+    "drawbar_cap_black": ("drawbar_shadow_black", C.fader_cap),
+    "drawbar_cap_white": ("drawbar_shadow_white", C.fader_cap),
+    "layer_cap_grey": ("layer_shadow_grey", C.layer_cap),
+}
+
+
+def render_caps(out: Path, scale: int) -> None:
+    """3D caps textured by camera projection (D17): the geometry gives the silhouette and its
+    anti-aliased edge, the reference crop (`proj_<cap>.png` from tools/panel_refbake.py,
+    already aligned to this camera's frame) gives the colour, unlit. Then the cap's shadow
+    on the slotted plate from the same geometry and lean."""
+    for name, (shadow, make) in CAPS.items():
+        m = fresh(scale, name, name)
+        mat = M.projected(f"proj_{name}", P.RAW_DIR / f"proj_{name}.png")
+        make({"proj": mat}, "proj")
+        cy = bpy.context.scene.cycles
+        cy.use_denoising, cy.samples = False, 64  # unlit texture: no noise, keep it sharp
+        S.render(out / f"{name}_{scale}x.png")
+        m = fresh(scale, shadow, name)
+        S.flags(C.plate_slot(M.catcher_mats()), catcher=True)
+        S.flags(make(m, "cap_black"), holdout=True)
+        S.render(out / f"{shadow}_{scale}x.png")
+
+
 def render_plates(out: Path, scale: int) -> None:
     """Only the slotted slate plate; the tiles are cut from the reference (D17)."""
     C.plate_slot(fresh(scale, "plate_slate_slot", "plate"))
@@ -102,6 +127,7 @@ STAGES = {
     "plates": render_plates,
     "knob": render_knob,
     "ref_knobs": render_ref_knobs,
+    "caps": render_caps,
 }
 
 

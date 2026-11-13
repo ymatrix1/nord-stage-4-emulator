@@ -214,9 +214,10 @@ CALIBRATED = (
     ("plate_slate_2x.png", "panel_slate", (0, 0, 256, 256), 6),
     ("plate_silver_2x.png", "header_silver", (0, 0, 256, 256), 6),
     ("plate_slate_slot_2x.png", "panel_slate_drawbars", (20, 20, 100, 100), 6),
-    ("drawbar_cap_white_2x.png", "cap_white_top", (80, 135, 110, 170), 6),
-    ("drawbar_cap_black_2x.png", "cap_black_top", (80, 135, 110, 170), 8),
-    ("layer_cap_grey_2x.png", "cap_grey_top", (80, 80, 110, 100), 8),
+    # projected caps carry the reference pixels of their own instance: inside p10..p90
+    ("drawbar_cap_white_2x.png", "cap_white_top", (80, 135, 110, 170), "range"),
+    ("drawbar_cap_black_2x.png", "cap_black_top", (80, 135, 110, 170), "range"),
+    ("layer_cap_grey_2x.png", "cap_grey_top", (80, 80, 110, 100), "range"),
 )
 
 
@@ -226,7 +227,11 @@ def test_committed_sprites_match_sampled_colours():
     for asset, key, box, tol in CALIBRATED:
         px = np.asarray(Image.open(P.PROOF_DIR / asset).convert("RGBA").crop(box)).reshape(-1, 4)
         got, want = np.median(px[px[:, 3] > 250][:, :3], axis=0), colors[key]["use"]
-        assert max(abs(got - want)) <= tol, (asset, got, want)
+        if tol == "range":
+            lo, hi = np.asarray(colors[key]["p10"]) - 3, np.asarray(colors[key]["p90"]) + 3
+            assert ((got >= lo) & (got <= hi)).all(), (asset, got, lo, hi)
+        else:
+            assert max(abs(got - want)) <= tol, (asset, got, want)
 
 
 def test_main_usage_and_verify(capsys):

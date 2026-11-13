@@ -22,16 +22,13 @@ import panel_preview as V
 import panel_refbake as R
 from PIL import Image
 
-OUT = P.ROOT / ".reference" / "panel-compare-v4.png"
+OUT = P.ROOT / ".reference" / "panel-compare-v6.png"
 # EMPIRICAL: reference px per Blender unit (knob base 103.4 px = 0.8 u). Our 2x sprites have
 # 128 px per unit, so reference crops are scaled by 128 / 129.
 REF_PX_PER_U = 129.0
-# EMPIRICAL: centres of the Blender-only features on the 1961 x 1185 reference (base centre of
+# EMPIRICAL: centres of the plate patches on the 1961 x 1185 reference (base centre of
 # each control, from silhouette extents and a small correlation search).
 CAP_FEATURES = {
-    "drawbar_black": ((656.0, 972.0), ("cap", "drawbar_cap_black")),
-    "drawbar_white": ((954.0, 1006.0), ("cap", "drawbar_cap_white")),
-    "layer_grey": ((311.0, 242.0), ("cap", "layer_cap_grey")),
     "plate_red": ((200.0, 300.0), ("tile", "plate_red")),
     "plate_slate": ((640.0, 400.0), ("tile", "plate_slate")),
     "plate_silver": ((1400.0, 85.0), ("tile", "plate_silver")),
@@ -52,6 +49,8 @@ def features(crops: dict | None = None) -> dict:
     for name, t in crops["triangles"].items():
         x0, y0, x1, y1 = t["box"]
         out[f"tri_{name}"] = (((x0 + x1) / 2, (y0 + y1) / 2), ("tri", name, t))
+    for name, c in crops.get("caps", {}).items():
+        out[name] = (tuple(c["centre"]), ("cap", name))
     out.update(CAP_FEATURES)
     return out
 
