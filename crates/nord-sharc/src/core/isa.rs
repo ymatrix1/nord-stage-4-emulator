@@ -91,7 +91,7 @@ impl Core {
             },
             w: value,
             cond_ok: self.cond(bits(value, 37, 33)),
-            cond_y: self.simd() && self.cond_for(self.flags_y, bits(value, 37, 33)),
+            cond_y: self.simd() && self.cond_for(true, bits(value, 37, 33)),
         }
     }
 }

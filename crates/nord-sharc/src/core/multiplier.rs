@@ -66,12 +66,16 @@ impl Core {
         let cls = op >> 6;
         if cls == 0 {
             return match op {
+                // ASSUMED for the plain forms, VERIFIED in the dual-memory form (census diff, 12
+                // cases): clearing an MR register clears MN, MV, MU, MI (a zero result)
                 0x14 => {
                     self.mr[0] = 0;
+                    self.set_mult_flags(false, false, false, 0);
                     true
                 }
                 0x16 => {
                     self.mr[1] = 0;
+                    self.set_mult_flags(false, false, false, 0);
                     true
                 }
                 _ => self.saturate_or_round_mr(op, n),
@@ -325,5 +329,14 @@ mod tests {
         assert!(fits((1i128 << 64) - 1, true, true) && !fits(-1, true, true));
         assert_eq!(round_mr(0x1_8000_0000), 0x2_0000_0000);
         assert_eq!(round_mr(0x2_8000_0000), 0x2_0000_0000, "ties go to even");
+    }
+
+    #[test]
+    fn clearing_mr_clears_the_multiplier_flags() {
+        // census diff (12 cases of the dual-memory form)
+        let mut c = Core::new(&[]);
+        c.sys.astat_extra[0] = 0xF << 6;
+        assert!(c.fixed_mult(0x14, 0, 0, 0));
+        assert_eq!(c.sys.astat_extra[0] >> 6 & 0xF, 0);
     }
 }

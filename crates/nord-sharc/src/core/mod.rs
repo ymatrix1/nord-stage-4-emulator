@@ -22,6 +22,9 @@ mod banks;
 mod bitfifo;
 mod branch;
 mod branch_ext;
+pub mod census;
+#[cfg(test)]
+mod census_regress;
 #[cfg(test)]
 mod compute_adi;
 mod dag;
@@ -55,7 +58,6 @@ mod multifunction;
 mod multiplier;
 mod pcstack;
 pub mod periph;
-pub mod census;
 pub mod probe_fixture;
 mod shifter;
 #[cfg(test)]
@@ -332,16 +334,29 @@ impl Core {
 
     /// Whether condition code `c` (0..32, `31` = TRUE) holds for PEx.
     fn cond(&self, c: u64) -> bool {
-        self.cond_for(self.flags, c)
+        self.cond_for(false, c)
     }
 
-    /// Whether condition code `c` holds for the given flag set.
-    fn cond_for(&self, f: Flags, c: u64) -> bool {
+    /// Whether condition code `c` holds for PEx (`y` = false) or PEy.
+    fn cond_for(&self, y: bool, c: u64) -> bool {
+        let f = if y { self.flags_y } else { self.flags };
+        let af = self.sys.astat_extra[usize::from(y)] >> 10 & 1 == 1;
+        let sat = self.mode1 & float::MODE1_ALUSAT != 0;
         let lce = self.loops.last().is_some_and(|l| l.remaining > 1);
         let base = match c & 15 {
             0 => f.az,
-            1 => f.an && !f.az,
-            2 => f.an || f.az,
+            // VERIFIED (census diff, `if CC Rd = Rs` for all 64 combinations of AZ AV AN AC AS AI, with
+            // and without CACC): LT = AN xor AV, LE = (AN xor AV) or AZ; GE and GT are their negations
+            // VERIFIED (census diff, 64 flag combinations x AF in {0, 1}): after a floating-point
+            // ALU operation (AF = 1) LT is AN and not AZ, LE is AN or AZ; after a fixed-point
+            // one they compare AN with AV
+            // with ALUSAT set and AF clear LT is AN alone and LE is AN or AZ (AV is ignored: an
+            // overflow saturates instead of flipping the sign) -- VERIFIED the same way
+            1 if af => f.an && !f.az,
+            1 if sat => f.an,
+            1 => f.an != f.av,
+            2 if af || sat => f.an || f.az,
+            2 => (f.an != f.av) || f.az,
             3 => f.ac,
             4 => f.av,
             7 => f.sv,
@@ -455,5 +470,21 @@ mod tests {
         let mut c = core_with(&[0x0001, 0x0001, 0x0001]);
         assert_eq!(c.run(2), None);
         assert_eq!(c.steps, 2);
+    }
+
+    #[test]
+    fn lt_and_le_follow_af_and_alusat() {
+        // census diff: 288 + 256 simulator cases over AZ AV AN AC x AF (x ALUSAT)
+        let mut c = Core::new(&[]);
+        c.flags.an = true;
+        c.flags.av = true; // AN xor AV = 0
+        assert!(!c.cond(1) && c.cond(17), "fixed: LT false, GE true");
+        c.sys.astat_extra[0] |= 1 << 10; // AF: float rule
+        assert!(c.cond(1), "after a float op LT = AN and not AZ");
+        c.sys.astat_extra[0] &= !(1 << 10);
+        c.mode1 |= 1 << 13; // ALUSAT
+        assert!(c.cond(1), "with ALUSAT LT = AN");
+        c.flags.az = true;
+        assert!(c.cond(1) && c.cond(2));
     }
 }

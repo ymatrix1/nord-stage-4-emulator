@@ -8,7 +8,15 @@ impl Core {
     /// The values a store of `ureg` writes (PEx, and PEy for a data register), read before the
     /// instruction's compute runs: all halves of one instruction read the old registers.
     pub(super) fn capture(&self, ureg: u8) -> (u32, u32) {
-        let y = if ureg < 16 { self.s[ureg as usize] } else { 0 };
+        // VERIFIED (census diff): in SIMD mode a store of any other universal register also writes
+        // its PEy complement to `addr + 1`; for ASTAT and STKY that is ASTATy/STKYy (ASSUMED, the
+        // census only saw M0 stores), for the rest the same value (M0 stores).
+        let y = match ureg {
+            0..=15 => self.s[ureg as usize],
+            0x50..=0x5F => self.r[usize::from(ureg & 15)],
+            0x76 | 0x78 => self.read_ureg(ureg + 1),
+            _ => self.read_ureg(ureg),
+        };
         (self.read_ureg(ureg), y)
     }
 
@@ -36,21 +44,65 @@ impl Core {
         captured: (u32, u32),
     ) -> Result<(), Fault> {
         let bad = |address| Fault::BadAddress { pc: d.pc, address };
-        let pair = self.simd() && ureg < 16;
+        if Self::long_word(d) {
+            // VERIFIED (census diff, scalar mode, 126 firmware forms): a long-word access moves the
+            // register pair `Un, Un+1` (n even; an odd register selects its pair) to or from the two
+            // words at `addr & !1`. ASSUMED in SIMD mode (the simulator also changes S0 there: open).
+            let (u0, u1) = (ureg, ureg ^ 1); // the named register takes the lower address
+            let a = addr & !1;
+            if write {
+                let (v0, v1) = (self.read_ureg(u0), self.read_ureg(u1));
+                self.dm_write(a, v0).map_err(bad)?;
+                self.dm_write(a.wrapping_add(1), v1).map_err(bad)?;
+            } else {
+                let (v0, v1) = (
+                    self.dm_read(a).map_err(bad)?,
+                    self.dm_read(a.wrapping_add(1)).map_err(bad)?,
+                );
+                self.write_ureg(u0, v0);
+                self.write_ureg(u1, v1);
+            }
+            return Ok(());
+        }
+        // VERIFIED (census diff): the condition of a conditional move is evaluated per element (the
+        // word at `addr` follows PEx's condition, the one at `addr + 1` PEy's), and an S register
+        // transfers like an R register with the roles swapped (`S4 = DM(a)` also loads R4 from
+        // `a + 1`).
+        let (x_ok, y_ok) = match d.kind() {
+            Kind::T3a | Kind::T3b | Kind::T4a | Kind::T4b => (d.cond_ok, !self.simd() || d.cond_y),
+            _ => (true, true),
+        };
+        let data = ureg < 16 || (0x50..0x60).contains(&ureg);
+        let twin = if ureg < 16 { 0x50 | ureg } else { ureg & 15 };
         if write {
-            self.dm_write(addr, captured.0).map_err(bad)?;
-            if pair {
+            if x_ok {
+                self.dm_write(addr, captured.0).map_err(bad)?;
+            }
+            if self.simd() && y_ok {
                 self.dm_write(addr.wrapping_add(1), captured.1)
                     .map_err(bad)?;
             }
         } else {
-            let v = self.dm_read(addr).map_err(bad)?;
-            self.write_ureg(ureg, v);
-            if pair {
-                self.s[ureg as usize] = self.dm_read(addr.wrapping_add(1)).map_err(bad)?;
+            if x_ok {
+                let v = self.dm_read(addr).map_err(bad)?;
+                self.write_ureg(ureg, v);
+            }
+            if self.simd() && data && y_ok {
+                let v = self.dm_read(addr.wrapping_add(1)).map_err(bad)?;
+                self.write_ureg(twin, v);
             }
         }
         Ok(())
+    }
+
+    /// Whether the memory access of `d` is a long word (64-bit) transfer: bit 39 of Types 14a, 15a
+    /// and 15b, bit 30 of Types 3a and 3b (ADI `elfdump` prints `(LW)`; checked on 126 firmware forms).
+    fn long_word(d: &Decoded) -> bool {
+        match d.kind() {
+            Kind::T14a | Kind::T15a | Kind::T15b => bits(d.w, 39, 39) == 1,
+            Kind::T3a | Kind::T3b => bits(d.w, 30, 30) == 1,
+            _ => false,
+        }
     }
 
     /// Executes the move and modify types: 3a/3b/3c, 4a/4b, 5a/5b, 7a/7b, 14a, 15a/15b, 16a,
@@ -68,8 +120,12 @@ impl Core {
                     imm
                 };
                 self.write_ureg(code, value);
-                if self.simd() && code < 16 {
-                    self.s[code as usize] = value; // broadcast to PEy
+                // broadcast to the twin register of the other element (VERIFIED, census diff:
+                // `S0 = 0xc0f7c` in SIMD mode also sets R0)
+                if self.simd() && (code < 16 || code >> 4 == 5) {
+                    self.write_ureg(if code < 16 { 0x50 | code } else { code & 15 }, value);
+                } else if self.simd() && (code == 0x76 || code == 0x78) {
+                    self.write_ureg(code + 1, value); // VERIFIED: `STKYx = 0x...` also sets STKYy
                 }
             }
             Kind::T14a => {
@@ -102,8 +158,13 @@ impl Core {
                 let mi = bits(w, 40, 38) as usize + bank;
                 let addr = self.dag_out(ii, self.i[ii]);
                 let next_i = self.modified(ii, mi);
-                self.dm_write(addr, bits(w, 31, 0) as u32)
-                    .map_err(|address| Fault::BadAddress { pc: d.pc, address })?;
+                let bad = |address| Fault::BadAddress { pc: d.pc, address };
+                self.dm_write(addr, bits(w, 31, 0) as u32).map_err(bad)?;
+                if self.simd() {
+                    // VERIFIED (census diff): an immediate store also fills the next word
+                    self.dm_write(addr.wrapping_add(1), bits(w, 31, 0) as u32)
+                        .map_err(bad)?;
+                }
                 self.i[ii] = next_i;
             }
             Kind::T16b => {
@@ -114,12 +175,15 @@ impl Core {
                 let addr = self.dag_out(ii, self.i[ii]);
                 let next_i = self.modified(ii, mi);
                 let value = sign_extend(bits(w, 31, 16) as u32, 16);
-                self.dm_write(addr, value)
-                    .map_err(|address| Fault::BadAddress { pc: d.pc, address })?;
+                let bad = |address| Fault::BadAddress { pc: d.pc, address };
+                self.dm_write(addr, value).map_err(bad)?;
+                if self.simd() {
+                    self.dm_write(addr.wrapping_add(1), value).map_err(bad)?; // see Type 16a
+                }
                 self.i[ii] = next_i;
             }
             Kind::T18a => self.bit_op(d)?,
-            Kind::T5a | Kind::T5b if d.cond_ok => {
+            Kind::T5a | Kind::T5b if d.cond_ok || self.simd() && d.cond_y => {
                 if bits(w, 43, 43) == 1 {
                     // `Rx <-> Sy` [, compute]: Rx bits 26..23, Sy bits 41..38 (VERIFIED against
                     // ADI elfdump on 1,087 swaps, docs 5.34). In SIMD mode the swap is the same
@@ -129,11 +193,15 @@ impl Core {
                     self.swap_rs(r, s);
                 } else {
                     let src = ((bits(w, 42, 38) << 2) | bits(w, 32, 31)) as u8;
-                    self.move_ureg(bits(w, 29, 23) as u8, src);
+                    // the compute and the transfer both read the registers as they were before
+                    // the instruction (VERIFIED, census diff: `F12 = F8 * F7, R8 = R0`)
+                    let dst = bits(w, 29, 23) as u8;
+                    let cap = self.capture_move(src);
                     self.run_move_compute(d, with_compute)?;
+                    self.apply_move_if(dst, src, &cap, d.cond_ok, !self.simd() || d.cond_y);
                 }
             }
-            Kind::T3a | Kind::T3b if d.cond_ok => {
+            Kind::T3a | Kind::T3b if d.cond_ok || self.simd() && d.cond_y => {
                 let bank = Self::dag_bank(bits(w, 32, 32));
                 let ii = bits(w, 43, 41) as usize + bank;
                 let mi = bits(w, 40, 38) as usize + bank;
@@ -173,7 +241,7 @@ impl Core {
                 self.run_move_compute(d, with_compute)?;
                 self.i[dst] = self.modified_always(src, self.m[mi]);
             }
-            Kind::T4a | Kind::T4b if d.cond_ok => {
+            Kind::T4a | Kind::T4b if d.cond_ok || self.simd() && d.cond_y => {
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 40, 40));
                 // DATA6 is a signed offset; the U bit (38) selects post-modify with update
                 // (`dm(i6,2)`: access at I, then I += DATA6) instead of the pre-modify offset
@@ -397,5 +465,78 @@ mod tests {
         let mut c = core_at_zero(&[0x1702, 0x0000, 0x0000]);
         assert!(c.step().is_ok());
         assert_eq!(c.pc, 3);
+    }
+
+    #[test]
+    fn simd_store_of_a_non_data_register_writes_addr_plus_one_too() {
+        // census diff: `DM(addr) = M0` in SIMD mode wrote M0 at addr and addr + 1 on the simulator
+        let mut c = crate::core::Core::new(&[]);
+        c.mode1 = 1 << 21;
+        c.m[0] = 2;
+        let d = c.fetch(0);
+        c.mem_transfer(&d, 0xB2300, 0x20, true).unwrap();
+        assert_eq!((c.dm_read(0xB2300), c.dm_read(0xB2301)), (Ok(2), Ok(2)));
+        let mut scalar = crate::core::Core::new(&[]);
+        scalar.m[0] = 2;
+        scalar.mem_transfer(&d, 0xB2300, 0x20, true).unwrap();
+        assert_eq!(scalar.dm_read(0xB2301), Ok(0));
+    }
+
+    #[test]
+    fn long_word_access_moves_a_register_pair_at_an_even_address() {
+        // census diff: `R0 = DM(0xB2181) (LW)` is parcels 1080 000b 2181 in the firmware
+        let mut c = crate::core::support::core_at_zero(&[0x1080, 0x000B, 0x2181]);
+        c.dm_write(0xB2180, 0x1111).unwrap();
+        c.dm_write(0xB2181, 0x2222).unwrap();
+        c.r[1] = 9;
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!(
+            (c.r[0], c.r[1]),
+            (0x1111, 0x2222),
+            "address aligned down, R0 and R1"
+        );
+        // the same word without the LW bit loads R0 only
+        let mut plain = crate::core::support::core_at_zero(&[0x1000, 0x000B, 0x2181]);
+        plain.dm_write(0xB2181, 0x2222).unwrap();
+        plain.r[1] = 9;
+        assert_eq!(plain.step(), Ok(()));
+        assert_eq!((plain.r[0], plain.r[1]), (0x2222, 9));
+    }
+
+    #[test]
+    fn long_word_access_with_an_odd_register_gives_it_the_lower_address() {
+        // census diff: `R3 = DM(I2, M0) (LW)` loads R3 from the lower word and R2 from the upper
+        let mut c = crate::core::support::core_at_zero(&[0x443e, 0x41bf]);
+        c.i[2] = 0xB2200;
+        c.m[0] = 0;
+        c.dm_write(0xB2200, 0x1111).unwrap();
+        c.dm_write(0xB2201, 0x2222).unwrap();
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!((c.r[3], c.r[2]), (0x1111, 0x2222));
+    }
+
+    #[test]
+    fn simd_immediate_load_into_s_also_sets_the_r_twin() {
+        // census diff: `S0 = 0xc0f7c` (Type 17a)
+        let mut c = crate::core::support::core_at_zero(&[0x0f50, 0x000c, 0x0f7c]);
+        c.mode1 = 1 << 21;
+        assert_eq!(c.step(), Ok(()));
+        assert_eq!((c.s[0], c.r[0]), (0xC0F7C, 0xC0F7C));
+    }
+
+    #[test]
+    fn simd_immediate_store_fills_the_next_word_too() {
+        // census diff: `DM(I0, M1) = 0` (Type 16a, parcels 9040 0000 0000) in SIMD mode
+        let mut c = crate::core::support::core_at_zero(&[0x9040, 0x0000, 0x0000]);
+        c.mode1 = 1 << 21;
+        c.i[0] = 0xB2400;
+        c.m[1] = 1;
+        c.dm_write(0xB2401, 0x55).unwrap();
+        let _ = c.step();
+        assert_eq!(
+            c.dm_read(0xB2401),
+            Ok(0),
+            "the twin word is written as well"
+        );
     }
 }

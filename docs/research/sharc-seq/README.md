@@ -20,3 +20,5 @@ It needs CCES 2.12.1 with an active licence (never touched) and re-runs itself u
 Stack probe: `gen_stack_probe.py`, `stack_fixture.txt`, `stack_measured.txt`, `stack_names.json`; findings `../sharc-stacks.md`, check `stack_measured.rs`.
 
 SIMD: `gen_simd_probe.py`, `simd_fixture.txt`, `simd_measured.txt`, `simd_names.json`; results in `../sharc-simd.md`, check in `crates/nord-sharc/src/core/simd_measured.rs`.
+
+Census diff (every firmware instruction against the simulator): `gen_census_probe.py`, `sim_batch.py`, `census_diff.py`, `census_regress.py`, fixtures `census_*.txt`; results `../sharc-census-diff.md`, check `crates/nord-sharc/src/core/census_regress.rs`.

@@ -58,7 +58,7 @@ impl Core {
             let (add, sub) = if float { (0x81, 0x82) } else { (0x01, 0x02) };
             let (orig, flags, fx) = (self.r, self.flags, self.fx);
             let ok_add = self.compute(alu_word(add, ra));
-            let (sum, sum_fx) = (self.r[ra as usize], self.fx);
+            let (sum, sum_fx, sum_flags) = (self.r[ra as usize], self.fx, self.flags);
             self.r = orig;
             self.fx = fx;
             let ok_sub = self.compute(alu_word(sub, rs));
@@ -82,6 +82,10 @@ impl Core {
             self.r[rs as usize] = diff;
             self.fx.take(&sum_fx, ra as usize);
             self.fx.take(&diff_fx, rs as usize);
+            // like the dual add/subtract: the flags are the OR of the sum's and the difference's
+            // (VERIFIED, census diff, 5 triple-operation cases)
+            let diff_flags = self.flags;
+            self.flags = Self::or_flags(sum_flags, diff_flags);
             return true;
         }
         let op6 = bits(c, 21, 16);
@@ -134,16 +138,21 @@ impl Core {
         // VERIFIED (`simd_measured.rs`, 64 operand pairs of the fixed dual form on PEx, ASTAT bits
         // AZ AV AN AC): the flags are the OR of the sum's and the difference's. ASSUMED for AS and
         // AI and for the float form (AZ AN AV AC checked there too; the SIMD probe covers both).
-        self.flags = Flags {
-            az: sum_flags.az || diff_flags.az,
-            an: sum_flags.an || diff_flags.an,
-            av: sum_flags.av || diff_flags.av,
-            ac: sum_flags.ac || diff_flags.ac,
-            as_: sum_flags.as_ || diff_flags.as_,
-            ai: sum_flags.ai || diff_flags.ai,
-            ..sum_flags
-        };
+        self.flags = Self::or_flags(sum_flags, diff_flags);
         true
+    }
+
+    /// The ALU flags of a dual add/subtract: AZ AV AN AC AS AI of either result.
+    fn or_flags(a: Flags, b: Flags) -> Flags {
+        Flags {
+            az: a.az || b.az,
+            an: a.an || b.an,
+            av: a.av || b.av,
+            ac: a.ac || b.ac,
+            as_: a.as_ || b.as_,
+            ai: a.ai || b.ai,
+            ..a
+        }
     }
 }
 

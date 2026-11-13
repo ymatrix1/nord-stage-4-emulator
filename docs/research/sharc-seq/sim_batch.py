@@ -83,11 +83,14 @@ def main():
                         break
                 except RuntimeError:
                     pass
-                if time.time() - t1 > 20:
-                    T.Halt(0, True)
+                if time.time() - t1 > 3:
                     break
-            T.GetMemory(0, sim_run.DM_MEMORY_ID, res, a.n_state, 1, buf_res)
-            T.GetMemory(0, sim_run.DM_MEMORY_ID, scr_a, SCR_WORDS, 1, buf_scr)
+            try:
+                T.GetMemory(0, sim_run.DM_MEMORY_ID, res, a.n_state, 1, buf_res)
+                T.GetMemory(0, sim_run.DM_MEMORY_ID, scr_a, SCR_WORDS, 1, buf_scr)
+            except RuntimeError as e:   # the simulator stopped on the instruction (bad access, ...)
+                out.write('HALT %s\n' % str(e).split(':')[-1].strip().replace(' ', '_'))
+                continue
             ws = struct.unpack('>%dI' % a.n_state, bytes(buf_res)) + struct.unpack('>%dI' % SCR_WORDS, bytes(buf_scr))
             out.write(' '.join('%08X' % w for w in ws) + '\n')
     finally:

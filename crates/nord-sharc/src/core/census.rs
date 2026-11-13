@@ -35,10 +35,12 @@ fn one_case(f: &Fixture, scr: &[u32], parcels: &str, state: &[u32]) -> Result<St
         c.sram[o..o + 2].copy_from_slice(&p.to_le_bytes());
     }
     for (i, w) in state.iter().enumerate() {
-        c.dm_write(st + i as u32, *w).map_err(|e| format!("st write {e:x}"))?;
+        c.dm_write(st + i as u32, *w)
+            .map_err(|e| format!("st write {e:x}"))?;
     }
     for (i, w) in scr.iter().enumerate() {
-        c.dm_write(scr_a + i as u32, *w).map_err(|e| format!("scr write {e:x}"))?;
+        c.dm_write(scr_a + i as u32, *w)
+            .map_err(|e| format!("scr write {e:x}"))?;
     }
     c.pc = f.entry;
     let mut steps = 0;
@@ -56,6 +58,32 @@ fn one_case(f: &Fixture, scr: &[u32], parcels: &str, state: &[u32]) -> Result<St
         out.push(format!("{w:08X}"));
     }
     Ok(out.join(" "))
+}
+
+/// Compact form of an output line for the committed regression fixtures: the dumped state words,
+/// then ` @index=value` for each scratch word that differs from the table the case started with.
+/// `FAULT` and `HALT` lines stay as they are.
+pub fn compact(line: &str, scr: &[u32], n_state: usize) -> String {
+    if line.starts_with("FAULT") || line.starts_with("HALT") {
+        return line.to_string();
+    }
+    let w = words(&line.split_whitespace().collect::<Vec<_>>());
+    let mut out: Vec<String> = w.iter().take(n_state).map(|x| format!("{x:08X}")).collect();
+    for (i, x) in w.iter().skip(n_state).enumerate() {
+        if scr.get(i) != Some(x) {
+            out.push(format!("@{i}={x:08X}"));
+        }
+    }
+    out.join(" ")
+}
+
+/// The scratch table of a cases file (its `scr` line).
+pub fn scratch_of(cases: &str) -> Vec<u32> {
+    cases
+        .lines()
+        .find_map(|l| l.strip_prefix("scr "))
+        .map(|r| words(&r.split_whitespace().collect::<Vec<_>>()))
+        .unwrap_or_default()
 }
 
 /// Runs every case of `cases` and returns one output line per case.
@@ -92,5 +120,21 @@ mod tests {
     #[test]
     fn words_parse_hex_and_default_to_zero() {
         assert_eq!(words(&["1F", "zz"]), vec![0x1F, 0]);
+    }
+
+    #[test]
+    fn compact_keeps_state_words_and_changed_scratch_words_only() {
+        let scr = [1, 2, 3];
+        let line = "0000000A 0000000B 00000001 00000009 00000003";
+        assert_eq!(compact(line, &scr, 2), "0000000A 0000000B @1=00000009");
+        assert_eq!(compact("FAULT x", &scr, 2), "FAULT x");
+        assert_eq!(
+            scratch_of(
+                "scr 1 2 3
+0001 0
+"
+            ),
+            vec![1, 2, 3]
+        );
     }
 }

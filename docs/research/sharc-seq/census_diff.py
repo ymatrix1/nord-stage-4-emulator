@@ -58,12 +58,49 @@ def load_instructions(image_dir):
                 insns, _ = v.tile(v.parcels_le(mem[lo:hi]))
                 for name, parcels in insns:
                     seen.setdefault(tuple(parcels), (name, v.decode(parcels)))
-    return seen
+    return label_with_adi(seen)
+
+
+def label_with_adi(seen):
+    """Replaces the `sharc_visa` text with ADI's own `elfdump` text; drops what ADI does not decode
+    to the same parcels (the tiler also cuts data and mis-aligned code into 'instructions')."""
+    import adi_dis
+    order = sorted(seen)
+    stream, addr = [], []
+    for parcels in order:
+        addr.append(len(stream))
+        stream += list(parcels)
+    listing = adi_dis.disassemble(stream)
+    out = {}
+    for parcels, a in zip(order, addr):
+        entry = listing.get(a)
+        if entry and entry[0] == list(parcels) and re.search(r'[=<(]', entry[1]):
+            out[parcels] = (seen[parcels][0], entry[1])
+    return out
+
+
+BIG_OFFSET = re.compile(r'(?:dm|pm)\((0x[0-9a-f]{5,}),\s*i\d+\)', re.I)
+BANK_BITS = 0x4F8   # MODE1 bits that swap register banks (SRRFL/H, SRD1L/H, SRD2L/H)
 
 
 def usable(item):
+    """Single instructions the probe can run: no control flow, no timer/stack/interrupt registers,
+    no MODE1 writes (a random MODE1 breaks the probe), no offsets that leave data memory."""
     parcels, (name, text) = item
-    return not DENY.search(text) and len(parcels) <= 3
+    t = text.lower().replace(' ', '')
+    if DENY.search(text.upper()) or len(parcels) > 3:
+        return False
+    # ADI prints a blank compute (leading comma) or 'ch' for bit patterns that are no instruction:
+    # data cut into 'code' by the tiler (parcel 3 repeating parcel 1 is the usual sign)
+    if text.lstrip().startswith(',') or t.endswith('=ch') or (len(parcels) == 3 and parcels[0] == parcels[2]):
+        return False
+    if re.match(r'(mode1|mode2)=', t) or re.search(r',(mode1|mode2)=', t):
+        return False
+    m = BIG_OFFSET.search(text)
+    if m and 0x8000 < int(m.group(1), 16) < 0xFFFF8000:
+        return False
+    b = re.match(r'bit(set|clr|tgl|xor|tst)mode1(0x[0-9a-f]+)', t)
+    return not (b and int(b.group(2), 16) & BANK_BITS)
 
 
 def redirect_abs(parcels, name, scr_addr, rnd):
@@ -81,8 +118,10 @@ def make_state(rnd, scr_addr, mode1):
     s += [0] * 16 + [0] * 16                                                    # b, l
     s += [scr_addr + 0x100 + rnd.randrange(64) for _ in range(16)]             # i
     s += [rnd.choice([1, 2, 3, 4, 0xFFFFFFFF, 0xFFFFFFFE]) for _ in range(16)]  # m
-    astat = (rnd.getrandbits(6) | rnd.getrandbits(3) << 11 | rnd.getrandbits(8) << 24) & ~0x400
-    s += [mode1, astat, rnd.getrandbits(6) | rnd.getrandbits(3) << 11, 0, 0]
+    def astat():   # all 32 bits random, but AZ and AN never hold together
+        a = rnd.getrandbits(32)
+        return a & ~0x4 if a & 1 else a
+    s += [mode1, astat(), astat(), rnd.getrandbits(32), rnd.getrandbits(32)]
     s += [data() for _ in range(6)]
     return s
 
@@ -108,6 +147,25 @@ def run(cmd, outfile=None):
         sys.exit('failed: %s' % ' '.join(cmd))
 
 
+def run_sim(dxe, cases, out, jobs):
+    """Runs sim_batch.py on `jobs` shards of the case file in parallel (one simulator per process)."""
+    lines = open(cases).read().split(chr(10))
+    head, body = lines[0], [l for l in lines[1:] if l]
+    size = -(-len(body) // jobs)
+    shards = [body[k:k + size] for k in range(0, len(body), size)]
+    procs = []
+    for k, sh in enumerate(shards):
+        c, o = '%s.%d' % (cases, k), '%s.%d' % (out, k)
+        open(c, 'w').write(head + chr(10) + chr(10).join(sh) + chr(10))
+        cmd = [sys.executable, os.path.join(HERE, 'sim_batch.py'), dxe, c, '--output', o]
+        procs.append((subprocess.Popen(cmd, stdout=subprocess.DEVNULL), o))
+    with open(out, 'w') as f:
+        for p, o in procs:
+            if p.wait():
+                sys.exit('shard failed: ' + o)
+            f.write(open(o).read())
+
+
 def report(meta, sim_path, model_path, n_state, path):
     names = layout()
     sim = open(sim_path).read().split('\n')
@@ -116,12 +174,12 @@ def report(meta, sim_path, model_path, n_state, path):
     bad = 0
     for i, (text, name, k) in enumerate(meta):
         a, b = sim[i], mod[i]
-        if a == b:
+        if a == b or (a.startswith('HALT') and b.startswith('FAULT')):   # both refuse the instruction
             continue
         bad += 1
         x, y = a.split(), b.split()
-        if y[:1] == ['FAULT']:
-            diff = [b]
+        if y[:1] == ['FAULT'] or x[:1] == ['HALT']:
+            diff = [a[:60], b[:60]]
         else:
             diff = ['%s sim=%s model=%s' % (names[j] if j < n_state else 'scr%d' % (j - n_state), x[j], y[j])
                     for j in range(min(len(x), len(y))) if x[j] != y[j]][:6]
@@ -145,6 +203,8 @@ def main():
     ap.add_argument('--sample', type=int, default=0, help='random subset of N instructions (0 = all)')
     ap.add_argument('--states', type=int, default=6)
     ap.add_argument('--seed', type=int, default=1)
+    ap.add_argument('--reuse-sim', action='store_true', help='keep sim.txt, rerun only the model and the report')
+    ap.add_argument('--jobs', type=int, default=1, help='parallel simulator processes')
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     items = sorted((it for it in load_instructions(a.images).items() if usable(it)), key=lambda it: it[0])
@@ -154,7 +214,12 @@ def main():
     cases, simo, modo = (os.path.join(a.work, n) for n in ('cases.txt', 'sim.txt', 'model.txt'))
     meta = build_cases(items, a.states, syms['_scr'], a.seed, cases)
     print('%d instructions, %d cases' % (len(items), len(meta)))
-    run([sys.executable, os.path.join(HERE, 'sim_batch.py'), a.dxe, cases, '--output', simo])
+    if a.reuse_sim:   # sim.txt from an earlier run with the same --seed/--states/--sample
+        pass
+    elif a.jobs > 1:
+        run_sim(a.dxe, cases, simo, a.jobs)
+    else:
+        run([sys.executable, os.path.join(HERE, 'sim_batch.py'), a.dxe, cases, '--output', simo])
     run(['cargo', 'run', '-q', '-p', 'nord-sharc', '--bin', 'sharc_census_run', '--', a.fixture, cases], modo)
     bad = report(meta, simo, modo, gen.N_STATE, os.path.join(a.work, 'report.txt'))
     print('%d differing cases, see %s' % (bad, os.path.join(a.work, 'report.txt')))

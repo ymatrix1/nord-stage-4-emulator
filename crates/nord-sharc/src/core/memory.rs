@@ -208,4 +208,15 @@ mod tests {
         c.write_ureg(0x7C, 1);
         assert_eq!(c.read_ureg(0x7C), 0, "unlisted system registers read as 0");
     }
+
+    #[test]
+    fn loading_a_b_register_also_loads_its_index_register() {
+        // census diff: the probe loads I0, then B0 = 0, and the simulator dumps I0 = 0
+        let mut c = Core::new(&[]);
+        c.write_ureg(0x10, 0xB2200); // I0
+        c.write_ureg(0x40, 0); // B0
+        assert_eq!((c.i[0], c.b[0]), (0, 0));
+        c.write_ureg(0x41, 0x1234);
+        assert_eq!((c.i[1], c.b[1]), (0x1234, 0x1234));
+    }
 }
