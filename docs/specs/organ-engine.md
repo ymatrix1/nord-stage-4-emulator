@@ -4,7 +4,17 @@
 
 Specifies the 2-layer (`Organ A`, `Organ B`) physical modeling Organ Engine and Model 122 Vintage Rotary Speaker simulation of the Nord Stage 4.
 
-Implemented in [`crates/nord-core/src/organ.rs`](../../crates/nord-core/src/organ.rs).
+Implemented in [`crates/nord-core/src/organ/`](../../crates/nord-core/src/organ/):
+
+| Module | Content |
+|---|---|
+| `mod.rs` | `OrganLayer` state, `note_on`/`note_off`, `render_frame` signal chain |
+| `types.rs` | enums (`OrganModel`, `ScannerMode`, `RotarySpeed`, `ToneWheelSource`), gear table, rotary constants |
+| `firmware_bank.rs` | `ToneBank`: PNO Core1 oscillator-bank arithmetic, x table, `fracmul`, `phase_step` |
+| `tonewheel.rs` | gear frequencies, pickup calibration, 91-wheel generator (firmware or legacy source) |
+| `drawbar.rs` | drawbar offsets, level law (`drawbar_gain`, TD-10), foldback |
+| `keyclick.rs`, `scanner.rs`, `rotary.rs` | key click, scanner vibrato/chorus, Model 122 rotary |
+| `bank_golden.rs` | test-only golden vectors from `tools/organ_bank_ref.py golden` |
 
 ---
 
@@ -45,11 +55,29 @@ Rather than ideal equal temperament ($2^{n/12}$), the 12 drive gears use integer
 
 Each octave doubles the number of teeth on the rotating wheel (`2, 4, 8, 16, 32, 64, 128`, with top-octave tonewheels `tw >= 84` using physical `192`-tooth wheels paired with a $4/3$ step-up gear). All 91 tonewheel phase accumulators advance continuously on every audio sample (`phase[i] = (phase[i] + 2*pi * f[i] / fs) mod 2*pi`), ensuring authentic phase interaction when multiple keys share a tonewheel.
 
+### 3.1.1 Firmware oscillator-bank parity (`ToneWheelSource::Firmware`, default)
+
+Source: [organ-tonewheel-bank](../research/organ-tonewheel-bank.md) (oracle run, 0 mismatches over 29,440 words). For `OrganModel::B3` each wheel runs
+
+| Step | Equation | Status |
+|---|---|---|
+| Step | `step = round(f / fs * 2^32)` (firmware: `fracmul(inc, tune)`, `f = fs * step / 2^32`) | VERIFIED relation, the frequencies `f` stay the Hammond gear ratios (ASSUMED; the firmware ladder is 12-TET) |
+| Accumulate | `phase = (phase + step) mod 2^32` (`u32`), before the table read | VERIFIED |
+| Index | `idx = phase >> 20`, 4096 entries, no interpolation | VERIFIED |
+| Waveform | `x = sin t - 0.1122 cos 2t - 0.01585 cos 3t - 0.00631 cos 4t - 0.00398 cos 5t` (harmonics 0, -19.0, -36.0, -44.0, -48.0 dB), `T[i] = x(2 pi i / 4096)` built once in `new` | VERIFIED harmonics, table phase origin ASSUMED |
+| Role | the x wave on every B3 wheel, replacing the sine and the extra low-wheel harmonics | ASSUMED (about 60 %, the bank may be a string-resonance bank) |
+
+Other models and `ToneWheelSource::Legacy` keep the float-phase sine path unchanged. The pickup calibration, crosstalk and drawbar mapping are unchanged and `ASSUMED`. Tests: `firmware_bank::tests` (closed form at chosen steps, harmonic levels, `fracmul` rounding), `bank_golden::tests` (Rust bank vs the Python model, vectors from `python tools/organ_bank_ref.py golden`, synthetic table, no firmware data).
+
+**Detuned copies** (`OrganLayer::detuned_copies`, default off): each wheel runs two accumulators at `-0.945` and `+0.945` cent (`COPY_SPREAD_CENTS = 1.89`, EMPIRICAL: rms of `1200 log2(v[2k+1] / v[2k])` over the ARM default table; the firmware signs are random, the constant pair is ASSUMED) and the outputs are averaged. Not default because the role of the copies is unproven.
+
+**Render change** (`render_hash`, 2,240,000 bytes): SHA-256 `25baa387...7b59a` before, `181c4fcb...3029` after; only the engine timeline (default organ layer) and the standalone organ segment change, synth, piano and FX segments are bit-identical. Organ level changes by +0.08 dB RMS; the 4th and higher partials of each wheel appear.
+
 - **Pickup Calibration (`B3` vs `B3 Bass`):** Standard `B3` tapers the bottom 12 complex wheels (`0.74..0.94`) and softens upper wheels above `tw 60` (`1.0..0.84`). `B3 Bass` boosts low wheels `0..24` (`1.32..1.05`) for prominent pedal/bass weight.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
-Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps, mapped in -3 dB steps per notch below `8`, with `0` = $-\infty\text{ dB}$):
+Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps). The level law is `ASSUMED`: the code uses linear `level / 8` (`drawbar::drawbar_gain`); this section used to claim -3 dB per notch, neither is verified (TD-10; the preset field is 4 bits `0..=8`, [preset-dsp-map](../research/preset-dsp-map.md)). `0` = $-\infty\text{ dB}$:
 
 | Drawbar | Footage | Semitone Offset ($\Delta k$) | Foldback Behavior |
 |---|---|---:|---|

@@ -105,7 +105,7 @@ Routine `0x12272D`: triangle LFO (`|phase| - 0.5`, `*4`, clip), `fix`, interpola
 - **Wave:** use the firmware x wave for every wheel (VERIFIED table, role ASSUMED); the y wave is the candidate for the other tonewheel mode (`Edt_Sys_kToneWheelMode`).
 - **Do not** read the 184 elements as Layer A / B.
 
-## To-do for `crates/nord-core/src/organ.rs` (not done here; TD-09 restructuring in progress)
+## To-do for `crates/nord-core/src/organ/` (items 1 and 3 done: `firmware_bank.rs`, `docs/specs/organ-engine.md` 3.1.1; item 2 partly: two copies with a constant pair, no 92nd wheel, no per-copy weights)
 
 1. Replace the ad hoc harmonics by the x table (formula in section 1; 4096 points, no interpolation needed for parity with the firmware; keep a linear-interpolated variant for quality).
 2. Add a 92nd (spare) wheel and a second copy per wheel with the section 4 offsets (cent table from `tools/organ_bank_ref.py defaults`), driven by a mono weight vector per copy.
