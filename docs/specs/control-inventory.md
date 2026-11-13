@@ -47,7 +47,7 @@ enum Binding {
 |---|---|---|
 | Unique ids | Lowercase ASCII, no duplicates | implemented |
 | Provenance | Every entry has page 11-53, a label and a source; `Assumed` entries state why | implemented |
-| Bindings | Every binding is non-empty; every `Bound` id appears as a quoted literal in `nord-plugin/src/{params,fx_params,fx_selectors,morph_assign}.rs`; every `Unsupported` bean exists in `.beans/` | implemented |
+| Bindings | Every binding is non-empty; every `Bound` id appears as a quoted literal in the `nord-plugin` sources, or as `<prefix>_<name>[_{n}]` where `<prefix>` is a nested `id_prefix` in `params.rs` and `<name>` a literal `#[id]` (per-layer ids such as `pianox_unison_{n}`); every `Unsupported` bean exists in `.beans/` | implemented |
 | Counts | Per-section, per-kind, per-binding, `Assumed` and `morphable` totals pinned (§5) | implemented |
 | Completeness | Every control has a layout rect and a renderer | B8 |
 | Geometry | No two rects overlap; each rect lies inside its section rect | B8 |
@@ -67,13 +67,13 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
 | **Total** | | | | | | **273** |
 
-By binding: `Bound` 66, `UiOnly` 49, `Unsupported` 158. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 75 controls. Morphable: 35.
+By binding: `Bound` 83, `UiOnly` 49, `Unsupported` 141. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 75 controls. Morphable: 35.
 
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
 ## Gap list
 
-The old code-review gap list is replaced by the 158 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects/rotary, `ns4-h7he` organ/piano, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the 141 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects/rotary, `ns4-h7he` organ/piano, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 6. Decisions and open questions
 

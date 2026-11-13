@@ -19,14 +19,14 @@ pub fn controls() -> Vec<ControlEntry> {
         e("rotary.speed", s, K::Button, "SLOW/STOP - FAST", 53)
             .morph()
             .bound("rotary_speed_fast"),
-        e("rotary.stop_mode", s, K::Button, "STOP MODE", 53).todo("ns4-e3zs"),
+        e("rotary.stop_mode", s, K::Button, "STOP MODE", 53).bound("organx_stop_mode"),
         e("rotary.angle", s, K::Button, "ANGLE", 53)
             .shift()
             .todo("ns4-e3zs"),
         e("rotary.organ", s, K::Button, "ORGAN (route to rotary)", 53).todo("ns4-e3zs"),
         e("rotary.close_mic", s, K::Button, "CLOSE MIC", 53)
             .shift()
-            .todo("ns4-e3zs"),
+            .bound("organx_close_mic"),
         e("rotary.speed_leds", s, K::Led, "SLOW / FAST LEDs", 53)
             .assumed("LED labels from the panel photo")
             .ui("derived from the speed state"),

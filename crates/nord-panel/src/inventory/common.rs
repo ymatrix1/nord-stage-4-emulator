@@ -18,6 +18,8 @@ pub struct BlockSpec {
     /// Manual page of the SUSTPED/PSTICK text.
     pub ped_page: u16,
     pub pstick_label: &'static str,
+    /// Host id of the per-layer octave parameter (`_{n}` suffix), if the section has one.
+    pub octave_id: Option<&'static str>,
     /// Bean tracking the missing section-level behaviour.
     pub bean: &'static str,
 }
@@ -104,8 +106,16 @@ pub fn layer_block(b: &BlockSpec) -> Vec<ControlEntry> {
                 .todo("ns4-ymci"),
         );
     }
-    v.push(ControlEntry::new(&id("octave_down"), s, K::Button, "OCTAVE SHIFT -", p).todo(b.bean));
-    v.push(ControlEntry::new(&id("octave_up"), s, K::Button, "OCTAVE SHIFT +", p).todo(b.bean));
+    for (tail, label) in [
+        ("octave_down", "OCTAVE SHIFT -"),
+        ("octave_up", "OCTAVE SHIFT +"),
+    ] {
+        let e = ControlEntry::new(&id(tail), s, K::Button, label, p);
+        v.push(match b.octave_id {
+            Some(host) => e.bound(host),
+            None => e.todo(b.bean),
+        });
+    }
     v.push(
         ControlEntry::new(&id("kb_zone_down"), s, K::Button, "KB ZONE -", p)
             .shift()
@@ -143,6 +153,7 @@ mod tests {
         page: 18,
         ped_page: 18,
         pstick_label: "PSTICK",
+        octave_id: None,
         bean: "ns4-h7he",
     };
 
