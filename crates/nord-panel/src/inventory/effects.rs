@@ -24,7 +24,7 @@ pub fn controls() -> Vec<ControlEntry> {
             48,
         )
         .shift()
-        .todo(bean),
+        .bound("fxy_group_{n}"),
         e(
             "fx.focus.group_synth",
             s,
@@ -33,7 +33,7 @@ pub fn controls() -> Vec<ControlEntry> {
             48,
         )
         .shift()
-        .todo(bean),
+        .bound("fxy_group_{n}"),
         e("fx.focus.leds", s, K::Led, "FX FOCUS LEDs", 48).ui("show the focused section or layer"),
         // Mod 1 (p.49-50)
         e("mod1.on", s, K::Button, "MOD 1 ON", 49).todo(bean),
@@ -46,7 +46,7 @@ pub fn controls() -> Vec<ControlEntry> {
             49,
         )
         .shift()
-        .todo(bean),
+        .bound("fxy_mod1_var_{n}"),
         e("mod1.rate", s, K::Knob, "MOD 1 RATE", 49)
             .morph()
             .bound("mod1_rate"),
@@ -64,7 +64,7 @@ pub fn controls() -> Vec<ControlEntry> {
             50,
         )
         .shift()
-        .todo(bean),
+        .bound("fxy_mod2_var_{n}"),
         e("mod2.rate", s, K::Knob, "MOD 2 RATE", 50).bound("mod2_rate"),
         e("mod2.amount", s, K::Knob, "MOD 2 AMOUNT", 50)
             .morph()
@@ -73,7 +73,7 @@ pub fn controls() -> Vec<ControlEntry> {
         e("delay.on", s, K::Button, "DELAY ON", 50).bound("delay_on"),
         e("delay.global", s, K::Button, "GLOBAL (Shift+On)", 48)
             .shift()
-            .todo(bean),
+            .bound("fxy_glob_delay_{n}"),
         e("delay.tempo", s, K::Knob, "DELAY TEMPO", 50)
             .morph()
             .bound("delay_ms"),
@@ -135,12 +135,12 @@ pub fn controls() -> Vec<ControlEntry> {
             .assumed("RES knob named on p.52; its panel position is not described")
             .bound("fxx_filter_res_{n}"),
         e("amp.filter", s, K::Button, "FILTER LP24/HP24", 52).todo(bean),
-        e("amp.to_rotary", s, K::Button, "TO ROTARY", 52).todo(bean),
+        e("amp.to_rotary", s, K::Button, "TO ROTARY", 52).bound("fxsel_cabinet_{n}"),
         // Compressor (p.52)
         e("comp.on", s, K::Button, "COMP ON", 52).bound("comp_on"),
         e("comp.global", s, K::Button, "GLOBAL (Shift+On)", 48)
             .shift()
-            .todo(bean),
+            .bound("fxy_glob_comp_{n}"),
         e("comp.amount", s, K::Knob, "COMP AMOUNT", 52)
             .morph()
             .bound("comp_amt"),
@@ -151,7 +151,7 @@ pub fn controls() -> Vec<ControlEntry> {
         e("reverb.on", s, K::Button, "REVERB ON", 52).todo(bean),
         e("reverb.global", s, K::Button, "GLOBAL (Shift+On)", 52)
             .shift()
-            .todo(bean),
+            .bound("fxy_glob_rev_{n}"),
         e("reverb.type", s, K::Button, "REVERB TYPE (6)", 52).bound("rev_model"),
         e(
             "reverb.variation",
