@@ -14,6 +14,7 @@ mod state;
 mod support;
 #[cfg(test)]
 mod tests;
+pub mod ui_state;
 
 /// Names every bay file needs; imported with `use super::prelude::*;`.
 mod prelude {

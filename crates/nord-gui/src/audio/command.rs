@@ -1,5 +1,6 @@
 //! `AudioCommand`: messages from the UI and MIDI threads to the real-time DSP thread.
 
+use super::edits::{FxEdit, OrganEdit, PianoEdit, ProgramEdit, SynthEdit};
 use nord_core::fx::{Mod1Type, Mod2Type, ReverbModel};
 use nord_core::midi::MidiEvent;
 use nord_core::organ::{OrganModel, RotarySpeed, ScannerMode};
@@ -10,6 +11,16 @@ use std::sync::Arc;
 /// Commands sent from the UI/MIDI to the real-time DSP thread.
 #[derive(Debug, Clone)]
 pub enum AudioCommand {
+    /// Organ-area panel edit (see `audio/edits/organ.rs`).
+    Organ(OrganEdit),
+    /// Piano-area panel edit.
+    Piano(PianoEdit),
+    /// Synth-area panel edit.
+    Synth(SynthEdit),
+    /// Layer-effects panel edit.
+    Fx(FxEdit),
+    /// Program-area panel edit.
+    Program(ProgramEdit),
     Midi(MidiEvent),
     SetMasterVolume(f32),
     SetDrawbars([u8; 9]),
