@@ -9,6 +9,8 @@ mod amp_eq;
 mod biquad;
 mod delay;
 mod fw_coeffs;
+mod fw_compressor;
+mod fw_stage;
 mod master_iir;
 mod modulation;
 mod reverb;
@@ -20,12 +22,15 @@ mod tests_biquad_golden;
 #[cfg(test)]
 mod tests_chain;
 #[cfg(test)]
+mod tests_compressor_golden;
+#[cfg(test)]
 mod tests_delay;
 #[cfg(test)]
 mod tests_master_golden;
 mod types;
 
 pub use biquad::*;
+pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use tables::*;
 pub use types::*;
 
@@ -295,6 +300,9 @@ pub struct MasterBus {
     /// (`fw_coeffs::MASTER_IIR_WORDS`). Default `false`; the position in the chain is ASSUMED.
     pub master_iir_enabled: bool,
     iir: master_iir::MasterIir,
+    /// Opt-in firmware compressor gain computer (`fw_compressor`), 4-frame latency; replaces the
+    /// peak-envelope compressor while set. Default `None`.
+    fw_compressor: Option<fw_stage::FwCompressorStage>,
     env: f32,
     recon_lp_l: f32,
     recon_lp_r: f32,
@@ -306,6 +314,7 @@ impl Default for MasterBus {
             compressor_amount: 0.25,
             master_iir_enabled: false,
             iir: master_iir::MasterIir::new(),
+            fw_compressor: None,
             env: 0.0,
             recon_lp_l: 0.0,
             recon_lp_r: 0.0,
@@ -314,6 +323,14 @@ impl Default for MasterBus {
 }
 
 impl MasterBus {
+    /// Replaces the peak-envelope compressor by the firmware gain computer (`None` restores it).
+    ///
+    /// Adds a latency of 4 frames and restarts the stage. The compressor context is ASSUMED apart
+    /// from the algorithm (VERIFIED, see `fw_compressor`); `compressor_amount` is not used.
+    pub fn set_fw_compressor(&mut self, comp: Option<FwCompressor>) {
+        self.fw_compressor = comp.map(fw_stage::FwCompressorStage::new);
+    }
+
     /// Processes the summed 7-layer stereo signal through the Master Compressor and DAC stage.
     pub fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
         let [l, r] = if self.master_iir_enabled {
@@ -321,6 +338,10 @@ impl MasterBus {
         } else {
             frame
         };
+        if let Some(stage) = &mut self.fw_compressor {
+            let [cl, cr] = stage.process_frame([l, r]);
+            return self.reconstruct([cl.clamp(-1.0, 1.0), cr.clamp(-1.0, 1.0)]);
+        }
         let peak = l.abs().max(r.abs());
         self.env = 0.99 * self.env + 0.01 * peak;
 
@@ -331,12 +352,14 @@ impl MasterBus {
             1.0 + 0.15 * amt
         };
 
-        let cl = (l * gain).clamp(-1.0, 1.0);
-        let cr = (r * gain).clamp(-1.0, 1.0);
+        self.reconstruct([(l * gain).clamp(-1.0, 1.0), (r * gain).clamp(-1.0, 1.0)])
+    }
 
-        // Post-DAC Burr-Brown PCM1791A + NJM4580M stage:
-        // The hardware PCM1791A features a flat passband within +/-0.002 dB up to 21.8 kHz.
-        // A gentle 0.985 alpha preserves crisp treble (<0.15 dB roll-off at 20 kHz) without in-band damping.
+    /// Post-DAC Burr-Brown PCM1791A + NJM4580M stage:
+    /// The hardware PCM1791A features a flat passband within +/-0.002 dB up to 21.8 kHz.
+    /// A gentle 0.985 alpha preserves crisp treble (<0.15 dB roll-off at 20 kHz) without in-band damping.
+    #[inline]
+    fn reconstruct(&mut self, [cl, cr]: [f32; 2]) -> [f32; 2] {
         self.recon_lp_l += 0.985 * (cl - self.recon_lp_l);
         self.recon_lp_r += 0.985 * (cr - self.recon_lp_r);
         [self.recon_lp_l, self.recon_lp_r]
@@ -356,5 +379,38 @@ mod tests {
             let [l, r] = bus.process_frame(fx.process_frame([x, x]));
             assert!(l.is_finite() && r.is_finite());
         }
+    }
+    #[test]
+    fn firmware_compressor_is_opt_in_delays_four_frames_and_none_restores_the_default() {
+        let drive = |bus: &mut MasterBus| -> Vec<[f32; 2]> {
+            (0..64)
+                .map(|n| {
+                    let x = (n as f32 * 0.07).sin() * 0.4;
+                    bus.process_frame([x, -x])
+                })
+                .collect()
+        };
+        let mut plain = MasterBus::default();
+        let reference = drive(&mut plain);
+        let mut toggled = MasterBus::default();
+        toggled.set_fw_compressor(Some(FwCompressor::new()));
+        toggled.set_fw_compressor(None);
+        assert_eq!(
+            drive(&mut toggled),
+            reference,
+            "None restores the default path"
+        );
+        let mut fw = MasterBus::default();
+        fw.set_fw_compressor(Some(FwCompressor::new()));
+        let out = drive(&mut fw);
+        assert!(out.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
+        assert!(
+            out[..4].iter().all(|f| f[0].abs() < 1e-3),
+            "first block is silent"
+        );
+        assert!(
+            out[20][0].abs() > 0.01,
+            "audio passes after the first block"
+        );
     }
 }

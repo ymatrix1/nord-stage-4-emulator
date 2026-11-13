@@ -15,7 +15,7 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 | Stage rows | Channel table `0xC0547668` rows 0..34 (target 0) are the **35 stage records**: 9-word records (`size 0x83`) at DM `0xB63EE + 8 k` (step 10 after every fifth row); word 0 is the routine pointer. All 35 core 1 rows hold the null stub `0x125346` in the image and the 13 listed core 2 rows `0x1249D2` (the CSV extent is capped at 48 rows). | VERIFIED (`stages`) |
 | Who writes the routine pointer? | ARM writer wrappers over table `0xC0547668` (pattern `ldr ip,[T, r3, lsl #4]`; functions `0xC021D928`, `0xC021DA80`, `0xC021DC14`: `(this, value r1, ?, row r3)`, each sends `(row base, value)`). Values are converted from system addresses with the sequence `cmn r1,#0xd8000001 ... cmp r1,#0x28800000 ... lsr r1,#2`, which occurs at more than 100 sites in `0xC0118950..0xC02429xx`. | VERIFIED (listing) |
 | Amp type switch | `0xC021D064 (this, case)` has a 10-way jump table (`cmp r1,#9; ldrls pc,[pc,r1,lsl #2]`); this matches `Edt_Effects_kAmpTypeNew` (0..9) and the 10 `AmpCabinet` modes of `fx/types.rs`. Run in the harness after the layer constructor `0xC0220E50`, each case sends **two cascaded biquad coefficient sets** (5 words each at DM `0xB060B..F` and `0xB0614..18`) plus routine pointers (section 5). | VERIFIED (`amp`); order of the cases against UI names ASSUMED |
-| Edit id to routine map | Not closed. `Edt_Effects_kFx1Type / kFx2Type / kRvbType / kDlyFbFxType` (0..11) go through module objects (`this+0x50..0x64` of the layer object) whose descriptors are filled by constructors the harness does not run (section 4, 6). | open |
+| Edit id to routine map | **Follow-up** [fx-type-map](fx-type-map.md): no static type-to-routine table was found; all 100 code records belong to 28 module descriptor lists, and the Amp unit's type values reach the DSP as coefficient data and a mode word. The four Edt type ids are still not tied to a handler (part constructor chain not buildable in the harness). | open (narrowed) |
 
 ## 2. FX code records of the ARM (VERIFIED)
 
@@ -137,9 +137,9 @@ The numbers are the float words of the firmware read back by the harness (VERIFI
 | Rust component | Firmware counterpart | Match | To do |
 |---|---|---|---|
 | `LayerFxChain` (`mod.rs`, 5 slots per layer, 7 layers) | 35 stage records, 5 effects per layer = tag slots 1..5 | structure matches | keep |
-| `MasterBus` (`mod.rs`, peak envelope compressor, 0.985 one-pole) | master 4-section TDF II IIR (inline pass code, PM `0x945F2..0x94605`, 4 sets of 5 coefficients) and compressor gain computer `0x120630` | different structure | add the master 4-biquad IIR; implement the gain computer (4-lane `ABS/MAX`, `LOGB/MANT` log2 estimate, threshold, fixed-point interpolation); `kCmpAmt` (0..127, default 95) and `kCmpResponse` select its curve |
+| `MasterBus` (`mod.rs`, peak envelope compressor, 0.985 one-pole) | master 4-section TDF II IIR (inline pass code, PM `0x945F2..0x94605`, 4 sets of 5 coefficients) and compressor gain computer `0x120630` | IIR opt-in (`master_iir_enabled`); **gain computer opt-in** (`fx/fw_compressor.rs`, `MasterBus::set_fw_compressor`, VERIFIED algorithm, ASSUMED parameters, 4-frame latency) | map `kCmpAmt` (0..127, default 95) and `kCmpResponse` to the context words once the ARM writer is found ([fx-type-map](fx-type-map.md) s7) |
 | Amp (`amp_eq.rs`, `AmpCabinet`) | 10 cases of `0xC021D064`, two cascaded biquad sets each (section 5) | no numeric tie | use the firmware sets for cases 0-5 (identity for case 4) once the case to UI order is settled |
-| Amp `LP24 / HP24`, filter resonance | run 12 family (4 frames, `CLIP` in the feedback path) | not modelled | add a resonant state-variable/ladder stage with clipped feedback, 4-frame blocks |
+| Amp `LP24 / HP24`, filter resonance | run 12 family (4 frames, `CLIP` in the feedback path) | not modelled | add a resonant state-variable/ladder stage with clipped feedback, 4-frame blocks; reference model still to write ([fx-type-map](fx-type-map.md) s7) |
 | `Biquad` (`biquad.rs`) | TDF II, 40-bit registers, truncating store | form VERIFIED | optional: truncating store for bit-exact tests |
 | Delay (`delay.rs`) | run 7 (RECIPS Newton, packed 16-bit floats `FPACK/FUNPACK`, smoothing 0.9908), `0x120D8A` modulated read, fs/4 bank `0x120FDB` | not modelled | store the line as 16-bit floats, smooth the time with the 0.9908 one-pole, add the fs/4 pair around a modulated delay |
 | Reverb (`reverb.rs`) | run 9 multi-tap packed lines (8 and 16 taps) | structure plausible | derive line lengths once the type tables are found |
@@ -156,7 +156,7 @@ Provenance for new constants derived from this note: structure is `EMPIRICAL`; t
 
 ## Follow-ups
 
-1. Run the directory constructors and the sibling virtual methods of vtable `0xC04437D8` (type switches for Fx1, Fx2, Rvb, DlyFbFx) and tabulate `type -> routine pc`.
+1. ~~Run the directory constructors and the sibling virtual methods of vtable `0xC04437D8`~~ done in [fx-type-map](fx-type-map.md): directory ctor `0xC0227D60` runs (with `arm_boot_full.install_ui_stubs` and `0xC0011B60` stubbed), the Amp unit's switches are tabulated; the Fx1/Fx2/Rvb/Dly type handlers need the part constructor chain (fx-type-map s6).
 2. Raise the 48-row cap for table `0xC0547668` and list all 35 core 2 rows.
 3. Install a routine in a stage record in the oracle (`sharc-org --poke`) and compare `0x120630` and `0x12379B` with reference models.
 4. Join strip offsets to `Edt_Effects_*` through the strip sender.

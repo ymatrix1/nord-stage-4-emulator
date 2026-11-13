@@ -219,7 +219,7 @@ def test_golden_vectors_are_deterministic_and_follow_the_closed_form():
     idx = step >> 20
     assert words[0][0] == int(table[idx].view("<u4"))
     # x(pi/2) = 1 + 0.1122 - 0.01585 * 0... : cos(2t)=-1, cos(3t)=0, cos(4t)=1, cos(5t)=0
-    assert abs(float(table[1024]) - (1 + 0.1122 - 0.00631)) < 1e-6
+    assert abs(float(table[1024]) - (1 + 0.112202 - 0.00630957)) < 1e-6
 
 
 def test_cli_golden_prints_rust_constants(capsys):

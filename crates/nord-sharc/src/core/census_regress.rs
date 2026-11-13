@@ -40,3 +40,20 @@ fn model_matches_the_simulator_on_every_census_regression_case() {
         bad.len()
     );
 }
+
+const PLUS_FIXTURE: &str = include_str!("../../../../docs/research/sharc-seq/census21_fixture.txt");
+const PLUS_CASES: &str = include_str!("../../../../docs/research/sharc-seq/plus_cases.txt");
+const PLUS_MEASURED: &str = include_str!("../../../../docs/research/sharc-seq/plus_measured.txt");
+
+/// VERIFIED on the ADSP-21571 cycle-accurate simulator: 120 random full core states written by the
+/// loader and read back after a no-op (ASTATx/y, STKYx/y write masks of SHARC+).
+#[test]
+fn sharc_plus_system_register_masks_match_the_21571_simulator() {
+    let scr = scratch_of(PLUS_CASES);
+    let got = run_cases(PLUS_FIXTURE, PLUS_CASES).unwrap();
+    let want: Vec<&str> = PLUS_MEASURED.lines().collect();
+    let got: Vec<String> = got.lines().map(|l| compact(l, &scr, N_STATE)).collect();
+    assert_eq!(got.len(), want.len());
+    let bad = (0..got.len()).filter(|&i| got[i] != want[i]).count();
+    assert_eq!(bad, 0, "{bad} of {} cases differ", got.len());
+}
