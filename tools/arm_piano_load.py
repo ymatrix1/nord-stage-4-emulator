@@ -52,6 +52,15 @@ PIANO_TYPE_WORD = 0x6E706E6F
 # VERIFIED (`docs/research/nord-piano-npno-and-codec.md` header table): the marker in the
 # backup (`.ns4b`) copy of a piano file; everything from here on is served after the device header.
 BACKUP_CNSP_OFFSET = 0x2C
+# VERIFIED (run, `docs/research/piano-sound-load.md` section 2): the piano core select method
+# `0xC00AAA58(core, id, arg)` finds the pool object whose `[P + 0x6420]` equals `id`, and tail-calls
+# the binder `0xC00A3988(core, layer, P, arg)` that stores `P` at `[core + 4 + 4 * layer]`.
+SELECT_SOUND = 0xC00AAA58
+CORE0 = 0x90BF5400
+# EMPIRICAL (disassembly of `0xC006CCBC`, pc `0xC006CD60`): the serial send to the DSP polls a GPIO
+# input bit `(halfword >> pin) & 1 == expected` and gives up only after 4800 timer counts; with
+# the interrupt-driven timer of the harness that is 4800 ticks, so the first send blocks forever.
+GPIO_POLL_PC = 0xC006CD60
 # D + 0xC: 2 loads the header block only (object state 2), 0 reads the 38 stroke records too.
 KIND_HEADER_ONLY = 2
 KIND_FULL = 0
@@ -112,6 +121,28 @@ class LibraryStub:
         return 0
 
 
+def select_sound(emu: ae.ArmEmu, entry_id: int, core: int = CORE0, arg: int = 0) -> int:
+    """Bind the loaded object with id `entry_id` (entry | volume << 14) to `core` through the
+    firmware's own select method; returns its result."""
+    return ast.call_preserving(emu, SELECT_SOUND, core, entry_id, arg, max_insns=20_000_000)
+
+
+def bound_sound(emu: ae.ArmEmu, core: int = CORE0, layer: int = 0) -> int:
+    """`[core + 4 + 4 * layer]`: the sound object the key path reads (0: none)."""
+    return emu.read32(core + 4 + 4 * layer)
+
+
+def install_dsp_ready(emu: ae.ArmEmu) -> None:
+    """Model the DSP serial link as always ready: at the GPIO poll the loaded bit is replaced by
+    the expected level (`r3 = expected << pin`, `r1` = expected, `r12` = pin), so a message
+    send returns instead of waiting for the timeout. ASSUMED: the real DSP answers at once."""
+
+    def hook(_uc, _address, _size, _user) -> None:  # noqa: ANN001
+        emu.set_reg(3, (emu.reg(1) & 1) << (emu.reg(12) & 31))
+
+    emu.uc.hook_add(emu._u.UC_HOOK_CODE, hook, begin=GPIO_POLL_PC, end=GPIO_POLL_PC)
+
+
 def find_words(
     emu: ae.ArmEmu, value: int, lo: int = 0x90000000, hi: int = 0x92000000, step: int = 0x100000
 ) -> list[int]:
@@ -158,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap.add_argument("--ns4b", type=Path, required=True)
     ap.add_argument("--npno", required=True, help="archive member of the piano file")
     ap.add_argument("--kind", type=int, default=KIND_FULL)
+    ap.add_argument("--note", type=int)
+    ap.add_argument("--velocity", type=int, default=100)
     ns = ap.parse_args(argv)
     rig = kd.build_rig(ns.image, ns.sram, ns.cache)
     stub = LibraryStub({1: device_image(read_npno(ns.ns4b, ns.npno), "Library.npno")}, ns.kind)
@@ -168,6 +201,17 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     objs = sound_objects(rig.emu)
     print("load status", status, "reads", len(stub.reads), "first object", hex(objs[0]))
     print("state", sound_state(rig.emu, objs[0]))
+    if ns.note is None:
+        return 0
+    select_sound(rig.emu, 1)
+    print("bound", hex(bound_sound(rig.emu)))
+    install_dsp_ready(rig.emu)
+    counts = kd.count_calls(rig.emu)
+    rig.tick(2)
+    rows = kd.capture_note(rig, ns.note, ns.velocity, counts, on_ticks=40, off_ticks=10)
+    print({k: v for k, v in counts.items() if v})
+    print(kd.CSV_HEADER)
+    print(chr(10).join(rows))
     return 0
 
 

@@ -96,3 +96,28 @@ def test_read_npno_reads_the_head_of_a_member(tmp_path):
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("Piano/A.npno", b"0123456789")
     assert pl.read_npno(path, "Piano/A.npno", limit=4) == b"0123"
+
+
+def test_select_sound_calls_the_select_method_with_core_id_arg():
+    emu = make_emu()
+    emu.write32(pl.SELECT_SOUND, 0xE1A00001)  # mov r0, r1
+    emu.write32(pl.SELECT_SOUND + 4, 0xE12FFF1E)  # bx lr
+    emu.set_reg(13, ae.STACK_TOP - 0x2000)
+    assert pl.select_sound(emu, 9, core=ae.SRAM_BASE) == 9
+
+
+def test_bound_sound_reads_the_layer_slot():
+    emu = make_emu()
+    emu.write32(STORAGE + 4 + 8, 0x1234)
+    assert pl.bound_sound(emu, core=STORAGE, layer=2) == 0x1234
+    assert pl.bound_sound(emu, core=STORAGE, layer=0) == 0
+
+
+def test_dsp_ready_sets_the_polled_bit_to_the_expected_level():
+    emu = make_emu()
+    pl.install_dsp_ready(emu)
+    emu.set_reg(1, 1)
+    emu.set_reg(12, 5)
+    emu.set_reg(3, 0)
+    emu.run(pl.GPIO_POLL_PC, pl.GPIO_POLL_PC + 4, max_insns=4)
+    assert emu.reg(3) == 1 << 5

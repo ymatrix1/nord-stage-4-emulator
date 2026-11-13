@@ -84,4 +84,4 @@ Prints whether the real hooks are registered (`True`), the ring `(size, head, ta
 2. Decode the 64-bit zone masks (`[client + 0x28]`, `0xC00D1EBC`) to see which program state routes a note to the organ and synth layers; then capture the organ `0xC00BF890` and synth `0xC01EC690` messages with `Rig.tick`.
 3. Model the `0x60000000` panel / keybed device (hook 2 writes `0x60000010..0x60000024`) to see if the keybed scanner, not MIDI, feeds the same event ring.
 4. Capture the message series over control-rate ticks once a note produces messages (`Rig.tick` returns `(tick, message)` pairs; `message_rows` writes the CSV).
-5. The load chain runs with a stubbed library volume; the object is created but not bound to the core: [piano-sound-load](piano-sound-load.md).
+5. The load chain runs with a stubbed library volume; binding and voice start now reached with stubs: [piano-sound-load](piano-sound-load.md).
