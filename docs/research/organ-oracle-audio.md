@@ -54,7 +54,7 @@ Resulting map (set 0; set `s` adds `0x65 s` to the `0x959xx` words and `0x64 s` 
 | `a[i]` | `0x9594F + i` | weight factor, wheel `i` | VERIFIED (poke) |
 | `b[i]` | `0x95AE2 + i` | weight factor | VERIFIED |
 | `wB[i]` | `0x957DE + i` | weight factor paired with `a` | VERIFIED |
-| `wA[i]` | `0x9566E + i` | weight factor paired with `b`; **not reachable** through the ARM selector table `0xC022A594` (selectors 1, 3, 4 give `wB`, `a`, `b`) | VERIFIED (poke), reachability EMPIRICAL |
+| `wA[i]` | `0x9566E + i` | weight factor paired with `b`; **not sent by the ARM**: it is DSP state, `wA <- a wB + b wA` per frame (`a + b = 1`, so `a` is a smoothing coefficient and `wB` the target; [organ-weights](organ-weights.md) s4) | VERIFIED (poke + run) |
 | `g5`, `g6` | `0x959AF`, `0x959B0` | diagonal lane gains (x from tx, y from ty) | VERIFIED |
 | `g7`, `g8` | `0x95B3F`, `0x95B3E` | cross gains (y from tx, x from ty) | VERIFIED |
 | `L` | `0x95B42` | level target, smoothed with 0.99 | VERIFIED |
@@ -156,8 +156,8 @@ target/release/sharc-organ SRAM/core1_sram.bin --no-bank --calls 1 --script s.tx
 
 ## Follow-ups
 
-1. Find the ARM code that writes `a`, `b`, `wB` (selectors 3, 4, 1 of `0xC022A594`, called through `0xC001FF18`) and from which edit/key event; feed its words through `sharc-organ` to settle the footage offsets, foldback and the 7-bit curve (all ASSUMED here).
-2. Identify `wA` (`0x9566E`): no selector reaches it; test whether another path (`0xC022A6EC` block, part routing `0xC0236410`) writes it.
+1. Done in [organ-weights](organ-weights.md): the ARM code is the bank engine key-down / update pair (`0xC022C3A8`, `0xC022AFB8`); footage offsets, foldback (wheels 0..90) and the 7-bit curve are VERIFIED and the ARM words replay through `sharc-organ` (`tools/organ_weights_replay.py`).
+2. Done: `wA` (`0x9566E`) is DSP smoothing state, never written by the ARM.
 3. Find the input of the post stage `0x12272D` (`DM(0xE2BE0)`, buffers `0xE2110..`) and the routine `0x1229B3` that writes through `I0`; run the chain tone -> scanner -> output once the slot record is known.
 4. Frame rate and tune index (absolute pitch): needs a running boot capture or a hardware recording; until then the engine keeps wheel 0 = C1 (ASSUMED) and `implied_frame_rate` documents the 43,156.4 Hz that makes the ladder equal.
 5. ARM int-to-float conversion of the gains (`0xC001FF18`): confirm `raw / 2^23` by running the sender.
