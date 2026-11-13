@@ -15,9 +15,16 @@
 //!   `X` from [`super::velocity_curve`]. The stroke is the one of the root's layer list with the
 //!   largest threshold not above the velocity position `T(velocity) + bias`.
 //!
-//! A note-on starts several firmware voices. The *main* voice (layer 0, bias 0) is what
-//! [`NpnoLevel::main_voice_q23`] returns; the extra voices of grand and upright files (a first voice
-//! with bias 20, or on layer 1) are reachable through [`NpnoLevel::amplitude_q23`].
+//! A note-on starts one or two firmware voices ([`NpnoLevel::voices`]). The *main* voice (layer 0,
+//! position `T`) always exists. Sounds of the classes in [`TWO_VOICE_CLASSES`] (file byte `0x44`:
+//! 1 grand, 2 and 3 electric piano / Wurlitzer, 5 grand, 6 upright; VERIFIED on grand, upright,
+//! Wurlitzer, EP; single voice on 4, 7, 14, 15, 16) add a first voice: on layer 1 at the position
+//! `F` (record byte `0x33`) of the main voice's record when the root has layer-1 strokes,
+//! otherwise on layer 0 at `T + 20`. Across 96 random notes on four sounds the list of voice
+//! levels equals the firmware's in 96 of 96 cases (the two-stage layer-1 position was found by
+//! comparing three candidates; the plain `T` position matches only 22 of 24 upright notes).
+//! All factory files carry the version word `0x464`; the firmware branches for the words 2 and 5
+//! are never used by them and are not modelled.
 
 use super::velocity_curve::{velocity_position, x_from_curve};
 use super::velocity_level::amplitude_q23;
@@ -32,12 +39,29 @@ const RECORD_LEN: usize = 0x76;
 const LEVEL_FIELD: usize = 0x34;
 const THRESHOLD_FIELD: usize = 0x74;
 const POSITION_MAX: u16 = 249;
+const CLASS_BYTE: usize = 0x44;
+const FLOOR_FIELD: usize = 0x33;
+/// Class bytes whose notes start the extra first voice (VERIFIED by run, see the module note).
+pub const TWO_VOICE_CLASSES: [u8; 5] = [1, 2, 3, 5, 6];
+/// Position bias of the extra voice when the root has no layer-1 strokes.
+pub const EXTRA_VOICE_BIAS: u16 = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Stroke {
+    index: u16,
     offset: i16,
     threshold: u8,
     layer: u8,
+    /// Record byte `0x33`: the position the layer-1 pre-selection uses.
+    floor: u8,
+}
+
+/// One firmware voice of a note-on: the selected stroke record and its Q23 level.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VoiceLevel {
+    /// Index of the stroke record in the file.
+    pub record: u16,
+    pub amplitude_q23: u32,
 }
 
 /// Level inputs of one `.npno` file.
@@ -47,6 +71,7 @@ pub struct NpnoLevel {
     b1: [i8; 128],
     b2: [i8; 128],
     b3: i8,
+    class: u8,
     /// `(root, strokes of that root in file order)`.
     roots: Vec<(u8, Vec<Stroke>)>,
 }
@@ -68,6 +93,7 @@ impl NpnoLevel {
             b2[note] = *bytes.get(B2 + note)? as i8;
         }
         let b3 = *bytes.get(B3)? as i8;
+        let class = *bytes.get(CLASS_BYTE)?;
         let total = usize::from(be16(bytes, COUNTS + 4)?);
         let mut roots: Vec<u8> = keymap.iter().copied().filter(|&r| r != 0xFF).collect();
         roots.sort_unstable();
@@ -84,6 +110,8 @@ impl NpnoLevel {
                 let at = RECORDS + RECORD_LEN * index;
                 let record = bytes.get(at..at + RECORD_LEN)?;
                 strokes.push(Stroke {
+                    index: u16::try_from(index).ok()?,
+                    floor: record[FLOOR_FIELD],
                     offset: i16::from_be_bytes([record[LEVEL_FIELD], record[LEVEL_FIELD + 1]]),
                     threshold: record[THRESHOLD_FIELD],
                     layer: record[4] & 3,
@@ -97,6 +125,7 @@ impl NpnoLevel {
             b1,
             b2,
             b3,
+            class,
             roots: list,
         })
     }
@@ -115,8 +144,7 @@ impl NpnoLevel {
         i16::from(self.b1[n]) + i16::from(self.b2[n]) + i16::from(self.b3)
     }
 
-    /// `rec[0x5E]` of the stroke of `note` on `layer` selected at velocity position `position`.
-    pub fn stroke_offset(&self, note: u8, layer: u8, position: u16) -> Option<i16> {
+    fn pick(&self, note: u8, layer: u8, position: u16) -> Option<&Stroke> {
         let root = self.root_of(note)?;
         let strokes = &self.roots.iter().find(|(r, _)| *r == root)?.1;
         let mut chosen: Option<&Stroke> = None;
@@ -125,18 +153,55 @@ impl NpnoLevel {
                 chosen = Some(stroke);
             }
         }
-        chosen.map(|s| s.offset)
+        chosen
     }
 
-    /// Q23 amplitude of one firmware voice: `layer` list, velocity position `T(velocity) + bias`.
+    fn has_layer(&self, note: u8, layer: u8) -> bool {
+        self.root_of(note)
+            .and_then(|root| self.roots.iter().find(|(r, _)| *r == root))
+            .is_some_and(|(_, strokes)| strokes.iter().any(|s| s.layer == layer))
+    }
+
+    fn level(&self, note: u8, velocity: u8, stroke: &Stroke) -> VoiceLevel {
+        VoiceLevel {
+            record: stroke.index,
+            amplitude_q23: amplitude_q23(stroke.offset, x_from_curve(velocity), self.key_sum(note)),
+        }
+    }
+
+    /// `rec[0x5E]` of the stroke of `note` on `layer` selected at velocity position `position`.
+    pub fn stroke_offset(&self, note: u8, layer: u8, position: u16) -> Option<i16> {
+        self.pick(note, layer, position).map(|s| s.offset)
+    }
+
+    /// Q23 amplitude of one voice: `layer` list, velocity position `T(velocity) + bias`.
     pub fn amplitude_q23(&self, note: u8, velocity: u8, layer: u8, bias: u16) -> Option<u32> {
         let position = (u16::from(velocity_position(velocity)) + bias).min(POSITION_MAX);
-        let offset = self.stroke_offset(note, layer, position)?;
-        Some(amplitude_q23(
-            offset,
-            x_from_curve(velocity),
-            self.key_sum(note),
-        ))
+        let stroke = self.pick(note, layer, position)?;
+        Some(self.level(note, velocity, stroke).amplitude_q23)
+    }
+
+    /// The voices a note-on starts, extra first voice (if any) then the main voice; empty when
+    /// the note is unmapped or the root has no layer-0 stroke.
+    pub fn voices(&self, note: u8, velocity: u8) -> Vec<VoiceLevel> {
+        let velocity = velocity.clamp(1, 127);
+        let t = u16::from(velocity_position(velocity));
+        let Some(main) = self.pick(note, 0, t) else {
+            return Vec::new();
+        };
+        let mut out = Vec::with_capacity(2);
+        if TWO_VOICE_CLASSES.contains(&self.class) {
+            let extra = if self.has_layer(note, 1) {
+                self.pick(note, 1, u16::from(main.floor))
+            } else {
+                self.pick(note, 0, (t + EXTRA_VOICE_BIAS).min(POSITION_MAX))
+            };
+            if let Some(extra) = extra {
+                out.push(self.level(note, velocity, extra));
+            }
+        }
+        out.push(self.level(note, velocity, main));
+        out
     }
 
     /// Q23 amplitude of the main voice (layer 0, no bias).
@@ -279,6 +344,54 @@ mod tests {
         let at = COUNTS + 2 * (3 + 60);
         d[at..at + 2].copy_from_slice(&2u16.to_be_bytes());
         assert!(NpnoLevel::parse(&d).is_none());
+    }
+
+    #[test]
+    fn two_voice_class_adds_the_biased_first_voice_on_layer_0() {
+        let strokes: Vec<(u8, i16, u8)> = GRAND_LIST.iter().map(|&(o, t)| (0, o, t)).collect();
+        let mut image = test_image(60, &strokes, 49);
+        image[CLASS_BYTE] = 5;
+        let model = NpnoLevel::parse(&image).unwrap();
+        let voices = model.voices(60, 49);
+        assert_eq!(voices.len(), 2);
+        assert_eq!(
+            Some(voices[0].amplitude_q23),
+            model.amplitude_q23(60, 49, 0, 20)
+        );
+        assert_eq!(Some(voices[1].amplitude_q23), model.main_voice_q23(60, 49));
+        image[CLASS_BYTE] = 4;
+        let single = NpnoLevel::parse(&image).unwrap().voices(60, 49);
+        assert_eq!(single.len(), 1, "class 4 has one voice");
+        assert_eq!(single[0], voices[1]);
+    }
+
+    #[test]
+    fn layer_1_voice_uses_the_floor_byte_of_the_main_record() {
+        // Layer 0: offsets 10 / 20 / 30 at thresholds 0 / 20 / 40, floor bytes 0 / 25 / 50.
+        // Layer 1: offsets 1 / 2 / 3 at thresholds 0 / 30 / 60.
+        let mut image = test_image(
+            60,
+            &[
+                (0, 10, 0),
+                (0, 20, 20),
+                (0, 30, 40),
+                (1, 1, 0),
+                (1, 2, 30),
+                (1, 3, 60),
+            ],
+            0,
+        );
+        image[CLASS_BYTE] = 6;
+        for (i, floor) in [0u8, 25, 50, 0, 0, 0].into_iter().enumerate() {
+            image[RECORDS + RECORD_LEN * i + FLOOR_FIELD] = floor;
+        }
+        // The count header lists six records for root 60 (test_image sets it).
+        let model = NpnoLevel::parse(&image).unwrap();
+        // Velocity 64: T = 78, main = third layer-0 record (floor 50), layer 1 at position 50 -> offset 2.
+        let voices = model.voices(60, 64);
+        assert_eq!(voices.len(), 2);
+        assert_eq!(voices[0].record, 4, "layer-1 record index");
+        assert_eq!(voices[1].record, 2);
     }
 
     #[test]

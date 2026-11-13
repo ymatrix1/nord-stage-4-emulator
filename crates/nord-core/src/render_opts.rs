@@ -69,6 +69,14 @@ pub fn apply_b3_tail(engine: &mut Stage4Engine, tail: Option<bool>) {
     }
 }
 
+/// Switches both piano layers to the firmware level law (`PianoLayer::firmware_velocity_level`).
+pub fn apply_piano_level(engine: &mut Stage4Engine, on: bool) {
+    if on {
+        engine.piano_a.firmware_velocity_level = true;
+        engine.piano_b.firmware_velocity_level = true;
+    }
+}
+
 /// Applies the opt-in firmware switches to every layer of `engine`.
 pub fn apply_firmware_options(
     engine: &mut Stage4Engine,
@@ -136,6 +144,15 @@ mod tests {
         assert_eq!(e.synth_b.chain, SynthChain::Legacy);
         apply_synth_chain(&mut e, Some(SynthChain::FirmwareStrip));
         assert!(e.synth_a.strip_chain() && e.synth_b.strip_chain() && e.synth_c.strip_chain());
+    }
+
+    #[test]
+    fn piano_level_switch_reaches_both_layers() {
+        let mut e = Stage4Engine::new(48_000.0);
+        apply_piano_level(&mut e, false);
+        assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
+        apply_piano_level(&mut e, true);
+        assert!(e.piano_a.firmware_velocity_level && e.piano_b.firmware_velocity_level);
     }
 
     #[test]
