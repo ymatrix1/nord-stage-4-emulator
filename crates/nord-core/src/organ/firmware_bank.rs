@@ -8,6 +8,7 @@
 //! Real-time: `advance` only touches pre-allocated arrays. The table is built once in `new`.
 
 use super::types::NUM_TONEWHEELS;
+use super::vibrato_bank::{copy_ratio, copy_weights};
 use std::f64::consts::TAU;
 
 /// Number of table entries (`2^12`).
@@ -20,15 +21,6 @@ pub const TABLE_LEN: usize = 4096;
 ///
 /// VERIFIED: `idx = phase >> 20` (same oracle run as `TABLE_LEN`).
 pub const INDEX_SHIFT: u32 = 20;
-
-/// Spread between the two detuned copies of a wheel, in cents (rms of `1200 log2(v[2k+1]/v[2k])`).
-///
-/// EMPIRICAL: 1.89 cent rms over 92 pairs of the ARM default increment table
-/// (`python tools/organ_bank_ref.py defaults`, `bank0_CODE@0x443EA8`), mean -0.16 cent, random
-/// sign per wheel. The Rust model applies it as a constant `-spread/2` and `+spread/2` pair
-/// (ASSUMED simplification); the role of the copies (stereo decorrelation or unison strings) is
-/// ASSUMED.
-pub const COPY_SPREAD_CENTS: f64 = 1.89;
 
 /// Harmonic coefficients of the firmware x waveform: `sin t` plus `c[k] cos((k+2) t)`.
 ///
@@ -78,6 +70,7 @@ pub struct ToneBank {
     steps: [[u32; NUM_TONEWHEELS]; 2],
     phases: [[u32; NUM_TONEWHEELS]; 2],
     copies: bool,
+    weights: [f32; 2],
     fs: f32,
 }
 
@@ -89,6 +82,7 @@ impl ToneBank {
             steps: [[0; NUM_TONEWHEELS]; 2],
             phases: [[0; NUM_TONEWHEELS]; 2],
             copies: false,
+            weights: copy_weights(false),
             fs: 0.0,
         }
     }
@@ -103,23 +97,21 @@ impl ToneBank {
         self.copies
     }
 
-    /// Recomputes every step from the wheel frequencies. With `copies`, copy 0 sits
-    /// `COPY_SPREAD_CENTS / 2` below and copy 1 above each frequency; otherwise only copy 0 runs,
-    /// at the nominal frequency. Phases are kept.
+    /// Recomputes every step from the wheel frequencies. With `copies` (vibrato enable on) each
+    /// element runs at its table detune (`vibrato_bank::DETUNE_CENTS`, element `2 w + c`) and the
+    /// two copies are mixed with `copy_weights(true)`; otherwise only copy 0 runs at the nominal
+    /// frequency (the firmware exact table has identical copies). Phases are kept.
     pub fn retune(&mut self, freqs_hz: &[f64; NUM_TONEWHEELS], fs: f32, copies: bool) {
         self.fs = fs;
         self.copies = copies;
-        let half = COPY_SPREAD_CENTS / 2.0;
-        let lo = (-half / 1200.0).exp2();
-        let hi = (half / 1200.0).exp2();
+        self.weights = copy_weights(copies);
         for (w, &f) in freqs_hz.iter().enumerate() {
-            if copies {
-                self.steps[0][w] = phase_step(f * lo, f64::from(fs));
-                self.steps[1][w] = phase_step(f * hi, f64::from(fs));
+            self.steps[0][w] = phase_step(f * copy_ratio(w, 0, copies), f64::from(fs));
+            self.steps[1][w] = if copies {
+                phase_step(f * copy_ratio(w, 1, copies), f64::from(fs))
             } else {
-                self.steps[0][w] = phase_step(f, f64::from(fs));
-                self.steps[1][w] = 0;
-            }
+                0
+            };
         }
     }
 
@@ -128,7 +120,8 @@ impl ToneBank {
         self.steps[copy][wheel] = step;
     }
 
-    /// Advances all accumulators by one frame and writes the wheel outputs (copies averaged).
+    /// Advances all accumulators by one frame and writes the wheel outputs (copies mixed with the
+    /// firmware weights).
     ///
     /// The first output is already advanced by one step (VERIFIED: accumulate before the read).
     pub fn advance(&mut self, out: &mut [f32; NUM_TONEWHEELS]) {
@@ -136,6 +129,7 @@ impl ToneBank {
         let read = |p: u32| table[(p >> INDEX_SHIFT) as usize];
         let (pa, pb) = self.phases.split_at_mut(1);
         let (sa, sb) = (&self.steps[0], &self.steps[1]);
+        let [wa, wb] = self.weights;
         if self.copies {
             for (((o, a), b), (&step_a, &step_b)) in out
                 .iter_mut()
@@ -145,7 +139,7 @@ impl ToneBank {
             {
                 *a = a.wrapping_add(step_a);
                 *b = b.wrapping_add(step_b);
-                *o = 0.5 * (read(*a) + read(*b));
+                *o = wa * read(*a) + wb * read(*b);
             }
         } else {
             for ((o, a), &step_a) in out.iter_mut().zip(pa[0].iter_mut()).zip(sa.iter()) {
@@ -242,17 +236,26 @@ mod tests {
     }
 
     #[test]
-    fn detuned_copies_average_two_tables_reads() {
+    fn detuned_copies_follow_the_cent_table() {
+        use super::super::vibrato_bank::{wheel_hz, DETUNE_CENTS};
         let mut freqs = [0.0f64; NUM_TONEWHEELS];
-        freqs[0] = 440.0;
+        for (w, f) in freqs.iter_mut().enumerate() {
+            *f = wheel_hz(w, 0.0);
+        }
         let mut single = ToneBank::new();
         single.retune(&freqs, 48_000.0, false);
         let mut dual = ToneBank::new();
         dual.retune(&freqs, 48_000.0, true);
         assert_eq!(single.steps[1][0], 0);
-        let ratio = f64::from(dual.steps[1][0]) / f64::from(dual.steps[0][0]);
-        let cents = 1200.0 * ratio.log2();
-        assert!((cents - COPY_SPREAD_CENTS).abs() < 1e-3, "{cents}");
+        assert!(!single.copies() && dual.copies());
+        for w in [0usize, 1, 45, 90] {
+            for c in 0..2 {
+                let ratio = f64::from(dual.steps[c][w]) / f64::from(single.steps[0][w]);
+                let cents = 1200.0 * ratio.log2();
+                let want = f64::from(DETUNE_CENTS[2 * w + c]);
+                assert!((cents - want).abs() < 1e-3, "w{w} c{c}: {cents} vs {want}");
+            }
+        }
         let (mut a, mut b) = ([0.0; NUM_TONEWHEELS], [0.0; NUM_TONEWHEELS]);
         let mut diff = 0.0f32;
         for _ in 0..4000 {
@@ -262,5 +265,22 @@ mod tests {
             assert!(b[0].is_finite() && b[0].abs() <= 1.2);
         }
         assert!(diff > 0.0);
+    }
+
+    #[test]
+    fn exact_bank_matches_single_copy_output() {
+        let mut freqs = [0.0f64; NUM_TONEWHEELS];
+        freqs[3] = 523.25;
+        let mut bank = ToneBank::new();
+        bank.retune(&freqs, 48_000.0, false);
+        let mut out = [0.0f32; NUM_TONEWHEELS];
+        let mut ph = 0u32;
+        let step = phase_step(523.25, 48_000.0);
+        let table = build_x_table();
+        for _ in 0..500 {
+            bank.advance(&mut out);
+            ph = ph.wrapping_add(step);
+            assert_eq!(out[3], table[(ph >> INDEX_SHIFT) as usize]);
+        }
     }
 }

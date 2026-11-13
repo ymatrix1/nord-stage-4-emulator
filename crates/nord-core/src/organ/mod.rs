@@ -1,7 +1,8 @@
 //! 2-Layer Physical Modeling Organ Engine (`DSPO` — 91 Tonewheels + Model 122 Rotary Speaker).
 //!
 //! Spec: `docs/specs/organ-engine.md`. Submodules: `types` (enums, constants), `drawbar` (bus
-//! mapping, TD-10), `firmware_bank` (PNO Core1 oscillator-bank arithmetic), `tonewheel` (91-wheel
+//! mapping, firmware level curve), `firmware_bank` (PNO Core1 oscillator-bank arithmetic),
+//! `vibrato_bank` (12-TET ladder, detune table, group gains), `tonewheel` (91-wheel
 //! generator), `keyclick`, `scanner`, `rotary`.
 
 mod drawbar;
@@ -11,18 +12,18 @@ mod rotary;
 mod scanner;
 mod tonewheel;
 mod types;
+mod vibrato_bank;
 
 #[cfg(test)]
 mod bank_golden;
 
-pub use drawbar::drawbar_gain;
-pub use firmware_bank::{
-    build_x_table, firmware_wave_x, fracmul, phase_step, ToneBank, COPY_SPREAD_CENTS,
-};
+pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
+pub use firmware_bank::{build_x_table, firmware_wave_x, fracmul, phase_step, ToneBank};
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
     ROTARY_BASS_HORN_BALANCES, ROTARY_CROSSOVER_HZ,
 };
+pub use vibrato_bank::{wheel_hz, DETUNE_CENTS, GAINS_DETUNED, GAINS_EXACT};
 
 use drawbar::{foldback_tonewheel, DRAWBAR_OFFSETS};
 use std::f32::consts::TAU;
@@ -55,13 +56,20 @@ pub struct OrganLayer {
     /// When `true`, engages brake/stop mode regardless of `rotary_speed`.
     pub rotary_stop_mode: bool,
     pub scanner_mode: ScannerMode,
-    /// `B3` tonewheel waveform and phase arithmetic (default `Legacy`; `Firmware` is opt-in, role ASSUMED).
+    /// `B3` tonewheel waveform and phase arithmetic (default `Firmware`, role ASSUMED, about 70 %;
+    /// `Legacy` stays selectable).
     pub tonewheel_source: ToneWheelSource,
-    /// Runs two detuned copies per wheel (`COPY_SPREAD_CENTS`) in the firmware bank (EMPIRICAL,
-    /// default off).
+    /// Organ Vibrato-Enable level 1: the firmware bank runs the detuned table
+    /// (`DETUNE_CENTS`, +-1.9 cent rms ensemble copies) instead of the exact 12-TET one. VERIFIED
+    /// table selection, default off.
     pub detuned_copies: bool,
+    /// Fine Tune in cents applied to the firmware bank (clamped to -400..+381, default 0).
+    pub fine_tune_cents: f32,
+    /// Drawbar level law (default: firmware curve; `Linear` is the old `level / 8`).
+    pub drawbar_law: DrawbarLaw,
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
+    synced_fine_cents: f32,
     tone_bank: ToneBank,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
     pickup_b3: [f32; NUM_TONEWHEELS],
@@ -95,7 +103,7 @@ impl OrganLayer {
         let mut freqs_hz = [0.0f64; NUM_TONEWHEELS];
         for (i, (f, f64hz)) in freqs.iter_mut().zip(freqs_hz.iter_mut()).enumerate() {
             *f = Self::tonewheel_gear_frequency(i);
-            *f64hz = tonewheel::gear_frequency_f64(i);
+            *f64hz = wheel_hz(i, 0.0);
         }
         let (pickup_b3, pickup_b3_bass) = Self::pickup_tables();
         let sample_rate = sample_rate.max(8000.0);
@@ -122,8 +130,11 @@ impl OrganLayer {
             scanner_mode: ScannerMode::Off,
             tonewheel_source: ToneWheelSource::default(),
             detuned_copies: false,
+            fine_tune_cents: 0.0,
+            drawbar_law: DrawbarLaw::default(),
             tonewheel_freqs: freqs,
             tonewheel_freqs_hz: freqs_hz,
+            synced_fine_cents: 0.0,
             tone_bank,
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
             pickup_b3,
@@ -226,7 +237,7 @@ impl OrganLayer {
                 if level == 0 {
                     continue;
                 }
-                let gain = drawbar_gain(level);
+                let gain = drawbar_gain_law(level, self.drawbar_law);
                 let tw = foldback_tonewheel(base_midi + DRAWBAR_OFFSETS[db_idx]);
                 dry += gain * tw_signals[tw] * key_gain * db_bus_scale * 0.08;
             }
@@ -330,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_source_is_default_and_all_sources_render_bounded_audio() {
+    fn firmware_source_is_default_and_all_sources_render_bounded_audio() {
         for (source, copies) in [
             (ToneWheelSource::Firmware, false),
             (ToneWheelSource::Firmware, true),
@@ -354,7 +365,28 @@ mod tests {
         }
         assert_eq!(
             OrganLayer::new(48_000.0).tonewheel_source,
-            ToneWheelSource::Legacy
+            ToneWheelSource::Firmware
         );
+    }
+
+    #[test]
+    fn drawbar_law_changes_level_of_a_half_open_bar() {
+        let render = |law: DrawbarLaw| {
+            let mut o = OrganLayer::new(48_000.0);
+            o.drawbar_law = law;
+            o.drawbars = [0, 0, 4, 0, 0, 0, 0, 0, 0];
+            o.percussion_enabled = false;
+            o.rotary_enabled = false;
+            o.note_on(60);
+            let mut e = 0.0f32;
+            for _ in 0..9600 {
+                let [l, _] = o.render_frame();
+                e += l * l;
+            }
+            e
+        };
+        let (fw, lin) = (render(DrawbarLaw::Firmware), render(DrawbarLaw::Linear));
+        // 22/127 against 4/8: -9.2 dB amplitude (power ratio about 0.12, key click aside)
+        assert!(fw < 0.3 * lin && fw > 0.0, "{fw} vs {lin}");
     }
 }

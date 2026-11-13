@@ -12,7 +12,8 @@ Implemented in [`crates/nord-core/src/organ/`](../../crates/nord-core/src/organ/
 | `types.rs` | enums (`OrganModel`, `ScannerMode`, `RotarySpeed`, `ToneWheelSource`), gear table, rotary constants |
 | `firmware_bank.rs` | `ToneBank`: PNO Core1 oscillator-bank arithmetic, x table, `fracmul`, `phase_step` |
 | `tonewheel.rs` | gear frequencies, pickup calibration, 91-wheel generator (firmware or legacy source) |
-| `drawbar.rs` | drawbar offsets, level law (`drawbar_gain`, TD-10), foldback |
+| `drawbar.rs` | drawbar offsets, firmware level curve (`drawbar_gain`, `DrawbarLaw`, TD-10), foldback |
+| `vibrato_bank.rs` | 12-TET ladder (`wheel_hz`, Fine Tune), 184-entry detune table, group gains, copy weights |
 | `keyclick.rs`, `scanner.rs`, `rotary.rs` | key click, scanner vibrato/chorus, Model 122 rotary |
 | `bank_golden.rs` | test-only golden vectors from `tools/organ_bank_ref.py golden` |
 
@@ -55,9 +56,9 @@ Rather than ideal equal temperament ($2^{n/12}$), the 12 drive gears use integer
 
 Each octave doubles the number of teeth on the rotating wheel (`2, 4, 8, 16, 32, 64, 128`, with top-octave tonewheels `tw >= 84` using physical `192`-tooth wheels paired with a $4/3$ step-up gear). All 91 tonewheel phase accumulators advance continuously on every audio sample (`phase[i] = (phase[i] + 2*pi * f[i] / fs) mod 2*pi`), ensuring authentic phase interaction when multiple keys share a tonewheel.
 
-### 3.1.1 Firmware oscillator-bank parity (`ToneWheelSource::Firmware`, opt-in, role disputed)
+### 3.1.1 Firmware oscillator-bank parity (`ToneWheelSource::Firmware`, default for `B3`, role ASSUMED about 70 %)
 
-**Status:** the bank ALGORITHM is VERIFIED against the SHARC oracle; its ROLE as the organ tonewheel generator is ASSUMED and disputed. The bank is installed by the PNO Core1 piano state machine (state 1 generators: `0x122620` oscillator bank, `0x12272D` post stage, `0x122A71` LFO delay) and by no ORG/Core2 module id ([pno-module-chain](../research/pno-module-chain.md), branch `research/pno-module-chain`). Current lean: about 65 % piano string resonance (unison-style detuned pair; the ARM has `Edt_Sys_kStringResonanceLevel`), about 35 % B3 tonewheels. The default is therefore `ToneWheelSource::Legacy`; `Firmware` stays available as an option with the same code. The organ tone source remains unlocated.
+**Status:** the bank ALGORITHM and its pitch programming are VERIFIED (SHARC oracle, ARM run of `0xC022D9F0`); its ROLE as the organ tone source is ASSUMED at about 70 % ([organ-tone-source](../research/organ-tone-source.md): the PNO Core1 184-element bank `0x122620` plus post stage `0x12272D`; the ORG image is channel-strip post-processing). The bank is installed by the PNO Core1 state machine and by no ORG/Core2 module id ([pno-module-chain](../research/pno-module-chain.md)); the ARM drives it from the organ edit ids. `ToneWheelSource::Firmware` is therefore the default for `B3`; `ToneWheelSource::Legacy` (gear ratios, sine) stays selectable.
 
 What would settle it: (1) the ARM writer of the bank's weights (`0x9566E`, `0x95726`, `0x957DE`) and whether `Edt_Sys_kToneWheelMode` / `Buffer_kOrgDrawbar` or `Edt_Sys_kStringResonanceLevel` drives them; (2) the piano-versus-organ program selector (which program runs the PNO Core1 state machine when an organ layer is active); (3) a running boot capture of the DSP data memory with an organ patch sounding.
 
@@ -65,23 +66,36 @@ Source: [organ-tonewheel-bank](../research/organ-tonewheel-bank.md) (oracle run,
 
 | Step | Equation | Status |
 |---|---|---|
-| Step | `step = round(f / fs * 2^32)` (firmware: `fracmul(inc, tune)`, `f = fs * step / 2^32`) | VERIFIED relation, the frequencies `f` stay the Hammond gear ratios (ASSUMED; the firmware ladder is 12-TET) |
+| Step | `step = round(f / fs * 2^32)` (firmware: `fracmul(inc, tune)`, `f = fs * step / 2^32`) | VERIFIED relation; `f` is the 12-TET ladder of section 3.1.2 |
 | Accumulate | `phase = (phase + step) mod 2^32` (`u32`), before the table read | VERIFIED |
 | Index | `idx = phase >> 20`, 4096 entries, no interpolation | VERIFIED |
 | Waveform | `x = sin t - 0.1122 cos 2t - 0.01585 cos 3t - 0.00631 cos 4t - 0.00398 cos 5t` (harmonics 0, -19.0, -36.0, -44.0, -48.0 dB), `T[i] = x(2 pi i / 4096)` built once in `new` | VERIFIED harmonics, table phase origin ASSUMED |
-| Role | the x wave on every B3 wheel, replacing the sine and the extra low-wheel harmonics (opt-in only) | ASSUMED/disputed (about 35 % tonewheels, about 65 % piano string resonance) |
+| Role | the x wave on every B3 wheel, replacing the sine and the extra low-wheel harmonics | ASSUMED (about 70 % organ tone source) |
 
-The default (`ToneWheelSource::Legacy`) and every other model keep the float-phase sine path; the `Firmware` variant is selected by setting `OrganLayer::tonewheel_source`. The pickup calibration, crosstalk and drawbar mapping are unchanged and `ASSUMED`. Tests: `firmware_bank::tests` (closed form at chosen steps, harmonic levels, `fracmul` rounding), `bank_golden::tests` (Rust bank vs the Python model, vectors from `python tools/organ_bank_ref.py golden`, synthetic table, no firmware data).
+Every other model keeps the float-phase sine path; `Legacy` on `B3` is selected by setting `OrganLayer::tonewheel_source`. The pickup calibration and crosstalk stay `ASSUMED`. Tests: `firmware_bank::tests` (closed form at chosen steps, harmonic levels, `fracmul` rounding, detune table steps), `bank_golden::tests` (Rust bank vs the Python model, vectors from `python tools/organ_bank_ref.py golden`, synthetic table, no firmware data).
 
-**Detuned copies** (`OrganLayer::detuned_copies`, default off): each wheel runs two accumulators at `-0.945` and `+0.945` cent (`COPY_SPREAD_CENTS = 1.89`, EMPIRICAL: rms of `1200 log2(v[2k+1] / v[2k])` over the ARM default table; the firmware signs are random, the constant pair is ASSUMED) and the outputs are averaged. Off by default, and only effective with `ToneWheelSource::Firmware`; the role of the copies is unproven.
+### 3.1.2 Pitch ladder, Fine Tune and vibrato detune (`vibrato_bank.rs`)
 
-**Render change** (`render_hash`, 2,240,000 bytes): PR #83 made `Firmware` the default and moved the SHA-256 from `25baa387...7b59a` to `181c4fcb...3029`; restoring `Legacy` as the default returns it to `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a` (re-run after this change). The `181c4fcb` figure now applies only to `Firmware` selected explicitly. In that mode only the engine timeline and the standalone organ segment change; synth, piano and FX segments are bit-identical. Organ level changes by +0.08 dB RMS; the 4th and higher partials of each wheel appear.
+The ARM routine `0xC022D9F0(this, level)` programs the 184 increments from a table chosen by the organ Vibrato-Enable level ([arm-organ-messages](../research/arm-organ-messages.md) section 7, `tools/arm_bank.py`, `docs/research/data/arm-bank-increments.csv`). Element `j = 2 w + c`: wheel `w`, copy `c`.
+
+| Item | Value | Status |
+|---|---|---|
+| Vibrato level not 1 | exact 12-TET table `bank0_CODE@0x444188`: copies identical, spread 0.00 cent, step 100.00 cent (max 0.055 cent from `2^(w/12)`, word quantisation); gains (setter idx 5..8) `0x7FFFFF, 0, 0x7FFFFF, 0` (flag 0) | VERIFIED |
+| Vibrato level 1 | detuned table `@0x443EA8`: `DETUNE_CENTS[j]` (mean +0.11, rms 1.41, range -2.49..+2.46 cent; copies of a wheel differ 1.90 cent rms); gains `0x600000, 0x600000, 0x300000, 0x300000` (flag 0); flag-1 variants in the research doc | VERIFIED |
+| Reading of the detune | vibrato / chorus ensemble effect, replacing the earlier constant `-0.945 / +0.945` cent pair (`COPY_SPREAD_CENTS`, removed) | ASSUMED |
+| Pitch anchor | wheel 0 = MIDI 24 (C1), A4 = 440 Hz; the organ is equal tempered, not Hammond gear-ratio tuned (the gear table above applies to `Legacy` only) | ASSUMED |
+| Fine Tune | `OrganLayer::fine_tune_cents`, multiplies every frequency by `2^(cents/1200)`; clamped to the firmware tune table range -400..+381 cent (the Fine Tune handler writes the bank rate `DM 0xC27C5`) | range VERIFIED, mapping ASSUMED |
+| Copy mix | `OrganLayer::detuned_copies` selects the table. Weights = gains 5, 6 normalised to unit sum: exact `[1, 0]`, detuned `[0.5, 0.5]`; groups 7, 8 are not modelled | gains VERIFIED, mapping and normalisation ASSUMED |
+
+Tests: `vibrato_bank::tests` (12-TET step 100 cent, A4 anchor, Fine Tune, table statistics and spot values from the CSV rows, weights), `firmware_bank::tests::detuned_copies_follow_the_cent_table`, `tonewheel::tests::fine_tune_retunes_the_firmware_bank`.
+
+**Render change** (`render_hash`, 2,240,000 bytes): before this change (default `Legacy`) `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a`; after (default `Firmware`, 12-TET pitches, firmware drawbar curve) `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0`. Only the engine timeline (its organ layers) and the standalone organ segment change; synth, sample, piano and FX segments are bit-identical.
 
 - **Pickup Calibration (`B3` vs `B3 Bass`):** Standard `B3` tapers the bottom 12 complex wheels (`0.74..0.94`) and softens upper wheels above `tw 60` (`1.0..0.84`). `B3 Bass` boosts low wheels `0..24` (`1.32..1.05`) for prominent pedal/bass weight.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
-Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps). The level law is `ASSUMED`: the code uses linear `level / 8` (`drawbar::drawbar_gain`); this section used to claim -3 dB per notch, neither is verified (TD-10; the preset field is 4 bits `0..=8`, [preset-dsp-map](../research/preset-dsp-map.md)). `0` = $-\infty\text{ dB}$:
+Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps). The level law is the firmware curve (`drawbar::drawbar_gain`, `DrawbarLaw::Firmware`): the edit value `0..=8` maps through the integer table `bank0_CODE@0xC02B0EC0` to the 7-bit values `0, 3, 6, 13, 22, 39, 62, 87, 127`, i.e. `0` (off), -32.5, -26.5, -19.8, -15.2, -10.3, -6.2, -3.3, 0 dB re full scale (VERIFIED table, [arm-organ-messages](../research/arm-organ-messages.md) section 7; that `value / 127` is the final DSP gain is ASSUMED, TD-10). The old `level / 8` stays selectable as `DrawbarLaw::Linear`. `0` = $-\infty\text{ dB}$:
 
 | Drawbar | Footage | Semitone Offset ($\Delta k$) | Foldback Behavior |
 |---|---|---:|---|

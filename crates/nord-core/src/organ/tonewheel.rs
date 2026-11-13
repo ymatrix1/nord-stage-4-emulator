@@ -6,24 +6,9 @@
 //! float-phase sine path.
 
 use super::types::{HAMMOND_GEAR_RATIOS, HAMMOND_MOTOR_HZ, NUM_TONEWHEELS};
+use super::vibrato_bank::{clamp_fine_tune, wheel_hz};
 use super::{OrganLayer, OrganModel, ToneWheelSource};
 use std::f32::consts::TAU;
-
-/// Hammond gear frequency of wheel `tw_idx` in `f64`: motor Hz x drive/driven x teeth x step-up.
-///
-/// Same equation as [`OrganLayer::tonewheel_gear_frequency`] without the `f32` rounding, used to
-/// derive the `u32` phase steps. ASSUMED: the firmware pitch ladder is 12-TET, not the Hammond
-/// gear ratios (`docs/research/organ-tonewheel-bank.md` section 4); the gear ratios are the
-/// existing project choice (TD-04).
-pub(super) fn gear_frequency_f64(tw_idx: usize) -> f64 {
-    let clamped = tw_idx.min(NUM_TONEWHEELS - 1);
-    let (drive, driven, teeth) = OrganLayer::tonewheel_gear_spec(clamped);
-    let step_up = if clamped >= 84 { 4.0 / 3.0 } else { 1.0 };
-    f64::from(HAMMOND_MOTOR_HZ)
-        * (f64::from(drive) / f64::from(driven))
-        * f64::from(teeth)
-        * step_up
-}
 
 impl OrganLayer {
     /// Returns `(drive_teeth, driven_teeth, physical_wheel_teeth)` for tonewheel index `0..91`.
@@ -76,11 +61,17 @@ impl OrganLayer {
         (b3, bass)
     }
 
-    /// Re-derives the `u32` phase steps if the sample rate or the copy switch changed.
+    /// Re-derives the `u32` phase steps if the sample rate, the vibrato table or Fine Tune changed.
     fn sync_bank(&mut self) {
+        let fine = clamp_fine_tune(self.fine_tune_cents);
         if self.tone_bank.sample_rate() != self.sample_rate
             || self.tone_bank.copies() != self.detuned_copies
+            || self.synced_fine_cents != fine
         {
+            for (w, f) in self.tonewheel_freqs_hz.iter_mut().enumerate() {
+                *f = wheel_hz(w, fine);
+            }
+            self.synced_fine_cents = fine;
             self.tone_bank.retune(
                 &self.tonewheel_freqs_hz,
                 self.sample_rate,
@@ -143,7 +134,6 @@ mod tests {
         let organ = OrganLayer::new(48_000.0);
         // MIDI 69 (A4) maps to tonewheel index 69 - 24 = 45 (88/64 * 16 * 20 = 440.0 Hz exact)
         assert!((organ.tonewheel_freqs[45] - 440.0).abs() < 1e-3);
-        assert!((gear_frequency_f64(45) - 440.0).abs() < 1e-9);
         // C1 (index 0) uses 85/104 gear ratio -> 32.6923 Hz (distinct from ideal ET 32.7032 Hz)
         assert!((organ.tonewheel_freqs[0] - 32.692307).abs() < 1e-3);
         // Top-octave tonewheels >= 84 use physical 192-tooth wheel
@@ -207,7 +197,7 @@ mod tests {
         let mut fw = OrganLayer::new(fs);
         fw.tonewheel_source = ToneWheelSource::Firmware;
         let mut legacy = OrganLayer::new(fs);
-        assert_eq!(legacy.tonewheel_source, ToneWheelSource::Legacy);
+        legacy.tonewheel_source = ToneWheelSource::Legacy;
         let f_fw = measured_hz(&mut fw, 45, fs);
         let f_lg = measured_hz(&mut legacy, 45, fs);
         assert!(
@@ -222,6 +212,7 @@ mod tests {
         let mut fw = OrganLayer::new(fs);
         fw.tonewheel_source = ToneWheelSource::Firmware;
         let mut legacy = OrganLayer::new(fs);
+        legacy.tonewheel_source = ToneWheelSource::Legacy;
         let mut dual = OrganLayer::new(fs);
         dual.tonewheel_source = ToneWheelSource::Firmware;
         dual.detuned_copies = true;
@@ -234,6 +225,27 @@ mod tests {
         assert!(d_legacy > 1.0, "firmware x wave must differ from the sine");
         assert!(d_dual > 0.0, "detuned copies must change the output");
         assert!(dual.tone_bank.copies());
+    }
+
+    #[test]
+    fn fine_tune_retunes_the_firmware_bank() {
+        let fs = 48_000.0;
+        let mut base = OrganLayer::new(fs);
+        let mut up = OrganLayer::new(fs);
+        up.fine_tune_cents = 100.0; // one semitone: wheel 45 sounds like wheel 46
+        let f_base = measured_hz(&mut base, 45, fs);
+        let f_up = measured_hz(&mut up, 45, fs);
+        assert!((f_base - 440.0).abs() <= 1.0, "{f_base}");
+        assert!((f_up - 466.16).abs() <= 1.0, "{f_up}");
+    }
+
+    #[test]
+    fn firmware_pitch_is_12_tet_not_gear_ratio() {
+        let mut o = OrganLayer::new(48_000.0);
+        o.render_tonewheels(1.0 / 48_000.0);
+        // wheel 0: ET C1 32.7032 Hz (the gear ratio gives 32.6923 Hz, kept for Legacy only)
+        assert!((o.tonewheel_freqs_hz[0] - 32.703_195_66).abs() < 1e-6);
+        assert!((f64::from(o.tonewheel_freqs[0]) - o.tonewheel_freqs_hz[0]).abs() > 0.01);
     }
 
     #[test]
