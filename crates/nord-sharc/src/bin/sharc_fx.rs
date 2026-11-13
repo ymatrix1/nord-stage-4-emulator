@@ -18,6 +18,8 @@
 //! --poke [N:]ADDR=V   data word before call N (default 0); V may be a float as f0.5
 //! --fill [N:]ADDR=V,V,...   consecutive data words before call N
 //! --dump ADDR:COUNT   print `dump ADDR hex float` rows after every call
+//! @FILE               read more arguments from FILE (whitespace separated; for long scenario lists)
+//! --trace             print `trace PC R S I M L B (16 words each)` (hex) before every step of a call
 //! --max N             instruction limit per phase (default 1000000)
 //! ```
 use nord_sharc::core::{Core, Fault};
@@ -110,6 +112,7 @@ struct Options {
     /// (call index, address, value)
     pokes: Vec<(u32, u32, u32)>,
     dumps: Vec<(u32, u32)>,
+    trace: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Options, String> {
@@ -132,6 +135,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--until" => o.until = Some(num(&need()?)?),
             "--trigger" => o.trigger = Some(num(&need()?)?),
             "--stop-at" => o.stop_at = Some(num(&need()?)?),
+            "--trace" => o.trace = true,
             "--dev" => {
                 let s = need()?;
                 let (_, a, v) = split_target(&s)?;
@@ -191,6 +195,33 @@ fn fault_text(f: &Fault) -> String {
 
 /// Steps until `pc` equals `stop` (before executing it) or `max` steps passed.
 fn run_to(core: &mut Core, stop: u32, max: u64) -> Result<u64, String> {
+    run_to_traced(core, stop, max, None)
+}
+
+/// One `trace` row: pc and the R, S, I, M, L and B register files before the instruction at `pc` runs.
+fn trace_row(core: &Core) -> String {
+    let mut row = format!("trace {:x}", core.pc);
+    for v in core
+        .r
+        .iter()
+        .chain(&core.s)
+        .chain(&core.i)
+        .chain(&core.m)
+        .chain(&core.l)
+        .chain(&core.b)
+    {
+        let _ = write!(row, " {v:x}");
+    }
+    row
+}
+
+/// `run_to` that appends a `trace_row` per executed instruction to `trace` when it is `Some`.
+fn run_to_traced(
+    core: &mut Core,
+    stop: u32,
+    max: u64,
+    mut trace: Option<&mut String>,
+) -> Result<u64, String> {
     let start = core.steps;
     while core.pc != stop {
         if core.steps - start >= max {
@@ -199,13 +230,31 @@ fn run_to(core: &mut Core, stop: u32, max: u64) -> Result<u64, String> {
                 core.pc
             ));
         }
+        if let Some(t) = trace.as_deref_mut() {
+            let _ = writeln!(t, "{}", trace_row(core));
+        }
         core.step().map_err(|f| fault_text(&f))?;
     }
     Ok(core.steps - start)
 }
 
+/// Replaces every `@FILE` argument by the whitespace separated words of the file.
+fn expand_args(args: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for a in args {
+        match a.strip_prefix('@') {
+            Some(path) => {
+                let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+                out.extend(text.split_whitespace().map(str::to_string));
+            }
+            None => out.push(a.clone()),
+        }
+    }
+    Ok(out)
+}
+
 fn run(args: &[String]) -> Result<String, String> {
-    let o = parse_args(args)?;
+    let o = parse_args(&expand_args(args)?)?;
     let data = std::fs::read(&o.image).map_err(|e| format!("{}: {e}", o.image))?;
     let mut core = Core::new(&data);
     core.pc = o.entry;
@@ -239,7 +288,7 @@ fn run(args: &[String]) -> Result<String, String> {
             apply(&mut core, r, v);
         }
         core.pc = call;
-        let n = run_to(&mut core, until, o.max)?;
+        let n = run_to_traced(&mut core, until, o.max, o.trace.then_some(&mut out))?;
         let _ = writeln!(out, "call {k}: {n} steps, pc 0x{:x}", core.pc);
         for &(addr, count) in &o.dumps {
             for a in addr..addr + count {
@@ -362,6 +411,41 @@ mod tests {
         ]))
         .unwrap_err();
         assert!(err.contains("step limit"), "{err}");
+    }
+
+    #[test]
+    fn at_file_arguments_are_expanded() {
+        let path =
+            std::env::temp_dir().join(format!("nord_sharc_fx_args_{}.txt", std::process::id()));
+        std::fs::write(
+            &path,
+            "--set R2=9
+--trace",
+        )
+        .unwrap();
+        let args = strings(&["img", &format!("@{}", path.display()), "--calls", "2"]);
+        let expanded = expand_args(&args).unwrap();
+        assert_eq!(
+            expanded,
+            strings(&["img", "--set", "R2=9", "--trace", "--calls", "2"])
+        );
+        assert!(expand_args(&strings(&["@/nonexistent/args.txt"])).is_err());
+    }
+
+    #[test]
+    fn trace_prints_one_row_per_executed_instruction() {
+        let img = tiny_image();
+        let text = run(&strings(&[
+            &img, "--entry", "0x120000", "--boot", "1", "--call", "0x120000", "--until",
+            "0x120004", "--set", "R2=9", "--trace",
+        ]))
+        .unwrap();
+        let rows: Vec<&str> = text.lines().filter(|l| l.starts_with("trace ")).collect();
+        assert_eq!(rows.len(), 4, "{text}");
+        assert!(rows[0].starts_with("trace 120000 "), "{}", rows[0]);
+        // `trace`, pc, then 16 words of each of R, S, I, M, L and B
+        assert_eq!(rows[0].split_whitespace().count(), 2 + 96);
+        assert_eq!(rows[0].split_whitespace().nth(4), Some("9"));
     }
 
     #[test]
