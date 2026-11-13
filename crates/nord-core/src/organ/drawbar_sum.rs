@@ -19,6 +19,9 @@ impl OrganLayer {
         buses: &[[f32; NUM_TONEWHEELS]; 2],
         lanes: usize,
     ) -> [f32; 2] {
+        if self.b3_weights_active() {
+            return [self.sum_b3_weights(&buses[0]), 0.0];
+        }
         let oct_semis = i32::from(self.octave_shift.clamp(-2, 2)) * 12;
         let db_bus_scale = if self.model == OrganModel::B3
             && self.percussion_enabled
