@@ -2,6 +2,7 @@
 
 - **Checked:** 2026-11-12
 - **Sources (local, never committed):** FX image of OS v1.66 (`dsp_image_0_FX.bin`, `python tools/ns4_dsp_ldr.py ... --sram DIR` gives `core1_sram.bin`, `core2_sram.bin`, entry `0x1211E3` for both); ADI `elfdump` listings of both cores (`python tools/adi_dis.py core2_sram.bin 0x240000 0x24A800`, CCES 2.12.1); `tools/sharc_routines.py` census; `sharc-org` (pass runs) and the new `sharc-fx` (routine calls); [dsp-image-hunt](dsp-image-hunt.md) 5.18 to 5.21, [org-dsp-map](org-dsp-map.md), [dsp-rx-protocol](dsp-rx-protocol.md), [sharc-sequencer](sharc-sequencer.md), [hardware-audio-reference-fx](hardware-audio-reference-fx.md), `crates/nord-core/src/fx.rs`.
+- **See also:** [fx-chain-install](fx-chain-install.md) (ARM routine directory, stage rows, Amp type switch).
 - **Question:** How is the FX DSP pass organised (cores, buffers, effect chain, parameter and instance layout), which kinds of effect routine does the image contain, how do they get installed, and can one routine be run in the oracle and compared with a reference model?
 
 Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = read in the ADI listing or reproduced by the command shown; **EMPIRICAL** = textual shape of the code (counts of instruction patterns, not behaviour); **ASSUMED** = reading of the purpose.
