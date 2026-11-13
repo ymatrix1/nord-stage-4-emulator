@@ -5,7 +5,7 @@
 //! constructor) to the dry sum `s = sum W ring`; the whole chain is linear and time invariant, so a
 //! sustained wheel line of frequency `f` leaves with the amplitude gain `G(f)` relative to the
 //! dry `A W h` line. The table is `tools/organ_b3_proc.py` output over the oracle (`sharc-pass`)
-//! with the constructor loaded and `DM(0xB44C0) = 1.0`: 82 points from single wheels and their
+//! with the full ARM boot log loaded (`docs/research/arm-boot-state.md`) and `DM(0xB44C0) = 1.0`: 34 points from single wheels and their
 //! harmonics, lines from different notes at one frequency agree within 0.1 dB.
 
 /// `(Hz, dB)` points of `G(f)`, ascending in Hz (at the firmware frame rate, host independent).
@@ -13,89 +13,41 @@
 /// EMPIRICAL: measured gain of the oracle chain per line (`docs/research/data/b3-tail-gain.csv`,
 /// test `table_matches_the_derived_csv`); the phase of the response is not recorded, so wheel
 /// harmonics keep the firmware table phases (partial amplitudes are right, waveform shape is not).
-pub(super) const TAIL_DB: [(f32, f32); 82] = [
-    (65.41, 0.39),
-    (69.30, 0.19),
-    (73.40, -0.16),
-    (77.75, -0.91),
-    (82.37, -1.04),
-    (87.29, -1.46),
-    (92.47, -1.78),
-    (97.99, -2.21),
-    (103.81, -2.67),
-    (109.98, -3.06),
-    (116.50, -3.60),
-    (123.45, -3.99),
-    (130.83, -4.49),
-    (138.59, -4.99),
-    (146.79, -5.54),
-    (155.51, -6.09),
-    (164.74, -6.66),
-    (174.58, -7.18),
-    (184.93, -7.73),
-    (196.11, -8.18),
-    (207.76, -9.02),
-    (220.04, -9.57),
-    (233.09, -10.28),
-    (247.00, -11.02),
-    (261.72, -11.82),
-    (277.26, -12.33),
-    (293.68, -13.07),
-    (311.12, -13.88),
-    (329.58, -14.62),
-    (349.27, -15.60),
-    (370.03, -16.39),
-    (391.96, -17.35),
-    (415.26, -18.22),
-    (439.94, -19.16),
-    (466.00, -20.05),
-    (493.79, -21.30),
-    (523.30, -22.19),
-    (554.37, -23.14),
-    (587.16, -24.05),
-    (622.03, -24.90),
-    (658.96, -25.53),
-    (698.32, -25.80),
-    (739.74, -25.97),
-    (783.92, -26.11),
-    (830.52, -26.31),
-    (879.88, -25.09),
-    (932.01, -24.74),
-    (987.58, -24.33),
-    (1046.61, -24.10),
-    (1108.74, -23.97),
-    (1174.33, -24.01),
-    (1244.06, -24.14),
-    (1317.93, -24.48),
-    (1396.63, -24.89),
-    (1479.47, -25.46),
-    (1567.84, -26.25),
-    (1661.04, -25.20),
-    (1759.77, -24.84),
-    (1864.01, -23.95),
-    (1975.16, -23.19),
-    (2093.22, -22.84),
-    (2217.49, -22.85),
-    (2348.66, -23.53),
-    (2488.11, -23.70),
-    (2635.85, -23.55),
-    (2793.26, -22.49),
-    (2958.95, -21.68),
-    (3137.76, -21.06),
-    (3322.09, -20.88),
-    (3521.26, -20.56),
-    (3728.03, -19.69),
-    (3952.05, -18.78),
-    (4186.44, -18.23),
-    (4434.97, -17.89),
-    (4697.31, -17.36),
-    (4976.23, -16.75),
-    (5271.71, -15.99),
-    (6271.37, -13.77),
-    (6649.70, -13.53),
-    (7039.07, -13.40),
-    (7460.20, -12.74),
-    (7904.11, -12.83),
+pub(super) const TAIL_DB: [(f32, f32); 34] = [
+    (65.41, 7.68),
+    (82.37, 8.03),
+    (97.99, 8.25),
+    (109.98, 8.26),
+    (130.83, 8.25),
+    (164.74, 8.09),
+    (174.58, 8.00),
+    (196.15, 7.86),
+    (219.97, 7.53),
+    (233.00, 7.41),
+    (247.11, 6.88),
+    (261.65, 6.93),
+    (293.78, 6.54),
+    (311.01, 6.22),
+    (329.72, 6.04),
+    (349.16, 5.71),
+    (415.26, 4.74),
+    (439.94, 4.42),
+    (466.00, 4.14),
+    (523.30, 3.37),
+    (587.16, 2.54),
+    (622.03, 2.09),
+    (739.74, 0.83),
+    (830.52, -0.02),
+    (1046.61, -2.24),
+    (1317.93, -3.32),
+    (1479.47, -4.15),
+    (2093.22, -6.09),
+    (2635.85, -7.49),
+    (3322.09, -8.70),
+    (3953.78, -9.54),
+    (4976.23, -10.77),
+    (6644.17, -12.52),
+    (9952.45, -15.71),
 ];
 
 /// Linear amplitude gain at `hz`: dB linear in `log2(hz)` between the table points, flat beyond
@@ -144,12 +96,12 @@ mod tests {
             let g = 20.0 * tail_gain(hz).log10();
             assert!((g - db).abs() < 1e-3, "{hz}: {g} vs {db}");
         }
-        // 440 Hz is -19.1 dB in the oracle, 880 Hz about -25 dB
-        assert!((20.0 * tail_gain(440.0).log10() + 19.14).abs() < 0.1);
+        // 440 Hz is +4.4 dB in the oracle, 1 kHz about -2 dB
+        assert!((20.0 * tail_gain(440.0).log10() - 4.42).abs() < 0.1);
         assert_eq!(tail_gain(10.0), tail_gain(TAIL_DB[0].0));
         assert_eq!(tail_gain(20_000.0), tail_gain(TAIL_DB[TAIL_DB.len() - 1].0));
         // between two points the dB value lies between theirs
         let mid = 20.0 * tail_gain(300.0).log10();
-        assert!(mid < -12.0 && mid > -15.0, "{mid}");
+        assert!(mid > 6.0 && mid < 7.0, "{mid}");
     }
 }
