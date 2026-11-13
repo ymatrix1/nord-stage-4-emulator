@@ -117,7 +117,15 @@ impl OrganLayer {
     ) -> ([[f32; NUM_TONEWHEELS]; 2], usize) {
         let mut raw = [[0.0f32; NUM_TONEWHEELS]; 2];
         let mut lanes = 1;
-        if self.effective_tone_source() == ToneWheelSource::Firmware {
+        let source = self.effective_tone_source();
+        if source == ToneWheelSource::B3Wheels {
+            let fine = clamp_fine_tune(self.fine_tune_cents);
+            if self.b3_synced != (self.sample_rate, fine) {
+                self.b3_wheels.retune(self.sample_rate, fine);
+                self.b3_synced = (self.sample_rate, fine);
+            }
+            self.b3_wheels.advance(&mut raw[0]);
+        } else if source == ToneWheelSource::Firmware {
             if self.vibrato_link == VibratoLink::Firmware {
                 self.lane_mixer.set_level(self.vibrato_level());
                 let copies = self.lane_mixer.active();
@@ -170,7 +178,9 @@ impl OrganLayer {
         let mut calibrated = [[0.0f32; NUM_TONEWHEELS]; 2];
         for (dst_lane, src_lane) in calibrated.iter_mut().zip(raw.iter()).take(lanes) {
             for (i, dst) in dst_lane.iter_mut().enumerate() {
-                let pickup = if self.weight_mode == WeightMode::Firmware && !self.b3_bass_mode {
+                let pickup = if source == ToneWheelSource::B3Wheels
+                    || (self.weight_mode == WeightMode::Firmware && !self.b3_bass_mode)
+                {
                     1.0 // the firmware path has no per-wheel calibration (ASSUMED tables bypassed)
                 } else {
                     self.pickup_calibration(i)
