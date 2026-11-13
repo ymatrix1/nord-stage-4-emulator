@@ -179,7 +179,10 @@ Sweep of the index -64..64 (3 passes per value): [data/synth-env-rate-table.csv]
 | Meaning | `cA` reads as the per-pass rate of a segment moving toward the target, `1 - cD` as the per-pass decay of a one-pole; time constants 1 / cA passes: 0.2 ms .. 21 s at 48 kHz if one pass is one sample (**ASSUMED**: a pass is 2 frames) | ASSUMED |
 | Consumer | no store or load site of `DM(0xC0E21 + ...)` outside the installer was found in the ORG core 2 pass; the ADSR runtime is not in the code the pass reaches (installer slot modules `0x12082F` / `0x1208D6` ramps are the nearest candidates, not run with real data) | open |
 
-## 8. Rust to-do (`crates/nord-core/src/synth/`, not edited here)
+## 8. Rust to-do (`crates/nord-core/src/synth/`)
+
+Status: items 2 to 5 and the rate-table lookups of item 6 are ported as opt-in paths (`synth/fw_filter.rs`, `synth/fw_filter_tables.rs`, `synth/fw_env_rates.rs`, spec [synth-engine](../specs/synth-engine.md) 4.1); the strip word to `R` law (item 3, cutoff in Hz), the `kFltType` selection (item 4) and the ADR generator (item 6) stay open. Float32 Rust against this document's bit-exact model: coefficients 1.1e-7 relative, output words 6.0e-7 absolute, low-pass impulse spectrum against the closed form 6.3e-5 relative.
+
 
 1. **Oscillator**: VA saw of [synth-voice-control](synth-voice-control.md) s5 (`g(inc)`, two-increment falling PolyBLEP), VERIFIED.
 2. **Filter core**: replace the ZDF ladder by the **two-section trapezoidal resonator** of section 3.2: per section `c' = c + g a; v = (u + b)/2 - c' - k a; a' = clip(a + g v, +-1); b' = u; out = (c' + c)/2`, two sections in series, coefficients `g = 2 R N`, `k = P N`, `N = 1/sqrt(1 + R P + R^2)`, input gain `cin`. 40-bit intermediates are not needed (float32 differs by 1e-7 relative). Tag the constants `VERIFIED` against `tools/synth_filter_model.py` (output words) and keep the clip limit 1.0 (`DM(I5-28)`).

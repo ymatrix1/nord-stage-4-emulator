@@ -37,6 +37,9 @@ pub struct SynthVoice {
     pub amp_env: f32,
     pub filter: ZdfFilter,
     pub filter_right: ZdfFilter,
+    /// Firmware filter states (`FilterEngine::Firmware`), left and right.
+    pub fw_filter: FwFilter,
+    pub fw_filter_right: FwFilter,
     pub sample_zone_idx: Option<usize>,
     pub sample_pos: f64,
     pub sample_step: f64,
@@ -72,6 +75,8 @@ impl Default for SynthVoice {
             amp_env: 0.0,
             filter: ZdfFilter::default(),
             filter_right: ZdfFilter::default(),
+            fw_filter: FwFilter::default(),
+            fw_filter_right: FwFilter::default(),
             sample_zone_idx: None,
             sample_pos: 0.0,
             sample_step: 1.0,

@@ -367,7 +367,17 @@ impl SynthLayer {
             let voice_cutoff =
                 (eff_cutoff * kb_track_scale * env_scale).clamp(14.0, 0.48 * self.sample_rate);
 
-            let filtered_l = if self.filter_on {
+            // Firmware filter family: coefficients once per voice and sample (no allocation).
+            let fw_kind = FwFilterType::from_model(self.filter_model);
+            let fw_co = (self.filter_engine == FilterEngine::Firmware).then(|| {
+                FwCoefs::from_params(fw_kind, voice_cutoff, self.resonance, self.sample_rate)
+            });
+
+            let filtered_l = if !self.filter_on {
+                raw_osc_l
+            } else if let Some(co) = &fw_co {
+                v.fw_filter.process(raw_osc_l, co, fw_kind)
+            } else {
                 v.filter.process(
                     raw_osc_l,
                     self.filter_model,
@@ -376,8 +386,6 @@ impl SynthLayer {
                     self.filter_drive,
                     self.sample_rate,
                 )
-            } else {
-                raw_osc_l
             };
             let amp_vel = (1.0 - self.amp_velocity.clamp(0.0, 1.0))
                 + self.amp_velocity.clamp(0.0, 1.0) * v.velocity;
@@ -389,7 +397,11 @@ impl SynthLayer {
             let env_gain = v.amp_env * amp_vel * voice_gain * 0.25;
             mix_l += filtered_l * env_gain;
             if let Some(osc_r) = raw_osc_r {
-                let filtered_r = if self.filter_on {
+                let filtered_r = if !self.filter_on {
+                    osc_r
+                } else if let Some(co) = &fw_co {
+                    v.fw_filter_right.process(osc_r, co, fw_kind)
+                } else {
                     v.filter_right.process(
                         osc_r,
                         self.filter_model,
@@ -398,8 +410,6 @@ impl SynthLayer {
                         self.filter_drive,
                         self.sample_rate,
                     )
-                } else {
-                    osc_r
                 };
                 mix_r += filtered_r * env_gain;
             } else {
