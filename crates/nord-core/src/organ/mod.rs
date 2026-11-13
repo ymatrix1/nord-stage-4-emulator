@@ -246,6 +246,17 @@ impl OrganLayer {
         }
     }
 
+    /// Selects the B3 generator tables with (default) or without the processor tail's frequency
+    /// response ([`b3_tail`](self)); setup-time only (rebuilds the wheel tables and phases).
+    pub fn set_b3_tail(&mut self, on: bool) {
+        self.b3_wheels = if on {
+            B3Wheels::new()
+        } else {
+            B3Wheels::without_tail()
+        };
+        self.b3_synced = (0.0, f32::NAN);
+    }
+
     /// Triggers a key-down event with single-trigger B3 percussion and key-click transient.
     pub fn note_on(&mut self, note: u8) {
         self.note_on_with_gain(note, 1.0);
