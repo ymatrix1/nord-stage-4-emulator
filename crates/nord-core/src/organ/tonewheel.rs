@@ -125,6 +125,13 @@ impl OrganLayer {
                 self.b3_synced = (self.sample_rate, fine);
             }
             self.b3_wheels.advance(&mut raw[0]);
+        } else if source == ToneWheelSource::FarfisaWheels {
+            let fine = clamp_fine_tune(self.fine_tune_cents);
+            if self.farfisa_synced != (self.sample_rate, fine) {
+                self.farfisa_wheels.retune(self.sample_rate, fine);
+                self.farfisa_synced = (self.sample_rate, fine);
+            }
+            self.farfisa_wheels.advance(&mut raw[0]);
         } else if source == ToneWheelSource::Firmware {
             if self.vibrato_link == VibratoLink::Firmware {
                 self.lane_mixer.set_level(self.vibrato_level());

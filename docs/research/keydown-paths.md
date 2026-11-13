@@ -49,7 +49,7 @@ Every note-on on channel 1 (`0x90`) calls `0xC0085630` once, `0xC00BC7AC` once (
 
 ## 5. Organ and synth
 
-With the section and layer enable ids set through the layer clients (`Edt_Com_kSectionEnableOrg_I` `0x9A`, `Edt_Com_kSectionEnableSyn_I` `0x9C`, `Edt_OrgCom_kLayerEnableOrg_I` `0xAE`, `Edt_SynCom_kLayerEnableSyn_I` `0xA1` = 1) a note-on on channels 1..3 still calls neither the organ second-family key-down `0xC00BF890` nor the synth voice engine event `0xC01EC690`: the layer loop `0xC00D1EBC..0xC00D1F00` tests a 64-bit mask `[client + 0x28]` against the event mask and only the piano client passes. The mask is built from the zone / enable state; why the organ and synth masks do not match is not decoded. **No organ or synth key message was captured.**
+**Update (2026-11-13, [keydown-zones](keydown-zones.md)):** the claim that only the piano client passes the 64-bit mask test was wrong. Every layer client passes it for a channel 1 note; the gate is the **zone enable byte** of the layer zone object (`0xC00C82D4`, read by `0xC00C859C`), which the program section table `[[0xC055B144]] + 0x288` drives. With the organ and synth sections enabled (`arm_zones.enable_sections`) the organ key-down `0xC00BF890` and the synth voice event `0xC01EC690` run, and their DSP messages are tabulated in [keydown-zones](keydown-zones.md).
 
 ## 5b. The `0x60000000` device (keybed or panel scanner?)
 
@@ -81,7 +81,7 @@ Prints whether the real hooks are registered (`True`), the ring `(size, head, ta
 ## Follow-ups
 
 1. Find the first non-zero store into `core + 4` (write watch during a boot where `SPI_TRANSFER` and `SPI_DOWNLOAD_BLOCK` serve the sample header from the local `.ns4b` piano library, not committed) and decode the sound header layout of `P`.
-2. Decode the 64-bit zone masks (`[client + 0x28]`, `0xC00D1EBC`) to see which program state routes a note to the organ and synth layers; then capture the organ `0xC00BF890` and synth `0xC01EC690` messages with `Rig.tick`.
+2. ~~Decode the 64-bit zone masks~~ done in [keydown-zones](keydown-zones.md).
 3. Model the `0x60000000` panel / keybed device (hook 2 writes `0x60000010..0x60000024`) to see if the keybed scanner, not MIDI, feeds the same event ring.
 4. Capture the message series over control-rate ticks once a note produces messages (`Rig.tick` returns `(tick, message)` pairs; `message_rows` writes the CSV).
-5. The load chain runs with a stubbed library volume; the object is created but not bound to the core: [piano-sound-load](piano-sound-load.md).
+5. The load chain runs with a stubbed library volume; binding and voice start now reached with stubs: [piano-sound-load](piano-sound-load.md).

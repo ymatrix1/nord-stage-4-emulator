@@ -104,6 +104,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Polyphony steal priority algorithm (recycling decaying released voices and quietest sustaining voices before active sounding notes)
 - [x] Hardware-parity sampler interpolation: exact SMP 6-tap x 256-phase Q31 kernel (`piano/q31_kernel.rs`, Hamming-windowed sinc, bit-exact closed form) behind `SampleInterp`, plus the SMP unpacker/predictor model (`piano/smp_unpack.rs`)
 - [x] SMP compressed-voice replay on the oracle: record layout of the `0x1C07D8` loop decoded, real `.npno` pages (mono and stereo, widths 5..12, orders 1..3) played through the SMP image and equal to the Rust model bit for bit (`piano/smp_voice.rs`, `piano/smp_page.rs`, `docs/research/smp-voice.md`); `SmpKernel::interpolate_hw` is the integer-exact variant
+- [x] Firmware velocity -> level law traced by running the real firmware with a stubbed sound library (`tools/arm_piano_load.py`): `n = rec[0x5E] + 2X + 60 - sum(b)`, `X(velocity)` table and `level_q23` verified; opt-in model `piano/velocity_level.rs` (not in the default render; [research](research/piano-sound-load.md))
 
 ---
 
@@ -208,9 +209,12 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Model to path map: B3 = generator `0x121BBE` + processor `0x121E2B`, Vox = `0x12272D` + `0x1229B3`, Pipe = `0x122620` + `0x12268F` ([D21](DECISIONS.md#d21-organ-model-to-dsp-path-map), [b3-generator](research/b3-generator.md), [organ-post-stage](research/organ-post-stage.md))
 - [x] B3 pitch ladder (bit exact) and wheel tables as opt-in `ToneWheelSource::B3Wheels` ([organ-engine](specs/organ-engine.md) s3.1.6)
 - [x] Vox chord end to end in the oracle (`sharc-pass`)
-- [ ] B3: per-key weights (taper bytes), amplitude table, vibrato/chorus tail (`DM 0x95471..0x954E5`), frame rate; then make `B3Wheels` the B3 default
-- [ ] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with real weights (writer of key flags and taper words), the 9.9 cent offset, brightness (`ns4-58cz`)
-- [ ] Farfisa (`0x122B85`, generator `0x122A71`) and B3 Bass (`0x122296`): replay in the oracle, then Rust
+- [x] B3: per-key footage weights and per-wheel amplitudes from the captured key-down, frame rate settled ([organ-keydown-weights](research/organ-keydown-weights.md))
+- [ ] B3: processor tail (`DM 0x95471..0x954E5` constructor taps, dry gain writer); then make `B3Wheels` the B3 default (oracle chord is 12.7 to 31.8 dB below the Rust dry sum)
+- [x] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with the captured key-down weights (four footage rows per key, no velocity), 9.9 cent offset explained ([organ-keydown-weights](research/organ-keydown-weights.md))
+- [ ] Vox default: oscillator start phases (two chord lines 3.4 / 2.1 dB off), sine bank rows 84..95, amp stage and brightness (`ns4-58cz`)
+- [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
+- [ ] Farfisa processor `0x122B85` (ARM weights and filter tables, OQ19) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust
 - [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
 
 ### 7b.4 Effects

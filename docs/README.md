@@ -93,6 +93,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 | [research/organ-model-paths.md](research/organ-model-paths.md) | Which PNO core 1 routines each `Edt_Org_kModel` installs |
 | [research/b3-tone-source.md](research/b3-tone-source.md) | B3 tone source: generator `0x121BBE` + processor `0x121E2B` |
 | [research/b3-generator.md](research/b3-generator.md) | B3 generator frequency law, wheel tables, silent tail |
+| [research/organ-farfisa-bass.md](research/organ-farfisa-bass.md) | Farfisa generator decoded and ported, Farfisa / B3 Bass passes in the oracle, event-2 chain owners |
 | [research/organ-weights.md](research/organ-weights.md) | Per-wheel weights from the ARM bank engines |
 | [research/organ-oracle-audio.md](research/organ-oracle-audio.md) | Bank + mix stage audio from the oracle against the Rust engine |
 | [research/organ-tonewheel-bank.md](research/organ-tonewheel-bank.md) | PNO core 1 bank `0x122620` (Pipe generator), oracle run and ARM tables |
