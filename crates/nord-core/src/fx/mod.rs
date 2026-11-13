@@ -48,6 +48,8 @@ mod tests_fw_delay_time;
 #[cfg(test)]
 mod tests_fw_map;
 #[cfg(test)]
+mod tests_fw_reverb_mix;
+#[cfg(test)]
 mod tests_fw_series;
 #[cfg(test)]
 mod tests_lfo_golden;

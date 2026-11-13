@@ -51,6 +51,27 @@ pub fn delay_feedback(v: f32) -> f32 {
     v / 127.0
 }
 
+/// Reverb send (wet) word of `kRvbAmt`: `x^2 (2 - x)` with `x = v / 128`, exactly 1 at `v = 127`.
+/// VERIFIED words (all 128 values of `docs/research/data/fx-reverb-amt.csv`, max abs error 1.2e-7;
+/// module `0xC02BB44C` words `-0x1F` and the same pair at `0xC02BB54C` word 18), EMPIRICAL role
+/// (send / dry of the reverb crossfade).
+#[inline]
+pub fn reverb_send(v: f32) -> f32 {
+    if v >= 127.0 {
+        return 1.0;
+    }
+    let x = v / 128.0;
+    x * x * (2.0 - x)
+}
+
+/// Reverb dry word of `kRvbAmt`: the equal-power partner of [`reverb_send`], `sqrt(1 - wet^2)`
+/// (0 at `v = 127`). VERIFIED words (same series), EMPIRICAL role.
+#[inline]
+pub fn reverb_dry(v: f32) -> f32 {
+    let w = reverb_send(v);
+    (1.0 - w * w).max(0.0).sqrt()
+}
+
 /// Compressor threshold word `c[-0x1B]` of `kCmpAmt` (log2 level units): `-36 v / 127`. VERIFIED
 /// words (series `Cmp,,kCmpAmt,0xC0441558,0,-27`), EMPIRICAL role (it becomes the threshold word
 /// through the makeup smoother, `fw_compressor` overlap).
@@ -208,6 +229,22 @@ mod tests {
         assert_eq!(db_to_counts(15.0), 60.0);
         assert_eq!(db_to_counts(-100.0), -60.0);
         assert_eq!(db_to_counts(0.0), 0.0);
+    }
+
+    #[test]
+    fn reverb_law_is_equal_power_and_hits_the_captured_words() {
+        // captured words (float32 bits) of docs/research/data/fx-reverb-amt.csv
+        assert_eq!((reverb_send(0.0), reverb_dry(0.0)), (0.0, 1.0));
+        assert_eq!((reverb_send(127.0), reverb_dry(127.0)), (1.0, 0.0));
+        assert_eq!(reverb_send(64.0), 0.375);
+        assert!((reverb_dry(64.0) - 0.927_025).abs() < 1e-6);
+        assert!((reverb_send(8.0) - 0.007_568_36).abs() < 1e-7);
+        assert!((reverb_send(96.0) - 0.703_125).abs() < 1e-7);
+        assert!((reverb_send(126.0) - 0.984_135).abs() < 1e-6);
+        for v in 0..=127 {
+            let (w, d) = (reverb_send(v as f32), reverb_dry(v as f32));
+            assert!((w * w + d * d - 1.0).abs() < 1e-5, "v {v}");
+        }
     }
 
     #[test]

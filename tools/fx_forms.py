@@ -14,6 +14,7 @@ the model (for example `c[4]` is the dry gain target of the delay) and `ASSUMED`
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -62,6 +63,23 @@ def crossfade_wet(v: float, full_scale: float = 127.0) -> float:
 def crossfade_dry(v: float, full_scale: float = 127.0) -> float:
     """Dry word that goes with `crossfade_wet`: `1 - v / full_scale`."""
     return 1.0 - v / full_scale
+
+
+def reverb_wet(v: float) -> float:
+    """Reverb send (wet) word of `kRvbAmt` (0..127): `x^2 (2 - x)` with `x = v / 128`; full scale
+    (`v = 127`) is exactly 1. Words VERIFIED on all 128 values (`fx-reverb-amt.csv`)."""
+    if v >= 127:
+        return 1.0
+    x = v / 128.0
+    return x * x * (2.0 - x)
+
+
+def reverb_dry(v: float) -> float:
+    """Dry word that goes with `reverb_wet` (equal power: `wet^2 + dry^2 = 1`); 0 at `v = 127`."""
+    if v >= 127:
+        return 0.0
+    w = reverb_wet(v)
+    return math.sqrt(max(0.0, 1.0 - w * w))
 
 
 @dataclass(frozen=True)
