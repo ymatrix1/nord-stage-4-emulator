@@ -1,0 +1,450 @@
+{
+ "messages": 96111,
+ "phases": [
+  [
+   "init",
+   0
+  ],
+  [
+   "boot",
+   242131
+  ],
+  [
+   "settle 1",
+   253846
+  ],
+  [
+   "settle 2",
+   273307
+  ],
+  [
+   "settle 3",
+   282468
+  ],
+  [
+   "settle 4",
+   285510
+  ],
+  [
+   "settle 5",
+   285534
+  ],
+  [
+   "settle 6",
+   286494
+  ],
+  [
+   "settle 7",
+   286503
+  ],
+  [
+   "settle 8",
+   286503
+  ]
+ ],
+ "by_phase": [
+  {
+   "phase": "boot",
+   "chip": "FX",
+   "core": 1,
+   "path": 2,
+   "messages": 1655,
+   "distinct_words": 975,
+   "zero_values": 602,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "boot",
+   "chip": "FX",
+   "core": 2,
+   "path": 2,
+   "messages": 860,
+   "distinct_words": 810,
+   "zero_values": 257,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "boot",
+   "chip": "ORG",
+   "core": 1,
+   "path": 2,
+   "messages": 24417,
+   "distinct_words": 23100,
+   "zero_values": 2424,
+   "l2_words": 11820,
+   "other_words": 0
+  },
+  {
+   "phase": "boot",
+   "chip": "ORG",
+   "core": 2,
+   "path": 2,
+   "messages": 12597,
+   "distinct_words": 11280,
+   "zero_values": 2424,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "boot",
+   "chip": "PNO",
+   "core": 1,
+   "path": 2,
+   "messages": 28375,
+   "distinct_words": 11852,
+   "zero_values": 3502,
+   "l2_words": 5910,
+   "other_words": 0
+  },
+  {
+   "phase": "boot",
+   "chip": "PNO",
+   "core": 2,
+   "path": 2,
+   "messages": 12597,
+   "distinct_words": 11280,
+   "zero_values": 2424,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "boot",
+   "chip": "SMP",
+   "core": 0,
+   "path": 1,
+   "messages": 24,
+   "distinct_words": 12,
+   "zero_values": 6,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "boot",
+   "chip": "SY",
+   "core": 0,
+   "path": 1,
+   "messages": 290,
+   "distinct_words": 63,
+   "zero_values": 5,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "settle",
+   "chip": "FX",
+   "core": 1,
+   "path": 2,
+   "messages": 1844,
+   "distinct_words": 1834,
+   "zero_values": 1007,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "settle",
+   "chip": "FX",
+   "core": 2,
+   "path": 2,
+   "messages": 1905,
+   "distinct_words": 1895,
+   "zero_values": 380,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "settle",
+   "chip": "ORG",
+   "core": 1,
+   "path": 2,
+   "messages": 912,
+   "distinct_words": 912,
+   "zero_values": 666,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "settle",
+   "chip": "ORG",
+   "core": 2,
+   "path": 2,
+   "messages": 912,
+   "distinct_words": 912,
+   "zero_values": 666,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "settle",
+   "chip": "PNO",
+   "core": 1,
+   "path": 2,
+   "messages": 7295,
+   "distinct_words": 4105,
+   "zero_values": 1729,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "settle",
+   "chip": "PNO",
+   "core": 2,
+   "path": 2,
+   "messages": 912,
+   "distinct_words": 912,
+   "zero_values": 666,
+   "l2_words": 0,
+   "other_words": 0
+  },
+  {
+   "phase": "settle",
+   "chip": "SMP",
+   "core": 0,
+   "path": 1,
+   "messages": 1516,
+   "distinct_words": 686,
+   "zero_values": 1132,
+   "l2_words": 0,
+   "other_words": 0
+  }
+ ],
+ "bulk": [
+  {
+   "dm_word": "0x95471",
+   "count": 32,
+   "src": "0xc027c10c",
+   "region": "bank0_CODE",
+   "sha": "24fbc5991d4edf26",
+   "lr": "0xc00228f8"
+  },
+  {
+   "dm_word": "0x9549d",
+   "count": 60,
+   "src": "0xc027c1bc",
+   "region": "bank0_CODE",
+   "sha": "efadd984cd270256",
+   "lr": "0xc0022cf0"
+  }
+ ],
+ "stubs": [
+  {
+   "stub": "dsp_image_download",
+   "caller_lr": "0xc024bb2c",
+   "phase": "boot",
+   "calls": 1,
+   "first_args": [
+    "0x9000f6d0",
+    "0x0",
+    "0x4b",
+    "0x0"
+   ],
+   "first_obj": [
+    "0xc029ef1c",
+    "0x9000f6a0",
+    "0x1",
+    "0x1b2e020",
+    "0x1",
+    "0x1",
+    "0x1",
+    "0x0"
+   ]
+  },
+  {
+   "stub": "spi_download_block",
+   "caller_lr": "0xc024888c",
+   "phase": "boot",
+   "calls": 2,
+   "first_args": [
+    "0x9017de50",
+    "0x1",
+    "0x0",
+    "0x0"
+   ],
+   "first_obj": [
+    "0x4",
+    "0xc0444e68",
+    "0x0",
+    "0x0",
+    "0x0",
+    "0x0",
+    "0x0",
+    "0x0"
+   ]
+  },
+  {
+   "stub": "spi_download_block",
+   "caller_lr": "0xc02495d8",
+   "phase": "boot",
+   "calls": 2,
+   "first_args": [
+    "0x9017de50",
+    "0x0",
+    "0xc029ed9c",
+    "0x0"
+   ],
+   "first_obj": [
+    "0x4",
+    "0xc0444e68",
+    "0x0",
+    "0x0",
+    "0x0",
+    "0x0",
+    "0x0",
+    "0x0"
+   ]
+  },
+  {
+   "stub": "spi_transfer",
+   "caller_lr": "0xc004b7dc",
+   "phase": "boot",
+   "calls": 9,
+   "first_args": [
+    "0x9000fd30",
+    "0x3",
+    "0x4000080",
+    "0x1"
+   ],
+   "first_obj": [
+    "0x4",
+    "0x9",
+    "0x8",
+    "0xf",
+    "0x62000010",
+    "0x9000fc90",
+    "0x932c6",
+    "0x3"
+   ]
+  },
+  {
+   "stub": "spi_transfer",
+   "caller_lr": "0xc004ba50",
+   "phase": "boot",
+   "calls": 3,
+   "first_args": [
+    "0x9000fd30",
+    "0x1",
+    "0x92519",
+    "0x1"
+   ],
+   "first_obj": [
+    "0x4",
+    "0x9",
+    "0x8",
+    "0xf",
+    "0x62000010",
+    "0x9000fc90",
+    "0x932c6",
+    "0x1"
+   ]
+  },
+  {
+   "stub": "spi_transfer",
+   "caller_lr": "0xc004bc8c",
+   "phase": "boot",
+   "calls": 30003,
+   "first_args": [
+    "0x9000fd30",
+    "0x1",
+    "0x92519",
+    "0x1"
+   ],
+   "first_obj": [
+    "0x4",
+    "0x9",
+    "0x8",
+    "0xf",
+    "0x62000010",
+    "0x9000fc90",
+    "0x932c6",
+    "0x1"
+   ]
+  },
+  {
+   "stub": "spi_transfer",
+   "caller_lr": "0xc0062e00",
+   "phase": "boot",
+   "calls": 4,
+   "first_args": [
+    "0x9000fd30",
+    "0x1",
+    "0x940a1",
+    "0x1"
+   ],
+   "first_obj": [
+    "0x4",
+    "0x9",
+    "0x8",
+    "0xf",
+    "0x62000010",
+    "0x9000fc90",
+    "0x932c6",
+    "0x1"
+   ]
+  },
+  {
+   "stub": "spi_transfer",
+   "caller_lr": "0xc0248a50",
+   "phase": "boot",
+   "calls": 2,
+   "first_args": [
+    "0x9000fd30",
+    "0x1",
+    "0x9409f",
+    "0x1"
+   ],
+   "first_obj": [
+    "0x4",
+    "0x9",
+    "0x8",
+    "0xf",
+    "0x62000010",
+    "0x9000fc90",
+    "0x932c6",
+    "0x1"
+   ]
+  }
+ ],
+ "file_read_callers": {
+  "0xc0095d5c": 139,
+  "0xc023f950": 1
+ },
+ "state": {
+  "FX/1": {
+   "words": 2560,
+   "sha": "7da1e5615f25cc42"
+  },
+  "FX/2": {
+   "words": 2555,
+   "sha": "784059703803c4b1"
+  },
+  "ORG/1": {
+   "words": 12102,
+   "sha": "5f57c6a3bf068116"
+  },
+  "ORG/2": {
+   "words": 12102,
+   "sha": "a59045a77fbf4af7"
+  },
+  "PNO/1": {
+   "words": 8306,
+   "sha": "f740a4d99496dbc5"
+  },
+  "PNO/2": {
+   "words": 12102,
+   "sha": "d1da6979d3c22600"
+  }
+ },
+ "l2": {
+  "ORG": {
+   "words": 11820,
+   "sha": "4daf976efb9cdd4a"
+  },
+  "PNO": {
+   "words": 5910,
+   "sha": "6764c691be215713"
+  }
+ },
+ "null_calls": 782,
+ "poll_hits": 557652
+}
