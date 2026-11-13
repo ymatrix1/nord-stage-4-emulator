@@ -17,10 +17,11 @@ from proof_geom import box, loft
 # 0.78 x 1.79 u at the base). Black and white caps share this geometry.
 CAP_W = 0.80
 CAP_BACK, CAP_FRONT = 0.90, -0.89
-CAP_HT, CAP_HN = 0.90, 0.42  # EMPIRICAL (photos): nose about 0.47 of the block height
+CAP_HT, CAP_HN = 0.70, 0.17  # EMPIRICAL: owner's side-view sketch (2026-11-13), block
+# 108 px and nose 26 px over a 277 px cap length
 BLOCK_FRONT = 0.20  # EMPIRICAL (loose-cap photo): block is about 0.4 of the cap length
-NOSE_TOP_FRONT = -0.66  # EMPIRICAL: flat nose top ends here, then the chamfer
-NOSE_FRONT_H = 0.14  # EMPIRICAL: upright foot left under the chamfer
+NOSE_TOP_FRONT = -0.52  # EMPIRICAL (sketch): flat nose top ends here, then curves down
+NOSE_FRONT_H = 0.03  # EMPIRICAL (sketch): the nose runs out almost to a point
 LIP_L, LIP_H = 0.06, 0.10  # EMPIRICAL (loose-cap photo): base lip behind the block
 CAP_TAPER = 0.05  # EMPIRICAL: walls nearly upright (draft only)
 CAP_BEVEL = 0.12  # EMPIRICAL: reference cap corners read about 8 px rounded at 2x
@@ -52,16 +53,18 @@ def _section(y, z, top_x, left=-CAP_W / 2):
 
 def fader_cap(m, key):
     """Drawbar cap, one loft from back to front: base lip, tall upright rear block, step
-    down onto the full-width nose (the bevel makes the fillet), chamfered nose front."""
+    down onto the low full-width nose (the bevel makes the fillet), curved nose front."""
     ht, hn, e = CAP_HT, CAP_HN, 0.005
     top = (-CAP_W / 2 * (1 - CAP_TAPER), CAP_W / 2 * (1 - CAP_TAPER))
     secs = [
         (CAP_BACK, LIP_H, top),
         (CAP_BACK - LIP_L, LIP_H, top),
         (CAP_BACK - LIP_L - e, ht, top),
-        (BLOCK_FRONT, ht, top),
+        (BLOCK_FRONT + 0.06, ht, top),
+        (BLOCK_FRONT, ht - 0.06, top),  # rounded top front edge (sketch)
         (BLOCK_FRONT - e, hn, top),
         (NOSE_TOP_FRONT, hn, top),
+        (-0.72, 0.10, top),  # EMPIRICAL (sketch): curved nose front
         (CAP_FRONT, NOSE_FRONT_H, top),
     ]
     rings = [_section(y, z, tx) for y, z, tx in secs]
