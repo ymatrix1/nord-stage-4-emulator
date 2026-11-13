@@ -116,13 +116,14 @@ pub struct NpnoSound {
 }
 
 impl NpnoSound {
-    /// Gain in `0..=1` of `note` at `velocity` relative to the same note at velocity 127 from the
-    /// firmware's level law (`None` when the sound has no model or the note is unmapped).
+    /// Voice gain of `note` at `velocity` from the firmware's level law: the ARM writes the
+    /// float `level_q23 / 2^23` of the main voice to the SMP voice record (DM `0x9252A`, VERIFIED
+    /// by run for two velocities), and the SMP scales the decoded stroke (`y / 8192`) by it.
+    /// `None` when the sound has no model or the note is unmapped.
     pub fn firmware_velocity_gain(&self, note: u8, velocity: u8) -> Option<f32> {
         let model = self.firmware_level.as_ref()?;
         let level = model.main_voice_q23(note, velocity.clamp(1, 127))?;
-        let reference = model.main_voice_q23(note, 127)?.max(1);
-        Some((level as f32 / reference as f32).min(1.0))
+        Some((level as f32 / 8_388_608.0).min(1.0))
     }
 
     /// Creates a playable `NpnoSound` from parsed `NpnoInstrument` and raw file bytes.
@@ -1544,8 +1545,7 @@ mod tests {
         fw.set_sound(Some(sound));
         fw.firmware_velocity_level = true;
         fw.note_on(60, 40);
-        let want = model.main_voice_q23(60, 40).unwrap() as f32
-            / model.main_voice_q23(60, 127).unwrap() as f32;
+        let want = model.main_voice_q23(60, 40).unwrap() as f32 / 8_388_608.0;
         assert!(
             (fw.voices[0].amp - want).abs() < 1e-6,
             "{} vs {want}",
