@@ -111,6 +111,41 @@ These four messages **do not depend on k or v**, so they are not the drawbar lev
 
 Next concrete steps: (a) find the reader of `record[0x10..0x18]` (watch the nine words with a memory-read hook while calling `0xC022F060`, `0xC00BE348` and the other per-layer periodic functions); (b) run the boot further than `0xC00FC9F4` once the garbage vtable call at `0xC001B82C` (event insert `0xC001B67C`, called from `0xC0168658` through the UI/display setup) is skipped, since the real updater tasks need the rest of the object graph.
 
+## 7. Drawbar level curve and the first ARM message to DSP audio chain (VERIFIED)
+
+**Drawbar curve.** The reader of the nine drawbar words is the record update `0xC00BE348` itself (read hook: `0xC00BE3A8` and the copy loop `0xC00BE7B8..0xC00BE80C`). It maps each edit value `v` (0..8) through the 9-entry integer table at **`0xC02B0EC0`** into a 9-word array `[record+0x28]+0x18` of 7-bit values:
+
+| Drawbar `v` | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| 7-bit value | 0 | 3 | 6 | 13 | 22 | 39 | 62 | 87 | 127 |
+| dB re 127 | off | -32.5 | -26.5 | -19.8 | -15.2 | -10.3 | -6.2 | -3.3 | 0 |
+
+(`python tools/arm_bank.py <bank0_CODE.bin> <bank0_SRAM.bin>` prints it; run check: drawbars set to `1..8, 0` give the array `3 6 13 22 39 62 87 127 0`, all eight set to 8 give `127` everywhere.) So the answer to "is the drawbar value 7-bit scaled?" is: **yes, by a nonlinear table, about -3 dB per step at the top and steeper below** (neither the linear `d/8` of `organ.rs` nor `16 d`). Status: the table is VERIFIED (image bytes + run); that the 7-bit array is the final gain seen by the DSP is ASSUMED, because the messages that this routine sends in the harness (the four PNO words of section 6) did not change with the array, and the sender of the array itself was not found. The 7-bit range matches the controller-word state `(value7 << 8) | 0x20` of [arm-fw-emulation](arm-fw-emulation.md) section 4, which is the likely next hop.
+
+**Bank programming (`tools/arm_bank.py`).** `0xC022D9F0(this, level)` writes 184 phase increments (`word << 8`) to PNO core 1 DM words `0x955B6 .. 0x9566D` through the inline port store (system address `0x282556DC + 4 i`; table at `0xC0444188` for the exact 12-TET bank, the detuned bank for level 1) and passes four gains to a virtual setter (indices 5..8). Run with a fake object graph (the setter logs the calls; the increments are the real firmware's stores):
+
+| `level` | byte `this+0x4E` | gains 5, 6, 7, 8 | Increment table |
+|---|---|---|---|
+| 1 (vibrato enable) | 0 | `0x600000, 0x600000, 0x300000, 0x300000` | detuned |
+| 1 | 1 | `0x600000, 0, 0, 0x600000` | detuned |
+| 0, 2, 3 | 0 | `0x7FFFFF, 0, 0x7FFFFF, 0` | exact 12-TET |
+| 0, 2, 3 | 1 | `0x7FFFFF, 0, 0, 0` | exact 12-TET |
+
+All 184 increments for both banks are in [data/arm-bank-increments.csv](data/arm-bank-increments.csv) (`0x00635300` is the first exact-12-TET word, `0x00635000` the detuned one).
+
+**Replay (VERIFIED).** The increments become `sharc-bank` pokes (`bank_script`, lines `CALL ADDR VALUE`):
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DSP
+python tools/ns4_dsp_ldr.py DSP/dsp_image_1_PNO.bin --sram SRAM
+python tools/arm_bank.py target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin --level 1 --script l1.script
+target/release/sharc-bank SRAM/core1_sram.bin --calls 2 --script l1.script --out l1.out --dump 0x955B6:4
+```
+
+`--dump 0x955B6:4` reads back `635300 635300 693b00 693b00` for level 0 and `635000 633e00 691900 695700` for level 1 (the pokes land), and the two output arrays of the 2 calls (`2 x 2 x 368` words) differ in **260 of 1472 words** between the two banks. That is the first complete chain *ARM routine -> port stores -> DSP words -> oscillator bank output* from real firmware messages. The four gains are not poked (their setter target was not decoded), so both runs use the image's default weights.
+
+Not done: the organ vs piano vs synth reachability of `0xC022D9F0` / `0xC0236410` (static callers only: organ apply `0xC01209C4/0xC0120C60`, part routing `0xC0236410`; no piano id was driven), the vibrato / percussion / rotary / model ids through `0xC011CB60`, and the weights/post-stage words.
+
 ## Implications
 
 - `arm-edit-params.csv` is the authoritative id, name and range list for the 422 edit parameters; the organ drawbar field is a 0..8 integer at the ARM edit layer, which settles the "scaled 7-bit?" question for *that* layer only.
