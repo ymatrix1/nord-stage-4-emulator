@@ -153,7 +153,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] **B5** Host and behaviour layer: `PanelHost`, `PanelAction`, Shift / hold / double-tap / selector cycling / pot snap / Live Mode with unit tests (`ns4-q6p7`; `crates/nord-panel/src/behaviour/`, timings `ASSUMED` except the 500 ms hold)
 - [ ] **B6** Headless golden-image harness: CPU raster via `tiny-skia`, per-pixel tolerance + error budget, goldens at 0.5x; optional local-only photo comparison skipped without `.reference/` (`ns4-7cv6`, after B4)
 - [ ] **B7** Asset baker (`xtask bake-panel`) and material/shadow system: Blender-rendered sprites and filmstrips from our own models, committed renders with content hashes, `tiny-skia` for flat vector layers, theme tokens; first proves one knob filmstrip and one fader cap and measures atlas size (D15, `ns4-77s9`, after B1, B4)
-- [ ] **B8a-g** Section renderers with a golden image each and every section control bound: master/rotary/wheels (`ns4-0sud`), organ (`ns4-9h25`), piano (`ns4-otuf`), program + both OLEDs (`ns4-z6fi`), synth (`ns4-irgv`), effects (`ns4-hcuh`), keybed (`ns4-jpgx`) (after B2, B5, B6, B7)
+- [ ] **B8a-g** Section renderers with a golden image each and every section control bound: master/rotary/wheels (`ns4-0sud`), organ (`ns4-9h25`), piano (`ns4-otuf`), program + both OLEDs (`ns4-z6fi`), synth (`ns4-irgv`), effects (`ns4-hcuh`), keybed (`ns4-jpgx`) (after B2, B5, B6, B7). **Layout prerequisite delivered:** `crates/nord-panel/src/layout/` gives every control a mm rectangle (`rect_for`, `section_rect`; 36 of 273 estimated, scale 0.6917 mm/px from the 2000 px photo, `ASSUMED`); renderers are not started, so the box stays open
 - [ ] **B9a-d** Parameter and engine parity, additive IDs only: synth per layer (`ns4-4w9l`), effects (`ns4-e3zs`), organ/piano per layer (`ns4-h7he`), program/menus/Extern (`ns4-ymci`) (after B3)
 - [ ] **B10** Lock-free telemetry engine to GUI; test proves `process_block` does not allocate; LED ladders show morphed level (`ns4-gjy2`, after B5)
 - [ ] **B11** Plugin editor (`nih_plug_egui`): resizable fixed aspect, HiDPI, size saved; loads in Reaper and Bitwig (`ns4-hud1`, after B5, B8)
@@ -207,7 +207,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Boot message log: every ARM to DSP store from reset (80,815 boot messages, real EMIFA ports) kept, fingerprinted and replayed into `sharc-pass` / `sharc-org` (PNO core 1 8,300 / 8,306 words, ORG 12,102 / 12,102); census of the stubbed SPI routines ([arm-bulk-tables](research/arm-bulk-tables.md), `tools/arm_bulk_tables.py`)
 - [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
 - [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
-- [ ] SY / SMP equality, port the corrected tail table with regenerated chord tests and the video check, Vox / Farfisa line comparisons; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] Corrected B3 tail ported with regenerated chord tests, oracle chords within 0.54 dB and video mid -1.1 dB ([b3-tail-bootstate](research/b3-tail-bootstate.md)); `B3Wheels` stays opt-in (RMS +8.0 dB)
+- [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 
@@ -216,6 +217,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] B3 pitch ladder (bit exact) and wheel tables as opt-in `ToneWheelSource::B3Wheels` ([organ-engine](specs/organ-engine.md) s3.1.6)
 - [x] Vox chord end to end in the oracle (`sharc-pass`)
 - [x] B3: per-key footage weights and per-wheel amplitudes from the captured key-down, frame rate settled ([organ-keydown-weights](research/organ-keydown-weights.md))
+- [x] Pipe video gap: Pipe2 lines match the oracle to 0.00 dB on three chords in both weight modes (`organ/pipe_lines.rs`); the Space Drama II clip is synth-dominated (`tools/mix_fit.py`), default and `render_hash` unchanged ([pipe-video-gap](research/pipe-video-gap.md))
+- [ ] Pipe-only hardware clip, organ level `L` and the Pipe weight scale (Legacy bus +14.4 dB over the ARM weight unit), wheel steps from the ARM increment words ([pipe-video-gap](research/pipe-video-gap.md) follow-ups)
 - [x] B3: processor tail as an oracle-measured amplitude response (`b3_tail.rs`, [organ-b3-tail](research/organ-b3-tail.md))
 - [ ] B3: dry gain writer, tail phase, multi-write `A`, drawbar sweep; then make `B3Wheels` the B3 default (3 chords: 10 / 8 / 6 of 13 / 13 / 11 lines within 1 dB; hardware clip mid band -11.9 dB)
 - [x] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with the captured key-down weights (four footage rows per key, no velocity), 9.9 cent offset explained ([organ-keydown-weights](research/organ-keydown-weights.md))
@@ -251,7 +254,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Core2 filter stage `0x12566E` (two 4-pole sections, table-interpolated coefficients) reproduced bit-exact in Python ([synth-stage-equations](research/synth-stage-equations.md), `tools/synth_filter_model.py`)
 - [x] Firmware filter family `0x12566E` / `0x125913` / `0x125A50` (LP4, BP4, HP4) and the envelope rate tables as opt-in Rust (`synth/fw_filter.rs`, `synth/fw_env_rates.rs`, `SynthLayer::filter_engine`, spec [synth-engine](specs/synth-engine.md) 4.1); defaults and `render_hash` unchanged
 - [x] Firmware strip chain as one opt-in switch (`SynthLayer::chain = FirmwareStrip`: firmware saw, ADR record chain with the rate tables, strip word 3 cutoff law, firmware filter, gain de-zipper; `synth/strip_path.rs`, `strip_map.rs`, `render-patch --synth-chain strip`, spec [synth-engine](specs/synth-engine.md) 4.2); stage words checked against the oracle (`tools/synth_strip_e2e.py`), Smooth Lead presence gap -16.5 -> -9.0 dB ([synth-strip-path](research/synth-strip-path.md))
-- [ ] Synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
+- [x] Synth key-down velocity series `g(vel)` (VERIFIED table, EMPIRICAL S-curve) wired into the strip chain voice level (`synth/key_velocity.rs`, `tools/synth_velocity.py`); Wave edit ids probed in the ARM harness: they do not change strip word 0 (`tools/synth_wave_probe.py`, [synth-strip-path](research/synth-strip-path.md) s6); strip default stays off (presence -9.0 dB, RMS +3.8 dB)
+- [ ] Synth parity remainder (the strip stage of SHAPE / SUB OSC / SYNC waves is written by the program-load path, not the edit ids): `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
 - [ ] Pulse and triangle shapes, amp envelope smoothing
 - [ ] Hardware sweeps for the remaining ASSUMED scales ([synth-hardware-sweep-plan](research/synth-hardware-sweep-plan.md), OQ7)
 

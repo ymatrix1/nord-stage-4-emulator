@@ -116,3 +116,33 @@ fn sy_saw_fade_knee_is_in_hz_not_in_engine_increments() {
     let b = saw_wave(SawModel::FirmwareSy, 0.4, inc, 1.0 / f);
     assert!((a - b).abs() < 1e-6, "{a} vs {b}");
 }
+
+#[test]
+fn strip_voice_level_follows_the_key_velocity_series() {
+    let level = |on: bool, vel: u8| {
+        let mut s = layer(SynthChain::FirmwareStrip);
+        s.strip_key_velocity = on;
+        s.note_on(57, vel);
+        energy(&render_n(&mut s, 9_600)).sqrt()
+    };
+    let (soft, loud) = (level(true, 64), level(true, 127));
+    // g(64) / g(127) = 32 / 127: far under the linear 0.5.
+    assert!(soft / loud < 0.35, "series ratio {}", soft / loud);
+    let (lin_soft, lin_loud) = (level(false, 64), level(false, 127));
+    assert!(
+        (lin_soft / lin_loud - 0.5).abs() < 0.05,
+        "linear ratio {}",
+        lin_soft / lin_loud
+    );
+}
+
+#[test]
+fn legacy_chain_ignores_the_key_velocity_series() {
+    let rms = |on: bool| {
+        let mut s = layer(SynthChain::Legacy);
+        s.strip_key_velocity = on;
+        s.note_on(57, 64);
+        energy(&render_n(&mut s, 4_800))
+    };
+    assert_eq!(rms(true), rms(false));
+}

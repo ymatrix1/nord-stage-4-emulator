@@ -2,31 +2,51 @@
 
 use super::*;
 
+/// Soft-clipped sine `tanh(k x) / tanh(k)`: approaches a square wave as `k` grows (unity peak).
+#[inline]
+fn soft_square(x: f32, k: f32) -> f32 {
+    (k * x).tanh() / k.tanh()
+}
+
 impl LayerFxChain {
     pub(super) fn process_mod1(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {
         if self.mod1_type == Mod1Type::Off {
             return [l, r];
         }
-        let lfo = self.mod1_phase.sin();
+        let phase = self.mod1_phase;
+        let lfo = phase.sin();
         self.mod1_phase = (self.mod1_phase + TAU * self.mod1_rate_hz * inv_fs) % TAU;
         let amt = self.mod1_amount.clamp(0.0, 1.0);
+        let var = self.mod1_variation;
         match self.mod1_type {
             Mod1Type::Off => [l, r],
             Mod1Type::Tremolo => {
-                let g = 1.0 - 0.5 * amt * (1.0 + lfo);
+                // VARIATION: square wave shape (manual p.49), soft-clipped sine (ASSUMED k = 6).
+                let w = if var { soft_square(lfo, 6.0) } else { lfo };
+                let g = 1.0 - 0.5 * amt * (1.0 + w);
                 [l * g, r * g]
             }
             Mod1Type::AutoPan => {
-                let pan = 0.5 * amt * lfo;
+                // VARIATION: harder pan waveform (manual p.49), ASSUMED k = 3.
+                let w = if var { soft_square(lfo, 3.0) } else { lfo };
+                let pan = 0.5 * amt * w;
                 [l * (1.0 - pan), r * (1.0 + pan)]
             }
-            Mod1Type::RingMod => [
-                l * (1.0 - amt) + (l * lfo) * amt,
-                r * (1.0 - amt) + (r * lfo) * amt,
-            ],
+            Mod1Type::RingMod => {
+                // VARIATION: stereo ring mod (manual p.49): the right carrier is 90 degrees ahead.
+                let lfo_r = if var { phase.cos() } else { lfo };
+                [
+                    l * (1.0 - amt) + (l * lfo) * amt,
+                    r * (1.0 - amt) + (r * lfo_r) * amt,
+                ]
+            }
             Mod1Type::Wah => {
                 // Resonant 2-pole SVF bandpass swept between 350 Hz and 2.8 kHz
-                let norm_sweep = 0.5 + 0.5 * lfo;
+                let norm_sweep = if self.mod1_ped {
+                    self.mod1_ped_pos.clamp(0.0, 1.0)
+                } else {
+                    0.5 + 0.5 * lfo
+                };
                 let fc = 350.0 * 8.0f32.powf(norm_sweep);
                 let w = (TAU * fc * inv_fs).clamp(0.02, 0.55);
                 let q_damp = 0.35;
@@ -57,11 +77,20 @@ impl LayerFxChain {
         let lfo_r = self.mod2_phase.cos();
         self.mod2_phase = (self.mod2_phase + TAU * self.mod2_rate_hz * inv_fs) % TAU;
         let amt = self.mod2_amount.clamp(0.0, 1.0);
+        let var = self.mod2_variation;
+        // VARIATION of Flanger / Vibe is the mono version (manual p.50): both channels share one LFO.
+        let lfo_r = if var && matches!(self.mod2_type, Mod2Type::Flanger | Mod2Type::Vibe) {
+            lfo_l
+        } else {
+            lfo_r
+        };
 
         match self.mod2_type {
             Mod2Type::Off => [l, r],
             Mod2Type::Chorus | Mod2Type::Vibe | Mod2Type::Flanger => {
                 let (base_ms, depth_ms, fb_gain, wet_scale) = match self.mod2_type {
+                    // VARIATION: vintage pedal chorus, wider and deeper (manual p.50), ASSUMED values.
+                    Mod2Type::Chorus if var => (7.0, 6.5 * amt, 0.0, 0.6),
                     Mod2Type::Chorus => (9.0, 4.5 * amt, 0.0, 0.5),
                     Mod2Type::Vibe => (11.0, 6.0 * amt, 0.15 * amt, 0.65),
                     Mod2Type::Flanger => (2.8, 2.2 * amt, 0.45 * amt, 0.55),
@@ -88,7 +117,9 @@ impl LayerFxChain {
                 let coeff_r = ((1.0 - TAU * freq_r * inv_fs) / (1.0 + TAU * freq_r * inv_fs))
                     .clamp(-0.95, 0.95);
 
-                let mut x_l = l + self.phaser_fb[0] * 0.35 * amt;
+                // VARIATION: Bi-Phase character (manual p.50): ASSUMED stronger feedback, zero at minimum.
+                let fb = if var { 0.6 } else { 0.35 };
+                let mut x_l = l + self.phaser_fb[0] * fb * amt;
                 for state in &mut self.phaser_ap_l {
                     let y = -coeff_l * x_l + *state;
                     *state = x_l + coeff_l * y;
@@ -96,7 +127,7 @@ impl LayerFxChain {
                 }
                 self.phaser_fb[0] = x_l.clamp(-2.0, 2.0);
 
-                let mut x_r = r + self.phaser_fb[1] * 0.35 * amt;
+                let mut x_r = r + self.phaser_fb[1] * fb * amt;
                 for state in &mut self.phaser_ap_r {
                     let y = -coeff_r * x_r + *state;
                     *state = x_r + coeff_r * y;
@@ -125,5 +156,80 @@ mod tests {
         for _ in 0..256 {
             assert_eq!(fx.process_frame([0.0, 0.0]), [0.0, 0.0]);
         }
+    }
+
+    fn run(configure: impl Fn(&mut LayerFxChain)) -> Vec<[f32; 2]> {
+        let mut fx = LayerFxChain::new(48_000.0);
+        fx.reverb_model = ReverbModel::Off;
+        fx.mod1_amount = 0.8;
+        fx.mod2_amount = 0.8;
+        fx.mod1_rate_hz = 5.0;
+        fx.mod2_rate_hz = 2.0;
+        configure(&mut fx);
+        (0..9600)
+            .map(|n| {
+                let x = (n as f32 * 0.05).sin() * 0.5;
+                fx.process_frame([x, x * 0.8])
+            })
+            .collect()
+    }
+
+    #[test]
+    fn mod1_variation_changes_every_type_and_stays_finite() {
+        for t in [Mod1Type::Tremolo, Mod1Type::AutoPan, Mod1Type::RingMod] {
+            let base = run(|fx| fx.mod1_type = t);
+            let var = run(|fx| {
+                fx.mod1_type = t;
+                fx.mod1_variation = true;
+            });
+            assert!(var.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
+            assert!(base != var, "{t:?} variation has no effect");
+        }
+    }
+
+    #[test]
+    fn mod2_variation_changes_chorus_flanger_vibe_and_phaser() {
+        for t in [
+            Mod2Type::Chorus,
+            Mod2Type::Flanger,
+            Mod2Type::Vibe,
+            Mod2Type::Phaser,
+        ] {
+            let base = run(|fx| fx.mod2_type = t);
+            let var = run(|fx| {
+                fx.mod2_type = t;
+                fx.mod2_variation = true;
+            });
+            assert!(var.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
+            assert!(base != var, "{t:?} variation has no effect");
+        }
+    }
+
+    #[test]
+    fn mono_flanger_variation_gives_identical_lfo_in_both_channels() {
+        let out = run(|fx| {
+            fx.mod2_type = Mod2Type::Flanger;
+            fx.mod2_variation = true;
+        });
+        // Left and right inputs differ only by gain 0.8; with a shared LFO the ratio stays 0.8.
+        let ok = out
+            .iter()
+            .skip(100)
+            .all(|f| (f[1] - 0.8 * f[0]).abs() < 1e-4);
+        assert!(ok, "variation flanger is not mono");
+    }
+
+    #[test]
+    fn wah_ped_position_moves_the_filter_and_ignores_the_lfo() {
+        let at = |pos: f32| {
+            run(|fx| {
+                fx.mod1_type = Mod1Type::Wah;
+                fx.mod1_ped = true;
+                fx.mod1_ped_pos = pos;
+            })
+        };
+        assert!(at(0.1) != at(0.9), "pedal position has no effect");
+        let free = run(|fx| fx.mod1_type = Mod1Type::Wah);
+        assert!(free != at(0.5));
     }
 }

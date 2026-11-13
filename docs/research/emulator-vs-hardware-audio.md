@@ -118,6 +118,10 @@ Ranking criterion: size of the spectral/level/width gap that survives every vari
 - Add segments for delay/compressor programs (e.g. Boxxx, A:28, Pipe1 plus delay) to exercise `FirmwareFx`.
 - Replace the pure-Python spectrum in `video_ref.analyze_wav` with numpy; the 16-variant run takes about 6 minutes, nearly all in analysis.
 
+## Update: Pipe clip is synth-dominated (2026-11-13)
+
+The `organ_pipe` clip has two synth layers on. Section isolation, the oracle line check (0.00 dB per line, three chords) and a power-mix fit are in [pipe-video-gap](pipe-video-gap.md): the synth section alone scores 2.45, the organ alone 6.4 to 6.5, and the Legacy waveform "wins" only by filling the synth's treble deficit. The Pipe default stays the firmware bank.
+
 ## Update: B3 and Vox with the captured key-down weights (2026-11-13)
 
 `ToneWheelSource::B3Wheels` now applies the captured per-wheel amplitudes and per-key footage weights and `Vox` the captured four-footage key map ([organ-keydown-weights](organ-keydown-weights.md)); both stay opt-in. Re-run of `organ_b3` and `organ_vox` (same clips): B3 `b3wheels` RMS gap +14.9 to +3.1 dB, clipping 10.3 % to 0.022 % of samples, crest 5.6 to 17.5 dB (hardware 17.7), presence +1.3 dB, brilliance +8.0 dB, score 4.83 to 4.76; Vox `vox` score 7.66 to 3.44 (default 5.68), mid +9.9 dB, presence and brilliance -2.3 and -2.5 dB, RMS -6.5 dB. The default rows are unchanged. Raw table: [organ-keydown-weights](organ-keydown-weights.md) section 4.
