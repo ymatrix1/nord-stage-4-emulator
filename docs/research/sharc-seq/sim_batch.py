@@ -10,6 +10,7 @@ per case, the dumped state (`_res`, N words) followed by the scratch table (512 
 import argparse
 import os
 import struct
+import threading
 import sys
 import time
 
@@ -60,6 +61,7 @@ def main():
     ap.add_argument('--n-state', type=int, default=107)
     ap.add_argument('--target', choices=['21489', '21571'], default='21489',
                     help='simulator: ADSP-21489 (functional) or ADSP-21571 (SHARC+, cycle-accurate)')
+    ap.add_argument('--case-timeout', type=float, default=60.0, help='21571: seconds before a case is halted')
     ap.add_argument('--no-reexec', action='store_true')
     a = ap.parse_args()
     if not sim_run.is_py36_32() and not a.no_reexec:
@@ -110,19 +112,16 @@ def main():
                 T.SetMemory(0, dm_id, addr, len(ws), 1, bytearray(words_bytes(ws)))
             if a.target == '21571':
                 T.SetMemory(0, dm_id, done, 1, 1, bytearray(4))
-                T.Run(0, False)
-                t_run = time.time()
-                while time.time() - t_run < 20:
-                    time.sleep(0.05)
-                    try:
-                        T.GetMemory(0, dm_id, done, 1, 1, flag)
-                        if struct.unpack('>I', bytes(flag))[0] == 0xD0E5:
-                            break
-                    except RuntimeError:
-                        pass
-                else:   # the case never reached the exit: no PC write, so reload and run the start-up again
+                # Run(wait) blocks until the exit breakpoint; a watchdog halts a case that never gets there
+                fired = []
+                dog = threading.Timer(a.case_timeout, lambda: (fired.append(1), T.Halt(0, False)))
+                dog.start()
+                try:
+                    T.Run(0, True)
+                finally:
+                    dog.cancel()
+                if fired:   # no PC write on SHARC+: reload and run the start-up again
                     out.write('HALT timeout' + chr(10))
-                    T.Halt(0, True)
                     T.LoadProgram(0, dxe, False)
                     T.RemoveAllBreakpoints(0)
                     T.SetBreakpointAtAddress(0, exit_a)

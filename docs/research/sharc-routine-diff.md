@@ -22,6 +22,14 @@ Question: does the model run the real oscillator-bank routine (pc 0x122620, mix 
 ### Routine 0x122620 on the SHARC+ simulator: bit-exact
 6 random cases (random registers, `MODE1 = 0xE10000`, random words in DM `0xC2400..0xC2800`, image tables elsewhere), whole routine including the `DO (PC, 0xFF800055)` outer loop: **every R, S, B, L, I, M register, MODE1, ASTATx, MR0..2 and the 1 024 output words in DM match the model**. The only differences are the three SHARC+ system-register write masks above (ASTATy, STKYx, STKYy; not touched by the routine). So the `DO` bit 7 is indeed a SHARC+ feature the 21489 simulator ignores, and the model's loop semantics are right for it. This is the oscillator-bank inner loop (91 passes x 2): the bank is bit-exact with the SHARC+ simulator on this input class.
 
+### Mix stage 0x12268F on the SHARC+ simulator: bit-exact
+40 random cases (seed 7, `--target 21571`, 202 s incl. the 140 s start-up) plus an earlier 12-case run: MODE1 `0xE10000`, `I1 = 0xB473C` (record of set 0), `I0 = 0xB0220`, random floats in [-4, 4) in the weight arrays `wA 0x9566E..`, `a 0x9594F..`, scalars `0x959AF..B6`, `b/g7/g8/L 0x95AE2..0x95B4F`, the bank x array `0xC24E5..0xC264C` and the output window `0xB0220..27`; image tables elsewhere (`0x95000..0x95FFF`, `0xB4700..`, `0xC0000..0xC3FFF`). **All 107 state words, the scratch table and every watched DM word match the model in all 40 cases (0 of 40 differ).** VERIFIED: `routine_diff.py` command below, max err 0 bits. Bank `0x122620` was already bit-exact (above).
+
+```bash
+python docs/research/sharc-seq/routine_diff.py IMG/dsp_image_1_PNO.bin 0 12268F OUT/cens21.dxe docs/research/sharc-seq/census21_fixture.txt   --work WORK --target 21571 --dm c0000:c4000 --dm 95000:96000 --dm b4700:b4800 --rand-float 9566e:9594e --rand-float 9594f:959b8   --rand-float 95ae2:95b50 --rand-float c24e5:c264d --rand-float b0220:b0228 --reg i1=b473c --reg i0=b0220 --cases 40 --seed 7
+```
+(probe: `gen_census_probe.py OUT --plus && cc21k -proc ADSP-21571 -si-revision any -g -O0 -o OUT/cens21.dxe OUT/cens.asm OUT/cens.c`). `routine_diff.py` gained `--reg NAME=HEX` and `--rand-float LO:HI`; `sim_batch.py` runs each 21571 case with `Run(wait)` under a watchdog (`--case-timeout`).
+
 ## Implications
 The bank routine is not yet verified. Everything before the loop exit matches, so the multiplier, `FEXT`, dual-memory and SIMD paths it uses are consistent with the instruction-level census (`sharc-census-diff.md`).
 
