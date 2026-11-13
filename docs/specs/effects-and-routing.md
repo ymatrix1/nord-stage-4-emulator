@@ -121,10 +121,28 @@ Code: `crates/nord-core/src/fx/biquad.rs` (`ext40_ref`, `FW_BUTTERWORTH_FS4_WORD
 Golden vectors: `python tools/fx_biquad_check.py --golden` prints the Rust arrays (derived words only, no
 firmware code); the test regenerates the input in integer arithmetic.
 
-The Rust master bus (section 3) has no counterpart of the firmware's 4-biquad master IIR (end of the FX pass):
-the Butterworth set above is recorded as a test constant only. The compressor, delays, LFOs and resonant
-filters stay as they were (`ASSUMED` or `EMPIRICAL` per their doc comments); the firmware routine classes
-are listed in [fx-dsp-map](../research/fx-dsp-map.md) and not ported.
+The master bus has an optional firmware 4-section IIR (`fx/master_iir.rs`, `MasterBus::master_iir_enabled`,
+default `false`, so the render hash does not change). Sets (`fx/fw_coeffs.rs::MASTER_IIR_WORDS`, PM
+`0x945F2..0x94605`, palindromic numerators) are `VERIFIED` firmware words (20 words dumped from the Core2 flat
+SRAM image, 0 differing). Together they are a flat low pass: -0.0001 dB up to 5 kHz, about -12 dB at 12 kHz, under
+-50 dB at 20 kHz at 48 kHz (`EMPIRICAL`, computed in a unit test). Not `VERIFIED`: that the four sets are a
+plain cascade in memory order and where the inline code stores to memory (`ASSUMED`; the oracle was run on
+`0x120FDB` only), and the bus position (before the compressor, `ASSUMED`). Test:
+`python tools/fx_biquad_check.py --golden-master` prints the golden words for `tests_master_golden.rs`
+(ext40 reference bit-exact; the fast f32 path stays within 1e-5 of it). The pair at `0x9437A` (fs/4
+Butterworth) is a different table, not part of the master IIR. The compressor, delays, LFOs and resonant filters
+stay as they were (`ASSUMED` or `EMPIRICAL` per their doc comments); the firmware routine classes are listed in
+[fx-dsp-map](../research/fx-dsp-map.md) and not ported.
+
+### 4.0 Firmware Amp biquad sets
+
+`fx/fw_coeffs.rs::AMP_FW_WORDS` holds the two cascaded sets (`b0 b1 b2 a1 a2`, TDF II) the ARM Amp type switch
+`0xC021D064` sends for cases 0..9 (`VERIFIED` words, `python tools/fx_chain_install.py amp ...`,
+[fx-chain-install](../research/fx-chain-install.md) s5): cases 0..3 boost sections, case 4 identity, case 5 high
+pass then low pass, cases 6..9 none. Pole radii are inside the unit circle (unit test). `LayerFxChain::amp_fw_coeffs`
+(default `false`) replaces the RBJ cabinet by the case-5 sets for `Small Speaker` (non-variation) only; this mapping
+is `ASSUMED` (shape fit: -33 dB at 50 Hz, -39 dB at 20 kHz, +4.4 dB at 1 kHz, 48 kHz). The order of cases 0..3 against
+`Twin`/`JC` is not decoded, so they stay unmapped and the default path is unchanged.
 
 ### 4.1 EQ gain per count
 

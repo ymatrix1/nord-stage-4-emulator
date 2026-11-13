@@ -135,3 +135,17 @@ def test_golden_rust_lists_every_word_as_hex():
     text = fx.golden_rust()
     assert "GOLDEN_LEFT: [u32; 64]" in text and "GOLDEN_STATES: [u32; 12]" in text
     assert text.count("0x") == 64 + 64 + 12
+
+
+def test_master_golden_vectors_have_the_documented_shape_and_are_deterministic():
+    g = fx.master_golden_vectors()
+    n = fx.MASTER_BLOCKS * fx.FRAMES
+    assert len(g["left"]) == len(g["right"]) == n and len(g["states"]) == 16
+    assert g == fx.master_golden_vectors()
+    assert all(s[0] == s[2] for s in fx.MASTER_WORDS), "palindromic numerators"
+
+
+def test_master_golden_rust_uses_the_master_prefix():
+    text = fx.golden_rust(master=True)
+    assert "MASTER_GOLDEN_LEFT: [u32; 32]" in text and "MASTER_GOLDEN_STATES: [u32; 16]" in text
+    assert text.count("0x") == 32 + 32 + 16
