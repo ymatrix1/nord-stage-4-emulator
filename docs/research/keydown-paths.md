@@ -51,6 +51,18 @@ Every note-on on channel 1 (`0x90`) calls `0xC0085630` once, `0xC00BC7AC` once (
 
 With the section and layer enable ids set through the layer clients (`Edt_Com_kSectionEnableOrg_I` `0x9A`, `Edt_Com_kSectionEnableSyn_I` `0x9C`, `Edt_OrgCom_kLayerEnableOrg_I` `0xAE`, `Edt_SynCom_kLayerEnableSyn_I` `0xA1` = 1) a note-on on channels 1..3 still calls neither the organ second-family key-down `0xC00BF890` nor the synth voice engine event `0xC01EC690`: the layer loop `0xC00D1EBC..0xC00D1F00` tests a 64-bit mask `[client + 0x28]` against the event mask and only the piano client passes. The mask is built from the zone / enable state; why the organ and synth masks do not match is not decoded. **No organ or synth key message was captured.**
 
+## 5b. The `0x60000000` device (keybed or panel scanner?)
+
+Access log over 40 ticks of the settled state with the real hooks (code hooks on `0x60000000..0x600000FF`):
+
+| Access | pc | Count | Reading |
+|---|---|---|---|
+| read `+0x10`, read `+0x20` | `0x80001500`, `0x80001508` (hook 3, `0x800013D8`) | 10 each (every 4 ticks) | two 32-bit input words per scan step |
+| write `+0x15` | `0x80001580` | 10 | per-step output |
+| write `+0x10`, `+0x14`, `+0x20`, `+0x24`, `+0x16` | `0x80001660..0x800016B8` (hook 2, `0x800015A8`, a state machine in `[state + 0x120..0x128]` that walks a one-hot mask `1, 2, 4 ... 0x100` and writes its complement to `+0x16`) | 3 each | strobe / output data from the arrays at `state + 0xA0, 0xC0, 0xE0, 0x100` |
+
+EMPIRICAL: a strobe-walking scanner with two input words. Whether it scans the keybed matrix or only panel buttons / LEDs is not decided; no input value was injected, so the key path through this device is untested. The harness maps the window to zero pages, so both input words read 0.
+
 ## 6. Reproduce
 
 ```bash
