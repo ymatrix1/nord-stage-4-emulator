@@ -23,9 +23,9 @@
 //!
 //! The coefficient vector lives in program memory per voice (`PM(I9)`), written by the ARM; the
 //! binomial rows of [`FIXED_LPC_COEFFS`] are the only vectors that reproduce the fixed-LPC codec
-//! (ASSUMED: the ARM loads exactly these, oldest history first). The ARM-side re-layout from the
-//! file's big-endian MSB-first words to this LSB-first 16-bit-unit stream is not known
-//! (OPEN: not decoded); only the DSP-side semantics are modelled here.
+//! (VERIFIED on the oracle with these rows, `docs/research/smp-voice.md`; the ARM writes them
+//! itself, oldest history first). A `.npno` page needs no re-layout (its 16-bit big-endian words
+//! are the units); the `.nsmp4` MSB-first 32-bit layout is OPEN.
 
 /// Smallest and largest residual width the unpacker handles in one 32-bit window.
 pub const WIDTHS: std::ops::RangeInclusive<u32> = 1..=16;

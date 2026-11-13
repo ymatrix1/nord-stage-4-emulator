@@ -10,7 +10,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 pub mod q31_kernel;
+pub mod smp_page;
 pub mod smp_unpack;
+pub mod smp_voice;
 
 #[cfg(test)]
 mod interp_switch;
