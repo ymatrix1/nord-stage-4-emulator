@@ -8,12 +8,11 @@
 //! word in Types 14a, 15a and 15b, bit 30 in Types 3a and 3b (compare the same instruction with
 //! and without `(LW)` in the ADI listing). The pair is `Rn, Rn+1` for an even register code `n`,
 //! data registers and index registers alike (`i2=dm(0x94036) (LW)` in the SMP image loads I2 and
-//! I3). In SIMD mode the transfer already moves the PEy register to the next word, so the flag
-//! adds nothing there (ASSUMED: the SMP voice loop has 5 SIMD `(LW)` accesses, ADI prints the
-//! flag, behaviour unconfirmed). An odd register code faults instead of moving one word, and
-//! the Type 4 forms are not modelled.
-use super::exec::Decoded;
-use super::{Core, Fault};
+//! I3). The transfer itself is `Core::mem_transfer_with` (`moves.rs`): VERIFIED by the census diff
+//! (`docs/research/sharc-census-diff.md`) the pair is `Rn, Rn^1` at `addr & !1`, an odd register
+//! takes the lower word, and the same rule holds in SIMD mode (the 25 LW shapes of
+//! `census_regress.rs`). The Type 4 forms are not modelled.
+use super::Core;
 use crate::visa::{bits, Kind};
 
 impl Core {
@@ -23,45 +22,6 @@ impl Core {
             Kind::T14a | Kind::T15a | Kind::T15b => bits(w, 39, 39) == 1,
             Kind::T3a | Kind::T3b => bits(w, 30, 30) == 1,
             _ => false,
-        }
-    }
-
-    /// `None` for a plain access. For a long-word access the value of the second register of the
-    /// pair (read before a parallel compute runs); faults for the unsupported cases.
-    pub(super) fn lw_prepare(&self, d: &Decoded, ureg: u8) -> Result<Option<u32>, Fault> {
-        if !Self::lw_flag(d.kind(), d.w) {
-            return Ok(None);
-        }
-        if self.simd() && ureg < 16 {
-            return Ok(None); // the SIMD pair transfer already covers the second word
-        }
-        if ureg % 2 == 1 {
-            return Err(self.fault(d.pc, &d.insn));
-        }
-        Ok(Some(self.read_ureg(ureg + 1)))
-    }
-
-    /// Completes a long-word access after the first register moved: stores `second` at
-    /// `addr + 1` or loads register `ureg + 1` from there. Does nothing for a plain access.
-    pub(super) fn lw_complete(
-        &mut self,
-        d: &Decoded,
-        addr: u32,
-        ureg: u8,
-        write: bool,
-        second: Option<u32>,
-    ) -> Result<(), Fault> {
-        let Some(second) = second else {
-            return Ok(());
-        };
-        let at = addr.wrapping_add(1);
-        let bad = |address| Fault::BadAddress { pc: d.pc, address };
-        if write {
-            self.dm_write(at, second).map_err(bad)
-        } else {
-            let v = self.dm_read(at).map_err(bad)?;
-            self.write_ureg(ureg + 1, v);
-            Ok(())
         }
     }
 }
@@ -138,17 +98,5 @@ mod tests {
         c.dm_write(0x9_4037, 0x9_0200).unwrap();
         assert!(c.step().is_ok());
         assert_eq!((c.i[2], c.i[3]), (0x9_0100, 0x9_0200));
-    }
-
-    #[test]
-    fn simd_keeps_the_pair_transfer_and_odd_registers_fault() {
-        let mut simd = core_at_zero(&[0x1180, 0x0009, 0x2196]);
-        simd.mode1 = 1 << 21;
-        (simd.r[0], simd.s[0]) = (1, 2);
-        assert!(simd.step().is_ok());
-        assert_eq!(simd.dm_read(0x9_2197).unwrap(), 2);
-        // R1 has no even partner
-        let mut odd = core_at_zero(&[0x1181, 0x0009, 0x2196]);
-        assert!(odd.step().is_err());
     }
 }

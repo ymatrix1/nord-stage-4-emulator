@@ -44,7 +44,7 @@ impl Core {
         captured: (u32, u32),
     ) -> Result<(), Fault> {
         let bad = |address| Fault::BadAddress { pc: d.pc, address };
-        if Self::long_word(d) {
+        if Self::lw_flag(d.kind(), d.w) {
             // VERIFIED (census diff, scalar mode, 126 firmware forms): a long-word access moves the
             // register pair `Un, Un+1` (n even; an odd register selects its pair) to or from the two
             // words at `addr & !1`. ASSUMED in SIMD mode (the simulator also changes S0 there: open).
@@ -95,16 +95,6 @@ impl Core {
         Ok(())
     }
 
-    /// Whether the memory access of `d` is a long word (64-bit) transfer: bit 39 of Types 14a, 15a
-    /// and 15b, bit 30 of Types 3a and 3b (ADI `elfdump` prints `(LW)`; checked on 126 firmware forms).
-    fn long_word(d: &Decoded) -> bool {
-        match d.kind() {
-            Kind::T14a | Kind::T15a | Kind::T15b => bits(d.w, 39, 39) == 1,
-            Kind::T3a | Kind::T3b => bits(d.w, 30, 30) == 1,
-            _ => false,
-        }
-    }
-
     /// Executes the move and modify types: 3a/3b/3c, 4a/4b, 5a/5b, 7a/7b, 14a, 15a/15b, 16a,
     /// 17a/17b and 18a. Types with a compute field run it before the memory access.
     pub(super) fn exec_move(&mut self, d: &Decoded) -> Result<(), Fault> {
@@ -130,17 +120,13 @@ impl Core {
             }
             Kind::T14a => {
                 let (addr, ureg) = (bits(w, 31, 0) as u32, bits(w, 38, 32) as u8);
-                let second = self.lw_prepare(d, ureg)?;
                 self.mem_transfer(d, addr, ureg, write_bit(40))?;
-                self.lw_complete(d, addr, ureg, write_bit(40), second)?;
             }
             Kind::T15a => {
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 44, 44));
                 let addr = self.dag_out(ii, self.i[ii].wrapping_add(bits(w, 31, 0) as u32));
                 let ureg = bits(w, 38, 32) as u8;
-                let second = self.lw_prepare(d, ureg)?;
                 self.mem_transfer(d, addr, ureg, write_bit(40))?;
-                self.lw_complete(d, addr, ureg, write_bit(40), second)?;
                 self.broadcast_load(ii, ureg, write_bit(40));
             }
             Kind::T15b => {
@@ -150,9 +136,7 @@ impl Core {
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 37, 37));
                 let addr = self.dag_out(ii, self.i[ii].wrapping_add(offset));
                 let ureg = bits(w, 29, 23) as u8;
-                let second = self.lw_prepare(d, ureg)?;
                 self.mem_transfer(d, addr, ureg, write_bit(40))?;
-                self.lw_complete(d, addr, ureg, write_bit(40), second)?;
                 self.broadcast_load(ii, ureg, write_bit(40));
             }
             Kind::T16a => {
@@ -218,10 +202,8 @@ impl Core {
                 };
                 let ureg = bits(w, 29, 23) as u8;
                 let captured = self.capture(ureg);
-                let second = self.lw_prepare(d, ureg)?;
                 self.run_move_compute(d, with_compute)?;
                 self.mem_transfer_with(d, addr, ureg, write_bit(31), captured)?;
-                self.lw_complete(d, addr, ureg, write_bit(31), second)?;
                 self.broadcast_load(ii, ureg, write_bit(31));
                 if let Some(u) = update {
                     self.i[ii] = u;

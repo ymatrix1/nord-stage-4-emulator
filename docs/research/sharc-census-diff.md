@@ -26,7 +26,7 @@ First run: 1 875 of 50 052 cases differed. After the fixes below: **18 of 49 722
 | 11 | Triple operation (multiply, add, subtract): ALU flags are the OR of sum and difference | flags of the difference |
 | 12 | A shift count of `i32::MIN` must not overflow | panic in debug builds |
 
-Provenance in code: each fix carries a `VERIFIED` tag naming the census; items marked ASSUMED stay ASSUMED (AF cleared by a fixed ALU op; the SIMD long-word case).
+Provenance in code: each fix carries a `VERIFIED` tag naming the census; items marked ASSUMED stay ASSUMED (AF cleared by a fixed ALU op).
 
 ## Open (18 cases of 49 722, 6 shapes, listed by `census_diff.py`)
 * `STKYx = DM(addr) (LW)`: the model writes the pair to the wrong registers (1 instruction).
@@ -34,7 +34,6 @@ Provenance in code: each fix carries a `VERIFIED` tag naming the census; items m
 * `IF EQ R0 = LSHIFT R12 BY 0x100` and `IF EQ R2 <-> S0` in SIMD (per-element condition on shifter flags and swaps).
 * `MR1F = R3, R1 = DM(...)`: MR2 reads back zero-extended in the simulator.
 * `IF EQ R0 = FPACK F0, M12 = DM(...)` in SIMD.
-* Long-word loads in SIMD mode (the simulator also changes S0).
 
 ## Implications
 Several of these hit common firmware code: conditional ops after float arithmetic (9), dual-memory multiply-accumulate (10, 11), shifts before bit-field tests (4), index-register setup with `B` writes (1), the FX start-up (`ASTAT`/`STKY` writes, 2).
