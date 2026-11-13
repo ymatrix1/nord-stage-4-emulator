@@ -333,6 +333,7 @@ class ArmEmu:
         """Stub the allocator at `address` (r0 = size) with a bump pointer over zeroed memory."""
         self.uc.mem_map(heap_base, size)
         top = [heap_base]
+        self.heap_top = top  # exposed so `arm_steady.snapshot` can save and restore the pointer
 
         def alloc(emu: ArmEmu) -> int:
             p = top[0]
