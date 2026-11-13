@@ -5,8 +5,11 @@
 //! `G[n] = round(2^23 * 2^(-n / 60))` at ARM `0xC02A1A08` and the index
 //! `n = max(0, S.i16[0x5E] + 2 * X + 60 - b1 - b2 - b3)` reduced by 60 per octave. One index step
 //! is `20 * log10(2^(1/60))` = 0.1003 dB. The three `b` values are signed per-key bytes and `X` is
-//! a call-frame word; how velocity reaches `X` is not derived yet, so this module only provides the
-//! table and the index to amplitude map.
+//! a call-frame word. VERIFIED (run, `docs/research/piano-sound-load.md` section 6): the piano class
+//! enters the sibling routine `0xC00A1EB4` (same index and table) and its stored amplitude equals
+//! `level_q23(n)` in 17 of 17 velocity runs; how velocity reaches `X` and the stroke offset
+//! `S.i16[0x5E]` is in [`super::velocity_level`]. This module only provides the table and the index
+//! to amplitude map.
 
 use std::sync::OnceLock;
 
@@ -31,8 +34,9 @@ pub fn level_table() -> &'static [u32; TABLE_LEN] {
     })
 }
 
-/// EMPIRICAL (read from the listing of `0xC00A1D5C`, not run end to end): the Q23 amplitude for an
-/// attenuation `index`. Negative indices clamp to 0 (the ARM applies `max(0, ..)`), the index is
+/// VERIFIED (run: the firmware's `0xC00A1EB4` stored amplitudes equal this map for 17 of 17
+/// Clavinet D6 velocity runs at key 60, test `velocity_level::tests`; listing of `0xC00A1D5C`
+/// agrees): the Q23 amplitude for an attenuation `index`. Negative indices clamp to 0 (the ARM applies `max(0, ..)`), the index is
 /// reduced by 60 per octave, and the result saturates to [`Q23_MAX`].
 pub fn level_q23(table: &[u32; TABLE_LEN], index: i32) -> u32 {
     let n = index.max(0) as u32;

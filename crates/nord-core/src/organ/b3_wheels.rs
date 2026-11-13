@@ -88,23 +88,6 @@ const PHASE_T3: [f64; HARMONICS] = [
     -FRAC_PI_2, -PI, PI, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 ];
 
-/// Per-note ring amplitude `A` written by the ARM key-down at `DM 0x95122 + (note - 36)`, notes
-/// 36..115.
-///
-/// EMPIRICAL: median of the oracle fits over footages that are not percussion-overwritten; gaps
-/// (74, 80..83, 109..115) interpolated; the value varies by up to 10 % with the key. Not applied by
-/// the bus: the matching weights `W(key, footage)` (taper bytes) are not tabulated, so a flat
-/// level is the neutral choice (`docs/research/b3-generator.md` section 4).
-pub const WHEEL_GAIN: [f32; 80] = [
-    0.4858, 0.5192, 0.4802, 0.4829, 0.4336, 0.4646, 0.4344, 0.3784, 0.4075, 0.3669, 0.3902, 0.3823,
-    0.3755, 0.3758, 0.3680, 0.3569, 0.3758, 0.3632, 0.3630, 0.3406, 0.3502, 0.3451, 0.3465, 0.3439,
-    0.2940, 0.2824, 0.2904, 0.3298, 0.2879, 0.4095, 0.3988, 0.3425, 0.3510, 0.3498, 0.3845, 0.3739,
-    0.3704, 0.3805, 0.3901, 0.3998, 0.3998, 0.4093, 0.3842, 0.4501, 0.4627, 0.4753, 0.4879, 0.5004,
-    0.5130, 0.5015, 0.5148, 0.5059, 0.5465, 0.4932, 0.5497, 0.6399, 0.5505, 0.5713, 0.5731, 0.5833,
-    0.4720, 0.7005, 0.5863, 0.7624, 0.6681, 0.5948, 0.4731, 0.5536, 0.6951, 0.7180, 0.7569, 0.7214,
-    0.5104, 0.5515, 0.5926, 0.6336, 0.6747, 0.6747, 0.6747, 0.6747,
-];
-
 /// Phase step of the base oscillator `pitch_class` (octave 0) in 2^-32 cycle per DSP call:
 /// `(inc * 0x3F000000 + 2^30) >> 31` (SHARC `ssfr` rounding).
 pub const fn base_step(pitch_class: usize) -> u32 {
@@ -373,13 +356,5 @@ mod tests {
             a.advance(&mut out);
         }
         assert_eq!(a.phase_of(w), a.step[w].wrapping_mul(10_000));
-    }
-
-    #[test]
-    fn gain_table_spot_values_follow_the_arm_key_down_floats() {
-        // DM 0x9513A (note 60) 0x3E9689D0 = 0.2939 -> 0.2940 (fit); 0x95152 (note 84) 0.5129
-        assert!((WHEEL_GAIN[60 - 36] - 0.294).abs() < 1e-3);
-        assert!((WHEEL_GAIN[84 - 36] - 0.5129).abs() < 2e-3);
-        assert!((WHEEL_GAIN[67 - 36] - 0.3427).abs() < 3e-3);
     }
 }

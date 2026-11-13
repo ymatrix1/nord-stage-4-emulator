@@ -96,3 +96,72 @@ fn the_source_falls_back_to_legacy_on_other_models() {
         );
     }
 }
+
+fn b3_path() -> OrganLayer {
+    let mut o = layer(OrganModel::B3, ToneWheelSource::B3Wheels);
+    o.percussion_enabled = false;
+    o.rotary_enabled = false;
+    o.key_click_enabled = false;
+    o.drawbars = [8, 8, 8, 0, 0, 0, 0, 0, 0];
+    o
+}
+
+#[test]
+fn key_weights_replace_the_legacy_drawbar_gains_on_the_b3_wheels_path() {
+    let mut o = b3_path();
+    assert!(o.b3_weights_active());
+    o.note_on(60);
+    let peak = (0..24_000)
+        .map(|_| o.render_frame()[0].abs())
+        .fold(0.0f32, f32::max);
+    // A * W of the three footages of C4 (0.294 * 0.0329 and neighbours) sums to a few 0.01
+    assert!(peak > 0.005 && peak < 0.05, "peak {peak}");
+    // other models and B3 Bass mode keep their paths
+    let mut bass = b3_path();
+    bass.b3_bass_mode = true;
+    assert!(!bass.b3_weights_active());
+    assert!(!layer(OrganModel::B3, ToneWheelSource::Legacy).b3_weights_active());
+}
+
+#[test]
+fn b3_keys_have_no_velocity_and_release_to_exact_silence() {
+    let render = |gain: f32| {
+        let mut o = b3_path();
+        o.note_on_with_gain(64, gain);
+        (0..9_600).map(|_| o.render_frame()[0]).collect::<Vec<_>>()
+    };
+    assert_eq!(render(0.2), render(1.0)); // VERIFIED negative: keydown-zones.md section 4
+    let mut o = b3_path();
+    o.note_on(64);
+    for _ in 0..4_800 {
+        o.render_frame();
+    }
+    o.note_off(64);
+    let mut last = [1.0f32; 2];
+    for _ in 0..4_800 {
+        last = o.render_frame();
+    }
+    assert_eq!(last, [0.0, 0.0]);
+}
+
+#[test]
+fn the_b3_chord_level_follows_a_times_w_not_the_legacy_bus_scale() {
+    let rms = |source: ToneWheelSource| {
+        let mut o = layer(OrganModel::B3, source);
+        o.percussion_enabled = false;
+        o.rotary_enabled = false;
+        o.key_click_enabled = false;
+        for n in [60u8, 64, 67] {
+            o.note_on(n);
+        }
+        let e: f32 = (0..48_000)
+            .map(|_| {
+                let [l, _] = o.render_frame();
+                l * l
+            })
+            .sum();
+        (e / 48_000.0).sqrt()
+    };
+    // the legacy path sums full-scale drawbars at 0.08 each; the captured weights are lower
+    assert!(rms(ToneWheelSource::B3Wheels) < 0.5 * rms(ToneWheelSource::Legacy));
+}

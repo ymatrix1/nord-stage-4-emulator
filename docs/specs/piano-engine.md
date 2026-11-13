@@ -25,6 +25,14 @@ Maps incoming MIDI velocity $v \in [1, 127]$ to normalized gain/timbre excitatio
 - **`Medium` (Default):** $\left(\dfrac{v}{127}\right)^{1.00}$ (linear response)
 - **`Heavy`:** $\left(\dfrac{v}{127}\right)^{1.55}$ (wider pianissimo dynamic control)
 
+### Firmware velocity -> level law (opt-in, `piano/velocity_level.rs`)
+
+VERIFIED against the real firmware (OS v1.66, `docs/research/piano-sound-load.md` sections 6 and 7; Clavinet D6, Bright Grand, Amber Upright, note 60, 79 velocities): the piano class level method `0xC00A1EB4` stores the Q23 voice amplitude
+
+$$n = \mathrm{rec}[\mathtt{0x5E}] + 2X + 60 - (b_1 + b_2 + b_3), \qquad A = G[n mod 60] \gg \lfloor n / 60 floor,\quad G[k] = \mathrm{round}(2^{23} \cdot 2^{-k/60})$$
+
+(`piano/level_q23.rs`; 60 steps per octave, 0.1003 dB per step). `X` is the velocity attenuation `clamp(d + ((128 - c) T) >> 7, 0, 249)`, `T` a byte of the firmware velocity curve for the internal velocity (`0..=1023`), `(c, d)` = `(0x13, 0)` for the zone used; it falls from 170 (velocity 1) to 0 (velocity 121 and above) and was identical for the three sounds swept. `rec[0x5E]` is a field of the selected stroke record (depends on the root key and the velocity layer; file specific), `b1 + b2 + b3` are three signed per-key bytes of the sound object (40 / 49 / 54 at note 60 for the three sounds; they vary with the note). The module provides the `X` table (VERIFIED at 79 velocities, EMPIRICAL interpolation between), the stroke step function (EMPIRICAL between swept velocities) and the index formula; it is **not wired into the default render** (`render_hash` unchanged). Open: the velocity-layer switch velocities, `rec[0x5E]` from the `.npno` stroke records, the per-key bytes from the file, and the internal velocity mapping (`r8`).
+
 ---
 
 ## 3. Key Release
