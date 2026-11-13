@@ -121,3 +121,50 @@ def test_dsp_ready_sets_the_polled_bit_to_the_expected_level():
     emu.set_reg(3, 0)
     emu.run(pl.GPIO_POLL_PC, pl.GPIO_POLL_PC + 4, max_insns=4)
     assert emu.reg(3) == 1 << 5
+
+
+def test_level_index_matches_the_listing_formula():
+    assert pl.level_index(36, 170, 0, 0, 0) == 36 + 340 + 60
+    assert pl.level_index(66, 0, 10, 20, 10) == 86
+
+
+def test_hook_level_calls_records_arguments_and_the_stored_output():
+    emu = make_emu()
+    # str r0, [out ptr loaded from the stack]: mov r0,#7 ; ldr r1,[sp,#8] ; str r0,[r1] ; bx lr
+    code = [0xE3A00007, 0xE59D1008, 0xE5810000, 0xE12FFF1E]
+    for i, word in enumerate(code):
+        emu.write32(pl.LEVEL_PIANO + 4 * i, word)
+    emu.write_bytes(OUT + 0x5E, struct.pack("<h", -3))
+    calls = pl.hook_level_calls(emu)
+    ret = ae.LOAD_BASE + 0x2000  # return site (zeroed code: harmless no-op)
+    sp = ae.STACK_TOP - 0x2000
+    emu.set_reg(13, sp)
+    for i, word in enumerate((99, 0, BUF)):
+        emu.write32(sp + 4 * i, word)
+    for reg, value in ((0, 0), (1, 0), (2, OUT), (3, 60), (14, ret)):
+        emu.set_reg(reg, value)
+    emu.run(pl.LEVEL_PIANO, ret + 4, max_insns=20)
+    assert calls == [pl.LevelCall(99, -3, 60, 7)]
+
+
+# (velocity, X, rec5e, amplitude): the level calls of the Clavinet D6 sweep, key 60, per-key
+# bytes summing to 40 (`docs/research/piano-sound-load.md` section 6).
+LEVEL_SWEEP = [
+    (1, 170, 36, 0x151CB),
+    (32, 112, 36, 0x50A28),
+    (64, 66, 36, 0xE966A),
+    (88, 36, 56, 0x172803),
+    (112, 9, 66, 0x267F2E),
+    (127, 0, 66, 0x2F6526),
+]
+
+
+@pytest.mark.parametrize(("velocity", "x", "rec5e", "amplitude"), LEVEL_SWEEP)
+def test_level_amplitude_reproduces_the_captured_levels(velocity, x, rec5e, amplitude):
+    assert pl.level_amplitude(pl.level_index(rec5e, x, 15, 15, 10)) == amplitude
+
+
+def test_level_amplitude_saturates_and_clamps():
+    assert pl.level_amplitude(-5) == 0x7FFFFF
+    assert pl.level_amplitude(60) == 0x400000
+    assert pl.level_amplitude(600) == 0x800000 >> 10

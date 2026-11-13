@@ -143,6 +143,63 @@ def install_dsp_ready(emu: ae.ArmEmu) -> None:
     emu.uc.hook_add(emu._u.UC_HOOK_CODE, hook, begin=GPIO_POLL_PC, end=GPIO_POLL_PC)
 
 
+# VERIFIED (run, `docs/research/piano-sound-load.md` section 5): the level method of the piano
+# class is slot 4 of the class table `0xC02A1D20`: `0xC00A1EB4(this, P2, rec, key, X, arg6, out0,
+# out1, ..)` with `P2 = P + 0x5EA0`. Its siblings are slot 4 of the tables at `0xC02A1CB4`
+# (`0xC00A210C`), `0xC02A1CD8` (`0xC00A1D5C`) and `0xC02A1CFC` (`0xC00A1E00`).
+LEVEL_PIANO = 0xC00A1EB4
+LEVEL_METHODS = {0xC00A210C: 1, 0xC00A1D5C: 2, 0xC00A1E00: 3, LEVEL_PIANO: 4}
+# VERIFIED (read from the listing, matches `piano/level_q23.rs`): index step per octave.
+LEVEL_STEPS = 60
+
+
+@dataclass
+class LevelCall:
+    """One call of a level method: call-frame word `x`, record halfword `rec5e` (`[rec + 0x5E]`),
+    key argument and the amplitude the method stored through its first output pointer."""
+
+    x: int
+    rec5e: int
+    key: int
+    out: int | None
+
+
+def level_index(rec5e: int, x: int, b1: int, b2: int, b3: int) -> int:
+    """`n = rec5e + 2 X + 60 - b1 - b2 - b3` of the level methods (before the `max(0, n)`)."""
+    return rec5e + 2 * x + LEVEL_STEPS - b1 - b2 - b3
+
+
+def level_amplitude(index: int) -> int:
+    """Q23 amplitude of a level index: `round(2^23 * 2^(-n / 60))` reduced by octaves, saturated
+    at `0x7FFFFF` (same law as `crates/nord-core/src/piano/level_q23.rs`)."""
+    n = max(index, 0)
+    table = round(8388608 * 2 ** (-(n % LEVEL_STEPS) / LEVEL_STEPS))
+    return min(table >> (n // LEVEL_STEPS), 0x7FFFFF)
+
+
+def hook_level_calls(emu: ae.ArmEmu, method: int = LEVEL_PIANO) -> list[LevelCall]:
+    """Record every call of `method` (entry arguments, then the value written at its first
+    output pointer on return); returns the live list."""
+    calls: list[LevelCall] = []
+
+    def entry(_uc, _address, _size, _user) -> None:  # noqa: ANN001
+        sp, lr = emu.reg(13), emu.reg(14)
+        x, out_ptr = emu.read32(sp), emu.read32(sp + 8)
+        (rec5e,) = struct.unpack("<h", emu.read_bytes(emu.reg(2) + 0x5E, 2))
+        call = LevelCall(x, rec5e, emu.reg(3), None)
+        calls.append(call)
+        handle: list[int] = []
+
+        def back(_uc2, _a, _s, _u) -> None:  # noqa: ANN001
+            call.out = emu.read32(out_ptr)
+            emu.uc.hook_del(handle[0])
+
+        handle.append(emu.uc.hook_add(emu._u.UC_HOOK_CODE, back, begin=lr, end=lr))
+
+    emu.uc.hook_add(emu._u.UC_HOOK_CODE, entry, begin=method, end=method)
+    return calls
+
+
 def find_words(
     emu: ae.ArmEmu, value: int, lo: int = 0x90000000, hi: int = 0x92000000, step: int = 0x100000
 ) -> list[int]:
