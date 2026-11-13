@@ -232,3 +232,42 @@ def test_settled_emulator_boots_settles_and_caches(tmp_path) -> None:
     assert isinstance(blob, bytes)
     emu2, _ = cap.settled_emulator(code, None, cache)  # second call loads the cache
     assert emu2.tick_state["step"] == 0
+
+
+def sample_rows() -> list[cap.CaptureRow]:
+    param = cap.Param(0x166, "Edt_Org_kModel", 0, 5)
+    organ = cap.Store(0, "organ", 0x10)
+    other = cap.Store(1, "piano", 0x20)
+    pno = ae.Message(2, 1, 0x28000000 + 4 * 0x955B6, 0x635300, 0xC0001234)
+    smp = ae.Message(1, 4, 0x9403E, 0x3F800000, 0xC0001238)
+    return [
+        cap.CaptureRow(param, 3, organ, "call", pno),
+        cap.CaptureRow(param, 3, organ, "tick", ae.Message(2, 1, 0x28000000 + 4 * 0x955B7, 0)),
+        cap.CaptureRow(param, 3, other, "call", pno),
+        cap.CaptureRow(param, 4, organ, "call", smp),
+        cap.CaptureRow(param, 5, organ, "error", ae.Message(0, -1, 0, 0), "boom"),
+    ]
+
+
+def test_summary_csv_groups_by_id_kind_and_value() -> None:
+    lines = cap.summary_csv(sample_rows()).strip().split("\n")
+    assert lines[0].startswith("id,name,kind,value,calls,ticks,destinations")
+    assert lines[1:] == [
+        "0x166,Edt_Org_kModel,organ,3,1,1,PNO/1/2,0x955b6,0x955b7,2,1",
+        "0x166,Edt_Org_kModel,organ,4,1,0,SMP/0/1,0x9403e,0x9403e,1,1",
+        "0x166,Edt_Org_kModel,piano,3,1,0,PNO/1/2,0x955b6,0x955b6,1,1",
+    ]  # the error row has no message and is left out
+
+
+def test_bank_script_keeps_only_pno_core1_path2_words() -> None:
+    rows = sample_rows()
+    text = cap.bank_script(rows, "Edt_Org_kModel", 3, call=2)
+    assert text.splitlines() == [
+        "2 0x955b6 0x00635300  # Edt_Org_kModel=3",
+        "2 0x955b7 0x00000000  # Edt_Org_kModel=3",
+        "2 0x955b6 0x00635300  # Edt_Org_kModel=3",
+    ]
+    only_organ = cap.bank_script(rows, "Edt_Org_kModel", 3, call=1, layer=0)
+    assert only_organ.count("\n") == 2
+    assert cap.bank_script(rows, "Edt_Org_kModel", 4, call=1) == ""  # SMP is not PNO
+    assert cap.bank_script(rows, "nope", 3, call=1) == ""
