@@ -93,8 +93,8 @@ python tools/sharc_routine_io.py PNO_c1.txt 0x121BBE 0x121E2B 0x122296 0x122B85 
 ## 6. What would settle the rest
 
 1. ~~The summed output of `0x121E2B` (why `DM 0xB46A8` stays 0)~~ closed in [b3-generator](b3-generator.md): `0xB46A8` is a filter state; the output is the slot stream, silent because the FIR taps `0x95471..` and the dry gain `0xB44C0` are never written by the captured ARM bursts.
-2. A replay of models 5 and 2 (`0x122296`, `0x122B85`) with the same ARM burst and the Farfisa 30-word block.
-3. Which chain objects are chan 1 and chan 3 (they hold event 2 permanently): organ second voices or the piano pair.
+2. ~~A replay of models 5 and 2~~ done in [organ-farfisa-bass](organ-farfisa-bass.md): Bass sounds, Farfisa is silent (weights and filter table zero), the Farfisa generator is decoded.
+3. ~~Which chain objects are chan 1 and chan 3~~ answered in [organ-farfisa-bass](organ-farfisa-bass.md) s6: the second store of each organ layer.
 4. A slot-ownership test with both organ layers on non-B3 models (the second layer's re-install did not take effect in `fresh --layers 0,1`): does slot 1 get released when no layer uses event 0?
 
 ## Implications

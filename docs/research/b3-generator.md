@@ -74,7 +74,7 @@ The percussion items (`[record + 0x2C]`, two items) write the 4' and 2 2/3' ring
 
 ## Follow-ups
 
-1. Find the ARM writer of `DM 0x95471..0x954E5` and `0xB44C0` (vibrato / chorus type handler), then replay a B3 key with the tail programmed and compare the stream with the Rust drawbar bus.
+1. Find the ARM writer of `DM 0xB44C0` (the taps `DM 0x95471..` come from the engine constructor `0xC002187C`, [organ-farfisa-bass](organ-farfisa-bass.md) s2) (vibrato / chorus type handler), then replay a B3 key with the tail programmed and compare the stream with the Rust drawbar bus.
 2. Tabulate the per-key weights `W(key, footage)` (taper bytes) over all keys (the ARM capture of 21 keys is in this PR's data; 79 keys needed) and the key dependence of `A`.
 3. ~~Settle the DSP frame rate~~ done: [dsp-frame-rate](dsp-frame-rate.md) (43,402.34 Hz).
-4. B3 Bass (`0x122296`) and Farfisa (`0x122B85`) replays with the same method.
+4. ~~B3 Bass (`0x122296`) and Farfisa (`0x122B85`) replays~~ done: [organ-farfisa-bass](organ-farfisa-bass.md).
