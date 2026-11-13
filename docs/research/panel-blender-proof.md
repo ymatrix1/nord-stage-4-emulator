@@ -170,3 +170,19 @@ Still different:
 - Button down and lit states; LED lenses; drawbar variants; keys.
 - Reduce filmstrip size (palette quantisation, 32 frames for small knobs).
 - egui side-by-side at 1x and 2x once B4 exists; `xtask bake-panel` replaces `tools/panel_assets.py` packing.
+
+## Eighth review: drawbar cap profile from the purchased model (2026-11-13)
+
+Checked: 2026-11-13. Sources: the owner's purchased 3D model (`.reference/HIGH_POLY_KEYBOARD_STAGE_PIANO`,
+never committed), the owner's cap photos. Question: why did caps built from photos not look like the
+real part?
+
+Method: load the glTF in Blender, pick the one drawbar cap (two mesh pieces near x=-0.362, y=1.740,
+z=0.038; the four-vertex stray quads next to it are not part of the cap), project its vertices onto
+the panel plane, scale so the width is 0.80 u, and read the side silhouette. Result (`CAP_PROFILE` in
+`assets/blender/parts_cap.py`): 1.587 u long, block 1.04 u tall, nose 0.36 u, chamfer to the tip, flat
+rear ledge. Plan length stretched by 1.03 and moved 0.06 u back to fit the reference silhouette
+(IoU black 0.959, white 0.929, layer 0.943).
+
+Implications: photo-estimated shapes were off by up to 40 % in height; measure from the model.
+Follow-ups: rounder block edges (model radius about 0.05 u), per-cap lean check on the white cap.
