@@ -9,11 +9,11 @@ pub fn controls() -> Vec<ControlEntry> {
     let bean = "ns4-4w9l";
     vec![
         // LFO
-        e("synth.lfo.waveform", s, K::Button, "LFO WAVEFORM", 34).todo(bean),
-        e("synth.lfo.dest", s, K::Button, "LFO DESTINATION", 34).todo(bean),
+        e("synth.lfo.waveform", s, K::Button, "LFO WAVEFORM", 34).bound("synthm_lfo_shape_{n}"),
+        e("synth.lfo.dest", s, K::Button, "LFO DESTINATION", 34).bound("synthm_lfo_dest_{n}"),
         e("synth.lfo.rate", s, K::Knob, "LFO RATE/TIME", 34)
             .morph()
-            .todo(bean),
+            .bound("synthm_lfo_rate_{n}"),
         e(
             "synth.lfo.rate_mst_clk",
             s,
@@ -25,7 +25,7 @@ pub fn controls() -> Vec<ControlEntry> {
         .todo(bean),
         e("synth.lfo.mod_amt", s, K::Knob, "LFO MOD AMT", 34)
             .morph()
-            .todo(bean),
+            .bound("synthm_lfo_amount_{n}"),
         e(
             "synth.lfo.group",
             s,
@@ -50,13 +50,13 @@ pub fn controls() -> Vec<ControlEntry> {
             "VIBRATO ON/DLY/WHL/A.T./PED",
             37,
         )
-        .todo(bean),
+        .bound("synthm_vib_mode_{n}"),
         e("synth.vibrato.menu", s, K::Button, "VIBRATO MENU", 37)
             .assumed("menu entry point is not described in the manual text")
             .todo(bean),
         // Arpeggiator / Gate
         e("synth.arp.run", s, K::Button, "ARP RUN", 35).todo(bean),
-        e("synth.arp.mode", s, K::Button, "ARP / POLY / GATE", 35).todo(bean),
+        e("synth.arp.mode", s, K::Button, "ARP / POLY / GATE", 35).bound("synthm_arp_mode_{n}"),
         e(
             "synth.arp.pattern",
             s,
@@ -77,7 +77,7 @@ pub fn controls() -> Vec<ControlEntry> {
         .todo(bean),
         e("synth.arp.rate", s, K::Knob, "ARP RATE/TIME", 36)
             .morph()
-            .todo(bean),
+            .bound("synthm_arp_rate_{n}"),
         e(
             "synth.arp.rate_mst_clk",
             s,
@@ -87,7 +87,7 @@ pub fn controls() -> Vec<ControlEntry> {
         )
         .shift()
         .todo(bean),
-        e("synth.arp.range", s, K::Knob, "ARP RANGE / GATE ENV", 36).todo(bean),
+        e("synth.arp.range", s, K::Knob, "ARP RANGE / GATE ENV", 36).bound("synthm_arp_range_{n}"),
         e("synth.arp.menu", s, K::Button, "ARP MENU", 36).todo(bean),
         e(
             "synth.arp.group",
