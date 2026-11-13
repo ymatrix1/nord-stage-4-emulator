@@ -42,6 +42,11 @@ EVENT_INSERT = 0xC001B67C
 # ASSUMED: text width / line measure over a font glyph table `[font + 8]` that is null because
 # the LCD driver is not modelled. Returns 0 (empty text).
 TEXT_MEASURE = (0xC001B9D0,)
+# VERIFIED (disassembly 0xC02281BC): SPI master transfer `(dev, a, b, 1, &out)` whose fifth
+# argument (stack) receives the slave's answer; the caller at 0xC0228200 then allocates that many
+# 0x14-byte objects. The poll breaker feeds `0x3F0077` (4.1 M objects, exhausts the heap). Stub:
+# answer 0 (ASSUMED: "nothing to allocate" is a legal slave answer).
+SPI_TRANSFER = 0xC0066E64
 HIGH_PAGE = 0xFFFF0000
 
 
@@ -57,6 +62,14 @@ def run_init_array(emu: ae.ArmEmu, per_call: int = 300_000_000) -> None:
 def install_ui_stubs(emu: ae.ArmEmu, extra: tuple[int, ...] = ()) -> None:
     """No-op the display / timer-queue routines whose objects hang off unmodelled hardware."""
     emu.add_stub(EVENT_INSERT, lambda _e: 0)
+
+    def spi_transfer(e: ae.ArmEmu) -> int:
+        out = e.read32(e.reg(13))  # fifth argument: result pointer
+        if out:
+            e.write32(out, 0)
+        return 0
+
+    emu.add_stub(SPI_TRANSFER, spi_transfer)
     for addr in (*TEXT_MEASURE, *extra):
         emu.add_stub(addr, lambda _e: 0)
     # A null font table dereference computes `0xFFFFFFFC`; give it a zero page instead of a fault.
