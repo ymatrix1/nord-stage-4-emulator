@@ -185,6 +185,18 @@ python tools/adi_dis.py SRAM/core1_sram.bin 0x245366 0x245560      # output stag
 target/release/sharc-chain SRAM/core1_sram.bin --step 0x12272D:0x1229B2 --trace 0x1228FB:0x1229B3 trace.txt --dump 0xE2164:12
 ```
 
+## 8. Rust port and comparison with the oracle chord
+
+`ToneWheelSource::Vox` (`crates/nord-core/src/organ/vox_*.rs`, spec [organ-engine](../specs/organ-engine.md) section 3.1.7) ports sections 3 and 4 (the sine bank stays out: weight 0 in the assumed map). Chord C4 E4 G4, weight 1 on oscillators 36, 40, 43, 20,000 passes of `sharc-pass` against `organ_ref --mode vox --rate 43156.4` (mono), `python tools/organ_vox_compare.py`:
+
+| Run | Fundamental level, Rust against oracle (C4 / E4 / G4) | Harmonics 2..9 above -60 dB (max / rms deviation) | First sidebands (oracle, Rust) |
+|---|---|---|---|
+| no vibrato | -0.0008 / -0.0016 / -0.0020 dB | 1.0 dB / 0.23 dB (20 partials) | none |
+| V1, depth `0xE46400` | -0.0011 / -0.0016 / -0.0020 dB | 4.0 dB / 1.1 dB (13) | C4 0.168 / 0.160, 0.167 / 0.161; E4 0.213 / 0.203, 0.212 / 0.204; G4 0.256 / 0.244, 0.255 / 0.244 |
+| V3, depth `0x240B700` | -0.0019 / -0.0021 / -0.0025 dB | 0.65 dB / 0.23 dB (10) | C4 0.458 / 0.432, 0.457 / 0.433; E4 0.611 / 0.576, 0.610 / 0.577; G4 0.781 / 0.732, 0.780 / 0.733 |
+
+Harmonics relative to the fundamental (oracle, no vibrato, dB, h = 2..9): C4 -38.9 -22.7 -56.6 -37.6 -63.6 -48.0 -77.7 -56.1; E4 -39.5 -24.3 -58.1 -39.2 -70.5 -50.0 -79.8 -58.4; G4 -21.1 -26.2 -59.6 -41.7 -69.6 -52.7 -82.6 -61.3. The Rust deviations are 0.0 to 0.2 dB except C4 h = 6 (-3.9 dB, level -64 dB), G4 h = 4 (-1.0 dB) and h = 6 (-2.0 dB). The first sideband of the oracle is the unmodified LFO of section 3.1 (5.94 Hz at 43,156.4 Hz; the 5.96 Hz of section 3.1 is a rounding of `0x905A3 / 2^32 * 43,156`, the exact value is 5.941). Differences left: the waveshaper table is the regenerated closed form (rms 1.7e-4 against the image), the one-pole cutoffs are 4-digit ratios, and the f32 arithmetic flips a table index now and then (golden `vox_golden.rs`: max 2.1e-5 without, 2.6e-4 with vibrato against the bit-exact model).
+
 ## Implications
 
 - The organ-capable PNO Core1 code has **two independent tone paths**: the 92-wheel bank + mix stage (stereo detune, [organ-oracle-audio](organ-oracle-audio.md)) and the 84-note oscillator bank with a built-in pitch vibrato and fine tune, whose audio leaves through `0x1229B3`. Vibrato depth and Fine Tune act as **pitch** modulation on the second path; no delay-line vibrato exists in either routine.
@@ -196,4 +208,4 @@ target/release/sharc-chain SRAM/core1_sram.bin --step 0x12272D:0x1229B2 --trace 
 1. Find the ARM code that builds the `0x1229B3` record (weights `DM(I1 - 0x1F)`, parameter block, three state blocks) and the writer of `DM(0xE2BE0)` (sine base); run its words through `organ_post_oracle.py`. This decides the key to oscillator map (ASSUMED `note - 24`), the drawbar/footage use and the section coefficients (identity here).
 2. Decide whether the post stage serves Vox/Farfisa (or Pipe) and the bank + mix the B3: compare per-model install sequences in the ARM replay scripts (`data/arm-replay-organ-model3.script`).
 3. Measure the real frame rate (absolute pitch of both banks) and the sine bank's audible role.
-4. Rust to-do (`crates/nord-core/src/organ/`, not touched here): a `note_bank.rs` module (84 oscillators: `ph += m rate`, fold, clip by `128.8 * 2^(-k/12)`, 1,025-point waveshaper, asymmetry for notes 12..47, bilinear one-pole `c_k`), a `post_lfo.rs` (triangle `phase += 0x905A3`, depth, fine tune, `m = 0.5 + mod/2`), the sine bank with 12 buckets, and the `output_stage` (96-word weighted sum, three sections, `0.090075`). `scanner.rs` stays the ASSUMED Hammond model; golden vectors come from `organ_post_ref.py` the way `bank_mix_golden.rs` uses `organ_oracle_audio.py golden`. The waveshaper table `T` has to be fitted or regenerated from the oracle (1,025 points, not committable as raw firmware data).
+4. ~~Rust to-do~~ done in section 8 (`vox_bank.rs`, `vox_shaper.rs`, `vox_output.rs`, `vox_source.rs`, `vox_layer.rs`; sine bank and the 12 buckets not ported). The original note: (`crates/nord-core/src/organ/`, not touched here): a `note_bank.rs` module (84 oscillators: `ph += m rate`, fold, clip by `128.8 * 2^(-k/12)`, 1,025-point waveshaper, asymmetry for notes 12..47, bilinear one-pole `c_k`), a `post_lfo.rs` (triangle `phase += 0x905A3`, depth, fine tune, `m = 0.5 + mod/2`), the sine bank with 12 buckets, and the `output_stage` (96-word weighted sum, three sections, `0.090075`). `scanner.rs` stays the ASSUMED Hammond model; golden vectors come from `organ_post_ref.py` the way `bank_mix_golden.rs` uses `organ_oracle_audio.py golden`. The waveshaper table `T` has to be fitted or regenerated from the oracle (1,025 points, not committable as raw firmware data).

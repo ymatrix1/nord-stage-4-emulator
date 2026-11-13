@@ -19,6 +19,11 @@ mod tonewheel;
 mod types;
 mod vibrato_bank;
 mod vibrato_link;
+mod vox_bank;
+mod vox_layer;
+mod vox_output;
+mod vox_shaper;
+mod vox_source;
 mod weight_state;
 mod weights;
 
@@ -28,6 +33,8 @@ mod b3_source_tests;
 mod bank_golden;
 #[cfg(test)]
 mod bank_mix_golden;
+#[cfg(test)]
+mod vox_golden;
 #[cfg(test)]
 mod weight_tests;
 
@@ -114,6 +121,7 @@ pub struct OrganLayer {
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
     synced_fine_cents: f32,
     tone_bank: ToneBank,
+    vox: vox_source::VoxSource,
     b3_wheels: B3Wheels,
     b3_synced: (f32, f32),
     lane_mixer: LaneMixer,
@@ -187,6 +195,7 @@ impl OrganLayer {
             tonewheel_freqs_hz: freqs_hz,
             synced_fine_cents: 0.0,
             tone_bank,
+            vox: vox_source::VoxSource::new(sample_rate),
             b3_wheels: B3Wheels::new(),
             b3_synced: (0.0, f32::NAN),
             lane_mixer: LaneMixer::new(sample_rate),
@@ -269,6 +278,9 @@ impl OrganLayer {
     /// Renders a single stereo frame `[left, right]` with zero heap allocations.
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        if self.vox_active() {
+            return self.render_vox_frame(inv_fs);
+        }
 
         // 1. Advance all 91 spinning tonewheels continuously (two lanes while the detuned
         //    ensemble's stereo blend is active, otherwise one)

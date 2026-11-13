@@ -8,15 +8,19 @@ use std::f32::consts::TAU;
 mod amp_eq;
 mod biquad;
 mod delay;
+mod firmware_fx;
 mod fw_allpass;
+mod fw_amp_drive;
 mod fw_coeffs;
 mod fw_compressor;
 mod fw_delay;
-mod fw_lfo;
-mod fw_resonant;
+pub mod fw_map;
+mod fw_params;
 mod fw_short_float;
 mod fw_stage;
+mod fw_tone_stack;
 mod fw_words;
+mod master;
 mod master_iir;
 mod modulation;
 mod reverb;
@@ -36,6 +40,12 @@ mod tests_delay;
 #[cfg(test)]
 mod tests_delay_golden;
 #[cfg(test)]
+mod tests_firmware_fx;
+#[cfg(test)]
+mod tests_fw_map;
+#[cfg(test)]
+mod tests_fw_series;
+#[cfg(test)]
 mod tests_lfo_golden;
 #[cfg(test)]
 mod tests_master_golden;
@@ -44,11 +54,18 @@ mod tests_resonant_golden;
 mod types;
 
 pub use biquad::*;
+pub use firmware_fx::FirmwareFx;
 pub use fw_allpass::{ctx as fw_allpass_ctx, FwAllpass};
+pub use fw_amp_drive::{ctx as fw_amp_drive_ctx, DriveTables, FwAmpDrive};
 pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
-pub use fw_lfo::{ctx as fw_lfo_ctx, FwLfo, LfoTables};
-pub use fw_resonant::{ctx as fw_resonant_ctx, FwResonant2, FwResonant4};
+pub use fw_map::AllpassType;
+pub use fw_params::{
+    compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,
+    set_tone_stack, CMP_SLOPE,
+};
+pub use fw_tone_stack::{ctx as fw_tone_stack_ctx, FwToneStack2, FwToneStack4};
+pub use master::MasterBus;
 pub use tables::*;
 pub use types::*;
 
@@ -131,6 +148,10 @@ pub struct LayerFxChain {
     pub reverb_color: ReverbColor,
     pub reverb_mix: f32,
     pub morph: FxMorphSet,
+    /// Opt-in firmware closed forms (delay mix law, firmware compressor). Default all off.
+    pub firmware_fx: FirmwareFx,
+    fw_comp: Option<fw_stage::FwCompressorStage>,
+    fw_comp_amount: f32,
     mod1_phase: f32,
     wah_state_l: [f32; 2],
     wah_state_r: [f32; 2],
@@ -216,6 +237,9 @@ impl LayerFxChain {
             reverb_color: ReverbColor::Normal,
             reverb_mix: 0.15,
             morph: FxMorphSet::default(),
+            firmware_fx: FirmwareFx::OFF,
+            fw_comp: None,
+            fw_comp_amount: 0.0,
             mod1_phase: 0.0,
             wah_state_l: [0.0; 2],
             wah_state_r: [0.0; 2],
@@ -310,125 +334,17 @@ impl LayerFxChain {
     }
 }
 
-/// Global Master Compressor and Burr-Brown `PCM1791A` + JRC `NJM4580M` output reconstruction stage.
-#[derive(Debug, Clone, Copy)]
-pub struct MasterBus {
-    pub compressor_amount: f32,
-    /// Run the summed bus through the firmware 4-section master IIR before the compressor
-    /// (`fw_coeffs::MASTER_IIR_WORDS`). Default `false`; the position in the chain is ASSUMED.
-    pub master_iir_enabled: bool,
-    iir: master_iir::MasterIir,
-    /// Opt-in firmware compressor gain computer (`fw_compressor`), 4-frame latency; replaces the
-    /// peak-envelope compressor while set. Default `None`.
-    fw_compressor: Option<fw_stage::FwCompressorStage>,
-    env: f32,
-    recon_lp_l: f32,
-    recon_lp_r: f32,
-}
-
-impl Default for MasterBus {
-    fn default() -> Self {
-        Self {
-            compressor_amount: 0.25,
-            master_iir_enabled: false,
-            iir: master_iir::MasterIir::new(),
-            fw_compressor: None,
-            env: 0.0,
-            recon_lp_l: 0.0,
-            recon_lp_r: 0.0,
-        }
-    }
-}
-
-impl MasterBus {
-    /// Replaces the peak-envelope compressor by the firmware gain computer (`None` restores it).
-    ///
-    /// Adds a latency of 4 frames and restarts the stage. The compressor context is ASSUMED apart
-    /// from the algorithm (VERIFIED, see `fw_compressor`); `compressor_amount` is not used.
-    pub fn set_fw_compressor(&mut self, comp: Option<FwCompressor>) {
-        self.fw_compressor = comp.map(fw_stage::FwCompressorStage::new);
-    }
-
-    /// Processes the summed 7-layer stereo signal through the Master Compressor and DAC stage.
-    pub fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
-        let [l, r] = if self.master_iir_enabled {
-            self.iir.process_frame(frame)
-        } else {
-            frame
-        };
-        if let Some(stage) = &mut self.fw_compressor {
-            let [cl, cr] = stage.process_frame([l, r]);
-            return self.reconstruct([cl.clamp(-1.0, 1.0), cr.clamp(-1.0, 1.0)]);
-        }
-        let peak = l.abs().max(r.abs());
-        self.env = 0.99 * self.env + 0.01 * peak;
-
-        let amt = self.compressor_amount.clamp(0.0, 1.0);
-        let gain = if self.env > 0.5 {
-            1.0 / (1.0 + amt * (self.env - 0.5) * 2.0)
-        } else {
-            1.0 + 0.15 * amt
-        };
-
-        self.reconstruct([(l * gain).clamp(-1.0, 1.0), (r * gain).clamp(-1.0, 1.0)])
-    }
-
-    /// Post-DAC Burr-Brown PCM1791A + NJM4580M stage:
-    /// The hardware PCM1791A features a flat passband within +/-0.002 dB up to 21.8 kHz.
-    /// A gentle 0.985 alpha preserves crisp treble (<0.15 dB roll-off at 20 kHz) without in-band damping.
-    #[inline]
-    fn reconstruct(&mut self, [cl, cr]: [f32; 2]) -> [f32; 2] {
-        self.recon_lp_l += 0.985 * (cl - self.recon_lp_l);
-        self.recon_lp_r += 0.985 * (cr - self.recon_lp_r);
-        [self.recon_lp_l, self.recon_lp_r]
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn default_chain_and_master_bus_pass_finite_audio() {
+    fn default_chain_passes_finite_audio() {
         let mut fx = LayerFxChain::new(48_000.0);
-        let mut bus = MasterBus::default();
         for n in 0..512 {
             let x = (n as f32 * 0.03).sin() * 0.5;
-            let [l, r] = bus.process_frame(fx.process_frame([x, x]));
+            let [l, r] = fx.process_frame([x, x]);
             assert!(l.is_finite() && r.is_finite());
         }
-    }
-    #[test]
-    fn firmware_compressor_is_opt_in_delays_four_frames_and_none_restores_the_default() {
-        let drive = |bus: &mut MasterBus| -> Vec<[f32; 2]> {
-            (0..64)
-                .map(|n| {
-                    let x = (n as f32 * 0.07).sin() * 0.4;
-                    bus.process_frame([x, -x])
-                })
-                .collect()
-        };
-        let mut plain = MasterBus::default();
-        let reference = drive(&mut plain);
-        let mut toggled = MasterBus::default();
-        toggled.set_fw_compressor(Some(FwCompressor::new()));
-        toggled.set_fw_compressor(None);
-        assert_eq!(
-            drive(&mut toggled),
-            reference,
-            "None restores the default path"
-        );
-        let mut fw = MasterBus::default();
-        fw.set_fw_compressor(Some(FwCompressor::new()));
-        let out = drive(&mut fw);
-        assert!(out.iter().all(|f| f[0].is_finite() && f[1].is_finite()));
-        assert!(
-            out[..4].iter().all(|f| f[0].abs() < 1e-3),
-            "first block is silent"
-        );
-        assert!(
-            out[20][0].abs() > 0.01,
-            "audio passes after the first block"
-        );
     }
 }

@@ -158,18 +158,18 @@ Code: `fx/fw_compressor.rs` (`FwCompressor`, context offsets in `fw_compressor_c
 | Parameter values | `FwCompressor::new()`: unity makeup, threshold far above any level (no reduction), `k = 0.9908`, `T0 = 1.0`, `T1 = 0.5` | ASSUMED; the ARM words behind `kCmpAmt` (0..127, default 95) and `kCmpResponse` are not decoded |
 | Bus position and latency | replaces the peak-envelope compressor when set; 4 frames of latency (block collection) | ASSUMED position; default off, `render_hash` unchanged (`cb8d83b7...`) |
 
-### 4.0b Firmware routine ports: delay, table LFO, all-pass, resonant filters (opt-in)
+### 4.0b Firmware routine ports: delay, amp drive, all-pass, tone stack (opt-in)
 
-Code: `fx/fw_delay.rs` (`FwDelay`, `DelayIo`), `fx/fw_lfo.rs` (`FwLfo`, `LfoTables`), `fx/fw_allpass.rs`
-(`FwAllpass`), `fx/fw_resonant.rs` (`FwResonant2`, `FwResonant4`), shared `fx/fw_words.rs` and
-`fx/fw_short_float.rs`; golden vectors `fx/tests_{delay,lfo,allpass,resonant}_golden.rs`. Equations, field tables and
+Code: `fx/fw_delay.rs` (`FwDelay`, `DelayIo`), `fx/fw_amp_drive.rs` (`FwAmpDrive`, `DriveTables`), `fx/fw_allpass.rs`
+(`FwAllpass`), `fx/fw_tone_stack.rs` (`FwToneStack2`, `FwToneStack4`), shared `fx/fw_words.rs` and
+`fx/fw_short_float.rs`; golden vectors `fx/tests_{delay,lfo,allpass,resonant}_golden.rs` (the file names keep the model names). Role correction ([fx-contexts](../research/fx-contexts.md) s5.2, s5.3): `0x1228CF` is the Amp **drive** stage (`FwAmpDrive`, phase word = `kAmpDrive / 127`) and `0x1243F4` / `0x124497` the Amp **tone stack** (`FwToneStack2/4`). Equations, field tables and
 the verification record: [fx-routine-models](../research/fx-routine-models.md).
 
 | Item | Rust | Status |
 |---|---|---|
 | Algorithms | the five FX routines `0x1206B0`, `0x1228CF`, `0x122C39`, `0x1243F4`, `0x124497` as straight-line f32 code over the firmware's context words | VERIFIED: models equal the oracle on 2,200 to 4,600 random scenarios each and register for register on the trace |
 | Precision | f32 (the DSP uses 40-bit registers and truncating stores) | worst relative error against the golden vectors 3e-6 (resonant), 3e-6 (all-pass), 1.5e-5 (LFO), below 1e-6 (delay), packed delay words exact |
-| Wiring | exported types only; not part of `LayerFxChain` or `MasterBus` | the ARM words that fill the contexts are undecoded, default `render_hash` unchanged |
+| Wiring | exported types; the delay mix law and the compressor are wired through `FirmwareFx` (s4.0c), the rest only have parameter fills (`fw_params`) | default `render_hash` unchanged |
 | Parameter values | none shipped (`Default` is an all-zero context) | ASSUMED roles of the words (EMPIRICAL where an equation shows the role) |
 
 Module map of the FX library (which module owns which routine pcs, 28 ARM descriptor lists for all 100 code
@@ -180,6 +180,41 @@ models and ports for the delay `0x1206B0`, table LFO `0x1228CF`, phaser `0x12379
 the resonant filter `0x1243F4`, (3) the 16-bit packed-float delay memory with the `0.9908` smoother once the delay
 routine is modelled, (4) legacy Amp types: the 12-way handler `0xC020506C` sends a 130-word FIR and up to 12
 biquad sets per type (`fx-type-map` s4).
+
+### 4.0c Firmware parameter maps and the `FirmwareFx` switch (opt-in)
+
+Code: `fx/fw_map.rs` (closed forms, `pub mod fw_map`), `fx/fw_params.rs` (fills of the stage contexts), `fx/firmware_fx.rs`
+(`FirmwareFx`, `LayerFxChain::firmware_fx`), `fx/master.rs` (`MasterBus::use_fw_compressor_amount`). Source:
+[fx-contexts](../research/fx-contexts.md) s5 and s8, `tools/fx_forms.py`. Tests: `fx/tests_fw_map.rs` against the captured series words in
+`fx/tests_fw_series.rs` (copied from `docs/research/data/fx-param-fits.csv`, error below 1e-5 of the series range), `fx/tests_firmware_fx.rs`.
+
+The type value selects a module and data picks the variant (two types per module, `fx-type-modules.csv`); the Rust enums keep one
+parameter set per engine mode. The engine's `0..=1` fields are the presets' `raw7 / 127` (`cbin/fx_preset.rs`), so the firmware UI value is
+`v = 127 x` (`fw_map::unit_to_ui`, scale equality `ASSUMED` for the layer fields); EQ dB maps to counts with `EQ_GAIN_DB_PER_COUNT`.
+
+| Id | Context word | Form (v = UI value) | Wired | Tags |
+|---|---|---|---|---|
+| `kDlyMix` | send `c[-0x1B]`, dry `c[4]` | `min(1,(v/64)^2)`, `min(1,(2-v/64)^2)` | layer delay when `FirmwareFx::delay_laws` | words VERIFIED (11 values), roles EMPIRICAL |
+| `kDlyFbkAmt` | `c[-0x1A]`, `c[-0x19]` | `v/127` (= the engine scale; the engine keeps its 0.95 clamp) | identity, no change | VERIFIED words |
+| delay time | `c[0x15]`, `c[0x16]`, `c[0x19]` | not decoded (needs the variants `0x1208AF`, `0x120AB5`, `0x120D15`) | no: the engine delay time law stays | open |
+| `kCmpAmt` | threshold `c[-0x1B]`, makeup target `c[-0x1C]` | `-36 v/127`, `1 + 5.72 (v/127)^2` | layer (`FirmwareFx::compressor`) and master (`use_fw_compressor_amount`) | words VERIFIED, roles EMPIRICAL |
+| attack / release pairs | `c[-0x20..-0x1D]` | `(0.102071, 1.0)`, `(4.607e-4, 0.04)` for every value | with `kCmpAmt` | VERIFIED words |
+| compressor slope, log gain | slope `c[-0x17]`, `c[-0x0B]` | `0.05` (`CMP_SLOPE`), `1.0` | with `kCmpAmt` | ASSUMED (base words of the Cmp type switch not captured) |
+| `kCmpResponse` | none | words identical for both values | no (engine `comp_fast` keeps its legacy meaning) | open |
+| `kAmpDrive` | `c[-0x20]` of `FwAmpDrive` | `v/127` | fill only (`set_amp_drive`): the drive curve tables are firmware data, not in the repo | VERIFIED words |
+| `kAmpTreble`, `kAmpBass` | `F c[-0x1B]`, `E c[-0x1C]`, `A c[-0x20]`, `a c[-0x14]` | 13-point tables, linear in the word between points | fill only (`set_tone_stack`): the other tone-stack words come from the Amp type switch | words VERIFIED at the 13 counts, interpolation and unit tables (piano) EMPIRICAL |
+| `kAmpMid`, `kAmpMidFreq` | `C D B` and `0xC044398C` words | not mapped | no | open |
+| `kFx1RateClkDiv`, `kFx1Amt` (types 2, 3) | `c[-0x20]`, wet `c[-0x1A]` / `c[-0x16]`, dry `c[-0x19]` | `12800 + 16384 v`, `v/254`, `1 - v/254` | fill only (`set_allpass`): Fx1 type to engine `Mod1Type` map and base words open | VERIFIED words |
+
+`FirmwareFx` is `Default` all off (`render_hash` unchanged, below). **Latency:** the firmware compressor works on blocks of 4 stereo frames, so
+the layer or master path gains 4 frames (83 us at 48 kHz) while it is on; the layer stage keeps running with amount 0 (unity) when
+`comp_enabled` is false so the latency does not depend on the compressor switch. Measured (687 Hz sine, 0.5 peak, RMS of the second half-second): amount 0 gives
+the unity RMS 0.3536, amount 0.5 gives 0.677 (+5.6 dB), amount 1.0 gives 1.337 (+11.6 dB): the makeup `1 + 5.72 u^2` dominates, because the
+slope and log gain are `ASSUMED`. There is no hardware recording to compare against, so the end-to-end comparison does **not** support turning
+`FirmwareFx` on by default.
+
+Stability tests (`tests_firmware_fx.rs`, `master.rs`): silence in gives exact silence out, loud (1.5) and quiet (1e-3) alternating input
+stays finite, bounded by the makeup and free of denormals, for amounts 0, 0.3, 1.
 
 ### 4.1 EQ gain per count
 
