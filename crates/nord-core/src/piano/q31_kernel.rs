@@ -42,9 +42,13 @@ const HALF_WIDTH: f64 = 3.0;
 pub enum SampleInterp {
     /// Catmull-Rom cubic over 4 points (the pre-SMP-research default, kept for comparison).
     Cubic,
-    /// Hardware parity: the 6-tap, 256-phase SMP kernel with the phase truncated to 1/256.
-    #[default]
+    /// The 6-tap, 256-phase SMP kernel with the phase truncated to 1/256, `f32` arithmetic.
     SmpQ31,
+    /// Hardware parity: the SMP kernel with the DSP's integer MAC (`SmpKernel::interpolate_hw`,
+    /// VERIFIED 1,200 of 1,200 frames against the oracle) for integer `.npno` PCM; float WAV / SFZ
+    /// strokes use the `f32` path of [`Self::SmpQ31`].
+    #[default]
+    SmpQ31Hw,
 }
 
 /// The SMP kernel in integer (hardware) and `f32` (render) form.

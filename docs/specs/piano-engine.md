@@ -92,7 +92,7 @@ When a pre-decoded `.npno` or open SFZ/WAV (`NpnoSound::from_sfz_str` / `from_sf
    $$
    r = 2^{\frac{(n - n_{\text{root}}) + \frac{c}{100}}{12}}, \qquad \text{sample\_step} = r \cdot \frac{f_{\text{s, stroke}}}{f_{\text{s, engine}}}
    $$
-3. **SMP 6-Tap Q31 Sample Interpolation (`SampleInterp::SmpQ31`, default):**
+3. **SMP 6-Tap Q31 Sample Interpolation (`SampleInterp::SmpQ31Hw`, default; `SmpQ31` is the f32 form):**
    All fractional sample lookups (including `35 kHz -> 48 kHz` `.npno` hardware sample-rate conversion and semitone transposition) use the kernel the SMP DSP image applies (`crates/nord-core/src/piano/q31_kernel.rs`; see "SMP sample interpolation" below). `SampleInterp::Cubic` selects the earlier zero-allocation 4-point Catmull-Rom spline over `[p_{k-1}, p_k, p_{k+1}, p_{k+2}]` (`PianoLayer::sample_interp`).
 4. **Resilient Fallback:**
    If no sample is loaded, or if the note is outside the mapped multisample zones, the engine smoothly falls back to the mathematical harmonic oscillator bank.
@@ -128,7 +128,7 @@ Source: [smp-kernel-fit](../research/smp-kernel-fit.md) (VERIFIED, `tools/ns4_sm
 
 The table is built once (`SmpKernel::shared()`, called in `PianoLayer::new`); `render_frame` only reads a `&'static` table (6 MACs per channel, no allocation, no lock).
 
-`PianoLayer::sample_interp` selects the path: `SmpQ31` (default, hardware parity) or `Cubic` (Catmull-Rom). Measured worst-case error of interpolating a sine at fractional positions (kernel vs Catmull-Rom, Python model in the research note): 0.05 fs -71 / -66 dB, 0.10 fs -55 / -47 dB, 0.15 fs -50 / -35 dB, 0.20 fs -55 / -27 dB, 0.25 fs -36 / -19 dB, 0.30 fs -22 / -14 dB. The unit test `test_sine_tone_error_against_ideal_and_cubic` pins the kernel below the cubic error at 0.2 fs. Like the hardware, the kernel is a fixed interpolator with no anti-alias filtering for upward transposition.
+`PianoLayer::sample_interp` selects the path: `SmpQ31Hw` (default, hardware parity: the integer MAC `SmpKernel::interpolate_hw` for integer `.npno` strokes, `LoadedPianoStroke::integer_pcm`; float WAV / SFZ strokes use the f32 kernel), `SmpQ31` (f32 kernel for all strokes) or `Cubic` (Catmull-Rom). Measured worst-case error of interpolating a sine at fractional positions (kernel vs Catmull-Rom, Python model in the research note): 0.05 fs -71 / -66 dB, 0.10 fs -55 / -47 dB, 0.15 fs -50 / -35 dB, 0.20 fs -55 / -27 dB, 0.25 fs -36 / -19 dB, 0.30 fs -22 / -14 dB. The unit test `test_sine_tone_error_against_ideal_and_cubic` pins the kernel below the cubic error at 0.2 fs. Like the hardware, the kernel is a fixed interpolator with no anti-alias filtering for upward transposition.
 
 `piano/smp_unpack.rs` models the voice-loop residual unpacker (LSB-first, 16 payload bits per 32-bit word, `FEXT`/`FDEP (SE)`, widths 1..16) and the 4-tap integer predictor; tests prove it equals `cbin::sample` decoding of the same synthetic residuals for widths 1..16 and orders 0..4.
 
