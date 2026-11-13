@@ -233,7 +233,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 
 - [x] Firmware saw `0x12501F` and SY gain de-zipper as opt-in (`synth/hw_saw.rs`, `synth/gain_dezip.rs`, [synth-voice-control](research/synth-voice-control.md)); sinc kernels within 1 ulp ([oracle-vs-engine](research/oracle-vs-engine.md), [sy-smp-audio](research/sy-smp-audio.md))
 - [x] Core2 filter stage `0x12566E` (two 4-pole sections, table-interpolated coefficients) reproduced bit-exact in Python ([synth-stage-equations](research/synth-stage-equations.md), `tools/synth_filter_model.py`)
-- [ ] Synth filter and envelope Rust parity: port `0x12566E`, the envelope stages and the `osc_wave` to stage selection, then re-baseline `render_hash` (TD-11)
+- [x] Firmware filter family `0x12566E` / `0x125913` / `0x125A50` (LP4, BP4, HP4) and the envelope rate tables as opt-in Rust (`synth/fw_filter.rs`, `synth/fw_env_rates.rs`, `SynthLayer::filter_engine`, spec [synth-engine](specs/synth-engine.md) 4.1); defaults and `render_hash` unchanged
+- [ ] Synth parity remainder: `0x1257B2`, the strip word to `R` law, `kFltType` and `osc_wave` to stage selection, the ADR segment generator, then flip the defaults and re-baseline `render_hash` (TD-11)
 - [ ] Pulse and triangle shapes, amp envelope smoothing
 - [ ] Hardware sweeps for the remaining ASSUMED scales ([synth-hardware-sweep-plan](research/synth-hardware-sweep-plan.md), OQ7)
 
