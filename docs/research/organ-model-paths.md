@@ -84,5 +84,5 @@ Features it reproduces: `T(+-512) = +-1`, overshoot 1.094 at `+-171` (a third of
 
 1. Find the writer of `PM(0x95E46 + 0x60 i)`: trace the PNO kernel (pc `0x1800..0x1B00`) with a pass harness in `sharc-chain` and the voice blocks `0x954E6`, `0x9559C`.
 2. Locate the B3, Farfisa and B3 Bass tone source (other DSP image, ORG strips) from a key-down under models 0, 2, 5 on all comms.
-3. Check the model order against a UI test (the string pool order is the only evidence for names).
+3. Check the model order against a UI test (the string pool order is the only evidence for names; the manual's model order agrees, [organ-farfisa-bass](organ-farfisa-bass.md) s1).
 4. Verify the Vox record against audio once the weights are known.

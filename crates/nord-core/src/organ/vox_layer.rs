@@ -1,14 +1,16 @@
 //! `OrganLayer` glue of the Vox tone source (`ToneWheelSource::Vox`, model `Vox`).
 //!
-//! Spec: `docs/specs/organ-engine.md` section 3.1.7. The held keys select the oscillator weights,
-//! the vibrato / chorus setting selects the vibrato depth of the bank's pitch LFO (the bank has no
+//! Spec: `docs/specs/organ-engine.md` section 3.1.7. The held keys select the oscillator weights
+//! (`vox_keys`: four footage rows per key at the default program's level, no velocity), the
+//! vibrato / chorus setting selects the vibrato depth of the bank's pitch LFO (the bank has no
 //! delay-line scanner), and the key click and the rotary speaker stay as in the other paths.
-//! The drawbars and the percussion do not act on this source (the Vox footage to weight map is
-//! not decoded, `docs/research/pno-full-pass.md` section 6).
+//! The drawbars and the percussion do not act on this source (the ARM map from the Vox footage
+//! edits to the level slots was not captured).
 
 use super::types::ScannerMode;
 use super::vibrato_bank::clamp_fine_tune;
 use super::vox_bank::NOTES;
+use super::vox_keys;
 use super::{OrganLayer, ToneWheelSource};
 
 /// VERIFIED: the three vibrato depth words the ARM writes to `DM(0xE20E3)` for the Vox vibrato
@@ -45,14 +47,15 @@ impl OrganLayer {
         }
         self.vox
             .set_fine_cents(clamp_fine_tune(self.fine_tune_cents));
-        // oscillator k plays MIDI note k + 24 (ASSUMED map, docs/research/pno-full-pass.md s4)
+        // a key drives the rows `fold(key - 36 + SLOT_OFFSETS[slot])` of the default footage
+        // slots with their level and no velocity (`vox_keys`, VERIFIED, keydown-zones.md s5)
         let shift = i32::from(self.octave_shift.clamp(-2, 2)) * 12;
         let mut targets = [0.0f32; NOTES];
-        for (k, t) in targets.iter_mut().enumerate() {
-            let note = k as i32 + 24 - shift;
-            if (0..128).contains(&note) && self.held_notes[note as usize] {
-                *t = self.note_gains[note as usize] * self.weight_level;
-            }
+        for (note, _) in self.held_notes.iter().enumerate().filter(|(_, &h)| h) {
+            vox_keys::add_key(&mut targets, note as i32 + shift);
+        }
+        for t in &mut targets {
+            *t *= self.weight_level;
         }
         let dry = self.vox.render(&targets, vox_depth(self.scanner_mode));
         if self.active_key_count == 0
@@ -151,13 +154,31 @@ mod tests {
     }
 
     #[test]
-    fn keys_outside_the_oscillator_range_stay_silent() {
+    fn keys_fold_by_octaves_and_the_unported_sine_rows_stay_silent() {
+        // note 120: every default slot lands on rows 84..95 (the unported sine bank)
         let mut o = vox_layer();
-        o.note_on(10);
         o.note_on(120);
         for _ in 0..4000 {
             assert_eq!(o.render_frame(), [0.0, 0.0]);
         }
+        // note 10 folds its rows up by octaves onto note oscillators and sounds
+        let mut o = vox_layer();
+        o.note_on(10);
+        let peak = (0..24_000)
+            .map(|_| o.render_frame()[0].abs())
+            .fold(0.0f32, f32::max);
+        assert!(peak > 0.005, "{peak}");
+    }
+
+    #[test]
+    fn a_key_sounds_four_footages_with_no_velocity() {
+        let render = |gain: f32| {
+            let mut o = vox_layer();
+            o.note_on_with_gain(60, gain);
+            (0..12_000).map(|_| o.render_frame()[0]).collect::<Vec<_>>()
+        };
+        // VERIFIED (keydown-zones.md s4): the Vox key-down carries no velocity
+        assert_eq!(render(0.3), render(1.0));
     }
 
     #[test]

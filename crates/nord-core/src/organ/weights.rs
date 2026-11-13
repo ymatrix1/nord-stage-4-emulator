@@ -58,7 +58,7 @@ pub fn a_update() -> f64 {
 /// `a + b = 1`), so the ramp lasts the same time in seconds at any sample rate. Exactly `1 - a`
 /// at the firmware frame rate.
 ///
-/// ASSUMED: frame rate 43,156.4 Hz (`lane_mix::FIRMWARE_FRAME_RATE_HZ`).
+/// VERIFIED: frame rate 43,402.34 Hz (`lane_mix::FIRMWARE_FRAME_RATE_HZ`).
 pub fn keep_for(a: f64, fs: f32) -> f32 {
     (1.0 - a).powf(FIRMWARE_FRAME_RATE_HZ / f64::from(fs.max(1.0))) as f32
 }

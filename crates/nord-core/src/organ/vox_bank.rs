@@ -89,7 +89,7 @@ pub struct VoxBank {
 }
 
 impl VoxBank {
-    /// Bank for engine sample rate `fs` (firmware frame rate assumed 43,156.4 Hz).
+    /// Bank for engine sample rate `fs` (firmware frame rate `FIRMWARE_FRAME_RATE_HZ`, VERIFIED).
     pub fn new(fs: f32) -> Self {
         let mut rate = [0.0; NOTES];
         let mut coef = [0.0f32; NOTES];
@@ -236,6 +236,21 @@ mod tests {
     }
 
     #[test]
+    fn frame_rate_puts_note_zero_on_c1() {
+        // rate_0 = 0x62C2E7 at m = 0.5 is C1 (MIDI 24, the ASSUMED key map `note - 24`) to 0.001
+        // cent at the DSP frame rate (the word is round(C1 / F * 2^33)); at the old 43,156.4 Hz it was 9.8 cent flat, the "9.9 cent below
+        // the Pipe bank" of OQ17 (the Pipe bank at unity tune is 9.6 cent sharp of C1 there, at the
+        // ARM's Fine Tune word it is on C1 as well).
+        let c1 = 440.0 * (-45.0f64 / 12.0).exp2();
+        let cents = |hz: f64| 1200.0 * (hz / c1).log2();
+        let at_fw = cycles_per_frame(0) * FIRMWARE_FRAME_RATE_HZ;
+        assert!(cents(at_fw).abs() < 1e-3, "{}", cents(at_fw));
+        assert!((cents(cycles_per_frame(0) * 43_156.4) + 9.84).abs() < 0.1);
+        // octaves stay exact: note 12 is C2
+        assert!((cycles_per_frame(12) / cycles_per_frame(0) - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
     fn lfo_runs_at_the_firmware_rate_in_hz() {
         for fs in [48_000.0f32, 44_100.0, FIRMWARE_FRAME_RATE_HZ as f32] {
             let mut bank = VoxBank::new(fs);
@@ -253,7 +268,7 @@ mod tests {
             }
             let hz = f64::from(crossings) / 4.0;
             let want = LFO_STEP / COUNTS * FIRMWARE_FRAME_RATE_HZ;
-            assert!((want - 5.94).abs() < 0.01, "{want}");
+            assert!((want - 5.975).abs() < 0.01, "{want}"); // 0x905A3 / 2^32 * 43,402.34
             assert!((hz - want).abs() < 0.3, "{fs}: {hz} Hz");
             assert!(
                 (lo + 0.83).abs() < 0.01 && (hi - 0.99).abs() < 0.01,
