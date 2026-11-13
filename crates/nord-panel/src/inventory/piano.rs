@@ -14,6 +14,7 @@ pub fn controls() -> Vec<ControlEntry> {
         page: 23,
         ped_page: 23,
         pstick_label: "PSTICK",
+        octave_id: Some("pianox_octave_{n}"),
         bean: "ns4-h7he",
     });
     v.push(e("piano.type", s, K::Button, "TYPE", 24).bound("piano_category"));
@@ -32,7 +33,9 @@ pub fn controls() -> Vec<ControlEntry> {
             .shift()
             .ui("model version and size screen"),
     );
-    v.push(e("piano.soft_release", s, K::Button, "SOFT RELEASE", 25).todo("ns4-h7he"));
+    v.push(
+        e("piano.soft_release", s, K::Button, "SOFT RELEASE", 25).bound("pianox_soft_release_{n}"),
+    );
     v.push(e("piano.string_res", s, K::Button, "STRING RES", 25).bound("piano_string_res"));
     v.push(
         e("piano.ped_noise", s, K::Button, "PED NOISE", 25)
@@ -40,9 +43,9 @@ pub fn controls() -> Vec<ControlEntry> {
             .bound("piano_pedal_noise"),
     );
     v.push(e("piano.kb_touch", s, K::Button, "KB TOUCH", 25).bound("piano_touch"));
-    v.push(e("piano.dyn_comp", s, K::Button, "DYN COMP 1/2/3", 25).todo("ns4-h7he"));
+    v.push(e("piano.dyn_comp", s, K::Button, "DYN COMP 1/2/3", 25).bound("pianox_dyn_comp_{n}"));
     v.push(e("piano.timbre", s, K::Button, "TIMBRE", 26).bound("piano_timbre"));
-    v.push(e("piano.unison", s, K::Button, "UNISON 1/2/3", 26).todo("ns4-h7he"));
+    v.push(e("piano.unison", s, K::Button, "UNISON 1/2/3", 26).bound("pianox_unison_{n}"));
     v
 }
 

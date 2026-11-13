@@ -36,12 +36,12 @@ pub fn controls() -> Vec<ControlEntry> {
         .shift()
         .todo(bean),
         // Voice
-        e("synth.voice.mode", s, K::Button, "VOICE MONO/LEGATO", 34).todo(bean),
+        e("synth.voice.mode", s, K::Button, "VOICE MONO/LEGATO", 34).bound("synthx_voice_{n}"),
         e("synth.voice.priority", s, K::Button, "LO / HI PRIORITY", 34)
             .assumed("manual names Lo/Hi modes but not the button that selects them")
-            .todo(bean),
-        e("synth.voice.glide", s, K::Knob, "GLIDE", 35).todo(bean),
-        e("synth.unison", s, K::Button, "UNISON 1/2/3", 35).todo(bean),
+            .bound("synthx_priority_{n}"),
+        e("synth.voice.glide", s, K::Knob, "GLIDE", 35).bound("synthx_glide_{n}"),
+        e("synth.unison", s, K::Button, "UNISON 1/2/3", 35).bound("synthx_unison_{n}"),
         // Vibrato
         e(
             "synth.vibrato.selector",

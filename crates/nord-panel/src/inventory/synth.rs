@@ -16,6 +16,7 @@ pub fn controls() -> Vec<ControlEntry> {
         page: 27,
         ped_page: 28,
         pstick_label: "PSTICK/RNG",
+        octave_id: None,
         bean,
     });
     v.push(e("synth.oled", s, K::Oled, "SYNTH DISPLAY", 27).ui("drawn by the OLED renderer (B8d)"));
@@ -76,13 +77,13 @@ pub fn controls() -> Vec<ControlEntry> {
             33,
         )
         .shift()
-        .todo(bean),
+        .bound("synthx_osc_env_pitch_{n}"),
     );
     v.push(e("synth.osc.envelope", s, K::Button, "OSC ENVELOPE", 33).todo(bean));
     v.push(
         e("synth.osc.env_amt", s, K::Knob, "OSC ENV AMT", 33)
             .morph()
-            .todo(bean),
+            .bound("synthx_osc_env_{n}"),
     );
     v.push(
         e(
@@ -110,7 +111,7 @@ pub fn controls() -> Vec<ControlEntry> {
     v.push(
         e("synth.filter.env_amt", s, K::Knob, "FILTER ENV AMT", 32)
             .morph()
-            .todo(bean),
+            .bound("synthx_filter_env_{n}"),
     );
     v.push(e("synth.filter.envelope", s, K::Button, "FILTER ENVELOPE", 33).todo(bean));
     v.push(

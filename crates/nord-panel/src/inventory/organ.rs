@@ -26,6 +26,7 @@ pub fn controls() -> Vec<ControlEntry> {
         page: 18,
         ped_page: 18,
         pstick_label: "PSTICK",
+        octave_id: Some("organx_octave_{n}"),
         bean: "ns4-h7he",
     });
     v.push(e("organ.model", s, K::Button, "ORGAN MODEL", 18).bound("organ_model"));
@@ -65,7 +66,7 @@ pub fn controls() -> Vec<ControlEntry> {
             "VIB/CHORUS V1-C3",
             19,
         )
-        .todo("ns4-h7he"),
+        .bound("organx_scanner_{n}"),
     );
     v.push(
         e("organ.vibrato_on.a", s, K::Button, "VIB/CHORUS ON A", 19)
