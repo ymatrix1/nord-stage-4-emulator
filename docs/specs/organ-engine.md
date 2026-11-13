@@ -56,9 +56,19 @@ Rather than ideal equal temperament ($2^{n/12}$), the 12 drive gears use integer
 
 Each octave doubles the number of teeth on the rotating wheel (`2, 4, 8, 16, 32, 64, 128`, with top-octave tonewheels `tw >= 84` using physical `192`-tooth wheels paired with a $4/3$ step-up gear). All 91 tonewheel phase accumulators advance continuously on every audio sample (`phase[i] = (phase[i] + 2*pi * f[i] / fs) mod 2*pi`), ensuring authentic phase interaction when multiple keys share a tonewheel.
 
-### 3.1.1 Firmware oscillator-bank parity (`ToneWheelSource::Firmware`, default for `B3`, role ASSUMED about 70 %)
+### 3.1.1 Pipe organ bank parity (`ToneWheelSource::Firmware`, default for the models Pipe1 / Pipe2)
 
-**Status:** the bank ALGORITHM and its pitch programming are VERIFIED (SHARC oracle, ARM run of `0xC022D9F0`); its ROLE as the organ tone source is ASSUMED at about 70 % ([organ-tone-source](../research/organ-tone-source.md): the PNO Core1 184-element bank `0x122620` plus post stage `0x12272D`; the ORG image is channel-strip post-processing). The bank is installed by the PNO Core1 state machine and by no ORG/Core2 module id ([pno-module-chain](../research/pno-module-chain.md)); the ARM drives it from the organ edit ids. `ToneWheelSource::Firmware` is therefore the default for `B3`; `ToneWheelSource::Legacy` (gear ratios, sine) stays selectable.
+**Correction (model attribution, VERIFIED):** the bank was first assigned to the `B3` model. [organ-model-paths](../research/organ-model-paths.md) disproves that: the firmware installs, per `Edt_Org_kModel` (B3, Vox, Farfisa, Pipe1, Pipe2, B3 Bass = 0..5; chain step `0xC022F060`), the bank `0x122620` and its mix stage `0x12268F` for **Pipe1 and Pipe2 only** (they differ in one word, `DM(0x9594E)`: mix-stage input array `0xC24E5` or `0xC2655`, not modelled). B3, Farfisa and B3 Bass install no generator; Vox installs `0x12272D` + `0x1229B3` ([organ-post-stage](../research/organ-post-stage.md), not in Rust yet).
+
+**Status:** the bank ALGORITHM, its pitch programming, the weights and the vibrato detune table are VERIFIED (SHARC oracle, ARM run of `0xC022D9F0`); the model to routine map is VERIFIED (run). ASSUMED: the model value order matches the UI order (the string pool order is the only evidence) and that the bank is the audible tone source of the pipe models. `ToneWheelSource::ModelDefault` (the default) resolves per model (`OrganModel::default_tone_source`):
+
+| Model | Default source | Explicit `Firmware` | Explicit `Legacy` |
+|---|---|---|---|
+| Pipe1, Pipe2 | `Firmware` (bank; no B3 pickup calibration or crosstalk) | bank | gear-ratio sine |
+| B3 (and B3 Bass mode) | `Legacy` (tone source not located) | bank, experiment only (attribution disproved) | gear-ratio sine |
+| Vox, Farfisa | `Legacy` | falls back to `Legacy` (no 92-wheel bank) | gear-ratio sine |
+
+The tone source of B3, Farfisa and B3 Bass is open ([OPEN-QUESTIONS](../OPEN-QUESTIONS.md)); `WeightMode` stays `Legacy` by default.
 
 What would settle it: (1) ~~the ARM writer of the bank's weights~~ found ([organ-weights](../research/organ-weights.md): key-down / update of the four bank engines send `a`, `b`, `wB`; `wA` is DSP state; footage offsets, foldback and the drawbar curve VERIFIED), still open whether `Edt_Sys_kToneWheelMode` / `Edt_Sys_kStringResonanceLevel` drive them and what writes the engine's drawbar indices; (2) the piano-versus-organ program selector (which program runs the PNO Core1 state machine when an organ layer is active); (3) a running boot capture of the DSP data memory with an organ patch sounding.
 
@@ -89,7 +99,7 @@ The ARM routine `0xC022D9F0(this, level)` programs the 184 increments from a tab
 
 Tests: `vibrato_bank::tests` (12-TET step 100 cent, A4 anchor, Fine Tune, table statistics and spot values from the CSV rows, weights, lane matrix, smoother), `firmware_bank::tests::detuned_copies_follow_the_cent_table`, `tonewheel::tests::fine_tune_retunes_the_firmware_bank`.
 
-**Render change** (`render_hash`, 2,240,000 bytes): before this change (default `Legacy`) `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a`; after (default `Firmware`, 12-TET pitches, firmware drawbar curve) `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0`; after the exact x-table levels of the oracle-audio change `d98808bd1597f99ffee7b247cb9785ab62a441941fb6b92312575ddbf73b7b75` (max sample difference 2.0e-6). Only the engine timeline (its organ layers) and the standalone organ segment change; synth, sample, piano and FX segments are bit-identical.
+**Render change** (`render_hash`, 2,240,000 bytes): before this change (default `Legacy`) `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a`; after (bank as the default of every `B3` layer, 12-TET pitches, firmware drawbar curve) `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0`; after the exact x-table levels of the oracle-audio change `d98808bd1597f99ffee7b247cb9785ab62a441941fb6b92312575ddbf73b7b75` (max sample difference 2.0e-6). Only the engine timeline (its organ layers) and the standalone organ segment change; synth, sample, piano and FX segments are bit-identical. **Model attribution fix:** with the bank moved from `B3` to Pipe1 / Pipe2 (`ToneWheelSource::ModelDefault`) the default `render_hash` returns to the pre-bank value `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a` (bit-identical: the render dump uses the `B3` model and no Pipe layer).
 
 - **Pickup Calibration (`B3` vs `B3 Bass`):** Standard `B3` tapers the bottom 12 complex wheels (`0.74..0.94`) and softens upper wheels above `tw 60` (`1.0..0.84`). `B3 Bass` boosts low wheels `0..24` (`1.32..1.05`) for prominent pedal/bass weight.
 
@@ -110,7 +120,7 @@ Engine status: the 92 wheels exist in `ToneBank` (`BANK_WHEELS`); the layer feed
 
 ### 3.1.4 Vibrato-enable link, smoothed gains and stereo lanes (`vibrato_link.rs`, `lane_mix.rs`)
 
-`OrganLayer::vibrato_link` selects between two behaviours (only `B3` with `ToneWheelSource::Firmware` is affected):
+`OrganLayer::vibrato_link` selects between two behaviours (only layers whose tone source resolves to `Firmware` are affected: the Pipe models by default):
 
 | `VibratoLink` | Table / gains | Mixing |
 |---|---|---|

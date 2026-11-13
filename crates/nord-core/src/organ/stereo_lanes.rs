@@ -1,13 +1,23 @@
 //! Tests of the vibrato-level selection, the smoothed lane gains and the stereo blend of the
 //! organ's `Firmware` link (`tonewheel.rs`, `lane_mix.rs`, `mod.rs::render_frame`).
 
-use super::{OrganLayer, ScannerMode, VibratoLink};
+use super::{OrganLayer, OrganModel, ScannerMode, ToneWheelSource, VibratoLink};
 
 const FS: f32 = 48_000.0;
 const SETTLE: usize = 4000;
 
+/// Layer on the firmware bank. The bank belongs to the Pipe models; these tests keep the `B3`
+/// layer with the bank forced (experiment) because it has no Pipe output damping (x0.92) and so
+/// the oracle-exact gains and amplitudes are checked without that ASSUMED model gain.
+fn bank_layer(fs: f32) -> OrganLayer {
+    let mut o = OrganLayer::new(fs);
+    o.model = OrganModel::B3;
+    o.tonewheel_source = ToneWheelSource::Firmware;
+    o
+}
+
 fn settled(mode: ScannerMode) -> OrganLayer {
-    let mut o = OrganLayer::new(FS);
+    let mut o = bank_layer(FS);
     o.scanner_mode = mode;
     o.crosstalk_level = 0.0;
     for _ in 0..SETTLE {
@@ -18,13 +28,13 @@ fn settled(mode: ScannerMode) -> OrganLayer {
 
 #[test]
 fn scanner_mode_selects_table_and_lane_count() {
-    let mut o = OrganLayer::new(FS);
+    let mut o = bank_layer(FS);
     assert_eq!(o.render_tonewheel_lanes(1.0 / FS).1, 1);
     assert!(!o.tone_bank.copies());
     o.scanner_mode = ScannerMode::C2;
     assert_eq!(o.render_tonewheel_lanes(1.0 / FS).1, 2);
     assert!(o.tone_bank.copies());
-    let mut manual = OrganLayer::new(FS);
+    let mut manual = bank_layer(FS);
     manual.vibrato_link = VibratoLink::Manual;
     manual.scanner_mode = ScannerMode::C2;
     assert_eq!(manual.render_tonewheel_lanes(1.0 / FS).1, 1);
@@ -32,7 +42,7 @@ fn scanner_mode_selects_table_and_lane_count() {
     manual.detuned_copies = true;
     assert_eq!(manual.render_tonewheel_lanes(1.0 / FS).1, 1);
     assert!(manual.tone_bank.copies());
-    let mut forced = OrganLayer::new(FS);
+    let mut forced = bank_layer(FS);
     forced.detuned_copies = true;
     assert_eq!(forced.render_tonewheel_lanes(1.0 / FS).1, 2);
 }
@@ -70,7 +80,7 @@ fn exact_gains_put_copy_zero_on_both_lanes() {
 
 #[test]
 fn gains_ramp_instead_of_jumping() {
-    let mut o = OrganLayer::new(FS);
+    let mut o = bank_layer(FS);
     o.crosstalk_level = 0.0;
     o.scanner_mode = ScannerMode::C1;
     let diff = |o: &mut OrganLayer| {
@@ -99,9 +109,9 @@ fn chord(o: &mut OrganLayer) {
 
 #[test]
 fn mono_sum_equals_the_manual_mono_mean() {
-    let mut fw = OrganLayer::new(FS);
+    let mut fw = bank_layer(FS);
     fw.detuned_copies = true;
-    let mut manual = OrganLayer::new(FS);
+    let mut manual = bank_layer(FS);
     manual.detuned_copies = true;
     manual.vibrato_link = VibratoLink::Manual;
     for _ in 0..SETTLE {
@@ -123,7 +133,7 @@ fn mono_sum_equals_the_manual_mono_mean() {
 
 #[test]
 fn exact_table_stays_dual_mono_without_rotary() {
-    let mut o = OrganLayer::new(FS);
+    let mut o = bank_layer(FS);
     chord(&mut o);
     for _ in 0..1000 {
         let [l, r] = o.render_frame();
@@ -133,8 +143,28 @@ fn exact_table_stays_dual_mono_without_rotary() {
 
 #[test]
 fn smoothing_follows_the_sample_rate() {
-    let mut o = OrganLayer::new(96_000.0);
+    let mut o = bank_layer(96_000.0);
     o.scanner_mode = ScannerMode::C3;
     o.render_tonewheel_lanes(1.0 / 96_000.0);
     assert!((f64::from(o.lane_mixer.keep()) - 0.99f64.powf(43_156.4 / 96_000.0)).abs() < 1e-6);
+}
+
+#[test]
+fn pipe_models_default_to_the_stereo_bank_and_others_stay_mono() {
+    for (model, lanes) in [
+        (OrganModel::Pipe1, 2),
+        (OrganModel::Pipe2, 2),
+        (OrganModel::B3, 1),
+        (OrganModel::Vox, 1),
+        (OrganModel::Farfisa, 1),
+    ] {
+        let mut o = OrganLayer::new(FS);
+        o.model = model;
+        o.detuned_copies = true; // level 1: the blend runs on the firmware bank only
+        let mut n = 0;
+        for _ in 0..SETTLE {
+            n = o.render_tonewheel_lanes(1.0 / FS).1;
+        }
+        assert_eq!(n, lanes, "{model:?}");
+    }
 }
