@@ -101,6 +101,9 @@ pub struct OrganLayer {
     pub rotary_enabled: bool,
     pub rotary_speed: RotarySpeed,
     pub rotary_drive: f32,
+    /// Opt-in rotary drive law `tanh(g x) / g`, `g = 1 + 3 drive` (unity small signal gain, so the
+    /// drive no longer adds +18.4 dB at drive 2.44); default `false` keeps `tanh(g x)`.
+    pub rotary_drive_unity: bool,
     /// Rotary microphone placement (`false` = Normal distance with cabinet reflections, `true` = Close mic).
     pub rotary_close_mic: bool,
     /// Stereo virtual microphone separation angle in degrees (`0.0..=180.0`, default `120.0`).
@@ -196,6 +199,7 @@ impl OrganLayer {
             rotary_enabled: true,
             rotary_speed: RotarySpeed::Slow,
             rotary_drive: 0.2,
+            rotary_drive_unity: false,
             rotary_close_mic: false,
             rotary_mic_angle_deg: 120.0,
             rotary_stop_mode: false,
