@@ -157,7 +157,7 @@ For `piano.rs` and `sample_osc`: the sampler path of the hardware is **6-tap Q31
 
 ## Follow-ups
 
-1. Find the ARM code that writes the slot table and chain heads (`0xC01D6`, `0xC2F48`, `0xC2F82`) as `(id, value)` messages: join with the 904 `0xC006CA48` call sites of [arm-dsp-protocol](arm-dsp-protocol.md); the ARM holds DSP addresses as constants (for example `0xE3400` is loaded at `0xC0001BAC` and stored into a table).
+1. (Answered in [pno-module-chain](pno-module-chain.md): the ARM names routines as system addresses in channel rows; slot installer `0xC022F060` / `0xC022C524`.) Find the ARM code that writes the slot table and chain heads (`0xC01D6`, `0xC2F48`, `0xC2F82`) as `(id, value)` messages: join with the 904 `0xC006CA48` call sites of [arm-dsp-protocol](arm-dsp-protocol.md); the ARM holds DSP addresses as constants (for example `0xE3400` is loaded at `0xC0001BAC` and stored into a table).
 2. Run one biquad routine under `sharc-run` against a Python transposed direct form II model (needs `MODE1` SIMD bits and `M`/`I` registers preset at an `--enter` point) to turn section 4 from EMPIRICAL into VERIFIED.
 3. Run SMP's voice loop (`0x1C07D8`) on a CNSP page from a backup to compare decoded and interpolated samples with `crates/nord-core` (the fixed-LPC decoder exists).
 4. ~~Identify the SMP kernel window~~ Done: Hamming 0.54/0.46 with additive DC normalisation ([smp-kernel-fit](smp-kernel-fit.md)).
