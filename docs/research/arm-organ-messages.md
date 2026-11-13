@@ -181,3 +181,20 @@ Checked 2026-11-12. Sources: `bank0_CODE.bin` v1.66 disassembly, `unicorn` runs.
 **Root cause 1: the harness skipped the C++ static initialisers.** `__rt_lib_init` (`0xC026BA04`) calls every word of `[0xC052B890, 0xC052B8A0)` = `0xC00002A4, 0xC024D1A0, 0xC024DC64, 0xC025DBBC`. `arm_emu.run_static_init` ran the first with every `bl` skipped. Run for real (all four, `arm_boot_full.run_init_array`, instant) they fill BSS tables the constructors read, for example the edit id table `0xC0572EC0` (`0xE8, 0xEB, ...`). With it zero, a client constructor (`0xC0149B94`, called from `0xC019FA24`) passed id 0 to the subscribe routine `0xC00DCA30`, whose range check (`id - 0x31 < 0x200`) failed into the compiler trap at `0xC00DCC5C` (`mov r3,#0; ldr r3,[r3,#0x14]; udf`). That was the second stop after the stubs below.
 
 **The `blx r3` at `0xC001B82C` itself** is not a garbage vtable. `0xC001B67C(queue, a, b, desc)` is a timer event queue insert (sorted by the time word `[ev + 8]`, queue count at `[queue + 0x18]`). It is called by `0xC001ED84` (five call sites `0xC0168658..0xC0168724`, UI/display setup) with `desc = [[0xC055EF70 + 0x308] + 0x28 + 4 i]`. `[0xC055EF70 + 0x308]` is never written before this point, so `desc` is null and `[desc]` (the vtable) reads 0. Fix: `EVENT_INSERT` is a documented no-op stub (ASSUMED harmless: it only schedules display refresh). The text measure routines (`0xC001B9D0`) dereference a null font glyph table (`[font + 8]`, LCD driver not modelled): stubbed to return 0, and the page `0xFFFF0000` is mapped so the resulting `0xFFFFFFFC` read returns zero.
+
+**Further stubs found while iterating** (`arm_boot_full.install_ui_stubs`): the SPI transfer `0xC0066E64` (fifth stack argument receives the slave's answer; the poll breaker fed `0x3F0077`, and the caller at `0xC0228200` then allocated 4.1 M objects of 0x14 bytes, exhausting the heap) is stubbed to answer 0, and the count check at `0xC02281F0` forces r5 = 0 (the stub alone left `-1` in r5; ASSUMED: "nothing to allocate" is a legal answer). With both, the allocation loop is skipped.
+
+**How far the boot gets (measured, 12 M instructions/s up to 0.4 B, 1 M/s after):**
+
+| Instructions | State |
+|---|---|
+| 0.38 B | previous stop point (`0xC001B82C`) passed |
+| 0.40 B | SPI answer loop at `0xC02281FC` (fixed above) |
+| 0.43 B to 0.48 B | still running real boot code (`0xC0228B68`, `0xC00EBBA8..0xC00EBBC4`); the earlier 3-instruction wait loop at `0xC0075D40..D48` (`ldr r3,[r4,#0x1c]; cmp r3,#0; bne`, a join on a worker task flag that no scheduler clears) was seen by the probe `p3` only before the SPI count fix; with the fix the boot moves on |
+| beyond 0.5 B | not reached within the session time (the run is slow after 0.4 B: roughly 1 M instructions/s) |
+
+The boot has therefore **not been shown to reach its steady state**; it passes the former stop and is still executing real code at 0.48 B. The RTOS task scheduler, AINTC and SPI are not modelled; the likeliest next blockers are task-join wait loops of the form above (model: clear the flag word, or run the worker).
+
+**Sweep (`tools/arm_sweep.py`, `docs/research/arm-sweep.csv`).** 116 ids (`Edt_Org*`, Leslie, `Edt_Pno*`, rotary, `Edt_Effects*`) x values 1 and 2 through `0xC00D051C(layer + 0x5AB4, 0, &{id, 1}, v)` at 0.47 B instructions: **0 messages and 0 null calls**, the same silence as section 8 at the `0xC00FC9F4` state. So the vibrato/percussion/model/Leslie/Effects clients are still not constructed at 0.47 B; the sweep has to be re-run once the boot goes further (`python tools/arm_sweep.py <bank0_CODE.bin> <bank0_SRAM.bin> --boot-insns N`).
+
+**Organ vs piano (PNO core 1):** not decided. No new evidence beyond section 7 (organ drawbar record path and bank programmer both write PNO comm 1 core 1); the piano layer edit store was not located.

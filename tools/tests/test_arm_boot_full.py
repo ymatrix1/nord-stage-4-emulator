@@ -77,6 +77,16 @@ def test_install_ui_stubs_noop_the_ui_routines_and_map_the_high_page() -> None:
     assert emu.read32(0xFFFFFFFC) == 0  # a null font table dereference reads zero
 
 
+def test_spi_transfer_stub_zeroes_the_result_word() -> None:
+    emu = emu_with({bf.SPI_TRANSFER: words(0xE3A00009, BX_LR)})
+    bf.install_ui_stubs(emu)
+    out = ae.SRAM_BASE + 0x100
+    emu.uc.mem_write(out, struct.pack("<I", 0x3F0077))
+    # AAPCS: fifth argument on the stack; `call` places it at [sp]
+    assert emu.call(bf.SPI_TRANSFER, 0, 0, 0, 1, out) == 0
+    assert emu.read32(out) == 0
+
+
 def test_install_ui_stubs_accepts_extra_addresses() -> None:
     extra = ae.LOAD_BASE + 0x2000
     emu = emu_with({extra: words(0xE3A00009, BX_LR)})
