@@ -92,6 +92,12 @@ impl LayerFxChain {
         let rev_l = 0.42 * (tap_outs[0] + 0.75 * tap_outs[2] + 0.25 * tap_outs[3]);
         let rev_r = 0.42 * (tap_outs[1] + 0.75 * tap_outs[3] + 0.25 * tap_outs[2]);
         let mix = self.reverb_mix.clamp(0.0, 1.0);
+        if self.firmware_fx.reverb_mix {
+            // `kRvbAmt` words: equal-power dry and send (opt-in, `fw_map::reverb_send`).
+            let ui = fw_map::unit_to_ui(mix);
+            let (dry, send) = (fw_map::reverb_dry(ui), fw_map::reverb_send(ui));
+            return [l * dry + rev_l * send, r * dry + rev_r * send];
+        }
         [
             l * (1.0 - 0.22 * mix) + rev_l * mix,
             r * (1.0 - 0.22 * mix) + rev_r * mix,
