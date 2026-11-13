@@ -210,7 +210,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Vox chord end to end in the oracle (`sharc-pass`)
 - [ ] B3: per-key weights (taper bytes), amplitude table, vibrato/chorus tail (`DM 0x95471..0x954E5`), frame rate; then make `B3Wheels` the B3 default
 - [ ] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with real weights (writer of key flags and taper words), the 9.9 cent offset, brightness (`ns4-58cz`)
-- [ ] Farfisa (`0x122B85`, generator `0x122A71`) and B3 Bass (`0x122296`): replay in the oracle, then Rust
+- [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
+- [ ] Farfisa processor `0x122B85` (ARM weights and filter tables, OQ19) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust
 - [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
 
 ### 7b.4 Effects

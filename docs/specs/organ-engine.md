@@ -225,6 +225,29 @@ Comparison with the oracle chord (C4 E4 G4, weight 1 on oscillators 36, 40, 43, 
 
 The odd harmonics are far below the unfiltered single-note values of organ-post-stage section 5 (3rd -22.7 dB against -16.4 dB for C4) because the output sections low-pass the sum (corners about 340 Hz and 1.1 kHz). The Rust chord is mono; the oracle `L` and `R` lanes of the full pass carry the same partials.
 
+### 3.1.8 Farfisa divider (`ToneWheelSource::FarfisaWheels`, `farfisa_wheels.rs`)
+
+Opt-in tone source of the `Farfisa` model, the PNO core 1 generator `0x122A71` ([organ-farfisa-bass](../research/organ-farfisa-bass.md)). It is a free-running top-octave divider, not a tonewheel bank, but its 98 outputs are one signal per note, so it plugs into the 91-wheel bus: wheel `w` = note `24 + w`, oscillator `n` (semitone 0..11), row `r` = note `12 + n + 12 r` (8 rows, 9 for `n < 2`). Row 0 (notes 12..23) is below the bus and dropped; wheels 86..90 (notes 110..114) have no source and stay silent. `ToneWheelSource::FarfisaWheels` applies to `OrganModel::Farfisa` only (other models fall back to their default); `ModelDefault` on `Farfisa` stays `Legacy`. All state is in `OrganLayer::new()` (12 oscillators x 9 rows of `f32`); `advance` has no allocation or lock.
+
+```text
+phase_n += step_n                        u32, 1 cycle = 2^32, step_n = (inc_n >> 1) rho fine,  inc_n = round(3236192 2^(n/12))
+phase_(r+1) = 2 phase_r + 0xAAAAAC11     wrapping
+u = (|phase_r / 2^31| - 0.66666645) slope_(n,r)         slope_(n,r) = -1327.1669 2^-r 2^(-n/12) / rho
+y = max(b clip(u) + a y_prev, clip(u))   a = exp(-0.0047343 2^r 2^(n/12) rho)  (r <= 6),  2^11 for r = 7,  0 for r = 8;  b = 1 - a
+```
+
+`rho = 43,402.6 Hz / sample rate` keeps the pitch (12-TET at `A = 440` Hz) and the edge and release widths in samples; Fine Tune scales `step`.
+
+| Item | Law | Tag |
+|---|---|---|
+| Structure (the LFO is excluded: the image depth is 0), ladder, offsets, edge, release | bit-exact SHARC model `tools/organ_farfisa_ref.py` (4 random scenarios and 40 consecutive image-state calls, 0 differing words); the Rust code matches the oracle ring over 60,000 frames to max 4.0e-5, SNR 104.5 dB, spectral error 0.00 dB (`python tools/organ_farfisa_oracle.py compare`) and the Python golden vectors (`farfisa_golden.rs`) to 2e-4 | VERIFIED (structure) |
+| `inc_n`, `S`, `off`, `slope` | closed forms of the image tables (1 unit, exact, exact, 1e-7) | VERIFIED (fit) |
+| `a_(n,r)` | `exp(-0.0047343 ...)`, rows 7 and 8 as above; error 1e-6 | EMPIRICAL (fit) |
+| Frame rate 43,402.6 Hz | puts oscillator 0 row 0 on C0 = 16.3516 Hz; the Vox offset (-9.9 cent against the Pipe bank rate) agrees | ASSUMED |
+| LFO (rate `DM 0xC27D6`, depth `0xC27D7`, the Farfisa vibrato) | modelled in Python, not in Rust (the depth is an ARM word with unknown mapping) | VERIFIED in Python, not ported |
+
+Not modelled (why it stays opt-in): the processor `0x122B85` (four weighted sums of the ring, filter sections, lattice, gains; every coefficient is an ARM word that no captured burst writes, so the oracle pass is silent), the Farfisa vibrato, the per-key weights. The existing drawbar bus, percussion and rotary run unchanged on the wheel outputs. Default render hash unchanged (`25baa387b0219c08`). Tests: `farfisa_wheels::tests` (steps, wheel map, pitch, golden rows, release, sample rate, Fine Tune), `farfisa_source_tests` (resolution, host-rate pitch, Fine Tune, determinism, silent top, other models unchanged), `tools/tests/test_organ_farfisa_ref.py`, `test_organ_farfisa_oracle.py`, `test_organ_fb_pass.py`.
+
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
 Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps). The level law is the firmware curve (`drawbar::drawbar_gain`, `DrawbarLaw::Firmware`): the edit value `0..=8` maps through the integer table `bank0_CODE@0xC02B0EC0` to the 7-bit values `0, 3, 6, 13, 22, 39, 62, 87, 127`, i.e. `0` (off), -32.5, -26.5, -19.8, -15.2, -10.3, -6.2, -3.3, 0 dB re full scale (VERIFIED table, [arm-organ-messages](../research/arm-organ-messages.md) section 7; that `value / 127` is the final DSP gain is ASSUMED, TD-10). The old `level / 8` stays selectable as `DrawbarLaw::Linear`. `0` = $-\infty\text{ dB}$:
@@ -301,6 +324,8 @@ The firmware tone source of this model (opt-in `ToneWheelSource::Vox`, 84 note o
 - Drawbar 9: Acts as the classic Vox **Tone / Wave** control (morphing between pure Flute/Sine and rich Reed/Square wave).
 
 ### 6.2 Farfisa Compact Model
+The firmware tone source of this model (opt-in `ToneWheelSource::FarfisaWheels`, the 12 top-octave dividers of the generator `0x122A71`) is specified in section 3.1.8; the description below is the default `Legacy` path.
+
 Multi-contact keying feeding multi-tab resonant bandpass filter banks:
 - **Flute 8'**, **Oboe 8'**, **Clarinet 16'**, **Strings 4'**: Emulated via parallel resonant 2-pole bandpass filters with formant peaks at 750 Hz, 1.2 kHz, 2.5 kHz, and 4.2 kHz.
 
