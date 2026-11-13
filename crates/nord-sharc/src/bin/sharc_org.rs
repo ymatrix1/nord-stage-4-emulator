@@ -28,17 +28,12 @@
 //! `docs/research/org-dsp-map.md`.
 #[path = "sharc_org/args.rs"]
 mod args;
-#[path = "sharc_org/audio.rs"]
-mod audio;
-#[path = "sharc_org/msg.rs"]
-mod msg;
-#[path = "sharc_org/pass.rs"]
-mod pass;
 
 use args::parse_args;
-use audio::{capture, wav_bytes};
 use nord_sharc::core::Core;
-use pass::{pc_ranges, run_pass, run_steps, runs, store_sites, PassEnd};
+use nord_sharc::runner::audio::{capture, wav_bytes};
+use nord_sharc::runner::msg;
+use nord_sharc::runner::pass::{self, pc_ranges, run_pass, run_steps, runs, store_sites, PassEnd};
 use std::fmt::Write as _;
 use std::process::ExitCode;
 

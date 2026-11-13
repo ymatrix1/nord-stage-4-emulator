@@ -1,22 +1,8 @@
 //! Command line of `sharc-org`: option parsing into [`Options`].
-use crate::audio::{parse_spec, BufSpec};
-use crate::msg::{parse_msg, parse_rx_irq, parse_script, Msg, STRIP_BASE};
-use crate::pass::PassConfig;
-
-pub fn parse_number(s: &str) -> Option<u32> {
-    match s.strip_prefix("0x") {
-        Some(hex) => u32::from_str_radix(hex, 16).ok(),
-        None => s.parse().ok(),
-    }
-}
-
-/// A data value: number, `0x` hex or `f<float>` (float bit pattern).
-pub fn parse_value(s: &str) -> Option<u32> {
-    match s.strip_prefix('f') {
-        Some(f) => f.parse::<f32>().ok().map(f32::to_bits),
-        None => parse_number(s),
-    }
-}
+use nord_sharc::runner::audio::{parse_spec, BufSpec};
+use nord_sharc::runner::msg::{parse_msg, parse_rx_irq, parse_script, Msg, STRIP_BASE};
+use nord_sharc::runner::pass::PassConfig;
+use nord_sharc::runner::{parse_number, parse_value};
 
 /// `A=V` into an (address, value) pair.
 fn parse_assign(s: &str) -> Result<(u32, u32), String> {

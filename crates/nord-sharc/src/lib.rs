@@ -2,4 +2,5 @@
 // `docs/specs/sharc-core.md`).
 pub mod core;
 pub mod harness;
+pub mod runner;
 pub mod visa;

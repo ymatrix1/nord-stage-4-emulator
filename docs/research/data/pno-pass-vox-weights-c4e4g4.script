@@ -1,0 +1,6 @@
+# ASSUMED weights of Vox record 0 for C4 E4 G4: DM(0x95E46 + (note - 24)) = 1.0 (oscillator = note - 24).
+# The ARM sender of the real weights (0xC0224468) is not run for a key here, see pno-full-pass.md section 6.
+0 0x95e6a 0x3f800000  # osc 36 (C4)
+0 0x95e6e 0x3f800000  # osc 40 (E4)
+0 0x95e71 0x3f800000  # osc 43 (G4)
+0 0x95b42 0x3f800000  # level L (ASSUMED 1.0)
