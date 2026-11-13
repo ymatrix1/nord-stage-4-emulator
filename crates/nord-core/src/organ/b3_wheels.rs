@@ -7,6 +7,7 @@
 //! ([`note_step`]) and read through a 128 + 1 point cyclic table with linear interpolation, the
 //! table chosen by note ([`wheel_table`]). Wheel `w` of the 91-wheel bus is note `24 + w`.
 
+use super::b3_tail::tail_gain;
 use super::lane_mix::FIRMWARE_FRAME_RATE_HZ;
 use super::types::NUM_TONEWHEELS;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
@@ -155,28 +156,58 @@ fn build_table(amp: &[f64; HARMONICS], phase: &[f64; HARMONICS]) -> [f32; TABLE_
 /// Bank of one phase-stepped wheel per tonewheel index (`note = 24 + w`).
 #[derive(Debug, Clone)]
 pub struct B3Wheels {
+    #[cfg(test)]
     tables: [[f32; TABLE_POINTS]; 3],
+    /// Per-wheel tables: the class table with every harmonic scaled by the processor tail's
+    /// gain at its frequency ([`super::b3_tail`]), or the plain class table without the tail.
+    wheel_tables: Box<[[f32; TABLE_POINTS]]>,
     phase: [u32; NUM_TONEWHEELS],
     step: [u32; NUM_TONEWHEELS],
-    class: [u8; NUM_TONEWHEELS],
 }
 
 impl B3Wheels {
-    /// Builds the three wheel tables; wheels start at phase 0 with zero step until [`Self::retune`].
+    /// Builds the wheel tables with the processor tail's frequency response applied (the audible
+    /// B3 path); wheels start at phase 0 with zero step until [`Self::retune`].
     pub fn new() -> Self {
+        Self::build(true)
+    }
+
+    /// Plain firmware wheel tables without the tail response (the generator output only).
+    pub fn without_tail() -> Self {
+        Self::build(false)
+    }
+
+    fn build(tail: bool) -> Self {
         let mut class = [0u8; NUM_TONEWHEELS];
         for (w, c) in class.iter_mut().enumerate() {
             *c = wheel_table(WHEEL0_NOTE + w) as u8;
         }
+        let sets = [
+            (&AMP_T1, &PHASE_T1),
+            (&AMP_T2, &PHASE_T2),
+            (&AMP_T3, &PHASE_T3),
+        ];
+        let tables = sets.map(|(a, p)| build_table(a, p));
+        let wheel_tables = (0..NUM_TONEWHEELS)
+            .map(|w| {
+                let (amp, phase) = sets[usize::from(class[w])];
+                if !tail {
+                    return tables[usize::from(class[w])];
+                }
+                let f0 = firmware_note_hz(WHEEL0_NOTE + w);
+                let mut scaled = *amp;
+                for (h, a) in scaled.iter_mut().enumerate() {
+                    *a *= f64::from(tail_gain(((h + 1) as f64 * f0) as f32));
+                }
+                build_table(&scaled, phase)
+            })
+            .collect();
         Self {
-            tables: [
-                build_table(&AMP_T1, &PHASE_T1),
-                build_table(&AMP_T2, &PHASE_T2),
-                build_table(&AMP_T3, &PHASE_T3),
-            ],
+            #[cfg(test)]
+            tables,
+            wheel_tables,
             phase: [0; NUM_TONEWHEELS],
             step: [0; NUM_TONEWHEELS],
-            class,
         }
     }
 
@@ -192,13 +223,12 @@ impl B3Wheels {
 
     /// Advances every wheel by one sample and writes the wheel outputs.
     pub fn advance(&mut self, out: &mut [f32; NUM_TONEWHEELS]) {
-        for (((o, ph), st), &c) in out
+        for (((o, ph), st), table) in out
             .iter_mut()
             .zip(self.phase.iter_mut())
             .zip(self.step.iter())
-            .zip(self.class.iter())
+            .zip(self.wheel_tables.iter())
         {
-            let table = &self.tables[usize::from(c)];
             let idx = (*ph >> 25) as usize;
             let frac = (*ph & 0x01FF_FFFF) as f32 * (1.0 / 33_554_432.0);
             *o = table[idx] + frac * (table[idx + 1] - table[idx]);
