@@ -34,3 +34,6 @@ Sample-accurate waveform match (live performance, room, different samples).
 
 - [x] Jazz Guitar II invalid: filter on/off flag ignored (sample resolves). Fix lives on claude/synth-params-dsps-0x2f-b7b76d (filter_on); re-run after merge.
 - [x] ns4 render-patch now prints resolved sounds (piano/synth refs).
+
+## Progress (2026-11-13)
+- [x] Six single-engine segments compared per engine with `tools/emu_vs_hw.py` and the new opt-in `render-patch` flags (`--tone-source`, `--filter-engine`, `--firmware-fx`): `docs/research/emulator-vs-hardware-audio.md`. FirmwareFx not exercised (no delay/compressor in the chosen programs); Farfisa+Small II amp spectrum within 4.4 dB of hardware in all bands.

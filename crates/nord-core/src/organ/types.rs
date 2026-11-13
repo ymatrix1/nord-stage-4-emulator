@@ -131,6 +131,10 @@ pub enum ToneWheelSource {
     /// Pre-bank waveform: float phase, Hammond gear ratios, sine plus ad hoc low-wheel harmonics
     /// (ASSUMED).
     Legacy,
+    /// Opt-in Vox note oscillator bank (`vox_bank.rs`, spec section 3.1.6): the PNO Core1 post
+    /// stage `0x12272D` and output stage `0x1229B3`, installed by firmware model 1. Applies to
+    /// [`OrganModel::Vox`] only; other models fall back to their default source.
+    Vox,
     /// B3 generator `0x121BBE` of PNO core 1: the firmware pitch ladder (12 oscillators, octave
     /// doubling, `ssfr` rounding; VERIFIED to 2.5e-11 against the oracle) and the measured wheel
     /// tables, one wheel per note. Opt-in: the per-key weights and per-note amplitudes of the
@@ -146,6 +150,8 @@ impl ToneWheelSource {
     pub const fn resolve(self, model: OrganModel) -> Self {
         match (self, model) {
             (Self::ModelDefault, m) => m.default_tone_source(),
+            (Self::Vox, OrganModel::Vox) => Self::Vox,
+            (Self::Vox, m) => m.default_tone_source(),
             (Self::Firmware, OrganModel::Vox | OrganModel::Farfisa) => Self::Legacy,
             (Self::B3Wheels, m) if !matches!(m, OrganModel::B3) => Self::Legacy,
             (explicit, _) => explicit,

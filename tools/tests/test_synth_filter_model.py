@@ -78,3 +78,50 @@ def test_clip_limits_the_band_state():
     y = m.process(lane, co, [0x41200000] * 200)  # 10.0 step
     assert all(abs(float(s.ld(w))) < 50.0 for w in y)
     assert abs(float(s.ld(lane.a1))) <= 1.0 and abs(float(s.ld(lane.a2))) <= 1.0
+
+
+def test_band_pass_and_high_pass_stages_match_the_oracle_impulse_words():
+    a, b = tables()  # table C of `0x125913` equals table A at indices 64 and 65 (0.99, 0.9745)
+    co = m.coefficients(0x40000000, 0x3E99999A, a, b)
+    imp = [0x3F800000] + [0] * 7
+    assert m.process_bp(m.Lane(), co, imp) == [
+        0x3D8C230E,
+        0x3E43DED8,
+        0x3E300A5D,
+        0xBCB4C2FE,
+        0xBE6D1417,
+        0xBEACB125,
+        0xBE98A25C,
+        0xBE1571AF,
+    ]
+    assert m.process_hp(m.Lane(), co, imp) == [
+        0x3F15794D,
+        0xBF340DC7,
+        0xBEC81292,
+        0xBBA7E32B,
+        0x3E89B484,
+        0x3EB438AA,
+        0x3E871768,
+        0x3DAD12F1,
+    ]
+
+
+def test_hp_scale_is_one_minus_g2_over_4_minus_gk_over_2():
+    g_w, k_w = 0x3F069B14, 0x3F1EA266
+    g, k = float(s.ld(g_w)), float(s.ld(k_w))
+    assert abs(float(m.hp_scale(g_w, k_w)) - (1 - g * g / 4 - g * k / 2)) < 1e-6
+
+
+def test_closed_form_response_matches_the_oracle_impulse_spectrum():
+    # oracle (R = 0.3, index 64, P = 0.70711): peak 2.2629 / cin 0.99 at 0.0809, -3 dB at 0.1199
+    f = m.lp4_features(0.3, 0.70711)
+    assert abs(f["peak_gain"] - 2.2629 / 0.99) < 2e-3
+    assert abs(f["peak_f"] - 0.0809) < 2e-4 and abs(f["f_3db"] - 0.1199) < 2e-4
+    assert abs(f["nominal"] - math.atan(0.3) / math.pi) < 1e-12
+    assert abs(m.lp4_gain(0.3, 0.70711, 0.0) - 1.0) < 1e-9  # DC gain is cin
+
+
+def test_resonance_is_one_over_p():
+    g, k = m.section_gk(0.3, 0.0)  # P = 0: undamped, the peak is huge
+    assert k == 0.0 and m.lp4_features(0.3, 0.0)["peak_gain"] > 1e6
+    assert m.lp4_features(0.3, 2.0)["peak_gain"] <= 1.0 + 1e-9  # P = 2: critically damped

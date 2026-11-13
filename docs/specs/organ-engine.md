@@ -24,7 +24,7 @@ Implemented in [`crates/nord-core/src/organ/`](../../crates/nord-core/src/organ/
 | Model Enum | Panel Name | Synthesis Architecture |
 |---|---|---|
 | `B3` | **B3** | 91 phase-locked spinning tonewheels, harmonic foldback, key click, 2nd/3rd percussion, C1–C3/V1–V3 scanner vibrato |
-| `Vox` | **Vox** | Vox Continental 12-oscillator top-octave divider (`16'`, `8'`, `4'`, `II`, `III`, `IV`, Sine + Reed/Triangle filter waves) |
+| `Vox` | **Vox** | Vox Continental 12-oscillator top-octave divider (`16'`, `8'`, `4'`, `II`, `III`, `IV`, Sine + Reed/Triangle filter waves); opt-in firmware source `ToneWheelSource::Vox` (84 note oscillators, section 3.1.7) |
 | `Farf` | **Farf** | Farfisa Compact transistor divider with multi-tab bandpass registers and high-boost brilliance |
 | `Pipe1` | **Pipe 1** | Pure liturgical Principal/Flute pipe voicing with subtle wind chiff transient |
 | `Pipe2` | **Pipe 2** | Full swell/great tracker organ registration with reed harmonics |
@@ -179,6 +179,52 @@ Opt-in tone source of the `B3` model, from the PNO core 1 generator `0x121BBE` (
 
 Not modelled (why it stays opt-in): per-key weights `W(key, footage)` (taper bytes `0x25..0xFF`), the amplitude `A` with its key dependence, the percussion on the shared wheels, the scanner line-box tail (`DM 0x95471..`) of the processor. The existing drawbar bus, percussion, key click, scanner and rotary run unchanged on the wheel outputs with a flat pickup (1.0, no `pickup_calibration`). The default render hash is unchanged (`render_hash`: 25baa387b0219c08 before and after).
 
+### 3.1.7 Vox note bank (`ToneWheelSource::Vox`, `vox_bank.rs`, `vox_shaper.rs`, `vox_output.rs`, `vox_source.rs`, `vox_layer.rs`)
+
+Opt-in tone source of the `Vox` model (firmware `Edt_Org_kModel = 1`), the PNO core 1 post stage `0x12272D` and output stage `0x1229B3` ([organ-post-stage](../research/organ-post-stage.md), [organ-model-paths](../research/organ-model-paths.md), [pno-full-pass](../research/pno-full-pass.md)). It is not a tonewheel bank: 84 note oscillators with a built-in pitch LFO, a waveshaper and a per-note low-pass, summed with per-key weights through three 2-tap sections. `ToneWheelSource::Vox` applies to `OrganModel::Vox` only (other models fall back to their default); `ModelDefault` on `Vox` stays `Legacy`. Everything is allocated in `OrganLayer::new()`; `render_frame` runs 84 oscillators, one table lookup and one one-pole each per sample, with no allocation or lock.
+
+Per firmware frame (`F = 43,156.4 Hz`, ASSUMED, the Pipe bank rate of `lane_mix.rs`; the engine converts with `scale = F / fs`: phase steps and the LFO scale, the one-poles and sections are redesigned at the engine rate with the cutoff in Hz unchanged):
+
+```text
+lfo      phase += 0x905A3;  tri = clip(4 (|s| - 0.5), 1);  tri' = clip(tri - 0.08, 0.91) + 0.08
+m        = 0.5 (fine tune factor) + 0.5 depth tri'                 (depth = DM(0xE20E3), pitch fraction)
+note k   ph += m rate_k,   rate_k = 0x62C2E7 2^(k/12)              (k = 0..83, oscillator k = MIDI k + 24)
+         x = clip((|s| - 0.5) coef_k, 1),  coef_k = 128.8 2^(-k/12),   A = T[fix(x 512)]
+         k in 12..47: A *= (A > 0 ? 1 : 0.9 + 0.2 s)               (s = signed phase -1..1)
+         Y = c (A + A') + (1 - 2c) Y'                              (bilinear one-pole, c per group of 4 notes)
+output   T = sum_k w_k Y_k;  3 sections (DC blocker, two low-passes);  y = out_3 g1 0.090075
+```
+
+| Item | Value | Tag |
+|---|---|---|
+| Structure (LFO, ladder, fold, clip, table, asymmetry, one-pole, 3 sections, `0.090075`) | bit-exact SHARC model `tools/organ_post_ref.py`; the Rust code matches it on closed-form tables (`vox_golden.rs`, max error 2.1e-5 (rms 1.6e-6) plain and 2.6e-4 (rms 2.2e-5) with vibrato over 48 records of 5 and 3 notes, test `golden_note_signals_match_the_python_model`) | VERIFIED (structure) |
+| `rate_k`, `coef_k` | image values, closed forms within 1.8e-6 relative | VERIFIED |
+| Waveshaper `T` | band-limited step, Blackman windowed sinc integral, `a = 170.58`, shift `-0.4638` (`vox_shaper.rs`, regenerated, no firmware table; rms 1.7e-4 against the image, `tools/organ_shaper.py`) | EMPIRICAL |
+| One-pole cutoff per group of 4 notes | 21 ratios `fc / f0` (1.9119 ... 1.7108, 4 digits) rebuilt from the image coefficients, within 4.1e-5 relative; the pattern repeats per octave with three steps and is not a closed form | EMPIRICAL |
+| LFO | `0x905A3` per frame = 5.94 Hz at `F` (the note in organ-post-stage quotes 5.96), per engine rate in Hz unchanged; both SIMD lanes share one LFO (equal start phase 0, ASSUMED) | VERIFIED (step), start phase ASSUMED |
+| Vibrato depth | `V1/C1 = 0xE464 << 8`, `V2/C2 = 0x1782D << 8`, `V3/C3 = 0x240B7 << 8` of `2^31` = 0.70 %, 1.15 %, 1.76 % peak pitch (the ARM words); the mapping from `scanner_mode` is ASSUMED (the Hammond scanner is bypassed on this source) | VERIFIED (words), mapping ASSUMED |
+| Fine Tune | `m` scaled by `2^(cents / 1200)` (`DM(0xE20E0)` offset) | VERIFIED (law), cents mapping ASSUMED |
+| Output sections `(a0, a1, b0, b1)` | `(0.9891, -0.9944, 0.9944, 0)` high-pass, `(0.9514, 0.0305, 0.0161, 0)`, `(0.8348, 0.1035, 0.0546, 0)` low-passes (corners about 340 Hz and 1.1 kHz at `F`); redesigned at the engine rate by the bilinear transform of their analog equivalent | VERIFIED (image values), rate conversion mine |
+| Gains | `g1 -> 1.0`, `g2 -> 0` (0.001 per frame), gain word 1.0; start state settled | targets VERIFIED, word and start ASSUMED |
+| Key to oscillator map, weights | held key `n` drives oscillator `n - 24 - 12 octave_shift` with weight 1.0 times its velocity gain times `weight_level`, ramped over 2 ms (the firmware writes weights instantly) | ASSUMED |
+| Sine bank (36 sines, 12 buckets, weights 84..95) | not implemented: weight 0 in the assumed map; at the image default base word the sines run at 0.1 to 0.45 cycles per frame (above 4 kHz), so they are not pitch carriers | open |
+| Absolute pitch | oscillator 0 is 32.52 Hz at `F`, 9.9 cent flat of the Pipe bank (`pno-full-pass` s4) | ASSUMED (frame rate) |
+
+Not applied on this source: drawbars, percussion, the Vox "Tone" morph of `render_frame` step 3 (the footage to weight map is not decoded), crosstalk and pickup tables. The key click and the rotary speaker are unchanged.
+
+Comparison with the oracle chord (C4 E4 G4, weight 1 on oscillators 36, 40, 43, `pno-pass-install-vox.script` + `pno-pass-vox-weights-c4e4g4.script`, 20,000 passes; Rust `organ_ref --mode vox --vibrato N --rate 43156.4`; `python tools/organ_vox_compare.py ORACLE.npy RUST.csv`, partial amplitudes with a Hann window at the exact 12-TET frequencies, skip 4,000 frames, 32,768 analysed; table of the last run in [organ-post-stage](../research/organ-post-stage.md) section 8):
+
+| Quantity | Result (Rust against oracle) |
+|---|---|
+| Fundamentals C4 / E4 / G4, absolute level | -0.001 / -0.002 / -0.002 dB (no vibrato); -0.002 dB at V1 and V3 |
+| Harmonics 2..9 relative to the fundamental, no vibrato, above -60 dB (20 partials) | max 1.0 dB, rms 0.23 dB; the largest differences are in partials below -60 dB (6th of C4 -3.9 dB at -64 dB) |
+| V3 (depth 1.76 %), above -60 dB (10 partials) | max 0.65 dB, rms 0.23 dB |
+| V1 (0.70 %), above -60 dB (13 partials) | max 4.0 dB (4th of E4 at -54 dB), rms 1.1 dB |
+| First vibrato sidebands, V3, oracle against Rust, relative to the carrier | C4 0.458 / 0.432 against 0.457 / 0.433; E4 0.611 / 0.576 against 0.610 / 0.577; G4 0.781 / 0.732 against 0.780 / 0.733 |
+| First vibrato sidebands, V1 | C4 0.168 / 0.160 against 0.167 / 0.161; E4 0.213 / 0.203 against 0.212 / 0.204; G4 0.256 / 0.244 against 0.255 / 0.244 |
+
+The odd harmonics are far below the unfiltered single-note values of organ-post-stage section 5 (3rd -22.7 dB against -16.4 dB for C4) because the output sections low-pass the sum (corners about 340 Hz and 1.1 kHz). The Rust chord is mono; the oracle `L` and `R` lanes of the full pass carry the same partials.
+
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
 Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps). The level law is the firmware curve (`drawbar::drawbar_gain`, `DrawbarLaw::Firmware`): the edit value `0..=8` maps through the integer table `bank0_CODE@0xC02B0EC0` to the 7-bit values `0, 3, 6, 13, 22, 39, 62, 87, 127`, i.e. `0` (off), -32.5, -26.5, -19.8, -15.2, -10.3, -6.2, -3.3, 0 dB re full scale (VERIFIED table, [arm-organ-messages](../research/arm-organ-messages.md) section 7; that `value / 127` is the final DSP gain is ASSUMED, TD-10). The old `level / 8` stays selectable as `DrawbarLaw::Linear`. `0` = $-\infty\text{ dB}$:
@@ -247,6 +293,9 @@ The Hammond mechanical scanner vibrato consists of a multi-tap LC delay line (9 
 ## 6. Transistor & Pipe Organ Filter Banks
 
 ### 6.1 Vox Continental Model
+
+The firmware tone source of this model (opt-in `ToneWheelSource::Vox`, 84 note oscillators with a built-in pitch vibrato) is specified in section 3.1.7; the description below is the default `Legacy` path.
+
 12 master top-octave dividers generating unfiltered square/reed and filtered sine/flute waves:
 - Drawbar 1..4 (`16'`, `8'`, `4'`, `IV` Mixture): Control relative balance between fundamental registers.
 - Drawbar 9: Acts as the classic Vox **Tone / Wave** control (morphing between pure Flute/Sine and rich Reed/Square wave).

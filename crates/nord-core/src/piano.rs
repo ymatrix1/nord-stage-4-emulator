@@ -78,6 +78,9 @@ pub struct LoadedPianoStroke {
     pub pcm_right: Option<Arc<[f32]>>,
     pub loop_start: Option<usize>,
     pub loop_end: Option<usize>,
+    /// `true` when `pcm` holds the integer samples of a CNSP decode (`y / 8192`), so the hardware
+    /// integer MAC applies (`SampleInterp::SmpQ31Hw`); `false` for float WAV / SFZ material.
+    pub integer_pcm: bool,
 }
 
 /// Multi-velocity and key-off release zone descriptor for `.npno` and SFZ/WAV multisample instruments.
@@ -122,6 +125,7 @@ impl NpnoSound {
                 pcm_right: right.map(Into::into),
                 loop_start: s.loop_start.map(|x| x as usize),
                 loop_end: s.loop_end.map(|x| x as usize),
+                integer_pcm: true,
             });
             meta.push((idx, s.root_key, s.stroke_kind, s.vel_low));
         }
@@ -250,6 +254,7 @@ impl NpnoSound {
             pcm_right: None,
             loop_start: None,
             loop_end: None,
+            integer_pcm: false,
         };
         let strokes = vec![stroke];
         let stroke_by_key = [Some(0); 128];
@@ -312,6 +317,7 @@ impl NpnoSound {
                     pcm_right: None,
                     loop_start: reg.loop_start,
                     loop_end: reg.loop_end,
+                    integer_pcm: false,
                 });
                 cache.insert(cache_key, idx);
                 idx
@@ -1224,6 +1230,8 @@ impl PianoLayer {
         let at = |pcm: &[f32]| match interp {
             SampleInterp::Cubic => Self::sample_pcm_at(pcm, p),
             SampleInterp::SmpQ31 => kernel.interpolate(pcm, p),
+            SampleInterp::SmpQ31Hw if stroke.integer_pcm => kernel.interpolate_hw(pcm, p),
+            SampleInterp::SmpQ31Hw => kernel.interpolate(pcm, p),
         };
         let l = at(&stroke.pcm)?;
         let r = stroke.pcm_right.as_deref().and_then(at).unwrap_or(l);

@@ -4,7 +4,7 @@
 
 Specifies the 7 independent per-layer effects pipelines (`Organ A`, `Organ B`, `Piano A`, `Piano B`, `Synth A`, `Synth B`, `Synth C`), the global Master Compressor, and the Master Clock.
 
-Implemented in [`crates/nord-core/src/fx.rs`](../../crates/nord-core/src/fx.rs) and [`crates/nord-core/src/engine.rs`](../../crates/nord-core/src/engine.rs).
+Implemented in [`crates/nord-core/src/fx/`](../../crates/nord-core/src/fx/mod.rs) and [`crates/nord-core/src/engine/`](../../crates/nord-core/src/engine/mod.rs).
 
 ---
 
@@ -183,7 +183,7 @@ biquad sets per type (`fx-type-map` s4).
 
 ### 4.0c Firmware parameter maps and the `FirmwareFx` switch (opt-in)
 
-Code: `fx/fw_map.rs` (closed forms, `pub mod fw_map`), `fx/fw_params.rs` (fills of the stage contexts), `fx/firmware_fx.rs`
+Code: `fx/fw_map.rs` (closed forms, `pub mod fw_map`), `fx/fw_delay_time.rs` + `fx/fw_delay_table.rs` (delay time law, `pub mod fw_delay_time`), `fx/fw_params.rs` (fills of the stage contexts), `fx/firmware_fx.rs`
 (`FirmwareFx`, `LayerFxChain::firmware_fx`), `fx/master.rs` (`MasterBus::use_fw_compressor_amount`). Source:
 [fx-contexts](../research/fx-contexts.md) s5 and s8, `tools/fx_forms.py`. Tests: `fx/tests_fw_map.rs` against the captured series words in
 `fx/tests_fw_series.rs` (copied from `docs/research/data/fx-param-fits.csv`, error below 1e-5 of the series range), `fx/tests_firmware_fx.rs`.
@@ -196,7 +196,7 @@ parameter set per engine mode. The engine's `0..=1` fields are the presets' `raw
 |---|---|---|---|---|
 | `kDlyMix` | send `c[-0x1B]`, dry `c[4]` | `min(1,(v/64)^2)`, `min(1,(2-v/64)^2)` | layer delay when `FirmwareFx::delay_laws` | words VERIFIED (11 values), roles EMPIRICAL |
 | `kDlyFbkAmt` | `c[-0x1A]`, `c[-0x19]` | `v/127` (= the engine scale; the engine keeps its 0.95 clamp) | identity, no change | VERIFIED words |
-| delay time | `c[0x15]`, `c[0x16]`, `c[0x19]` | not decoded (needs the variants `0x1208AF`, `0x120AB5`, `0x120D15`) | no: the engine delay time law stays | open |
+| `kDlyRateClkDiv` (14 bit) | tap `c[0x15]`, old tap `c[0x16]`, cross-fade step `c[0x19]` | `c[0x15] = min(61438, floor(43.402339 k))`, `k` = fractional index in the 1501-entry list `fw_delay_table.rs`; first echo `trunc(c[0x15]) + 2` samples (18.1 ms to 1.280 s) | free-running delay when `FirmwareFx::delay_time` and `LayerFxChain::delay_rate_raw` is set; tempo sync and the 45 ms tap cross-fade stay the engine's | words VERIFIED (264 values), DSP echo law VERIFIED (oracle), constant `K` interval only, `c[0x14]` mode and ring length ASSUMED ([fx-delay-time](../research/fx-delay-time.md)) |
 | `kCmpAmt` | threshold `c[-0x1B]`, makeup target `c[-0x1C]` | `-36 v/127`, `1 + 5.72 (v/127)^2` | layer (`FirmwareFx::compressor`) and master (`use_fw_compressor_amount`) | words VERIFIED, roles EMPIRICAL |
 | attack / release pairs | `c[-0x20..-0x1D]` | `(0.102071, 1.0)`, `(4.607e-4, 0.04)` for every value | with `kCmpAmt` | VERIFIED words |
 | compressor slope, log gain | slope `c[-0x17]`, `c[-0x0B]` | `0.05` (`CMP_SLOPE`), `1.0` | with `kCmpAmt` | ASSUMED (base words of the Cmp type switch not captured) |
@@ -206,7 +206,7 @@ parameter set per engine mode. The engine's `0..=1` fields are the presets' `raw
 | `kAmpMid`, `kAmpMidFreq` | `C D B` and `0xC044398C` words | not mapped | no | open |
 | `kFx1RateClkDiv`, `kFx1Amt` (types 2, 3) | `c[-0x20]`, wet `c[-0x1A]` / `c[-0x16]`, dry `c[-0x19]` | `12800 + 16384 v`, `v/254`, `1 - v/254` | fill only (`set_allpass`): Fx1 type to engine `Mod1Type` map and base words open | VERIFIED words |
 
-`FirmwareFx` is `Default` all off (`render_hash` unchanged, below). **Latency:** the firmware compressor works on blocks of 4 stereo frames, so
+`FirmwareFx` is `Default` all off (`render_hash` unchanged, below). `delay_time` replaces the engine's `delay_time_ms` by `echo_samples_at(v, fs)` (`fx/delay.rs`, `target_delay_samples`) in the free-running delay when the program's raw 14 bit value is present (`engine/program_fx.rs` sets `delay_rate_raw`); it falls back to the engine time in tempo sync. Tests `fx/tests_fw_delay_time.rs` (first echo at sample 870 and 46500, fallbacks), `fx/fw_delay_time.rs` (34 captured words, plateaus, monotone), `tools/tests/test_fx_delay_time.py` (264 words, table fingerprint, oracle arguments). The engine's `DELAY_TIME_MS` table (`1500 ms .. 20 ms`, 128 steps) disagrees with the firmware law and stays the default. **Latency:** the firmware compressor works on blocks of 4 stereo frames, so
 the layer or master path gains 4 frames (83 us at 48 kHz) while it is on; the layer stage keeps running with amount 0 (unity) when
 `comp_enabled` is false so the latency does not depend on the compressor switch. Measured (687 Hz sine, 0.5 peak, RMS of the second half-second): amount 0 gives
 the unity RMS 0.3536, amount 0.5 gives 0.677 (+5.6 dB), amount 1.0 gives 1.337 (+11.6 dB): the makeup `1 + 5.72 u^2` dominates, because the

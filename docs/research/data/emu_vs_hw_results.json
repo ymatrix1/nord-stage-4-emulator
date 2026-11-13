@@ -1,0 +1,1020 @@
+{
+ "all_notes": {
+  "video": "_zksT69H30c",
+  "segments": [
+   {
+    "id": "organ_b3",
+    "entry": "Program/Bank A/B3 Chords n Solo.ns4p",
+    "engine": "organ B3",
+    "at_s": 238,
+    "duration_s": 25,
+    "notes": 285,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 15.16,
+       "low_120_400": -1.37,
+       "mid_400_1500": 2.2,
+       "presence_1500_3000": -1.88,
+       "brilliance_3000_8000": 1.21,
+       "air_8000_20000": 26.81
+      },
+      "centroid_delta_hz": -71.2,
+      "rms_delta_db": 16.91,
+      "width_hw": 0.4797,
+      "width_emu": 0.348,
+      "centroid_hw_hz": 480.8,
+      "rms_hw_dbfs": -20.53,
+      "attack_hw_ms": 80.5,
+      "attack_emu_ms": 25.2,
+      "label": "default",
+      "score": 4.36,
+      "worst_band": [
+       "sub_20_120",
+       15.16
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 3.6,
+      "emu_clip_frac": 0.23827
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 15.23,
+       "low_120_400": -1.0,
+       "mid_400_1500": 1.93,
+       "presence_1500_3000": -1.96,
+       "brilliance_3000_8000": 1.67,
+       "air_8000_20000": 27.55
+      },
+      "centroid_delta_hz": -84.3,
+      "rms_delta_db": 16.87,
+      "width_hw": 0.4797,
+      "width_emu": 0.35,
+      "centroid_hw_hz": 480.8,
+      "rms_hw_dbfs": -20.53,
+      "attack_hw_ms": 80.5,
+      "attack_emu_ms": 22.8,
+      "label": "b3wheels",
+      "score": 4.36,
+      "worst_band": [
+       "sub_20_120",
+       15.23
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 3.7,
+      "emu_clip_frac": 0.23425
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 15.16,
+       "low_120_400": -1.37,
+       "mid_400_1500": 2.2,
+       "presence_1500_3000": -1.92,
+       "brilliance_3000_8000": 1.16,
+       "air_8000_20000": 26.74
+      },
+      "centroid_delta_hz": -71.7,
+      "rms_delta_db": 16.88,
+      "width_hw": 0.4797,
+      "width_emu": 0.3479,
+      "centroid_hw_hz": 480.8,
+      "rms_hw_dbfs": -20.53,
+      "attack_hw_ms": 80.5,
+      "attack_emu_ms": 26.1,
+      "label": "firmware-fx",
+      "score": 4.36,
+      "worst_band": [
+       "sub_20_120",
+       15.16
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 3.6,
+      "emu_clip_frac": 0.23463
+     }
+    ],
+    "hw_peak_dbfs": -2.9,
+    "hw_crest_db": 17.6
+   },
+   {
+    "id": "organ_vox",
+    "entry": "Program/Bank A/Vintage Vox J3.ns4p",
+    "engine": "organ Vox + Twin amp",
+    "at_s": 2360,
+    "duration_s": 11,
+    "notes": 160,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": -0.11,
+       "low_120_400": -2.0,
+       "mid_400_1500": 11.92,
+       "presence_1500_3000": -1.71,
+       "brilliance_3000_8000": -2.14,
+       "air_8000_20000": 13.55
+      },
+      "centroid_delta_hz": -260.5,
+      "rms_delta_db": 16.75,
+      "width_hw": 0.4968,
+      "width_emu": 0.1804,
+      "centroid_hw_hz": 1467.9,
+      "rms_hw_dbfs": -26.76,
+      "attack_hw_ms": 87.0,
+      "attack_emu_ms": 54.5,
+      "label": "default",
+      "score": 3.58,
+      "worst_band": [
+       "mid_400_1500",
+       11.92
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 10.0,
+      "emu_clip_frac": 0.00124
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 3.85,
+       "low_120_400": 1.49,
+       "mid_400_1500": 8.09,
+       "presence_1500_3000": -9.77,
+       "brilliance_3000_8000": -10.38,
+       "air_8000_20000": 14.48
+      },
+      "centroid_delta_hz": -1081.5,
+      "rms_delta_db": 4.86,
+      "width_hw": 0.4968,
+      "width_emu": 0.1664,
+      "centroid_hw_hz": 1467.9,
+      "rms_hw_dbfs": -26.76,
+      "attack_hw_ms": 87.0,
+      "attack_emu_ms": 51.8,
+      "label": "vox",
+      "score": 6.72,
+      "worst_band": [
+       "brilliance_3000_8000",
+       -10.38
+      ],
+      "emu_peak_dbfs": -4.1,
+      "emu_crest_db": 17.8,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 3.87,
+       "low_120_400": 1.52,
+       "mid_400_1500": 8.17,
+       "presence_1500_3000": -9.7,
+       "brilliance_3000_8000": -10.31,
+       "air_8000_20000": 14.54
+      },
+      "centroid_delta_hz": -1080.2,
+      "rms_delta_db": 4.76,
+      "width_hw": 0.4968,
+      "width_emu": 0.1408,
+      "centroid_hw_hz": 1467.9,
+      "rms_hw_dbfs": -26.76,
+      "attack_hw_ms": 87.0,
+      "attack_emu_ms": 52.7,
+      "label": "vox+firmware-fx",
+      "score": 6.71,
+      "worst_band": [
+       "brilliance_3000_8000",
+       -10.31
+      ],
+      "emu_peak_dbfs": -4.1,
+      "emu_crest_db": 17.9,
+      "emu_clip_frac": 0.0
+     }
+    ],
+    "hw_peak_dbfs": -11.6,
+    "hw_crest_db": 15.2
+   },
+   {
+    "id": "organ_pipe",
+    "entry": "Program/Bank A/Space Drama II.ns4p",
+    "engine": "organ Pipe2 + synth, reverb",
+    "at_s": 1094,
+    "duration_s": 30,
+    "notes": 430,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 5.04,
+       "low_120_400": 2.83,
+       "mid_400_1500": -0.24,
+       "presence_1500_3000": -2.72,
+       "brilliance_3000_8000": -6.55,
+       "air_8000_20000": 2.0
+      },
+      "centroid_delta_hz": -259.5,
+      "rms_delta_db": 8.97,
+      "width_hw": 0.742,
+      "width_emu": 0.3322,
+      "centroid_hw_hz": 755.2,
+      "rms_hw_dbfs": -26.0,
+      "attack_hw_ms": 57.3,
+      "attack_emu_ms": 67.0,
+      "label": "default",
+      "score": 3.48,
+      "worst_band": [
+       "brilliance_3000_8000",
+       -6.55
+      ],
+      "emu_peak_dbfs": -3.0,
+      "emu_crest_db": 14.1,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 3.96,
+       "low_120_400": 2.16,
+       "mid_400_1500": 0.26,
+       "presence_1500_3000": -1.49,
+       "brilliance_3000_8000": -2.95,
+       "air_8000_20000": 5.62
+      },
+      "centroid_delta_hz": -186.7,
+      "rms_delta_db": 8.35,
+      "width_hw": 0.742,
+      "width_emu": 0.3281,
+      "centroid_hw_hz": 755.2,
+      "rms_hw_dbfs": -26.0,
+      "attack_hw_ms": 57.3,
+      "attack_emu_ms": 76.8,
+      "label": "legacy-tone",
+      "score": 2.16,
+      "worst_band": [
+       "sub_20_120",
+       3.96
+      ],
+      "emu_peak_dbfs": -3.4,
+      "emu_crest_db": 14.3,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 5.05,
+       "low_120_400": 2.83,
+       "mid_400_1500": -0.25,
+       "presence_1500_3000": -2.72,
+       "brilliance_3000_8000": -6.55,
+       "air_8000_20000": 2.0
+      },
+      "centroid_delta_hz": -259.7,
+      "rms_delta_db": 8.97,
+      "width_hw": 0.742,
+      "width_emu": 0.3322,
+      "centroid_hw_hz": 755.2,
+      "rms_hw_dbfs": -26.0,
+      "attack_hw_ms": 57.3,
+      "attack_emu_ms": 67.1,
+      "label": "firmware-fx",
+      "score": 3.48,
+      "worst_band": [
+       "brilliance_3000_8000",
+       -6.55
+      ],
+      "emu_peak_dbfs": -3.0,
+      "emu_crest_db": 14.1,
+      "emu_clip_frac": 0.0
+     }
+    ],
+    "hw_peak_dbfs": -11.3,
+    "hw_crest_db": 14.7
+   },
+   {
+    "id": "piano_dry",
+    "entry": "Program/Bank A/Velvet Grand.ns4p",
+    "engine": "piano Grand, no FX",
+    "at_s": 1708,
+    "duration_s": 25,
+    "notes": 299,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 2.93,
+       "low_120_400": 0.82,
+       "mid_400_1500": -2.62,
+       "presence_1500_3000": 3.06,
+       "brilliance_3000_8000": 5.57,
+       "air_8000_20000": 6.11
+      },
+      "centroid_delta_hz": -61.1,
+      "rms_delta_db": 11.78,
+      "width_hw": 0.4568,
+      "width_emu": 0.4668,
+      "centroid_hw_hz": 463.8,
+      "rms_hw_dbfs": -24.54,
+      "attack_hw_ms": 86.9,
+      "attack_emu_ms": 85.5,
+      "label": "default",
+      "score": 3.0,
+      "worst_band": [
+       "brilliance_3000_8000",
+       5.57
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 12.8,
+      "emu_clip_frac": 0.00037
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 2.92,
+       "low_120_400": 0.82,
+       "mid_400_1500": -2.62,
+       "presence_1500_3000": 3.06,
+       "brilliance_3000_8000": 5.57,
+       "air_8000_20000": 6.09
+      },
+      "centroid_delta_hz": -60.9,
+      "rms_delta_db": 11.78,
+      "width_hw": 0.4568,
+      "width_emu": 0.4668,
+      "centroid_hw_hz": 463.8,
+      "rms_hw_dbfs": -24.54,
+      "attack_hw_ms": 86.9,
+      "attack_emu_ms": 85.6,
+      "label": "firmware-fx",
+      "score": 3.0,
+      "worst_band": [
+       "brilliance_3000_8000",
+       5.57
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 12.8,
+      "emu_clip_frac": 0.00036
+     }
+    ],
+    "hw_peak_dbfs": 0.0,
+    "hw_crest_db": 24.5
+   },
+   {
+    "id": "synth_lead",
+    "entry": "Program/Bank A/Smooth Lead.ns4p",
+    "engine": "synth Triangle LP24",
+    "at_s": 2420,
+    "duration_s": 22,
+    "notes": 210,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 0.43,
+       "low_120_400": 0.11,
+       "mid_400_1500": 0.59,
+       "presence_1500_3000": -16.09,
+       "brilliance_3000_8000": -9.58,
+       "air_8000_20000": 28.23
+      },
+      "centroid_delta_hz": -256.6,
+      "rms_delta_db": -6.91,
+      "width_hw": 0.2782,
+      "width_emu": 0.0869,
+      "centroid_hw_hz": 818.8,
+      "rms_hw_dbfs": -22.5,
+      "attack_hw_ms": 21.4,
+      "attack_emu_ms": 47.0,
+      "label": "default",
+      "score": 5.36,
+      "worst_band": [
+       "presence_1500_3000",
+       -16.09
+      ],
+      "emu_peak_dbfs": -18.6,
+      "emu_crest_db": 10.8,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 0.63,
+       "low_120_400": 0.47,
+       "mid_400_1500": 0.51,
+       "presence_1500_3000": -14.94,
+       "brilliance_3000_8000": -4.87,
+       "air_8000_20000": 29.61
+      },
+      "centroid_delta_hz": -291.3,
+      "rms_delta_db": 3.52,
+      "width_hw": 0.2782,
+      "width_emu": 0.0882,
+      "centroid_hw_hz": 818.8,
+      "rms_hw_dbfs": -22.5,
+      "attack_hw_ms": 21.4,
+      "attack_emu_ms": 44.9,
+      "label": "fw-filter",
+      "score": 4.28,
+      "worst_band": [
+       "presence_1500_3000",
+       -14.94
+      ],
+      "emu_peak_dbfs": -9.7,
+      "emu_crest_db": 9.3,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 0.63,
+       "low_120_400": 0.47,
+       "mid_400_1500": 0.51,
+       "presence_1500_3000": -14.94,
+       "brilliance_3000_8000": -4.86,
+       "air_8000_20000": 29.63
+      },
+      "centroid_delta_hz": -291.1,
+      "rms_delta_db": 3.52,
+      "width_hw": 0.2782,
+      "width_emu": 0.0882,
+      "centroid_hw_hz": 818.8,
+      "rms_hw_dbfs": -22.5,
+      "attack_hw_ms": 21.4,
+      "attack_emu_ms": 45.0,
+      "label": "fw-filter+fx",
+      "score": 4.28,
+      "worst_band": [
+       "presence_1500_3000",
+       -14.94
+      ],
+      "emu_peak_dbfs": -9.7,
+      "emu_crest_db": 9.3,
+      "emu_clip_frac": 0.0
+     }
+    ],
+    "hw_peak_dbfs": -6.2,
+    "hw_crest_db": 16.3
+   },
+   {
+    "id": "fx_amp",
+    "entry": "Program/Bank A/Tiny Transistor.ns4p",
+    "engine": "organ Farfisa + Small II amp + reverb",
+    "at_s": 1812,
+    "duration_s": 25,
+    "notes": 366,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 7.14,
+       "low_120_400": 2.64,
+       "mid_400_1500": -0.18,
+       "presence_1500_3000": -1.02,
+       "brilliance_3000_8000": 0.11,
+       "air_8000_20000": 8.72
+      },
+      "centroid_delta_hz": -33.1,
+      "rms_delta_db": 12.76,
+      "width_hw": 0.0881,
+      "width_emu": 0.0571,
+      "centroid_hw_hz": 1011.6,
+      "rms_hw_dbfs": -19.36,
+      "attack_hw_ms": 22.5,
+      "attack_emu_ms": 31.2,
+      "label": "default",
+      "score": 2.22,
+      "worst_band": [
+       "sub_20_120",
+       7.14
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 6.6,
+      "emu_clip_frac": 0.03113
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 7.13,
+       "low_120_400": 2.64,
+       "mid_400_1500": -0.18,
+       "presence_1500_3000": -1.02,
+       "brilliance_3000_8000": 0.09,
+       "air_8000_20000": 8.53
+      },
+      "centroid_delta_hz": -33.1,
+      "rms_delta_db": 12.73,
+      "width_hw": 0.0881,
+      "width_emu": 0.0571,
+      "centroid_hw_hz": 1011.6,
+      "rms_hw_dbfs": -19.36,
+      "attack_hw_ms": 22.5,
+      "attack_emu_ms": 31.3,
+      "label": "firmware-fx",
+      "score": 2.21,
+      "worst_band": [
+       "sub_20_120",
+       7.13
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 6.6,
+      "emu_clip_frac": 0.03002
+     }
+    ],
+    "hw_peak_dbfs": -7.4,
+    "hw_crest_db": 12.0
+   }
+  ]
+ },
+ "confirmed_only": {
+  "video": "_zksT69H30c",
+  "segments": [
+   {
+    "id": "organ_b3",
+    "entry": "Program/Bank A/B3 Chords n Solo.ns4p",
+    "engine": "organ B3",
+    "at_s": 238,
+    "duration_s": 25,
+    "notes": 101,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 17.48,
+       "low_120_400": -0.21,
+       "mid_400_1500": 0.31,
+       "presence_1500_3000": -5.7,
+       "brilliance_3000_8000": 0.45,
+       "air_8000_20000": 19.47
+      },
+      "centroid_delta_hz": -207.9,
+      "rms_delta_db": 14.93,
+      "width_hw": 0.4797,
+      "width_emu": 0.2493,
+      "centroid_hw_hz": 480.8,
+      "rms_hw_dbfs": -20.53,
+      "attack_hw_ms": 106.7,
+      "attack_emu_ms": 38.5,
+      "label": "default",
+      "score": 4.83,
+      "worst_band": [
+       "sub_20_120",
+       17.48
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 5.6,
+      "emu_clip_frac": 0.10301
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 16.93,
+       "low_120_400": -0.02,
+       "mid_400_1500": 0.32,
+       "presence_1500_3000": -5.11,
+       "brilliance_3000_8000": 1.09,
+       "air_8000_20000": 21.2
+      },
+      "centroid_delta_hz": -202.0,
+      "rms_delta_db": 14.89,
+      "width_hw": 0.4797,
+      "width_emu": 0.25,
+      "centroid_hw_hz": 480.8,
+      "rms_hw_dbfs": -20.53,
+      "attack_hw_ms": 106.7,
+      "attack_emu_ms": 39.9,
+      "label": "b3wheels",
+      "score": 4.69,
+      "worst_band": [
+       "sub_20_120",
+       16.93
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 5.6,
+      "emu_clip_frac": 0.10116
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 17.48,
+       "low_120_400": -0.21,
+       "mid_400_1500": 0.31,
+       "presence_1500_3000": -5.71,
+       "brilliance_3000_8000": 0.43,
+       "air_8000_20000": 19.45
+      },
+      "centroid_delta_hz": -208.0,
+      "rms_delta_db": 14.91,
+      "width_hw": 0.4797,
+      "width_emu": 0.2492,
+      "centroid_hw_hz": 480.8,
+      "rms_hw_dbfs": -20.53,
+      "attack_hw_ms": 106.7,
+      "attack_emu_ms": 38.6,
+      "label": "firmware-fx",
+      "score": 4.83,
+      "worst_band": [
+       "sub_20_120",
+       17.48
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 5.6,
+      "emu_clip_frac": 0.10193
+     }
+    ],
+    "hw_peak_dbfs": -2.9,
+    "hw_crest_db": 17.6
+   },
+   {
+    "id": "organ_vox",
+    "entry": "Program/Bank A/Vintage Vox J3.ns4p",
+    "engine": "organ Vox + Twin amp",
+    "at_s": 2360,
+    "duration_s": 11,
+    "notes": 36,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": -4.14,
+       "low_120_400": 0.37,
+       "mid_400_1500": 13.37,
+       "presence_1500_3000": -4.72,
+       "brilliance_3000_8000": -5.81,
+       "air_8000_20000": 13.72
+      },
+      "centroid_delta_hz": -606.0,
+      "rms_delta_db": 11.06,
+      "width_hw": 0.4968,
+      "width_emu": 0.1841,
+      "centroid_hw_hz": 1467.9,
+      "rms_hw_dbfs": -26.76,
+      "attack_hw_ms": 86.0,
+      "attack_emu_ms": 44.9,
+      "label": "default",
+      "score": 5.68,
+      "worst_band": [
+       "mid_400_1500",
+       13.37
+      ],
+      "emu_peak_dbfs": -3.1,
+      "emu_crest_db": 12.6,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": -8.01,
+       "low_120_400": 2.49,
+       "mid_400_1500": 11.31,
+       "presence_1500_3000": -8.23,
+       "brilliance_3000_8000": -8.28,
+       "air_8000_20000": 15.5
+      },
+      "centroid_delta_hz": -921.0,
+      "rms_delta_db": -0.78,
+      "width_hw": 0.4968,
+      "width_emu": 0.1679,
+      "centroid_hw_hz": 1467.9,
+      "rms_hw_dbfs": -26.76,
+      "attack_hw_ms": 86.0,
+      "attack_emu_ms": 20.7,
+      "label": "vox",
+      "score": 7.66,
+      "worst_band": [
+       "mid_400_1500",
+       11.31
+      ],
+      "emu_peak_dbfs": -6.7,
+      "emu_crest_db": 20.8,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": -8.11,
+       "low_120_400": 2.51,
+       "mid_400_1500": 11.46,
+       "presence_1500_3000": -8.16,
+       "brilliance_3000_8000": -8.19,
+       "air_8000_20000": 15.59
+      },
+      "centroid_delta_hz": -915.6,
+      "rms_delta_db": -0.91,
+      "width_hw": 0.4968,
+      "width_emu": 0.1498,
+      "centroid_hw_hz": 1467.9,
+      "rms_hw_dbfs": -26.76,
+      "attack_hw_ms": 86.0,
+      "attack_emu_ms": 20.8,
+      "label": "vox+firmware-fx",
+      "score": 7.69,
+      "worst_band": [
+       "mid_400_1500",
+       11.46
+      ],
+      "emu_peak_dbfs": -6.6,
+      "emu_crest_db": 21.1,
+      "emu_clip_frac": 0.0
+     }
+    ],
+    "hw_peak_dbfs": -11.6,
+    "hw_crest_db": 15.2
+   },
+   {
+    "id": "organ_pipe",
+    "entry": "Program/Bank A/Space Drama II.ns4p",
+    "engine": "organ Pipe2 + synth, reverb",
+    "at_s": 1094,
+    "duration_s": 30,
+    "notes": 259,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 4.11,
+       "low_120_400": 2.97,
+       "mid_400_1500": -0.58,
+       "presence_1500_3000": -5.86,
+       "brilliance_3000_8000": -11.22,
+       "air_8000_20000": 0.8
+      },
+      "centroid_delta_hz": -315.9,
+      "rms_delta_db": 7.35,
+      "width_hw": 0.742,
+      "width_emu": 0.33,
+      "centroid_hw_hz": 755.2,
+      "rms_hw_dbfs": -26.0,
+      "attack_hw_ms": 58.4,
+      "attack_emu_ms": 69.7,
+      "label": "default",
+      "score": 4.95,
+      "worst_band": [
+       "brilliance_3000_8000",
+       -11.22
+      ],
+      "emu_peak_dbfs": -4.1,
+      "emu_crest_db": 14.5,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 3.26,
+       "low_120_400": 2.94,
+       "mid_400_1500": 0.26,
+       "presence_1500_3000": -4.27,
+       "brilliance_3000_8000": -9.24,
+       "air_8000_20000": 1.56
+      },
+      "centroid_delta_hz": -271.1,
+      "rms_delta_db": 6.69,
+      "width_hw": 0.742,
+      "width_emu": 0.3251,
+      "centroid_hw_hz": 755.2,
+      "rms_hw_dbfs": -26.0,
+      "attack_hw_ms": 58.4,
+      "attack_emu_ms": 67.0,
+      "label": "legacy-tone",
+      "score": 3.99,
+      "worst_band": [
+       "brilliance_3000_8000",
+       -9.24
+      ],
+      "emu_peak_dbfs": -3.9,
+      "emu_crest_db": 15.4,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 4.11,
+       "low_120_400": 2.98,
+       "mid_400_1500": -0.58,
+       "presence_1500_3000": -5.86,
+       "brilliance_3000_8000": -11.21,
+       "air_8000_20000": 0.81
+      },
+      "centroid_delta_hz": -316.1,
+      "rms_delta_db": 7.35,
+      "width_hw": 0.742,
+      "width_emu": 0.33,
+      "centroid_hw_hz": 755.2,
+      "rms_hw_dbfs": -26.0,
+      "attack_hw_ms": 58.4,
+      "attack_emu_ms": 69.8,
+      "label": "firmware-fx",
+      "score": 4.95,
+      "worst_band": [
+       "brilliance_3000_8000",
+       -11.21
+      ],
+      "emu_peak_dbfs": -4.1,
+      "emu_crest_db": 14.5,
+      "emu_clip_frac": 0.0
+     }
+    ],
+    "hw_peak_dbfs": -11.3,
+    "hw_crest_db": 14.7
+   },
+   {
+    "id": "piano_dry",
+    "entry": "Program/Bank A/Velvet Grand.ns4p",
+    "engine": "piano Grand, no FX",
+    "at_s": 1708,
+    "duration_s": 25,
+    "notes": 169,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 2.09,
+       "low_120_400": 0.31,
+       "mid_400_1500": -1.59,
+       "presence_1500_3000": 3.08,
+       "brilliance_3000_8000": 6.43,
+       "air_8000_20000": 4.98
+      },
+      "centroid_delta_hz": -26.4,
+      "rms_delta_db": 9.35,
+      "width_hw": 0.4568,
+      "width_emu": 0.4694,
+      "centroid_hw_hz": 463.8,
+      "rms_hw_dbfs": -24.54,
+      "attack_hw_ms": 86.9,
+      "attack_emu_ms": 67.5,
+      "label": "default",
+      "score": 2.7,
+      "worst_band": [
+       "brilliance_3000_8000",
+       6.43
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 15.2,
+      "emu_clip_frac": 5e-05
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 2.08,
+       "low_120_400": 0.31,
+       "mid_400_1500": -1.59,
+       "presence_1500_3000": 3.08,
+       "brilliance_3000_8000": 6.43,
+       "air_8000_20000": 4.98
+      },
+      "centroid_delta_hz": -26.3,
+      "rms_delta_db": 9.35,
+      "width_hw": 0.4568,
+      "width_emu": 0.4694,
+      "centroid_hw_hz": 463.8,
+      "rms_hw_dbfs": -24.54,
+      "attack_hw_ms": 86.9,
+      "attack_emu_ms": 67.6,
+      "label": "firmware-fx",
+      "score": 2.7,
+      "worst_band": [
+       "brilliance_3000_8000",
+       6.43
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 15.2,
+      "emu_clip_frac": 5e-05
+     }
+    ],
+    "hw_peak_dbfs": 0.0,
+    "hw_crest_db": 24.5
+   },
+   {
+    "id": "synth_lead",
+    "entry": "Program/Bank A/Smooth Lead.ns4p",
+    "engine": "synth Triangle LP24",
+    "at_s": 2420,
+    "duration_s": 22,
+    "notes": 156,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 0.38,
+       "low_120_400": -0.27,
+       "mid_400_1500": 0.65,
+       "presence_1500_3000": -16.47,
+       "brilliance_3000_8000": -6.88,
+       "air_8000_20000": 31.21
+      },
+      "centroid_delta_hz": -231.7,
+      "rms_delta_db": -6.44,
+      "width_hw": 0.2782,
+      "width_emu": 0.0883,
+      "centroid_hw_hz": 818.8,
+      "rms_hw_dbfs": -22.5,
+      "attack_hw_ms": 19.8,
+      "attack_emu_ms": 42.3,
+      "label": "default",
+      "score": 4.93,
+      "worst_band": [
+       "presence_1500_3000",
+       -16.47
+      ],
+      "emu_peak_dbfs": -18.4,
+      "emu_crest_db": 10.6,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 0.67,
+       "low_120_400": 0.15,
+       "mid_400_1500": 0.48,
+       "presence_1500_3000": -15.25,
+       "brilliance_3000_8000": -5.75,
+       "air_8000_20000": 29.57
+      },
+      "centroid_delta_hz": -269.0,
+      "rms_delta_db": 3.91,
+      "width_hw": 0.2782,
+      "width_emu": 0.0902,
+      "centroid_hw_hz": 818.8,
+      "rms_hw_dbfs": -22.5,
+      "attack_hw_ms": 19.8,
+      "attack_emu_ms": 41.9,
+      "label": "fw-filter",
+      "score": 4.46,
+      "worst_band": [
+       "presence_1500_3000",
+       -15.25
+      ],
+      "emu_peak_dbfs": -9.7,
+      "emu_crest_db": 8.9,
+      "emu_clip_frac": 0.0
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 0.66,
+       "low_120_400": 0.15,
+       "mid_400_1500": 0.48,
+       "presence_1500_3000": -15.25,
+       "brilliance_3000_8000": -5.74,
+       "air_8000_20000": 29.59
+      },
+      "centroid_delta_hz": -269.0,
+      "rms_delta_db": 3.91,
+      "width_hw": 0.2782,
+      "width_emu": 0.0902,
+      "centroid_hw_hz": 818.8,
+      "rms_hw_dbfs": -22.5,
+      "attack_hw_ms": 19.8,
+      "attack_emu_ms": 42.0,
+      "label": "fw-filter+fx",
+      "score": 4.46,
+      "worst_band": [
+       "presence_1500_3000",
+       -15.25
+      ],
+      "emu_peak_dbfs": -9.7,
+      "emu_crest_db": 8.9,
+      "emu_clip_frac": 0.0
+     }
+    ],
+    "hw_peak_dbfs": -6.2,
+    "hw_crest_db": 16.3
+   },
+   {
+    "id": "fx_amp",
+    "entry": "Program/Bank A/Tiny Transistor.ns4p",
+    "engine": "organ Farfisa + Small II amp + reverb",
+    "at_s": 1812,
+    "duration_s": 25,
+    "notes": 78,
+    "variants": [
+     {
+      "bands_delta_db": {
+       "sub_20_120": 4.44,
+       "low_120_400": 2.3,
+       "mid_400_1500": -0.7,
+       "presence_1500_3000": 1.28,
+       "brilliance_3000_8000": 3.83,
+       "air_8000_20000": 1.54
+      },
+      "centroid_delta_hz": 126.8,
+      "rms_delta_db": 6.97,
+      "width_hw": 0.0881,
+      "width_emu": 0.0583,
+      "centroid_hw_hz": 1011.6,
+      "rms_hw_dbfs": -19.36,
+      "attack_hw_ms": 22.1,
+      "attack_emu_ms": 42.3,
+      "label": "default",
+      "score": 2.51,
+      "worst_band": [
+       "sub_20_120",
+       4.44
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 12.4,
+      "emu_clip_frac": 0.00182
+     },
+     {
+      "bands_delta_db": {
+       "sub_20_120": 4.44,
+       "low_120_400": 2.3,
+       "mid_400_1500": -0.7,
+       "presence_1500_3000": 1.28,
+       "brilliance_3000_8000": 3.84,
+       "air_8000_20000": 1.17
+      },
+      "centroid_delta_hz": 127.2,
+      "rms_delta_db": 6.96,
+      "width_hw": 0.0881,
+      "width_emu": 0.0583,
+      "centroid_hw_hz": 1011.6,
+      "rms_hw_dbfs": -19.36,
+      "attack_hw_ms": 22.1,
+      "attack_emu_ms": 42.4,
+      "label": "firmware-fx",
+      "score": 2.51,
+      "worst_band": [
+       "sub_20_120",
+       4.44
+      ],
+      "emu_peak_dbfs": 0.0,
+      "emu_crest_db": 12.4,
+      "emu_clip_frac": 0.00176
+     }
+    ],
+    "hw_peak_dbfs": -7.4,
+    "hw_crest_db": 12.0
+   }
+  ]
+ }
+}

@@ -4,6 +4,17 @@ use super::*;
 
 impl LayerFxChain {
     pub(super) fn target_delay_samples(&self, bpm: f32) -> f32 {
+        // Firmware time law of `kDlyRateClkDiv` (opt-in, free running only): VERIFIED, see
+        // `fw_delay_time`. The firmware range is 18 ms to 1.28 s, inside the line.
+        if let (true, false, Some(raw)) = (
+            self.firmware_fx.delay_time,
+            self.delay_clock_sync,
+            self.delay_rate_raw,
+        ) {
+            let samples =
+                fw_delay_time::echo_samples_at(raw.min(fw_delay_time::MAX_RATE), self.sample_rate);
+            return samples.clamp(1.0, (DELAY_LINE_LEN - 8) as f32);
+        }
         let target_ms = if self.delay_clock_sync {
             let beat_ms = 60_000.0 / bpm.clamp(30.0, 300.0);
             (beat_ms
