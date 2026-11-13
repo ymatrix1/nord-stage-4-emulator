@@ -75,7 +75,7 @@ nord-stage-4-emulator/
 │           ├── cbin.rs         # Clavia Binary (CBIN) & .ns4b parser/serializer
 │           ├── firmware.rs     # OS v1.66 firmware container & SHARC partition parser
 │           ├── morph.rs        # 3-source Morph matrix, Scene I/II, 4-zone split crossfade
-│           ├── organ.rs        # B3 91-tonewheel physical model, percussion & Rotary 122
+│           ├── organ/          # B3 91-tonewheel physical model, percussion & Rotary 122
 │           ├── piano.rs        # Piano multisample voice, timbre EQ & modal string resonance
 │           ├── synth.rs        # Wave 2 PolyBLEP VA osc, ZDF Ladder filter & ADR envelope
 │           ├── fx.rs           # Per-layer 5-slot FX pipeline + Master Compressor & Clock
