@@ -30,7 +30,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 - **Remediation Plan:** When implementing `crates/nord-plugin`, either wrap the `egui` canvas using `nih_plug_egui` (unifying standalone and VST3/CLAP UI) or provide standard parameter automation bridges between `nih-plug` parameters and `Stage4PanelState`.
 
 ### TD-02: MIDI & Audio Device Selection
-- **Context:** `audio.rs` auto-selects the system default CPAL output device and the first available MIDIR input port.
+- **Context:** `audio/io.rs` auto-selects the system default CPAL output device and the first available MIDIR input port.
 - **Debt:** Users with multiple MIDI controllers (e.g. secondary keyboard or pedalboard) or dedicated ASIO/CoreAudio interfaces cannot switch devices from a GUI settings menu.
 - **Remediation Plan:** Introduce a modal settings dialogue or menu bar to list available CPAL audio devices, buffer sizes, and MIDIR input ports.
 

@@ -2228,6 +2228,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "nord-panel"
+version = "0.1.0"
+dependencies = [
+ "egui",
+]
+
+[[package]]
 name = "nord-plugin"
 version = "0.1.0"
 dependencies = [

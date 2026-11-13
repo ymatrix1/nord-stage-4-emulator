@@ -4,9 +4,9 @@ Status: draft (Phase 6b, `ns4-xc5n`) · Counts and pages **unverified** against 
 
 ## 1. Scope
 
-One machine-checked list of every Nord Stage 4 front-panel control (manual ch. 3-9), shared by the standalone app and the plugin editor through `crates/nord-panel` (planned). The inventory answers, per control: what it is, where the manual documents it, how sure we are, and what it drives.
+One machine-checked list of every Nord Stage 4 front-panel control (manual ch. 3-9), shared by the standalone app and the plugin editor through `crates/nord-panel` (skeleton landed in B4; entries pending B2). The inventory answers, per control: what it is, where the manual documents it, how sure we are, and what it drives.
 
-Sources: Nord Stage 4 User Manual (local copy in `.reference/`, git-ignored, never committed), reference panel photos listed in [visual-style-and-panel.md](visual-style-and-panel.md) §1, and the current code (`crates/nord-gui/src/panel.rs`, `crates/nord-plugin/src/params.rs`).
+Sources: Nord Stage 4 User Manual (local copy in `.reference/`, git-ignored, never committed), reference panel photos listed in [visual-style-and-panel.md](visual-style-and-panel.md) §1, and the current code (`crates/nord-gui/src/panel/`, `crates/nord-plugin/src/params.rs`).
 
 ## 2. Record format
 
@@ -14,11 +14,12 @@ Each control is one `ControlEntry` in `crates/nord-panel/src/inventory/` (planne
 
 | Field | Type | Meaning |
 |---|---|---|
-| `id` | `ControlId` | Stable enum variant, `Section_Layer_Name` (e.g. `OrganA_Drawbar3`, `Program_Store`). Never renamed once shipped. |
+| `id` | `ControlId` | Stable enum variant, `Section_Layer_Name` (e.g. `OrganA_Drawbar3`, `Program_Store`). Never renamed once shipped. The B4 skeleton (`crates/nord-panel`) uses the newtype `ControlId(&'static str)` (ASSUMED); B2 may swap it for a generated enum. |
 | `section` | `Section` | `Master`, `Organ`, `Piano`, `Program`, `Synth`, `Effects`, `Keybed` |
 | `kind` | `ControlKind` | `Knob`, `Encoder`, `Fader`, `Drawbar`, `Button`, `Selector`, `Led`, `LedLadder`, `Oled`, `Wheel`, `Stick`, `Key` |
 | `layer` | `Option<Layer>` | `A`/`B`/`C` for per-layer controls; `None` for global |
 | `manual_page` | `u16` | Page in the OS v1.x manual where the control is described |
+| `source` | `&'static str` | Source text backing `provenance` (must be non-empty; checked by `inventory::validate`) |
 | `provenance` | `Provenance` | `Verified` / `Empirical` / `Assumed` per [provenance-in-code](../../.agents/rules/provenance-in-code.md), with source text |
 | `binding` | `Binding` | See §3 |
 | `rect_mm` | `Rect` | Layout rect in panel millimetres (filled by `layout/`, B8) |

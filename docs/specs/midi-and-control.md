@@ -69,7 +69,7 @@ In this engine, incoming CC and channel aftertouch affect global controls only w
 
 ## 4. Audio Host and MIDI Event Delivery Specification
 
-Implemented in [`crates/nord-gui/src/audio.rs`](../../crates/nord-gui/src/audio.rs).
+Implemented in [`crates/nord-gui/src/audio/`](../../crates/nord-gui/src/audio/mod.rs).
 
 ### 4.1 Audio Output Formats & Channel Layout
 - **Sample Formats:**
