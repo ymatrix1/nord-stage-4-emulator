@@ -1,0 +1,103 @@
+# ARM edit registry, organ layer and partial boot: what was reached for the organ messages
+
+- **Checked:** 2026-11-12
+- **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` and `bank0_SRAM.bin` (OS v1.66), `tools/arm_boot.py` (new, tests in `tools/tests/test_arm_boot.py`, hand-assembled ARM snippets, no firmware needed), `tools/arm_emu.py`, `capstone` 5, `unicorn` 2.1. Derived data (ids, names, small integers only): [arm-edit-params.csv](arm-edit-params.csv). Prior notes: [arm-fw-emulation](arm-fw-emulation.md), [arm-param-messages](arm-param-messages.md), [preset-dsp-map](preset-dsp-map.md).
+- **Question:** Can the edit framework and the organ layer be brought up far enough to set `Edt_Org_Preset_kDb1..9` (`0x16D..0x175`) and the other organ ids and capture the resulting ARM to DSP messages (drawbar encoding, level curve)?
+
+Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by the command shown, **EMPIRICAL** = measured but not proven, **ASSUMED** = structural reading.
+
+## 1. Short answer
+
+| Question | Result | Status |
+|---|---|---|
+| Edit registry built by the real firmware code | Routine `0xC01A44C8` runs unmodified on a zeroed context (50 M instruction budget, allocator `0xC025D56C` stubbed) and registers **422 edit parameters** with name, id, domain, min, max, default, widths. `python tools/arm_boot.py registry target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin --csv docs/research/arm-edit-params.csv` | VERIFIED |
+| Organ layer object | Constructor `0xC0019BAC` runs unmodified (after a zeroed dispatcher is installed at `[0xC055B160]`) and subscribes to **109 edit ids**, among them all nine `0x16D..0x175`, `0x16B`, `0x16C`, `0x166`, `0x177..0x179` (`python tools/arm_boot.py layer ...`). | VERIFIED |
+| Drawbar value domain | 4 bit, **0..8**, default `8 8 8 8 0 0 0 0 0` (a `888000000` registration), widths `(4, 4, 0)`; the handler stores the plain integer `(q16 + 0x8000) >> 16` (section 3). The 7-bit scaling of [preset-dsp-map](preset-dsp-map.md) H1 (`16 d`) is **not** seen at this stage. | VERIFIED (registry, handler disassembly) |
+| Drawbar level curve (dB table) | **Not recovered.** The curve lives downstream of the callback in section 3. | open |
+| ARM to DSP messages for drawbars, vibrato/chorus, percussion, rotary, organ model, key split, key-on | **Not captured.** No organ message table, no replay. Section 4 gives the exact missing object and where the partial boot stops. | open |
+| Partial boot | Reaches about 383.7 M instructions with a tick model, a GPIO handshake model and six stubs (section 5), then calls a garbage function pointer. | VERIFIED (reproducible stop) |
+
+## 2. Edit registry (VERIFIED, `arm-edit-params.csv`)
+
+`0xC01A44C8(ctx, cfg, registry_obj)` stores `[ctx] = 0`, `registry_obj[0x1C] = ctx`, copies three words of `cfg` (`[0]` layer count, default 6) into the globals `0xC052B8BC`, `0xC059B210`, `0xC059B214`, then calls the three registrars `0xC00F10C0` (buffer), `0xC00F1030` / `0xC00F0FFC` (scalar) which call `0xC00F0A28`. That allocates a `0xD4`-byte descriptor, appends it to `ctx[1 + n]` and stores its position at `ctx[0x233 + id]` (byte offset `0x8CC + 4 id`, `-1` = none). Descriptor layout read back (`tools/arm_boot.py` `ENTRY_*`):
+
+| Offset | Field | Evidence |
+|---|---|---|
+| `+0x00` | edit id | `0x16D` for `Edt_Org_Preset_kDb1` |
+| `+0x04` | domain (`0xB` organ common, `0xC` drawbar preset, `0xD` vibrato / percussion preset) | CSV column `domain` |
+| `+0x08` | pointer to a `0x80`-byte copy of the name | strings in CSV |
+| `+0x10 / +0x14 / +0x18` | min / max / default (signed) | `Fnc_Pan` `-64 / 63 / 0`, `Edt_Org_kOctaveShift` `-6 / 6 / 0` |
+| `+0x70 .. +0x78` | three words copied from the registration call: `(1, 7, 0)` for MIDI-like 7-bit values, `(4, 4, 0)` for drawbars, `(1, 1, 0)` for switches | CSV column `w70;w74;w78`; meaning ASSUMED (preset field width in bits) |
+
+The organ block of the registry (all VERIFIED from the run):
+
+| Id | Name | Domain | Range | Default |
+|---|---|---|---|---|
+| `0x160` | `Edt_Org_kPresetEnable` | `0xB` | 0..1 | 1 |
+| `0x161` | `Edt_Org_kKbZone` | `0xB` | 0..11 | 5 |
+| `0x162` | `Edt_Org_kOctaveShift` | `0xB` | -6..6 | 0 |
+| `0x164` | `Edt_Org_kSustainEnable` | `0xB` | 0..1 | 0 |
+| `0x166` | `Edt_Org_kModel` | `0xB` | 0..5 | 0 |
+| `0x16D .. 0x175` | `Edt_Org_Preset_kDb1 .. kDb9` | `0xC` | 0..8 | `8 8 8 8 0 0 0 0 0` |
+| `0x16C` | `Edt_Org_Preset_kVibratoEnable` | `0xD` | 0..1 | 0 |
+| `0x16B` | `Edt_Org_Preset_kB3PercEnable` | `0xD` | 0..1 | 0 |
+| `0x177` | `Edt_Org_Preset_kB3PercHarmonic` | `0xD` | 0..1 | 0 |
+| `0x178` | `Edt_Org_Preset_kB3PercSpeed` | `0xD` | 0..1 | 0 |
+| `0x179` | `Edt_Org_Preset_kB3PercLevel` | `0xD` | 0..1 | 0 |
+
+`kModel` has six values (0..5); the names of the six are not in the registry. The domain meanings are ASSUMED from the grouping of the names. Vibrato / chorus *type* and rotary parameters are not `Edt_Org_*` ids: the CSV has `Edt_OrgCom_*` (`0xAD..0xB0`, layer focus / enable) and the `Edt_Effects_*` block (rotary speaker, `0x1A7` amp type etc.); find them with `grep -i "rotary\|vib" docs/research/arm-edit-params.csv`.
+
+## 3. Drawbar change handler (disassembly, VERIFIED reading; not executed)
+
+`0xC011AB8C(this, r1 = event, r2 = edit id, r3 = &q16 value)` is the change handler of a class whose vtable is at `0xC02BC73C` (the same table holds the store setter `0xC00D051C` at slot 8, so the two classes share a base). For `r2 = 0x16D + k` (`sub r1, r2, #0x16C ; sub r1, r1, #1 ; cmp r1, #8` at `0xC011ABC4`) it does:
+
+```
+value = (q16 + 0x8000) >> 16          ; plain integer 0..8, no scaling
+engine = [this + 0x98]
+engine[0x14 + k] = value              ; nine consecutive words at byte +0x50 .. +0x70
+tail-call the pointer-to-member stored at engine + 0x48 (function) / +0x4C (this adjust)
+        with (engine + adjust, k, value)
+```
+
+So the drawbar reaches the sound engine as `(k, value 0..8)`; the code that turns it into DSP words is the target of that member pointer and was **not** located (the pointer is filled by a constructor of the engine class, not by a literal that a text search finds). Other facts from the same reading:
+
+- The central notify path is `0xC00D2B94` (set a value and notify), which calls the dispatcher `0xC00D2868`: a binary search in the client table `[G + 0x150 + 4 n]` (count `[G + 0x14C]`, `G = [0xC055B160]`) and a virtual call (`vtable[1]`) on every enabled client; edit ids `0x31..0x230` take the branch at `0xC00D2A2C`. Layer constructors append their client to that table (`0xC0019BF8..0xC0019C14`). VERIFIED by disassembly, executed only as far as the constructor.
+- The organ layer's own handler `0xC011CB60` only special-cases `0x8E, 0x35, 0x8D, 0x166, 0x16C`; for other ids (drawbars) it forwards through the sub-object table at `[layer + 0x5000 + 0x6C8 + 4 base]` (vtable slot 8 = `0xC00D051C`) when a flag byte is set. The flag pointer table at `layer + 4 (base + 12 slot + 0x15D4) + 4` is zero after the constructor (filled by code that did not run), so the forward does not happen in the harness.
+- The UI side `0xC0195BCC` creates one `0xA0`-byte widget per drawbar id at x offsets `0xE0, 8, 0x28, 0x48, ...`: screen drawing, not DSP.
+
+## 4. Why no messages: the missing object
+
+The layer constructor's base `0xC0015B48` fetches a per-layer program object `r4 = [[0xC055A198 + 0xFC8] + 0x17C + 4 layer]` (the same table family as the port object at `[0xC055A198 + 0xFB8]`) and calls its virtual methods 0 and 1 to build the layer's store (`layer + 0x5AB4`). In isolation these objects do not exist: the six null calls of the constructor are exactly there (`0xC00157DC`, `0xC00157FC`, `0xC0015A54`, `0xC0015A74`, `0xC0015BAC`, `0xC0015BC8`), the store has no tables, and `0xC00D051C(store, 0, {0x16D, 1}, 5)` returns without a single call or message (measured in the session with a call tracer; not a committed test, it needs the firmware). Building that object is the job of the application constructor, which is why the partial boot below matters. Calling the layer handler directly (`0xC011CB60`) gives the same silence (flag byte null).
+
+Leads, all **ASSUMED**: (a) the nine strip gain words 26..34 of [arm-fw-emulation](arm-fw-emulation.md) section 3 (`-2^(2n+1)` for integer `n`, driven by strip ids `0x0B, 0x0C, 0x0E, 0x12, 0x13, 0x15, 0x18, 0x19, 0x1B`) is a nine-element array like the nine drawbars, but the callers that set these ids are the strip default routine `0xC01EE590` (constants) and `0xC011B338`; no link to `0x16D..0x175` was found; (b) the controller words `DM(0xC1DCC..)` are front-panel controls (UI manager loop `0xC01EE3B0`), not edit values.
+
+## 5. Partial boot (VERIFIED run, every stub is a FAKE)
+
+`python tools/arm_boot.py boot target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin --insns 400000000` (about 2 minutes). Setup: static initialiser `0xC00002A4` (real), then the application constructor thunk `0xC025D524`.
+
+| Item | Treatment | Real or fake |
+|---|---|---|
+| 64-bit tick `0x80001DC0` (`ldrd` at `0xC0080684`, `0xC0080690`) | `install_tick`: `+5000` per read | modelled (fake time base) |
+| DSP block transfer `0xC006CCBC` (waits for a GPIO input bit to equal the toggled output bit; SET at `bank + 8`, CLR at `bank + 0xC` from the `OUT_DATA` pointer, IN at `bank + 0xC`) | `install_gpio_echo`: every IN_DATA bit follows the last SET/CLR | modelled (assumed AM1808 GPIO layout, `GPIO_BASE = 0x01E26000`) |
+| cp15 control write at `0xC0024624` (MMU enable) | skipped | fake |
+| `operator new` `0xC025D56C` | bump allocator | fake |
+| DSP image download `0xC0241C58`, SPI block download `0xC0240548` (retries until the SPI slave answers `1`; the harness SPI returns zero) | return 0 | fake |
+| Board configuration query `0xC024BF70` | writes 0, returns 1 | fake |
+| Logger `0xC0080314` | returns (kind 8 blinks an LED forever; the failed SPI transfer reaches it through a counter pair at `[obj + 0x218/0x21C]` in the SPI driver) | fake |
+| PSC / other device polls | `enable_poll_breaker` | fake |
+| Null vtable calls (217 by the stop) | `guard_null_calls`; low memory re-zeroed every 50 000 instructions, because stores through a null `this` otherwise leave data that later null reads follow | fake |
+
+Not modelled: the SPI peripheral (so the DSP download and every SPI device probe is skipped), the AINTC / IRQ vector and RTOS timer tick, the RTOS scheduler. The boot nevertheless passes the delay loops, the soft-float table builds (158 k calls of the double add `0xC025C740` in the first 20 M instructions) and a large `memmove` insertion loop (`0xC0256488` from `0xC002319C`).
+
+**Stop point (reproducible):** after 383.7 M instructions the run executes at `pc = 0x90E7C878` (a heap address) with `lr = 0xC001B830`, i.e. `blx r3` at `0xC001B82C` calls through a vtable slot that holds garbage because an earlier object was not built (the 217 null calls before it are the same symptom). The next step is to decode which object `0xC001B7xx` calls; no further stub was added.
+
+## Implications
+
+- `arm-edit-params.csv` is the authoritative id, name and range list for the 422 edit parameters; the organ drawbar field is a 0..8 integer at the ARM edit layer, which settles the "scaled 7-bit?" question for *that* layer only.
+- The remaining work is the object graph below the application constructor: the per-layer program object (section 4) and the engine's member-pointer callback (section 3).
+
+## Follow-ups
+
+1. Identify the call at `0xC001B82C` and what the harness did not build; add the missing SPI model (the SPI driver `0xC0066E64` is a TI SPI master: TXFULL `0x2000` and RXEMPTY `0x8000` at `+0x42`, data at `+0x40`/`+0x3C`) so the DSP downloads can run instead of being skipped.
+2. After the application constructor returns, call `0xC00D2B94` (set and notify) for `0x16D + k` and read `emu.messages`; if the engine callback sends nothing itself, trace the member pointer stored at `engine + 0x48`.
+3. Find the constructor that fills `engine + 0x48 / 0x4C` (store with a literal function address into a `0x50`-byte-plus object whose words `0x14..0x1C` are the drawbars).

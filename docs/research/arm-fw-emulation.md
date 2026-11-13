@@ -145,6 +145,8 @@ The strip burst replaces both null stage pointers of strip 0 (`0x80120BF7`, `0x8
 
 ## Follow-ups
 
+Update (2026-11-12, [arm-organ-messages](arm-organ-messages.md)): the edit registry (422 parameters, [arm-edit-params.csv](arm-edit-params.csv)) and the organ layer constructor now run in isolation (`tools/arm_boot.py`), the partial boot reaches 383.7 M instructions with tick, GPIO and six stubs; Follow-up 1 below is partly done (organ messages still not captured).
+
 1. Build the timer/handshake/RTOS stubs of section 5 (a) to (c) far enough for the application constructor to return, then run the edit registration `0xC01A44C8` and call the edit-set method with id `0x16D`; capture the burst for all nine drawbars, then `kVibratoEnable`, `kB3Perc*`, Leslie.
 2. Trace the changed-control list filled by the front panel scan to map physical drawbars to controller slots `0..47`.
 3. Drive the table "A" senders (`0xC002AC5C`, `0xC02040DC`, `0xC0208B5C`) to see the PNO core 1 block writes and compare with the tonewheel bank agent's DM addresses.
