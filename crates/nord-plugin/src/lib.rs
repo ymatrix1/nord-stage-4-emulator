@@ -12,6 +12,7 @@ pub mod fx_params;
 pub mod fx_selectors;
 pub mod midi;
 pub mod morph_assign;
+pub mod organ_params;
 pub mod param_snapshot;
 pub mod params;
 pub mod piano_params;

@@ -231,6 +231,14 @@ organ_perc_enable|1|0.000000
 organ_perc_fast|1|1.000000
 organ_perc_soft|1|0.000000
 organ_perc_third|1|1.000000
+organx_b3_bass_1|1|0.000000
+organx_b3_bass_2|1|0.000000
+organx_close_mic|1|0.000000
+organx_octave_1|4|0.500000
+organx_octave_2|4|0.500000
+organx_scanner_1|6|0.000000
+organx_scanner_2|6|0.000000
+organx_stop_mode|1|0.000000
 piano_a_enabled|1|1.000000
 piano_a_level|cont|0.850000
 piano_b_enabled|1|0.000000
