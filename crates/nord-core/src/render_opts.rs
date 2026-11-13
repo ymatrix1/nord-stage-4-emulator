@@ -1,5 +1,5 @@
-//! Opt-in firmware paths for `ns4 render-patch` (`--tone-source`, `--filter-engine`,
-//! `--firmware-fx`). Defaults leave the engine untouched, so default renders stay bit-identical.
+//! Opt-in firmware paths shared by `ns4 render-patch` and the GUI (`--tone-source`,
+//! `--filter-engine`, `--synth-chain`, `--firmware-fx`, `--measured-laws`, ...). Defaults leave the engine untouched, so default renders stay bit-identical.
 
 use crate::engine::Stage4Engine;
 use crate::fx::FirmwareFx;
@@ -14,8 +14,9 @@ pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
         "firmware" | "pipe" => Ok(ToneWheelSource::Firmware),
         "vox" => Ok(ToneWheelSource::Vox),
         "b3wheels" | "b3" => Ok(ToneWheelSource::B3Wheels),
+        "farfisa" | "farfisawheels" => Ok(ToneWheelSource::FarfisaWheels),
         _ => Err(format!(
-            "invalid --tone-source '{v}' (expected default|legacy|firmware|vox|b3wheels)"
+            "invalid --tone-source '{v}' (expected default|legacy|firmware|vox|b3wheels|farfisa)"
         )),
     }
 }
@@ -118,9 +119,300 @@ pub fn apply_firmware_options(
     }
 }
 
+/// Every opt-in firmware switch in one `Copy` value shared by `ns4 render-patch` and the GUI.
+///
+/// `None` / `false` leave the engine default untouched. [`apply_to`](Self::apply_to) only ever
+/// switches paths on (render-patch semantics); [`apply_exact`](Self::apply_exact) also switches
+/// them back to the default so a running engine can be A/B toggled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FirmwareOptions {
+    /// `--tone-source` (`None` = `ModelDefault`).
+    pub tone_source: Option<ToneWheelSource>,
+    /// `--filter-engine` (`None` = `Zdf`).
+    pub filter_engine: Option<FilterEngine>,
+    /// `--synth-chain` (`None` = `Legacy`).
+    pub synth_chain: Option<SynthChain>,
+    /// `--b3-tail on|off` (`None` = the `B3Wheels` default, tail on).
+    pub b3_tail: Option<bool>,
+    /// `--firmware-fx`: every `FirmwareFx` port on every FX chain.
+    pub firmware_fx: bool,
+    /// `--firmware-piano-level`: `PianoLayer::firmware_velocity_level`.
+    pub piano_firmware_level: bool,
+    /// `--measured-laws`: `SynthLayer::measured_laws` (EMPIRICAL, Audible Genius clips).
+    pub measured_laws: bool,
+}
+
+/// The engine defaults: every opt-in path off, except the firmware piano level, which is the
+/// default for `.npno` sounds (D23).
+impl Default for FirmwareOptions {
+    fn default() -> Self {
+        Self {
+            tone_source: None,
+            filter_engine: None,
+            synth_chain: None,
+            b3_tail: None,
+            firmware_fx: false,
+            piano_firmware_level: true,
+            measured_laws: false,
+        }
+    }
+}
+
+impl FirmwareOptions {
+    /// Every opt-in path off and the legacy piano velocity response (`--legacy-all`).
+    pub fn legacy_all() -> Self {
+        Self {
+            piano_firmware_level: false,
+            ..Self::default()
+        }
+    }
+
+    /// Every verified firmware path on (`--firmware-all`): firmware tone wheels, firmware filter,
+    /// strip chain, firmware FX, firmware piano level. `measured_laws` (EMPIRICAL) stays off.
+    pub fn firmware_all() -> Self {
+        Self {
+            tone_source: Some(ToneWheelSource::Firmware),
+            filter_engine: Some(FilterEngine::Firmware),
+            synth_chain: Some(SynthChain::FirmwareStrip),
+            b3_tail: None,
+            firmware_fx: true,
+            piano_firmware_level: true,
+            measured_laws: false,
+        }
+    }
+
+    /// Parses the shared flags from a CLI argument list; unknown arguments are ignored so a host
+    /// binary can mix in its own flags. Presets (`--firmware-all`, `--legacy-all`) apply first,
+    /// then individual flags override them.
+    pub fn from_args(args: &[String]) -> Result<Self, String> {
+        let has = |name: &str| args.iter().any(|a| a == name);
+        let value = |name: &str| {
+            args.iter()
+                .position(|a| a == name)
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str)
+        };
+        let mut o = Self::default();
+        if has("--firmware-all") {
+            o = Self::firmware_all();
+        }
+        if has("--legacy-all") {
+            o = Self::legacy_all();
+        }
+        if let Some(v) = value("--tone-source") {
+            o.tone_source = Some(parse_tone_source(v)?);
+        }
+        if let Some(v) = value("--filter-engine") {
+            o.filter_engine = Some(parse_filter_engine(v)?);
+        }
+        if let Some(v) = value("--synth-chain") {
+            o.synth_chain = Some(parse_synth_chain(v)?);
+        }
+        if let Some(v) = value("--b3-tail") {
+            o.b3_tail = Some(parse_on_off("--b3-tail", v)?);
+        }
+        o.firmware_fx |= has("--firmware-fx");
+        o.piano_firmware_level |= has("--firmware-piano-level");
+        if has("--legacy-piano-level") {
+            o.piano_firmware_level = false;
+        }
+        o.measured_laws |= has("--measured-laws");
+        Ok(o)
+    }
+
+    /// Switches the selected paths on (identical to the individual `apply_*` calls render-patch
+    /// used before this struct existed).
+    pub fn apply_to(&self, engine: &mut Stage4Engine) {
+        apply_firmware_options(
+            engine,
+            self.tone_source,
+            self.filter_engine,
+            self.firmware_fx,
+        );
+        apply_piano_level(engine, self.piano_firmware_level);
+        apply_b3_tail(engine, self.b3_tail);
+        apply_synth_chain(engine, self.synth_chain);
+        if self.measured_laws {
+            self.set_measured_laws(engine);
+        }
+    }
+
+    /// Sets every path to exactly this value, including back to the engine default. Runs on
+    /// the audio thread between blocks; `set_b3_tail` rebuilds the wheel tables (setup-time cost),
+    /// the other switches are plain field writes.
+    pub fn apply_exact(&self, engine: &mut Stage4Engine) {
+        let tone = self.tone_source.unwrap_or(ToneWheelSource::ModelDefault);
+        let filter = self.filter_engine.unwrap_or(FilterEngine::Zdf);
+        let chain = self.synth_chain.unwrap_or(SynthChain::Legacy);
+        engine.organ_a.tonewheel_source = tone;
+        engine.organ_b.tonewheel_source = tone;
+        for s in [
+            &mut engine.synth_a,
+            &mut engine.synth_b,
+            &mut engine.synth_c,
+        ] {
+            s.filter_engine = filter;
+            s.chain = chain;
+        }
+        let fx = if self.firmware_fx {
+            FirmwareFx::ALL
+        } else {
+            FirmwareFx::OFF
+        };
+        for c in engine.fx_chains.iter_mut() {
+            c.firmware_fx = fx;
+        }
+        engine.piano_a.firmware_velocity_level = self.piano_firmware_level;
+        engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
+        apply_b3_tail(engine, Some(self.b3_tail.unwrap_or(true)));
+        self.set_measured_laws(engine);
+    }
+
+    fn set_measured_laws(&self, engine: &mut Stage4Engine) {
+        engine.synth_a.measured_laws = self.measured_laws;
+        engine.synth_b.measured_laws = self.measured_laws;
+        engine.synth_c.measured_laws = self.measured_laws;
+    }
+
+    /// Short human-readable summary of the active paths (`"defaults"` when none is on).
+    pub fn summary(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(t) = self.tone_source {
+            parts.push(format!("tone={t:?}"));
+        }
+        if let Some(f) = self.filter_engine {
+            parts.push(format!("filter={f:?}"));
+        }
+        if let Some(c) = self.synth_chain {
+            parts.push(format!("chain={c:?}"));
+        }
+        if let Some(b) = self.b3_tail {
+            parts.push(format!("b3-tail={}", if b { "on" } else { "off" }));
+        }
+        if self.firmware_fx {
+            parts.push("fx".into());
+        }
+        if !self.piano_firmware_level {
+            parts.push("legacy-piano".into());
+        }
+        if self.measured_laws {
+            parts.push("measured".into());
+        }
+        if parts.is_empty() {
+            "defaults".into()
+        } else {
+            parts.join(" ")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn from_args_parses_flags_presets_and_ignores_unknown() {
+        assert_eq!(
+            FirmwareOptions::from_args(&args(&["gui", "--program", "x.ns4p"])),
+            Ok(FirmwareOptions::default())
+        );
+        let o = FirmwareOptions::from_args(&args(&[
+            "--tone-source",
+            "b3wheels",
+            "--filter-engine",
+            "firmware",
+            "--synth-chain",
+            "strip",
+            "--b3-tail",
+            "off",
+            "--firmware-fx",
+            "--firmware-piano-level",
+            "--measured-laws",
+        ]))
+        .unwrap();
+        assert_eq!(o.tone_source, Some(ToneWheelSource::B3Wheels));
+        assert_eq!(o.b3_tail, Some(false));
+        assert!(o.firmware_fx && o.piano_firmware_level && o.measured_laws);
+        let all = FirmwareOptions::from_args(&args(&["--firmware-all"])).unwrap();
+        assert_eq!(all, FirmwareOptions::firmware_all());
+        assert!(!all.measured_laws);
+        let over = FirmwareOptions::from_args(&args(&[
+            "--firmware-all",
+            "--tone-source",
+            "vox",
+            "--legacy-piano-level",
+        ]))
+        .unwrap();
+        assert_eq!(over.tone_source, Some(ToneWheelSource::Vox));
+        assert!(!over.piano_firmware_level);
+        let legacy = FirmwareOptions::from_args(&args(&["--firmware-all", "--legacy-all"]));
+        assert_eq!(legacy, Ok(FirmwareOptions::legacy_all()));
+        assert!(FirmwareOptions::from_args(&args(&["--tone-source", "bogus"])).is_err());
+    }
+
+    #[test]
+    fn apply_to_matches_the_individual_apply_calls() {
+        let mut a = Stage4Engine::new(48_000.0);
+        let mut b = Stage4Engine::new(48_000.0);
+        FirmwareOptions::default().apply_to(&mut a);
+        assert_eq!(a.organ_a.tonewheel_source, ToneWheelSource::ModelDefault);
+        assert!(!a.synth_a.measured_laws && a.piano_a.firmware_velocity_level);
+        FirmwareOptions::firmware_all().apply_to(&mut a);
+        apply_firmware_options(
+            &mut b,
+            Some(ToneWheelSource::Firmware),
+            Some(FilterEngine::Firmware),
+            true,
+        );
+        apply_piano_level(&mut b, true);
+        apply_synth_chain(&mut b, Some(SynthChain::FirmwareStrip));
+        assert_eq!(a.organ_b.tonewheel_source, b.organ_b.tonewheel_source);
+        assert_eq!(a.synth_c.filter_engine, b.synth_c.filter_engine);
+        assert_eq!(a.synth_c.chain, b.synth_c.chain);
+        assert_eq!(a.fx_chains[3].firmware_fx, FirmwareFx::ALL);
+        assert!(a.piano_b.firmware_velocity_level);
+        let m = FirmwareOptions {
+            measured_laws: true,
+            ..Default::default()
+        };
+        m.apply_to(&mut a);
+        assert!(a.synth_a.measured_laws && a.synth_b.measured_laws && a.synth_c.measured_laws);
+    }
+
+    #[test]
+    fn apply_exact_round_trips_back_to_the_defaults() {
+        let mut e = Stage4Engine::new(48_000.0);
+        let on = FirmwareOptions {
+            measured_laws: true,
+            b3_tail: Some(false),
+            ..FirmwareOptions::firmware_all()
+        };
+        on.apply_exact(&mut e);
+        assert_eq!(e.synth_b.filter_engine, FilterEngine::Firmware);
+        assert!(e.synth_c.measured_laws && e.piano_a.firmware_velocity_level);
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert_eq!(e.organ_a.tonewheel_source, ToneWheelSource::ModelDefault);
+        assert_eq!(e.synth_a.filter_engine, FilterEngine::Zdf);
+        assert_eq!(e.synth_a.chain, SynthChain::Legacy);
+        assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::OFF);
+        assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
+        FirmwareOptions::legacy_all().apply_exact(&mut e);
+        assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
+    }
+
+    #[test]
+    fn summary_lists_active_paths() {
+        assert_eq!(FirmwareOptions::default().summary(), "defaults");
+        let s = FirmwareOptions::firmware_all().summary();
+        assert!(s.contains("tone=Firmware") && s.contains("fx") && !s.contains("legacy-piano"));
+        assert!(FirmwareOptions::legacy_all()
+            .summary()
+            .contains("legacy-piano"));
+    }
 
     #[test]
     fn b3_tail_switch_parses_and_changes_the_b3_wheels_render() {
@@ -147,6 +439,10 @@ mod tests {
         assert_eq!(parse_tone_source("Vox"), Ok(ToneWheelSource::Vox));
         assert_eq!(parse_tone_source("b3wheels"), Ok(ToneWheelSource::B3Wheels));
         assert_eq!(parse_tone_source("pipe"), Ok(ToneWheelSource::Firmware));
+        assert_eq!(
+            parse_tone_source("farfisa"),
+            Ok(ToneWheelSource::FarfisaWheels)
+        );
         assert!(parse_tone_source("x").is_err());
         assert_eq!(parse_filter_engine("firmware"), Ok(FilterEngine::Firmware));
         assert!(parse_filter_engine("x").is_err());
