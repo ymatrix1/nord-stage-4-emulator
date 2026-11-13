@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 /// Host parameter sources; a `Bound` id must appear as a quoted literal here.
-const HOST_SOURCES: [&str; 9] = [
+const HOST_SOURCES: [&str; 10] = [
     include_str!("../../../nord-plugin/src/params.rs"),
     include_str!("../../../nord-plugin/src/fx_params.rs"),
     include_str!("../../../nord-plugin/src/fx_selectors.rs"),
@@ -16,6 +16,7 @@ const HOST_SOURCES: [&str; 9] = [
     include_str!("../../../nord-plugin/src/organ_params.rs"),
     include_str!("../../../nord-plugin/src/synth_mod_params.rs"),
     include_str!("../../../nord-plugin/src/fx_extra_params.rs"),
+    include_str!("../../../nord-plugin/src/synth_gate_params.rs"),
 ];
 /// Source of the top-level struct that declares the nested `id_prefix` values.
 const PARAMS_SRC: &str = include_str!("../../../nord-plugin/src/params.rs");
@@ -175,9 +176,9 @@ fn total_is_the_sum_of_sections() {
 fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
-    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 98);
+    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 104);
     assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 49);
-    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 126);
+    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 120);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)
@@ -193,6 +194,7 @@ fn host_id_resolver_accepts_literals_and_nested_ids_only() {
     assert!(host_id_exists("organx_close_mic"));
     assert!(host_id_exists("fxx_mod1_amount_{n}"));
     assert!(host_id_exists("synthm_arp_mode_{n}"));
+    assert!(host_id_exists("synthg_kb_hold"));
     assert!(!host_id_exists("pianox_nope_{n}"));
     assert!(!host_id_exists("nopex_unison_{n}"));
     assert!(!host_id_exists("nothing"));
