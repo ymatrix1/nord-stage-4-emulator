@@ -9,6 +9,7 @@ use std::f32::consts::TAU;
 use std::path::Path;
 use std::sync::Arc;
 
+pub mod level_q23;
 pub mod q31_kernel;
 pub mod smp_page;
 pub mod smp_unpack;
