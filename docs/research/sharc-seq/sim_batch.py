@@ -26,16 +26,28 @@ def words_bytes(ws):
 
 
 def read_cases(path):
-    scr, cases = None, []
+    """Returns (scratch table, global memory setup, cases). Header lines besides `scr`:
+    `code ADDR PARCELS` (16-bit parcels, hex, poked into program memory), `dm ADDR WORDS..` and
+    `watch ADDR COUNT` (DM words appended to every result). A case line may end with
+    ` | ADDR WORDS..` chunks of DM to write before it runs (routine inputs)."""
+    scr, cases, setup = None, [], {'code': [], 'dm': [], 'watch': []}
     for line in open(path):
-        t = line.split()
+        parts = line.split('|')
+        t = parts[0].split()
         if not t:
             continue
         if t[0] == 'scr':
             scr = [int(x, 16) for x in t[1:]]
+        elif t[0] == 'code':
+            setup['code'].append((int(t[1], 16), t[2]))
+        elif t[0] == 'dm':
+            setup['dm'].append((int(t[1], 16), [int(x, 16) for x in t[2:]]))
+        elif t[0] == 'watch':
+            setup['watch'].append((int(t[1], 16), int(t[2])))
         else:
-            cases.append((t[0], [int(x, 16) for x in t[1:]]))
-    return scr, cases
+            chunks = [(int(c.split()[0], 16), [int(x, 16) for x in c.split()[1:]]) for c in parts[1:] if c.split()]
+            cases.append((t[0], [int(x, 16) for x in t[1:]], chunks))
+    return scr, setup, cases
 
 
 def main():
@@ -54,7 +66,7 @@ def main():
     dxe = os.path.abspath(a.dxe)
     syms = sim_run.elf_symbols(dxe)
     slot, st, res, scr_a, exit_a, done = (syms[n] for n in ('_slot', '_st', '_res', '_scr', '_probe_exit', '_done'))
-    scr, cases = read_cases(a.cases)
+    scr, setup, cases = read_cases(a.cases)
     sys.path.insert(0, sim_run.unpack_wheel())
     os.environ['PATH'] = os.path.join(sim_run.cces_home(), 'System') + os.pathsep + os.environ['PATH']
     os.environ.setdefault('CCES_HOME', sim_run.cces_home())
@@ -66,7 +78,7 @@ def main():
         buf_res = bytearray(4 * a.n_state)
         buf_scr = bytearray(4 * SCR_WORDS)
         flag = bytearray(4)
-        for k, (parcels, state) in enumerate(cases):
+        for k, (parcels, state, chunks) in enumerate(cases):
             T.LoadProgram(0, dxe, False)   # fresh memory and registers: Reset is slow and leaves no program
             T.SetBreakpointAtAddress(0, exit_a)
             ps = [int(parcels[i:i + 4], 16) for i in range(0, len(parcels), 4)]
@@ -74,6 +86,11 @@ def main():
             T.SetMemory(0, sim_run.DM_MEMORY_ID, st, len(state), 1, bytearray(words_bytes(state)))
             T.SetMemory(0, sim_run.DM_MEMORY_ID, scr_a, SCR_WORDS, 1, bytearray(words_bytes(scr)))
             T.SetMemory(0, PM_SHORT_WORD_ID, slot, SLOT_PARCELS, 1, bytearray(struct.pack('>%dH' % SLOT_PARCELS, *ps)))
+            for addr, hexp in setup['code']:
+                n = len(hexp) // 4
+                T.SetMemory(0, PM_SHORT_WORD_ID, addr, n, 1, bytearray(bytes.fromhex(hexp)))
+            for addr, ws in setup['dm'] + chunks:
+                T.SetMemory(0, sim_run.DM_MEMORY_ID, addr, len(ws), 1, bytearray(words_bytes(ws)))
             T.Run(0, False)
             t1 = time.time()
             while True:   # the state reads HALTED until the run starts: wait for the done flag instead
@@ -92,6 +109,10 @@ def main():
                 out.write('HALT %s\n' % str(e).split(':')[-1].strip().replace(' ', '_'))
                 continue
             ws = struct.unpack('>%dI' % a.n_state, bytes(buf_res)) + struct.unpack('>%dI' % SCR_WORDS, bytes(buf_scr))
+            for addr, n in setup['watch']:
+                wb = bytearray(4 * n)
+                T.GetMemory(0, sim_run.DM_MEMORY_ID, addr, n, 1, wb)
+                ws += struct.unpack('>%dI' % n, bytes(wb))
             out.write(' '.join('%08X' % w for w in ws) + '\n')
     finally:
         T.Disconnect()
