@@ -121,3 +121,18 @@ To keep every label legible on standard 1080p/1440p/4K monitors and inside DAW p
 1. **Full Panorama View (`1600×520` aspect, scalable `0.75x..2.0x`):** Shows the entire Nord Stage 4 top panel + 88-key interactive keyboard with split-zone color overlays and pitch/mod wheels.
 2. **Focused Rack View (`1100×640` compact DAW mode):** Keeps the Top Master/Program/Morph/Scene bar + 88-key Split bar permanently visible while allowing large, zoomed-in inspection of `[ORGAN + PIANO]` or `[SYNTH + LAYER EFFECTS]` at full 1:1 readability.
 3. **Docked `.ns4b` Archive Browser & Knob Recall Mode:** The `.ns4b` library drawer docks as a resizable left `SidePanel` before the front-panel `CentralPanel` (never overlapping hardware controls), with an `Auto-close` toggle (enabled by default) that dismisses the browser upon selecting a Program, Piano, or Sample so the full top panel remains unobstructed. `Sync Knobs on Preset` defaults to `false` to match authentic non-motorized Nord Stage 4 hardware behavior (where OLEDs, `A:11..H:88` location, LED button rings, `fx_focus`, and layer/drawbar LED meters update while potentiometer caps keep their physical angle).
+
+---
+
+## 6. Baked sprite proof (B7, Phase 6b)
+
+First measured output of the D15 baker: one knob filmstrip and one fader cap with a separate shadow, rendered by `assets/blender/build_proof.py`, committed under `assets/panel/proof/` with SHA-256 hashes in `manifest.json` (`python tools/panel_assets.py verify`). Details and sizes: [panel-blender-proof.md](../research/panel-blender-proof.md).
+
+| Item | Value | Tag |
+|---|---|---|
+| Knob filmstrip | 64 frames, 8x8 grid, frame 96 px (1x) / 192 px (2x), pointer -135 to +135 deg clockwise | rotation `EMPIRICAL` (rotary scale on reference photo, measurement only) |
+| Fader cap | 96 px / 192 px sprite, separate shadow sprite of the same size | `ASSUMED` geometry (original) |
+| Light | one top-left sun, elevation about 55 deg | `ASSUMED`, D15 |
+| Camera | orthographic, 14 deg tilt toward player | `ASSUMED` |
+| Size, one of each asset | 420 KB (1x), 1.28 MB (2x) PNG | measured |
+| Full-panel estimate (4 knob styles, 3 fader styles) | 1.56 MB (1x), 4.62 MB (2x) PNG | counts `ASSUMED` until B2 |

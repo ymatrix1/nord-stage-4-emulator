@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "files": {
+    "knob_filmstrip_1x.png": {
+      "sha256": "63eb3003bc10b715801bdb74591862999a14d115ffca564da86e6fb2d3d8f0d7",
+      "bytes": 372214,
+      "width": 768,
+      "height": 768
+    },
+    "fader_cap_1x.png": {
+      "sha256": "52ac7fd3e431cc395d4fd12a36c389c4bbb84ee7c74882b5ea0253302ab13ec2",
+      "bytes": 5928,
+      "width": 96,
+      "height": 96
+    },
+    "fader_shadow_1x.png": {
+      "sha256": "0600c6dc1a5fac8a9adb9ad236b923ffc100781b43c5df4b3df984d83e35fd69",
+      "bytes": 5194,
+      "width": 96,
+      "height": 96
+    },
+    "plate_red_1x.png": {
+      "sha256": "18b2072257f8096d6188768d5615fa9b2e965270f3a7949ad3c4e5aa51627bc6",
+      "bytes": 12916,
+      "width": 128,
+      "height": 128
+    },
+    "plate_slate_slot_1x.png": {
+      "sha256": "a14928857232a5c28ba8f984804af09313a29cc303f726dfc852e80aaa351d4b",
+      "bytes": 23856,
+      "width": 128,
+      "height": 256
+    },
+    "knob_filmstrip_2x.png": {
+      "sha256": "5ec2c5d413de453baeec789591c0ce429b7f18065eea9c581cb7d406c88ce33f",
+      "bytes": 1091749,
+      "width": 1536,
+      "height": 1536
+    },
+    "fader_cap_2x.png": {
+      "sha256": "0ebcba7eae412b71b66cb6916bbc6ae8575cd2e2761da13a2df7197be819a19e",
+      "bytes": 17116,
+      "width": 192,
+      "height": 192
+    },
+    "fader_shadow_2x.png": {
+      "sha256": "57a092058ab6a07cfe7cbe2bac391964d27f320d4aed3e809bd7ab35ae44f11d",
+      "bytes": 13905,
+      "width": 192,
+      "height": 192
+    },
+    "plate_red_2x.png": {
+      "sha256": "ee34f8d495393e70b6b042829ea65d161929afc74e13ae2df5d7252982bb1a13",
+      "bytes": 53402,
+      "width": 256,
+      "height": 256
+    },
+    "plate_slate_slot_2x.png": {
+      "sha256": "318e4c9247673d6146e5efde5e90900286de9da9a2728c146831d4b31d9b7ab3",
+      "bytes": 106894,
+      "width": 256,
+      "height": 512
+    }
+  }
+}
