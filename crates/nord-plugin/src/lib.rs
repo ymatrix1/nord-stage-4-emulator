@@ -12,6 +12,7 @@ pub mod aux_pedal_params;
 pub mod fx_extra_params;
 pub mod fx_params;
 pub mod fx_selectors;
+pub mod fx_sharing_params;
 pub mod midi;
 pub mod morph_assign;
 pub mod organ_extra_params;

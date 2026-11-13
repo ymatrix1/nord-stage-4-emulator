@@ -8,6 +8,27 @@ use super::{OrganLayer, RotarySpeed};
 use std::f32::consts::TAU;
 
 impl OrganLayer {
+    /// Copies the shared Rotary Speaker controls of `src` (speed, drive, mic, angle, stop mode).
+    ///
+    /// Manual p.48: the Rotary is one instance per Program; its speed and drive are common to every
+    /// sound routed through it. Used by the engine's `TO ROTARY` bus.
+    pub fn mirror_rotary_settings(&mut self, src: &OrganLayer) {
+        self.rotary_speed = src.rotary_speed;
+        self.rotary_drive = src.rotary_drive;
+        self.rotary_drive_unity = src.rotary_drive_unity;
+        self.rotary_close_mic = src.rotary_close_mic;
+        self.rotary_mic_angle_deg = src.rotary_mic_angle_deg;
+        self.rotary_stop_mode = src.rotary_stop_mode;
+    }
+
+    /// Runs a mono external signal (a Piano / Synth layer routed `TO ROTARY`) through the rotary.
+    ///
+    /// Allocation free; uses the layer's own rotor state, so call it on a dedicated bus instance.
+    #[inline]
+    pub fn process_external_rotary(&mut self, x: f32) -> [f32; 2] {
+        self.process_rotary(x, 1.0 / self.sample_rate)
+    }
+
     /// Processes Model 122 Rotary Speaker with Doppler delay, Close Mic, Angle, Stop Mode, and cabinet reflections.
     pub(super) fn process_rotary(&mut self, scanner_out: f32, inv_fs: f32) -> [f32; 2] {
         let gain = 1.0 + 3.0 * self.rotary_drive;
@@ -169,6 +190,26 @@ mod tests {
         assert!(level(true, 0.001) < 0.002);
         // a loud input clips below 1/g under the unity law
         assert!(level(true, 4.0) < 0.2);
+    }
+
+    #[test]
+    fn external_rotary_is_stereo_and_mirrors_settings() {
+        let mut src = OrganLayer::new(48_000.0);
+        src.rotary_speed = RotarySpeed::Fast;
+        src.rotary_drive = 0.9;
+        src.rotary_close_mic = true;
+        let mut bus = OrganLayer::new(48_000.0);
+        bus.mirror_rotary_settings(&src);
+        assert_eq!(bus.rotary_speed, RotarySpeed::Fast);
+        assert_eq!(bus.rotary_drive, 0.9);
+        assert!(bus.rotary_close_mic);
+        let mut diff = 0.0f32;
+        for i in 0..8192 {
+            let [l, r] = bus.process_external_rotary(0.5 * (i as f32 * 0.07).sin());
+            assert!(l.is_finite() && r.is_finite());
+            diff += (l - r).abs();
+        }
+        assert!(diff > 1.0, "rotary output is not stereo");
     }
 
     #[test]

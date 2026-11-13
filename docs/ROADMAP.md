@@ -151,7 +151,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] **B5** Host and behaviour layer: `PanelHost`, `PanelAction`, Shift / hold / double-tap / selector cycling / pot snap / Live Mode with unit tests (`ns4-q6p7`; `crates/nord-panel/src/behaviour/`, timings `ASSUMED` except the 500 ms hold)
 - [ ] **B6** Headless golden-image harness: CPU raster via `tiny-skia`, per-pixel tolerance + error budget, goldens at 0.5x; optional local-only photo comparison skipped without `.reference/` (`ns4-7cv6`, after B4)
 - [ ] **B7** Asset baker (`xtask bake-panel`) and material/shadow system: Blender-rendered sprites and filmstrips from our own models, committed renders with content hashes, `tiny-skia` for flat vector layers, theme tokens; first proves one knob filmstrip and one fader cap and measures atlas size (D15, `ns4-77s9`, after B1, B4)
-- [ ] **B8a-g** Section renderers with a golden image each and every section control bound: master/rotary/wheels (`ns4-0sud`), organ (`ns4-9h25`), piano (`ns4-otuf`), program + both OLEDs (`ns4-z6fi`), synth (`ns4-irgv`), effects (`ns4-hcuh`), keybed (`ns4-jpgx`) (after B2, B5, B6, B7)
+- [ ] **B8a-g** Section renderers with a golden image each and every section control bound: master/rotary/wheels (`ns4-0sud`), organ (`ns4-9h25`), piano (`ns4-otuf`), program + both OLEDs (`ns4-z6fi`), synth (`ns4-irgv`), effects (`ns4-hcuh`), keybed (`ns4-jpgx`) (after B2, B5, B6, B7). **Layout prerequisite delivered:** `crates/nord-panel/src/layout/` gives every control a mm rectangle (`rect_for`, `section_rect`; 36 of 273 estimated, scale 0.6917 mm/px from the 2000 px photo, `ASSUMED`); renderers are not started, so the box stays open
 - [ ] **B9a-d** Parameter and engine parity, additive IDs only: synth per layer (`ns4-4w9l`), effects (`ns4-e3zs`), organ/piano per layer (`ns4-h7he`), program/menus/Extern (`ns4-ymci`) (after B3)
 - [ ] **B10** Lock-free telemetry engine to GUI; test proves `process_block` does not allocate; LED ladders show morphed level (`ns4-gjy2`, after B5)
 - [ ] **B11** Plugin editor (`nih_plug_egui`): resizable fixed aspect, HiDPI, size saved; loads in Reaper and Bitwig (`ns4-hud1`, after B5, B8)
@@ -205,7 +205,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Boot message log: every ARM to DSP store from reset (80,815 boot messages, real EMIFA ports) kept, fingerprinted and replayed into `sharc-pass` / `sharc-org` (PNO core 1 8,300 / 8,306 words, ORG 12,102 / 12,102); census of the stubbed SPI routines ([arm-bulk-tables](research/arm-bulk-tables.md), `tools/arm_bulk_tables.py`)
 - [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
 - [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
-- [ ] SY / SMP equality, port the corrected tail table with regenerated chord tests and the video check, Vox / Farfisa line comparisons; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] Corrected B3 tail ported with regenerated chord tests, oracle chords within 0.54 dB and video mid -1.1 dB ([b3-tail-bootstate](research/b3-tail-bootstate.md)); `B3Wheels` stays opt-in (RMS +8.0 dB)
+- [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 

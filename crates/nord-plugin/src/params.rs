@@ -122,6 +122,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fxx", group = "Layer FX Extra")]
     pub layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank,
 
+    /// Per-layer FX variations, Wah PED, delay division, GLOBAL / GROUP sharing.
+    #[nested(id_prefix = "fxy", group = "Layer FX Sharing")]
+    pub layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -347,6 +351,7 @@ impl Default for Stage4Params {
             organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
             piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
             layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
+            layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -616,6 +621,7 @@ impl Stage4Params {
         self.synth_gate.sync_to_engine(engine);
         self.organ_layers.sync_to_engine(engine);
         self.layer_fx_extra.sync_to_engine(engine);
+        self.layer_fx_sharing.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();
