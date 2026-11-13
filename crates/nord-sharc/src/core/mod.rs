@@ -207,6 +207,18 @@ pub struct Core {
     pub watch_addrs: Vec<u32>,
     /// Maximum number of logged writes (default [`WATCH_LIMIT`]).
     pub watch_limit: usize,
+    /// First data address whose loads are logged in `rwatch_hits` while `rwatch_on` (`u32::MAX` = none).
+    pub rwatch: u32,
+    /// Register trace window `(lo, hi, limit)`: every step whose pc lies in `lo..=hi` logs R, S, I, M.
+    pub trace: Option<(u32, u32, usize)>,
+    /// Lines logged by `trace`.
+    pub trace_log: Vec<String>,
+    /// Number of consecutive words load-watched from `rwatch`.
+    pub rwatch_len: u32,
+    /// Loads inside the window as `(pc, address)`, at most `watch_limit`.
+    pub rwatch_hits: Vec<(u32, u32)>,
+    /// True while the pass loop runs (host reads of the memory are not core loads).
+    pub rwatch_on: bool,
     pub imask: u32,
     pub mmask: u32,
     pub flags: Flags,
@@ -278,6 +290,12 @@ impl Core {
             watch_hits: Vec::new(),
             watch_addrs: Vec::new(),
             watch_limit: WATCH_LIMIT,
+            rwatch: u32::MAX,
+            trace: None,
+            trace_log: Vec::new(),
+            rwatch_len: 1,
+            rwatch_hits: Vec::new(),
+            rwatch_on: false,
             imask: 0,
             mmask: sysregs::MMASK_RESET,
             flags: Flags::default(),

@@ -200,7 +200,8 @@ parameter set per engine mode. The engine's `0..=1` fields are the presets' `raw
 | `kCmpAmt` | threshold `c[-0x1B]`, makeup target `c[-0x1C]` | `-36 v/127`, `1 + 5.72 (v/127)^2` | layer (`FirmwareFx::compressor`) and master (`use_fw_compressor_amount`) | words VERIFIED, roles EMPIRICAL |
 | attack / release pairs | `c[-0x20..-0x1D]` | `(0.102071, 1.0)`, `(4.607e-4, 0.04)` for every value | with `kCmpAmt` | VERIFIED words |
 | compressor slope, log gain | slope `c[-0x17]`, `c[-0x0B]` | `0.05` (`CMP_SLOPE`), `1.0` | with `kCmpAmt` | ASSUMED (base words of the Cmp type switch not captured) |
-| `kCmpResponse` | none | words identical for both values | no (engine `comp_fast` keeps its legacy meaning) | open |
+| `kCmpResponse` | none | the handler ignores the value (same four constants, 4 states tried) | no (engine `comp_fast` keeps its legacy meaning) | closed: no DSP effect ([fx-reverb-leslie](../research/fx-reverb-leslie.md) s4) |
+| `kRvbAmt` | send `0xC02BB44C` word `-0x1F`, dry word `-0x1E` | `x^2 (2 - x)` with `x = v/128` (1 at 127), `sqrt(1 - wet^2)` | reverb dry and send when `FirmwareFx::reverb_mix`; the reverb network itself stays the engine FDN | words VERIFIED (all 128 values), role EMPIRICAL |
 | `kAmpDrive` | `c[-0x20]` of `FwAmpDrive` | `v/127` | fill only (`set_amp_drive`): the drive curve tables are firmware data, not in the repo | VERIFIED words |
 | `kAmpTreble`, `kAmpBass` | `F c[-0x1B]`, `E c[-0x1C]`, `A c[-0x20]`, `a c[-0x14]` | 13-point tables, linear in the word between points | fill only (`set_tone_stack`): the other tone-stack words come from the Amp type switch | words VERIFIED at the 13 counts, interpolation and unit tables (piano) EMPIRICAL |
 | `kAmpMid`, `kAmpMidFreq` | `C D B` and `0xC044398C` words | not mapped | no | open |

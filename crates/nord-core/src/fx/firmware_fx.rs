@@ -15,6 +15,9 @@
 ///   `LayerFxChain::delay_rate_raw` (the preset's 14 bit value, set by `apply_fx_chain`); without
 ///   it, or in tempo sync, the engine time law is used. The firmware cross-fades two taps for
 ///   45 ms when the value changes; the engine keeps its own slew.
+/// * `reverb_mix`: the reverb send and dry gains follow `kRvbAmt` (`fw_map::reverb_send` / `reverb_dry`,
+///   equal power; words VERIFIED on all 128 values, role EMPIRICAL). Only the mix: the engine's
+///   reverb network keeps its own taps, decay and damping (the multi-tap routines are not ported).
 /// * `compressor`: the layer compressor is the firmware gain computer ([`super::FwCompressor`])
 ///   with the `kCmpAmt` words. Algorithm VERIFIED, `kCmpAmt` words VERIFIED, slope and log gain
 ///   ASSUMED. **Latency 4 frames (83 us at 48 kHz)** on that layer; the stage runs even when
@@ -33,6 +36,8 @@ pub struct FirmwareFx {
     pub compressor: bool,
     /// Firmware delay time law of `kDlyRateClkDiv` (free-running delay only).
     pub delay_time: bool,
+    /// Reverb mix law of `kRvbAmt`.
+    pub reverb_mix: bool,
 }
 
 impl FirmwareFx {
@@ -41,6 +46,7 @@ impl FirmwareFx {
         delay_laws: false,
         compressor: false,
         delay_time: false,
+        reverb_mix: false,
     };
 
     /// Every switch on.
@@ -48,6 +54,7 @@ impl FirmwareFx {
         delay_laws: true,
         compressor: true,
         delay_time: true,
+        reverb_mix: true,
     };
 }
 
@@ -59,7 +66,7 @@ mod tests {
     fn default_is_off_and_all_turns_every_switch_on() {
         assert_eq!(FirmwareFx::default(), FirmwareFx::OFF);
         let all = std::hint::black_box(FirmwareFx::ALL);
-        assert!(all.delay_laws && all.compressor && all.delay_time);
+        assert!(all.delay_laws && all.compressor && all.delay_time && all.reverb_mix);
         assert_ne!(all, FirmwareFx::OFF);
     }
 }

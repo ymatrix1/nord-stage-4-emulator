@@ -137,6 +137,7 @@ impl SynthLayer {
             filter_right: self.voices[idx].filter_right,
             fw_filter: self.voices[idx].fw_filter,
             fw_filter_right: self.voices[idx].fw_filter_right,
+            strip: StripVoice::default(),
             sample_zone_idx,
             sample_pos: 0.0,
             sample_step,

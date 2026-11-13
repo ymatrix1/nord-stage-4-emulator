@@ -224,6 +224,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Routine models with opt-in Rust ports: delay `0x1206B0`, table LFO `0x1228CF`, all-pass `0x122C39`, resonant `0x1243F4` / `0x124497` ([fx-routine-models](research/fx-routine-models.md))
 - [x] FX type map: 28 modules own all 100 routines; Amp type is data plus a mode word ([fx-type-map](research/fx-type-map.md)); client and context words with measured scalings ([fx-contexts](research/fx-contexts.md))
 - [x] FX delay time law: `kDlyRateClkDiv` to the tap word and the oracle echo law, opt-in `FirmwareFx::delay_time` ([fx-delay-time](research/fx-delay-time.md))
+- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); reverb network and Leslie still open
 - [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); the reverb tables (`ns4-ca0i`); the delay time law (`kDlyRateClkDiv`, [fx-delay-time](research/fx-delay-time.md)) is decoded and wired behind `FirmwareFx::delay_time`
 - [ ] Enable gating and the command consumer ([fx-contexts](research/fx-contexts.md) s7; wiring plan s8), then sweep the four type ids with the effects enabled
 
@@ -240,7 +241,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Firmware saw `0x12501F` and SY gain de-zipper as opt-in (`synth/hw_saw.rs`, `synth/gain_dezip.rs`, [synth-voice-control](research/synth-voice-control.md)); sinc kernels within 1 ulp ([oracle-vs-engine](research/oracle-vs-engine.md), [sy-smp-audio](research/sy-smp-audio.md))
 - [x] Core2 filter stage `0x12566E` (two 4-pole sections, table-interpolated coefficients) reproduced bit-exact in Python ([synth-stage-equations](research/synth-stage-equations.md), `tools/synth_filter_model.py`)
 - [x] Firmware filter family `0x12566E` / `0x125913` / `0x125A50` (LP4, BP4, HP4) and the envelope rate tables as opt-in Rust (`synth/fw_filter.rs`, `synth/fw_env_rates.rs`, `SynthLayer::filter_engine`, spec [synth-engine](specs/synth-engine.md) 4.1); defaults and `render_hash` unchanged
-- [ ] Synth parity remainder: `0x1257B2`, the strip word to `R` law, `kFltType` and `osc_wave` to stage selection, the ADR segment generator, then flip the defaults and re-baseline `render_hash` (TD-11)
+- [x] Firmware strip chain as one opt-in switch (`SynthLayer::chain = FirmwareStrip`: firmware saw, ADR record chain with the rate tables, strip word 3 cutoff law, firmware filter, gain de-zipper; `synth/strip_path.rs`, `strip_map.rs`, `render-patch --synth-chain strip`, spec [synth-engine](specs/synth-engine.md) 4.2); stage words checked against the oracle (`tools/synth_strip_e2e.py`), Smooth Lead presence gap -16.5 -> -9.0 dB ([synth-strip-path](research/synth-strip-path.md))
+- [ ] Synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
 - [ ] Pulse and triangle shapes, amp envelope smoothing
 - [ ] Hardware sweeps for the remaining ASSUMED scales ([synth-hardware-sweep-plan](research/synth-hardware-sweep-plan.md), OQ7)
 
