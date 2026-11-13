@@ -114,8 +114,9 @@ fn key_weights_replace_the_legacy_drawbar_gains_on_the_b3_wheels_path() {
     let peak = (0..24_000)
         .map(|_| o.render_frame()[0].abs())
         .fold(0.0f32, f32::max);
-    // A * W of the three footages of C4 (0.294 * 0.0329 and neighbours) sums to a few 0.01
-    assert!(peak > 0.005 && peak < 0.05, "peak {peak}");
+    // A * W of the three footages of C4 (0.294 * 0.0329 and neighbours) times the corrected
+    // tail (about +8 dB at 65 to 330 Hz) gives a peak of about 0.07
+    assert!(peak > 0.03 && peak < 0.15, "peak {peak}");
     // other models and B3 Bass mode keep their paths
     let mut bass = b3_path();
     bass.b3_bass_mode = true;
@@ -205,10 +206,10 @@ fn the_tail_puts_the_chord_lines_where_the_oracle_has_them() {
     let tail = &x[3_000..3_000 + 8_192];
     // captured keys only (60, 64): the lines of wheels 52, 60, 64, 71 carry no interpolated W
     for (note, want) in [
-        (52usize, 0.005_14f64),
-        (60, 0.002_41),
-        (64, 0.001_80),
-        (71, 0.001_09),
+        (52usize, 0.029_19f64),
+        (60, 0.021_19),
+        (64, 0.019_79),
+        (71, 0.018_64),
     ] {
         let got = line(tail, b3_note_hz(note), fs);
         let db = 20.0 * (got / want).log10();
