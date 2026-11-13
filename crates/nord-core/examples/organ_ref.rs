@@ -1,0 +1,190 @@
+//! `cargo run --release -p nord-core --example organ_ref -- [options]`
+//!
+//! Renders the organ tone source of the Rust engine for a chord, in the form the oracle chain
+//! (`sharc-organ`, `tools/organ_oracle_audio.py`) produces, so that `tools/ns4_oracle_compare.py`
+//! can compare the two. Method and results: `docs/research/organ-oracle-audio.md`.
+//!
+//! ```text
+//! --mode layer       OrganLayer with percussion, crosstalk, rotary and scanner off (only mode)
+//! --notes 60,64,67    MIDI notes (default C4 E4 G4)       --drawbars 888000000
+//! --frames N          frames to render (default 16384)    --detuned   firmware detuned table
+//! --rate HZ           sample rate / bank frame rate (default: the rate at which wheel 0 equals the
+//!                     firmware increment of the exact table, 43,156 Hz)
+//! --linear            DrawbarLaw::Linear instead of the firmware curve
+//! --out PREFIX        writes PREFIX.wav (float32 stereo) and PREFIX.csv (index,L,R)
+//! ```
+use nord_core::organ::{
+    drawbar_gain_law, DrawbarLaw, OrganLayer, RotarySpeed, ScannerMode, ToneWheelSource,
+};
+use std::fmt::Write as _;
+
+/// ARM exact 12-TET increment of element 0: `bank0_CODE@0x444188[0] << 8`
+/// (`docs/research/data/arm-bank-increments.csv`).
+const INC0_EXACT: u32 = 0x0063_5300;
+/// Frequency of MIDI note 24 (wheel 0) in the engine (`vibrato_bank::wheel_hz(0, 0)`).
+const WHEEL0_HZ: f64 = 32.703_195_66;
+
+struct Opts {
+    mode: String,
+    notes: Vec<u8>,
+    drawbars: [u8; 9],
+    frames: usize,
+    detuned: bool,
+    rate: f64,
+    linear: bool,
+    out: String,
+}
+
+fn parse(args: &[String]) -> Result<Opts, String> {
+    // Cycles per frame of wheel 0 in the oracle: inc * tune / 2^32 with tune 0.5.
+    let rate0 = WHEEL0_HZ / (f64::from(INC0_EXACT) * 0.5 / 4_294_967_296.0);
+    let mut o = Opts {
+        mode: "layer".into(),
+        notes: vec![60, 64, 67],
+        drawbars: [8, 8, 8, 0, 0, 0, 0, 0, 0],
+        frames: 16384,
+        detuned: false,
+        rate: rate0,
+        linear: false,
+        out: "organ_ref".into(),
+    };
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut val = |what: &str| it.next().cloned().ok_or(format!("{a} needs {what}"));
+        match a.as_str() {
+            "--mode" => o.mode = val("layer|bank")?,
+            "--notes" => {
+                o.notes = val("N,N")?
+                    .split(',')
+                    .map(|s| s.parse().map_err(|_| "bad note".to_string()))
+                    .collect::<Result<_, _>>()?;
+            }
+            "--drawbars" => {
+                let d = val("nine digits")?;
+                if d.len() != 9 {
+                    return Err("--drawbars needs nine digits".into());
+                }
+                for (slot, c) in o.drawbars.iter_mut().zip(d.chars()) {
+                    *slot = c.to_digit(9).ok_or("drawbar digits are 0..8")? as u8;
+                }
+            }
+            "--frames" => o.frames = val("N")?.parse().map_err(|_| "bad --frames")?,
+            "--rate" => o.rate = val("HZ")?.parse().map_err(|_| "bad --rate")?,
+            "--out" => o.out = val("PREFIX")?,
+            "--detuned" => o.detuned = true,
+            "--linear" => o.linear = true,
+            _ => return Err(format!("unknown option {a}")),
+        }
+    }
+    Ok(o)
+}
+
+/// OrganLayer with everything but the tonewheel source, the drawbar sum and the key-click off.
+fn render_layer(o: &Opts) -> Vec<[f32; 2]> {
+    let mut organ = OrganLayer::new(o.rate as f32);
+    organ.tonewheel_source = ToneWheelSource::Firmware;
+    organ.detuned_copies = o.detuned;
+    organ.percussion_enabled = false;
+    organ.crosstalk_level = 0.0;
+    organ.rotary_enabled = false;
+    organ.rotary_speed = RotarySpeed::Slow;
+    organ.scanner_mode = ScannerMode::Off;
+    organ.drawbars = o.drawbars;
+    organ.drawbar_law = if o.linear {
+        DrawbarLaw::Linear
+    } else {
+        DrawbarLaw::Firmware
+    };
+    for &n in &o.notes {
+        organ.note_on(n);
+    }
+    (0..o.frames).map(|_| organ.render_frame()).collect()
+}
+
+fn write_outputs(o: &Opts, frames: &[[f32; 2]]) -> Result<(), String> {
+    let mut csv = format!("# mode: {}\n# rate: {}\nindex,L,R\n", o.mode, o.rate);
+    let mut pcm = Vec::with_capacity(frames.len() * 8);
+    for (i, f) in frames.iter().enumerate() {
+        writeln!(csv, "{i},{},{}", f[0], f[1]).map_err(|e| e.to_string())?;
+        pcm.extend_from_slice(&f[0].to_le_bytes());
+        pcm.extend_from_slice(&f[1].to_le_bytes());
+    }
+    std::fs::write(format!("{}.csv", o.out), csv).map_err(|e| e.to_string())?;
+    let rate = o.rate.round() as u32;
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + pcm.len() as u32).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    for v in [16u32, 0x0002_0003, rate, rate * 8, 0x0020_0008] {
+        wav.extend_from_slice(&v.to_le_bytes());
+    }
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(pcm.len() as u32).to_le_bytes());
+    wav.extend_from_slice(&pcm);
+    std::fs::write(format!("{}.wav", o.out), wav).map_err(|e| e.to_string())
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let o = match parse(&args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+    };
+    let frames = render_layer(&o);
+    if let Err(e) = write_outputs(&o, &frames) {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
+    let peak = frames.iter().flatten().fold(0.0f32, |m, v| m.max(v.abs()));
+    println!(
+        "{} frames at {:.2} Hz, peak {peak:.4}, firmware gain of drawbar 8 = {}",
+        frames.len(),
+        o.rate,
+        drawbar_gain_law(8, DrawbarLaw::Firmware)
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strings(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn options_parse_and_reject_garbage() {
+        let o = parse(&strings(&[
+            "--notes",
+            "60,64",
+            "--drawbars",
+            "808000000",
+            "--detuned",
+        ]))
+        .unwrap();
+        assert_eq!(
+            (o.notes.clone(), o.drawbars[1], o.detuned),
+            (vec![60, 64], 0, true)
+        );
+        assert!(parse(&strings(&["--bogus"])).is_err());
+        assert!(parse(&strings(&["--drawbars", "88"])).is_err());
+    }
+
+    #[test]
+    fn default_rate_puts_wheel_zero_on_the_firmware_increment() {
+        let o = parse(&[]).unwrap();
+        assert!((o.rate - 43_155.0).abs() < 5.0, "{}", o.rate);
+    }
+
+    #[test]
+    fn layer_render_is_finite_and_not_silent() {
+        let mut o = parse(&[]).unwrap();
+        o.frames = 512;
+        let f = render_layer(&o);
+        assert!(f.iter().flatten().all(|v| v.is_finite()));
+        assert!(f.iter().flatten().any(|v| v.abs() > 1e-3));
+    }
+}
