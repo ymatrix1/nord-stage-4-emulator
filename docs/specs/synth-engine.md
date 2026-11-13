@@ -4,7 +4,7 @@
 
 Specifies the 3-layer (`Synth A`, `Synth B`, `Synth C`) 46-voice polyphonic Synth Engine derived from the Nord Wave 2 (`DSPSyn` SHARC partition).
 
-Implemented in [`crates/nord-core/src/synth.rs`](../../crates/nord-core/src/synth.rs).
+Implemented in [`crates/nord-core/src/synth/`](../../crates/nord-core/src/synth/mod.rs).
 
 ---
 
