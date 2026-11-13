@@ -21,7 +21,7 @@
      "variants": [
        {"label": "default", "flags": []},
        {"label": "firmware-fx", "flags": ["--firmware-fx"]},
-       {"label": "firmware-piano-level", "flags": ["--firmware-piano-level"]}]},
+       {"label": "legacy-piano-level", "flags": ["--legacy-piano-level"]}]},
     {"id": "synth_lead", "entry": "Program/Bank A/Smooth Lead.ns4p", "engine": "synth Triangle LP24", "at_s": 2420, "duration_s": 22,
      "variants": [
        {"label": "default", "flags": []},

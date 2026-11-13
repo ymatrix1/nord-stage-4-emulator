@@ -51,12 +51,11 @@ pub fn apply_synth_chain(engine: &mut Stage4Engine, chain: Option<SynthChain>) {
     }
 }
 
-/// Switches both piano layers to the firmware level law (`PianoLayer::firmware_velocity_level`).
+/// Sets the firmware level law of both piano layers (`PianoLayer::firmware_velocity_level`,
+/// default on); `ns4 render-patch --legacy-piano-level` turns it off.
 pub fn apply_piano_level(engine: &mut Stage4Engine, on: bool) {
-    if on {
-        engine.piano_a.firmware_velocity_level = true;
-        engine.piano_b.firmware_velocity_level = true;
-    }
+    engine.piano_a.firmware_velocity_level = on;
+    engine.piano_b.firmware_velocity_level = on;
 }
 
 /// Applies the opt-in firmware switches to every layer of `engine`.
@@ -111,6 +110,7 @@ mod tests {
     #[test]
     fn piano_level_switch_reaches_both_layers() {
         let mut e = Stage4Engine::new(48_000.0);
+        assert!(e.piano_a.firmware_velocity_level && e.piano_b.firmware_velocity_level);
         apply_piano_level(&mut e, false);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
         apply_piano_level(&mut e, true);

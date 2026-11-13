@@ -283,3 +283,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** A routine that matches the DSP bit for bit proves nothing if the ARM-side mapping into it is a guess; the Pipe/B3 mix-up is the example. Opt-in paths keep every claim testable (golden tests) without moving audio that nobody asked to move.
 - **Alternatives:** Switch defaults as soon as a routine matches (rejected after #87); keep firmware paths in research tools only (the engine would never benefit).
 - **Impact:** Open defaults are tracked in TD-04, TD-10 and TD-11. The `render_hash` SHA-256 is recorded in each PR that touches it.
+
+### D23. The firmware piano level is the default for `.npno` sounds
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PR for `feat/piano-extra-voice`; evidence [piano-sound-load](research/piano-sound-load.md) sections 9 to 11)
+- **Context:** D22 keeps firmware paths opt-in until the algorithm and the mapping into it are VERIFIED. The piano velocity response was the touch curve `VelocityTouch` (ASSUMED powers) plus a shaping rule.
+- **Decision:** `PianoLayer::firmware_velocity_level` defaults to `true`. For an `.npno` sound the note-on starts the firmware's voices (`NpnoLevel::voices`) with the gain `level_q23 / 2^23` each; SFZ/WAV and synthetic sounds and damper-down notes keep the legacy path. `ns4 render-patch --legacy-piano-level` restores the old response.
+- **Why:** The level law, the stroke selection, the per-key bytes, the extra-voice rule and the gain word equal the real firmware (ARM run with the loaded sound) in 96 of 96 random notes on four sounds and 12 of 12 SMP record gains; the mapping from note and velocity into them is derived from the file, not guessed (D22 conditions 1 and 2).
+- **Alternatives:** Stay opt-in (kept the ASSUMED touch curve although the firmware law is known); make the SFZ/WAV path follow the same law (no stroke records, no model).
+- **Impact:** `render_hash` `25baa387...` unchanged (synthetic piano only); the `.npno` piano renders change. The emulator-versus-hardware piano gap does not shrink (RMS +11.8 -> +12.2 dB on Velvet Grand): the excess level is downstream of the voice and is tracked in the research note.

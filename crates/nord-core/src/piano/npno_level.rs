@@ -56,8 +56,31 @@ struct Stroke {
     floor: u8,
 }
 
+/// The (at most two) voices of a note-on, stored inline (no heap allocation).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VoiceList {
+    items: [VoiceLevel; 2],
+    len: usize,
+}
+
+impl VoiceList {
+    fn push(&mut self, voice: VoiceLevel) {
+        if self.len < self.items.len() {
+            self.items[self.len] = voice;
+            self.len += 1;
+        }
+    }
+}
+
+impl std::ops::Deref for VoiceList {
+    type Target = [VoiceLevel];
+    fn deref(&self) -> &[VoiceLevel] {
+        &self.items[..self.len]
+    }
+}
+
 /// One firmware voice of a note-on: the selected stroke record and its Q23 level.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct VoiceLevel {
     /// Index of the stroke record in the file.
     pub record: u16,
@@ -138,6 +161,14 @@ impl NpnoLevel {
             .filter(|&r| r != 0xFF)
     }
 
+    /// Root key the stroke record `record` belongs to (`None` for an unknown record).
+    pub fn record_root(&self, record: u16) -> Option<u8> {
+        self.roots
+            .iter()
+            .find(|(_, strokes)| strokes.iter().any(|s| s.index == record))
+            .map(|(root, _)| *root)
+    }
+
     /// `b1 + b2 + b3` of `note`.
     pub fn key_sum(&self, note: u8) -> i16 {
         let n = usize::from(note.min(127));
@@ -183,13 +214,13 @@ impl NpnoLevel {
 
     /// The voices a note-on starts, extra first voice (if any) then the main voice; empty when
     /// the note is unmapped or the root has no layer-0 stroke.
-    pub fn voices(&self, note: u8, velocity: u8) -> Vec<VoiceLevel> {
+    pub fn voices(&self, note: u8, velocity: u8) -> VoiceList {
         let velocity = velocity.clamp(1, 127);
         let t = u16::from(velocity_position(velocity));
         let Some(main) = self.pick(note, 0, t) else {
-            return Vec::new();
+            return VoiceList::default();
         };
-        let mut out = Vec::with_capacity(2);
+        let mut out = VoiceList::default();
         if TWO_VOICE_CLASSES.contains(&self.class) {
             let extra = if self.has_layer(note, 1) {
                 self.pick(note, 1, u16::from(main.floor))
@@ -231,175 +262,5 @@ pub(crate) fn test_image(root: u8, strokes: &[(u8, i16, u8)], key_sum: i8) -> Ve
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::velocity_level::{
-        note_amplitude_q23, stroke_at, AMBER_UPRIGHT_STROKES, BRIGHT_GRAND_STROKES,
-        CLAVINET_D6_STROKES, X_SWEEP,
-    };
-    use super::*;
-
-    // Root-60 lists of the swept sounds: `(rec[0x5E], threshold)` of the layer in use.
-    const CLAVINET_LIST: [(i16, u8); 3] = [(66, 0), (56, 16), (36, 46)];
-    const GRAND_LIST: [(i16, u8); 8] = [
-        (35, 0),
-        (34, 10),
-        (26, 29),
-        (19, 47),
-        (8, 62),
-        (-2, 78),
-        (-1, 92),
-        (-10, 107),
-    ];
-    const UPRIGHT_LIST: [(i16, u8); 9] = [
-        (43, 0),
-        (44, 6),
-        (36, 19),
-        (36, 32),
-        (28, 45),
-        (18, 61),
-        (8, 76),
-        (8, 90),
-        (-1, 106),
-    ];
-
-    /// Velocities swept on the grand and the upright: 1, 5, 9, ... and 127.
-    fn swept_every_fourth() -> impl Iterator<Item = u8> {
-        (1..=127u8).step_by(4).chain([127])
-    }
-
-    fn level(layer: u8, list: &[(i16, u8)], key_sum: i8) -> NpnoLevel {
-        let strokes: Vec<(u8, i16, u8)> = list.iter().map(|&(o, t)| (layer, o, t)).collect();
-        NpnoLevel::parse(&test_image(60, &strokes, key_sum)).expect("synthetic image parses")
-    }
-
-    #[test]
-    fn clavinet_main_voice_matches_every_swept_amplitude() {
-        let model = level(0, &CLAVINET_LIST, 40);
-        for &(velocity, _) in &X_SWEEP {
-            let want = note_amplitude_q23(&CLAVINET_D6_STROKES, &[(60, 40)], velocity, 60);
-            assert_eq!(
-                model.main_voice_q23(60, velocity),
-                Some(want),
-                "velocity {velocity}"
-            );
-        }
-    }
-
-    #[test]
-    fn grand_first_voice_with_bias_20_matches_every_swept_amplitude() {
-        let model = level(0, &GRAND_LIST, 49);
-        for velocity in swept_every_fourth() {
-            let want = note_amplitude_q23(&BRIGHT_GRAND_STROKES, &[(60, 49)], velocity, 60);
-            assert_eq!(
-                model.amplitude_q23(60, velocity, 0, 20),
-                Some(want),
-                "velocity {velocity}"
-            );
-        }
-    }
-
-    #[test]
-    fn upright_first_voice_on_layer_1_matches_every_swept_amplitude() {
-        let model = level(1, &UPRIGHT_LIST, 54);
-        for velocity in swept_every_fourth() {
-            let want = note_amplitude_q23(&AMBER_UPRIGHT_STROKES, &[(60, 54)], velocity, 60);
-            assert_eq!(
-                model.amplitude_q23(60, velocity, 1, 0),
-                Some(want),
-                "velocity {velocity}"
-            );
-        }
-    }
-
-    #[test]
-    fn stroke_choice_agrees_with_the_swept_step_tables() {
-        let model = level(0, &CLAVINET_LIST, 40);
-        for &(velocity, _) in &X_SWEEP {
-            let position = u16::from(velocity_position(velocity));
-            assert_eq!(
-                model.stroke_offset(60, 0, position),
-                Some(stroke_at(&CLAVINET_D6_STROKES, velocity))
-            );
-        }
-    }
-
-    #[test]
-    fn unmapped_note_and_missing_layer_give_none() {
-        let model = level(0, &CLAVINET_LIST, 40);
-        assert_eq!(model.main_voice_q23(61, 64), None, "note 61 is unmapped");
-        assert_eq!(
-            model.amplitude_q23(60, 64, 2, 0),
-            None,
-            "no layer 2 strokes"
-        );
-        assert_eq!(model.root_of(60), Some(60));
-        assert_eq!(model.key_sum(60), 40);
-    }
-
-    #[test]
-    fn parse_rejects_short_and_inconsistent_files() {
-        assert!(NpnoLevel::parse(&[0u8; 100]).is_none());
-        let mut d = test_image(60, &[(0, 1, 0)], 0);
-        // Claim two strokes for the root while the header total says one.
-        let at = COUNTS + 2 * (3 + 60);
-        d[at..at + 2].copy_from_slice(&2u16.to_be_bytes());
-        assert!(NpnoLevel::parse(&d).is_none());
-    }
-
-    #[test]
-    fn two_voice_class_adds_the_biased_first_voice_on_layer_0() {
-        let strokes: Vec<(u8, i16, u8)> = GRAND_LIST.iter().map(|&(o, t)| (0, o, t)).collect();
-        let mut image = test_image(60, &strokes, 49);
-        image[CLASS_BYTE] = 5;
-        let model = NpnoLevel::parse(&image).unwrap();
-        let voices = model.voices(60, 49);
-        assert_eq!(voices.len(), 2);
-        assert_eq!(
-            Some(voices[0].amplitude_q23),
-            model.amplitude_q23(60, 49, 0, 20)
-        );
-        assert_eq!(Some(voices[1].amplitude_q23), model.main_voice_q23(60, 49));
-        image[CLASS_BYTE] = 4;
-        let single = NpnoLevel::parse(&image).unwrap().voices(60, 49);
-        assert_eq!(single.len(), 1, "class 4 has one voice");
-        assert_eq!(single[0], voices[1]);
-    }
-
-    #[test]
-    fn layer_1_voice_uses_the_floor_byte_of_the_main_record() {
-        // Layer 0: offsets 10 / 20 / 30 at thresholds 0 / 20 / 40, floor bytes 0 / 25 / 50.
-        // Layer 1: offsets 1 / 2 / 3 at thresholds 0 / 30 / 60.
-        let mut image = test_image(
-            60,
-            &[
-                (0, 10, 0),
-                (0, 20, 20),
-                (0, 30, 40),
-                (1, 1, 0),
-                (1, 2, 30),
-                (1, 3, 60),
-            ],
-            0,
-        );
-        image[CLASS_BYTE] = 6;
-        for (i, floor) in [0u8, 25, 50, 0, 0, 0].into_iter().enumerate() {
-            image[RECORDS + RECORD_LEN * i + FLOOR_FIELD] = floor;
-        }
-        // The count header lists six records for root 60 (test_image sets it).
-        let model = NpnoLevel::parse(&image).unwrap();
-        // Velocity 64: T = 78, main = third layer-0 record (floor 50), layer 1 at position 50 -> offset 2.
-        let voices = model.voices(60, 64);
-        assert_eq!(voices.len(), 2);
-        assert_eq!(voices[0].record, 4, "layer-1 record index");
-        assert_eq!(voices[1].record, 2);
-    }
-
-    #[test]
-    fn key_sum_adds_the_three_signed_bytes() {
-        let mut d = test_image(60, &[(0, 1, 0)], -4);
-        d[B2 + 60] = 3;
-        d[B3] = 49;
-        let model = NpnoLevel::parse(&d).unwrap();
-        assert_eq!(model.key_sum(60), 48);
-    }
-}
+#[path = "npno_level_tests.rs"]
+mod tests;
