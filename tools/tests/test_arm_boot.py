@@ -201,3 +201,45 @@ def test_construct_organ_layer_and_subscribed_ids() -> None:
 def test_boot_result_finished_flag() -> None:
     assert ab.BootResult(ae.SENTINEL, 0, 10).finished
     assert not ab.BootResult(0xC0000000, 0, 10).finished
+
+
+def test_boot_until_stops_at_the_target_instruction() -> None:
+    code = words(0xE3A00001, 0xE3A00002, 0xE3A00003, BX_LR)  # mov r0,#1..#3 ; bx lr
+    emu = emu_for(ab.APP_THUNK, code)
+    ab.install_boot_stubs(emu)
+    result = ab.boot_until(emu, ab.APP_THUNK + 8, max_insns=1000, chunk=100)
+    assert result.history == [ab.APP_THUNK + 8]
+    assert result.pc == ab.APP_THUNK + 8
+    assert emu.reg(0) == 2
+
+
+def test_dispatcher_and_program_objects_read_the_firmware_tables() -> None:
+    emu = emu_for(ae.LOAD_BASE, words(BX_LR))
+    g = 0x98100000
+    emu.uc.mem_map(g, 0x1000)
+    emu.write32(ab.DISPATCHER_GLOBAL, g)
+    emu.write32(g + 0x17C, 0x1111)
+    emu.write32(g + 0x17C + 8, 0x3333)
+    assert ab.dispatcher(emu) == g
+    assert ab.program_objects(emu, 4) == [0x1111, 0, 0x3333, 0]
+
+
+def test_set_drawbar_passes_q16_and_edit_id() -> None:
+    # fake handler: [r0] = r2 (edit id) ; [r0 + 4] = [r3] (q16 value) ; return
+    code = words(0xE5802000, 0xE5931000, 0xE5801004, BX_LR)
+    emu = emu_for(ab.DRAWBAR_HANDLER, code)
+    emu.uc.mem_map(0x98200000, 0x1000)
+    ab.set_drawbar(emu, 0x98200000, 0, 3, 5, 0x98200800)
+    assert emu.read32(0x98200000) == 0x16D + 3
+    assert emu.read32(0x98200004) == 5 << 16
+
+
+def test_read_drawbar_record_and_update_sets_busy_byte() -> None:
+    emu = emu_for(ab.RECORD_UPDATE, words(BX_LR))
+    rec = 0x98300000
+    emu.uc.mem_map(rec, 0x1000)
+    for k in range(9):
+        emu.write32(rec + ab.RECORD_DRAWBARS + 4 * k, k)
+    assert ab.read_drawbar_record(emu, rec) == list(range(9))
+    assert ab.run_record_update(emu, rec) == []
+    assert emu.read_bytes(rec + ab.RECORD_BUSY, 1) == b"\x01"

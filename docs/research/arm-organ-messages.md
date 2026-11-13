@@ -91,6 +91,26 @@ Not modelled: the SPI peripheral (so the DSP download and every SPI device probe
 
 **Stop point (reproducible):** after 383.7 M instructions the run executes at `pc = 0x90E7C878` (a heap address) with `lr = 0xC001B830`, i.e. `blx r3` at `0xC001B82C` calls through a vtable slot that holds garbage because an earlier object was not built (the 217 null calls before it are the same symptom). The next step is to decode which object `0xC001B7xx` calls; no further stub was added.
 
+## 6. Second pass: the real notify chain runs (VERIFIED run, `tools/arm_boot.py` `boot_until`)
+
+Section 4 was wrong about the cause: the per-layer objects are not missing from the firmware, they were missing from the *isolated* harness. `boot_until(emu, G_CTOR_PROGRESS)` runs the real boot to `0xC00FC9F4` (about 371 M instructions, edit controller constructor `0xC00FB85C`, called from `0xC024A88C`). There the firmware itself has built the dispatcher `G = [0xC055B160]`, the registry (422 parameters again) and the program objects `[G + 0x17C + 4 n]` (16-byte objects, n = 0..5 and 7 non-null). In that state:
+
+1. `0xC0019BAC` (organ layer constructor) runs with **zero null calls** and registers its client in `G` (`[G + 0x14C] = 1`).
+2. `0xC00D051C(store, 0, &{0x16D, 1}, v)` on the layer's store reaches the real chain `0xC00D0578 -> 0xC00D04D0`, `0xC00D0960 -> 0xC00CC4F0 -> 0xC00CDAD0 -> 0xC00CD97C`, then `0xC00CC5A8 -> 0xC011AB8C` (the drawbar change handler of section 3), `0xC011AC0C -> 0xC022AB2C` (the pointer-to-member callback, no null call anywhere).
+3. The callback is five instructions: `base = [engine + 0x78]; base[(table[k] + 0x10)] = value; byte base[0x6C] = 1`. `table` (`0xC02BE988`) is the identity `0, 1, ..., 8` (read from the image). So drawbar `k` (edit id `0x16D + k`) lands as the plain integer 0..8 in **word `0x10 + k` (byte `0x40 + 4k`) of an engine record** and sets that record's dirty byte `+0x6C`. The record address is `[0xC055F4B8 + 4 * layer]` copied to `engine + 0x78` by the engine constructor (`0xC0122280..0xC01222F8`). VERIFIED by `set_drawbar` for k = 0, 2, 8 and v = 0..8 (the word reads back v). **This settles the encoding at this stage: the 4-bit integer 0..8, no 7-bit scaling and no table lookup.**
+4. The record is consumed by `0xC00BE348(record)` (needs byte `+0x6D` set, `run_record_update` sets it): clears the dirty byte, walks the sub-records `[record + 0x28]`, `[record + 0x2C]` with a double-precision table lookup (`0xC0270BD4` int to double, `0xC025D11C`, `0xC0270C80` multiply, `0xC0270F78` double to float) and calls `0xC022DDC8(selector_a, selector_b, index, float)`.
+5. `0xC022DDC8` is a jump table over two selectors (0..3 each) that adds a per-selector base to `index` and tail-calls the **real sender `0xC001FF18(word_address, int_value)`**: it converts the int to a float, forms the system address `(w + 0x0A000000) << 2 = 0x28000000 + 4 w` (this is the first direct firmware confirmation of the `DM word <-> 0x28000000 + 4 w` mapping used by [arm-param-messages](arm-param-messages.md)), and stores `(address, [0 pad], value)` to `[[port object] + 0x44]` = the PNO comm port (comm 1, **core 1 addresses `0x2825....` and `0x282D....`**).
+
+So the organ path reaches **PNO core 1**, the core that holds the tonewheel bank ([organ-tonewheel-bank](organ-tonewheel-bank.md)). Captured (VERIFIED run; the harness re-installs the fake DSP ports after the boot because the boot rebuilds `[0xC055B150]`):
+
+| Trigger | Messages (PNO core 1, path 2) |
+|---|---|
+| `0xC00BE348(record)` after `set_drawbar(k, v)`, any k in {0, 2, 8}, any v in 0..8 | `DM 0x951F1`, `0xB44C9`, `0x95241`, `0xB44CB` (system addresses `0x282547C4`, `0x282D1324`, `0x28254904`, `0x282D132C`), each with value `0` |
+
+These four messages **do not depend on k or v**, so they are not the drawbar levels: they come from the curve rows of the record (`[record + 0x28]`) that the update walks while the double table at `[0xC0599950 + 0x38] -> 0xC027C2B0` (all `1.0` in the image, read from the firmware) and the unbuilt part of the record leave at zero. The drawbar words at record `+0x40..+0x60` are **written** by the callback but no reader of them was found yet: the updater `0xC022F060(engine)` (large, per-layer, reads `[engine + 0x34]` and the record dirty/busy bytes at `0xC022FED8`) ran without producing a drawbar message either. Not captured therefore: the dB curve, vibrato/percussion/rotary/model messages (the ids `0x16B/0x16C/0x166` go through other branches of `0xC011CB60`, not tried).
+
+Next concrete steps: (a) find the reader of `record[0x10..0x18]` (watch the nine words with a memory-read hook while calling `0xC022F060`, `0xC00BE348` and the other per-layer periodic functions); (b) run the boot further than `0xC00FC9F4` once the garbage vtable call at `0xC001B82C` (event insert `0xC001B67C`, called from `0xC0168658` through the UI/display setup) is skipped, since the real updater tasks need the rest of the object graph.
+
 ## Implications
 
 - `arm-edit-params.csv` is the authoritative id, name and range list for the 422 edit parameters; the organ drawbar field is a 0..8 integer at the ARM edit layer, which settles the "scaled 7-bit?" question for *that* layer only.
