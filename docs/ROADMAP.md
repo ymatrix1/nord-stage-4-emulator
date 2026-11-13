@@ -145,7 +145,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 **Goal:** Every front-panel control in the Nord Stage 4 manual (ch. 3-9) exists in the emulator with a layout rect, a renderer and a binding (`Bound(param_id)`, `UiOnly(reason)` or `Unsupported(bean)`), drawn as one 2.5D panel (`crates/nord-panel`) shared by the standalone app and the plugin editor ([control inventory](specs/control-inventory.md), [D15](DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering), [D16](DECISIONS.md#d16-phase-6b-scope-original-art-functional-or-stub-controls-ha88-first-additive-host-ids), OQ13 in [OPEN-QUESTIONS](OPEN-QUESTIONS.md)). Host parameter IDs already shipped are a stable contract: additive changes only.
 
 - [ ] **B1** Docs correction: reopen Phase 6 bays, control-inventory spec, visual-spec discrepancies, D15 (`ns4-7ky2`)
-- [ ] **B2** Control inventory data: every control from manual ch. 3-9 with page and provenance; counts match manual and photo (`ns4-3n0d`, after B1)
+- [ ] **B2** Control inventory data: every control from manual ch. 3-9 with page and provenance; counts match manual and photo (`ns4-3n0d`, after B1). **Partly delivered 2026-11-13:** `crates/nord-panel` lists 273 controls checked against the manual text; photo check covers headline counts only, so the box stays open
 - [x] **B3** Host parameter-ID stability test: committed snapshot of ID/type/range/default; remove/rename fails, add passes (`ns4-xhbf`, `crates/nord-plugin/param-ids.snapshot`, 264 ids)
 - [ ] **B4** Split oversized `nord-gui` files (`panel.rs`, `library.rs`, `audio.rs`, `widgets.rs`) and add `crates/nord-panel` skeleton; behaviour unchanged (`ns4-r7vt`)
 - [ ] **B5** Host and behaviour layer: `PanelHost`, `PanelAction`, Shift / hold / double-tap / selector cycling / pot snap / Live Mode with unit tests (`ns4-q6p7`, after B4)
@@ -203,7 +203,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] ARM-side maps: organ weights and key to wheel map ([organ-weights](research/organ-weights.md)), model to slot table ([organ-model-paths](research/organ-model-paths.md), [b3-tone-source](research/b3-tone-source.md)), PNO module chain ([pno-module-chain](research/pno-module-chain.md)), FX chain install, type map and contexts ([fx-chain-install](research/fx-chain-install.md), [fx-type-map](research/fx-type-map.md), [fx-contexts](research/fx-contexts.md)), piano path ([piano-dsp-path](research/piano-dsp-path.md))
 - [ ] Key-down capture: the keybed link (UART2 ring consumer) is not emulated, so no key event reaches the DSP messages (piano velocity law and organ key-down remain open; [piano-dsp-path](research/piano-dsp-path.md) follow-up 1)
 - [x] Boot message log: every ARM to DSP store from reset (80,815 boot messages, real EMIFA ports) kept, fingerprinted and replayed into `sharc-pass` / `sharc-org` (PNO core 1 8,300 / 8,306 words, ORG 12,102 / 12,102); census of the stubbed SPI routines ([arm-bulk-tables](research/arm-bulk-tables.md), `tools/arm_bulk_tables.py`)
-- [ ] L2 table replay (5,910 words per target) and FX equality check; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
+- [ ] SY / SMP equality, the `0xB2ECF` / `0xB2FF0` boot words, Rust paths re-compared with the full boot state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 
