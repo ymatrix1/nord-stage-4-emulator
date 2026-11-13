@@ -25,6 +25,7 @@ mod fw_filter_tables;
 mod fw_strip_cutoff;
 mod gain_dezip;
 mod hw_saw;
+mod key_velocity;
 mod measured;
 mod perf;
 mod render;
@@ -45,6 +46,9 @@ pub use fw_filter::{
 pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
 pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
 pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
+pub use key_velocity::{
+    key_velocity_g, key_velocity_g_fit, key_velocity_gain, KEY_CURVE_SATURATION, KEY_VELOCITY_G,
+};
 pub use measured::{
     supersaw_outer_cents, supersaw_voice_ratio, ENV_DECAY_TAU_FRACTION_MEASURED,
     FILTER_ENV_OCTAVES_MEASURED, OSC_ENV_PITCH_OCTAVES_MEASURED, SUPERSAW_OUTER_CENTS,
@@ -161,6 +165,9 @@ pub struct SynthLayer {
     pub osc_shape_category: bool,
     /// Per-voice signal chain (default `Legacy`; `FirmwareStrip` is `strip_path.rs`).
     pub chain: SynthChain,
+    /// Strip chain only: voice level from the key-down velocity series `g(vel) / 127` instead of the
+    /// linear velocity (`key_velocity.rs`, default on; no effect on the legacy chain).
+    pub strip_key_velocity: bool,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -286,6 +293,7 @@ impl SynthLayer {
             saw_model: SawModel::Classic,
             gain_dezipper: false,
             chain: SynthChain::Legacy,
+            strip_key_velocity: true,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,
