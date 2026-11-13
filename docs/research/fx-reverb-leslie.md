@@ -100,7 +100,7 @@ uv run pytest tools/tests/test_fx_rvbcore.py      # pinned golden words, no imag
 |---|---|
 | 40 calls, seed 3, type 0 words, lines 2658 / 4068 words | 9360 of 9360 written words identical, every instruction's registers equal |
 | 60 calls, seed 2, `--short` (lines 16 / 24 words, data reaches the loop) | 14040 of 14040 identical |
-| 170 calls, seed 5, `--short` (data reaches the all-pass taps, first tap 114 calls) | RUN170 |
+| 170 calls, seed 5, `--short` (data reaches the all-pass taps, first tap 114 calls) | 39780 of 39780 identical, every instruction's registers equal |
 
 What the oracle taught beyond the listing text (VERIFIED by the trace comparison):
 

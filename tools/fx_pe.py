@@ -339,8 +339,8 @@ class Machine:
                 raise AssertionError(f"before {pc:#x}: {k} model {v:#x} oracle {row[kind][n]:#x}")
 
 
-def parse_trace(text: str, call: int = 0) -> list[dict]:
-    """The `trace` rows of call number `call` of a `sharc-fx --trace` output."""
+def parse_traces(text: str) -> list[list[dict]]:
+    """The `trace` rows of every call of a `sharc-fx --trace` output (`[0]` precedes call 0)."""
     calls: list[list[dict]] = [[]]
     for line in text.splitlines():
         if line.startswith("trace "):
@@ -352,7 +352,12 @@ def parse_trace(text: str, call: int = 0) -> list[dict]:
             calls[-1].append(row)
         elif line.startswith("call "):
             calls.append([])
-    return calls[call]
+    return calls
+
+
+def parse_trace(text: str, call: int = 0) -> list[dict]:
+    """The `trace` rows of call number `call` of a `sharc-fx --trace` output."""
+    return parse_traces(text)[call]
 
 
 def log2_exact(q: Fraction) -> float:

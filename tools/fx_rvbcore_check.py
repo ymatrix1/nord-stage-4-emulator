@@ -26,7 +26,7 @@ if __package__ in (None, ""):
 import fx_biquad_check as fb
 import fx_model_rvbcore as core
 import fx_oracle as fo
-from fx_pe import M32, Machine, Missing, parse_trace
+from fx_pe import M32, Machine, Missing, parse_traces
 
 WRAP, END = 0x12435C, 0x1FFFFF
 IN_ADDR, CTX = 0xB1000, 0xB0CAE
@@ -110,8 +110,9 @@ def run_calls(image: str, binary: Path, frames: list[list[int]], mem0: dict[int,
 def model_calls(text: str, frames, mem0):
     """Run the model per call from the oracle rows; yields `(call, machine, entry row)`."""
     mem = Missing(mem0, default=0)
+    traces = parse_traces(text)
     for k, fr in enumerate(frames):
-        rows = parse_trace(text, k)
+        rows = traces[k]
         i0 = next(i for i, r in enumerate(rows) if r["pc"] == core.PC)
         i1 = next(i for i, r in enumerate(rows) if r["pc"] == core.END)
         mem.update({IN_ADDR + j: w for j, w in enumerate(fr)})
