@@ -9,9 +9,23 @@ use crate::organ::{OrganLayer, RotarySpeed};
 use crate::piano::PianoLayer;
 use crate::synth::SynthLayer;
 
+pub use aux_kb::{AuxKb, AuxVelocityCurve, NoteRoute};
+pub use extern_out::{ExternLayer, ExternState, MidiOut, MidiOutQueue, MIDI_OUT_CAPACITY};
+pub use pedals::{
+    ControlFunc, FootSwitchFunc, PedalSource, PedalState, RightPedal, RotorFunc, SwellFunc,
+    B3_SWELL_FLOOR, HALF_PEDAL_MIN,
+};
+
+mod aux_kb;
+mod extern_out;
 mod midi_dispatch;
+mod pedals;
 mod program;
 mod program_fx;
+#[cfg(test)]
+mod tests_extern;
+#[cfg(test)]
+mod tests_pedals;
 #[cfg(test)]
 mod tests_program;
 #[cfg(test)]
@@ -40,6 +54,12 @@ pub struct Stage4Engine {
     pub global_midi_channel: Option<u8>,
     /// Optional direct MIDI channel for each layer; these notes bypass keybed splits.
     pub layer_midi_channels: [Option<u8>; 7],
+    /// Aux KB (auxiliary keyboard) configuration.
+    pub aux_kb: AuxKb,
+    /// Pedals, pitch stick and per-layer SUSTPED / PSTICK routing.
+    pub pedals: PedalState,
+    /// Extern layer settings and the outgoing MIDI queue.
+    pub extern_out: ExternState,
     note_hold_counts: [[[u8; 7]; 128]; 16],
 }
 
@@ -66,6 +86,9 @@ impl Stage4Engine {
             master_clock: MasterClock::default(),
             global_midi_channel: Some(0),
             layer_midi_channels: [None; 7],
+            aux_kb: AuxKb::default(),
+            pedals: PedalState::default(),
+            extern_out: ExternState::default(),
             note_hold_counts: [[[0; 7]; 128]; 16],
         }
     }
@@ -104,7 +127,7 @@ impl Stage4Engine {
             self.synth_c.cutoff_hz = cut_c;
         }
 
-        let raw_layers = [
+        let mut raw_layers = [
             self.organ_a.render_frame(),
             self.organ_b.render_frame(),
             self.piano_a.render_frame(),
@@ -113,6 +136,7 @@ impl Stage4Engine {
             self.synth_b.render_frame(),
             self.synth_c.render_frame(),
         ];
+        self.apply_organ_swell(&mut raw_layers);
 
         let mut mix_l = 0.0f32;
         let mut mix_r = 0.0f32;
@@ -125,6 +149,11 @@ impl Stage4Engine {
             mix_r += fx_r * gain;
         }
 
+        let volume = self.pedals.volume_gain();
+        if volume != 1.0 {
+            mix_l *= volume;
+            mix_r *= volume;
+        }
         self.master_bus.process_frame([mix_l, mix_r])
     }
 
@@ -144,6 +173,7 @@ impl Stage4Engine {
     /// Processes an interleaved or dual-channel block in place with zero heap allocations.
     pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
         let frames = left.len().min(right.len());
+        self.extern_sync_volume();
         for i in 0..frames {
             let [l, r] = self.render_frame();
             left[i] = l;

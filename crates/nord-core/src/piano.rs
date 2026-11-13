@@ -829,6 +829,10 @@ pub struct PianoLayer {
     /// Keyboard octave transposition (`-2..=+2`).
     pub octave_shift: i8,
     pub damper_pedal_down: bool,
+    /// Half-pedal state: dampers half-raised (pedal depth in `0.2..0.5`), so keys released now fall
+    /// back on the slower soft-release decay. Set by the engine pedal router.
+    /// ASSUMED: slow decay stands in for partial damping, see `docs/specs/midi-and-control.md`.
+    pub damper_half: bool,
     pub sostenuto_pedal_down: bool,
     pub soft_pedal_down: bool,
     pub sound: Option<Arc<NpnoSound>>,
@@ -908,6 +912,7 @@ impl PianoLayer {
             dyn_comp: 0,
             octave_shift: 0,
             damper_pedal_down: false,
+            damper_half: false,
             sostenuto_pedal_down: false,
             soft_pedal_down: false,
             sound,
@@ -1118,7 +1123,7 @@ impl PianoLayer {
                     // Sostenuto holds the note until CC66 lifts.
                 } else if !v.releasing {
                     v.releasing = true;
-                    v.soft_release = self.soft_release;
+                    v.soft_release = self.soft_release || self.damper_half;
                     release_trigger = Some((v.last_velocity, v.amp, v.gain));
                 }
             }
