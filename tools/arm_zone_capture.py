@@ -11,8 +11,8 @@ and writes the DSP messages as CSV (derived values only) and as `sharc-org --msg
         target/fw_unpacked/bank0_SRAM.bin --cache target/keydown.snap --models 0 1 3 \
         --csv docs/research/data/keydown-organ-keys.csv
 
-Subcommands: `organ`, `synth`, `flags` (Vox key-flag rows), `scripts` (replay scripts),
-`velocity` (velocity curve table).
+Subcommands: `organ`, `synth`, `synthvel` (synth velocity word for 1..127), `flags` (Vox
+key-flag rows), `scripts` (replay scripts), `velocity` (velocity curve table).
 Evidence and tables: `docs/research/keydown-zones.md`.
 """
 
@@ -30,7 +30,7 @@ import arm_steady as ast
 import arm_zones as az
 
 CSV_HEADER = "kind,model,note,velocity,phase,tick,chip,core,path,dm_word,value"
-ORGAN_LAYERS = {0, 1}
+ORGAN_LAYERS = {0}  # organ A; layer B (index 1) has its own model and doubles every burst
 SYNTH_LAYERS = {4, 5, 6}
 # VERIFIED (run): the UI order of `Edt_Org_kModel` 0..5 (`arm_model_paths.NAMES_ADDRESS`).
 MODEL_NAMES = ("B3", "Vox", "Farfisa", "Pipe1", "Pipe2", "B3 Bass")
@@ -51,6 +51,7 @@ class Setup:
     bases: list[int]
     stores: dict[int, object]
     blob: bytes = b""
+    base: bytes = b""
 
     @property
     def emu(self) -> ae.ArmEmu:
@@ -70,12 +71,19 @@ class Setup:
     def freeze(self) -> None:
         self.blob = ast.snapshot(self.emu)
 
+    def fresh(self) -> None:
+        """Back to the state after `prepare` (no model installed, no key down)."""
+        self.blob = self.base
+        self.reset()
+
 
 def prepare(code: Path, sram: Path | None, cache: Path | None) -> Setup:
     rig = kd.build_rig(code, sram, cache)
     az.enable_sections(rig.emu)
     setup = Setup(rig, az.layer_bases(rig.emu), az.first_stores(rig.emu))
     rig.tick(2)
+    setup.freeze()
+    setup.base = setup.blob
     return setup
 
 
@@ -89,11 +97,11 @@ def rows_for(
     ]
 
 
-def install_organ_model(setup: Setup, model: int) -> list[tuple[int, ae.Message]]:
-    """Apply `Edt_Org_kModel = model` on organ layer A; returns the install burst."""
+def install_organ_model(setup: Setup, model: int, layer: int = 0) -> list[tuple[int, ae.Message]]:
+    """Apply `Edt_Org_kModel = model` on organ layer `layer` (0 = A, 1 = B); the install burst."""
     emu = setup.emu
     emu.clear_messages()
-    mp.install_model(emu, setup.stores[0], model, ticks=0)  # type: ignore[arg-type]
+    mp.install_model(emu, setup.stores[layer], model, ticks=0)  # type: ignore[arg-type]
     burst = [(0, m) for m in emu.messages]
     burst += setup.rig.tick(SETTLE_TICKS)
     return burst
@@ -186,7 +194,9 @@ def msg_script(blocks: list[tuple[int, str, list[tuple[int, ae.Message]]]], core
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("command", choices=["organ", "synth", "flags", "scripts", "velocity"])
+    ap.add_argument(
+        "command", choices=["organ", "synth", "synthvel", "flags", "scripts", "velocity"]
+    )
     ap.add_argument("image", type=Path)
     ap.add_argument("sram", type=Path, nargs="?")
     ap.add_argument("--cache", type=Path)
@@ -194,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap.add_argument("--csv", type=Path)
     ap.add_argument("--out", type=Path, help="output directory of `scripts`")
     ap.add_argument("--short", action="store_true", help="five points only (survey of a model)")
+    ap.add_argument("--layer", type=int, default=0, choices=[0, 1], help="organ layer A or B")
+    ap.add_argument("--ticks", type=int, default=70, help="ticks after note-on and note-off")
     ns = ap.parse_args(argv)
     notes = (
         21,
@@ -220,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         100,
     )
     notes += (105, 108)
-    velocities = (1, 16, 32, 48, 64, 80, 100, 127)
+    velocities = (1, 32, 64, 127)
     if ns.short:
         notes, velocities = (36, 60, 84), (32, 127)
     setup = prepare(ns.image, ns.sram, ns.cache)
@@ -230,20 +242,34 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         ns.csv.write_text(text, encoding="utf-8")
         return 0
     if ns.command == "organ":
-        setup.keep(ORGAN_LAYERS)
         for model in ns.models:
-            install_organ_model(setup, model)
+            setup.fresh()
+            setup.keep({ns.layer})
+            install_organ_model(setup, model, ns.layer)
             setup.freeze()
+            kind = "organ" if ns.layer == 0 else "organB"
             for note, vel in sweep_points(notes, velocities, 60, 100):
-                lines += key_run(setup, "organ", model, note, vel)[0]
+                lines += key_run(setup, kind, model, note, vel, ns.ticks, ns.ticks)[0]
                 print(f"model {model} note {note} velocity {vel}: {len(lines)} rows", flush=True)
     elif ns.command == "synth":
         for layers, kind in (({4}, "synthA"), ({5}, "synthB"), ({6}, "synthC")):
+            setup.fresh()
             setup.keep(layers)
             setup.freeze()
             for note, vel in sweep_points(notes, velocities, 60, 100):
                 lines += key_run(setup, kind, 0, note, vel, 60, 60)[0]
                 print(f"{kind} note {note} velocity {vel}: {len(lines)} rows", flush=True)
+    elif ns.command == "synthvel":
+        setup.fresh()
+        setup.keep({4})
+        setup.freeze()
+        lines = ["velocity,note,value_on,value_off"]
+        for vel in range(1, 128):
+            _rows, on, off = key_run(setup, "synthA", 0, 60, vel, 4, 4)
+            vals = [f"{m.word2:#010x}" for _t, m in on + off if m.core == 2]
+            lines.append(f"{vel},60,{vals[0]},{vals[-1]}")
+        ns.csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return 0
     elif ns.command == "flags":
         setup.keep(ORGAN_LAYERS)
         install_organ_model(setup, 1)
@@ -258,8 +284,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     else:
         ns.out.mkdir(parents=True, exist_ok=True)
         for model, name in ((0, "b3"), (1, "vox"), (3, "pipe")):
+            setup.fresh()
             setup.keep(ORGAN_LAYERS)
-            setup.reset()
             install = install_organ_model(setup, model)
             setup.freeze()
             _rows, on, off = key_run(setup, "organ", model, 60, 100, notes=(64, 67))
@@ -267,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
                 [(0, "model install", install), (1, "C4 E4 G4 on", on), (2, "off", off)]
             )
             (ns.out / f"keydown-{name}-c4e4g4.script").write_text(text, encoding="utf-8")
+        setup.fresh()
         setup.keep(SYNTH_LAYERS)
         setup.freeze()
         _rows, on, off = key_run(setup, "synth", 0, 60, 100, 60, 60, notes=(64, 67))

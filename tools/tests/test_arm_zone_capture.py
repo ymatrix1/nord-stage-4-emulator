@@ -154,3 +154,19 @@ def test_flag_table_lists_the_flags_of_each_note(monkeypatch: pytest.MonkeyPatch
 
     rig.send = send  # type: ignore[method-assign]
     assert zc.flag_table(setup, OBJ, (36, 40)) == ["note,row,slot", "36,0,2", "40,4,2"]
+
+
+def test_fresh_restores_the_base_snapshot_not_the_last_frozen_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    emu = emu_with({})
+    setup = zc.Setup(FakeRig(emu), [], {}, blob=b"frozen", base=b"base")  # type: ignore[arg-type]
+    restored: list[bytes] = []
+    monkeypatch.setattr(zc.ast, "restore", lambda _e, blob: restored.append(blob))
+    monkeypatch.setattr(zc.ast, "enable_real_timer", lambda _e: None)
+    setup.fresh()
+    assert restored == [b"base"]
+    assert setup.blob == b"base"
+    setup.blob = b"later"
+    setup.reset()
+    assert restored[-1] == b"later"
