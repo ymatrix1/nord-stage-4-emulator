@@ -8,6 +8,7 @@
 #![allow(semicolon_in_expressions_from_macros)]
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
+pub mod aux_pedal_params;
 pub mod fx_extra_params;
 pub mod fx_params;
 pub mod fx_selectors;
