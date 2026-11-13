@@ -1,5 +1,7 @@
 # Organ tonewheel weights from the real ARM code
 
+> **Correction (2026-11-13, model attribution):** [organ-model-paths](organ-model-paths.md) (VERIFIED, run) shows that the 92-wheel bank `0x122620`, its mix stage `0x12268F` and the weights / drawbar footage mapping are installed by the **Pipe organ models (Pipe1 / Pipe2)**, not by the B3 model: wherever this note says "B3 tonewheel bank" or "B3 tonewheels", read "Pipe organ bank (models Pipe1 / Pipe2)". The bank algorithm, ladder, mapping and weights stay VERIFIED; only the model attribution changes (the model order matches the UI: ASSUMED). B3, Farfisa and B3 Bass install no generator in PNO core 1 (tone source not located, [OPEN-QUESTIONS](../OPEN-QUESTIONS.md)). Rust: `ToneWheelSource::ModelDefault` applies the bank to Pipe1 / Pipe2 only.
+
 Checked 2026-11-13.
 
 Sources: `bank0_CODE.bin` / `bank0_SRAM.bin` v1.66 (disassembly with capstone, `unicorn` runs from the settled steady state of [arm-organ-messages](arm-organ-messages.md) section 10), the SHARC oracle (`sharc-organ`, PNO core 1 image), [organ-oracle-audio](organ-oracle-audio.md), [organ-tonewheel-bank](organ-tonewheel-bank.md). Only addresses, offsets, derived indices and message words are recorded; no firmware bytes.

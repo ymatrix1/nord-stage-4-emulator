@@ -6,7 +6,7 @@
 //! tools/organ_weight_compare.py` (level 1.0000x, attack and release envelopes within 0.1 %).
 
 use super::weights::{wheel_of, UNIT_WEIGHT};
-use super::{vibrato_bank::wheel_hz, OrganLayer, WeightMode};
+use super::{vibrato_bank::wheel_hz, OrganLayer, OrganModel, ToneWheelSource, WeightMode};
 
 /// Rate at which wheel 0 has the cycles per frame of the firmware increment (`organ_ref` default).
 const FRAME_RATE: f32 = 43_156.4;
@@ -14,6 +14,9 @@ const FRAME_RATE: f32 = 43_156.4;
 /// Layer with everything but the tonewheel drawbar path off.
 fn layer(mode: WeightMode) -> OrganLayer {
     let mut o = OrganLayer::new(FRAME_RATE);
+    // Bank forced on B3 (experiment): no Pipe output damping (x0.92, ASSUMED) on top of the weights
+    o.model = OrganModel::B3;
+    o.tonewheel_source = ToneWheelSource::Firmware;
     o.weight_mode = mode;
     o.percussion_enabled = false;
     o.crosstalk_level = 0.0;
