@@ -18,6 +18,9 @@ impl Stage4Engine {
         match event {
             MidiEvent::NoteOn { note, velocity, .. } => {
                 let channel_idx = channel as usize;
+                let Some(sounding) = self.transposed_note(note) else {
+                    return;
+                };
                 let mut recipients = 0u8;
                 let is_global_channel = self.global_midi_channel == Some(channel);
                 for layer in LayerId::ALL {
@@ -38,7 +41,10 @@ impl Stage4Engine {
                         continue;
                     }
                     recipients |= 1 << (layer as u8);
-                    self.layer_note_on(layer, note, velocity, split_gain);
+                    self.layer_note_on(layer, sounding, velocity, split_gain);
+                }
+                if recipients != 0 {
+                    self.held_transpose[channel_idx][note as usize] = self.transpose;
                 }
                 for layer in LayerId::ALL {
                     if recipients & (1 << (layer as u8)) != 0 {
@@ -62,7 +68,8 @@ impl Stage4Engine {
                         .iter()
                         .any(|counts| counts[note as usize][layer as usize] > 0);
                     if !held_on_any_channel {
-                        self.layer_note_off(layer, note);
+                        let sounding = self.sounding_note(channel_idx, note);
+                        self.layer_note_off(layer, sounding);
                     }
                 }
             }
@@ -128,7 +135,7 @@ impl Stage4Engine {
         }
     }
 
-    fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
+    pub(super) fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
         match layer {
             LayerId::OrganA => self.organ_a.note_on_with_gain(note, gain),
             LayerId::OrganB => self.organ_b.note_on_with_gain(note, gain),
@@ -140,7 +147,7 @@ impl Stage4Engine {
         }
     }
 
-    fn layer_note_off(&mut self, layer: LayerId, note: u8) {
+    pub(super) fn layer_note_off(&mut self, layer: LayerId, note: u8) {
         match layer {
             LayerId::OrganA => self.organ_a.note_off(note),
             LayerId::OrganB => self.organ_b.note_off(note),
