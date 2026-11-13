@@ -10,23 +10,19 @@ from __future__ import annotations
 import bpy
 from proof_geom import box, loft
 
-# Shape EMPIRICAL from photos of the real parts (owner, 2026-11-13): the drawbar cap is one
-# part: a tall rear block whose sides and front slope inward, and a long lower nose with a
-# chamfered front, narrower and offset left (reference). Plan size EMPIRICAL from the
-# reference (100 x 231 px = 0.78 x 1.79 u at the base). Black and white caps share this geometry.
+# Shape EMPIRICAL from the owner's photo of a loose cap (2026-11-13): one part, a tall
+# near-square rear block with upright walls, an upright front face filleted into a long
+# full-width nose about half its height, the nose front chamfered down, and a thin lip
+# along the base behind the block. Plan size EMPIRICAL from the reference (100 x 231 px =
+# 0.78 x 1.79 u at the base). Black and white caps share this geometry.
 CAP_W = 0.80
 CAP_BACK, CAP_FRONT = 0.90, -0.89
-CAP_HT, CAP_HN = 0.90, 0.42  # EMPIRICAL: owner photo of the panel, block about as tall as
-# the cap is wide, nose about half of that
-BLOCK_FRONT = -0.32  # EMPIRICAL (close-up photo): the block front slopes forward onto the nose
-BLOCK_TOP_FRONT = 0.02  # top edge of that face
-NOSE_TOP_FRONT = -0.58  # front edge of the short nose top, then the sloped nose front
-# EMPIRICAL (reference, every drawbar): the nose top face spans this, left of centre; its
-# right wall slopes down to the full-width base
-NOSE_TOP_X = (-0.43, 0.12)
-NOSE_LEFT = -0.45  # EMPIRICAL: the nose base sticks out left of the block (silhouette fit)
-NOSE_FRONT_H = 0.12  # EMPIRICAL (photos): the nose front slopes down low toward the player
-CAP_TAPER = 0.12  # EMPIRICAL: block top is about 0.88 of its base width (photo, front view)
+CAP_HT, CAP_HN = 0.90, 0.42  # EMPIRICAL (photos): nose about 0.47 of the block height
+BLOCK_FRONT = 0.20  # EMPIRICAL (loose-cap photo): block is about 0.4 of the cap length
+NOSE_TOP_FRONT = -0.66  # EMPIRICAL: flat nose top ends here, then the chamfer
+NOSE_FRONT_H = 0.14  # EMPIRICAL: upright foot left under the chamfer
+LIP_L, LIP_H = 0.06, 0.10  # EMPIRICAL (loose-cap photo): base lip behind the block
+CAP_TAPER = 0.05  # EMPIRICAL: walls nearly upright (draft only)
 CAP_BEVEL = 0.12  # EMPIRICAL: reference cap corners read about 8 px rounded at 2x
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
 FOOT_WALL = 0.06  # ASSUMED: upright strip at the foot of every wall
@@ -55,22 +51,20 @@ def _section(y, z, top_x, left=-CAP_W / 2):
 
 
 def fader_cap(m, key):
-    """Drawbar cap, one loft from back to front over a full-width base: tall rear block with
-    tapered sides and a sloped front, then the lower nose (about half the height) whose top
-    face sits left because its right wall slopes, ending in a chamfer (reference, photos)."""
-    ht, hn = CAP_HT, CAP_HN
-    blk = (-CAP_W / 2 * (1 - CAP_TAPER), CAP_W / 2 * (1 - CAP_TAPER))
-    side = CAP_W / 2 * (1 - CAP_TAPER * NOSE_FRONT_H / CAP_HT)  # same wall slope as the block
-    base = (-side, side)
+    """Drawbar cap, one loft from back to front: base lip, tall upright rear block, step
+    down onto the full-width nose (the bevel makes the fillet), chamfered nose front."""
+    ht, hn, e = CAP_HT, CAP_HN, 0.005
+    top = (-CAP_W / 2 * (1 - CAP_TAPER), CAP_W / 2 * (1 - CAP_TAPER))
     secs = [
-        (CAP_BACK, ht * 0.86, blk),
-        (CAP_BACK - 0.08, ht, blk),
-        (BLOCK_TOP_FRONT, ht, blk),
-        (BLOCK_FRONT, hn, NOSE_TOP_X, NOSE_LEFT),
-        (NOSE_TOP_FRONT, hn, NOSE_TOP_X, NOSE_LEFT),
-        (CAP_FRONT, NOSE_FRONT_H, base, NOSE_LEFT),  # chamfered front, no separate band
+        (CAP_BACK, LIP_H, top),
+        (CAP_BACK - LIP_L, LIP_H, top),
+        (CAP_BACK - LIP_L - e, ht, top),
+        (BLOCK_FRONT, ht, top),
+        (BLOCK_FRONT - e, hn, top),
+        (NOSE_TOP_FRONT, hn, top),
+        (CAP_FRONT, NOSE_FRONT_H, top),
     ]
-    rings = [_section(y, z, tx, *lx) for y, z, tx, *lx in secs]
+    rings = [_section(y, z, tx) for y, z, tx in secs]
     return [loft("cap_body", rings, m[key], smooth=False, bevel=CAP_BEVEL, segments=8)]
 
 
