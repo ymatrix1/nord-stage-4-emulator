@@ -30,8 +30,21 @@ python docs/research/sharc-seq/routine_diff.py IMG/dsp_image_1_PNO.bin 0 12268F 
 ```
 (probe: `gen_census_probe.py OUT --plus && cc21k -proc ADSP-21571 -si-revision any -g -O0 -o OUT/cens21.dxe OUT/cens.asm OUT/cens.c`). `routine_diff.py` gained `--reg NAME=HEX` and `--rand-float LO:HI`; `sim_batch.py` runs each 21571 case with `Run(wait)` under a watchdog (`--case-timeout`).
 
-### Post stage 0x12272D and output stage 0x1229B3 on the 21571 simulator: not yet compared (stall)
-`routine_diff.py --scenario post|output` feeds the inputs of `tools/organ_post_ref.py` (`synthetic_inputs`, `output_inputs`; contiguous words coalesced into one write, `--watch` ranges `0xE0000..0xE2FFF`, `0xB0000..0xB1FFF` read back) to both machines. The pokes work (4 s per case; `sim_batch.py` prints `case k` / `poked` to stderr), but **`Run` of the post stage never returns on the simulator**: 25+ minutes, and the 60 s `--case-timeout` watchdog (`Halt` from a timer thread) did not recover it either; no case completed (attempts with 6 and 20 cases). The mix stage with the same harness completes in about 5 s per case, so the stall is specific to the routine's inputs or code path (open: circular-buffer registers of the random start state, an MMR read, or a polling loop). Next: run the post stage from the exact `sharc-chain` state (not a random register file), bisect with breakpoints inside `0x12272D..0x1229B2`, and keep the model side (`organ_post_oracle.py verify`, bit-exact against the Rust oracle) as the reference until then.
+### Post stage 0x12272D and output stage 0x1229B3 on the SHARC+ simulator
+`routine_diff.py --scenario post|output` feeds the inputs of `tools/organ_post_ref.py` (`synthetic_inputs`, `output_inputs`, seeds 100..119, contiguous words coalesced into one write) to both machines; the DM image windows `0x95000..0x95FFF`, `0xB0000..0xB1FFF`, `0xE2000..0xE2FFF` are loaded into both and read back. Harness pitfalls found on the way (each cost a stalled run):
+* `--code` must cover the whole routine (`122600:122b00`; default `122900` cuts the post stage at `0x1229B2`): the simulator then runs off the end and `Run` never returns (the entry breakpoint was not even reached; `Halt` from a timer thread blocks too).
+* Loading more DM (`0xE0000..0xE3FFF` with `0xC0000..`/`0x90000..` image windows) also stalled the run (probably the probe's C-runtime data); keep to the windows above.
+* Unwritten L1 memory reads `0xEEEEEEEE` on the simulator and `0` in the model, so every word a routine reads must be loaded in both (the output window `0xB0200..` too).
+
+| Routine | Cases | Result |
+|---|---|---|
+| Output stage `0x1229B3` (`I0 = 0xB0200`, `I1 = 0xB1320`) | 20 | **0 of 20 differ**: all registers, scratch and every watched DM word match. VERIFIED (command below). |
+| Post stage `0x12272D` | 20 | **All DM words (`0xE2000..0xE2FFF`, `0xB0000..0xB1FFF`) match in 20 of 20**; registers match except `R14`/`R15` (and shadow `S14`/`S15`), where the simulator holds `0x000000EE` and the model `0` in 6 of 20 cases (cases 0, 1, 7, 12, 16, 19). The routine's results are unaffected. Open: probably a scratch value derived from a word the scenario does not set (`0xEEEEEEEE` on the simulator versus `0`), not yet traced. |
+
+```bash
+python docs/research/sharc-seq/routine_diff.py IMG/dsp_image_1_PNO.bin 0 1229B3 OUT/cens21.dxe docs/research/sharc-seq/census21_fixture.txt   --work WORK --target 21571 --code 122600:122b00 --scenario output --reg i0=b0200 --reg i1=b1320   --dm 95000:96000 --dm b0000:b2000 --dm e2000:e3000 --watch e2000:e3000 --watch b0000:b2000 --cases 20 --seed 100
+# post stage: entry 12272D, --scenario post, no --reg
+```
 
 ## Implications
 The bank routine is not yet verified. Everything before the loop exit matches, so the multiplier, `FEXT`, dual-memory and SIMD paths it uses are consistent with the instruction-level census (`sharc-census-diff.md`).
