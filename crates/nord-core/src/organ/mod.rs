@@ -8,6 +8,7 @@
 mod b3_wheels;
 mod drawbar;
 mod drawbar_sum;
+mod farfisa_wheels;
 mod firmware_bank;
 mod keyclick;
 mod lane_mix;
@@ -34,6 +35,10 @@ mod bank_golden;
 #[cfg(test)]
 mod bank_mix_golden;
 #[cfg(test)]
+mod farfisa_golden;
+#[cfg(test)]
+mod farfisa_source_tests;
+#[cfg(test)]
 mod vox_golden;
 #[cfg(test)]
 mod weight_tests;
@@ -43,6 +48,10 @@ pub use b3_wheels::{
     WHEEL_GAIN as B3_WHEEL_GAIN,
 };
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
+pub use farfisa_wheels::{
+    FarfisaWheels, DSP_FRAME_RATE as FARFISA_DSP_FRAME_RATE, OSCILLATORS as FARFISA_OSCILLATORS,
+    ROWS as FARFISA_ROWS,
+};
 pub use firmware_bank::{
     build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate, phase_step,
     ToneBank, DEFAULT_TUNE_WORD,
@@ -124,6 +133,8 @@ pub struct OrganLayer {
     vox: vox_source::VoxSource,
     b3_wheels: B3Wheels,
     b3_synced: (f32, f32),
+    farfisa_wheels: FarfisaWheels,
+    farfisa_synced: (f32, f32),
     lane_mixer: LaneMixer,
     weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
@@ -198,6 +209,8 @@ impl OrganLayer {
             vox: vox_source::VoxSource::new(sample_rate),
             b3_wheels: B3Wheels::new(),
             b3_synced: (0.0, f32::NAN),
+            farfisa_wheels: FarfisaWheels::new(),
+            farfisa_synced: (0.0, f32::NAN),
             lane_mixer: LaneMixer::new(sample_rate),
             weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
