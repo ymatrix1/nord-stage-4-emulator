@@ -215,6 +215,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] B3 pitch ladder (bit exact) and wheel tables as opt-in `ToneWheelSource::B3Wheels` ([organ-engine](specs/organ-engine.md) s3.1.6)
 - [x] Vox chord end to end in the oracle (`sharc-pass`)
 - [x] B3: per-key footage weights and per-wheel amplitudes from the captured key-down, frame rate settled ([organ-keydown-weights](research/organ-keydown-weights.md))
+- [x] Pipe video gap: Pipe2 lines match the oracle to 0.00 dB on three chords in both weight modes (`organ/pipe_lines.rs`); the Space Drama II clip is synth-dominated (`tools/mix_fit.py`), default and `render_hash` unchanged ([pipe-video-gap](research/pipe-video-gap.md))
+- [ ] Pipe-only hardware clip, organ level `L` and the Pipe weight scale (Legacy bus +14.4 dB over the ARM weight unit), wheel steps from the ARM increment words ([pipe-video-gap](research/pipe-video-gap.md) follow-ups)
 - [x] B3: processor tail as an oracle-measured amplitude response (`b3_tail.rs`, [organ-b3-tail](research/organ-b3-tail.md))
 - [ ] B3: dry gain writer, tail phase, multi-write `A`, drawbar sweep; then make `B3Wheels` the B3 default (3 chords: 10 / 8 / 6 of 13 / 13 / 11 lines within 1 dB; hardware clip mid band -11.9 dB)
 - [x] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with the captured key-down weights (four footage rows per key, no velocity), 9.9 cent offset explained ([organ-keydown-weights](research/organ-keydown-weights.md))
