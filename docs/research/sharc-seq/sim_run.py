@@ -27,6 +27,7 @@ import zipfile
 
 CCES_DEFAULT = r'C:\Analog Devices\CrossCore Embedded Studio 2.12.1'
 TARGET = ('ADSP-214xx Family Simulator', 'ADSP-214xx Simulator', 'ADSP-21489')
+TARGET_PLUS = ('ChipFactory Simulator', 'ADSP-21571 Cycle-Accurate-Sim', 'ADSP-21571')   # SHARC+, ~140 s C-runtime start-up
 DM_MEMORY_ID = 1  # "Data(DM) Memory", 32-bit words (checked against GetMemoryTypes)
 
 
@@ -86,17 +87,20 @@ def resolve(spec, syms):
         sys.exit('unknown symbol or address: %s' % spec)
 
 
-def run_probe(dxe, out_addr, exit_addr, count, timeout):
+def run_probe(dxe, out_addr, exit_addr, count, timeout, plus=False):
     """Runs the program to the exit breakpoint and returns `count` DM words from `out_addr`."""
     sys.path.insert(0, unpack_wheel())
     os.environ['PATH'] = os.path.join(cces_home(), 'System') + os.pathsep + os.environ['PATH']
     os.environ.setdefault('CCES_HOME', cces_home())
     import TpsdkServer.TpsdkServer as T
-    T.Connect(*TARGET)
+    T.Connect(*(TARGET_PLUS if plus else TARGET))
     try:
         T.LoadProgram(0, dxe, False)
         T.SetBreakpointAtAddress(0, exit_addr)
-        T.Run(0, False)
+        if plus:   # blocks until the breakpoint (the state reads HALTED before the run starts)
+            T.Run(0, True)
+        else:
+            T.Run(0, False)
         t0 = time.time()
         while T.GetTargetState(0) == T.STATE_RUNNING:
             if time.time() - t0 > timeout:
@@ -104,7 +108,7 @@ def run_probe(dxe, out_addr, exit_addr, count, timeout):
                 sys.exit('timeout after %ss (probe did not reach 0x%X)' % (timeout, exit_addr))
             time.sleep(0.01)
         buf = bytearray(4 * count)
-        T.GetMemory(0, DM_MEMORY_ID, out_addr, count, 1, buf)
+        T.GetMemory(0, 5 if plus else DM_MEMORY_ID, out_addr, count, 1, buf)
     finally:
         T.Disconnect()
     return struct.unpack('>%dI' % count, bytes(buf))
@@ -118,6 +122,7 @@ def main():
     ap.add_argument('--exit', default='___lib_prog_term', help='symbol or address to stop at')
     ap.add_argument('--output', help='write here instead of stdout')
     ap.add_argument('--timeout', type=float, default=120.0)
+    ap.add_argument('--target', choices=['21489', '21571'], default='21489')
     ap.add_argument('--no-reexec', action='store_true', help=argparse.SUPPRESS)
     a = ap.parse_args()
     if not is_py36_32() and not a.no_reexec:
@@ -128,7 +133,7 @@ def main():
         sys.exit(subprocess.call([py, os.path.abspath(__file__), '--no-reexec'] + sys.argv[1:]))
     dxe = os.path.abspath(a.dxe)
     syms = elf_symbols(dxe)
-    words = run_probe(dxe, resolve(a.out, syms), resolve(a.exit, syms), a.count, a.timeout)
+    words = run_probe(dxe, resolve(a.out, syms), resolve(a.exit, syms), a.count, a.timeout, a.target == '21571')
     text = ''.join('0x%08X\n' % w for w in words)
     if a.output:
         open(a.output, 'w').write(text)
