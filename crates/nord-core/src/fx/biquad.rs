@@ -135,8 +135,7 @@ impl Biquad {
 /// `ext40_reference_matches_the_firmware_golden_vectors`, 0 differing words. The design values are
 /// `b0 = b2 = 0.292893`, `b1 = 0.585786`, `a1 = 0`, `a2 = 0.171573` (`docs/research/fx-dsp-map.md`
 /// section 6); `b2` differs from `b0` by 7 ulp in the image, kept as found. The set at `0x9437F`
-/// is the same filter. Not a stage of the Rust chain: the master bus has no 4-biquad IIR.
-#[cfg(test)]
+/// is the same filter. Used by `fw_rvb_wrap` (the reverb half-rate wrapper); the master bus has no 4-biquad IIR.
 pub(super) const FW_BUTTERWORTH_FS4_WORDS: [u32; 5] =
     [0x3E95_F619, 0x3F15_F619, 0x3E95_F612, 0, 0x3E2F_B0D5];
 
