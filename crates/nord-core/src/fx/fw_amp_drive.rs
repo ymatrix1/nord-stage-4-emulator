@@ -1,5 +1,8 @@
-//! Firmware table LFO with a modulated filter chain (FX routine `0x1228CF`, module list
-//! `0xC04438D8`) as an opt-in stage.
+//! Firmware Amp **drive** stage (FX routine `0x1228CF`, module list `0xC04438D8#0`) as an opt-in
+//! stage. Formerly called the "table LFO": role correction of `docs/research/fx-contexts.md` s5.2.
+//! The phase word `ctx[-0x20]` is `kAmpDrive / 127` (VERIFIED words, `fw_map::amp_drive_target`),
+//! so the "phase" is the drive amount and the tables are drive curves, not an oscillator. The
+//! equations below are unchanged (the word "phase" is the model's name).
 //!
 //! A smoothed phase (`2^31` per half turn in the firmware's integer, `ctx[-2]` sets the scale)
 //! indexes two float tables (the `-cos` quarter wave and its companion) with linear
@@ -54,7 +57,7 @@ pub mod ctx {
 /// The three tables the routine reads: `a` and `b` have 257 entries (index `0 ..= 255`, plus one
 /// for the interpolation), `c` is indexed by a signed 10-bit field around `c_center`.
 #[derive(Debug, Clone, Copy)]
-pub struct LfoTables<'a> {
+pub struct DriveTables<'a> {
     /// First LFO table (the `-cos` quarter wave in the firmware).
     pub a: &'a [f32],
     /// Second LFO table.
@@ -67,11 +70,11 @@ pub struct LfoTables<'a> {
 
 /// Firmware table LFO stage: the 54 context words. Allocation free.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FwLfo {
+pub struct FwAmpDrive {
     ctx: Words<CTX_WORDS>,
 }
 
-impl Default for FwLfo {
+impl Default for FwAmpDrive {
     fn default() -> Self {
         Self {
             ctx: Words::new(BASE),
@@ -111,7 +114,7 @@ fn tdf2(x: f32, z: &mut [f32; 2], c: &[f32; 5]) -> f32 {
     y
 }
 
-impl FwLfo {
+impl FwAmpDrive {
     /// Builds the stage from the 54 raw context words (`I1 - 0x20 ..= I1 + 0x15`).
     pub const fn from_words(words: [u32; CTX_WORDS]) -> Self {
         Self {
@@ -137,7 +140,7 @@ impl FwLfo {
     /// Processes whole blocks in place: each block of 4 words is two stereo frames
     /// `[l0, r0, l1, r1]`; the loop count word `ctx[0x15]` of the firmware is the number of blocks
     /// and is not read here.
-    pub fn process(&mut self, tables: &LfoTables, frames: &mut [f32]) {
+    pub fn process(&mut self, tables: &DriveTables, frames: &mut [f32]) {
         let c = &mut self.ctx;
         let phase = smooth(
             c.f(ctx::PHASE_TARGET),
@@ -218,13 +221,13 @@ mod tests {
             floats(&g::LFO_TABLE_B),
             floats(&g::LFO_TABLE_C),
         );
-        let tables = LfoTables {
+        let tables = DriveTables {
             a: &a,
             b: &b,
             c: &c,
             c_center: (c.len() - 1) / 2,
         };
-        let mut f = FwLfo::from_words(g::LFO_CTX_IN);
+        let mut f = FwAmpDrive::from_words(g::LFO_CTX_IN);
         let (ins, outs) = (
             g::LFO_FRAMES_IN.as_chunks::<8>().0,
             g::LFO_FRAMES_OUT.as_chunks::<8>().0,
@@ -251,13 +254,13 @@ mod tests {
     #[test]
     fn the_phase_is_smoothed_toward_its_target_and_picks_the_table_entry() {
         let a: Vec<f32> = (0..257).map(|k| k as f32).collect();
-        let tables = LfoTables {
+        let tables = DriveTables {
             a: &a,
             b: &a,
             c: &[0.0; 3],
             c_center: 1,
         };
-        let mut f = FwLfo::default();
+        let mut f = FwAmpDrive::default();
         f.ctx.set_word(ctx::FIX_SCALE, 31);
         f.set_value(ctx::PHASE_TARGET, 0.25);
         f.set_value(ctx::PHASE_TARGET + 1, 0.25); // state == target: the phase stays 0.25

@@ -1,5 +1,5 @@
 //! Context word arrays and arithmetic helpers shared by the firmware routine ports
-//! (`fw_resonant`, `fw_allpass`, `fw_lfo`, `fw_delay`).
+//! (`fw_tone_stack`, `fw_allpass`, `fw_amp_drive`, `fw_delay`).
 //!
 //! A port keeps the routine's context as raw 32-bit words addressed by their offset from `I1`
 //! (the firmware's own layout), so a context captured from the DSP image loads unchanged and the
