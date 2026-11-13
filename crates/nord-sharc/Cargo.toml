@@ -23,6 +23,10 @@ name = "sharc-organ"
 path = "src/bin/sharc_organ.rs"
 
 [[bin]]
+name = "sharc-chain"
+path = "src/bin/sharc_chain.rs"
+
+[[bin]]
 name = "sharc-org"
 path = "src/bin/sharc_org.rs"
 
