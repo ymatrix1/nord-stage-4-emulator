@@ -27,25 +27,85 @@ const ID: [u32; 5] = [0x3F80_0000, 0, 0, 0, 0];
 /// [`amp_fw_has_sets`].
 pub(super) const AMP_FW_WORDS: [[[u32; 5]; AMP_FW_SECTIONS]; AMP_FW_CASES] = [
     [
-        [0x4033_D9B3, 0xC098_543D, 0x4004_2D9E, 0xBFBB_A49A, 0x3F14_C491],
-        [0x4030_D78F, 0xC0AA_F8EE, 0x4027_68A7, 0xBFAA_F8EE, 0x3EB0_806C],
+        [
+            0x4033_D9B3,
+            0xC098_543D,
+            0x4004_2D9E,
+            0xBFBB_A49A,
+            0x3F14_C491,
+        ],
+        [
+            0x4030_D78F,
+            0xC0AA_F8EE,
+            0x4027_68A7,
+            0xBFAA_F8EE,
+            0x3EB0_806C,
+        ],
     ],
     [
-        [0x3F80_0000, 0xBFFC_11CA, 0x3F78_4202, 0xBFFC_11CA, 0x3F78_4202],
-        [0x4040_31C8, 0xC0BC_A334, 0x403A_B4A5, 0xBFD7_95F2, 0x3F31_0758],
+        [
+            0x3F80_0000,
+            0xBFFC_11CA,
+            0x3F78_4202,
+            0xBFFC_11CA,
+            0x3F78_4202,
+        ],
+        [
+            0x4040_31C8,
+            0xC0BC_A334,
+            0x403A_B4A5,
+            0xBFD7_95F2,
+            0x3F31_0758,
+        ],
     ],
     [
-        [0x4132_E6C1, 0xC19D_7A98, 0x410B_3F4D, 0xBF90_0CE5, 0x3EB1_A779],
-        [0x3F34_9E72, 0xBFB3_1C19, 0x3F31_9CA9, 0xBFFF_DF00, 0x3F7F_C228],
+        [
+            0x4132_E6C1,
+            0xC19D_7A98,
+            0x410B_3F4D,
+            0xBF90_0CE5,
+            0x3EB1_A779,
+        ],
+        [
+            0x3F34_9E72,
+            0xBFB3_1C19,
+            0x3F31_9CA9,
+            0xBFFF_DF00,
+            0x3F7F_C228,
+        ],
     ],
     [
-        [0x3F7E_4439, 0xBFFC_7195, 0x3F7A_C870, 0xBFFC_7195, 0x3F79_0CA9],
-        [0x4051_7486, 0xC0CD_C4E0, 0x404B_29D1, 0xBFEB_2A24, 0x3F57_9063],
+        [
+            0x3F7E_4439,
+            0xBFFC_7195,
+            0x3F7A_C870,
+            0xBFFC_7195,
+            0x3F79_0CA9,
+        ],
+        [
+            0x4051_7486,
+            0xC0CD_C4E0,
+            0x404B_29D1,
+            0xBFEB_2A24,
+            0x3F57_9063,
+        ],
     ],
     [ID, ID],
     [
-        [0x3FD0_C965, 0xC050_C965, 0x3FD0_C965, 0xBFF5_6CE6, 0x3F6B_ACC3],
-        [0x3D70_0B71, 0x3DF0_0B71, 0x3D70_0B71, 0xBF9A_0CBA, 0x3EE0_38A1],
+        [
+            0x3FD0_C965,
+            0xC050_C965,
+            0x3FD0_C965,
+            0xBFF5_6CE6,
+            0x3F6B_ACC3,
+        ],
+        [
+            0x3D70_0B71,
+            0x3DF0_0B71,
+            0x3D70_0B71,
+            0xBF9A_0CBA,
+            0x3EE0_38A1,
+        ],
     ],
     [ID, ID],
     [ID, ID],
@@ -83,10 +143,34 @@ pub(super) fn amp_fw_case_for(cabinet: AmpCabinet, variation: bool) -> Option<us
 /// palindromic (`b0 == b2`). The fs/4 Butterworth pair of `0x9437A` is a different table
 /// (`FW_BUTTERWORTH_FS4_WORDS`). Section order is the memory order (ASSUMED to be the signal order).
 pub(super) const MASTER_IIR_WORDS: [[u32; 5]; 4] = [
-    [0x3F05_70C0, 0x3E86_59B2, 0x3F05_70C0, 0xBE3F_F6D3, 0x3F41_4CF5],
-    [0x3F27_B1AA, 0x3F05_CCF3, 0x3F27_B1AA, 0xBD44_728B, 0x3ECC_3FA1],
-    [0x3EF6_EF68, 0x3F27_7272, 0x3EF6_EF68, 0x3DD7_E720, 0x3E22_3B71],
-    [0x3E5F_F7D4, 0x3ED5_9E20, 0x3E5F_F7D4, 0x3E54_046B, 0x3CEE_34FC],
+    [
+        0x3F05_70C0,
+        0x3E86_59B2,
+        0x3F05_70C0,
+        0xBE3F_F6D3,
+        0x3F41_4CF5,
+    ],
+    [
+        0x3F27_B1AA,
+        0x3F05_CCF3,
+        0x3F27_B1AA,
+        0xBD44_728B,
+        0x3ECC_3FA1,
+    ],
+    [
+        0x3EF6_EF68,
+        0x3F27_7272,
+        0x3EF6_EF68,
+        0x3DD7_E720,
+        0x3E22_3B71,
+    ],
+    [
+        0x3E5F_F7D4,
+        0x3ED5_9E20,
+        0x3E5F_F7D4,
+        0x3E54_046B,
+        0x3CEE_34FC,
+    ],
 ];
 
 /// The master IIR sets as floats.
@@ -155,7 +239,10 @@ pub(super) mod tests {
 
     #[test]
     fn master_table_is_palindromic_and_starts_with_the_documented_words() {
-        assert_eq!(MASTER_IIR_WORDS[0][..3], [0x3F05_70C0, 0x3E86_59B2, 0x3F05_70C0]);
+        assert_eq!(
+            MASTER_IIR_WORDS[0][..3],
+            [0x3F05_70C0, 0x3E86_59B2, 0x3F05_70C0]
+        );
         assert!(MASTER_IIR_WORDS.iter().all(|s| s[0] == s[2]));
     }
 

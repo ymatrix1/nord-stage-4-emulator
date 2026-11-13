@@ -20,9 +20,9 @@ mod tests_biquad_golden;
 #[cfg(test)]
 mod tests_chain;
 #[cfg(test)]
-mod tests_master_golden;
-#[cfg(test)]
 mod tests_delay;
+#[cfg(test)]
+mod tests_master_golden;
 mod types;
 
 pub use biquad::*;

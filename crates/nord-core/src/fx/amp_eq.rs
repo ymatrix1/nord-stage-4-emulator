@@ -202,8 +202,14 @@ mod tests {
         let mut rbj = cab_chain(AmpCabinet::Small, false);
         let mut fw = cab_chain(AmpCabinet::Small, false);
         fw.amp_fw_coeffs = true;
-        let (a, b) = (tone_gain_db(&mut rbj, 1000.0), tone_gain_db(&mut fw, 1000.0));
-        assert!((a - b).abs() > 0.2, "firmware set must differ from RBJ: {a} vs {b}");
+        let (a, b) = (
+            tone_gain_db(&mut rbj, 1000.0),
+            tone_gain_db(&mut fw, 1000.0),
+        );
+        assert!(
+            (a - b).abs() > 0.2,
+            "firmware set must differ from RBJ: {a} vs {b}"
+        );
         // case 5: high pass then low pass, band limited (see fw_coeffs tests for the exact shape)
         let lo = tone_gain_db(&mut fw, 60.0);
         let hi = tone_gain_db(&mut fw, 18_000.0);
@@ -212,6 +218,9 @@ mod tests {
         let mut twin = cab_chain(AmpCabinet::Twin, false);
         let mut twin_fw = cab_chain(AmpCabinet::Twin, false);
         twin_fw.amp_fw_coeffs = true;
-        assert_eq!(tone_gain_db(&mut twin, 3000.0), tone_gain_db(&mut twin_fw, 3000.0));
+        assert_eq!(
+            tone_gain_db(&mut twin, 3000.0),
+            tone_gain_db(&mut twin_fw, 3000.0)
+        );
     }
 }
