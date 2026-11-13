@@ -5,7 +5,8 @@
 
 use super::drawbar::{drawbar_gain_law, foldback_tonewheel, DRAWBAR_OFFSETS};
 use super::types::NUM_TONEWHEELS;
-use super::{OrganLayer, OrganModel};
+use super::weights::UNIT_WEIGHT;
+use super::{OrganLayer, OrganModel, WeightMode};
 
 impl OrganLayer {
     /// Sums drawbars and percussion of all held keys. `buses[lane]` are the tonewheel buses of
@@ -14,7 +15,7 @@ impl OrganLayer {
     /// ASSUMED: the `0.08` drawbar bus scale, the `0.12` / `0.06` percussion gains and the B3
     /// Normal-percussion `0.708` dip (unchanged, see the spec).
     pub(super) fn sum_drawbars(
-        &self,
+        &mut self,
         buses: &[[f32; NUM_TONEWHEELS]; 2],
         lanes: usize,
     ) -> [f32; 2] {
@@ -29,14 +30,41 @@ impl OrganLayer {
             1.0
         };
 
+        let firmware = self.weight_mode == WeightMode::Firmware;
         let mut dry = [0.0f32; 2];
+        if firmware {
+            // Smoothed firmware weights through the mix stage (level L, ASSUMED 1.0): the bus
+            // already carries the wheel signals (x table, no per-wheel calibration).
+            let wa = self.weight_state.step(
+                &self.held_notes,
+                &self.drawbars,
+                self.octave_shift.clamp(-2, 2),
+                self.sample_rate,
+            );
+            let l = self.weight_level * db_bus_scale;
+            for (acc, bus) in dry.iter_mut().zip(buses.iter()).take(lanes) {
+                *acc = l * wa.iter().zip(bus.iter()).map(|(w, x)| w * x).sum::<f32>();
+            }
+        }
+        // Percussion keeps the legacy gains; in firmware mode they follow the ratio of the
+        // firmware weight unit to the legacy 0.08 bus scale so the drawbar/percussion balance holds.
+        let perc_scale = if firmware {
+            UNIT_WEIGHT * self.weight_level / 0.08
+        } else {
+            1.0
+        };
         for note in 0u8..=127u8 {
             if !self.held_notes[note as usize] {
                 continue;
             }
             let base_midi = i32::from(note) + oct_semis;
             let key_gain = self.note_gains[note as usize];
-            for (db_idx, &level) in self.drawbars.iter().enumerate() {
+            let legacy_drawbars = if firmware {
+                &[][..]
+            } else {
+                &self.drawbars[..]
+            };
+            for (db_idx, &level) in legacy_drawbars.iter().enumerate() {
                 if level == 0 {
                     continue;
                 }
@@ -55,7 +83,7 @@ impl OrganLayer {
                 let tw = foldback_tonewheel(base_midi + perc_offset);
                 let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
                 for (acc, bus) in dry.iter_mut().zip(buses.iter()).take(lanes) {
-                    *acc += self.percussion_env * bus[tw] * perc_gain * key_gain;
+                    *acc += self.percussion_env * bus[tw] * perc_gain * key_gain * perc_scale;
                 }
             }
         }
@@ -87,7 +115,7 @@ mod tests {
 
     #[test]
     fn no_held_keys_sum_to_zero() {
-        let o = OrganLayer::new(48_000.0);
+        let mut o = OrganLayer::new(48_000.0);
         assert_eq!(o.sum_drawbars(&[[1.0; NUM_TONEWHEELS]; 2], 2), [0.0, 0.0]);
     }
 }

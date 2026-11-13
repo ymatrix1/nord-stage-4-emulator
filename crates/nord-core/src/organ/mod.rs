@@ -18,11 +18,15 @@ mod tonewheel;
 mod types;
 mod vibrato_bank;
 mod vibrato_link;
+mod weight_state;
+mod weights;
 
 #[cfg(test)]
 mod bank_golden;
 #[cfg(test)]
 mod bank_mix_golden;
+#[cfg(test)]
+mod weight_tests;
 
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
 pub use firmware_bank::{
@@ -40,9 +44,14 @@ pub use vibrato_bank::{
 };
 
 pub use vibrato_link::{level_for_scanner, VibratoLevel, VibratoLink};
+pub use weights::{
+    a_key_down, a_update, targets as weight_targets, weight_sum, WeightMode, UNIT_WEIGHT,
+    WEIGHT_SCALE,
+};
 
 use std::f32::consts::TAU;
 use types::{ROTARY_BUFFER_SIZE, SCANNER_BUFFER_SIZE};
+use weight_state::{velocity_for_gain, WeightState};
 
 /// Physical modeling B3 & Transistor/Pipe Organ layer with integrated Model 122 Rotary Speaker.
 #[derive(Debug, Clone)]
@@ -86,11 +95,20 @@ pub struct OrganLayer {
     pub fine_tune_cents: f32,
     /// Drawbar level law (default: firmware curve; `Linear` is the old `level / 8`).
     pub drawbar_law: DrawbarLaw,
+    /// How the per-wheel drawbar weights are formed (default `Legacy`: instant gains, ASSUMED
+    /// bus scale and pickup calibration; `Firmware`: the ARM weights, smoothed, absolute scale).
+    pub weight_mode: WeightMode,
+    /// Output level `L` of the mix stage (`0x95B42`) applied in `WeightMode::Firmware`.
+    /// ASSUMED 1.0: no ARM message sets it.
+    pub weight_level: f32,
+    /// Key-click transient on key-down / key-up (default on; off for oracle comparisons).
+    pub key_click_enabled: bool,
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
     synced_fine_cents: f32,
     tone_bank: ToneBank,
     lane_mixer: LaneMixer,
+    weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
     pickup_b3: [f32; NUM_TONEWHEELS],
     pickup_b3_bass: [f32; NUM_TONEWHEELS],
@@ -153,11 +171,15 @@ impl OrganLayer {
             vibrato_link: VibratoLink::default(),
             fine_tune_cents: 0.0,
             drawbar_law: DrawbarLaw::default(),
+            weight_mode: WeightMode::default(),
+            weight_level: 1.0,
+            key_click_enabled: true,
             tonewheel_freqs: freqs,
             tonewheel_freqs_hz: freqs_hz,
             synced_fine_cents: 0.0,
             tone_bank,
             lane_mixer: LaneMixer::new(sample_rate),
+            weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
             pickup_b3,
             pickup_b3_bass,
@@ -197,13 +219,21 @@ impl OrganLayer {
             }
             self.held_notes[idx] = true;
             self.note_gains[idx] = gain.clamp(0.0, 1.0);
+            self.weight_state.key_down(
+                idx as u8,
+                velocity_for_gain(gain),
+                &self.drawbars,
+                self.octave_shift.clamp(-2, 2),
+            );
             self.active_key_count += 1;
             let click_scale = match self.model {
                 OrganModel::B3 | OrganModel::Vox => 0.45,
                 OrganModel::Farfisa => 0.18,
                 OrganModel::Pipe1 | OrganModel::Pipe2 => 0.25,
             };
-            self.click_env = click_scale * self.note_gains[idx].max(0.25);
+            if self.key_click_enabled {
+                self.click_env = click_scale * self.note_gains[idx].max(0.25);
+            }
         }
     }
 
@@ -212,13 +242,16 @@ impl OrganLayer {
         let idx = (note as usize).min(127);
         if self.held_notes[idx] {
             self.held_notes[idx] = false;
+            self.weight_state.key_up(idx as u8);
             self.active_key_count = self.active_key_count.saturating_sub(1);
             let click_scale = match self.model {
                 OrganModel::B3 | OrganModel::Vox => 0.16,
                 OrganModel::Farfisa => 0.06,
                 OrganModel::Pipe1 | OrganModel::Pipe2 => 0.05,
             };
-            self.click_env = self.click_env.max(click_scale);
+            if self.key_click_enabled {
+                self.click_env = self.click_env.max(click_scale);
+            }
         }
     }
 
@@ -231,6 +264,7 @@ impl OrganLayer {
         let (tw_buses, lanes) = self.render_tonewheel_lanes(inv_fs);
 
         if self.active_key_count == 0
+            && !(self.weight_mode == WeightMode::Firmware && self.weight_state.active())
             && self.click_env < 1e-6
             && self.click_bp_state[0].abs() < 1e-6
         {

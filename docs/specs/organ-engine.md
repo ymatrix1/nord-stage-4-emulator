@@ -121,8 +121,39 @@ Engine status: the 92 wheels exist in `ToneBank` (`BANK_WHEELS`); the layer feed
 - **Lanes:** `x = m00 a + m01 b`, `y = m10 a + m11 b` with the smoothed matrix `[[g5, g8], [g7, g6]] * level`; detuned steady state `x = 0.75 a + 0.375 b`, `y = 0.375 a + 0.75 b`. The lane split is done before the pickup/crosstalk stages (linear, so equivalent). While the table is exact and the ramp has settled only one lane exists and the old code path runs bit-exactly (render hash unchanged). Leaving level 1 keeps both copies running until the ramp settles, then retunes to the exact table.
 - **Stereo routing:** `mid = (x + y) / 2` goes through key click, scanner and rotary exactly as the mono signal did; `side = (x - y) / 2` is added to L and subtracted from R after the rotary. `(L + R) / 2` therefore equals the `Manual` mono mean (test `mono_sum_equals_the_manual_mono_mean`); without rotary `L = x`, `R = y`.
 - **Against the oracle** (`organ_ref --detuned` vs `organ_oracle_audio.py render --detuned`, `compare --lanes`, C4 E4 G4, 888000000, 43,156 Hz, first 2,048 frames dropped): lane x 37.7 dB, lane y 37.6 dB SNR after one gain; the old mono path against the same lanes gave 22.6 / 23.3 dB. Exact table: 37.7 dB on both lanes.
-- **Not implemented (VERIFIED in PR #111, `organ-weights.md`):** the mix stage also smooths the per-wheel weights (`wA <- a wB + b wA`, `a` = 0.0096 on key-down, 0.0043 on a full update). The engine still applies key gains instantly; per-wheel weight smoothing is TD-04 (d).
+- **Per-wheel weights:** the mix stage also smooths the per-wheel weights (`wA <- a wB + b wA`, `a` = 0.0096 on key-down, 0.0043 on a full update, [organ-weights](../research/organ-weights.md)); implemented as the opt-in `WeightMode::Firmware`, section 3.1.5.
 - Tests: `lane_mix::tests` (time constant, step response, both gain sets, level selection), `vibrato_link::tests`, `stereo_lanes::tests` (level/table selection, 0.75 / 0.375 blend, ramp, mono-sum equivalence, dual-mono when exact), `drawbar_sum::tests`.
+
+### 3.1.5 Firmware weights (`WeightMode::Firmware`, `weights.rs`, `weight_state.rs`)
+
+`OrganLayer::weight_mode` selects how the drawbar sum is formed (only `B3`-style drawbar buses; percussion and the other models keep their paths):
+
+| `WeightMode` | Per-wheel gain | Scale | Pickup tables |
+|---|---|---|---|
+| `Legacy` (default) | instant `drawbar_gain * key gain` per key and drawbar | ASSUMED `0.08` bus scale | ASSUMED calibration on every wheel |
+| `Firmware` | smoothed `wA[w]` of the ARM weights, below | VERIFIED `2^-23` per integer unit, level `L = weight_level` (ASSUMED 1.0) | none (the bank and mix stage have none); `b3_bass_mode` still applies its table |
+
+Targets (VERIFIED, [organ-weights](../research/organ-weights.md) s3, s5; 128 notes x 9 drawbars bit exact):
+
+```text
+wheel(note, j) = fold(note + octave_shift - 24 + OFFSET[j])          OFFSET = -12, 7, 0, 12, 19, 24, 28, 31, 36
+wB[w]          = 2^-23 * sum over held keys k and drawbars j with wheel(k, j) = w of  d7[level_j] * ((vel_k * 127) >> 4)
+d7             = 0, 3, 6, 13, 22, 39, 62, 87, 127           (DrawbarLaw is ignored in this mode)
+```
+
+Chords add on shared wheels; there is no tapering (all taper bytes are 127). One key at velocity 127 on a drawbar at 8 gives `UNIT_WEIGHT = 0.0152607`. The velocity is `round(gain * 127)` clamped to 1..127 (`note_on_with_gain`; ASSUMED that the engine gain is `velocity / 127`, the organ velocity source of the firmware is open). Targets are rebuilt only when a key, the drawbars or the octave shift change.
+
+Smoothing (VERIFIED coefficients and recurrence, [organ-weights](../research/organ-weights.md) s2, s4): per wheel and per firmware frame `wA <- a wB + (1 - a) wA` with `a = 0.0096406` (`0x3C1DF380`) on the wheels a key-down writes and `a = 0.0042715` (`0x3B8BF800`) on every wheel after a full update. At the engine rate the per-sample keep factor is `(1 - a)^(F / fs)` with `F` = 43,156.4 Hz (ASSUMED, as in 3.1.4), so the ramp lasts the same time at any rate (`weights::keep_for`). Differences below `1e-6` (-84 dB re one key) snap onto the target so a release ends in exact silence; the render early-out waits for the tail.
+
+| Event | Targets | `a` |
+|---|---|---|
+| key-down | new targets at once | `0.0096` on the 9 wheels of that key until the next full update (ASSUMED persistence: in the firmware the update that follows the key-down resets it, the delay between the two is not known) |
+| key-up | new targets | `0.0043` on all wheels (ASSUMED: the key-up handler was not read) |
+| drawbar or octave change | new targets | `0.0043` on all wheels |
+
+Output: `out_lane = L * sum_w wA[w] * bus_lane[w]` through the 91 wheel buses of 3.1.4 (the lane matrix and its smoothing are unchanged), times the existing B3 Normal-percussion `0.708` dip. Percussion keeps its ASSUMED gains scaled by `UNIT_WEIGHT * L / 0.08` so the drawbar / percussion balance is as in `Legacy`; the key click is not scaled (`key_click_enabled` switches it off for oracle comparisons).
+
+Against the oracle (`python tools/organ_weight_compare.py`, ARM key-down / key-off messages poked into `sharc-organ` with the mix smoothers started on their targets, `organ_ref --weights firmware`, C4 E4 G4 at 888000000, 43,156 Hz): level 1.0000x on both lanes, attack and release envelope within 0.1 % of peak, steady SNR 44.5 dB (57 dB in the first 2,000 frames; the residue grows with time: bank phase drift of the 12-TET ladder against the exact increment words, not the weights). `Legacy` was 0.0792x and 37.7 dB against the same chord with unit weights. The absolute loudness of `Firmware` is `0.0153` per key and drawbar at `L = 1`, 14.4 dB below `Legacy` (`0.0153 / 0.08`): `L` (`0x95B42`) and anything downstream of the mix stage are unknown, so the default stays `Legacy` and `weight_level` is the free parameter. Tests: `weights::tests` (formula, curve, velocities, chords, step responses of both `a`, rate independence), `weight_state::tests`, `weight_tests` (all 128 x 9 entries of `organ-key-wheel-map.csv`, oracle partials, velocity ratio 508 / 1008, release, attack ramp, mode switch), `tools/tests/test_organ_weight_compare.py`.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
