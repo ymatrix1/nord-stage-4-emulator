@@ -299,12 +299,18 @@ def cmd_compare(a: argparse.Namespace) -> int:
     notes = [int(n) for n in a.notes.split(",")]
     weights = chord_weights(notes, drawbar_digits(a.drawbars), a.law)
     incs = increments(a.detuned)
-    mid = orc.astype(np.float64).mean(axis=1)  # the engine path is mono: compare the lane mean
-    g, snr = best_scale(mid, ref[:, 0].astype(np.float64))
+    if a.lanes:
+        for k, name in enumerate(("x/L", "y/R")):
+            g, snr = best_scale(orc[:, k].astype(np.float64), ref[:, k].astype(np.float64))
+            print(f"lane {name}: rust/oracle level {1 / g:.4f}x, SNR after best gain {snr:.1f} dB")
+        return 0
+    mid = orc.astype(np.float64).mean(axis=1)  # mono comparison: oracle lane mean vs Rust (L+R)/2
+    rmean = ref.astype(np.float64).mean(axis=1)
+    g, snr = best_scale(mid, rmean)
     print(f"mono: rust/oracle level {1 / g:.4f}x, SNR after best gain {snr:.1f} dB")
     print("wheel  weight  oracle  rust  rust/oracle(dB, minus overall)")
     rows = partial_table(mid, weights, incs)
-    rust = [amplitude(ref[:, 0].astype(np.float64), c) for _, _, c, _ in rows]
+    rust = [amplitude(rmean, c) for _, _, c, _ in rows]
     g0 = rust[0] / rows[0][3] if rows[0][3] else 1.0
     for (i, wt, _, amp), r in zip(rows, rust, strict=True):
         print(
@@ -355,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--law", choices=("firmware", "linear"), default="firmware")
     c.add_argument("--detuned", action="store_true")
     c.add_argument("--skip", type=int, default=2048)
+    c.add_argument("--lanes", action="store_true", help="compare x/y against Rust L/R per lane")
     c.set_defaults(fn=cmd_compare)
     sub.add_parser("golden").set_defaults(fn=cmd_golden)
     tb = sub.add_parser("table")

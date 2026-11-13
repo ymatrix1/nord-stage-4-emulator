@@ -7,7 +7,8 @@
 //! ```text
 //! --mode layer       OrganLayer with percussion, crosstalk, rotary and scanner off (only mode)
 //! --notes 60,64,67    MIDI notes (default C4 E4 G4)       --drawbars 888000000
-//! --frames N          frames to render (default 16384)    --detuned   firmware detuned table
+//! --frames N          frames to render (default 16384)    --detuned   vibrato level 1: detuned table,
+//!                     stereo-blend lanes in L/R (compare per lane with `organ_oracle_audio.py compare --lanes`)
 //! --rate HZ           sample rate / bank frame rate (default: the rate at which wheel 0 equals the
 //!                     firmware increment of the exact table, 43,156 Hz)
 //! --linear            DrawbarLaw::Linear instead of the firmware curve

@@ -192,6 +192,16 @@ impl ToneBank {
         }
     }
 
+    /// Advances one frame and writes the raw outputs of copy 0 (`a`) and copy 1 (`b`, zero while
+    /// the second copy is not running) of the first 91 wheels, for the smoothed lane mixer
+    /// (`lane_mix::LaneMixer`) which applies the group gains itself.
+    pub fn advance_copies(&mut self, a: &mut [f32; NUM_TONEWHEELS], b: &mut [f32; NUM_TONEWHEELS]) {
+        let (mut fa, mut fb) = ([0.0; BANK_WHEELS], [0.0; BANK_WHEELS]);
+        self.step_all(&mut fa, &mut fb);
+        a.copy_from_slice(&fa[..NUM_TONEWHEELS]);
+        b.copy_from_slice(&fb[..NUM_TONEWHEELS]);
+    }
+
     /// Advances one frame and writes the two output lanes of the firmware mix stage per wheel:
     /// `x_lane = g5 a + g8 b`, `y_lane = g6 b + g7 a` with the lane matrix of the current vibrato
     /// table (`vibrato_bank::lane_matrix`). Summing `weight[w] * lane[w]` over the 92 wheels and

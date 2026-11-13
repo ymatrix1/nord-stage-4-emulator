@@ -109,8 +109,8 @@ What still differs (all outside the verified bank + mix path):
 |---|---|---|
 | Overall level | 0.0792x | `0.08` drawbar bus scale (ASSUMED), pickup calibration (ASSUMED), no mix-stage level |
 | Residual 37.7 dB | per-wheel gain error up to 2 % | the ASSUMED pickup calibration tables multiply each wheel (`tonewheel.rs`); the firmware path has no per-wheel calibration in the bank or mix stage |
-| Stereo spread of the detuned table | lanes differ by up to 5 % per partial | the engine path is mono until the rotary; `ToneBank::advance_lanes` provides the two lanes (tested), not routed |
-| Lane smoothing, level ramp | 100-frame time constant | the engine applies gains instantly; the steady state is equal |
+| Stereo spread of the detuned table | lanes differ by up to 5 % per partial | resolved: the two lanes are routed (spec 3.1.4); per lane SNR 37.7 / 37.6 dB against 22.6 / 23.3 dB for the old mono path |
+| Lane smoothing, level ramp | 100-frame time constant | resolved: `lane_mix.rs` ramps gains and level (spec 3.1.4) |
 | Weights | none by construction | both use per-wheel sums of `drawbar * wheel`; the footage offsets, the foldback and the curve as final gain are ASSUMED on both sides |
 | Frame rate | not comparable | the oracle gives cycles per frame; the Rust sample rate is a free parameter. Matching wheel 0 to the engine's C1 needs 43,156.4 Hz, matching it at 48 kHz means wheel 0 = 36.37 Hz (D1 minus 16 cent) |
 
