@@ -73,6 +73,11 @@ struct Voice<'a> {
     nearest: bool,
     /// The oracle's measured table of this kernel (3072 values, phase-major) instead of the engine's.
     table: Option<&'a [f32]>,
+    /// Per-frame gain of one channel (`gainL` / `gainR` series of a firmware-driven dump, where
+    /// Stage A slews the gain); `gain` is used when absent.
+    gains: Option<&'a [f32]>,
+    /// Per-frame `step` word (`step` series, bit patterns as float32); `ratio` is used when absent.
+    steps: Option<Vec<u32>>,
 }
 
 /// One resampled channel of a 128-frame ring.
@@ -86,12 +91,16 @@ fn render_channel(set: &SincKernelSet, v: &Voice, ring: &[f32]) -> Vec<f32> {
         arith,
         nearest,
         table,
+        gains,
+        ref steps,
     } = *v;
-    let step = (ratio * f64::from(1u32 << 24)).round() as u32;
+    let step0 = (ratio * f64::from(1u32 << 24)).round() as u32;
     let mut pos = (pos_frames * f64::from(1u32 << 25)).round() as i64 as u32;
     let kern = set.get(kernel);
     let mut out = Vec::with_capacity(frames);
-    for _ in 0..frames {
+    for n in 0..frames {
+        let step = steps.as_ref().map_or(step0, |s| s[n]);
+        let gain = gains.map_or(gain, |g| g[n]);
         let (mut idx, mut phase) = ((pos >> 25) as usize, ((pos >> 17) & 0xFF) as usize);
         if nearest && (pos >> 16) & 1 == 1 {
             phase += 1;
@@ -188,24 +197,30 @@ fn run(args: &[String]) -> Result<String, String> {
                 param(&dump.meta, "ref.pos_frames")?,
             );
             // a dump holds all six measured kernels, 3072 values each
-            let voice = Voice {
-                kernel,
-                gain,
-                ratio,
-                pos_frames: pos,
-                frames,
-                arith,
-                nearest,
-                table: table
-                    .as_deref()
-                    .map(|t| &t[kernel * PHASES * TAPS..(kernel + 1) * PHASES * TAPS]),
-            };
+            let steps = dump
+                .cols
+                .get("step")
+                .map(|c| c.iter().map(|v| v.to_bits()).collect::<Vec<u32>>());
             let mut chans = Vec::new();
-            for src in ["srcL", "srcR"] {
+            for (src, gain_series) in [("srcL", "gainL"), ("srcR", "gainR")] {
                 let ring = dump
                     .cols
                     .get(src)
                     .ok_or(format!("dump has no series {src}"))?;
+                let voice = Voice {
+                    kernel,
+                    gain,
+                    ratio,
+                    pos_frames: pos,
+                    frames,
+                    arith,
+                    nearest,
+                    table: table
+                        .as_deref()
+                        .map(|t| &t[kernel * PHASES * TAPS..(kernel + 1) * PHASES * TAPS]),
+                    gains: dump.cols.get(gain_series).map(Vec::as_slice),
+                    steps: steps.clone(),
+                };
                 chans.push(render_channel(&set, &voice, ring));
             }
             out.push_str("index,L,R\n");

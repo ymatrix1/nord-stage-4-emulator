@@ -23,6 +23,10 @@ pub struct Render {
 pub struct Runner {
     pub core: Core,
     pub render: Render,
+    /// Next free word of the command FIFO (0 until the first `msg`).
+    pub fifo_wr: u32,
+    /// First word of the command FIFO ring (`isr::FIFO_BASE` unless a `fifo` command moved it).
+    pub fifo_base: u32,
 }
 
 impl Runner {
@@ -32,6 +36,8 @@ impl Runner {
         Runner {
             core,
             render: Render::default(),
+            fifo_wr: 0,
+            fifo_base: crate::isr::FIFO_BASE,
         }
     }
 
@@ -112,6 +118,13 @@ impl Runner {
                         .map_err(|f| format!("fault in run: {f:?}"))?;
                 }
                 self.render.run_steps.push(self.core.steps - start);
+            }
+            Cmd::Irq { vector, max_steps } => self.run_irq(*vector, *max_steps)?,
+            Cmd::Msg { op, addr, value } => self.push_msg(*op, *addr, *value)?,
+            Cmd::Dev(addr, value) => self.core.preset_device(*addr, *value),
+            Cmd::Fifo(base) => {
+                self.fifo_base = *base;
+                self.fifo_wr = 0;
             }
             Cmd::Capture {
                 name,
