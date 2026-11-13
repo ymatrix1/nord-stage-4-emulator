@@ -1,7 +1,8 @@
 //! The opt-in switch that routes the engine's FX parameters through the firmware closed forms.
 
-/// Which firmware-derived behaviours a [`super::LayerFxChain`] uses. `Default` is all off: the
-/// chain then runs exactly as before (default `render_hash` unchanged).
+/// Which firmware-derived behaviours a [`super::LayerFxChain`] uses. `Default` is [`Self::DEFAULT`]:
+/// only `amp` is on (the one switch verified end to end, D22); [`Self::OFF`] restores the engine
+/// paths everywhere.
 ///
 /// Status of each switch (`docs/specs/effects-and-routing.md` s4.0c):
 ///
@@ -35,7 +36,7 @@
 /// tone stack (`FwToneStack2`, base words of the Amp type switch), the all-pass (`FwAllpass`, Fx1 type to engine `Mod1Type` map) and the
 /// delay line itself (`FwDelay` / the ring variant `0x120AB5`: ring length and routing words).
 /// Their parameter fills exist as `fw_params::set_*`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FirmwareFx {
     /// Delay mix law of `kDlyMix`.
     pub delay_laws: bool,
@@ -49,8 +50,20 @@ pub struct FirmwareFx {
     pub amp: bool,
 }
 
+impl Default for FirmwareFx {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 impl FirmwareFx {
-    /// Every switch off (the default).
+    /// The engine default: only the verified firmware amp (`amp`, see its doc) is on.
+    pub const DEFAULT: Self = Self {
+        amp: true,
+        ..Self::OFF
+    };
+
+    /// Every switch off.
     pub const OFF: Self = Self {
         delay_laws: false,
         compressor: false,
@@ -75,7 +88,9 @@ mod tests {
 
     #[test]
     fn default_is_off_and_all_turns_every_switch_on() {
-        assert_eq!(FirmwareFx::default(), FirmwareFx::OFF);
+        assert_eq!(FirmwareFx::default(), FirmwareFx::DEFAULT);
+        let d = std::hint::black_box(FirmwareFx::DEFAULT);
+        assert!(d.amp && !d.delay_laws && !d.compressor);
         let all = std::hint::black_box(FirmwareFx::ALL);
         assert!(all.delay_laws && all.compressor && all.delay_time && all.reverb_mix && all.amp);
         assert_ne!(all, FirmwareFx::OFF);

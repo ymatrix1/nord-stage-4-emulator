@@ -193,7 +193,9 @@ These are the six "cases" of [fx-chain-install](fx-chain-install.md) s5 (case `k
 | `vox_noamp` | +1.4 | +0.5 | +8.1 | -7.4 | -11.7 | -979 | -1.3 | 5.82 |
 | `vox_fwamp` (`--firmware-fx`) | +2.5 | -0.9 | -2.5 | -9.6 | -3.0 | +1728 | +11.6 | 3.69 |
 
-Reading: the firmware drive stage alone is **not** a better amp. The mid excess drops (+8.0 to -2.5) and brilliance rises (-5.5 to -3.0), but presence falls (-4.9 to -9.6), the level rises 11.4 dB (the Twin sections have a gain of about +12 dB and there is no cabinet to take it back) and the centroid overshoots (+1728 Hz, the unscored air band +28 dB): the missing cabinet FIR (the speaker roll-off) and the organ unit's tone routines are the other half of the amp. The composite score improves slightly (3.98 to 3.69) for the wrong reasons. The switch therefore stays opt-in; the next step is the cabinet routine `0x122A1D / 0x122B1D` (FIR plus 12 biquads, state in PM) with the words above.
+Reading: the firmware drive stage alone is **not** a better amp. The mid excess drops (+8.0 to -2.5) and brilliance rises (-5.5 to -3.0), but presence falls (-4.9 to -9.6), the level rises 11.4 dB (the Twin sections have a gain of about +12 dB and there is no cabinet to take it back) and the centroid overshoots (+1728 Hz, the unscored air band +28 dB): the missing cabinet FIR (the speaker roll-off) and the organ unit's tone routines are the other half of the amp. The composite score improves slightly (3.98 to 3.69) for the wrong reasons. The switch therefore stayed opt-in at this point; the next step was the cabinet routine `0x122A1D / 0x122B1D` (FIR plus 12 biquads, state in PM) with the words above.
+
+**Update:** the cabinet and the default switch are in s10 and s11 (the Vox score 3.69 below becomes 1.30 with the cabinet).
 
 **Stop point.** Done: type to word decode (6 of 9 modes), table dump, oracle-verified drive stage with the real context, opt-in wiring, Vox measurement. Not done: the cabinet FIR and biquad bank model, the organ unit's tone routines (`0xC02BB10C#1`, `0xC02BB2C4#1`, routines `0x124344 / 0x1239D0`, `0x124270 / 0x1238FC`) and the amp output level staging.
 
@@ -202,6 +204,57 @@ Reading: the firmware drive stage alone is **not** a better amp. The mid excess 
 `Edt_OrgCom_kEffectsLeslieDrv` (0..127) writes `v / 127` into two DM words of the organ unit's row on the PNO DSP chip core 1 (`0xB2F2D`, `0xB2F31`, ARM writer `0xC0062D54`; captured with `fx_clients.py --slots leslie.csv --slot Leslie --units 3`: words `0x3C010204` at `v = 1` up to `0x3F800000` at `v = 127`, exactly `v / 127`). The rows at `0xB2F29..0xB2F31` carry the routine pointer `0x12637B`, which in the PNO core 1 image is a two instruction null stub (`NOP`, `RTS`). So **no code of the FX / PNO library reads the Leslie drive**: the rotor, horn, crossover and drive run elsewhere (the ARM tick state machine and the ORG image, [fx-contexts](fx-contexts.md) s6). VERIFIED: `d = v / 127` and the stub. Not found: the nonlinearity, its gain or any level staging. The engine's `tanh((1 + 3 drive) x)` (`organ/rotary.rs`, +18.4 dB small signal at drive 2.44; `rotary_drive` is the same fraction times 10, `organ_preset.rs`) has no firmware counterpart to port, so (B) stops here and the engine rotary is unchanged.
 
 Fix proposal (not implemented; `organ/` is outside this change): make the rotary drive independent of the bus scale by dividing by its small signal gain, `tanh(g x) / g` with `g = 1 + 3 drive`, behind an opt-in switch next to `--tone-source`. The unity small signal gain removes the +18.4 dB that compensates the Legacy level and keeps the clipping shape. Evidence to collect first: the Leslie preamp in the ORG image (search the organ chip for the drive state words and a clip table) or a hardware recording with the rotary off and on.
+
+## 10. Amp cabinet `0x122A1D`: measured response (2026-11-13)
+
+```bash
+python tools/fx_amp_cabinet.py taps FX_core2_sram.bin PNO_core1_sram.bin amp.csv > crates/nord-core/src/fx/fw_cabinet_taps.rs
+python tools/fx_amp_cabinet.py chain FX_core2_sram.bin PNO_core1_sram.bin amp.csv > crates/nord-core/src/fx/tests_cabinet_golden.rs
+cargo test -p nord-core --lib fx::fw_
+```
+
+**Structure (listing `0x122A1D..0x122C38`, ADI disassembly).** Routine A (`0x122A1D`, 104 instructions): the input pairs are scaled by `2^-7` (`0x3C000000`) into a circular buffer (`B7 / L7 = c[-0x1B] / c[-0x1C]` = DM `0xE35F8`, 266 words), a 130 tap dual accumulator FIR over the pair stream (taps in PM at `c[-0x15]` = `0x969C0`, count `c[-0x17]` = `0x82`), then a loop of `2 c[-1]` frames over a bank of biquad sections (coefficients DM `c[-0x20]` = `0xE3702`, state PM `c[-0x1F]` = `0x96990`, `c[-0x1D]` sections), and an output gain `c[-0x1E]` times `128` (`0x43000000`). Routine B (`0x122B1D`, 111 instructions) is the same front end plus a mix of a second buffer (`I5`) between the FIR and the bank; with the organ context it outputs about -60 dB and is not part of the Twin / JC / Small signal path measured here (ASSUMED role: a second path of the stereo cabinet). The cabinet instance of the organ unit is `I1 = 0xE376A` (stage record words `0xB0476..0xB047B` of the type switch: `0xB041E, 0xC018A, 0xE376A, ...`, the drive stage ctx precedes it).
+
+**Behaviour (VERIFIED in the oracle).** With the real context (PNO core 1 template + the words of `kAmpTypeNew` + FX core 2 copy of the routine, as in s8) routine A is exactly linear, shift invariant and channel independent: an impulse shifted by 1, 2, 3 or 5 frames gives the shifted response word for word, a doubled impulse the doubled response, the cross channel is 0 (`tools/fx_amp_cabinet.py` asserts the shift invariance while measuring). It processes 2 frames per call (`c[-1] = 1`) with no latency (`y[0]` of an impulse at 0 is non-zero). Its response is therefore the model:
+
+| Cabinet | Types | Energy of `h` | Peak | 99 % / 99.9999 % of the energy within |
+|---|---|---|---|---|
+| Twin | 1, 2 | 0.0736 | 0.132 | 120 / 351 samples |
+| JC | 3, 4 | 0.0396 | 0.081 | 155 / 369 |
+| Small | 5, 6 | 0.1248 | 0.230 | 128 / 263 |
+
+(types of a pair carry the same cabinet words, checked by the capture diff of s8). Rust: `fx/fw_cabinet.rs` convolves the first 400 samples (`fw_cabinet_taps.rs`, float words, derived data), allocation free, no latency. The IIR bank is not transliterated (an impulse response of the exact LTI routine is equivalent and cheaper to verify); consequence: 400 taps per channel and sample (about 38 M MAC/s per active amp layer in release).
+
+**Oracle chain check (VERIFIED).** `tests_cabinet_golden.rs` is the output of drive stage `0x1228CF` then cabinet `0x122A1D` in the oracle (Twin, `kAmpDrive 14`) on a seeded 768 frame broadband signal; `FwAmpDrive` + `FwCabinet` differ by at most 9.0e-4 of the output peak (-61 dB, the 400 sample truncation and f32), asserted below 2e-3 in `fw_amp_stage.rs`. The tone stack `0x1243F4 / 0x124497` belongs to the piano and synth units only (s2: module `0xC04438D8#2`), so the organ chain is drive, cabinet and then the organ unit's own EQ routines (not modelled; the engine EQ follows).
+
+## 11. Amp level staging, Vox against the hardware, default and rotary drive
+
+**Where the 11 dB came from.** The missing cabinet. The Twin drive sections have about +12 dB of gain at 1 kHz and the cabinet response has an energy of 0.074 (white noise -11.3 dB; for the Vox spectrum the net chain is close to unity). No other gain stage between the organ output and the amp was needed: with the cabinet the RMS of `vox_fwamp` is +0.5 dB against the hardware (+11.6 dB without it).
+
+**Vox before / after** (`tools/emu_vs_hw.py --spec docs/research/data/emu_vs_hw_amp_vox.json`, `organ_vox`, dB re RMS, emulator minus hardware; `vox` = engine amp via `--amp-path engine`, `vox_fwamp` = firmware drive + cabinet):
+
+| Variant | sub | low | mid | pres | brill | centroid Hz | RMS | score |
+|---|---|---|---|---|---|---|---|---|
+| engine amp | -0.1 | +1.4 | +8.0 | -4.9 | -5.5 | -624 | +0.2 | 3.98 |
+| drive stage only (s8) | +2.5 | -0.9 | -2.5 | -9.6 | -3.0 | +1728 | +11.6 | 3.69 |
+| **drive + cabinet** | -0.6 | -0.1 | +3.6 | -1.3 | +0.9 | +149 | +0.5 | **1.30** |
+
+Every band is within 3.6 dB (mid, the bank's own excess, s8 of [b3-vox-video-gap](b3-vox-video-gap.md)), presence and brilliance within 1.3 dB, RMS +0.5 dB.
+
+**Default switched (D22).** Criteria of the task: oracle chain match (9e-4 of peak, far inside 1 dB), score 1.30 < 3.0, RMS within 3 dB. `FirmwareFx::amp` is therefore **on by default** for Twin, Twin II, JC, JC II, Small and Small II (`FirmwareFx::DEFAULT`; `FirmwareFx::OFF` and `render-patch --amp-path engine` restore the engine amp; `--firmware-fx` still turns every switch on). Consequences: the layer gains 4 frames (83 us) of latency while such an amp is selected; the `render_hash` of the golden dump changes from `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a` to `c7f06ca7ff6f8663be3bf2af772c6d6854f23593808ff3382d1895cf5f5ddbd5` (only the FX sweep section with amp modes). Not verified end to end: JC and Small against a recording (the video has only the Twin on the Vox program), the cabinet in the piano and synth units (ASSUMED equal to the organ unit's), the organ unit's own EQ routines.
+
+**Rotary drive switch (opt-in, default unchanged).** `render-patch --rotary-drive unity` / `OrganLayer::rotary_drive_unity`: `tanh(g x) / g`, `g = 1 + 3 drive` (`organ/rotary.rs`). Measured on the B3 segment (`docs/research/data/emu_vs_hw_rotary_b3.json`, 25 s, hardware peak -2.9 dBFS, RMS about -20.6 dBFS, crest 17.7 dB):
+
+| Variant | RMS dBFS | peak dBFS | crest dB | clipped samples | score |
+|---|---|---|---|---|---|
+| default (Legacy), engine law | -3.6 | 0.0 | 3.6 | 23.8 % | 4.36 |
+| default (Legacy), `unity` | -20.5 | -8.7 | 11.8 | 0 % | 4.43 |
+| `b3wheels` + tail, engine law | -19.1 | 0.0 | 19.1 | 0.04 % | 8.79 |
+| `b3wheels` + tail, `unity` | -37.4 | -11.9 | 25.4 | 0 % | 8.78 |
+
+Reading: for the Legacy source the unity law removes the +16.9 dB and the 24 % clipping and lands on the hardware RMS (-20.5 against about -20.6 dBFS) with a crest of 11.8 dB; for the firmware `b3wheels` source the engine law is already near the hardware level (+1.5 dB) and the unity law is 18 dB too quiet. The correct fix depends on the unresolved organ level stage (OQ17), so the flag stays opt-in; the firmware Leslie drive has no code to port (s9).
+
+**Stop point.** Done: cabinet response, oracle chain check, level staging explained, default switched, rotary flag. Not done: transliteration of the biquad bank, routine B, the organ unit EQ routines (`0x124344 / 0x1239D0`, `0x124270 / 0x1238FC`), a recording of JC or Small.
 
 ## Implications
 
@@ -214,4 +267,4 @@ Fix proposal (not implemented; `organ/` is outside this change): make the rotary
 1. Close the part constructor chain of section 6 and sweep the four type ids.
 2. Decode the unit's other change handlers (the classes of section 2 whose slot 24 is not a no-op: `0xC01F222C`, `0xC01F06C0`, `0xC01F3BC4`, `0xC0212A18`, `0xC021A6B8`, `0xC01F9668`, `0xC01FA51C`, `0xC01FCBC8`, `0xC0218A38`, `0xC01EAC40`) with bare module objects built like `probe`.
 3. Raise the 12 x 14-row table gates of `0xC020506C` (types 4..6, 8..11) with a real directory.
-4. Model the amp cabinet `0x122A1D / 0x122B1D` (s8) and the organ tone routines; find the Leslie drive nonlinearity (s9).
+4. Organ unit EQ routines `0x124344 / 0x1239D0`, `0x124270 / 0x1238FC`, routine `0x122B1D`, a transliteration of the cabinet bank (s10); the Leslie drive nonlinearity (s9).

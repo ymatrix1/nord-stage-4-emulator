@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 
 const SAMPLE_RATE: f32 = 48_000.0;
-const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--synth-chain legacy|strip] [--b3-tail on|off] [--firmware-fx] [--firmware-piano-level]...";
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--synth-chain legacy|strip] [--b3-tail on|off] [--amp-path engine|firmware] [--rotary-drive engine|unity] [--firmware-fx] [--firmware-piano-level]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
@@ -290,6 +290,21 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                     .map(|v| nord_core::render_opts::parse_on_off("--b3-tail", v))
                     .transpose()?,
             );
+            nord_core::render_opts::apply_amp_path(
+                &mut engine,
+                match flag("--amp-path").map(String::as_str) {
+                    None => None,
+                    Some("firmware") => Some(true),
+                    Some("engine") => Some(false),
+                    Some(v) => return Err(format!("invalid --amp-path '{v}' (expected engine|firmware)")),
+                },
+            );
+            match flag("--rotary-drive").map(String::as_str) {
+                None | Some("engine") => {}
+                Some("unity") => nord_core::render_opts::apply_rotary_unity(&mut engine, true),
+                Some(v) => return Err(format!("invalid --rotary-drive '{v}' (expected engine|unity)")),
+            }
+
             nord_core::render_opts::apply_synth_chain(
                 &mut engine,
                 flag("--synth-chain")
