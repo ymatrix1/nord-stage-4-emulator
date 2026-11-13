@@ -52,7 +52,7 @@ pub fn controls() -> Vec<ControlEntry> {
             .bound("mod1_rate"),
         e("mod1.amount", s, K::Knob, "MOD 1 AMOUNT", 49)
             .morph()
-            .todo(bean),
+            .bound("fxx_mod1_amount_{n}"),
         // Mod 2 (p.50)
         e("mod2.on", s, K::Button, "MOD 2 ON", 50).todo(bean),
         e("mod2.selector", s, K::Button, "MOD 2 TYPE (6)", 50).bound("mod2_type"),
@@ -68,7 +68,7 @@ pub fn controls() -> Vec<ControlEntry> {
         e("mod2.rate", s, K::Knob, "MOD 2 RATE", 50).bound("mod2_rate"),
         e("mod2.amount", s, K::Knob, "MOD 2 AMOUNT", 50)
             .morph()
-            .todo(bean),
+            .bound("fxx_mod2_amount_{n}"),
         // Delay (p.50-51)
         e("delay.on", s, K::Button, "DELAY ON", 50).bound("delay_on"),
         e("delay.global", s, K::Button, "GLOBAL (Shift+On)", 48)
@@ -95,7 +95,7 @@ pub fn controls() -> Vec<ControlEntry> {
             51,
         )
         .shift()
-        .todo(bean),
+        .bound("fxx_delay_fx_variation_{n}"),
         e("delay.filter", s, K::Button, "DELAY FILTER LP/HP/BP", 51).bound("delay_flt"),
         e(
             "delay.ping_pong",
@@ -109,7 +109,7 @@ pub fn controls() -> Vec<ControlEntry> {
         e("delay.tap_set", s, K::Button, "TAP/SET", 50).todo(bean),
         e("delay.analog", s, K::Button, "ANALOG (Shift+Tap/Set)", 51)
             .shift()
-            .todo(bean),
+            .bound("fxx_delay_analog_{n}"),
         // Amp Sim / EQ (p.51-52)
         e("amp.on", s, K::Button, "AMP SIM/EQ ON", 51).todo(bean),
         e("amp.drive", s, K::Knob, "DRIVE", 51)
@@ -124,16 +124,16 @@ pub fn controls() -> Vec<ControlEntry> {
             51,
         )
         .shift()
-        .todo(bean),
+        .bound("fxx_amp_variation_{n}"),
         e("amp.bass", s, K::Knob, "EQ BASS", 51).bound("eq_bass"),
         e("amp.mid", s, K::Knob, "EQ MID", 51).bound("eq_mid"),
         e("amp.mid_freq", s, K::Knob, "EQ MID FREQ", 51)
             .morph()
-            .todo(bean),
+            .bound("fxx_eq_mid_freq_{n}"),
         e("amp.treble", s, K::Knob, "EQ TREBLE", 51).bound("eq_treble"),
         e("amp.res", s, K::Knob, "FILTER RES", 52)
             .assumed("RES knob named on p.52; its panel position is not described")
-            .todo(bean),
+            .bound("fxx_filter_res_{n}"),
         e("amp.filter", s, K::Button, "FILTER LP24/HP24", 52).todo(bean),
         e("amp.to_rotary", s, K::Button, "TO ROTARY", 52).todo(bean),
         // Compressor (p.52)
