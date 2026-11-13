@@ -13,6 +13,7 @@ pub mod q31_kernel;
 pub mod smp_page;
 pub mod smp_unpack;
 pub mod smp_voice;
+pub mod step_q32;
 
 #[cfg(test)]
 mod interp_switch;
