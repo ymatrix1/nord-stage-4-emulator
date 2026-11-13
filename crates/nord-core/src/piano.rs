@@ -15,6 +15,7 @@ pub mod smp_page;
 pub mod smp_unpack;
 pub mod smp_voice;
 pub mod step_q32;
+pub mod velocity_curve;
 pub mod velocity_level;
 
 #[cfg(test)]
