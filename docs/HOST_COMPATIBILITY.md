@@ -66,6 +66,8 @@ All major front-panel controls are exposed as host-automatable parameters with s
 - **Synth LFO / Arp / Vibrato (A/B/C = `_1`/`_2`/`_3`):** `synthm_{lfo_shape,lfo_dest,lfo_rate,lfo_amount,arp_mode,arp_range,arp_rate,vib_mode,vib_rate,vib_depth,vib_delay}_{1,2,3}`.
 - **Layer FX extras (layers 1-7 = Organ A, Organ B, Piano A, Piano B, Synth A, B, C):** `fxx_{mod1_amount,mod2_amount,eq_mid_freq,filter_res,amp_variation,delay_analog,delay_fx_variation}_{1..7}`.
 - **Organ per layer (A/B = `_1`/`_2`):** `organx_{b3_bass,octave,scanner}_{1,2}` (scanner 0 = Off, 1-3 = V1-V3, 4-6 = C1-C3) and the shared Rotary switches `organx_close_mic`, `organx_stop_mode`.
+- **Organ per layer extras (A/B = `_1`/`_2`):** `organy_{model,key_click,rotary_on,mic_angle,fine_tune,crosstalk,detuned}_{1,2}`. `organy_model_N` is -1 (follow `organ_model`) or 0-4 (B3, Vox, Farfisa, Pipe1, Pipe2). `organy_fine_tune` and `organy_detuned` act in the firmware oscillator bank (Pipe models).
+- **Piano per layer extras:** `pianoy_{string_res,pedal_noise}_{1,2}` are ANDed with the global `piano_string_res` / `piano_pedal_noise`.
 - **Synth per layer (A/B/C = `_1`/`_2`/`_3`):** `synthx_{unison,voice,priority,glide,kb_track,filter_env,osc_env,osc_env_pitch}_{1,2,3}`.
 - **Synth Section:** `synth_a_level`, `synth_b_level`, `synth_c_level`, `synth_a_enabled`, `synth_b_enabled`, `synth_c_enabled`, `synth_osc_mode`, `synth_filter_cutoff`, `synth_filter_resonance`, `synth_filter_drive`, `synth_attack`, `synth_decay`, `synth_release`.
 
