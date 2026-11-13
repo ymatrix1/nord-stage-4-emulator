@@ -156,6 +156,25 @@ impl LayerFxChain {
             r = self.eq_treble.process(1, r);
         }
 
+        // Opt-in firmware gain computer with the `kCmpAmt` words (latency 4 frames). It runs even
+        // while `comp_enabled` is false (amount 0, unity) so the layer latency does not change.
+        if self.firmware_fx.compressor {
+            let amount = if self.comp_enabled {
+                fw_map::unit_to_ui(self.comp_amount)
+            } else {
+                0.0
+            };
+            let stage = self.fw_comp.get_or_insert_with(|| {
+                fw_stage::FwCompressorStage::new(fw_params::compressor_for_amount(amount))
+            });
+            if amount != self.fw_comp_amount {
+                fw_params::set_compressor_amount(stage.compressor_mut(), amount, false);
+            }
+            self.fw_comp_amount = amount;
+            return stage.process_frame([l, r]);
+        }
+        self.fw_comp = None;
+
         // Per-layer compressor (`comp_enabled`, `comp_fast` 1.5 ms vs 12 ms attack)
         if self.comp_enabled && self.comp_amount > 0.001 {
             let peak = l.abs().max(r.abs());

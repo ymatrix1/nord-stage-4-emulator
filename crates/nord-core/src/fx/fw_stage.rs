@@ -25,6 +25,11 @@ impl FwCompressorStage {
         }
     }
 
+    /// The compressor context (live parameter fills).
+    pub(super) fn compressor_mut(&mut self) -> &mut FwCompressor {
+        &mut self.comp
+    }
+
     /// Pushes one frame and returns the frame of the previous block at the same position.
     #[inline]
     pub(super) fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {

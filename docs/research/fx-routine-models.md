@@ -11,10 +11,12 @@ All five routines are modelled as instruction-by-instruction transliterations (`
 | Routine | pc | Instructions | Model | Random scenarios identical | Rust port (opt-in) |
 |---|---|---|---|---|---|
 | Delay | `0x1206B0` | 236 | `fx_model_delay.py` | 4,600 / 4,600 | `fx/fw_delay.rs` (`FwDelay`) |
-| Table LFO + filter chain | `0x1228CF` | 146 + 103 per block | `fx_model_lfo.py` | 3,600 / 3,600 | `fx/fw_lfo.rs` (`FwLfo`) |
+| Amp drive stage (formerly "table LFO + filter chain") | `0x1228CF` | 146 + 103 per block | `fx_model_lfo.py` | 3,600 / 3,600 | `fx/fw_amp_drive.rs` (`FwAmpDrive`) |
 | LFO-modulated dual biquad | `0x122C39` | 98 + 60 per block | `fx_model_allpass.py` | 2,500 / 2,500 | `fx/fw_allpass.rs` (`FwAllpass`) |
-| Resonant filter, 2 frames | `0x1243F4` | 60 | `fx_model_resonant.py` | 2,500 / 2,500 | `fx/fw_resonant.rs` (`FwResonant2`) |
-| Resonant filter, 4 frames | `0x124497` | 89 | `fx_model_resonant4.py` | 2,200 / 2,200 | `fx/fw_resonant.rs` (`FwResonant4`) |
+| Amp tone stack, 2 frames (formerly "resonant filter") | `0x1243F4` | 60 | `fx_model_resonant.py` | 2,500 / 2,500 | `fx/fw_tone_stack.rs` (`FwToneStack2`) |
+| Amp tone stack, 4 frames (formerly "resonant filter") | `0x124497` | 89 | `fx_model_resonant4.py` | 2,200 / 2,200 | `fx/fw_tone_stack.rs` (`FwToneStack4`) |
+
+Role correction ([fx-contexts](fx-contexts.md) s5.2, s5.3): the "table LFO" `0x1228CF` is the **Amp drive stage** (its phase word is `kAmpDrive / 127`, the tables are drive curves) and the "resonant filters" `0x1243F4` / `0x124497` are the **Amp tone stack** (treble, mid, bass words). The equations of this note are unchanged (`fx_model_lfo.py`, `fx_model_resonant*.py`, golden file names keep the model names); only the Rust names and doc comments changed.
 
 Status per item: the **algorithm** (data flow, operation order, field offsets) is `VERIFIED`; the **names and units** of the context words (cutoff, feedback, ...) are `EMPIRICAL` where an equation shows the role and `ASSUMED` where only the data flow is known; **which ARM parameter writes which word** is still undecoded for every routine ([fx-type-map](fx-type-map.md) s6). The Rust ports therefore take the firmware's context words as input and ship no musical defaults.
 
@@ -123,7 +125,7 @@ With an all-zero context both resonant routines pass the input through (unit tes
 
 ## 7. Rust parity
 
-The ports live in `crates/nord-core/src/fx/` (`fw_delay.rs`, `fw_lfo.rs`, `fw_allpass.rs`, `fw_resonant.rs`, shared `fw_words.rs`, `fw_short_float.rs`) and are exported (`FwDelay`, `FwLfo`, `FwAllpass`, `FwResonant2`, `FwResonant4`) but **not wired into the default signal path**: the effect classes of `fx.rs` (`Chorus`, `Flanger`, `Phaser`, `Vibe`, `Delay`, amp resonance) are driven by UI parameters, and the ARM words that would fill these contexts are not decoded. Allocation-free and lock-free (`process` takes plain slices); the context is the firmware's own word layout so a context captured from the DSP image loads unchanged. Golden vectors are generated, not hand-written (`tools/fx_golden.py`), and a Python test checks that the committed Rust files equal the generator output.
+The ports live in `crates/nord-core/src/fx/` (`fw_delay.rs`, `fw_amp_drive.rs`, `fw_allpass.rs`, `fw_tone_stack.rs`, shared `fw_words.rs`, `fw_short_float.rs`) and are exported (`FwDelay`, `FwAmpDrive`, `FwAllpass`, `FwToneStack2`, `FwToneStack4`) but **not wired into the default signal path** (the opt-in `FirmwareFx` switch of [effects-and-routing](../specs/effects-and-routing.md) s4.0c wires the delay mix law and the compressor): the effect classes of `fx.rs` (`Chorus`, `Flanger`, `Phaser`, `Vibe`, `Delay`, amp resonance) are driven by UI parameters, and the ARM words that would fill these contexts are not decoded. Allocation-free and lock-free (`process` takes plain slices); the context is the firmware's own word layout so a context captured from the DSP image loads unchanged. Golden vectors are generated, not hand-written (`tools/fx_golden.py`), and a Python test checks that the committed Rust files equal the generator output.
 
 ## Implications
 
