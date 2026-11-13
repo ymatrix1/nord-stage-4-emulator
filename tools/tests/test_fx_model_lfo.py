@@ -61,7 +61,7 @@ def test_the_state_moves_toward_the_target_by_one_minus_k():
     case[lfo.CTX - 0x20], case[lfo.CTX - 0x1F] = F(0.5), F(0.1)
     mem, _ = run(case)
     got = fb.from_bits(mem[lfo.CTX - 0x1F])
-    k = float(fb.from_bits(lfo.K))  # 0.99084 (the constant is quoted as 0.9908)
+    k = float(fb.from_bits(lfo.K))  # 0.99078 (quoted as 0.9908 elsewhere)
     want = 0.5 + (0.1 - 0.5) * k
     assert abs(float(got) - want) < 1e-6
 

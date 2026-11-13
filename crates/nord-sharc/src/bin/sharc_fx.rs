@@ -13,6 +13,7 @@
 //! --dev ADDR=V        scripted device read       --flag N=L   flag input level
 //! --trigger ADDR --stop-at PC   write 1 to ADDR, run until PC is reached (pass context)
 //! --call PC --until PC          routine to call and the pc at which it is considered finished
+//!                               (also its return address: `RTS (DB)` ends the call there)
 //! --calls N           number of calls (default 1); registers and pokes are re-applied before each
 //! --set REG=V         R0-15, S0-15, I0-15, M0-15, L0-15, B0-15 before every call
 //! --poke [N:]ADDR=V   data word before call N (default 0); V may be a float as f0.5
@@ -288,7 +289,12 @@ fn run(args: &[String]) -> Result<String, String> {
             apply(&mut core, r, v);
         }
         core.pc = call;
-        let n = run_to_traced(&mut core, until, o.max, o.trace.then_some(&mut out))?;
+        // a delayed `RTS (DB)` returns to the stop pc, so the call ends after its two slots
+        let depth = core.return_depth();
+        core.push_return_address(until);
+        let n = run_to_traced(&mut core, until, o.max, o.trace.then_some(&mut out));
+        core.truncate_returns(depth);
+        let n = n?;
         let _ = writeln!(out, "call {k}: {n} steps, pc 0x{:x}", core.pc);
         for &(addr, count) in &o.dumps {
             for a in addr..addr + count {

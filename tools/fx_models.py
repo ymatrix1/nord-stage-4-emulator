@@ -19,12 +19,21 @@ from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fx_model_allpass
 import fx_model_delay
 import fx_model_lfo
+import fx_model_resonant
+import fx_model_resonant4
 import fx_oracle as fo
 from fx_pe import M32
 
-MODULES = {"delay": fx_model_delay, "lfo": fx_model_lfo}
+MODULES = {
+    "delay": fx_model_delay,
+    "lfo": fx_model_lfo,
+    "allpass": fx_model_allpass,
+    "resonant": fx_model_resonant,
+    "resonant4": fx_model_resonant4,
+}
 GOLDEN_SEED, GOLDEN_SCENARIOS = 20260101, 8
 
 
