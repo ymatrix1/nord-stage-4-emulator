@@ -1,0 +1,34 @@
+{
+  "video": "_zksT69H30c",
+  "note": "Part A segments for tools/emu_vs_hw.py. at_s is inside the program's OLED window (video_part_a_programs.json). Variants: flags passed to ns4 render-patch; first is always the default engine.",
+  "segments": [
+    {"id": "organ_b3", "entry": "Program/Bank A/B3 Chords n Solo.ns4p", "engine": "organ B3", "at_s": 238, "duration_s": 25,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "b3wheels", "flags": ["--tone-source", "b3wheels"]},
+       {"label": "firmware-fx", "flags": ["--firmware-fx"]}]},
+    {"id": "organ_vox", "entry": "Program/Bank A/Vintage Vox J3.ns4p", "engine": "organ Vox + Twin amp", "at_s": 2360, "duration_s": 11,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "vox", "flags": ["--tone-source", "vox"]},
+       {"label": "vox+firmware-fx", "flags": ["--tone-source", "vox", "--firmware-fx"]}]},
+    {"id": "organ_pipe", "entry": "Program/Bank A/Space Drama II.ns4p", "engine": "organ Pipe2 + synth, reverb", "at_s": 1094, "duration_s": 30,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy-tone", "flags": ["--tone-source", "legacy"]},
+       {"label": "firmware-fx", "flags": ["--firmware-fx"]}]},
+    {"id": "piano_dry", "entry": "Program/Bank A/Velvet Grand.ns4p", "engine": "piano Grand, no FX", "at_s": 1708, "duration_s": 25,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "firmware-fx", "flags": ["--firmware-fx"]}]},
+    {"id": "synth_lead", "entry": "Program/Bank A/Smooth Lead.ns4p", "engine": "synth Triangle LP24", "at_s": 2420, "duration_s": 22,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "fw-filter", "flags": ["--filter-engine", "firmware"]},
+       {"label": "fw-filter+fx", "flags": ["--filter-engine", "firmware", "--firmware-fx"]}]},
+    {"id": "fx_amp", "entry": "Program/Bank A/Tiny Transistor.ns4p", "engine": "organ Farfisa + Small II amp + reverb", "at_s": 1812, "duration_s": 25,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "firmware-fx", "flags": ["--firmware-fx"]}]}
+  ]
+}

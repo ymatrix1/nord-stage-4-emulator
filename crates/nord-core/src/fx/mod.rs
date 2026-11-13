@@ -14,6 +14,8 @@ mod fw_amp_drive;
 mod fw_coeffs;
 mod fw_compressor;
 mod fw_delay;
+mod fw_delay_table;
+pub mod fw_delay_time;
 pub mod fw_map;
 mod fw_params;
 mod fw_short_float;
@@ -41,6 +43,8 @@ mod tests_delay;
 mod tests_delay_golden;
 #[cfg(test)]
 mod tests_firmware_fx;
+#[cfg(test)]
+mod tests_fw_delay_time;
 #[cfg(test)]
 mod tests_fw_map;
 #[cfg(test)]
@@ -150,6 +154,9 @@ pub struct LayerFxChain {
     pub morph: FxMorphSet,
     /// Opt-in firmware closed forms (delay mix law, firmware compressor). Default all off.
     pub firmware_fx: FirmwareFx,
+    /// 14 bit `kDlyRateClkDiv` value (`0..=16383`) of the program; read only with
+    /// `firmware_fx.delay_time` (the engine sets it from the preset). `None`: engine time.
+    pub delay_rate_raw: Option<u16>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_comp_amount: f32,
     mod1_phase: f32,
@@ -238,6 +245,7 @@ impl LayerFxChain {
             reverb_mix: 0.15,
             morph: FxMorphSet::default(),
             firmware_fx: FirmwareFx::OFF,
+            delay_rate_raw: None,
             fw_comp: None,
             fw_comp_amount: 0.0,
             mod1_phase: 0.0,
