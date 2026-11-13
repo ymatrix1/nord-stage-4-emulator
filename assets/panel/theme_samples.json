@@ -4,7 +4,7 @@
   "source": "Owner-supplied reference render of the Organ section and a Master Level knob close-up (private, local only, never committed; D16). Only the numbers below are stored.",
   "method": "Median, 10th and 90th percentile of sRGB 8-bit values over small flat patches (about 50x50 px) chosen by eye on flat surface areas, away from text, LEDs and edges. 'use' is the value the Blender materials are calibrated to. Surfaces carry baked lighting, so these are appearance targets, not albedo.",
   "colors": {
-    "panel_red": {"median": [134, 31, 41], "p10": [112, 21, 31], "p90": [151, 43, 53], "use": [134, 31, 41], "note": "red chassis strip left of the organ section; spec token chassis_red_primary is #8E1B1F = (142, 27, 31)"},
+    "panel_red": {"median": [134, 31, 41], "p10": [112, 21, 31], "p90": [151, 43, 53], "use": [130, 27, 38], "note": "red chassis strip left of the organ section; use = median of four patches (126..136, 25..28, 36..39); spec token chassis_red_primary is #8E1B1F = (142, 27, 31)"},
     "panel_slate": {"median": [55, 64, 76], "p10": [50, 60, 71], "p90": [62, 71, 83], "use": [55, 64, 76], "note": "dark slate between modules; spec token module_slate_bg is #323D47 = (50, 61, 71)"},
     "header_silver": {"median": [179, 191, 205], "p10": [135, 128, 134], "p90": [184, 195, 209], "use": [179, 191, 205], "note": "section header bar; spec token module_header_bar is #A3AFB9 = (163, 175, 185)"},
     "slot_floor": {"median": [27, 26, 26], "p10": [1, 1, 1], "p90": [30, 28, 29], "use": [27, 26, 26], "note": "fader slot interior"},
@@ -14,17 +14,31 @@
     "knob_top": {"median": [63, 59, 55], "p10": [63, 59, 55], "p90": [63, 59, 55], "use": [63, 59, 55], "note": "Master Level knob top face"},
     "knob_side": {"median": [47, 41, 39], "p10": [36, 28, 26], "p90": [56, 49, 47], "use": [47, 41, 39], "note": "knob flute sides, right of centre"},
     "knob_highlight": {"median": [72, 68, 65], "p10": [63, 59, 55], "p90": [80, 76, 73], "use": [72, 68, 65], "note": "soft highlight on the knob top, upper left"},
-    "ring_white": {"median": [245, 233, 231], "p10": [144, 36, 47], "p90": [250, 244, 242], "use": [250, 244, 242], "note": "arc indicator ring; median is tinted by red edge pixels, p90 used"}
+    "ring_white": {"median": [245, 233, 231], "p10": [144, 36, 47], "p90": [250, 244, 242], "use": [250, 244, 242], "note": "arc indicator ring; median is tinted by red edge pixels, p90 used"},
+    "pointer": {"median": [213, 213, 211], "p10": [212, 212, 211], "p90": [220, 220, 218], "use": [213, 213, 211], "note": "DRIVE knob pointer bar on the top face (light grey, not the ring white)"},
+    "button_grey_base": {"median": [142, 138, 136], "p10": [124, 121, 119], "p90": [150, 146, 144], "use": [142, 138, 136], "note": "grey pill button, base frame left of the pill (ORGAN button)"},
+    "button_grey_pill": {"median": [152, 148, 146], "p10": [149, 145, 143], "p90": [156, 152, 150], "use": [152, 148, 146], "note": "grey pill button, pill top"},
+    "button_black_base": {"median": [30, 30, 27], "p10": [25, 25, 22], "p90": [33, 33, 29], "use": [30, 30, 27], "note": "black pill button, base frame (ANGLE button)"},
+    "button_black_pill": {"median": [35, 35, 31], "p10": [32, 32, 28], "p90": [39, 39, 35], "use": [35, 35, 31], "note": "black pill button, pill top"},
+    "button_well": {"median": [9, 3, 3], "p10": [0, 0, 0], "p90": [75, 16, 22], "use": [9, 6, 6], "note": "black well around a button (thin, 2 px band)"},
+    "panel_red_fine": {"median": [126, 27, 38], "p10": [111, 20, 30], "p90": [137, 39, 50], "use": [126, 27, 38], "note": "red leather left of the DRIVE knob, second patch; spread shows the grain contrast"},
+    "header_silver_fine": {"median": [179, 190, 204], "p10": [169, 181, 195], "p90": [186, 196, 209], "use": [179, 190, 204], "note": "header bar right of the section name, clean patch; spread shows the speckle contrast"}
   },
   "proportions": {
-    "note": "Ratios read by eye and pixel counting on the same references; sizes are relative so no pixel data is kept.",
+    "note": "Ratios and sizes read by pixel counting and circle fits on the same reference (1 u = 129 reference px = knob base diameter / 0.8); no pixel data is kept.",
     "knob_height_over_diameter": 0.6,
     "knob_flute_count": 20,
     "knob_pointer_width_over_diameter": 0.11,
-    "knob_ring_outer_over_cap_radius": 1.15,
-    "knob_ring_thickness_over_diameter": [0.04, 0.14],
+    "knob_ring_outer_over_cap_radius": 1.31,
+    "knob_ring_thickness_over_diameter": [0.029, 0.145],
     "knob_ring_sweep_deg": 270,
-    "fader_cap_width_over_knob_diameter": 0.85,
-    "fader_slot_width_over_cap_width": 0.18
+    "fader_cap_width_over_knob_diameter": 0.97,
+    "fader_slot_width_over_cap_width": 0.18,
+    "knob_base_diameter_ref_px": 103.4,
+    "camera_height_over_knob_diameter": 16.9,
+    "fader_cap_length_over_width": 2.3,
+    "button_base_wh_ref_px": [135, 64],
+    "button_pill_wh_ref_px": [98, 46],
+    "drive_scale_radius_over_knob_radius": 1.4
   }
 }

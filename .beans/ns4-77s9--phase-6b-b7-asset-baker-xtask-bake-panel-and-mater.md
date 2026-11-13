@@ -32,8 +32,9 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 
 ## Summary of Changes
 Proof, Blender and asset side (PR 84, reworked in v2 on `feat/blender-panel-proof-v2` after the owner found the first renders too far from the hardware):
-- `assets/blender/` (`build_proof.py`, `proof_parts.py`, `proof_materials.py`): headless Blender 5.2 scene with an original 20-flute knob (pointer wrapping down the side), separate arc-ring layer, black/white/grey stepped fader caps with one shared shadow layer, red and slate plates; one top-left sun, 30 deg ortho camera.
+- `assets/blender/` (`build_proof.py`, `proof_scene.py`, `proof_geom.py`, `proof_materials.py`, `parts_*.py`): headless Blender 5.2 scene with an original 20-flute knob (bent tapered pointer), separate arc-ring and DRIVE-scale layers, black/white drawbar caps with a shared shadow, grey layer cap with its own shadow, grey/black pill buttons in wells, seamless red/slate/silver tiles and the slotted slate plate; one top-left sun (only shadow caster), perspective top-down camera with a per-class lean.
 - `assets/panel/theme_samples.json`: colours and proportions measured on the reference (numbers only).
-- `tools/panel_assets.py`, `tools/panel_compare.py` (+ tests): render driver, filmstrip stitcher, SHA-256 manifest and verify, size report, composed preview, private side-by-side helper.
-- Measured: one knob style + all caps + plates 503 KB (1x) / 1.47 MB (2x); full-panel estimate 1.82 MB / 5.13 MB PNG (counts `ASSUMED` until B2). See `docs/research/panel-blender-proof.md`, which also lists what still differs from the reference.
-- Not done: egui comparison (needs B4), `xtask bake-panel`, tiny-skia layers, theme tokens in code, buttons, seamless plates, full set.
+- `tools/panel_assets.py`, `tools/panel_preview.py`, `tools/panel_compare.py` (+ tests): render driver, filmstrip stitcher, seamless tiles, SHA-256 manifest and verify, size report, composed preview, private side-by-side helper with a per-feature difference metric.
+- v3 (`claude/blender-match-organ-a1e8a9`): matched feature by feature to the owner's Organ section reference at the same feature scale.
+- Measured (v3): whole proof set 600 KB (1x) / 1.84 MB (2x); full-panel estimate 1.93 MB / 5.72 MB PNG (counts `ASSUMED` until B2). See `docs/research/panel-blender-proof.md`, which also lists what still differs from the reference.
+- Not done: egui comparison (needs B4), `xtask bake-panel`, tiny-skia layers, theme tokens in code, button down/lit states, per-position lean, full set.

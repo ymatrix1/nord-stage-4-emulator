@@ -4,6 +4,7 @@ import ast
 import json
 from pathlib import Path
 
+import numpy as np
 import panel_assets as P
 import pytest
 from PIL import Image
@@ -80,44 +81,93 @@ def test_stitch_rejects_wrong_frame_size(tmp_path):
         P.stitch_filmstrip(raw, 1, tmp_path / "x.png")
 
 
+def _wrap_jump(a: np.ndarray) -> float:
+    """Mean step across the left/right and top/bottom wrap, relative to an inner step."""
+    wrap = np.abs(a[:, 0] - a[:, -1]).mean() + np.abs(a[0] - a[-1]).mean()
+    inner = np.abs(a[:, 1] - a[:, 0]).mean() + np.abs(a[1] - a[0]).mean()
+    return wrap / max(inner, 1e-9)
+
+
+def test_make_seamless_removes_the_wrap_seam():
+    ramp = np.tile(np.linspace(0, 255, 64), (64, 1))
+    rgb = np.stack([ramp, ramp.T, np.full_like(ramp, 90)], axis=-1).astype(np.uint8)
+    img = Image.fromarray(rgb, "RGB")
+    assert _wrap_jump(np.asarray(img, dtype=float)) > 20  # a ramp has a hard seam
+    out = P.make_seamless(img)
+    a = np.asarray(out.convert("RGB"), dtype=float)
+    assert out.size == img.size and out.getchannel("A").getextrema() == (255, 255)
+    assert _wrap_jump(a) < 3
+    assert np.allclose(a.mean(axis=(0, 1)), rgb.mean(axis=(0, 1)), atol=3)
+
+
+def test_make_seamless_keeps_noise_contrast():
+    rng = np.random.default_rng(0)
+    noise = rng.integers(60, 200, size=(64, 64, 3)).astype(np.uint8)
+    out = np.asarray(P.make_seamless(Image.fromarray(noise, "RGB")).convert("RGB"), dtype=float)
+    assert out.std() > 0.8 * noise.std()  # renormalised blend does not wash the grain out
+
+
 def test_size_report_scales_with_resolution(tmp_path):
-    manifest = P.build_manifest(_fake_proof(tmp_path))
-    rep = P.size_report(manifest)
+    rep = P.size_report(P.build_manifest(_fake_proof(tmp_path)))
     assert set(rep["per_scale"]) == {"1x", "2x"}
     for v in rep["per_scale"].values():
-        assert v["full_panel_png_bytes_excl_buttons"] > v["shared_sprite_set_png_bytes"] > 0
+        assert v["full_panel_png_bytes"] > v["shared_sprite_set_png_bytes"] > 0
+        assert v["full_panel_rgba_bytes"] > v["shared_sprite_set_rgba_bytes"]
+        assert set(v["sprite_png_bytes"]) == set(P.SPRITES)
+
+
+def test_lean_table_covers_every_sprite_class():
+    assert P.CAM_HEIGHT_U > 5
+    assert set(P.LEAN) >= {"knob", "drawbar", "layer", "button", "plate"}
+    assert P.LEAN["plate"] == (0.0, 0.0)
+    assert set(P.TILES) <= set(P.SPRITES)
 
 
 def test_committed_manifest_matches_files():
     """CI check: committed PNGs still match their recorded hashes (no Blender needed)."""
     manifest = json.loads(P.MANIFEST.read_text(encoding="utf-8"))
+    assert manifest["version"] == 2
+    assert set(manifest["files"]) == set(P.asset_names())
     assert P.verify_manifest(manifest) == []
     assert manifest["files"]["knob_filmstrip_2x.png"]["width"] == 2 * P.KNOB_FRAME_PX * P.KNOB_GRID
+    for name, (w, h) in P.SPRITES.items():
+        for s in P.SCALES:
+            meta = manifest["files"][f"{name}_{s}x.png"]
+            assert (meta["width"], meta["height"]) == (w * s, h * s), name
 
 
-def test_compose_preview_size():
-    sheet = P.compose_preview()
-    e = P.KNOB_FRAME_PX * 2
-    assert sheet.size == (e * 5 + 32, e * 2 + 8)
+def _alpha(name: str):
+    return Image.open(P.PROOF_DIR / name).convert("RGBA").getchannel("A")
 
 
-def test_composed_layers_are_opaque_and_ordered():
-    """Plate + ring + knob frame and plate + shadow + cap must be fully opaque composites."""
-    for img in (P.composed_knob(P.PROOF_DIR, 0), P.composed_fader(P.PROOF_DIR, "white")):
-        assert img.getchannel("A").getextrema() == (255, 255)
+def test_sprites_fit_their_frames():
+    """Caps, buttons and layers have a transparent margin: nothing is clipped by the frame."""
+    for name in P.SPRITES:
+        if name in P.TILES or name == "plate_slate_slot":
+            continue
+        alpha = _alpha(f"{name}_2x.png")
+        if name.endswith("_shadow"):  # catcher layer: faint everywhere, dark only near the cap
+            w, h = alpha.size
+            side = w // 3  # skip the middle third: the slot recess itself darkens the catcher
+            boxes = [
+                (0, 0, side, 2),
+                (w - side, 0, w, 2),
+                (0, h - 2, side, h),
+                (w - side, h - 2, w, h),
+            ]
+            border = [alpha.crop(b).getextrema()[1] for b in boxes]
+            assert max(border) < 48, (name, border)
+            continue
+        left, top, right, bottom = alpha.getbbox()
+        w, h = (v * 2 for v in P.SPRITES[name])
+        assert left > 1 and top > 1 and right < w - 1 and bottom < h - 1, name
 
 
-def test_fader_caps_are_distinct_colours_and_share_one_shadow():
-    names = P.asset_names()
-    assert sum(n.startswith("fader_shadow_") for n in names) == len(P.SCALES)
-    for color in P.FADER_COLORS:
-        assert f"fader_cap_{color}_1x.png" in names
-
-
-def test_knob_ring_is_its_own_layer():
-    assert "knob_ring_1x.png" in P.asset_names()
-    ring = Image.open(P.PROOF_DIR / "knob_ring_2x.png").convert("RGBA")
-    assert ring.getchannel("A").getextrema()[0] == 0  # transparent outside the arc
+def test_sprite_silhouettes_match_between_scales():
+    """1x and 2x describe the same silhouette: the 2x bbox is twice the 1x bbox (+-3 px)."""
+    for name in ("drawbar_cap_black", "drawbar_cap_white", "layer_cap_grey", "button_grey"):
+        b1, b2 = _alpha(f"{name}_1x.png").getbbox(), _alpha(f"{name}_2x.png").getbbox()
+        assert all(abs(2 * a - b) <= 3 for a, b in zip(b1, b2)), name
 
 
 def test_knob_filmstrip_is_transparent_and_cap_is_inside_frame():
@@ -133,32 +183,11 @@ def test_knob_filmstrip_is_transparent_and_cap_is_inside_frame():
         assert alpha.crop((0, e - 2, e, e)).getextrema()[1] < 16  # or at the bottom
 
 
-def test_fader_caps_fit_the_frame():
-    for color in P.FADER_COLORS:
-        alpha = (
-            Image.open(P.PROOF_DIR / f"fader_cap_{color}_2x.png").convert("RGBA").getchannel("A")
-        )
-        assert alpha.getbbox() is not None
-        left, top, right, bottom = alpha.getbbox()
-        assert left > 4 and top > 4 and right < alpha.width - 4 and bottom < alpha.height - 4
-
-
-def test_cap_sprites_match_between_scales():
-    """1x and 2x describe the same silhouette: bbox of the 2x cap is twice the 1x bbox (+-2 px)."""
-    for color in P.FADER_COLORS:
-        b1 = (
-            Image.open(P.PROOF_DIR / f"fader_cap_{color}_1x.png")
-            .convert("RGBA")
-            .getchannel("A")
-            .getbbox()
-        )
-        b2 = (
-            Image.open(P.PROOF_DIR / f"fader_cap_{color}_2x.png")
-            .convert("RGBA")
-            .getchannel("A")
-            .getbbox()
-        )
-        assert all(abs(2 * a - b) <= 3 for a, b in zip(b1, b2))
+def test_committed_tiles_are_opaque_and_seamless():
+    for name in P.TILES:
+        img = Image.open(P.PROOF_DIR / f"{name}_2x.png").convert("RGBA")
+        assert img.getchannel("A").getextrema() == (255, 255), name
+        assert _wrap_jump(np.asarray(img.convert("L"), dtype=float)) < 1.6, name
 
 
 def test_theme_samples_are_measured_data_with_sources():
@@ -171,20 +200,27 @@ def test_theme_samples_are_measured_data_with_sources():
     assert data["proportions"]["knob_flute_count"] > 0
 
 
-def test_committed_plates_match_sampled_colours():
-    """Rendered flat plates land near the measured reference colours (each channel within 6/255)."""
-    import numpy as np
+# (asset at 2x, theme key, flat patch box, max channel error): flat faces the materials are
+# calibrated on. Boxes are in 2x sprite pixels.
+CALIBRATED = (
+    ("plate_red_2x.png", "panel_red", (0, 0, 256, 256), 6),
+    ("plate_slate_2x.png", "panel_slate", (0, 0, 256, 256), 6),
+    ("plate_silver_2x.png", "header_silver", (0, 0, 256, 256), 6),
+    ("plate_slate_slot_2x.png", "panel_slate", (20, 20, 100, 100), 8),
+    ("drawbar_cap_white_2x.png", "cap_white_top", (80, 135, 110, 170), 6),
+    ("drawbar_cap_black_2x.png", "cap_black_top", (80, 135, 110, 170), 8),
+    ("layer_cap_grey_2x.png", "cap_grey_top", (80, 80, 110, 100), 8),
+    ("button_grey_2x.png", "button_grey_pill", (70, 40, 90, 56), 6),
+)
 
+
+def test_committed_sprites_match_sampled_colours():
+    """Flat faces of the rendered sprites land near the measured reference colours."""
     colors = json.loads(P.THEME_SAMPLES.read_text(encoding="utf-8"))["colors"]
-    for asset, key in (
-        ("plate_red_2x.png", "panel_red"),
-        ("plate_slate_slot_2x.png", "panel_slate"),
-    ):
-        px = np.asarray(Image.open(P.PROOF_DIR / asset).convert("RGB"))[20:100, 20:100].reshape(
-            -1, 3
-        )
-        got, want = np.median(px, axis=0), colors[key]["use"]
-        assert max(abs(got - want)) <= 6, (asset, got, want)
+    for asset, key, box, tol in CALIBRATED:
+        px = np.asarray(Image.open(P.PROOF_DIR / asset).convert("RGBA").crop(box)).reshape(-1, 4)
+        got, want = np.median(px[px[:, 3] > 250][:, :3], axis=0), colors[key]["use"]
+        assert max(abs(got - want)) <= tol, (asset, got, want)
 
 
 def test_main_usage_and_verify(capsys):
@@ -193,12 +229,15 @@ def test_main_usage_and_verify(capsys):
     assert "all hashes match" in capsys.readouterr().out
 
 
-def test_blender_script_shares_constants_and_parses():
-    src = (P.ROOT / "assets" / "blender" / "build_proof.py").read_text(encoding="utf-8")
-    ast.parse(src)  # bpy is unavailable outside Blender; syntax only
+def test_blender_scripts_share_constants_parse_and_stay_small():
+    blender = P.ROOT / "assets" / "blender"
+    src = (blender / "build_proof.py").read_text(encoding="utf-8")
     assert "import panel_assets as P" in src
-    assert "P.knob_angle_deg" in src and "P.KNOB_FRAMES" in src
-    for name in ("build_proof.py", "proof_parts.py", "proof_materials.py"):
-        text = (P.ROOT / "assets" / "blender" / name).read_text(encoding="utf-8")
-        ast.parse(text)
-        assert len(text.splitlines()) < 400, name
+    assert "P.knob_angle_deg" in src and "P.KNOB_FRAMES" in src and "P.LEAN" in src
+    files = sorted(blender.glob("*.py"))
+    assert {f.name for f in files} >= {"build_proof.py", "proof_scene.py", "parts_knob.py"}
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        ast.parse(text)  # bpy is unavailable outside Blender; syntax only
+        assert len(text.splitlines()) < 400, f.name
+        assert "ORIGINAL" in text or "Original art" in text or "(D16)" in text, f.name

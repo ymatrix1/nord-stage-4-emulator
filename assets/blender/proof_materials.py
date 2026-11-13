@@ -1,8 +1,9 @@
 """Procedural materials for the B7 proof (runs inside Blender). No image textures.
+Original art (D16).
 
 Base colours come from assets/panel/theme_samples.json (colours measured on the owner's
-reference render; numbers only, D16). `GAIN` is an EMPIRICAL per-material factor so the
-rendered flat colour lands on the measured colour under the scene light.
+reference render; numbers only, D16). `GAIN` holds EMPIRICAL per-channel factors so the rendered
+flat colour lands on the measured colour under the scene light.
 """
 
 from __future__ import annotations
@@ -24,11 +25,23 @@ def rgb_linear(rgb8, gain=1.0) -> tuple[float, float, float, float]:
     return (*[min(1.0, srgb_to_linear(v / 255) * k) for v, k in zip(rgb8, g)], 1.0)
 
 
-# EMPIRICAL: per-channel albedo gains (linear) so the rendered flat plate matches the measured
-# colour under the scene light; solved from a render of each plate
-# (docs/research/panel-blender-proof.md).
-GAIN_RED = (1.12, 0.55, 0.71)
-GAIN_SLATE = (0.66, 0.73, 0.80)
+# EMPIRICAL: per-channel albedo gains (linear) so each rendered flat surface lands on its
+# measured colour under the scene light; solved by rendering, taking the median of a flat patch
+# and multiplying by target / rendered in linear light (docs/research/panel-blender-proof.md,
+# checked by `test_committed_sprites_match_sampled_colours`).
+GAIN = {
+    "red": (1.058, 0.649, 0.837),
+    "slate": (1.072, 1.123, 1.136),
+    "silver": (1.091, 1.101, 1.078),
+    "cap_black": (0.38, 0.307, 0.24),
+    "cap_white": (1.059, 1.05, 1.039),
+    "cap_grey": (1.418, 1.407, 1.368),
+    "btn_grey": (0.991, 0.977, 0.968),
+    "btn_black": (0.118, 0.118, 0.06),
+    "ring": (1.08, 1.08, 1.06),
+    "knob_side": (1.8, 1.8, 1.8),
+    "knob_top": (0.7, 0.66, 0.6),
+}
 
 
 def theme() -> dict:
@@ -38,6 +51,39 @@ def theme() -> dict:
 def set_input(node, name: str, value) -> None:
     if name in node.inputs:
         node.inputs[name].default_value = value
+
+
+def _bump(nt, bsdf, height_socket, strength, distance=0.02):
+    bump = nt.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = strength
+    bump.inputs["Distance"].default_value = distance
+    nt.links.new(height_socket, bump.inputs["Height"])
+    nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def _tex(nt, kind):
+    """Texture node driven by object coordinates, so scales are per Blender unit (the default
+    generated coordinates are normalised to the bounding box)."""
+    coord = nt.nodes.get("coord") or nt.nodes.new("ShaderNodeTexCoord")
+    coord.name = "coord"
+    tex = nt.nodes.new(kind)
+    nt.links.new(coord.outputs["Object"], tex.inputs["Vector"])
+    return tex
+
+
+def _speckle(nt, bsdf, base, fleck, scale):
+    """Fine voronoi colour speckle (anodised / powder-coated metal)."""
+    vor = _tex(nt, "ShaderNodeTexVoronoi")
+    vor.inputs["Scale"].default_value = scale
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].position = 0.0
+    ramp.color_ramp.elements[1].position = 0.4
+    ramp.color_ramp.elements[0].color = tuple(min(1.0, c * (1 + fleck * 2)) for c in base[:3]) + (
+        1.0,
+    )
+    ramp.color_ramp.elements[1].color = tuple(c * (1 - fleck) for c in base[:3]) + (1.0,)
+    nt.links.new(vor.outputs["Distance"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
 
 
 def material(
@@ -51,10 +97,13 @@ def material(
     spec: float = 0.5,
     grain: float = 0.0,
     grain_scale: float = 60.0,
+    pebble: float = 0.0,
+    pebble_scale: float = 45.0,
     fleck: float = 0.0,
+    fleck_scale: float = 160.0,
 ) -> bpy.types.Material:
-    """Principled material. `grain` = procedural bump (leather-like noise), `fleck` = fine
-    voronoi colour speckle (anodised metal)."""
+    """Principled material. `grain` = noise bump, `pebble` = voronoi cell bump (leather-like
+    pebbled grain), `fleck` = fine voronoi colour speckle (anodised metal)."""
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     nt = mat.node_tree
@@ -67,27 +116,18 @@ def material(
     set_input(bsdf, "Coat Roughness", 0.05)
     set_input(bsdf, "Specular IOR Level", spec)
     if grain:
-        noise = nt.nodes.new("ShaderNodeTexNoise")
+        noise = _tex(nt, "ShaderNodeTexNoise")
         noise.inputs["Scale"].default_value = grain_scale
         noise.inputs["Detail"].default_value = 6.0
         noise.inputs["Roughness"].default_value = 0.7
-        bump = nt.nodes.new("ShaderNodeBump")
-        bump.inputs["Strength"].default_value = grain
-        bump.inputs["Distance"].default_value = 0.02
-        nt.links.new(noise.outputs["Fac"], bump.inputs["Height"])
-        nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        _bump(nt, bsdf, noise.outputs["Fac"], grain)
+    if pebble:
+        vor = _tex(nt, "ShaderNodeTexVoronoi")
+        vor.feature = "SMOOTH_F1"
+        vor.inputs["Scale"].default_value = pebble_scale
+        _bump(nt, bsdf, vor.outputs["Distance"], pebble, 0.02)
     if fleck:
-        vor = nt.nodes.new("ShaderNodeTexVoronoi")
-        vor.inputs["Scale"].default_value = 160.0
-        ramp = nt.nodes.new("ShaderNodeValToRGB")
-        ramp.color_ramp.elements[0].position = 0.0
-        ramp.color_ramp.elements[1].position = 0.4
-        ramp.color_ramp.elements[0].color = tuple(
-            min(1.0, c * (1 + fleck * 2)) for c in base[:3]
-        ) + (1.0,)
-        ramp.color_ramp.elements[1].color = tuple(c * (1 - fleck) for c in base[:3]) + (1.0,)
-        nt.links.new(vor.outputs["Distance"], ramp.inputs["Fac"])
-        nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+        _speckle(nt, bsdf, base, fleck, fleck_scale)
     return mat
 
 
@@ -96,27 +136,73 @@ def mats() -> dict[str, bpy.types.Material]:
     u = {k: v["use"] for k, v in t.items()}
     return {
         "red": material(
-            "red_lacquer", u["panel_red"], 0.55, gain=GAIN_RED, spec=0.15, grain=0.9, grain_scale=90
+            "red_leather",
+            u["panel_red"],
+            0.55,
+            gain=GAIN["red"],
+            spec=0.12,
+            pebble=1.3,
+            pebble_scale=34,
+            grain=0.25,
+            grain_scale=140,
         ),
         "slate": material(
             "dark_slate",
             u["panel_slate"],
             0.5,
-            gain=GAIN_SLATE,
+            gain=GAIN["slate"],
             spec=0.15,
             metal=0.2,
             fleck=0.12,
-            grain=0.15,
+            grain=0.3,
             grain_scale=140,
+            pebble=0.9,
+            pebble_scale=45,
+        ),
+        "silver": material(
+            "header_silver",
+            u["header_silver"],
+            0.55,
+            gain=GAIN["silver"],
+            spec=0.2,
+            fleck=0.05,
+            fleck_scale=220,
+            pebble=0.7,
+            pebble_scale=40,
         ),
         "slot": material("slot_floor", u["slot_floor"], 0.8),
-        "knob": material("knob_rubber", u["knob_side"], 0.42, spec=0.35),
-        "knob_top": material("knob_top", u["knob_top"], 0.30, spec=0.6, coat=0.25),
-        "pointer": material("pointer", u["ring_white"], 0.4),
-        "ring": material("ring", u["ring_white"], 0.5),
-        "cap_black": material("cap_black", u["cap_black_top"], 0.40, gain=0.45, spec=0.25),
-        "cap_white": material("cap_white", u["cap_white_top"], 0.35, spec=0.6),
-        "cap_grey": material("cap_grey", u["cap_grey_top"], 0.38, spec=0.6),
+        "well": material("button_well", u["button_well"], 0.9, spec=0.1),
+        "knob": material("knob_rubber", u["knob_side"], 0.32, gain=GAIN["knob_side"], spec=0.8),
+        "knob_top": material("knob_top", u["knob_top"], 0.5, gain=GAIN["knob_top"], spec=0.3),
+        "pointer": material("pointer", u["pointer"], 0.45),
+        "ring": material("ring", u["ring_white"], 0.6, gain=GAIN["ring"], spec=0.2),
+        "cap_black": material(
+            "cap_black", u["cap_black_top"], 0.32, gain=GAIN["cap_black"], spec=0.8
+        ),
+        "cap_white": material(
+            "cap_white", u["cap_white_top"], 0.35, gain=GAIN["cap_white"], spec=0.6
+        ),
+        "cap_grey": material(
+            "cap_grey",
+            u["cap_grey_top"],
+            0.4,
+            gain=GAIN["cap_grey"],
+            spec=0.6,
+            grain=0.5,
+            grain_scale=200,
+        ),
+        "btn_grey": material(
+            "btn_grey", u["button_grey_base"], 0.4, gain=GAIN["btn_grey"], spec=0.5
+        ),
+        "btn_grey_pill": material(
+            "btn_grey_pill", u["button_grey_pill"], 0.35, gain=GAIN["btn_grey"], spec=0.6
+        ),
+        "btn_black": material(
+            "btn_black", u["button_black_base"], 0.4, gain=GAIN["btn_black"], spec=0.6
+        ),
+        "btn_black_pill": material(
+            "btn_black_pill", u["button_black_pill"], 0.35, gain=GAIN["btn_black"], spec=0.5
+        ),
     }
 
 
@@ -124,4 +210,4 @@ def catcher_mats() -> dict[str, bpy.types.Material]:
     """Plain diffuse stand-ins for shadow-catcher grounds: the grain of the real plates would
     otherwise leak into the shadow alpha and bloat the PNGs."""
     flat = material("catcher", (128, 128, 128), 1.0, spec=0.0)
-    return {"red": flat, "slate": flat, "slot": flat}
+    return {"red": flat, "slate": flat, "slot": flat, "silver": flat}

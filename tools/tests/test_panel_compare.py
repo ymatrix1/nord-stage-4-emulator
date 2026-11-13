@@ -4,25 +4,35 @@ import panel_compare as C
 from PIL import Image
 
 
-def test_scaled_keeps_aspect():
-    assert C.scaled(Image.new("RGB", (100, 50)), 0.5).size == (50, 25)
-    assert C.scaled(Image.new("RGB", (2, 2)), 0.01).size == (1, 1)
+def test_ref_crop_scales_to_our_frame_and_pads_outside():
+    ref = Image.new("RGB", (200, 100), (10, 20, 30))
+    out = C.ref_crop(ref, (100.0, 50.0), (64, 32))
+    assert out.size == (64, 32)
+    assert out.getpixel((32, 16))[:3] == (10, 20, 30)
+    edge = C.ref_crop(ref, (199.0, 99.0), (64, 64))  # mostly outside the image: no error
+    assert edge.size == (64, 64)
 
 
-def test_side_by_side_layout():
-    a, b = Image.new("RGBA", (10, 20), (255, 0, 0, 255)), Image.new("RGB", (6, 8), (0, 255, 0))
-    s = C.side_by_side(a, b, gap=4)
-    assert s.size == (20, 20)
-    assert s.getpixel((0, 0))[:3] == (255, 0, 0)
-    assert s.getpixel((14, 0))[:3] == (0, 255, 0)
+def test_diff_metric_zero_for_identical_and_positive_otherwise():
+    a = Image.new("RGB", (4, 4), (100, 50, 25))
+    m = C.diff_metric(a, a.copy())
+    assert m["mad"] == 0 and m["ours_mean"] == [100.0, 50.0, 25.0]
+    assert C.diff_metric(a, Image.new("RGB", (4, 4), (110, 50, 25)))["mad"] > 3
+
+
+def test_features_point_inside_the_reference_frame():
+    for name, ((x, y), spec) in C.FEATURES.items():
+        assert 0 < x < 1961 and 0 < y < 1185, name
+        assert spec[0] in {"knob", "cap", "button", "tile"}, name
 
 
 def test_build_and_main(tmp_path, capsys):
-    knob = tmp_path / "knob.png"
-    caps = tmp_path / "caps.png"
-    Image.new("RGB", (134, 146), (140, 30, 40)).save(knob)
-    Image.new("RGB", (1961, 1185), (50, 60, 70)).save(caps)
+    ref = tmp_path / "ref.png"
+    Image.new("RGB", (1961, 1185), (50, 60, 70)).save(ref)
+    sheet, metrics = C.build(ref)
+    assert set(metrics) == set(C.FEATURES)
+    assert sheet.width > 2 * 2 * 192
     out = tmp_path / "sheet.png"
-    assert C.main(["--knob-ref", str(knob), "--caps-ref", str(caps), "--out", str(out)]) == 0
-    assert Image.open(out).width > 2 * C.OUR_KNOB_PX
+    assert C.main(["--ref", str(ref), "--out", str(out)]) == 0
+    assert out.exists() and "master_knob" in capsys.readouterr().out
     assert C.main([]) == 2
