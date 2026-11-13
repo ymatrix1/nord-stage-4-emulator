@@ -12,10 +12,15 @@ use crate::synth::SynthLayer;
 mod midi_dispatch;
 mod program;
 mod program_fx;
+mod sharing;
 #[cfg(test)]
 mod tests_program;
 #[cfg(test)]
 mod tests_routing;
+#[cfg(test)]
+mod tests_sharing;
+
+pub use sharing::FxSharing;
 
 /// Complete 7-layer Nord Stage 4 real-time DSP engine.
 #[derive(Debug, Clone)]
@@ -29,6 +34,12 @@ pub struct Stage4Engine {
     pub synth_b: SynthLayer,
     pub synth_c: SynthLayer,
     pub fx_chains: [LayerFxChain; 7],
+    /// GLOBAL / GROUP effect modes (all off by default); applied by [`Self::apply_fx_sharing`].
+    pub fx_sharing: FxSharing,
+    /// Shared Reverb of GLOBAL mode (after the rotary and the level faders, manual p.52).
+    global_reverb: Box<LayerFxChain>,
+    /// Rotary Speaker instance for layers routed `TO ROTARY` (settings mirror `organ_a`).
+    rotary_bus: Box<OrganLayer>,
     pub layer_levels: [MorphParameter; 7],
     pub synth_cutoff_morph: [MorphParameter; 3],
     pub morph_controllers: MorphControllers,
@@ -57,6 +68,9 @@ impl Stage4Engine {
             synth_b: SynthLayer::new(fs),
             synth_c: SynthLayer::new(fs),
             fx_chains: std::array::from_fn(|_| LayerFxChain::new(fs)),
+            fx_sharing: FxSharing::default(),
+            global_reverb: Box::new(LayerFxChain::new(fs)),
+            rotary_bus: Box::new(OrganLayer::new(fs)),
             layer_levels: [MorphParameter::new(0.8); 7],
             synth_cutoff_morph: [MorphParameter::new(0.5); 3],
             morph_controllers: MorphControllers::default(),
@@ -73,6 +87,7 @@ impl Stage4Engine {
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
     pub fn render_frame(&mut self) -> [f32; 2] {
         self.master_clock.advance(self.sample_rate);
+        self.sync_synth_clock();
 
         // Apply Morphing Matrix to Synth filter cutoffs via OS v1.66 14 Hz .. 32 kHz curve
         let cut_a = crate::cbin::cutoff_norm_to_hz(
@@ -115,21 +130,53 @@ impl Stage4Engine {
 
         let mut mix_l = 0.0f32;
         let mut mix_r = 0.0f32;
+        let mut rot_in = 0.0f32;
+        let mut rot_used = false;
 
         for (i, raw) in raw_layers.into_iter().enumerate() {
             self.fx_chains[i].apply_morph(&self.morph_controllers);
             let [fx_l, fx_r] = self.fx_chains[i].process_frame_with_bpm(raw, self.master_clock.bpm);
             let gain = self.layer_levels[i].evaluate(&self.morph_controllers);
+            // TO ROTARY (Piano / Synth layers): the mono sum after the fader feeds the shared rotary.
+            if i >= 2 && self.fx_chains[i].amp_cabinet == AmpCabinet::ToRotary {
+                rot_in += 0.5 * (fx_l + fx_r) * gain;
+                rot_used = true;
+                continue;
+            }
             mix_l += fx_l * gain;
             mix_r += fx_r * gain;
+        }
+        if rot_used {
+            self.rotary_bus.mirror_rotary_settings(&self.organ_a);
+            let [rl, rr] = self.rotary_bus.process_external_rotary(rot_in);
+            mix_l += rl;
+            mix_r += rr;
+        }
+        if self.fx_sharing.reverb_global.is_some() {
+            self.global_reverb.apply_morph(&self.morph_controllers);
+            [mix_l, mix_r] = self.global_reverb.process_reverb_frame([mix_l, mix_r]);
         }
 
         self.master_bus.process_frame([mix_l, mix_r])
     }
 
+    /// Feeds the Master Clock tempo to the Synth layers and applies their KB Sync clock resets.
+    fn sync_synth_clock(&mut self) {
+        let bpm = self.master_clock.bpm;
+        let mut reset = false;
+        for synth in [&mut self.synth_a, &mut self.synth_b, &mut self.synth_c] {
+            synth.perf.master_bpm = bpm;
+            reset |= synth.take_clock_reset();
+        }
+        if reset {
+            self.master_clock.beat_phase = 0.0;
+        }
+    }
+
     /// Processes an interleaved or dual-channel block in place with zero heap allocations.
     pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
         let frames = left.len().min(right.len());
+        self.apply_fx_sharing();
         for i in 0..frames {
             let [l, r] = self.render_frame();
             left[i] = l;

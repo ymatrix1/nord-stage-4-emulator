@@ -32,6 +32,7 @@ mod master;
 mod master_iir;
 mod modulation;
 mod reverb;
+mod sharing;
 #[cfg(test)]
 mod support;
 mod tables;
@@ -132,9 +133,17 @@ pub struct LayerFxChain {
     pub mod1_type: Mod1Type,
     pub mod1_rate_hz: f32,
     pub mod1_amount: f32,
+    /// Mod 1 VARIATION (manual p.49): harder pan / square tremolo / stereo ring mod. Default off.
+    pub mod1_variation: bool,
+    /// Mod 1 PED mode (manual p.49, Wah): the filter position follows `mod1_ped_pos` instead of the LFO.
+    pub mod1_ped: bool,
+    /// Wah PED position `0..=1` (pedal / Rate knob; ASSUMED 0.5 centre default).
+    pub mod1_ped_pos: f32,
     pub mod2_type: Mod2Type,
     pub mod2_rate_hz: f32,
     pub mod2_amount: f32,
+    /// Mod 2 VARIATION (manual p.50): vintage chorus, mono flanger / vibe, Bi-Phase phaser. Default off.
+    pub mod2_variation: bool,
     pub amp_cabinet: AmpCabinet,
     /// `Type II` / `Very Small Speaker` variation flag (stored; not yet modelled, ASSUMED no DSP difference).
     pub amp_variation: bool,
@@ -168,6 +177,8 @@ pub struct LayerFxChain {
     pub reverb_model: ReverbModel,
     pub reverb_color: ReverbColor,
     pub reverb_mix: f32,
+    /// Skips this chain's reverb (the engine sets it while Reverb GLOBAL mode is active, manual p.52).
+    pub bypass_reverb: bool,
     pub morph: FxMorphSet,
     /// Opt-in firmware closed forms (delay mix law, firmware compressor). Default all off.
     pub firmware_fx: FirmwareFx,
@@ -231,9 +242,13 @@ impl LayerFxChain {
             mod1_type: Mod1Type::Off,
             mod1_rate_hz: 4.0,
             mod1_amount: 0.4,
+            mod1_variation: false,
+            mod1_ped: false,
+            mod1_ped_pos: 0.5,
             mod2_type: Mod2Type::Off,
             mod2_rate_hz: 0.8,
             mod2_amount: 0.35,
+            mod2_variation: false,
             amp_cabinet: AmpCabinet::Off,
             amp_variation: false,
             amp_fw_coeffs: false,
@@ -261,6 +276,7 @@ impl LayerFxChain {
             reverb_model: ReverbModel::Stage,
             reverb_color: ReverbColor::Normal,
             reverb_mix: 0.15,
+            bypass_reverb: false,
             morph: FxMorphSet::default(),
             firmware_fx: FirmwareFx::DEFAULT,
             delay_rate_raw: None,
@@ -352,6 +368,9 @@ impl LayerFxChain {
         let [l2, r2] = self.process_mod2(l1, r1, inv_fs);
         let [l3, r3] = self.process_amp_eq_comp(l2, r2, inv_fs);
         let [l4, r4] = self.process_delay(l3, r3, bpm, inv_fs);
+        if self.bypass_reverb {
+            return [l4, r4];
+        }
         self.process_reverb(l4, r4, inv_fs)
     }
 
