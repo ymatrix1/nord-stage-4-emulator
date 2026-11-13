@@ -1,13 +1,17 @@
 //! Per-sample rendering of `SynthLayer`: LFO, envelopes, oscillators, filter and mix.
 
-use super::hw_saw::saw_wave;
 use super::*;
 
 impl SynthLayer {
     /// Renders a single stereo frame `[left, right]` across all 16 polyphonic voices.
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
-        if self.gain_dezipper {
+        let strip = if self.strip_chain() {
+            Some(self.strip_params())
+        } else {
+            None
+        };
+        if self.gain_dezipper || self.strip_chain() {
             self.control_tick();
         }
 
@@ -88,7 +92,23 @@ impl SynthLayer {
         let weak = UNISON_WEAK_CHANNEL_GAIN;
         let pan_norm = 1.0 / (1.0 + weak * weak).sqrt();
 
-        let dezip_pole = if self.gain_dezipper {
+        // ASSUMED (strip chain only): the ANALOG SHAPE category is built from the saw helper
+        // `0x12501F`, so a decoded `Triangle` of that category plays as the firmware saw.
+        let waveform = if strip.is_some()
+            && self.osc_shape_category
+            && self.waveform == VaWaveform::Triangle
+        {
+            VaWaveform::Saw
+        } else {
+            self.waveform
+        };
+        let saw_model = if strip.is_some() {
+            SawModel::FirmwareSy
+        } else {
+            self.saw_model
+        };
+        let dezip = self.gain_dezipper || strip.is_some();
+        let dezip_pole = if dezip {
             gain_pole_for(self.sample_rate)
         } else {
             0.0
@@ -100,7 +120,16 @@ impl SynthLayer {
             }
 
             // Envelope advance (OS v1.66 hardware floors: 0.5 ms attack, 3.0 ms decay/release, >=44 s decay = Hold)
-            if v.gate {
+            if let Some(sp) = &strip {
+                let (amp, fenv) = v.strip.advance(sp, v.gate);
+                v.amp_env = amp;
+                v.fenv = fenv;
+                if !v.gate && amp < 1e-4 {
+                    v.amp_env = 0.0;
+                    v.active = false;
+                    continue;
+                }
+            } else if v.gate {
                 if v.amp_env < 0.999 {
                     let atk = self.attack_sec.max(0.0005);
                     v.amp_env += (1.0 - v.amp_env) * (inv_fs / atk).min(1.0);
@@ -184,7 +213,9 @@ impl SynthLayer {
 
             // Filter envelope: dedicated ADR, or mirror the amp decay (legacy).
             let fenv_peak = 1.0 - self.filter_env_vel_amount.clamp(0.0, 1.0) * (1.0 - v.velocity);
-            let filter_env_level = if self.filter_env_dedicated {
+            let filter_env_level = if strip.is_some() && self.filter_env_dedicated {
+                v.fenv * fenv_peak
+            } else if self.filter_env_dedicated {
                 if v.gate {
                     if !v.fenv_attack_done {
                         let atk = self.filter_env_attack_sec.max(0.0005);
@@ -223,8 +254,8 @@ impl SynthLayer {
                             let dt_k = (f_k * inv_fs).clamp(1e-5, 0.49);
                             let t_k = v.uni_phase[k];
                             let s_k = Self::render_va(
-                                self.waveform,
-                                self.saw_model,
+                                waveform,
+                                saw_model,
                                 self.supersaw_detune,
                                 self.pulse_width,
                                 self.lfo_dest,
@@ -245,8 +276,8 @@ impl SynthLayer {
                     } else {
                         (
                             Self::render_va(
-                                self.waveform,
-                                self.saw_model,
+                                waveform,
+                                saw_model,
                                 self.supersaw_detune,
                                 self.pulse_width,
                                 self.lfo_dest,
@@ -329,8 +360,8 @@ impl SynthLayer {
                         }
                     } else {
                         let va = Self::render_va(
-                            self.waveform,
-                            self.saw_model,
+                            waveform,
+                            saw_model,
                             self.supersaw_detune,
                             self.pulse_width,
                             self.lfo_dest,
@@ -369,9 +400,15 @@ impl SynthLayer {
 
             // Firmware filter family: coefficients once per voice and sample (no allocation).
             let fw_kind = FwFilterType::from_model(self.filter_model);
-            let fw_co = (self.filter_engine == FilterEngine::Firmware).then(|| {
-                FwCoefs::from_params(fw_kind, voice_cutoff, self.resonance, self.sample_rate)
-            });
+            let fw_co =
+                (strip.is_some() || self.filter_engine == FilterEngine::Firmware).then(|| {
+                    let fc = if strip.is_some() {
+                        strip_cutoff_hz(voice_cutoff)
+                    } else {
+                        voice_cutoff
+                    };
+                    FwCoefs::from_params(fw_kind, fc, self.resonance, self.sample_rate)
+                });
 
             let filtered_l = if !self.filter_on {
                 raw_osc_l
@@ -389,7 +426,7 @@ impl SynthLayer {
             };
             let amp_vel = (1.0 - self.amp_velocity.clamp(0.0, 1.0))
                 + self.amp_velocity.clamp(0.0, 1.0) * v.velocity;
-            let voice_gain = if self.gain_dezipper {
+            let voice_gain = if dezip {
                 v.smoothed_gain(dezip_pole)
             } else {
                 v.gain
@@ -418,50 +455,6 @@ impl SynthLayer {
         }
 
         [mix_l, mix_r]
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[inline]
-    fn render_va(
-        waveform: VaWaveform,
-        saw_model: SawModel,
-        supersaw_detune: f32,
-        pulse_width: f32,
-        lfo_dest: LfoDestination,
-        lfo_amount: f32,
-        lfo_val: f32,
-        t: f32,
-        dt: f32,
-        eff_freq: f32,
-        inv_fs: f32,
-        supersaw_phases: &mut [f32; 7],
-    ) -> f32 {
-        match waveform {
-            VaWaveform::Saw => saw_wave(saw_model, t, dt),
-            VaWaveform::SuperSaw => {
-                let mut sum = 0.0f32;
-                let detune_scale = supersaw_detune.clamp(0.0, 1.0);
-                for (i, &det) in SUPERSAW_DETUNES.iter().enumerate() {
-                    let f_osc = eff_freq * (1.0 + det * detune_scale * 0.08);
-                    let dt_i = (f_osc * inv_fs).clamp(1e-5, 0.49);
-                    let p_i = supersaw_phases[i];
-                    let saw = saw_wave(saw_model, p_i, dt_i);
-                    sum += saw;
-                    supersaw_phases[i] = (p_i + dt_i) % 1.0;
-                }
-                sum * (1.0 / 7.0)
-            }
-            VaWaveform::Pulse => {
-                let mut pw = pulse_width.clamp(0.05, 0.95);
-                if lfo_dest == LfoDestination::OscCtrl {
-                    pw = (pw + lfo_amount * lfo_val * 0.4).clamp(0.05, 0.95);
-                }
-                let base = if t < pw { 1.0 } else { -1.0 };
-                base + poly_blep(t, dt) - poly_blep((t + 1.0 - pw) % 1.0, dt)
-            }
-            VaWaveform::Triangle => 1.0 - 4.0 * (t - 0.5).abs(),
-            VaWaveform::Sine => (TAU * t).sin(),
-        }
     }
 }
 

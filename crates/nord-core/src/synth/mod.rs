@@ -26,7 +26,10 @@ mod fw_strip_cutoff;
 mod gain_dezip;
 mod hw_saw;
 mod render;
+mod render_va;
 mod sample_osc;
+mod strip_map;
+mod strip_path;
 use dsp::unison_pan;
 pub use dsp::{poly_blep, ZdfFilter, FM_RATIOS};
 pub use fw_adr_chain::{fw_adr_step, FwAdrAction, FwAdrRecord, FW_ADR_LIMIT};
@@ -41,6 +44,12 @@ pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUT
 pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
 pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
+use strip_map::strip_cutoff_hz;
+pub use strip_map::{
+    attack_index, attack_seconds, cutoff_hz_from_word, decay_index, decay_seconds,
+    strip_word_for_cutoff, STRIP_PASS_FRAMES,
+};
+pub use strip_path::{StripEnvRecords, StripParams, StripVoice, SynthChain};
 pub use voice::SynthVoice;
 #[cfg(test)]
 mod tests_envelope;
@@ -50,6 +59,8 @@ mod tests_fw_filter_golden;
 mod tests_hw_saw_golden;
 #[cfg(test)]
 mod tests_osc_lfo;
+#[cfg(test)]
+mod tests_strip;
 mod voice;
 mod voice_alloc;
 
@@ -131,6 +142,12 @@ pub struct SynthLayer {
     pub saw_model: SawModel,
     /// Smooth the voice gain like the SY DSP (default off, see `gain_dezip.rs`).
     pub gain_dezipper: bool,
+    /// The decoded oscillator is in the ANALOG SHAPE category (`osc_category == 3`); only the
+    /// strip chain reads it (`render.rs`).
+    pub osc_shape_category: bool,
+    /// Per-voice signal chain (default `Legacy`; `FirmwareStrip` is `strip_path.rs`).
+    pub chain: SynthChain,
+    strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
     pub fm_amount: f32,
@@ -248,6 +265,9 @@ impl SynthLayer {
             waveform: VaWaveform::Saw,
             saw_model: SawModel::Classic,
             gain_dezipper: false,
+            chain: SynthChain::Legacy,
+            osc_shape_category: false,
+            strip_cache: None,
             ctrl_counter: 0,
             pulse_width: 0.5,
             fm_amount: 0.35,

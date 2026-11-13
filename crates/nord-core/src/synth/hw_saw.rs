@@ -24,6 +24,10 @@ pub enum SawModel {
     Classic,
     /// Firmware helper `0x12501F`: falling, two-increment quadratic step, high-pitch fade.
     Firmware,
+    /// `Firmware` with the high-pitch fade applied to the increment at the SY frame rate
+    /// (`inc * fs / F`), so the 5 kHz knee sits at 5 kHz in Hz at any engine rate. Used by
+    /// `SynthChain::FirmwareStrip`.
+    FirmwareSy,
 }
 
 /// VERIFIED: `A = 0x3EB0F34D` of the helper prologue (`0x125023`), checked by
@@ -54,6 +58,17 @@ pub fn firmware_blep_step(t: f32) -> f32 {
     }
 }
 
+/// The wave without the high-pitch fade: `1 - 2 p + d(t)`.
+#[inline]
+fn firmware_saw_core(phase: f32, inc: f32) -> f32 {
+    let t = if phase < 0.5 {
+        phase / inc
+    } else {
+        (phase - 1.0) / inc
+    };
+    1.0 - 2.0 * phase + firmware_blep_step(t)
+}
+
 /// One sample of the firmware saw at phase `phase` (`0..1`) and increment `inc` (`> 0`).
 ///
 /// VERIFIED against the SHARC oracle through the Python closed form (grid golden
@@ -63,20 +78,23 @@ pub fn firmware_saw(phase: f32, inc: f32) -> f32 {
     if inc <= 0.0 {
         return 0.0;
     }
-    let t = if phase < 0.5 {
-        phase / inc
-    } else {
-        (phase - 1.0) / inc
-    };
-    firmware_saw_fade(inc) * (1.0 - 2.0 * phase + firmware_blep_step(t))
+    firmware_saw_fade(inc) * firmware_saw_core(phase, inc)
 }
 
 /// Saw sample of the selected model (`Classic`: `(2 t - 1) - poly_blep(t, dt)`).
 #[inline]
-pub(super) fn saw_wave(model: SawModel, phase: f32, inc: f32) -> f32 {
+pub(super) fn saw_wave(model: SawModel, phase: f32, inc: f32, inv_fs: f32) -> f32 {
     match model {
         SawModel::Classic => (2.0 * phase - 1.0) - super::poly_blep(phase, inc),
         SawModel::Firmware => firmware_saw(phase, inc),
+        SawModel::FirmwareSy => {
+            if inc <= 0.0 {
+                return 0.0;
+            }
+            // Wrap step in engine increments, fade knee in SY increments (`inc * fs / F`).
+            let sy_inc = inc * super::SY_FRAME_RATE_HZ.recip() * inv_fs.recip();
+            firmware_saw_fade(sy_inc) * firmware_saw_core(phase, inc)
+        }
     }
 }
 
@@ -132,7 +150,10 @@ mod tests {
         assert!((firmware_saw(0.75, inc) + 0.5).abs() < 1e-6);
         assert!(firmware_saw(0.3, inc) > firmware_saw(0.6, inc));
         // the classic saw rises
-        assert!(saw_wave(SawModel::Classic, 0.3, 0.001) < saw_wave(SawModel::Classic, 0.6, 0.001));
+        assert!(
+            saw_wave(SawModel::Classic, 0.3, 0.001, 1.0)
+                < saw_wave(SawModel::Classic, 0.6, 0.001, 1.0)
+        );
     }
 
     #[test]

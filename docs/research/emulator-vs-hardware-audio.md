@@ -105,6 +105,10 @@ Ranking criterion: size of the spectral/level/width gap that survives every vari
 - Piano and Amp FX are close enough (score about 2.5) that further tuning should wait for calibrated note velocity.
 - The `FirmwareFx` switch cannot be judged until a segment that uses delay or compression is added.
 
+## Update: synth strip chain
+
+`--synth-chain strip` (opt-in firmware saw, ADR records, strip-law cutoff, firmware filter, gain de-zipper) is the new `strip` variant of `synth_lead` in the JSON: presence -16.5 -> -9.0 dB, RMS delta -6.4 -> +3.8 dB, score 4.93 -> 4.05. Cause and what remains: [synth-strip-path](synth-strip-path.md) (the decoded SHAPE `Triangle` has no second harmonic; the hardware note has one at -3.6 dB).
+
 ## Follow-ups
 
 - Replay controls: detect OLED pop-ups and the mod wheel to drive `--cc` events, and fit per-segment velocity from hardware attack levels, then re-run (`uv run python tools/emu_vs_hw.py --video ... --backup ... --workdir <scratch> --confirmed-only`).
