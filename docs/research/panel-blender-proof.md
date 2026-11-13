@@ -12,7 +12,7 @@ python tools/panel_refbake.py --ref <NS4-Panel-organ.png>   # reference-derived 
 python tools/panel_assets.py pack      # filmstrips, manifest.json, size report
 python tools/panel_assets.py preview   # assets/panel/proof/preview_2x.png from the committed layers
 python tools/panel_assets.py verify    # CI-safe: committed PNGs match manifest hashes
-python tools/panel_compare.py --ref <NS4-Panel-organ.png> --out .reference/panel-compare-v4.png
+python tools/panel_compare.py --ref <NS4-Panel-organ.png> --out .reference/panel-compare-v5.png
 ```
 
 `BLENDER=<path>` overrides the install path. Look development: `blender -b --factory-startup -P assets/blender/build_proof.py -- --out <dir> --quick [--only knob,caps,buttons,plates]` renders 2x only, 48 samples, six knob frames (about 25 s). Blender output is not bit-identical across machines, so the committed PNGs are the source of truth; packing and the seamless step are deterministic (tested).
@@ -58,12 +58,14 @@ Provenance: rows marked "reference" are `REFERENCE-DERIVED (D17)`; Blender rows 
 | `button_octave_shift` (black pair in one well, slate) | reference crop incl. well | 271x79 | 6,236 / 19,795 | 0.54 | up state only; resampling only |
 | `tri_organ_model` selector matrix + lit overlay | reference crop; lit cell replaced by an unlit cell; overlay = red light of the lit cell | 61x123 | 2,828 / 8,506 | 1.62 | right and down lit overlays are mirrors of left and up |
 | `tri_vib_chorus` selector matrix + lit overlay | reference crop; lit cell replaced by an unlit cell; overlay = red light of the lit cell | 121x60 | 2,645 / 8,057 | 1.64 | right and down lit overlays are mirrors of left and up |
-| Drawbar caps black / white, layer cap grey | Blender (original, v3) | 192x320, 192x192 | | 24 / 31 / 32 | as listed for v3 below (not cut from the reference: the caps overlap LED ladders and slots there) |
+| Drawbar caps black (16') / white (8'), layer cap grey | reference crops (`tools/panel_refcaps.py`): cap separated from the slate by colour (caps neutral, slate and labels bluish, LEDs red), slot strips dropped by width; own shadow layer from the darkening of the slate below and right of the cap | 192x320, 192x192 | | 12 / 17 / 21 | inside the cap 0.1 to 0.3; the rest is the LED ladders, labels and slot around it. The black cap keeps the red LED glow on its upper right edge; one sprite per colour, so other drawbar positions keep this cap's lean |
 | Plate tiles red / slate / silver | quilted from clean reference patches (24 px windows, each shifted to the measured colour), seamless | 256x256 | 24,053 / 85,951 (red) | 7 / 12 / 12 | panel-wide lighting gradient is not in a tile; MAD includes text and slot edges next to the patch |
 
 MAD (mean absolute difference, 0..255) compares ours with the same reference area at 2x. For reference crops it measures only resampling (about 0.5 to 1.6). The knob rows include the ring, labels and LEDs, which are out of scope.
 
-Sizes with the full style set: the proof set is 837 KB (1x) / 2.63 MB (2x) PNG. The full-panel estimate assumes 6 knob styles and 15 button styles, each button getting two more states later: 2.17 MB / 6.51 MB PNG, and 15.5 MB / 61.9 MB RGBA in GPU memory. The private comparison sheet is `.reference/panel-compare-v4.png`.
+Sizes with the full style set: the proof set is 824 KB (1x) / 2.76 MB (2x) PNG. The full-panel estimate assumes 6 knob styles and 15 button styles, each button getting two more states later: 2.16 MB / 6.64 MB PNG, and 15.5 MB / 62.1 MB RGBA in GPU memory. The private comparison sheet is `.reference/panel-compare-v5.png`.
+
+Owner review of v4 (2026-11-13): the Blender drawbar and layer caps did not match, the DRIVE knob looked flat with a light red rim, and its "6" was clipped. Fixes: the caps are now cut from the reference with their own shadow layers. The knob edge colours are taken from the cap interior instead of the red plate. Top-face pointer pixels are inpainted by turning about the leaning top centre. The label mask no longer touches the "6".
 
 Knob lean (v4 finding): on the reference, the DRIVE pointer sits 5.5 px below the base centre, so the optical axis is above the left column of knobs. The render is cropped off-centre vertically, and the v3 assumption that the axis sits at the image centre (`ASSUMED`) was wrong for y. The reference knobs now use lean y +1.0 / +1.4 u (`EMPIRICAL`).
 

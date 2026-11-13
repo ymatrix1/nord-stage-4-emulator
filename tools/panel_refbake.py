@@ -19,11 +19,17 @@ from pathlib import Path
 
 import numpy as np
 import panel_assets as P
+import panel_refcaps as RC
 from PIL import Image, ImageDraw, ImageFilter
 
 CROPS = P.ROOT / "assets" / "panel" / "ref_crops.json"
 TILE_2X = 256  # tile edge at 2x, 1x is half
 KNOB_2X = P.KNOB_FRAME_PX * 2
+
+
+def cap_shadow_name(cap: str) -> str:
+    """drawbar_cap_black -> drawbar_shadow_black: every cap has its own shadow layer."""
+    return cap.replace("_cap_", "_shadow_")
 
 
 def load_crops(path: Path = CROPS) -> dict:
@@ -216,6 +222,36 @@ def inpaint_rotate(a: np.ndarray, mask: np.ndarray, centre, inside: np.ndarray):
     return out
 
 
+def decontaminate(rgb: np.ndarray, alpha: np.ndarray, radius: float = 3.0) -> np.ndarray:
+    """Replace the colour of semi-transparent edge pixels with the colour of the opaque cap
+    next to them, so the plate the reference had behind the edge (red) does not show as a
+    light fringe on other plates."""
+    solid = (alpha > 0.98).astype(np.float64)
+    num = np.stack(
+        [
+            np.asarray(
+                Image.fromarray(np.clip(rgb[..., c] * solid, 0, 255).astype(np.uint8)).filter(
+                    ImageFilter.GaussianBlur(radius)
+                ),
+                dtype=np.float64,
+            )
+            for c in range(3)
+        ],
+        axis=-1,
+    )
+    den = (
+        np.asarray(
+            Image.fromarray((solid * 255).astype(np.uint8)).filter(
+                ImageFilter.GaussianBlur(radius)
+            ),
+            dtype=np.float64,
+        )[..., None]
+        / 255
+    )
+    spread = num / np.maximum(den, 1e-3)
+    return np.where(solid[..., None] > 0, rgb, np.where(den > 0.01, spread, rgb))
+
+
 def knob_body(ref: Image.Image, centre, top_off) -> Image.Image:
     """The reference knob cap without its pointer and without plate, ring or scale (alpha)."""
     edge = KNOB_2X * 129.0 / 128.0
@@ -225,14 +261,21 @@ def knob_body(ref: Image.Image, centre, top_off) -> Image.Image:
     top_r = 0.88 * base_r  # EMPIRICAL: top face plus shoulder, about 45 reference px
     soft, pointer = knob_masks(a, base_r, top_r, top_off)
     cap_px = (soft > 0.95) & (a[..., 0] - a[..., 1] < 22) & (a.min(axis=2) < 110)
-    filled = inpaint_rotate(a, pointer, (KNOB_2X / 2, KNOB_2X / 2), cap_px)
+    # top-face pixels turn about the leaning top centre, wall pixels about the base centre
+    c = KNOB_2X / 2
+    top_c = (c + top_off[0], c + top_off[1])
+    yy, xx = np.mgrid[:KNOB_2X, :KNOB_2X]
+    on_top = np.hypot(xx - top_c[0], yy - top_c[1]) < 0.8 * top_r
+    filled = inpaint_rotate(a, pointer & ~on_top, (c, c), cap_px & ~on_top)
+    filled = inpaint_rotate(filled, pointer & on_top, top_c, cap_px & on_top)
     # trim the outer rim band where the fitted outline still shows plate, ring or numerals
     inner = Image.fromarray(((soft > 0.5) * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(13))
     band = (soft > 0) & (np.asarray(inner) == 0)
     red = np.clip((filled[..., 0] - filled[..., 1] - 25) / 25, 0, 1)
     white = np.clip((filled.min(axis=2) - 110) / 40, 0, 1)
     keep = np.where(band & ~pointer, (1 - red) * (1 - white), 1.0)
-    rgba = np.dstack([filled, soft * keep * 255])
+    alpha = soft * keep
+    rgba = np.dstack([decontaminate(filled, alpha), alpha * 255])
     return Image.fromarray(np.clip(rgba, 0, 255).astype(np.uint8), "RGBA")
 
 
@@ -248,7 +291,7 @@ def knob_scale(ref: Image.Image, centre, body_alpha: np.ndarray) -> Image.Image:
     keep = (r > 0.29 * w) & (r < 0.47 * w) & (np.abs(ang) > 33) & (body_alpha < 0.05)
     # the reference DRIVE pointer points left and covers part of the "2": drop its tip
     keep &= ~((np.abs(yy - h / 2 - 0.02 * h) < 0.035 * h) & (xx < w / 2) & (r < 0.40 * w))
-    keep &= ~((yy < 0.17 * h) & (xx > 0.62 * w))  # tail of the "ON" label above the "6"
+    keep &= ~((yy < 0.15 * h) & (xx > 0.72 * w))  # tail of the "ON" label, right of the "6"
     alpha = np.clip((a[..., 1] - 50) / 150, 0, 1) * keep
     rgb = np.zeros_like(a) + np.array([238.0, 236.0, 234.0])
     return Image.fromarray(np.dstack([rgb, alpha * 255]).astype(np.uint8), "RGBA")
@@ -276,6 +319,10 @@ def bake(ref_path: Path, proof: Path = P.PROOF_DIR, crops: dict | None = None) -
         if name == "drive":
             alpha = np.asarray(body.getchannel("A"), dtype=np.float64) / 255
             two_x["knob_scale"] = knob_scale(ref, spec["centre"], alpha)
+    for name, spec in crops.get("caps", {}).items():
+        size = tuple(2 * v for v in spec["size"])
+        cap, shadow = RC.cap_layers(ref, spec["centre"], size, spec["kind"])
+        two_x[name], two_x[cap_shadow_name(name)] = cap, shadow
     for seed, (name, spec) in enumerate(crops["tiles"].items()):
         two_x[name] = plate_tile(ref, spec["target"], spec["tol"], seed)
     for name, img in two_x.items():

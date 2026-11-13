@@ -1,6 +1,7 @@
 """Headless Blender scene for the Phase 6b B7 proof: generic knob + ring, pointer and shadow
-layers for the reference knobs, drawbar and layer caps, the slotted plate. Buttons, triangle
-selectors, knob bodies, the DRIVE scale and plate tiles come from tools/panel_refbake.py (D17).
+layers for the reference knobs, the slotted plate. Buttons, triangle
+selectors, knob bodies, caps, the DRIVE scale and plate tiles come from tools/panel_refbake.py
+(D17).
 
 Run (Blender 5.2, no GUI, no add-ons):
 
@@ -91,25 +92,6 @@ def render_ref_knobs(out: Path, scale: int) -> None:
             S.render(P.frame_path(out, scale, i, f"pointer_{name}"))
 
 
-def render_caps(out: Path, scale: int) -> None:
-    """One sprite per cap (plate hidden), then one shadow layer per cap shape (cap holdout)."""
-    jobs = [(f"drawbar_cap_{c}", "drawbar", f"cap_{c}", C.fader_cap) for c in P.DRAWBAR_COLORS]
-    jobs.append(("layer_cap_grey", "layer", "cap_grey", C.layer_cap))
-    for name, lean, mat, make in jobs:
-        m = fresh(scale, name, lean)
-        S.flags(C.plate_slot(m), hide=True)
-        make(m, mat)
-        S.render(out / f"{name}_{scale}x.png")
-    for name, lean, make in (
-        ("drawbar_shadow", "drawbar", C.fader_cap),
-        ("layer_shadow", "layer", C.layer_cap),
-    ):
-        m = fresh(scale, name, lean)
-        S.flags(C.plate_slot(M.catcher_mats()), catcher=True)
-        S.flags(make(m, "cap_black"), holdout=True)
-        S.render(out / f"{name}_{scale}x.png")
-
-
 def render_plates(out: Path, scale: int) -> None:
     """Only the slotted slate plate; the tiles are cut from the reference (D17)."""
     C.plate_slot(fresh(scale, "plate_slate_slot", "plate"))
@@ -120,7 +102,6 @@ STAGES = {
     "plates": render_plates,
     "knob": render_knob,
     "ref_knobs": render_ref_knobs,
-    "caps": render_caps,
 }
 
 

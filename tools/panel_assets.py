@@ -64,11 +64,6 @@ SPRITES = {
     "knob_ring": (96, 96),  # white arc, separate layer (Master Level style)
     "knob_shadow_master": (96, 96),  # shadow of the reference-derived Master Level cap
     "knob_shadow_drive": (96, 96),
-    "drawbar_cap_black": (96, 160),
-    "drawbar_cap_white": (96, 160),
-    "drawbar_shadow": (96, 160),  # shared by both drawbar colours
-    "layer_cap_grey": (96, 96),
-    "layer_shadow": (96, 96),
     "plate_slate_slot": (128, 256),  # drawbar slot on slate, not a tile
 }
 # Knobs whose cap body is cut from the reference (D17); each gets a Blender pointer filmstrip.
@@ -84,11 +79,19 @@ def ref_sprites(crops: dict | None = None) -> list[str]:
     names = [f"button_{b}" for b in crops["buttons"]]
     names += [f"tri_{t}" for t in crops["triangles"]]
     names += sorted({f"tri_lit_{t['dir']}" for t in crops["triangles"].values()})
+    for cap in crops.get("caps", {}):
+        names += [cap, cap.replace("_cap_", "_shadow_")]
     names += [f"knob_body_{k}" for k in crops["knobs"]] + ["knob_scale", *TILES]
     return names
 
 
 DRAWBAR_COLORS = ("black", "white")
+# Cap frames (1x px); the caps are cut from the reference (D17), see ref_crops.json "caps".
+CAP_FRAMES = {
+    "drawbar_cap_black": (96, 160),
+    "drawbar_cap_white": (96, 160),
+    "layer_cap_grey": (96, 96),
+}
 
 # ASSUMED: control counts until B2 (ns4-3n0d) verifies them against the manual; chosen from a
 # rough read of the reference photo (3 sections x ~12 knobs, 9+9 drawbars, 3 layer faders).

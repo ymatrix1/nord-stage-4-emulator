@@ -32,5 +32,10 @@
     "plate_red": {"target": [130, 27, 38], "tol": 45},
     "plate_slate": {"target": [55, 64, 76], "tol": 30},
     "plate_silver": {"target": [181, 192, 206], "tol": 30}
+  },
+  "caps": {
+    "drawbar_cap_black": {"centre": [656, 972], "kind": "black", "size": [96, 160]},
+    "drawbar_cap_white": {"centre": [954, 1006], "kind": "white", "size": [96, 160]},
+    "layer_cap_grey": {"centre": [311, 242], "kind": "grey", "size": [96, 96]}
   }
 }

@@ -41,7 +41,7 @@ def test_composites_are_opaque():
     ]
     for img in imgs:
         assert img.getchannel("A").getextrema() == (255, 255)
-    assert imgs[2].size == tuple(2 * v for v in P.SPRITES["drawbar_cap_white"])
+    assert imgs[2].size == tuple(2 * v for v in P.CAP_FRAMES["drawbar_cap_white"])
 
 
 def test_knob_frame_matches_grid_cell():
@@ -54,4 +54,4 @@ def test_compose_preview_covers_all_groups():
     sheet = V.compose_preview()
     e = P.KNOB_FRAME_PX * 2
     assert sheet.width >= 7 * e  # six reference knob frames and one generic
-    assert sheet.height > e + 2 * P.SPRITES["drawbar_cap_black"][1]
+    assert sheet.height > e + 2 * P.CAP_FRAMES["drawbar_cap_black"][1]

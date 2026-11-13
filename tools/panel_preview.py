@@ -69,12 +69,11 @@ def composed_ref_knob(proof: Path, name: str, frame: int, scale: int = 2) -> Ima
 
 
 def composed_cap(proof: Path, name: str, scale: int = 2) -> Image.Image:
-    """Slate plate with slot, then the shared shadow layer, then the cap sprite.
+    """Slate plate with slot, then the cap's shadow layer, then the cap sprite.
     `name` is `drawbar_cap_black`, `drawbar_cap_white` or `layer_cap_grey`."""
-    w, h = (v * scale for v in P.SPRITES[name])
+    w, h = (v * scale for v in P.CAP_FRAMES[name])
     bg = centre_crop(_open(proof, "plate_slate_slot", scale), w, h)
-    shadow = "layer_shadow" if name.startswith("layer") else "drawbar_shadow"
-    for n in (shadow, name):
+    for n in (name.replace("_cap_", "_shadow_"), name):
         bg.alpha_composite(_open(proof, n, scale))
     return bg
 

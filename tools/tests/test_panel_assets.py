@@ -170,7 +170,10 @@ def test_sprites_fit_their_frames():
 def test_sprite_silhouettes_match_between_scales():
     """1x and 2x describe the same silhouette: the 2x bbox is twice the 1x bbox (+-3 px)."""
     for name in ("drawbar_cap_black", "drawbar_cap_white", "layer_cap_grey"):
-        b1, b2 = _alpha(f"{name}_1x.png").getbbox(), _alpha(f"{name}_2x.png").getbbox()
+        b1, b2 = (
+            _alpha(f"{name}_{k}x.png").point(lambda v: 255 if v > 64 else 0).getbbox()
+            for k in (1, 2)
+        )
         assert all(abs(2 * a - b) <= 3 for a, b in zip(b1, b2)), name
 
 

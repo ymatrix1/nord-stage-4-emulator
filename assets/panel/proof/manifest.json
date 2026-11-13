@@ -37,36 +37,6 @@
       "width": 96,
       "height": 96
     },
-    "drawbar_cap_black_1x.png": {
-      "sha256": "5abba077ce67bd9488e6f9b79ca22541694e5ca63860a5f3dfb43d6d55a58d99",
-      "bytes": 10100,
-      "width": 96,
-      "height": 160
-    },
-    "drawbar_cap_white_1x.png": {
-      "sha256": "259c2a2a5bc13ca429bbdd0b18fe89853a4f33cdcd683491a1c6d66249e6fd13",
-      "bytes": 10199,
-      "width": 96,
-      "height": 160
-    },
-    "drawbar_shadow_1x.png": {
-      "sha256": "8dd5be05be934f6072aaf39a05a3fcc22724d971d76f8203ca909e06af05ae59",
-      "bytes": 8917,
-      "width": 96,
-      "height": 160
-    },
-    "layer_cap_grey_1x.png": {
-      "sha256": "44119c9b893f3fd70ad71bc567dd9dcb3a04f9ceba8bbd3a1c5d45ead1860930",
-      "bytes": 4936,
-      "width": 96,
-      "height": 96
-    },
-    "layer_shadow_1x.png": {
-      "sha256": "7df0351e2d9367c3626299b213672353f0184eb716d7503f960c7c9885fd0e1f",
-      "bytes": 5914,
-      "width": 96,
-      "height": 96
-    },
     "plate_slate_slot_1x.png": {
       "sha256": "240447fe569fb50d8245330958b9513e2087163c2f153b3b5e6906bbd0f6456a",
       "bytes": 34285,
@@ -187,21 +157,57 @@
       "width": 20,
       "height": 15
     },
+    "drawbar_cap_black_1x.png": {
+      "sha256": "ef090977772dc457949b52e4d54511d71c0a3d5fd3a2070e88a527ce5fa5a254",
+      "bytes": 8797,
+      "width": 96,
+      "height": 160
+    },
+    "drawbar_shadow_black_1x.png": {
+      "sha256": "31a25f5c6daad936fc0d027c0cf1153f4ff1ba2f983d6415cfa5f4b0cc7d2da8",
+      "bytes": 2623,
+      "width": 96,
+      "height": 160
+    },
+    "drawbar_cap_white_1x.png": {
+      "sha256": "9adddb7f33fd1397012b4bdbefd6462a87394518d9ac8c227917ce66dc387095",
+      "bytes": 9396,
+      "width": 96,
+      "height": 160
+    },
+    "drawbar_shadow_white_1x.png": {
+      "sha256": "958b4f1196d0c7577156421bbf8083f31cd5923bf613de85a8d1ab330f39ccb5",
+      "bytes": 2086,
+      "width": 96,
+      "height": 160
+    },
+    "layer_cap_grey_1x.png": {
+      "sha256": "cd68040b00aedfdb495188fa9b39e36867ecb936c7d7f189d0e85a7ca0e88f67",
+      "bytes": 3709,
+      "width": 96,
+      "height": 96
+    },
+    "layer_shadow_grey_1x.png": {
+      "sha256": "62f79640e877028ddb3dd3f1c11350eb4a0a54b14013fcc3674e55a9bd4716b7",
+      "bytes": 1084,
+      "width": 96,
+      "height": 96
+    },
     "knob_body_master_1x.png": {
-      "sha256": "e1f5a6f1605c7d9d3089825f68b8c279618fec58cc113bbc16af10c4db612322",
-      "bytes": 4684,
+      "sha256": "182cc80e3829e518a3cddf36683cd4c28f7f0de18af6c0e0e49f030c9b839993",
+      "bytes": 4642,
       "width": 96,
       "height": 96
     },
     "knob_body_drive_1x.png": {
-      "sha256": "e1f5a6f1605c7d9d3089825f68b8c279618fec58cc113bbc16af10c4db612322",
-      "bytes": 4684,
+      "sha256": "182cc80e3829e518a3cddf36683cd4c28f7f0de18af6c0e0e49f030c9b839993",
+      "bytes": 4642,
       "width": 96,
       "height": 96
     },
     "knob_scale_1x.png": {
-      "sha256": "7376c06ab8f4bc148db46b63e43ffeec2b69584b6fd98555fdb7eff1988e5fc7",
-      "bytes": 3110,
+      "sha256": "93569d3a83ce31714ad72469ebad99cf965d19824140a1769ebdc5debcc9ffcd",
+      "bytes": 3198,
       "width": 96,
       "height": 96
     },
@@ -256,36 +262,6 @@
     "knob_shadow_drive_2x.png": {
       "sha256": "957f9b631e412fbb0ba234aa2910be0cbb69bcb0c423f744fa21a9dd63a6de5e",
       "bytes": 15347,
-      "width": 192,
-      "height": 192
-    },
-    "drawbar_cap_black_2x.png": {
-      "sha256": "23d983bc1cdf7a9dd5eaf7f493505f3e872b46c4b148774266c6c4fbe9049222",
-      "bytes": 30543,
-      "width": 192,
-      "height": 320
-    },
-    "drawbar_cap_white_2x.png": {
-      "sha256": "844e569bbf363ada5ea98e8739bded172218e91182b6e39b552ef01886893057",
-      "bytes": 30821,
-      "width": 192,
-      "height": 320
-    },
-    "drawbar_shadow_2x.png": {
-      "sha256": "c0d1e7720439473aaff2f51842eb38cea2a21700a5b6581cfb33b3da1a8443d6",
-      "bytes": 24941,
-      "width": 192,
-      "height": 320
-    },
-    "layer_cap_grey_2x.png": {
-      "sha256": "8c08abf2848a9408da4c81f32baf154931cd83f822ec3ac394bca47e0993e110",
-      "bytes": 13437,
-      "width": 192,
-      "height": 192
-    },
-    "layer_shadow_2x.png": {
-      "sha256": "acc28290163931e10894cf8482b45b4ec8aff71b69c3dcfc7464c5f059cfb7cc",
-      "bytes": 16005,
       "width": 192,
       "height": 192
     },
@@ -409,21 +385,57 @@
       "width": 40,
       "height": 30
     },
+    "drawbar_cap_black_2x.png": {
+      "sha256": "c7924154d69e83d94371010aa0b326154ecdaff374ca2d251fe2e83fa2d6db94",
+      "bytes": 81262,
+      "width": 192,
+      "height": 320
+    },
+    "drawbar_shadow_black_2x.png": {
+      "sha256": "f43f8719b4559fba7ea3ee667a1cbd197ef1cc9c56c06794db3c81a8a9385ab9",
+      "bytes": 5882,
+      "width": 192,
+      "height": 320
+    },
+    "drawbar_cap_white_2x.png": {
+      "sha256": "bd58cd0cdb0220caa4a6e8e64fa147ca8f1906b33f8a6bbe2c3e8f40a7cf27c1",
+      "bytes": 83151,
+      "width": 192,
+      "height": 320
+    },
+    "drawbar_shadow_white_2x.png": {
+      "sha256": "4c58b2e088a45e42b193b3b0e5f95b8340269cb214b4b6a9c5be796f01814137",
+      "bytes": 4662,
+      "width": 192,
+      "height": 320
+    },
+    "layer_cap_grey_2x.png": {
+      "sha256": "4438a95a32fbc74ab6588e64686d58da08ebf5ab3ad26591ff953c108716478f",
+      "bytes": 63563,
+      "width": 192,
+      "height": 192
+    },
+    "layer_shadow_grey_2x.png": {
+      "sha256": "fa716decd7113d1e410bf0b122d5f9267b91d89273edb8ca6eb32f0a704d48cd",
+      "bytes": 2416,
+      "width": 192,
+      "height": 192
+    },
     "knob_body_master_2x.png": {
-      "sha256": "db98aa8c8c4f2043324d06b93e0dd8fe6673d0e38aefaaf806fdfd9cdc108375",
-      "bytes": 66856,
+      "sha256": "5006731afe5d651c7f295b0fec66b3444d45b41b9d9072892042c7ef2e59b8ba",
+      "bytes": 67270,
       "width": 192,
       "height": 192
     },
     "knob_body_drive_2x.png": {
-      "sha256": "db98aa8c8c4f2043324d06b93e0dd8fe6673d0e38aefaaf806fdfd9cdc108375",
-      "bytes": 66856,
+      "sha256": "5006731afe5d651c7f295b0fec66b3444d45b41b9d9072892042c7ef2e59b8ba",
+      "bytes": 67270,
       "width": 192,
       "height": 192
     },
     "knob_scale_2x.png": {
-      "sha256": "3e5faf2e98f42f98a0db4732e5611987df07d07e3ca664dfa312b54bedc94c8a",
-      "bytes": 4141,
+      "sha256": "417e5103140522e9cf2f35c97e46cacba09c80f07ead93a924fc567dd7855957",
+      "bytes": 4283,
       "width": 192,
       "height": 192
     },
