@@ -147,7 +147,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [ ] **B1** Docs correction: reopen Phase 6 bays, control-inventory spec, visual-spec discrepancies, D15 (`ns4-7ky2`)
 - [ ] **B2** Control inventory data: every control from manual ch. 3-9 with page and provenance; counts match manual and photo (`ns4-3n0d`, after B1). **Partly delivered 2026-11-13:** `crates/nord-panel` lists 273 controls checked against the manual text; photo check covers headline counts only, so the box stays open
 - [x] **B3** Host parameter-ID stability test: committed snapshot of ID/type/range/default; remove/rename fails, add passes (`ns4-xhbf`, `crates/nord-plugin/param-ids.snapshot`, 264 ids)
-- [ ] **B4** Split oversized `nord-gui` files (`panel.rs`, `library.rs`, `audio.rs`, `widgets.rs`) and add `crates/nord-panel` skeleton; behaviour unchanged (`ns4-r7vt`). **Progress:** `nord-panel` exists; `panel.rs` is split into `panel/` (one file per bay, all under 400 lines, frame hash byte-identical); `library.rs`, `audio.rs`, `widgets.rs` still open
+- [x] **B4** Split oversized `nord-gui` files (`panel.rs`, `library.rs`, `audio.rs`, `widgets.rs`) and add `crates/nord-panel` skeleton; behaviour unchanged (`ns4-r7vt`; `panel/`, `library/`, `audio/`, `widgets/` are directory modules, every file under 400 lines, frame hash byte-identical)
 - [x] **B5** Host and behaviour layer: `PanelHost`, `PanelAction`, Shift / hold / double-tap / selector cycling / pot snap / Live Mode with unit tests (`ns4-q6p7`; `crates/nord-panel/src/behaviour/`, timings `ASSUMED` except the 500 ms hold)
 - [ ] **B6** Headless golden-image harness: CPU raster via `tiny-skia`, per-pixel tolerance + error budget, goldens at 0.5x; optional local-only photo comparison skipped without `.reference/` (`ns4-7cv6`, after B4)
 - [ ] **B7** Asset baker (`xtask bake-panel`) and material/shadow system: Blender-rendered sprites and filmstrips from our own models, committed renders with content hashes, `tiny-skia` for flat vector layers, theme tokens; first proves one knob filmstrip and one fader cap and measures atlas size (D15, `ns4-77s9`, after B1, B4)
@@ -204,7 +204,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [ ] Key-down capture: the keybed link (UART2 ring consumer) is not emulated, so no key event reaches the DSP messages (piano velocity law and organ key-down remain open; [piano-dsp-path](research/piano-dsp-path.md) follow-up 1)
 - [x] Boot message log: every ARM to DSP store from reset (80,815 boot messages, real EMIFA ports) kept, fingerprinted and replayed into `sharc-pass` / `sharc-org` (PNO core 1 8,300 / 8,306 words, ORG 12,102 / 12,102); census of the stubbed SPI routines ([arm-bulk-tables](research/arm-bulk-tables.md), `tools/arm_bulk_tables.py`)
 - [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
-- [ ] SY / SMP equality, the `0xB2ECF` / `0xB2FF0` boot words, Rust paths re-compared with the full boot state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
+- [ ] SY / SMP equality, port the corrected tail table with regenerated chord tests and the video check, Vox / Farfisa line comparisons; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 
