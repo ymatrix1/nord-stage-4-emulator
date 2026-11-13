@@ -61,7 +61,7 @@ Output of `pitch` (this session): `entries 1202, max |error| 0.4998 (Q24 units)`
 
 | # | Item | Hardware evidence | Status in Rust | Action |
 |---|---|---|---|---|
-| 1 | Pitch step | `T[n]` table, Q32 `step_frac`, cents `<= 0` (section 1) | `2^(semitones/12)` in `f32`, step as `f64` | add a `step_frac_q32(cents)` helper and test against `tools/arm_piano_path.py` goldens (`0xFFFFFF00`, `0xB504F300`, `0x80000000`); keep `f64` for the render path unless bit parity is wanted |
+| 1 | Pitch step | `T[n]` table, Q32 `step_frac`, cents `<= 0` (section 1) | `2^(semitones/12)` in `f32`, step as `f64` | DONE: `crates/nord-core/src/piano/step_q32.rs` (`cents_table`, `step_frac_q32`, `step_ratio`, goldens `0xFFFFFF00`, `0xF1A1BF00`, `0xB504F300`, `0x80000000`, `0x40000000`, table fingerprint FNV-1a `0xD8A679867A8BA945`); keep `f64` for the render path unless bit parity is wanted |
 | 2 | Voice count | 114 records, 3 list groups | `MAX_PIANO_VOICES = 64`, steal by envelope score (ASSUMED) | decide whether 114 is the polyphony limit (the list also holds release and noise voices: ASSUMED) |
 | 3 | Velocity curves | not found; ARM velocity is `>> 3` of a finer keybed value | `Light/Medium/Heavy` power laws `0.65 / 1 / 1.55`, `0.22 + 0.78 a^0.9`, una corda `0.76`: all ASSUMED, untagged | tag `ASSUMED`; replace when the law is found |
 | 4 | Sample-set selection | zone search over a key-sorted list with `ldrh [+4]` keys (`0xC0041108`); velocity layers by stroke | `select_stroke_with_damper` | compare with the real search once the list layout is decoded |
