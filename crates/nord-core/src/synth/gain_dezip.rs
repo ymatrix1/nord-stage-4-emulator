@@ -16,16 +16,19 @@ use super::*;
 /// series within 2e-6 (`tests::slew_matches_the_oracle_series`).
 pub const SY_GAIN_POLE: f32 = 0.979;
 
-/// ASSUMED: audio frame rate of the SY DSP is 48 kHz (the pole is per frame, so 47.1 frames is
-/// 0.98 ms only at this rate). Confirmed if the codec clock of the SY is measured.
-pub const SY_FRAME_RATE_HZ: f32 = 48_000.0;
+/// VERIFIED: audio frame rate of the SY DSP is 43,402.34 Hz, not 48 kHz: the SY saw fade words
+/// `B` and `A` are 5 kHz and 15 kHz divided by 43,402.0 to float32 precision
+/// (`hw_saw::tests::fade_constants_are_5_and_15_khz_at_the_dsp_frame_rate`), and the ARM holds the
+/// sample-rate literal `0x47298A58` (`docs/research/dsp-frame-rate.md`). The pole is per frame, so
+/// 47.1 frames are 1.09 ms.
+pub const SY_FRAME_RATE_HZ: f32 = crate::organ::FIRMWARE_FRAME_RATE_HZ as f32;
 
 /// ASSUMED: the ARM writes gain targets at a 1 kHz timer tick (timer irq 22, 1 ms,
 /// `docs/research/arm-organ-messages.md` section 10.1); the tick phase relative to notes is unknown.
 pub const CONTROL_TICK_HZ: f32 = 1_000.0;
 
 /// Per-frame pole at engine rate `fs`: the hardware pole stretched to the same time constant,
-/// `0.979^(48000 / fs)` (`0.979` at 48 kHz).
+/// `0.979^(43402.34 / fs)` (`0.979` at the SY frame rate).
 #[inline]
 pub fn gain_pole_for(fs: f32) -> f32 {
     SY_GAIN_POLE.powf(SY_FRAME_RATE_HZ / fs)
@@ -74,13 +77,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pole_is_the_hardware_value_at_48k_and_keeps_the_time_constant() {
-        assert!((gain_pole_for(48_000.0) - 0.979).abs() < 1e-7);
+    fn pole_is_the_hardware_value_at_the_frame_rate_and_keeps_the_time_constant() {
+        assert!((gain_pole_for(SY_FRAME_RATE_HZ) - 0.979).abs() < 1e-7);
         // same time constant in seconds: tau = -1 / (fs ln pole)
         let tau = |fs: f32| -1.0 / (fs * gain_pole_for(fs).ln());
         assert!((tau(96_000.0) - tau(48_000.0)).abs() / tau(48_000.0) < 1e-4);
         assert!((tau(44_100.0) - tau(48_000.0)).abs() / tau(48_000.0) < 1e-4);
-        assert!((tau(48_000.0) * 1000.0 - 0.981).abs() < 0.01); // ms
+        assert!((tau(48_000.0) * 1000.0 - 1.083).abs() < 0.01); // ms: 47.1 frames at 43.4 kHz
     }
 
     #[test]
@@ -119,8 +122,8 @@ mod tests {
                 }
             }
             let t_ms = n_e.expect("gain must fall below 1/e") as f32 / fs * 1000.0;
-            // 0.98 ms time constant plus up to one 1 ms control tick of latency
-            assert!((0.9..2.1).contains(&t_ms), "fs {fs}: 1/e after {t_ms} ms");
+            // 1.08 ms time constant plus up to one 1 ms control tick of latency
+            assert!((0.9..2.3).contains(&t_ms), "fs {fs}: 1/e after {t_ms} ms");
         }
     }
 

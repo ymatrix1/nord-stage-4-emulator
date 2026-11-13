@@ -7,14 +7,19 @@
 use super::vibrato_bank::{gain_value, GAINS_DETUNED, GAINS_EXACT, SMOOTH_KEEP};
 use super::vibrato_link::VibratoLevel;
 
-/// Frame rate of the firmware bank in Hz, used to convert the per-frame smoother to the engine
-/// sample rate.
+/// Frame rate of the DSP images (PNO, ORG, FX, SY) in Hz, used to convert the per-frame smoothers
+/// and the firmware phase steps to the engine sample rate.
 ///
-/// ASSUMED: 43,156.4 Hz, the rate at which wheel 0 of the exact ARM table equals the engine's
-/// C1 (`firmware_bank::implied_frame_rate`, `organ_ref` default rate). The real DSP frame rate is
-/// not known from the image; the only consequence is the time constant of the ramp
-/// (100 frames = 2.32 ms here), which the VERIFIED coefficient fixes in frames, not seconds.
-pub const FIRMWARE_FRAME_RATE_HZ: f64 = 43_156.4;
+/// VERIFIED: `43402.34375 = 44,444,000 / 1024`, the sample-rate literal `0x47298A58` of the ARM
+/// image (pool `0xC01BF74C`, with `fs / 2` `0x46A98A58` and `2 fs` `0x47A98A58`); five independent
+/// readouts agree: the FX delay times (`samples = trunc(ms * fs / 1000)`), the SY fade constants
+/// (`0x3DEBEF11 * fs = 5 kHz`), the B3 generator at the ARM-written Fine Tune word (note 60 =
+/// 261.652 Hz), the Pipe bank at the same word (wheel 0 = C1 within 0.4 cent) and the Vox rate word
+/// (`0x62C2E7` = C1 to 0.0001 cent). Checked by
+/// `docs/research/dsp-frame-rate.md` and `tests::frame_rate_*` in `firmware_bank.rs`,
+/// `b3_wheels.rs`, `vox_bank.rs`. The older 43,156.4 (bank at unity tune) and 43,829 (B3 at the
+/// image's default tune word) were the same rate read through the wrong Fine Tune word.
+pub const FIRMWARE_FRAME_RATE_HZ: f64 = 43_402.343_75;
 
 /// Gain differences below this (-86 dB; the f32 fixed point of the one-pole sits about 7e-6 off
 /// the target) snap to the target, which settles the ramp.
@@ -120,7 +125,7 @@ mod tests {
     fn keep_is_the_firmware_coefficient_at_the_firmware_rate() {
         let k = keep_for_rate(FIRMWARE_FRAME_RATE_HZ as f32);
         assert!((k - 0.99).abs() < 1e-6, "{k}");
-        // same time constant in seconds: 100 frames at 43,156.4 Hz = 2.317 ms
+        // same time constant in seconds: 100 frames at 43,402.34 Hz = 2.304 ms
         let k48 = f64::from(keep_for_rate(48_000.0));
         let tau_s = -1.0 / (48_000.0 * k48.ln());
         let tau_fw = -1.0 / (FIRMWARE_FRAME_RATE_HZ * 0.99f64.ln());
