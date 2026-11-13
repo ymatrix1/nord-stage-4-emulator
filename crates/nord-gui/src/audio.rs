@@ -95,6 +95,8 @@ pub enum AudioCommand {
         layer_idx: usize,
         sound: Option<Arc<nord_core::synth::SynthSampleSound>>,
     },
+    /// Sets every opt-in firmware path at once (A/B switching, see `firmware_panel`).
+    SetFirmwareOptions(nord_core::render_opts::FirmwareOptions),
 }
 
 /// Handle to communicate with the running audio background thread.
@@ -352,6 +354,7 @@ pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_
                 }
             }
         }
+        AudioCommand::SetFirmwareOptions(opts) => opts.apply_exact(engine),
         AudioCommand::LoadProgram(prog) => {
             engine.apply_program(&prog);
         }

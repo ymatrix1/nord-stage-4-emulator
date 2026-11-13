@@ -111,7 +111,8 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
 | Item | This spec says | Manual / evidence | Status |
 |---|---|---|---|
 | Morph target display (§4.4) | Amber glowing arc around the knob | Manual p.11: green Morph LEDs at the bottom-left of the knob show morph assignment | Spec wrong; renderer to follow the manual (B8, [D15](../DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering)) |
-| Fader LED ladder (§4.1) | 11 segments | Not yet checked against manual p.11 | `ASSUMED`; verify in B2 ([control inventory](control-inventory.md)) |
+| Fader LED ladder (§4.1) | 11 segments | Manual text does not state the LED count (p.18, 23, 27 only say "LED graph"); the drawbar ladders are 8 LEDs (p.21) | `ASSUMED`; needs a panel-photo count ([control inventory](control-inventory.md)) |
+| Split-point LEDs (§3, keybed) | 3 red LEDs | Manual p.15: green LEDs above the keyboard, plus L/M/H LEDs above the SPLIT ON/SET button | Spec wrong; inventory records both (`keybed.split_leds`, `split.leds`) |
 
 ---
 

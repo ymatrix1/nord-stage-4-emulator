@@ -5,6 +5,7 @@
 
 use eframe::egui;
 use nord_gui::audio::start_audio_and_midi;
+use nord_gui::firmware_panel::{self, FirmwarePanelState, HeadlessRequest};
 use nord_gui::library::BackupLibraryState;
 use nord_gui::panel::{render_stage4_panel, Stage4PanelState};
 use std::path::PathBuf;
@@ -18,10 +19,14 @@ struct CliArgs {
     initial_backup: Option<PathBuf>,
     initial_piano: Option<PathBuf>,
     initial_sample: Option<PathBuf>,
+    firmware: nord_core::render_opts::FirmwareOptions,
 }
 
 fn parse_cli_args<I: IntoIterator<Item = String>>(args: I) -> CliArgs {
     let mut parsed = CliArgs::default();
+    let args: Vec<String> = args.into_iter().collect();
+    // Invalid firmware flag values are reported by `main` before the window opens.
+    parsed.firmware = nord_core::render_opts::FirmwareOptions::from_args(&args).unwrap_or_default();
     let mut iter = args.into_iter().skip(1);
     while let Some(arg) = iter.next() {
         if arg == "--screenshot" {
@@ -67,6 +72,7 @@ struct Stage4App {
     active_keys: Arc<[AtomicBool; 128]>,
     screenshot_target: Option<PathBuf>,
     frame_count: u32,
+    firmware: FirmwarePanelState,
 }
 
 impl Stage4App {
@@ -83,7 +89,9 @@ impl Stage4App {
             active_keys,
             screenshot_target: cli.screenshot_target,
             frame_count: 0,
+            firmware: FirmwarePanelState::new(cli.firmware),
         };
+        app.firmware.push(&app.audio_handle);
 
         if let Some(path) = cli.initial_program {
             if let Ok(bytes) = std::fs::read(&path) {
@@ -201,6 +209,16 @@ impl eframe::App for Stage4App {
                         .render_top_bar(ui, &mut self.state.sync_knobs_on_program_load);
                 });
 
+            let before = self.firmware.opts;
+            egui::TopBottomPanel::top("ns4_firmware_bar").show(ctx, |ui| {
+                self.firmware.show_bar(ui, &self.audio_handle);
+            });
+            if before != self.firmware.opts {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Title(firmware_panel::window_title(
+                    &self.firmware.opts,
+                )));
+            }
+
             self.library
                 .render_drawer(ctx, &mut self.state, &self.audio_handle);
         }
@@ -253,13 +271,41 @@ impl eframe::App for Stage4App {
 }
 
 fn main() -> eframe::Result<()> {
-    let cli = parse_cli_args(std::env::args());
+    let argv: Vec<String> = std::env::args().collect();
+    let firmware = match nord_core::render_opts::FirmwareOptions::from_args(&argv) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("nord-stage4: {e}");
+            std::process::exit(2);
+        }
+    };
+    let headless = HeadlessRequest::from_args(&argv);
+    if headless.is_headless() {
+        if headless.dump_options {
+            println!("firmware options: {}", firmware.summary());
+        }
+        if let Some(wav) = &headless.self_test_wav {
+            match firmware_panel::run_self_test(&firmware, Some(wav)) {
+                Ok(report) => println!(
+                    "{report}
+wrote {}",
+                    wav.display()
+                ),
+                Err(e) => {
+                    eprintln!("nord-stage4 self-test failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        return Ok(());
+    }
+    let cli = parse_cli_args(argv);
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1580.0, 472.0])
             .with_min_inner_size([960.0, 360.0])
-            .with_title("Clavia Nord Stage 4"),
+            .with_title(firmware_panel::window_title(&cli.firmware)),
         ..Default::default()
     };
 
