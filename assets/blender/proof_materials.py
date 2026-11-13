@@ -35,7 +35,7 @@ GAIN = {
     "silver": (1.091, 1.101, 1.078),
     "cap_black": (0.38, 0.307, 0.24),
     "cap_white": (1.059, 1.05, 1.039),
-    "cap_grey": (1.418, 1.407, 1.368),
+    "cap_grey": (1.12, 1.112, 1.081),
     "ring": (1.08, 1.08, 1.06),
     "knob_side": (1.8, 1.8, 1.8),
     "knob_top": (0.7, 0.66, 0.6),
@@ -175,7 +175,7 @@ def mats() -> dict[str, bpy.types.Material]:
         "pointer": material("pointer", u["pointer"], 0.45),
         "ring": material("ring", u["ring_white"], 0.6, gain=GAIN["ring"], spec=0.2),
         "cap_black": material(
-            "cap_black", u["cap_black_top"], 0.32, gain=GAIN["cap_black"], spec=0.8
+            "cap_black", u["cap_black_top"], 0.4, gain=GAIN["cap_black"], spec=0.35
         ),
         "cap_white": material(
             "cap_white", u["cap_white_top"], 0.35, gain=GAIN["cap_white"], spec=0.6

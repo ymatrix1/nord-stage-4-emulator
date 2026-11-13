@@ -1,104 +1,91 @@
 """Drawbar / layer-fader cap and its slotted plate for the B7 proof (runs inside Blender).
 
-Original art (D16): authored from two extruded side profiles. Sizes are numbers measured on the
-owner's private reference (1 u = 129 reference px, see parts_knob.REF_PX_PER_U).
+Original art (D16): geometry authored from primitives (lofted sections); shapes follow the
+owner's photos of the real parts. Sizes are numbers measured on the owner's private reference (1 u = 129 reference px, see parts_knob.REF_PX_PER_U).
 """
 
 from __future__ import annotations
 
-import bmesh
 import bpy
-from proof_geom import box, loft, mesh_obj
+from proof_geom import box, loft
 
-# EMPIRICAL: white drawbar cap on the reference is 100 px wide and 231 px long; the lower nose
-# block is narrower (85 px), shifted left, and ends in a chamfer that reads as a 30 px band.
-CAP_W = 0.85  # EMPIRICAL: fitted to the reference cap silhouettes (IoU), was 0.78
+# Shape EMPIRICAL from photos of the real parts (owner, 2026-11-13): the drawbar cap is one
+# part: a tall rear block whose sides and front slope inward, and a long lower nose with a
+# chamfered front, narrower and offset left (reference). Plan size EMPIRICAL from the
+# reference (100 x 231 px = 0.78 x 1.79 u at the base). Black and white caps share this geometry.
+CAP_W = 0.80
 CAP_BACK, CAP_FRONT = 0.90, -0.89
-# ASSUMED: top block, nose and front skirt heights (only the lean and shading show them).
-CAP_HT, CAP_HN, CAP_HS = 0.50, 0.30, 0.04
-SKIRT_H = 0.16  # ASSUMED: lower body height (only its outline is measured)
-NOSE_X = (-0.45, 0.16)  # EMPIRICAL: nose left / right edge (black 16' cap, 4x zoom read)
-CAP_TAPER = 0.05  # EMPIRICAL: side walls lean in by this fraction of the width at the top
-CAP_BEVEL = 0.07  # EMPIRICAL: soft rounded edges, larger than v2's 0.03
+CAP_HT, CAP_HN = 0.50, 0.26  # ASSUMED heights (photo ratio about 2 : 1)
+BLOCK_FRONT = -0.18  # base of the block's sloped front face
+BLOCK_TOP_FRONT = 0.02  # top edge of that face
+NOSE_TOP_FRONT, NOSE_CHAMFER_Z = -0.66, 0.08  # front chamfer of the nose
+# EMPIRICAL (reference, every drawbar): the nose is narrower than the block and offset left
+NOSE_X = (-0.42, 0.18)
+FOOT_H = 0.12  # ASSUMED: low base under the nose, full width
+CAP_TAPER = 0.18  # EMPIRICAL: block top is about 0.82 of its base width (photo, front view)
+CAP_BEVEL = 0.07
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
-# EMPIRICAL: grey layer-fader cap on the reference is 96 px wide and 74 px long.
-LAYER_W, LAYER_L = 0.69, 0.585  # EMPIRICAL: silhouette fit (was 0.75 x 0.57)
-LAYER_H = 0.34  # ASSUMED
-LAYER_BEVEL = 0.09  # EMPIRICAL: the layer cap reads as a rounder, pillowy block
+# Layer-fader cap EMPIRICAL from its photo: a frustum, top smaller than the base on all sides,
+# rounded edges. Base 96 x 74 reference px.
+LAYER_W, LAYER_L, LAYER_H = 0.74, 0.58, 0.36
+LAYER_TOP = (0.82, 0.50)  # top width / length as a fraction of the base
+LAYER_BEVEL = 0.07
 # EMPIRICAL: slot is about 22 px wide on the reference, 0.22 of the cap width.
 SLOT_W, SLOT_LEN, SLOT_DEPTH, PLATE_T = 0.17, 3.4, 0.16, 0.2
 
 
-def _extrude_profile(name, prof, x0, x1, mat, z_top, bevel=CAP_BEVEL):
-    """Extrude a (y, z) side profile between x0 and x1, then lean the side walls inward with
-    height (the sloped wall of the reference caps)."""
-    bm = bmesh.new()
-    lo = [bm.verts.new((x0, y, z)) for y, z in prof]
-    hi = [bm.verts.new((x1, y, z)) for y, z in prof]
-    bm.faces.new(lo[::-1])
-    bm.faces.new(hi)
-    n = len(prof)
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new((lo[i], lo[j], hi[j], hi[i]))
-    cx, w = (x0 + x1) / 2, x1 - x0
-    for v in bm.verts:
-        k = CAP_TAPER * (v.co.z / z_top) * w / 2
-        v.co.x -= k if v.co.x > cx else -k
-        v.co.z += CAP_LIFT
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    return mesh_obj(name, bm, mat, bevel=bevel, segments=8, angle=20)
+def _section(y, z, top_frac, x0=-CAP_W / 2, x1=CAP_W / 2):
+    """Trapezoid cross-section at y between x0 and x1, `top_frac` of that width on top."""
+    c, hb = (x0 + x1) / 2, (x1 - x0) / 2
+    ht, zl = hb * top_frac, CAP_LIFT
+    return [(c - hb, y, zl), (c + hb, y, zl), (c + ht, y, zl + z), (c - ht, y, zl + z)]
 
 
-def _section(y, x0, x1, z):
-    """Cross-section ring at y: bottom edge, then the top edge pulled in by the wall slope."""
-    k = CAP_TAPER * (x1 - x0) / 2 * min(1.0, z / CAP_HT)
-    zl = CAP_LIFT
-    return [(x0, y, zl), (x1, y, zl), (x1 - k, y, zl + z), (x0 + k, y, zl + z)]
+def _frac(z):
+    return 1.0 - CAP_TAPER * z / CAP_HT
 
 
 def fader_cap(m, key):
-    """Drawbar cap, lofted from back to front: rounded back chamfer, long flat top, a slope that
-    narrows into a lower nose shifted left, then the front skirt at the foot (shadowed by the
-    nose). `key` picks cap_black / cap_white."""
-    ht, hn, hs = CAP_HT, CAP_HN, CAP_HS
-    half = CAP_W / 2
-    nx0, nx1 = NOSE_X
-    sections = [
-        (CAP_BACK, -half, half, ht - 0.12),
-        (CAP_BACK - 0.20, -half, half, ht),
-        (-0.10, -half, half, ht),
-        (-0.38, nx0, nx1, hn),
-        (-0.66, nx0, nx1, hn),
-        (-0.74, nx0, nx1, 0.06),
+    """Drawbar cap: flange, tall rear block with sloped sides and front, long lower nose with
+    a chamfered front, lofted from back to front. `key` picks the material."""
+    ht, hn = CAP_HT, CAP_HN
+    w = (-CAP_W / 2, CAP_W / 2)
+    secs = [
+        (CAP_BACK, ht * 0.86, *w),
+        (CAP_BACK - 0.08, ht, *w),
+        (BLOCK_TOP_FRONT, ht, *w),
+        (BLOCK_FRONT, hn, *NOSE_X),
+        (NOSE_TOP_FRONT, hn, *NOSE_X),
+        (CAP_FRONT, NOSE_CHAMFER_Z, *NOSE_X),
     ]
-    body = loft(
-        "cap_body",
-        [_section(*s) for s in sections],
+    rings = [_section(y, z, _frac(z), x0, x1) for y, z, x0, x1 in secs]
+    body = loft("cap_body", rings, m[key], smooth=False, bevel=CAP_BEVEL, segments=8)
+    # the nose sits on a low full-width foot that ends with the nose (seen right of the nose)
+    foot = loft(
+        "cap_foot",
+        [_section(y, FOOT_H, 0.97) for y in (BLOCK_FRONT + 0.1, CAP_FRONT)],
         m[key],
         smooth=False,
-        bevel=CAP_BEVEL,
-        segments=8,
+        bevel=0.02,
+        segments=3,
     )
-    skirt = _extrude_profile(
-        "cap_skirt",
-        # EMPIRICAL: the lower body runs full width under and right of the nose down to the
-        # front (silhouette fit on the reference)
-        [(-0.08, 0.0), (-0.08, SKIRT_H), (CAP_FRONT + 0.03, SKIRT_H), (CAP_FRONT, 0.0)],
-        -half,
-        half,
-        m[key],
-        hs,
-    )
-    return [body, skirt]
+    return [body, foot]
 
 
 def layer_cap(m, key):
-    """Short layer-fader cap: a small back chamfer, a short flat top and a long front slope (the
-    reference shows the slope as the largest face)."""
-    ht, y0, y1 = LAYER_H, -LAYER_L / 2, LAYER_L / 2
-    prof = [(y1, 0.0), (y1, ht - 0.08), (y1 - 0.08, ht), (0.05, ht), (y0 + 0.03, 0.10), (y0, 0.0)]
-    return [_extrude_profile("layer_cap", prof, -LAYER_W / 2, LAYER_W / 2, m[key], ht, LAYER_BEVEL)]
+    """Layer-fader cap: rounded frustum, top smaller than the base on all four sides."""
+    w, ln, h = LAYER_W / 2, LAYER_L / 2, LAYER_H
+    tw, tl = w * LAYER_TOP[0], ln * LAYER_TOP[1]
+    rings = [
+        [(-w, -ln, CAP_LIFT), (w, -ln, CAP_LIFT), (w, ln, CAP_LIFT), (-w, ln, CAP_LIFT)],
+        [
+            (-tw, -tl, CAP_LIFT + h),
+            (tw, -tl, CAP_LIFT + h),
+            (tw, tl, CAP_LIFT + h),
+            (-tw, tl, CAP_LIFT + h),
+        ],
+    ]
+    return [loft("layer_cap", rings, m[key], smooth=False, bevel=LAYER_BEVEL, segments=6)]
 
 
 def plate_slot(m):

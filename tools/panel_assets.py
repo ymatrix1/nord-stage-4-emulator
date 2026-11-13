@@ -53,7 +53,7 @@ LEAN = {
     # optical axis is above that knob (the reference is cropped off-centre vertically).
     "knob_master": (6.57, 1.0),
     "knob_drive": (6.57, 1.4),
-    "drawbar": (1.3, 2.97),
+    "drawbar": (1.3, 5.3),  # EMPIRICAL: between the 16' and 8' caps, axis above centre
     "layer": (5.29, -2.73),
     "button": (6.59, 0.70),
     "plate": (0.0, 0.0),
