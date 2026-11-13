@@ -8,6 +8,8 @@ use std::f32::consts::TAU;
 mod amp_eq;
 mod biquad;
 mod delay;
+mod fw_coeffs;
+mod master_iir;
 mod modulation;
 mod reverb;
 #[cfg(test)]
@@ -17,6 +19,8 @@ mod tables;
 mod tests_biquad_golden;
 #[cfg(test)]
 mod tests_chain;
+#[cfg(test)]
+mod tests_master_golden;
 #[cfg(test)]
 mod tests_delay;
 mod types;
@@ -73,6 +77,9 @@ pub struct LayerFxChain {
     pub amp_cabinet: AmpCabinet,
     /// `Type II` / `Very Small Speaker` variation flag (stored; not yet modelled, ASSUMED no DSP difference).
     pub amp_variation: bool,
+    /// Use the firmware biquad sets of the ARM Amp type switch where a mode is mapped to one
+    /// (`fw_coeffs::amp_fw_case_for`, ASSUMED: `Small Speaker` only). Default `false`: RBJ voicing.
+    pub amp_fw_coeffs: bool,
     /// Resonance (`0.0..=10.0`) of the `LP24` / `HP24` modes (replaces the Mid gain knob).
     pub eq_filter_res: f32,
     pub drive_amount: f32,
@@ -160,6 +167,7 @@ impl LayerFxChain {
             mod2_amount: 0.35,
             amp_cabinet: AmpCabinet::Off,
             amp_variation: false,
+            amp_fw_coeffs: false,
             eq_filter_res: 0.0,
             drive_amount: 0.0,
             eq_bass_db: 0.0,
@@ -283,6 +291,10 @@ impl LayerFxChain {
 #[derive(Debug, Clone, Copy)]
 pub struct MasterBus {
     pub compressor_amount: f32,
+    /// Run the summed bus through the firmware 4-section master IIR before the compressor
+    /// (`fw_coeffs::MASTER_IIR_WORDS`). Default `false`; the position in the chain is ASSUMED.
+    pub master_iir_enabled: bool,
+    iir: master_iir::MasterIir,
     env: f32,
     recon_lp_l: f32,
     recon_lp_r: f32,
@@ -292,6 +304,8 @@ impl Default for MasterBus {
     fn default() -> Self {
         Self {
             compressor_amount: 0.25,
+            master_iir_enabled: false,
+            iir: master_iir::MasterIir::new(),
             env: 0.0,
             recon_lp_l: 0.0,
             recon_lp_r: 0.0,
@@ -302,7 +316,11 @@ impl Default for MasterBus {
 impl MasterBus {
     /// Processes the summed 7-layer stereo signal through the Master Compressor and DAC stage.
     pub fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
-        let [l, r] = frame;
+        let [l, r] = if self.master_iir_enabled {
+            self.iir.process_frame(frame)
+        } else {
+            frame
+        };
         let peak = l.abs().max(r.abs());
         self.env = 0.99 * self.env + 0.01 * peak;
 

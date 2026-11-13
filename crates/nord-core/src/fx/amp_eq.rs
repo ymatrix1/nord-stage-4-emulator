@@ -1,5 +1,6 @@
 //! Amp / cabinet, drive, EQ and compressor stage of the per-layer FX chain.
 
+use super::fw_coeffs::{amp_fw_case_for, amp_fw_sets};
 use super::*;
 
 impl LayerFxChain {
@@ -17,10 +18,26 @@ impl LayerFxChain {
         // = reduced treble and a different mid; Small = Wurlitzer 200A internal speaker, variation = an even
         // smaller amp/speaker. ASSUMED: every Hz and dB value below (no firmware source; one-clip checks only,
         // see docs/research/hardware-audio-reference-fx.md).
-        let cab = matches!(
-            self.amp_cabinet,
-            AmpCabinet::Small | AmpCabinet::Jc | AmpCabinet::Twin
-        );
+        // Optional firmware path: the two cascaded biquad sets of the ARM Amp type switch replace the
+        // RBJ voicing for the modes `fw_coeffs::amp_fw_case_for` maps (default off, output unchanged).
+        let fw = if self.amp_fw_coeffs {
+            amp_fw_case_for(self.amp_cabinet, self.amp_variation).and_then(amp_fw_sets)
+        } else {
+            None
+        };
+        if let Some([s1, s2]) = fw {
+            self.cab_hp.c = s1;
+            self.cab_lp.c = s2;
+            for (ch, sig) in [&mut l, &mut r].into_iter().enumerate() {
+                let x = self.cab_hp.process(ch, *sig);
+                *sig = self.cab_lp.process(ch, x);
+            }
+        }
+        let cab = fw.is_none()
+            && matches!(
+                self.amp_cabinet,
+                AmpCabinet::Small | AmpCabinet::Jc | AmpCabinet::Twin
+            );
         if cab {
             let key = (self.amp_cabinet, self.amp_variation);
             if self.cab_cache != Some(key) {
@@ -177,5 +194,24 @@ mod tests {
             let [l, r] = fx.process_amp_eq_comp(x, -x, 1.0 / 48_000.0);
             assert!(l.is_finite() && r.is_finite());
         }
+    }
+
+    #[test]
+    fn firmware_amp_sets_are_opt_in_and_only_voice_small_speaker() {
+        use crate::fx::support::{cab_chain, tone_gain_db};
+        let mut rbj = cab_chain(AmpCabinet::Small, false);
+        let mut fw = cab_chain(AmpCabinet::Small, false);
+        fw.amp_fw_coeffs = true;
+        let (a, b) = (tone_gain_db(&mut rbj, 1000.0), tone_gain_db(&mut fw, 1000.0));
+        assert!((a - b).abs() > 0.2, "firmware set must differ from RBJ: {a} vs {b}");
+        // case 5: high pass then low pass, band limited (see fw_coeffs tests for the exact shape)
+        let lo = tone_gain_db(&mut fw, 60.0);
+        let hi = tone_gain_db(&mut fw, 18_000.0);
+        assert!(lo < b - 15.0 && hi < b - 25.0, "lo {lo} mid {b} hi {hi}");
+        // unmapped modes ignore the flag
+        let mut twin = cab_chain(AmpCabinet::Twin, false);
+        let mut twin_fw = cab_chain(AmpCabinet::Twin, false);
+        twin_fw.amp_fw_coeffs = true;
+        assert_eq!(tone_gain_db(&mut twin, 3000.0), tone_gain_db(&mut twin_fw, 3000.0));
     }
 }

@@ -249,11 +249,50 @@ def golden_vectors() -> dict[str, list[int]]:
     }
 
 
-def golden_rust() -> str:
-    """`golden_vectors` as Rust `const` arrays of `u32` words."""
+#: Master IIR (PM 0x945F2..0x94605): 4 sets of `b0 b1 b2 a1 a2` float32 words, read from the FX
+#: Core2 flat SRAM image (`python tools/fx_dm_tables.py` style dump, identical on Core1).
+MASTER_WORDS = (
+    (0x3F0570C0, 0x3E8659B2, 0x3F0570C0, 0xBE3FF6D3, 0x3F414CF5),
+    (0x3F27B1AA, 0x3F05CCF3, 0x3F27B1AA, 0xBD44728B, 0x3ECC3FA1),
+    (0x3EF6EF68, 0x3F277272, 0x3EF6EF68, 0x3DD7E720, 0x3E223B71),
+    (0x3E5FF7D4, 0x3ED59E20, 0x3E5FF7D4, 0x3E54046B, 0x3CEE34FC),
+)
+MASTER_BLOCKS = 8
+
+
+def master_golden_vectors() -> dict[str, list[int]]:
+    """Reference model of the 4-section master IIR: the sets in order, blocks of FRAMES frames,
+    states zero, the same input as `golden_vectors`. Each section reads and writes memory words
+    (`store32`) like one stage of `0x120FDB` (the master IIR's own store points are ASSUMED)."""
+    frames = [
+        (
+            Fraction((37 * n + 11) % 64, 64) - Fraction(1, 2),
+            Fraction((53 * n + 5) % 61, 64) - Fraction(1, 2),
+        )
+        for n in range(MASTER_BLOCKS * FRAMES)
+    ]
+    sets = [tuple(from_bits(w) for w in ws) for ws in MASTER_WORDS]
+    states = [[Fraction(0)] * 4 for _ in sets]
+    out: list[tuple[Fraction, Fraction]] = []
+    for b in range(MASTER_BLOCKS):
+        blk = frames[b * FRAMES : (b + 1) * FRAMES]
+        for coef, st in zip(sets, states):
+            blk = reference_cascade(blk, coef, st)
+        out += blk
+    return {
+        "left": [word(o[0]) for o in out],
+        "right": [word(o[1]) for o in out],
+        "states": [word(v) for st in states for v in st],
+    }
+
+
+def golden_rust(master: bool = False) -> str:
+    """`golden_vectors` (or `master_golden_vectors`) as Rust `const` arrays of `u32` words."""
     lines = []
-    for name, words in golden_vectors().items():
-        lines.append(f"pub(super) const GOLDEN_{name.upper()}: [u32; {len(words)}] = [")
+    vectors = master_golden_vectors() if master else golden_vectors()
+    prefix = "MASTER_" if master else ""
+    for name, words in vectors.items():
+        lines.append(f"pub(super) const {prefix}GOLDEN_{name.upper()}: [u32; {len(words)}] = [")
         lines += [
             "    " + ", ".join(f"{w:#010x}" for w in words[i : i + 6]) + ","
             for i in range(0, len(words), 6)
@@ -269,9 +308,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--bin", help="path of sharc-fx (default target/release)")
     p.add_argument("--golden", action="store_true", help="print golden vectors as Rust, no image")
+    p.add_argument(
+        "--golden-master", action="store_true", help="print the master IIR golden vectors as Rust"
+    )
     args = p.parse_args(argv)
-    if args.golden:
-        print(golden_rust())
+    if args.golden or args.golden_master:
+        print(golden_rust(master=args.golden_master))
         return 0
     if not args.image:
         p.error("image is required unless --golden is given")
