@@ -146,3 +146,20 @@ fn disabled_extern_or_off_channel_is_quiet() {
     assert!(drain(&mut e).is_empty());
     e.extern_all_notes_off(1);
 }
+
+#[test]
+fn extern_note_off_matches_sent_pitch_after_transpose_changes() {
+    let mut e = engine();
+    e.set_transpose(2);
+    e.extern_out.layers[0].octave_shift = 1;
+    note(&mut e, true, 60);
+    e.set_transpose(-3);
+    note(&mut e, false, 60);
+    let out = drain(&mut e);
+    assert_eq!(
+        out[0],
+        MidiOut::note_on(12, 74, 90),
+        "transpose then octave shift"
+    );
+    assert_eq!(out[1], MidiOut::note_off(12, 74));
+}

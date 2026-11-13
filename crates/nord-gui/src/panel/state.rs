@@ -5,6 +5,13 @@ use super::render_stage4_panel;
 
 /// Complete Nord Stage 4 interactive front-panel GUI state.
 pub struct Stage4PanelState {
+    // Per-area UI-only state (see `ui_state/`), one file per area.
+    pub organ_ui: super::ui_state::OrganUi,
+    pub piano_ui: super::ui_state::PianoUi,
+    pub synth_ui: super::ui_state::SynthUi,
+    pub fx_ui: super::ui_state::FxUi,
+    pub program_ui: super::ui_state::ProgramUi,
+
     // Master & Controllers (Bay 1)
     pub master_volume: f32,
     pub pitch_stick: f32,
@@ -99,6 +106,11 @@ pub struct Stage4PanelState {
 impl Default for Stage4PanelState {
     fn default() -> Self {
         Self {
+            organ_ui: Default::default(),
+            piano_ui: Default::default(),
+            synth_ui: Default::default(),
+            fx_ui: Default::default(),
+            program_ui: Default::default(),
             master_volume: 0.85,
             pitch_stick: 0.0,
             mod_wheel: 0.0,

@@ -65,3 +65,22 @@ v_{\text{effective}}(p) = \operatorname{clamp}\left(v_{\text{base}}(p) + m_{\tex
 $$
 
 All 3 physical sources sum additively and clamp cleanly to $[0.0, 1.0]$, matching the exact hardware behavior when moving the Mod Wheel and Control Pedal simultaneously.
+
+## 5. Program-area performance functions (Phase 6b B9d part 1, `ns4-ymci`)
+
+Engine code: `crates/nord-core/src/engine/{program_ops,snapshot,undo,layer_init,section_edit,clipboard,morph_clip,live_slots,fx_params}.rs`. Manual OS v1.6x p.40-46. All methods below that allocate (snapshots, clones) are control-thread only; `process_block` / `render_frame` only read `transpose` and `program_gain`.
+
+| Function | Engine API | Behaviour |
+|---|---|---|
+| Transpose (p.40) | `set_transpose(-6..=6)` | Shifts every layer, including direct-channel layers. A key releases at the pitch it started with (`held_transpose`). Notes leaving 0..127 are dropped. Split routing uses the physical key. |
+| Panic (p.40) | `panic()` | Note-off on every held note and layer, pedals up, Morph controllers reset. |
+| Program Levels (p.46) | `set_program_level_db(db)` | Linear gain `10^(dB/20)` multiplied onto every layer level; `0 dB` is exactly `1.0`, so renders are bit-identical. Range +/-12 dB is `ASSUMED` (manual shows `-3.5 dB`, no limits). |
+| Layer Init (p.43) | `layer_init(LayerInitTarget)` | `All`: every layer, FX, level and cutoff morph to defaults, only Piano A active (both scenes), splits default, transpose 0, level 0 dB. `OrganAb`: both organs to default (B3, Rotary on), FX off, Organ A on and B off in both scenes. `PianoA/B`: default panel, loaded sound kept (`ASSUMED`). `SynthA/B/C`: default waveform, loaded sample dropped. Undoable. |
+| Section Edit (p.43) | `section_edit_{organ,piano,synth,fx}(src, get, set)` | Copies one setting of `src` to its section siblings. The panel layer calls it while SECTION EDIT is held. |
+| Copy / Paste / Swap (p.43-44) | `copy_{layer,fx,morph,program}`, `paste_*`, `swap_layers` | Clipboard `engine.clipboard` survives program changes. Layer paste and swap only within a section. A layer clip holds the layer panel (notes released), FX parameters, level and (synth) cutoff morph. Morph clip holds the depth of one source for 7 levels, 3 cutoffs and 9 morph slots per FX chain, and can be pasted into another source. |
+| Undo (p.43) | `begin_undoable(op)`, `undo()`, `undo_available()`, `discard_undo()` | Single level. Snapshot (`ProgramState`) taken before the operation; undo restores it, including edits made afterwards (manual wording). No redo. `layer_init`, `paste_*`, `swap_layers`, `clear_morph`, `live_recall` begin an undo themselves; the host calls `begin_undoable` for Preset load, Group functions and All FX Off. |
+| Live Mode (p.44) | `LiveSlots` (8 slots), `live_auto_store`, `live_recall` | Data model only. `nord_panel::behaviour::LiveMode` returns the slot to save; the lead wires it to `live_auto_store`. Slot swap/copy/paste supported (Organize). |
+
+`ProgramState` stores layers plus `FxParams` (panel parameters of an FX chain without delay/reverb buffers), scene masks, split router, levels, cutoff morph, transpose, program level, tempo and master compressor. Not stored: Master bus, MIDI channels, held notes.
+
+Not implemented: copying a single effect unit (Mod 1, Amp, Delay, ...) instead of the whole chain; Undo redo; persisting Live slots to the `.ns4b` format; Solo (not stored in programs, p.42).

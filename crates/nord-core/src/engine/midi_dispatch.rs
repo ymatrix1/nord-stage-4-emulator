@@ -19,6 +19,9 @@ impl Stage4Engine {
         match event {
             MidiEvent::NoteOn { note, velocity, .. } => {
                 let channel_idx = channel as usize;
+                let Some(sounding) = self.transposed_note(note) else {
+                    return;
+                };
                 let mut recipients = 0u8;
                 for layer in LayerId::ALL {
                     if !self.scene.is_layer_active(layer) {
@@ -41,8 +44,11 @@ impl Stage4Engine {
                         velocity
                     };
                     recipients |= 1 << (layer as u8);
-                    self.clear_held(layer, note);
-                    self.layer_note_on(layer, note, velocity, split_gain);
+                    self.clear_held(layer, sounding);
+                    self.layer_note_on(layer, sounding, velocity, split_gain);
+                }
+                if recipients != 0 {
+                    self.held_transpose[channel_idx][note as usize] = self.transpose;
                 }
                 for layer in LayerId::ALL {
                     if recipients & (1 << (layer as u8)) != 0 {
@@ -66,7 +72,8 @@ impl Stage4Engine {
                         .iter()
                         .any(|counts| counts[note as usize][layer as usize] > 0);
                     if !held_on_any_channel {
-                        self.release_or_hold(layer, note);
+                        let sounding = self.sounding_note(channel_idx, note);
+                        self.release_or_hold(layer, sounding);
                     }
                 }
             }
@@ -140,7 +147,7 @@ impl Stage4Engine {
         }
     }
 
-    fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
+    pub(super) fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
         if let Some(i) = self.extern_index(layer) {
             // Crossfade gain scales the transmitted velocity; exactly 1.0 outside crossfades.
             let v = (f32::from(velocity) * gain).round().clamp(1.0, 127.0) as u8;

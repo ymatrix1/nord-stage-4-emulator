@@ -90,6 +90,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "synthx", group = "Synth Layers")]
     pub synth_layers: crate::synth_params::SynthLayerBank,
 
+    /// Per-program Transpose and Program Levels.
+    #[nested(id_prefix = "prog", group = "Program")]
+    pub program: crate::program_params::ProgramParams,
+
     /// Per-layer Synth LFO, Arpeggiator and Vibrato.
     #[nested(id_prefix = "synthm", group = "Synth Mod")]
     pub synth_mod: crate::synth_mod_params::SynthModBank,
@@ -343,6 +347,7 @@ impl Default for Stage4Params {
             layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank::default(),
             piano_layers: crate::piano_params::PianoLayerBank::default(),
             synth_layers: crate::synth_params::SynthLayerBank::default(),
+            program: crate::program_params::ProgramParams::default(),
             synth_mod: crate::synth_mod_params::SynthModBank::default(),
             pedals: crate::aux_pedal_params::PedalBank::default(),
             aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
@@ -615,6 +620,7 @@ impl Stage4Params {
         self.layer_fx_selectors.sync_to_engine(engine);
         self.piano_layers.sync_to_engine(engine);
         self.synth_layers.sync_to_engine(engine);
+        self.program.sync_to_engine(engine);
         self.synth_mod.sync_to_engine(engine);
         self.aux_kb.sync_to_engine(engine);
         self.pedals.sync_to_engine(engine);
