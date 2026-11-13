@@ -22,24 +22,25 @@ BLOCK_TOP_FRONT = 0.02  # top edge of that face
 NOSE_TOP_FRONT = -0.62  # front edge of the nose top
 # EMPIRICAL (reference, every drawbar): the nose top face spans this, left of centre; its
 # right wall slopes down to the full-width base
-NOSE_TOP_X = (-0.39, 0.12)
+NOSE_TOP_X = (-0.43, 0.12)
+NOSE_LEFT = -0.45  # EMPIRICAL: the nose base sticks out left of the block (silhouette fit)
 BASE_H = 0.10  # EMPIRICAL: low base band seen in front of the nose (reference)
 CAP_TAPER = 0.12  # EMPIRICAL: block top is about 0.88 of its base width (photo, front view)
 CAP_BEVEL = 0.09
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
 # Layer-fader cap EMPIRICAL from its photo: a frustum, top smaller than the base on all sides,
 # rounded edges. Base 96 x 74 reference px.
-LAYER_W, LAYER_L, LAYER_H = 0.74, 0.58, 0.36
+LAYER_W, LAYER_L, LAYER_H = 0.74, 0.61, 0.36
 LAYER_TOP = (0.82, 0.50)  # top width / length as a fraction of the base
 LAYER_BEVEL = 0.07
 # EMPIRICAL: slot is about 22 px wide on the reference, 0.22 of the cap width.
 SLOT_W, SLOT_LEN, SLOT_DEPTH, PLATE_T = 0.17, 3.4, 0.16, 0.2
 
 
-def _section(y, z, top_x):
-    """Cross-section at y: full cap width at the bottom, the top edge between `top_x`."""
+def _section(y, z, top_x, left=-CAP_W / 2):
+    """Cross-section at y: bottom from `left` to the right edge, top edge between `top_x`."""
     hb, zl = CAP_W / 2, CAP_LIFT
-    return [(-hb, y, zl), (hb, y, zl), (top_x[1], y, zl + z), (top_x[0], y, zl + z)]
+    return [(left, y, zl), (hb, y, zl), (top_x[1], y, zl + z), (top_x[0], y, zl + z)]
 
 
 def fader_cap(m, key):
@@ -53,12 +54,12 @@ def fader_cap(m, key):
         (CAP_BACK, ht * 0.86, blk),
         (CAP_BACK - 0.08, ht, blk),
         (BLOCK_TOP_FRONT, ht, blk),
-        (BLOCK_FRONT, hn, NOSE_TOP_X),
-        (NOSE_TOP_FRONT, hn, NOSE_TOP_X),
-        (NOSE_TOP_FRONT - 0.05, BASE_H, base),  # nose front drops onto the low base
-        (CAP_FRONT, BASE_H, base),
+        (BLOCK_FRONT, hn, NOSE_TOP_X, NOSE_LEFT),
+        (NOSE_TOP_FRONT, hn, NOSE_TOP_X, NOSE_LEFT),
+        (NOSE_TOP_FRONT - 0.05, BASE_H, base, NOSE_LEFT),  # nose front drops onto the base
+        (CAP_FRONT, BASE_H, base, NOSE_LEFT),
     ]
-    rings = [_section(y, z, tx) for y, z, tx in secs]
+    rings = [_section(y, z, tx, *lx) for y, z, tx, *lx in secs]
     return [loft("cap_body", rings, m[key], smooth=False, bevel=CAP_BEVEL, segments=8)]
 
 

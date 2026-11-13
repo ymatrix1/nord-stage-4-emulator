@@ -93,20 +93,25 @@ def render_ref_knobs(out: Path, scale: int) -> None:
 
 
 CAPS = {
-    "drawbar_cap_black": ("drawbar_shadow_black", C.fader_cap, "cap_black", "drawbar"),
-    "drawbar_cap_white": ("drawbar_shadow_white", C.fader_cap, "cap_white", "drawbar"),
-    "layer_cap_grey": ("layer_shadow_grey", C.layer_cap, "cap_grey", "layer"),
+    "drawbar_cap_black": ("drawbar_shadow_black", C.fader_cap),
+    "drawbar_cap_white": ("drawbar_shadow_white", C.fader_cap),
+    "layer_cap_grey": ("layer_shadow_grey", C.layer_cap),
 }
 
 
 def render_caps(out: Path, scale: int) -> None:
-    """Caps as real parts: one geometry per part (both drawbar colours share it, same camera),
-    shaded with the calibrated materials, then the cap's shadow from the same geometry."""
-    for name, (shadow, make, mat, lean) in CAPS.items():
-        m = fresh(scale, name, lean)
-        make(m, mat)
+    """Caps as real parts: one geometry per part (both drawbar colours share it), seen from
+    the camera where that cap sits on the reference (`LEAN[<cap>]`), coloured by the
+    reference crop projected from that camera (D17, `proj_<cap>.png` from panel_refbake), so
+    the outline comes from the geometry and the colour exactly from the reference. Then the
+    cap's shadow from the same geometry."""
+    for name, (shadow, make) in CAPS.items():
+        fresh(scale, name, name)
+        make({"proj": M.projected(f"proj_{name}", P.RAW_DIR / f"proj_{name}.png")}, "proj")
+        cy = bpy.context.scene.cycles
+        cy.use_denoising, cy.samples = False, 64  # unlit texture: no noise, keep it sharp
         S.render(out / f"{name}_{scale}x.png")
-        m = fresh(scale, shadow, lean)
+        m = fresh(scale, shadow, name)
         S.flags(C.plate_slot(M.catcher_mats()), catcher=True)
         S.flags(make(m, "cap_black"), holdout=True)
         S.render(out / f"{shadow}_{scale}x.png")
