@@ -5,19 +5,22 @@
 //! collects 4 frames, processes them and releases them one block later: **latency 4 frames
 //! (83 us at 48 kHz)**, the first 4 output frames are silence. Allocation free and `Copy`.
 //!
-//! The stage is the drive and voicing half of the firmware amp: two biquad sections around a
-//! differentiating high-pass, a drive-dependent waveshaper mix and the output high-pass. The
-//! **cabinet** (FIR and biquad bank of module `0xC0442A94`, routines `0x122A1D / 0x122B1D`) and the
-//! organ unit's tone routines are not modelled (`docs/research/fx-type-map.md` s8).
+//! The stage is the drive and voicing half of the firmware amp (two biquad sections around a
+//! differentiating high-pass, a drive-dependent waveshaper mix and the output high-pass) followed
+//! by the **cabinet** ([`super::fw_cabinet`], measured impulse response of `0x122A1D`, no extra
+//! latency). The organ unit's tone routines are not modelled (`docs/research/fx-type-map.md` s8,
+//! s10).
 
 use super::fw_amp_drive::{DriveTables, FwAmpDrive};
 use super::fw_amp_types::context_words;
+use super::fw_cabinet::FwCabinet;
 use super::fw_drive_tables::{A, B, C, C_CENTER};
 
 /// Amp drive stage plus the 4-frame buffers.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct FwAmpStage {
     drive: FwAmpDrive,
+    cabinet: FwCabinet,
     kind: u8,
     drive_ui: f32,
     input: [[f32; 2]; 4],
@@ -31,6 +34,7 @@ impl FwAmpStage {
     pub(super) fn new(kind: u8, drive_ui: f32) -> Option<Self> {
         Some(Self {
             drive: FwAmpDrive::from_words(context_words(kind, drive_ui)?),
+            cabinet: FwCabinet::new(kind)?,
             kind,
             drive_ui,
             input: [[0.0; 2]; 4],
@@ -70,7 +74,7 @@ impl FwAmpStage {
             self.drive.process(&tables, &mut block);
             self.output = std::array::from_fn(|k| [block[2 * k], block[2 * k + 1]]);
         }
-        out
+        self.cabinet.process_frame(out)
     }
 }
 
@@ -146,6 +150,37 @@ mod tests {
             twin.iter().any(|w| *w != 0) && jc != twin,
             "the vectors are not trivially silent or equal"
         );
+    }
+
+    #[test]
+    fn drive_plus_cabinet_matches_the_oracle_chain_on_broadband_input() {
+        use super::super::tests_cabinet_golden::CHAIN_OUT;
+        // The seeded LCG of `tools/fx_amp_cabinet.py::chain_input`.
+        let mut state: u32 = 12345;
+        let mut input = Vec::new();
+        for _ in 0..CHAIN_OUT.len() {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            input.push((f64::from(state >> 8) / f64::from(1u32 << 24) - 0.5) as f32 * 0.2);
+        }
+        let mut stage = FwAmpStage::new(1, 14.0).unwrap();
+        let tables = DriveTables {
+            a: &A,
+            b: &B,
+            c: &C,
+            c_center: C_CENTER,
+        };
+        let mut got = Vec::new();
+        for block in input.as_chunks::<8>().0 {
+            let mut frames = *block;
+            stage.drive.process(&tables, &mut frames);
+            for pair in frames.as_chunks::<2>().0 {
+                let y = stage.cabinet.process_frame(*pair);
+                got.extend(y.map(f32::to_bits));
+            }
+        }
+        let want = &CHAIN_OUT[..got.len()];
+        let e = worst_error(&got, want);
+        assert!(e < 2.0e-3, "drive + cabinet differs by {e:e} of the peak");
     }
 
     #[test]

@@ -70,3 +70,19 @@ fn switching_the_type_or_the_switch_rebuilds_or_drops_the_stage() {
     let _ = render(&mut fx, 4);
     assert!(fx.fw_amp.is_none());
 }
+
+#[test]
+fn the_default_chain_runs_the_firmware_amp() {
+    let mut fx = LayerFxChain::new(48_000.0);
+    fx.reverb_model = ReverbModel::Off;
+    fx.amp_cabinet = AmpCabinet::Twin;
+    assert_eq!(fx.firmware_fx, FirmwareFx::DEFAULT);
+    let _ = render(&mut fx, 50);
+    assert_eq!(fx.fw_amp.map(|s| s.kind()), Some(1));
+    fx.firmware_fx.amp = false;
+    let _ = render(&mut fx, 50);
+    assert!(
+        fx.fw_amp.is_none(),
+        "--amp-path engine restores the engine path"
+    );
+}

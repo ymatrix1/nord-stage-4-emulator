@@ -13,6 +13,8 @@ mod fw_allpass;
 mod fw_amp_drive;
 mod fw_amp_stage;
 mod fw_amp_types;
+mod fw_cabinet;
+mod fw_cabinet_taps;
 mod fw_coeffs;
 mod fw_compressor;
 mod fw_delay;
@@ -39,6 +41,8 @@ mod tests_allpass_golden;
 mod tests_amp_golden;
 #[cfg(test)]
 mod tests_biquad_golden;
+#[cfg(test)]
+mod tests_cabinet_golden;
 #[cfg(test)]
 mod tests_chain;
 #[cfg(test)]
@@ -258,7 +262,7 @@ impl LayerFxChain {
             reverb_color: ReverbColor::Normal,
             reverb_mix: 0.15,
             morph: FxMorphSet::default(),
-            firmware_fx: FirmwareFx::OFF,
+            firmware_fx: FirmwareFx::DEFAULT,
             delay_rate_raw: None,
             fw_comp: None,
             fw_amp: None,

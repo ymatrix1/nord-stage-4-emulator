@@ -75,6 +75,7 @@ pub(super) fn cab_chain(mode: AmpCabinet, var: bool) -> LayerFxChain {
     fx.reverb_model = ReverbModel::Off;
     fx.amp_cabinet = mode;
     fx.amp_variation = var;
+    fx.firmware_fx = FirmwareFx::OFF; // these helpers test the engine cabinet
     fx
 }
 
