@@ -1,5 +1,8 @@
-//! Firmware nonlinear resonant filter pair (FX routines `0x1243F4` and `0x124497`) as opt-in
-//! stages: a state-variable section whose integrator is clipped in the feedback path, one-pole
+//! Firmware Amp **tone stack** pair (FX routines `0x1243F4` and `0x124497`, module
+//! `0xC04438D8#2`, piano and synth units) as opt-in stages. Formerly called the "resonant filter":
+//! role correction of `docs/research/fx-contexts.md` s5.3 (treble `F`/`E`, bass `A`/`a` and mid
+//! words are written by `kAmpTreble`, `kAmpBass`, `kAmpMid`; fills in `fw_params::set_tone_stack`).
+//! Structure: a state-variable section whose integrator is clipped in the feedback path, one-pole
 //! shelves and parameter smoothers, left and right channel running the same recurrence.
 //!
 //! VERIFIED: `tools/fx_model_resonant.py` and `tools/fx_model_resonant4.py` reproduce both routines
@@ -88,13 +91,13 @@ macro_rules! words_api {
 /// `u += a (x - u); s = x + A u; z += B w; w = clip(w + B ((s + x_prev) / 2 - z - C w), L);
 /// y = s + D w; r = G y; d = r - q; out = y + F d; q = r + E d`.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FwResonant2 {
+pub struct FwToneStack2 {
     ctx: Words<CTX_WORDS>,
 }
 
-words_api!(FwResonant2);
+words_api!(FwToneStack2);
 
-impl FwResonant2 {
+impl FwToneStack2 {
     /// Processes one call in place: `frames = [l0, r0, l1, r1]`.
     pub fn process(&mut self, frames: &mut [f32; 4]) {
         let c = &mut self.ctx;
@@ -151,13 +154,13 @@ impl FwResonant2 {
 /// one-pole smoother of the section output and a feed-forward output; the parameters are smoothed
 /// after the frames.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FwResonant4 {
+pub struct FwToneStack4 {
     ctx: Words<CTX_WORDS>,
 }
 
-words_api!(FwResonant4);
+words_api!(FwToneStack4);
 
-impl FwResonant4 {
+impl FwToneStack4 {
     /// Processes one call in place: `frames = [l0, r0, l1, r1, l2, r2, l3, r3]`.
     pub fn process(&mut self, frames: &mut [f32; 8]) {
         let c = &mut self.ctx;
@@ -237,7 +240,7 @@ mod tests {
 
     #[test]
     fn two_frame_routine_matches_the_firmware_model() {
-        let f = std::cell::RefCell::new(FwResonant2::from_words(g::RES2_CTX_IN));
+        let f = std::cell::RefCell::new(FwToneStack2::from_words(g::RES2_CTX_IN));
         golden(
             |b| f.borrow_mut().process(b),
             &g::RES2_FRAMES_IN,
@@ -249,7 +252,7 @@ mod tests {
 
     #[test]
     fn four_frame_routine_matches_the_firmware_model() {
-        let f = std::cell::RefCell::new(FwResonant4::from_words(g::RES4_CTX_IN));
+        let f = std::cell::RefCell::new(FwToneStack4::from_words(g::RES4_CTX_IN));
         golden(
             |b| f.borrow_mut().process(b),
             &g::RES4_FRAMES_IN,
@@ -268,11 +271,11 @@ mod tests {
 
     #[test]
     fn zero_context_passes_the_input_through() {
-        let mut a = FwResonant2::default();
+        let mut a = FwToneStack2::default();
         let mut f = [0.5, -0.25, 1.0, 0.125];
         a.process(&mut f);
         assert_eq!(f, [0.5, -0.25, 1.0, 0.125]);
-        let mut b = FwResonant4::default();
+        let mut b = FwToneStack4::default();
         let mut g = [0.5, -0.25, 1.0, 0.125, 0.0, 2.0, -1.0, 3.0];
         b.process(&mut g);
         assert_eq!(g, [0.5, -0.25, 1.0, 0.125, 0.0, 2.0, -1.0, 3.0]);
@@ -280,14 +283,14 @@ mod tests {
 
     #[test]
     fn parameters_move_toward_their_targets_by_one_pole_steps() {
-        let mut a = FwResonant2::default();
+        let mut a = FwToneStack2::default();
         a.set_value(ctx::SMOOTH, 0.5);
         a.set_value(-0x20, 1.0); // target of A, state 0
         a.process(&mut [0.0; 4]);
         assert_eq!(a.value(-0x1E), 0.5, "A = target + k (state - target)");
         a.process(&mut [0.0; 4]);
         assert_eq!(a.value(-0x1E), 0.75);
-        let mut b = FwResonant4::default();
+        let mut b = FwToneStack4::default();
         b.set_value(ctx::SMOOTH, 0.5);
         b.set_value(-0x20, 1.0);
         b.set_value(ctx::LIMIT, 2.0);
@@ -307,11 +310,11 @@ mod tests {
             set(state::BAND, 0.9);
             set(state::BAND + 1, -0.9);
             let band = if four {
-                let mut f = FwResonant4::from_words(words);
+                let mut f = FwToneStack4::from_words(words);
                 f.process(&mut [0.3; 8]);
                 (f.value(state::BAND), f.value(state::BAND + 1))
             } else {
-                let mut f = FwResonant2::from_words(words);
+                let mut f = FwToneStack2::from_words(words);
                 f.process(&mut [0.3; 4]);
                 (f.value(state::BAND), f.value(state::BAND + 1))
             };
@@ -321,7 +324,7 @@ mod tests {
 
     #[test]
     fn the_left_and_right_channels_are_independent() {
-        let mut a = FwResonant2::default();
+        let mut a = FwToneStack2::default();
         a.set_value(-0x20, 0.7);
         a.set_value(ctx::POLE, 0.3);
         let mut b = a;

@@ -175,19 +175,26 @@ impl LayerFxChain {
             fb_r = (fb_r * 1.15).tanh();
         }
 
+        // Firmware mix law of `kDlyMix`: input send `min(1, (v / 64)^2)`, dry `min(1, (2 - v / 64)^2)`,
+        // unity tap (opt-in, `FirmwareFx::delay_laws`); otherwise the engine's dry + mix * wet.
+        let (dry, send, wet) = if self.firmware_fx.delay_laws {
+            let ui = fw_map::unit_to_ui(self.delay_mix);
+            (fw_map::delay_dry(ui), fw_map::delay_send(ui), 1.0)
+        } else {
+            (1.0, 1.0, self.delay_mix.clamp(0.0, 1.0))
+        };
         let fb = self.delay_feedback.clamp(0.0, 0.95);
         if self.delay_ping_pong {
-            let mono_in = 0.5 * (l + r);
+            let mono_in = 0.5 * (l + r) * send;
             self.delay_buf_l[self.delay_write_idx] = (mono_in + fb_r * fb).clamp(-4.0, 4.0);
             self.delay_buf_r[self.delay_write_idx] = (fb_l * fb).clamp(-4.0, 4.0);
         } else {
-            self.delay_buf_l[self.delay_write_idx] = (l + fb_l * fb).clamp(-4.0, 4.0);
-            self.delay_buf_r[self.delay_write_idx] = (r + fb_r * fb).clamp(-4.0, 4.0);
+            self.delay_buf_l[self.delay_write_idx] = (l * send + fb_l * fb).clamp(-4.0, 4.0);
+            self.delay_buf_r[self.delay_write_idx] = (r * send + fb_r * fb).clamp(-4.0, 4.0);
         }
         self.delay_write_idx = (self.delay_write_idx + 1) % DELAY_LINE_LEN;
 
-        let mix = self.delay_mix.clamp(0.0, 1.0);
-        [l + dl * mix, r + dr * mix]
+        [l * dry + dl * wet, r * dry + dr * wet]
     }
 }
 
