@@ -102,6 +102,14 @@ pub struct Stage4Params {
     #[nested(id_prefix = "organx", group = "Organ Layers")]
     pub organ_layers: crate::organ_params::OrganLayerBank,
 
+    /// Per-layer Organ model override, key click, rotary on/angle, fine tune, crosstalk, detune.
+    #[nested(id_prefix = "organy", group = "Organ Layers Extra")]
+    pub organ_extra: crate::organ_extra_params::OrganExtraBank,
+
+    /// Per-layer Piano String Resonance and Pedal Noise switches.
+    #[nested(id_prefix = "pianoy", group = "Piano Layers Extra")]
+    pub piano_extra: crate::piano_extra_params::PianoExtraBank,
+
     /// Per-layer FX extras: mod amounts, EQ mid freq, filter res, variations, delay analog.
     #[nested(id_prefix = "fxx", group = "Layer FX Extra")]
     pub layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank,
@@ -326,6 +334,8 @@ impl Default for Stage4Params {
             synth_mod: crate::synth_mod_params::SynthModBank::default(),
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
+            organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
+            piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
             layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
@@ -721,6 +731,10 @@ impl Stage4Params {
             s.decay_sec = dec;
             s.release_sec = rel;
         }
+
+        // Per-layer extras override the global Organ/Piano blocks above.
+        self.organ_extra.sync_to_engine(engine);
+        self.piano_extra.sync_to_engine(engine);
     }
 }
 
