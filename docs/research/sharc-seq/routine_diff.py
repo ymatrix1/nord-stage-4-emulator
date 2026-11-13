@@ -41,6 +41,7 @@ def main():
     ap.add_argument('--dm', action='append', default=[])
     ap.add_argument('--rand', action='append', default=[])
     ap.add_argument('--code', default='122600:122900', help='short-word range copied from the image (must be free in the probe)')
+    ap.add_argument('--target', default='21489', choices=['21489', '21571'], help='simulator (21571 = SHARC+, ~140 s start-up)')
     ap.add_argument('--cases', type=int, default=20)
     ap.add_argument('--mode1', type=lambda s: int(s, 16), default=0xE10000, help='MODE1 at the call')
     ap.add_argument('--seed', type=int, default=1)
@@ -80,7 +81,7 @@ def main():
     cases = os.path.join(a.work, 'rcases.txt')
     open(cases, 'w').write('\n'.join(lines) + '\n')
     simo, modo = os.path.join(a.work, 'rsim.txt'), os.path.join(a.work, 'rmodel.txt')
-    subprocess.check_call([sys.executable, os.path.join(HERE, 'sim_batch.py'), a.dxe, cases, '--output', simo])
+    subprocess.check_call([sys.executable, os.path.join(HERE, 'sim_batch.py'), a.dxe, cases, '--output', simo, '--target', a.target])
     with open(modo, 'w') as f:
         subprocess.check_call(['cargo', 'run', '-q', '-p', 'nord-sharc', '--bin', 'sharc_census_run', '--', a.fixture, cases],
                               stdout=f)
