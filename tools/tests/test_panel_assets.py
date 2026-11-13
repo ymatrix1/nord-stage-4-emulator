@@ -248,3 +248,15 @@ def test_blender_scripts_share_constants_parse_and_stay_small():
         ast.parse(text)  # bpy is unavailable outside Blender; syntax only
         assert len(text.splitlines()) < 400, f.name
         assert "ORIGINAL" in text or "Original art" in text or "(D16)" in text, f.name
+
+
+def test_retexture_slot_keeps_slot_and_uses_tile_grain():
+    render = Image.new("RGB", (40, 60), (90, 100, 110))
+    render.paste((10, 10, 10), (17, 0, 23, 60))  # the slot
+    rng = np.random.default_rng(3)
+    tile = Image.fromarray(rng.integers(40, 70, size=(16, 16, 3)).astype(np.uint8), "RGB")
+    out = np.asarray(P.retexture_slot(render, tile, (47, 57, 68)).convert("RGB"), dtype=float)
+    assert out[30, 20].max() < 20  # slot kept
+    plate = out[:, :12].reshape(-1, 3)
+    assert np.allclose(plate.mean(axis=0), (47, 57, 68), atol=3)  # tile, shifted to target
+    assert plate.std(axis=0).min() > 4  # grain, not the flat render

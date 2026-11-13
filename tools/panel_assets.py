@@ -253,9 +253,33 @@ def render(raw: Path = RAW_DIR) -> None:
     subprocess.run(cmd, check=True)
 
 
+def retexture_slot(render, tile, target, slot_lum: float = 40.0):
+    """Keep the Blender slot (dark pixels and their 1 px edge) and replace the rendered slate
+    around it with the reference slate tile (D17), shifted to the measured slate colour of the
+    drawbar area, so the plate behind the caps has the reference grain."""
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    from_render = np.asarray(render.convert("RGB"), dtype=np.float64)
+    lum = from_render.mean(axis=2)
+    slot = Image.fromarray(((lum < slot_lum) * 255).astype(np.uint8)).filter(
+        ImageFilter.MaxFilter(3)
+    )
+    keep = np.asarray(slot.filter(ImageFilter.GaussianBlur(0.8)), dtype=np.float64)[..., None] / 255
+    t = np.asarray(tile.convert("RGB"), dtype=np.float64)
+    reps = (-(-from_render.shape[0] // t.shape[0]), -(-from_render.shape[1] // t.shape[1]), 1)
+    t = np.tile(t, reps)[: from_render.shape[0], : from_render.shape[1]]
+    t = t - t.mean(axis=(0, 1)) + np.asarray(target, dtype=np.float64)
+    out = from_render * keep + t * (1 - keep)
+    return Image.fromarray(np.clip(np.rint(out), 0, 255).astype(np.uint8), "RGB").convert("RGBA")
+
+
 def pack(raw: Path = RAW_DIR, proof: Path = PROOF_DIR) -> dict:
-    """Stitch the Blender filmstrips and copy the Blender sprites; the reference-derived
-    sprites are already written by panel_refbake.py. Then rebuild the manifest."""
+    """Stitch the Blender filmstrips and copy the Blender sprites (the slot plate gets the
+    reference slate grain); the reference-derived sprites are already written by
+    panel_refbake.py, which must run first. Then rebuild the manifest."""
+    from PIL import Image
+
     for s in SCALES:
         for strip in FILMSTRIPS:
             name = "knob" if strip == "knob_filmstrip" else strip
@@ -263,6 +287,10 @@ def pack(raw: Path = RAW_DIR, proof: Path = PROOF_DIR) -> dict:
         for name in SPRITES:
             src = raw / f"{name}_{s}x.png"
             (proof / src.name).write_bytes(src.read_bytes())
+        slot = proof / f"plate_slate_slot_{s}x.png"
+        with Image.open(slot) as im, Image.open(proof / f"plate_slate_{s}x.png") as tile:
+            target = json.loads(REF_CROPS.read_text(encoding="utf-8"))["slot_plate_target"]
+            save_png(retexture_slot(im, tile, target), slot)
     manifest = build_manifest(proof)
     (proof / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest

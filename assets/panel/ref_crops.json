@@ -3,6 +3,7 @@
   "status": "REFERENCE-DERIVED (D17)",
   "source": "Owner-supplied render NS4-Panel-organ.max-2000x2000.format-png.png (1961 x 1185, private, kept in .reference/, never committed). Boxes are (x0, y0, x1, y1) in its pixels; tools/panel_refbake.py cuts the committed sprites from it.",
   "ref_px_per_unit": 129.0,
+  "slot_plate_target": [47, 57, 68],
   "buttons": {
     "organ_on": [716, 25, 852, 97],
     "vib_chorus": [1011, 226, 1148, 303],

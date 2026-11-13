@@ -66,3 +66,13 @@ def test_cap_layers_white_and_black():
         assert ca[150, 150, :3].tolist() == list(rgb), kind
         assert sa[258, 160, 3] > 40, kind  # darkened slate below the cap becomes shadow
         assert sa[20, 50, 3] == 0, kind  # clean slate far away casts nothing
+
+
+def test_matte_ignores_bluish_label_next_to_the_cap():
+    a = np.zeros((40, 40, 3)) + (52, 62, 75)
+    a[:8] = (181, 192, 206)  # silver label strip above
+    a[10:30, 10:30] = (232, 230, 226)  # cap
+    m = np.zeros((40, 40), bool)
+    m[10:30, 10:30] = True
+    alpha, rgb = RC.matte(a, m)
+    assert alpha[7, 20] == 0 and alpha[20, 20] == 1

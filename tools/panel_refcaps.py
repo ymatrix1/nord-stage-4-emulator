@@ -154,6 +154,10 @@ def matte(a: np.ndarray, m: np.ndarray, band: int = 2) -> tuple[np.ndarray, np.n
     edge = ~core & ~outer
     alpha = np.where(core, 1.0, 0.0)
     alpha = np.where(edge, np.where(strong, np.clip(t, 0, 1), m.astype(float)), alpha)
+    # outside the mask only neutral pixels can be cap edge; bluish ones are slate or a silver
+    # label next to the cap, which would otherwise unmix as light bits at the corners
+    bluish = a[..., 2] - a[..., 0] >= 10
+    alpha = np.where(~m & bluish, 0.0, alpha)
     rgb = np.where(edge[..., None], cap_c, a)
     return alpha, rgb
 
