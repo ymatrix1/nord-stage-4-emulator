@@ -9,6 +9,7 @@ mod bay_piano;
 mod bay_program;
 mod bay_synth;
 mod keybed;
+pub mod layout_px;
 mod state;
 #[cfg(test)]
 mod support;
