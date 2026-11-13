@@ -144,6 +144,29 @@ pass then low pass, cases 6..9 none. Pole radii are inside the unit circle (unit
 is `ASSUMED` (shape fit: -33 dB at 50 Hz, -39 dB at 20 kHz, +4.4 dB at 1 kHz, 48 kHz). The order of cases 0..3 against
 `Twin`/`JC` is not decoded, so they stay unmapped and the default path is unchanged.
 
+### 4.0a Firmware compressor gain computer (opt-in)
+
+Code: `fx/fw_compressor.rs` (`FwCompressor`, context offsets in `fw_compressor_ctx`), `fx/fw_stage.rs`,
+`MasterBus::set_fw_compressor`, golden vector `fx/tests_compressor_golden.rs`. Reference model and equations:
+[fx-type-map](../research/fx-type-map.md) s7 (`tools/fx_routine_models.py`).
+
+| Item | Rust | Status |
+|---|---|---|
+| Algorithm | block of 4 stereo frames: linked peak, release-smoothed level, `log2 = e + frac` estimate, threshold, attack/release excess smoother, linked reduction, `FIX` and a float-bit-pattern interpolation `T0 - T0 t + T1 t` (fractional `SSF` products), makeup smoother | VERIFIED: model equals the oracle on 2,100 random scenarios and a 6-block golden scenario, 0 differing words |
+| Precision | f32 (the DSP uses 40-bit registers and truncating stores) | worst relative output error 2.1e-7 against the golden vector (test bound 1e-6) |
+| Context layout | 26 words, offsets from `I1` (`-0x20 .. -0x07`); loads through `I1` are broadcast to both elements, the left threshold word overlaps the right makeup word | VERIFIED (oracle) |
+| Parameter values | `FwCompressor::new()`: unity makeup, threshold far above any level (no reduction), `k = 0.9908`, `T0 = 1.0`, `T1 = 0.5` | ASSUMED; the ARM words behind `kCmpAmt` (0..127, default 95) and `kCmpResponse` are not decoded |
+| Bus position and latency | replaces the peak-envelope compressor when set; 4 frames of latency (block collection) | ASSUMED position; default off, `render_hash` unchanged (`cb8d83b7...`) |
+
+Module map of the FX library (which module owns which routine pcs, 28 ARM descriptor lists for all 100 code
+records) and the finding that the Amp unit's type values are coefficient data and a mode word, not routine
+pointers, are in [fx-type-map](../research/fx-type-map.md). Parity to-do list: (1) map `Edt_Effects_kFx1Type`,
+`kFx2Type`, `kRvbType`, `kDlyFbFxType` to their handlers (blocked on the part constructor chain), (2) reference
+models and ports for the delay `0x1206B0`, table LFO `0x1228CF`, phaser `0x12379B` / all-pass `0x122C39` and
+the resonant filter `0x1243F4`, (3) the 16-bit packed-float delay memory with the `0.9908` smoother once the delay
+routine is modelled, (4) legacy Amp types: the 12-way handler `0xC020506C` sends a 130-word FIR and up to 12
+biquad sets per type (`fx-type-map` s4).
+
 ### 4.1 EQ gain per count
 
 `EQ_GAIN_DB_PER_COUNT = 0.25 dB` (`fx/tables.rs`, `ASSUMED`) is the single place that decodes and encodes the
