@@ -36,6 +36,8 @@ def read_cases(path):
         t = parts[0].split()
         if not t:
             continue
+        if t[0] == 'plus':   # model-side header (SHARC+ masks), nothing to do on the simulator
+            continue
         if t[0] == 'scr':
             scr = [int(x, 16) for x in t[1:]]
         elif t[0] == 'code':
@@ -108,7 +110,24 @@ def main():
                 T.SetMemory(0, dm_id, addr, len(ws), 1, bytearray(words_bytes(ws)))
             if a.target == '21571':
                 T.SetMemory(0, dm_id, done, 1, 1, bytearray(4))
-                T.Run(0, True)
+                T.Run(0, False)
+                t_run = time.time()
+                while time.time() - t_run < 20:
+                    time.sleep(0.05)
+                    try:
+                        T.GetMemory(0, dm_id, done, 1, 1, flag)
+                        if struct.unpack('>I', bytes(flag))[0] == 0xD0E5:
+                            break
+                    except RuntimeError:
+                        pass
+                else:   # the case never reached the exit: no PC write, so reload and run the start-up again
+                    out.write('HALT timeout' + chr(10))
+                    T.Halt(0, True)
+                    T.LoadProgram(0, dxe, False)
+                    T.RemoveAllBreakpoints(0)
+                    T.SetBreakpointAtAddress(0, exit_a)
+                    T.Run(0, True)
+                    continue
             else:
                 T.Run(0, False)
             t1 = time.time()
