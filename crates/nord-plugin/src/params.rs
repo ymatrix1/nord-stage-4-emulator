@@ -94,6 +94,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "synthm", group = "Synth Mod")]
     pub synth_mod: crate::synth_mod_params::SynthModBank,
 
+    /// Per-layer Synth Gate, Pattern, KB Hold / Sync and Master Clock sync.
+    #[nested(id_prefix = "synthg", group = "Synth Gate")]
+    pub synth_gate: crate::synth_gate_params::SynthGateBank,
+
     /// Per-layer Organ B3 Bass, octave and vibrato/chorus plus Rotary switches.
     #[nested(id_prefix = "organx", group = "Organ Layers")]
     pub organ_layers: crate::organ_params::OrganLayerBank,
@@ -328,6 +332,7 @@ impl Default for Stage4Params {
             piano_layers: crate::piano_params::PianoLayerBank::default(),
             synth_layers: crate::synth_params::SynthLayerBank::default(),
             synth_mod: crate::synth_mod_params::SynthModBank::default(),
+            synth_gate: crate::synth_gate_params::SynthGateBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
             organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
             piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
@@ -596,6 +601,7 @@ impl Stage4Params {
         self.piano_layers.sync_to_engine(engine);
         self.synth_layers.sync_to_engine(engine);
         self.synth_mod.sync_to_engine(engine);
+        self.synth_gate.sync_to_engine(engine);
         self.organ_layers.sync_to_engine(engine);
         self.layer_fx_extra.sync_to_engine(engine);
 

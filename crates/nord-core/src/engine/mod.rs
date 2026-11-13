@@ -73,6 +73,7 @@ impl Stage4Engine {
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
     pub fn render_frame(&mut self) -> [f32; 2] {
         self.master_clock.advance(self.sample_rate);
+        self.sync_synth_clock();
 
         // Apply Morphing Matrix to Synth filter cutoffs via OS v1.66 14 Hz .. 32 kHz curve
         let cut_a = crate::cbin::cutoff_norm_to_hz(
@@ -125,6 +126,19 @@ impl Stage4Engine {
         }
 
         self.master_bus.process_frame([mix_l, mix_r])
+    }
+
+    /// Feeds the Master Clock tempo to the Synth layers and applies their KB Sync clock resets.
+    fn sync_synth_clock(&mut self) {
+        let bpm = self.master_clock.bpm;
+        let mut reset = false;
+        for synth in [&mut self.synth_a, &mut self.synth_b, &mut self.synth_c] {
+            synth.perf.master_bpm = bpm;
+            reset |= synth.take_clock_reset();
+        }
+        if reset {
+            self.master_clock.beat_phase = 0.0;
+        }
     }
 
     /// Processes an interleaved or dual-channel block in place with zero heap allocations.

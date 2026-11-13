@@ -5,7 +5,14 @@ use super::*;
 impl SynthLayer {
     /// Advances the arpeggiator engine and generates notes when active.
     pub(super) fn tick_arpeggiator(&mut self, inv_fs: f32) {
+        if self.arp_mode != ArpMode::Gate {
+            self.perf.gate_level = 1.0;
+        }
         if self.arp_mode == ArpMode::Off {
+            return;
+        }
+        if self.arp_mode == ArpMode::Gate {
+            self.tick_gate(inv_fs);
             return;
         }
 
@@ -24,15 +31,22 @@ impl SynthLayer {
             return;
         }
 
-        // Arp speed: 16th note division at arp_rate_bpm
-        let sixteenth_sec = 60.0 / (self.arp_rate_bpm.max(30.0) * 4.0);
+        // Arp speed: 16th note at arp_rate_bpm, or a Master Clock subdivision when synced.
+        let sixteenth_sec = self.step_seconds();
         self.arp_sample_counter += inv_fs;
 
-        if self.arp_sample_counter >= sixteenth_sec {
+        if self.arp_sample_counter < sixteenth_sec {
+            if self.perf.pattern_on {
+                self.pattern_release(sixteenth_sec);
+            }
+        } else {
             self.arp_sample_counter -= sixteenth_sec;
 
             // Release previous arp note
             self.release_arp_notes();
+            if self.pattern_rest() {
+                return;
+            }
 
             if self.arp_mode == ArpMode::Poly {
                 for (slot, &note) in held_list
@@ -82,7 +96,7 @@ impl SynthLayer {
                         ((self.arp_rng >> 16) as usize % oct_range) as u8,
                     )
                 }
-                ArpMode::Off | ArpMode::Poly => unreachable!(),
+                ArpMode::Off | ArpMode::Poly | ArpMode::Gate => unreachable!(),
             };
 
             let next_note = (held_list[note_in_chord] + oct_offset * 12).min(127);
