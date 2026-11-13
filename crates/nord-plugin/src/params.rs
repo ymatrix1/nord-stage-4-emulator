@@ -90,6 +90,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "synthx", group = "Synth Layers")]
     pub synth_layers: crate::synth_params::SynthLayerBank,
 
+    /// Per-layer Organ B3 Bass, octave and vibrato/chorus plus Rotary switches.
+    #[nested(id_prefix = "organx", group = "Organ Layers")]
+    pub organ_layers: crate::organ_params::OrganLayerBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -307,6 +311,7 @@ impl Default for Stage4Params {
             layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank::default(),
             piano_layers: crate::piano_params::PianoLayerBank::default(),
             synth_layers: crate::synth_params::SynthLayerBank::default(),
+            organ_layers: crate::organ_params::OrganLayerBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -570,6 +575,7 @@ impl Stage4Params {
         self.layer_fx_selectors.sync_to_engine(engine);
         self.piano_layers.sync_to_engine(engine);
         self.synth_layers.sync_to_engine(engine);
+        self.organ_layers.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();
