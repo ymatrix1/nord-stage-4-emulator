@@ -106,6 +106,29 @@ The organ layers also own four *record* objects (`[0xC055F4B8 + 4 s]`, 128-item 
 
 Percussion enable (`Edt_Org_Preset_kB3PercEnable`) writes DM `0xB44B6 .. 0xB44C0` (6 words): off `0x3F7FC654, 0x3F7FFF58, 0x3A694800, 0xB7C00000, 0, 0x3F800000`; on the same four, `0x3EB23278` at `0xB44BE` and `0x3F333332` (0.7) at `0xB44C0`. Reading as filter / envelope coefficients is ASSUMED.
 
+## 8. Rust `WeightMode::Firmware` against the oracle
+
+Checked 2026-11-13. `organ_ref --weights firmware` (`OrganLayer`, percussion, crosstalk, rotary, scanner, key click off; 43,156.4 Hz so that frames equal the DSP frames) against `sharc-organ` driven with the ARM messages of this note: key-down at call 0 (`wB` target, `a = 0x3C1DF380`, `b = 0x3F7D8832` on the held wheels), key-off at frame 8192 (all 92 wheels `wB = 0`, `a = 0x3B8BF800`, `b = 0x3F7EE810`), level `L = 1` (ASSUMED), `wA` starting at 0, the mix-stage smoother states (`0x959B1..B2`, `0x95B40..41`, `0x95B44..45`) poked onto their targets (the harness boots them at 0, which gives an extra startup ramp of the oracle that the running firmware does not have).
+
+```bash
+cargo build --release -p nord-sharc --bins -p nord-core --example organ_ref
+python tools/organ_weight_compare.py SRAM/core1_sram.bin --oracle target/release/sharc-organ     --rust target/release/examples/organ_ref [--notes ..] [--drawbars ..] [--velocity ..] [--detuned]
+```
+
+| Scenario | Level rust/oracle | SNR steady (per lane) | Attack envelope (max / rms, % of peak) | Release envelope |
+|---|---|---|---|---|
+| C4 E4 G4, 888000000, vel 127 | 1.0000x, 1.0000x | 44.5 / 44.5 dB (57 dB over frames 0..2000) | 0.09 / 0.03 | 0.03 / 0.00 |
+| same, detuned table (stereo lanes) | 1.0001x, 1.0001x | 44.6 / 44.5 dB | 2.01 / 0.26 (the oracle starts on the detuned gains, Rust ramps from the exact ones) | 0.03 / 0.00 |
+| C4 E4 G4, 808030400, vel 64 | 1.0001x | 45.3 / 45.3 dB | 0.09 / 0.03 | 0.02 / 0.00 |
+| C2 C3 E7, 888888888 (high wheels fold) | 1.0010x | 26.9 / 26.9 dB | 0.16 / 0.07 | 0.10 / 0.01 |
+
+Findings:
+
+- The absolute scale is right: with `L = 1` the Rust output equals the oracle output at gain 1.0000 (the old chain was 0.0792x of an oracle fed unit weights, which is 5.2x louder than the firmware weights `0.0152607 * ` table amplitude).
+- The ramp with `a = 0.0096` (attack) and `a = 0.0043` (release) reproduces the oracle envelope to 0.1 % of peak; the one-pole recurrence per frame is therefore right, including the post-update use of `wA`.
+- The steady SNR is limited by bank phase drift (SNR falls from 57 dB in frames 0..2000 to 43.5 dB in 6000..8000): the 12-TET ladder of the Rust bank against the exact increment words at the assumed frame rate; the wheel gains themselves are exact (pickup calibration bypassed). High notes drift more (26.9 dB for the 888888888 chord).
+- Not decided by the evidence: whether the update that follows a key-down in the firmware resets `a` to 0.0043 within a few ms (then the real attack is slower than 0.0096 and the Rust ramp too fast), the key-up `a` (assumed 0.0043), the velocity source and `L`. The default therefore stays `WeightMode::Legacy`; at `L = 1` the firmware level is 14.4 dB below the old chain.
+
 ## Implications
 
 - `crates/nord-core/src/organ/drawbar.rs`: `DRAWBAR_OFFSETS` and `foldback_tonewheel` are now VERIFIED (tags updated, test `matches_the_firmware_key_tables`). Wheel 91 stays unused; `NUM_TONEWHEELS = 91` is right for the weights.
@@ -114,7 +137,7 @@ Percussion enable (`Edt_Org_Preset_kB3PercEnable`) writes DM `0xB44B6 .. 0xB44C0
 
 ## Follow-ups
 
-1. Rust to-do list (organ weights): (a) add a firmware weight mode to `organ/firmware_bank.rs`: `wB[w] = 2^-23 sum d7 * ((vel * 127) >> 4)` with per-key accumulation (chords add on shared wheels) and one-pole smoothing `w += a (wB - w)` with `a = 0.0096` on key-down and `0.0043` on drawbar changes; (b) replace `drawbar_gain` normalisation `0.08 * db_bus_scale` by the firmware scale once the output level `L` and group gains are fixed; (c) foldback: keep the current rule, add a test against `organ-key-wheel-map.csv`; (d) tapering: none in the bank engine (all 127), drop any tapering idea for B3; (e) percussion: model the 6-word coefficient block (section 7) after its consumer is found.
+1. Rust to-do list (organ weights) - (a), (b), (c), (d) done in section 8 and `docs/specs/organ-engine.md` 3.1.5 (`WeightMode::Firmware`, opt-in; (b) as the opt-in absolute scale with `L` ASSUMED 1); original wording: (a) add a firmware weight mode to `organ/firmware_bank.rs`: `wB[w] = 2^-23 sum d7 * ((vel * 127) >> 4)` with per-key accumulation (chords add on shared wheels) and one-pole smoothing `w += a (wB - w)` with `a = 0.0096` on key-down and `0.0043` on drawbar changes; (b) replace `drawbar_gain` normalisation `0.08 * db_bus_scale` by the firmware scale once the output level `L` and group gains are fixed; (c) foldback: keep the current rule, add a test against `organ-key-wheel-map.csv`; (d) tapering: none in the bank engine (all 127), drop any tapering idea for B3; (e) percussion: model the 6-word coefficient block (section 7) after its consumer is found.
 2. Find the writer of the engine drawbar indices at `+0x28` (preset apply, layer activate, or a copy from the record family) and the organ velocity source; drive the real key event dispatcher instead of the key-down handler.
 3. Identify the consumer and role of the 79-wheel record family (`0x951F1 ..`, `0x954E6 ..`) in the PNO core 1 image, and the source of `L` (`0x95B42`).
 4. Vibrato on: the observed messages for `Edt_Org_Preset_kVibratoEnable` stay zero; the replay uses the `0xC022D9F0` level-1 state (increments and gains) of [arm-organ-messages](arm-organ-messages.md) section 7.

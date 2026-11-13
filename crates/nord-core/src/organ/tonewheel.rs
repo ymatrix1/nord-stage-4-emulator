@@ -9,6 +9,7 @@ use super::types::{HAMMOND_GEAR_RATIOS, HAMMOND_MOTOR_HZ, NUM_TONEWHEELS};
 use super::vibrato_bank::{clamp_fine_tune, wheel_hz};
 use super::{
     level_for_scanner, OrganLayer, OrganModel, ToneWheelSource, VibratoLevel, VibratoLink,
+    WeightMode,
 };
 use std::f32::consts::TAU;
 
@@ -164,7 +165,11 @@ impl OrganLayer {
         let mut calibrated = [[0.0f32; NUM_TONEWHEELS]; 2];
         for (dst_lane, src_lane) in calibrated.iter_mut().zip(raw.iter()).take(lanes) {
             for (i, dst) in dst_lane.iter_mut().enumerate() {
-                let pickup = self.pickup_calibration(i);
+                let pickup = if self.weight_mode == WeightMode::Firmware && !self.b3_bass_mode {
+                    1.0 // the firmware path has no per-wheel calibration (ASSUMED tables bypassed)
+                } else {
+                    self.pickup_calibration(i)
+                };
                 let partner_4oct = (i + 48) % NUM_TONEWHEELS;
                 let partner_oct = (i + 12) % NUM_TONEWHEELS;
                 *dst = src_lane[i] * pickup

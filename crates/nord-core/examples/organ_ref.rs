@@ -12,10 +12,15 @@
 //! --rate HZ           sample rate / bank frame rate (default: the rate at which wheel 0 equals the
 //!                     firmware increment of the exact table, 43,156 Hz)
 //! --linear            DrawbarLaw::Linear instead of the firmware curve
+//! --weights firmware WeightMode::Firmware: ARM per-wheel weights, one-pole smoothing, absolute scale
+//!                     (default `legacy`); also drops the pickup tables and the key click
+//! --level L           mix-stage level `L` in firmware mode (default 1.0)
+//! --velocity V        MIDI velocity 1..127 of every key (firmware mode; default 127)
+//! --keyoff-at N       releases all keys at frame N (default: never)
 //! --out PREFIX        writes PREFIX.wav (float32 stereo) and PREFIX.csv (index,L,R)
 //! ```
 use nord_core::organ::{
-    drawbar_gain_law, DrawbarLaw, OrganLayer, RotarySpeed, ScannerMode, ToneWheelSource,
+    drawbar_gain_law, DrawbarLaw, OrganLayer, RotarySpeed, ScannerMode, ToneWheelSource, WeightMode,
 };
 use std::fmt::Write as _;
 
@@ -33,6 +38,10 @@ struct Opts {
     detuned: bool,
     rate: f64,
     linear: bool,
+    firmware_weights: bool,
+    level: f32,
+    velocity: u8,
+    keyoff_at: Option<usize>,
     out: String,
 }
 
@@ -47,6 +56,10 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         detuned: false,
         rate: rate0,
         linear: false,
+        firmware_weights: false,
+        level: 1.0,
+        velocity: 127,
+        keyoff_at: None,
         out: "organ_ref".into(),
     };
     let mut it = args.iter();
@@ -74,6 +87,21 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--out" => o.out = val("PREFIX")?,
             "--detuned" => o.detuned = true,
             "--linear" => o.linear = true,
+            "--weights" => {
+                o.firmware_weights = match val("legacy|firmware")?.as_str() {
+                    "legacy" => false,
+                    "firmware" => true,
+                    other => return Err(format!("--weights {other}: legacy or firmware")),
+                }
+            }
+            "--level" => o.level = val("L")?.parse().map_err(|_| "bad --level")?,
+            "--velocity" => {
+                o.velocity = val("1..127")?.parse().map_err(|_| "bad --velocity")?;
+                if !(1..=127).contains(&o.velocity) {
+                    return Err("--velocity is 1..127".into());
+                }
+            }
+            "--keyoff-at" => o.keyoff_at = Some(val("N")?.parse().map_err(|_| "bad --keyoff-at")?),
             _ => return Err(format!("unknown option {a}")),
         }
     }
@@ -96,10 +124,24 @@ fn render_layer(o: &Opts) -> Vec<[f32; 2]> {
     } else {
         DrawbarLaw::Firmware
     };
-    for &n in &o.notes {
-        organ.note_on(n);
+    if o.firmware_weights {
+        organ.weight_mode = WeightMode::Firmware;
+        organ.weight_level = o.level;
+        organ.key_click_enabled = false;
     }
-    (0..o.frames).map(|_| organ.render_frame()).collect()
+    for &n in &o.notes {
+        organ.note_on_with_gain(n, f32::from(o.velocity) / 127.0);
+    }
+    (0..o.frames)
+        .map(|i| {
+            if o.keyoff_at == Some(i) {
+                for &n in &o.notes {
+                    organ.note_off(n);
+                }
+            }
+            organ.render_frame()
+        })
+        .collect()
 }
 
 fn write_outputs(o: &Opts, frames: &[[f32; 2]]) -> Result<(), String> {
@@ -172,6 +214,30 @@ mod tests {
         );
         assert!(parse(&strings(&["--bogus"])).is_err());
         assert!(parse(&strings(&["--drawbars", "88"])).is_err());
+    }
+
+    #[test]
+    fn firmware_weight_options_parse_and_render() {
+        let mut o = parse(&strings(&[
+            "--weights",
+            "firmware",
+            "--velocity",
+            "64",
+            "--keyoff-at",
+            "100",
+        ]))
+        .unwrap();
+        assert!(o.firmware_weights && o.velocity == 64 && o.keyoff_at == Some(100));
+        assert!(parse(&strings(&["--weights", "x"])).is_err());
+        assert!(parse(&strings(&["--velocity", "0"])).is_err());
+        o.frames = 400;
+        let f = render_layer(&o);
+        assert!(f.iter().flatten().all(|v| v.is_finite()));
+        let rms = |a: usize, b: usize| {
+            (f[a..b].iter().map(|v| v[0] * v[0]).sum::<f32>() / (b - a) as f32).sqrt()
+        };
+        assert!(rms(360, 400) < 0.5 * rms(0, 100), "release tail decays");
+        assert!(rms(360, 400) > 0.0);
     }
 
     #[test]
