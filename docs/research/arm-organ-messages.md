@@ -290,6 +290,6 @@ So the one message burst that changes the bank output is the model selection (it
 ### 10.6 Limits and next steps
 
 - The 10 clients are the ones the boot builds by 433 M instructions; the effects / Leslie client (Fx2, Dly, Rvb, Cmp, Leslie ids) is not among them. Next: find where it is constructed (a second registry? the owners of `Edt_Com_kEffects*Global`) and add it to `LAYER_KINDS`.
-- Drawbar and vibrato levels need the weight tables that the stubbed SPI downloads would load; with them the 160-word blocks should carry gains. Next: model the SPI flash read for the organ tables, or load a `.ns4o` through the preset-load function.
+- **Resolved in [organ-weights](organ-weights.md):** the zero drawbar words were not missing SPI tables. The per-note tables are in RAM already; the weights are sums over *active keys* x drawbars, so with no key down every word is 0. The bank weights `a`, `b`, `wB` (92 per set) are sent by four bank engine objects (`0xC022C3A8` key down, `0xC022AFB8` update); `wA` is DSP state. The `Edt_Org_Preset_kDb` ids feed a different (79-wheel) record family.
 - `INSNS_PER_TICK` (200 000) is ASSUMED. The captured messages do not depend on it except for the idle words and the time at which "tick" messages appear; a 4 M-instruction window is 20 ticks.
 - The role of clients 7, 8, 9 and the meaning of the SMP words `0x9403E / 0x94046` are not decoded.
