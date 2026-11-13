@@ -7,7 +7,9 @@
 
 use super::types::{HAMMOND_GEAR_RATIOS, HAMMOND_MOTOR_HZ, NUM_TONEWHEELS};
 use super::vibrato_bank::{clamp_fine_tune, wheel_hz};
-use super::{OrganLayer, OrganModel, ToneWheelSource};
+use super::{
+    level_for_scanner, OrganLayer, OrganModel, ToneWheelSource, VibratoLevel, VibratoLink,
+};
 use std::f32::consts::TAU;
 
 impl OrganLayer {
@@ -62,32 +64,77 @@ impl OrganLayer {
     }
 
     /// Re-derives the `u32` phase steps if the sample rate, the vibrato table or Fine Tune changed.
-    fn sync_bank(&mut self) {
+    fn sync_bank(&mut self, copies: bool) {
         let fine = clamp_fine_tune(self.fine_tune_cents);
         if self.tone_bank.sample_rate() != self.sample_rate
-            || self.tone_bank.copies() != self.detuned_copies
+            || self.tone_bank.copies() != copies
             || self.synced_fine_cents != fine
         {
+            self.lane_mixer.set_rate(self.sample_rate);
             for (w, f) in self.tonewheel_freqs_hz.iter_mut().enumerate() {
                 *f = wheel_hz(w, fine);
             }
             self.synced_fine_cents = fine;
-            self.tone_bank.retune(
-                &self.tonewheel_freqs_hz,
-                self.sample_rate,
-                self.detuned_copies,
-            );
+            self.tone_bank
+                .retune(&self.tonewheel_freqs_hz, self.sample_rate, copies);
         }
     }
 
-    /// Advances all 91 spinning tonewheels and returns calibrated + crosstalk-coupled bus waveforms.
-    pub(super) fn render_tonewheels(&mut self, inv_fs: f32) -> [f32; NUM_TONEWHEELS] {
-        let mut raw = [0.0f32; NUM_TONEWHEELS];
-        if self.model == OrganModel::B3 && self.tonewheel_source == ToneWheelSource::Firmware {
-            self.sync_bank();
-            self.tone_bank.advance(&mut raw);
+    /// Vibrato-enable level in force: `detuned_copies` forces level 1, otherwise (Firmware link)
+    /// the level follows `scanner_mode`; the Manual link never leaves level 0 by itself.
+    fn vibrato_level(&self) -> VibratoLevel {
+        if self.detuned_copies {
+            VibratoLevel::DETUNED
+        } else if self.vibrato_link == VibratoLink::Firmware {
+            level_for_scanner(self.scanner_mode)
         } else {
-            for (i, sig) in raw.iter_mut().enumerate() {
+            VibratoLevel(0)
+        }
+    }
+
+    /// Single-lane view of [`Self::render_tonewheel_lanes`] (lane x).
+    #[cfg(test)]
+    pub(super) fn render_tonewheels(&mut self, inv_fs: f32) -> [f32; NUM_TONEWHEELS] {
+        self.render_tonewheel_lanes(inv_fs).0[0]
+    }
+
+    /// Advances all 91 spinning tonewheels and returns calibrated + crosstalk-coupled bus
+    /// waveforms of `lanes` lanes (1, or 2 while the detuned ensemble's stereo blend is active:
+    /// `Firmware` source, `Firmware` link, level 1 or its gain ramp still running).
+    ///
+    /// Lane `x = m00 a + m01 b`, `y = m10 a + m11 b` with the smoothed matrix of
+    /// [`LaneMixer`]; in steady state this is the oracle's mix stage (VERIFIED), the lane split
+    /// before the linear pickup and crosstalk stages is equivalent to splitting after them.
+    pub(super) fn render_tonewheel_lanes(
+        &mut self,
+        inv_fs: f32,
+    ) -> ([[f32; NUM_TONEWHEELS]; 2], usize) {
+        let mut raw = [[0.0f32; NUM_TONEWHEELS]; 2];
+        let mut lanes = 1;
+        if self.model == OrganModel::B3 && self.tonewheel_source == ToneWheelSource::Firmware {
+            if self.vibrato_link == VibratoLink::Firmware {
+                self.lane_mixer.set_level(self.vibrato_level());
+                let copies = self.lane_mixer.active();
+                self.sync_bank(copies);
+                if copies {
+                    let (mut a, mut b) = ([0.0; NUM_TONEWHEELS], [0.0; NUM_TONEWHEELS]);
+                    self.tone_bank.advance_copies(&mut a, &mut b);
+                    let m = self.lane_mixer.step();
+                    let [x, y] = &mut raw;
+                    for (((xo, yo), &p), &q) in x.iter_mut().zip(y.iter_mut()).zip(&a).zip(&b) {
+                        *xo = m[0][0] * p + m[0][1] * q;
+                        *yo = m[1][0] * p + m[1][1] * q;
+                    }
+                    lanes = 2;
+                } else {
+                    self.tone_bank.advance(&mut raw[0]);
+                }
+            } else {
+                self.sync_bank(self.detuned_copies);
+                self.tone_bank.advance(&mut raw[0]);
+            }
+        } else {
+            for (i, sig) in raw[0].iter_mut().enumerate() {
                 let p = self.tonewheel_phases[i];
                 *sig = match self.model {
                     OrganModel::B3 => {
@@ -109,19 +156,22 @@ impl OrganLayer {
         }
 
         if self.model != OrganModel::B3 {
-            return raw;
+            return (raw, lanes);
         }
 
         // Apply per-tonewheel pickup calibration and -42 dB generator bin crosstalk matrix.
-        let mut calibrated = [0.0f32; NUM_TONEWHEELS];
         let bleed = 0.008 * self.crosstalk_level.clamp(0.0, 2.0);
-        for (i, dst) in calibrated.iter_mut().enumerate() {
-            let pickup = self.pickup_calibration(i);
-            let partner_4oct = (i + 48) % NUM_TONEWHEELS;
-            let partner_oct = (i + 12) % NUM_TONEWHEELS;
-            *dst = raw[i] * pickup + bleed * (0.75 * raw[partner_4oct] + 0.40 * raw[partner_oct]);
+        let mut calibrated = [[0.0f32; NUM_TONEWHEELS]; 2];
+        for (dst_lane, src_lane) in calibrated.iter_mut().zip(raw.iter()).take(lanes) {
+            for (i, dst) in dst_lane.iter_mut().enumerate() {
+                let pickup = self.pickup_calibration(i);
+                let partner_4oct = (i + 48) % NUM_TONEWHEELS;
+                let partner_oct = (i + 12) % NUM_TONEWHEELS;
+                *dst = src_lane[i] * pickup
+                    + bleed * (0.75 * src_lane[partner_4oct] + 0.40 * src_lane[partner_oct]);
+            }
         }
-        calibrated
+        (calibrated, lanes)
     }
 }
 

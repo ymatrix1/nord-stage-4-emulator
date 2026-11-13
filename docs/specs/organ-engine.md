@@ -106,7 +106,23 @@ The bank output (184 elements) goes through the PNO Core1 mix stage `0x12268F` (
 | Python model agreement | 1.6e-5 (exact) / 1.8e-5 (detuned) relative rms over 16,384 frames of a chord |
 | Writer of `a`, `b`, `wB`, `wA` | ARM code not found; footage offsets, foldback and the drawbar curve as final gain stay ASSUMED |
 
-Engine status: the 92 wheels exist in `ToneBank` (`BANK_WHEELS`); the layer feeds 91 to the drawbar buses. Rust against oracle on a C4 E4 G4 chord with drawbars 888000000: partials within -0.19..+0.11 dB, SNR 37.7 dB (exact) / 37.6 dB (detuned) after one gain; residue = ASSUMED pickup calibration; overall level 0.0792x (ASSUMED `0.08` bus scale). Tests: `bank_mix_golden::tests`, `firmware_bank::tests`.
+Engine status: the 92 wheels exist in `ToneBank` (`BANK_WHEELS`); the layer feeds 91 to the drawbar buses, with the smoothed two-lane stereo path of section 3.1.4. Rust against oracle on a C4 E4 G4 chord with drawbars 888000000: partials within -0.19..+0.11 dB, SNR 37.7 dB (exact) / 37.6 dB (detuned) after one gain; residue = ASSUMED pickup calibration; overall level 0.0792x (ASSUMED `0.08` bus scale). Tests: `bank_mix_golden::tests`, `firmware_bank::tests`.
+
+### 3.1.4 Vibrato-enable link, smoothed gains and stereo lanes (`vibrato_link.rs`, `lane_mix.rs`)
+
+`OrganLayer::vibrato_link` selects between two behaviours (only `B3` with `ToneWheelSource::Firmware` is affected):
+
+| `VibratoLink` | Table / gains | Mixing |
+|---|---|---|
+| `Firmware` (default) | vibrato-enable level 1 = detuned table + stereo-blend gains, any other level = exact table + copy-0-on-both-lanes gains (VERIFIED, `0xC022D9F0`). The level follows `scanner_mode` (`Off` = 0, any `V1..C3` = 1: ASSUMED, the ARM passes the layer vibrato-enable byte `(value == 1)`); `detuned_copies = true` forces level 1 | gains `g5..g8` and the level ramp with `s = 0.01 t + 0.99 s` (VERIFIED) per firmware frame; the two lanes drive the stereo path |
+| `Manual` | `detuned_copies` only | previous behaviour: instant mono mean `copy_weights`, organ mono until the rotary |
+
+- **Smoothing at the engine rate:** the VERIFIED coefficient is per firmware frame. The per-sample keep factor is `0.99^(F / fs)` with `F = FIRMWARE_FRAME_RATE_HZ` = 43,156.4 Hz (ASSUMED: the rate at which wheel 0 equals the engine's C1), so the time constant is 100 frames = 2.32 ms at any sample rate (`keep_for_rate`; 0.9910 at 48 kHz). Differences below `5e-5` snap to the target (the f32 fixed point sits about 7e-6 off).
+- **Lanes:** `x = m00 a + m01 b`, `y = m10 a + m11 b` with the smoothed matrix `[[g5, g8], [g7, g6]] * level`; detuned steady state `x = 0.75 a + 0.375 b`, `y = 0.375 a + 0.75 b`. The lane split is done before the pickup/crosstalk stages (linear, so equivalent). While the table is exact and the ramp has settled only one lane exists and the old code path runs bit-exactly (render hash unchanged). Leaving level 1 keeps both copies running until the ramp settles, then retunes to the exact table.
+- **Stereo routing:** `mid = (x + y) / 2` goes through key click, scanner and rotary exactly as the mono signal did; `side = (x - y) / 2` is added to L and subtracted from R after the rotary. `(L + R) / 2` therefore equals the `Manual` mono mean (test `mono_sum_equals_the_manual_mono_mean`); without rotary `L = x`, `R = y`.
+- **Against the oracle** (`organ_ref --detuned` vs `organ_oracle_audio.py render --detuned`, `compare --lanes`, C4 E4 G4, 888000000, 43,156 Hz, first 2,048 frames dropped): lane x 37.7 dB, lane y 37.6 dB SNR after one gain; the old mono path against the same lanes gave 22.6 / 23.3 dB. Exact table: 37.7 dB on both lanes.
+- **Not implemented (VERIFIED in PR #111, `organ-weights.md`):** the mix stage also smooths the per-wheel weights (`wA <- a wB + b wA`, `a` = 0.0096 on key-down, 0.0043 on a full update). The engine still applies key gains instantly; per-wheel weight smoothing is TD-04 (d).
+- Tests: `lane_mix::tests` (time constant, step response, both gain sets, level selection), `vibrato_link::tests`, `stereo_lanes::tests` (level/table selection, 0.75 / 0.375 blend, ramp, mono-sum equivalence, dual-mono when exact), `drawbar_sum::tests`.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 

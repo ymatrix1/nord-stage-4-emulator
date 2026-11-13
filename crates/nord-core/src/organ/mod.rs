@@ -6,13 +6,18 @@
 //! generator), `keyclick`, `scanner`, `rotary`.
 
 mod drawbar;
+mod drawbar_sum;
 mod firmware_bank;
 mod keyclick;
+mod lane_mix;
 mod rotary;
 mod scanner;
+#[cfg(test)]
+mod stereo_lanes;
 mod tonewheel;
 mod types;
 mod vibrato_bank;
+mod vibrato_link;
 
 #[cfg(test)]
 mod bank_golden;
@@ -24,6 +29,7 @@ pub use firmware_bank::{
     build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate, phase_step,
     ToneBank, DEFAULT_TUNE_WORD,
 };
+pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
     ROTARY_BASS_HORN_BALANCES, ROTARY_CROSSOVER_HZ,
@@ -33,7 +39,8 @@ pub use vibrato_bank::{
     GAINS_EXACT,
 };
 
-use drawbar::{foldback_tonewheel, DRAWBAR_OFFSETS};
+pub use vibrato_link::{level_for_scanner, VibratoLevel, VibratoLink};
+
 use std::f32::consts::TAU;
 use types::{ROTARY_BUFFER_SIZE, SCANNER_BUFFER_SIZE};
 
@@ -71,6 +78,10 @@ pub struct OrganLayer {
     /// (`DETUNE_CENTS`, +-1.9 cent rms ensemble copies) instead of the exact 12-TET one. VERIFIED
     /// table selection, default off.
     pub detuned_copies: bool,
+    /// Whether the bank table and lane gains follow `scanner_mode` with the firmware smoother and
+    /// stereo lanes (`Firmware`, default) or only `detuned_copies` with instant mono mixing
+    /// (`Manual`, the previous behaviour).
+    pub vibrato_link: VibratoLink,
     /// Fine Tune in cents applied to the firmware bank (clamped to -400..+381, default 0).
     pub fine_tune_cents: f32,
     /// Drawbar level law (default: firmware curve; `Linear` is the old `level / 8`).
@@ -79,6 +90,7 @@ pub struct OrganLayer {
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
     synced_fine_cents: f32,
     tone_bank: ToneBank,
+    lane_mixer: LaneMixer,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
     pickup_b3: [f32; NUM_TONEWHEELS],
     pickup_b3_bass: [f32; NUM_TONEWHEELS],
@@ -138,12 +150,14 @@ impl OrganLayer {
             scanner_mode: ScannerMode::Off,
             tonewheel_source: ToneWheelSource::default(),
             detuned_copies: false,
+            vibrato_link: VibratoLink::default(),
             fine_tune_cents: 0.0,
             drawbar_law: DrawbarLaw::default(),
             tonewheel_freqs: freqs,
             tonewheel_freqs_hz: freqs_hz,
             synced_fine_cents: 0.0,
             tone_bank,
+            lane_mixer: LaneMixer::new(sample_rate),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
             pickup_b3,
             pickup_b3_bass,
@@ -212,8 +226,9 @@ impl OrganLayer {
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
 
-        // 1. Advance all 91 spinning tonewheels continuously
-        let tw_signals = self.render_tonewheels(inv_fs);
+        // 1. Advance all 91 spinning tonewheels continuously (two lanes while the detuned
+        //    ensemble's stereo blend is active, otherwise one)
+        let (tw_buses, lanes) = self.render_tonewheel_lanes(inv_fs);
 
         if self.active_key_count == 0
             && self.click_env < 1e-6
@@ -222,44 +237,15 @@ impl OrganLayer {
             return [0.0, 0.0];
         }
 
-        // 2. Sum active drawbars across held notes (with B3 Normal percussion -3 dB drawbar dip)
-        let oct_semis = i32::from(self.octave_shift.clamp(-2, 2)) * 12;
-        let db_bus_scale = if self.model == OrganModel::B3
-            && self.percussion_enabled
-            && !self.percussion_soft
-            && self.percussion_env > 1e-4
-        {
-            0.708
+        // 2. Sum active drawbars across held notes (with B3 Normal percussion -3 dB drawbar dip).
+        //    Two lanes split into mid (through scanner and rotary, so the mono sum is the
+        //    previous path) and side (added to L and subtracted from R after the rotary).
+        let sums = self.sum_drawbars(&tw_buses, lanes);
+        let (mut dry, side) = if lanes == 2 {
+            (0.5 * (sums[0] + sums[1]), Some(0.5 * (sums[0] - sums[1])))
         } else {
-            1.0
+            (sums[0], None)
         };
-
-        let mut dry = 0.0f32;
-        for note in 0u8..=127u8 {
-            if !self.held_notes[note as usize] {
-                continue;
-            }
-            let base_midi = i32::from(note) + oct_semis;
-            let key_gain = self.note_gains[note as usize];
-            for (db_idx, &level) in self.drawbars.iter().enumerate() {
-                if level == 0 {
-                    continue;
-                }
-                let gain = drawbar_gain_law(level, self.drawbar_law);
-                let tw = foldback_tonewheel(base_midi + DRAWBAR_OFFSETS[db_idx]);
-                dry += gain * tw_signals[tw] * key_gain * db_bus_scale * 0.08;
-            }
-            if self.percussion_env > 1e-4 {
-                let perc_offset = if self.percussion_third_harmonic {
-                    19
-                } else {
-                    12
-                };
-                let tw = foldback_tonewheel(base_midi + perc_offset);
-                let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
-                dry += self.percussion_env * tw_signals[tw] * perc_gain * key_gain;
-            }
-        }
 
         // 3. Model filter shaping (Vox Continental Tone, Farfisa Formants, Pipe Chiff)
         match self.model {
@@ -299,12 +285,16 @@ impl OrganLayer {
         // 5. Hammond Scanner Vibrato & Chorus (V1-V3, C1-C3)
         let scanner_out = self.process_scanner(dry, inv_fs);
 
-        if !self.rotary_enabled {
-            return [scanner_out, scanner_out];
+        // 6. Model 122 Rotary Speaker (skipped when disabled)
+        let [l, r] = if self.rotary_enabled {
+            self.process_rotary(scanner_out, inv_fs)
+        } else {
+            [scanner_out, scanner_out]
+        };
+        match side {
+            Some(s) => [l + s, r - s],
+            None => [l, r],
         }
-
-        // 6. Model 122 Rotary Speaker
-        self.process_rotary(scanner_out, inv_fs)
     }
 }
 
