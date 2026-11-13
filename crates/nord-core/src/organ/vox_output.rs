@@ -1,6 +1,6 @@
 //! Vox output stage `0x1229B3`: three 2-tap sections, two smoothed gains, fixed scale.
 //!
-//! Spec: `docs/specs/organ-engine.md` section 3.1.6; method `docs/research/organ-post-stage.md`
+//! Spec: `docs/specs/organ-engine.md` section 3.1.7; method `docs/research/organ-post-stage.md`
 //! section 4 and `organ-model-paths.md` section 4. The weighted sum of the 96-word post-stage
 //! block is formed by [`super::vox_source::VoxSource`]; this module is what follows it:
 //!

@@ -1,6 +1,6 @@
 //! Waveshaper of the Vox note oscillators: a band-limited step regenerated in closed form.
 //!
-//! Spec: `docs/specs/organ-engine.md` section 3.1.6. The PNO Core1 post stage `0x12272D` looks
+//! Spec: `docs/specs/organ-engine.md` section 3.1.7. The PNO Core1 post stage `0x12272D` looks
 //! the clipped fold of every note phase up in a 1,025-point table `T(i)`, `i = -512..512`. The
 //! firmware table is raw image data and is not committed; it is the integral of a Blackman
 //! windowed sinc (an anti-aliased clipper), regenerated here:

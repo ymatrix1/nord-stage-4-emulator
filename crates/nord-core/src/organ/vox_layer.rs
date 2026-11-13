@@ -1,6 +1,6 @@
 //! `OrganLayer` glue of the Vox tone source (`ToneWheelSource::Vox`, model `Vox`).
 //!
-//! Spec: `docs/specs/organ-engine.md` section 3.1.6. The held keys select the oscillator weights,
+//! Spec: `docs/specs/organ-engine.md` section 3.1.7. The held keys select the oscillator weights,
 //! the vibrato / chorus setting selects the vibrato depth of the bank's pitch LFO (the bank has no
 //! delay-line scanner), and the key click and the rotary speaker stay as in the other paths.
 //! The drawbars and the percussion do not act on this source (the Vox footage to weight map is

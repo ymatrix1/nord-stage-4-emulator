@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! --mode layer       OrganLayer with percussion, crosstalk, rotary and scanner off (default)
-//! --mode vox         the Vox note bank (`ToneWheelSource::Vox`, spec 3.1.6): weight 1 per key, the
+//! --mode vox         the Vox note bank (`ToneWheelSource::Vox`, spec 3.1.7): weight 1 per key, the
 //!                     output stage `0x1229B3`; drawbars, --weights and --detuned do not apply
 //! --vibrato N        vox mode: vibrato type 0 (off), 1..3 (V1..V3: Vox depths 0.70, 1.15, 1.76 %)
 //! --notes 60,64,67    MIDI notes (default C4 E4 G4)       --drawbars 888000000

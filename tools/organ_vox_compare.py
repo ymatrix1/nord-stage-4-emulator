@@ -32,7 +32,7 @@ def cycles_per_frame(k: int) -> float:
 
 
 def partial_amplitude(x: np.ndarray, cycles: float) -> float:
-    """Amplitude of the sinusoid of `cycles` per sample in `x` (Hann window, peak over +-0.4 bin)."""
+    """Amplitude of the sinusoid of `cycles` per sample in `x` (Hann window, peak over 0.4 bin)."""
     n = len(x)
     t = np.arange(n)
     win = 0.5 - 0.5 * np.cos(2 * np.pi * t / n)
@@ -52,6 +52,20 @@ def partial_table(x: np.ndarray, notes=MIDI_NOTES, harmonics: int = 9) -> np.nda
         for h in range(1, harmonics + 1):
             if h * f0 < 0.5:
                 out[i, h - 1] = partial_amplitude(x, h * f0)
+    return out
+
+
+LFO_CYCLES = 0x905A3 / 2**32  # VERIFIED: pitch LFO step per frame
+
+
+def sideband_table(x: np.ndarray, notes=MIDI_NOTES) -> np.ndarray:
+    """`(len(notes), 2)`: first vibrato sidebands (carrier -+ LFO) relative to the carrier."""
+    out = np.zeros((len(notes), 2))
+    for i, note in enumerate(notes):
+        f0 = cycles_per_frame(note - OSC_OFFSET)
+        carrier = partial_amplitude(x, f0)
+        for j, sign in enumerate((-1, 1)):
+            out[i, j] = partial_amplitude(x, f0 + sign * LFO_CYCLES) / carrier
     return out
 
 
@@ -96,6 +110,10 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         print(relative_db(res[key]))
     print("deviation Rust - oracle L (dB):")
     print(res["dev_db_L"])
+    np.set_printoptions(precision=3)
+    print("first sidebands (-LFO, +LFO) relative to the carrier, rows C4 E4 G4:")
+    print("oracle L", sideband_table(np.load(ns.oracle)[4000:, 0], MIDI_NOTES).tolist())
+    print("rust    ", sideband_table(load_csv(ns.rust)[4000:, 0], MIDI_NOTES).tolist())
     return 0
 
 

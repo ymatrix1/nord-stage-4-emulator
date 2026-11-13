@@ -1,7 +1,7 @@
 //! Vox note oscillator bank: the PNO Core1 post stage `0x12272D` (pitch LFO, 84 note oscillators
 //! with waveshaper, asymmetry and note-tracking low-pass).
 //!
-//! Spec: `docs/specs/organ-engine.md` section 3.1.6; method `docs/research/organ-post-stage.md`
+//! Spec: `docs/specs/organ-engine.md` section 3.1.7; method `docs/research/organ-post-stage.md`
 //! section 3. The structure is VERIFIED bit-exact against the SHARC oracle
 //! (`tools/organ_post_ref.py`); the constants below say which parts are read from the image and
 //! which are closed forms. Per frame (the firmware frame rate `F`, converted to the engine rate by
@@ -225,14 +225,14 @@ mod tests {
         // rounding is the largest difference
         let golden: Vec<&[f32]> = g::Y_PLAIN.iter().map(|r| &r[..]).collect();
         let (max, rms) = golden_error(0.0, &g::NOTES_PLAIN, &golden);
-        assert!(max < 1e-3 && rms < 1e-4, "max {max} rms {rms}");
+        assert!(max < 1e-4 && rms < 1e-5, "max {max} rms {rms}");
     }
 
     #[test]
     fn golden_note_signals_with_vibrato_match_the_python_model() {
         let golden: Vec<&[f32]> = g::Y_VIB.iter().map(|r| &r[..]).collect();
         let (max, rms) = golden_error(g::DEPTH, &g::NOTES_VIB, &golden);
-        assert!(max < 2e-3 && rms < 3e-4, "max {max} rms {rms}");
+        assert!(max < 1e-3 && rms < 1e-4, "max {max} rms {rms}");
     }
 
     #[test]

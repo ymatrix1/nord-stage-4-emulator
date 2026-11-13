@@ -1,7 +1,7 @@
 //! Vox tone source: the note bank (`vox_bank`), the weighted sum of the 96-word block and the
 //! output stage (`vox_output`).
 //!
-//! Spec: `docs/specs/organ-engine.md` section 3.1.6. The output stage `0x1229B3` forms
+//! Spec: `docs/specs/organ-engine.md` section 3.1.7. The output stage `0x1229B3` forms
 //! `T = sum_k w_k Y_k` over the 84 note signals (the 12 sine buckets carry weight 0 here, see the
 //! spec) and passes it through the three sections. The weights are delivered by the ARM
 //! (`0xC0224468`, `docs/research/pno-full-pass.md` section 6); the key to oscillator map and the

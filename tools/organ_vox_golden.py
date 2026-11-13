@@ -166,7 +166,7 @@ def rust_file() -> str:
         "//! Regenerate with `python tools/organ_vox_golden.py rust`: the bit-exact SHARC models",
         "//! of `tools/organ_post_ref.py` (verified against the oracle) run on closed-form",
         "//! tables. Derived values only, no firmware data. Provenance:",
-        "//! `docs/specs/organ-engine.md` section 3.1.6.",
+        "//! `docs/specs/organ-engine.md` section 3.1.7.",
         "#![allow(clippy::approx_constant, clippy::excessive_precision)]",
         "",
         f"pub(super) const FRAMES: usize = {FRAMES};",
