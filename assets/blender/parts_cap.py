@@ -16,16 +16,16 @@ from proof_geom import box, loft
 # reference (100 x 231 px = 0.78 x 1.79 u at the base). Black and white caps share this geometry.
 CAP_W = 0.80
 CAP_BACK, CAP_FRONT = 0.90, -0.89
-CAP_HT, CAP_HN = 0.50, 0.26  # ASSUMED heights (photo ratio about 2 : 1)
-BLOCK_FRONT = -0.18  # base of the block's sloped front face
+CAP_HT, CAP_HN = 0.90, 0.42  # EMPIRICAL: owner photo of the panel, block about as tall as
+# the cap is wide, nose about half of that
+BLOCK_FRONT = -0.32  # EMPIRICAL (close-up photo): the block front slopes forward onto the nose
 BLOCK_TOP_FRONT = 0.02  # top edge of that face
-NOSE_TOP_FRONT = -0.62  # front edge of the nose top
+NOSE_TOP_FRONT = -0.58  # front edge of the short nose top, then the sloped nose front
 # EMPIRICAL (reference, every drawbar): the nose top face spans this, left of centre; its
 # right wall slopes down to the full-width base
 NOSE_TOP_X = (-0.43, 0.12)
 NOSE_LEFT = -0.45  # EMPIRICAL: the nose base sticks out left of the block (silhouette fit)
-# EMPIRICAL: low base band in front of the nose; kept above CAP_BEVEL so it rounds evenly
-BASE_H = 0.14
+NOSE_FRONT_H = 0.12  # EMPIRICAL (photos): the nose front slopes down low toward the player
 CAP_TAPER = 0.12  # EMPIRICAL: block top is about 0.88 of its base width (photo, front view)
 CAP_BEVEL = 0.12  # EMPIRICAL: reference cap corners read about 8 px rounded at 2x
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
@@ -56,11 +56,11 @@ def _section(y, z, top_x, left=-CAP_W / 2):
 
 def fader_cap(m, key):
     """Drawbar cap, one loft from back to front over a full-width base: tall rear block with
-    tapered sides and a sloped front, then the lower nose whose top face is narrower and to
-    the left because its right wall slopes steeply (reference and photos)."""
+    tapered sides and a sloped front, then the lower nose (about half the height) whose top
+    face sits left because its right wall slopes, ending in a chamfer (reference, photos)."""
     ht, hn = CAP_HT, CAP_HN
     blk = (-CAP_W / 2 * (1 - CAP_TAPER), CAP_W / 2 * (1 - CAP_TAPER))
-    side = CAP_W / 2 * (1 - CAP_TAPER * BASE_H / CAP_HT)  # same wall slope as the block
+    side = CAP_W / 2 * (1 - CAP_TAPER * NOSE_FRONT_H / CAP_HT)  # same wall slope as the block
     base = (-side, side)
     secs = [
         (CAP_BACK, ht * 0.86, blk),
@@ -68,8 +68,7 @@ def fader_cap(m, key):
         (BLOCK_TOP_FRONT, ht, blk),
         (BLOCK_FRONT, hn, NOSE_TOP_X, NOSE_LEFT),
         (NOSE_TOP_FRONT, hn, NOSE_TOP_X, NOSE_LEFT),
-        (NOSE_TOP_FRONT - 0.05, BASE_H, base, NOSE_LEFT),  # nose front drops onto the base
-        (CAP_FRONT, BASE_H, base, NOSE_LEFT),
+        (CAP_FRONT, NOSE_FRONT_H, base, NOSE_LEFT),  # chamfered front, no separate band
     ]
     rings = [_section(y, z, tx, *lx) for y, z, tx, *lx in secs]
     return [loft("cap_body", rings, m[key], smooth=False, bevel=CAP_BEVEL, segments=8)]

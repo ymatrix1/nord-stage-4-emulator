@@ -59,7 +59,7 @@ LEAN = {
     "plate": (0.0, 0.0),
     # EMPIRICAL: per cap, from where it sits on the reference; the optical axis is about
     # 290 px above the image centre (DRIVE knob lean), tuned against the cap silhouettes.
-    "drawbar_cap_black": (2.56, 5.2),
+    "drawbar_cap_black": (1.2, 5.2),
     "drawbar_cap_white": (0.2, 5.5),
     "layer_cap_grey": (5.29, -0.45),
 }
