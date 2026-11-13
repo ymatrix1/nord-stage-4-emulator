@@ -10,20 +10,26 @@ from __future__ import annotations
 import bpy
 from proof_geom import box, loft
 
-# Shape EMPIRICAL from the owner's photo of a loose cap (2026-11-13): one part, a tall
-# near-square rear block with upright walls, an upright front face filleted into a long
-# full-width nose about half its height, the nose front chamfered down, and a thin lip
-# along the base behind the block. Plan size EMPIRICAL from the reference (100 x 231 px =
-# 0.78 x 1.79 u at the base). Black and white caps share this geometry.
+# Shape EMPIRICAL, measured on the owner's photo of a loose cap (2026-11-13, oblique view,
+# lengths scaled by the 113 px cap width at the block top, verticals by the block's front
+# corner edge; about +/-15 % from perspective). One part: base lip behind a tall rear block,
+# block front face sloping forward onto a long full-width nose (rounded join), nose top
+# chamfered at the front onto an upright front wall. Plan size EMPIRICAL from the reference
+# (100 x 231 px = 0.78 x 1.79 u at the base). Black and white caps share this geometry.
 CAP_W = 0.80
 CAP_BACK, CAP_FRONT = 0.90, -0.89
-CAP_HT, CAP_HN = 0.70, 0.17  # EMPIRICAL: owner's side-view sketch (2026-11-13), block
-# 108 px and nose 26 px over a 277 px cap length
-BLOCK_FRONT = 0.20  # EMPIRICAL (loose-cap photo): block is about 0.4 of the cap length
-NOSE_TOP_FRONT = -0.52  # EMPIRICAL (sketch): flat nose top ends here, then curves down
-NOSE_FRONT_H = 0.03  # EMPIRICAL (sketch): the nose runs out almost to a point
-LIP_L, LIP_H = 0.06, 0.10  # EMPIRICAL (loose-cap photo): base lip behind the block
-CAP_TAPER = 0.05  # EMPIRICAL: walls nearly upright (draft only)
+# Profile EMPIRICAL from the owner's side photo (2026-11-13, white cap, 342 px base length =
+# 1.79 u, 0.0052 u/px, about +/-10 % from the low camera); width taper and foot flare from
+# the owner's rear photo of three caps.
+CAP_HT, CAP_HN = 1.00, 0.47  # block 215 px, nose 100 px tall
+BLOCK_TOP_FRONT = 0.25  # block top front edge at 217 px from the nose tip
+BLOCK_FRONT = 0.04  # block front face meets the nose at 177 px: steep forward slope
+NOSE_TOP_FRONT = -0.66  # flat nose top ends at 44 px, then the chamfer
+NOSE_FRONT_H = 0.10  # short upright nose front wall under the chamfer
+LIP_L, LIP_H = 0.07, 0.20  # base step behind the block: 15 px out, 45 px tall
+CAP_TAPER = 0.20  # rear photo: block top about 0.8 of its base width
+FLARE_H = 0.14  # rear photo: walls flare out over the bottom ~0.14 u (concave foot)
+STEP = 0.04  # ASSUMED: run of the near-vertical back wall, so the bevel is not clamped
 CAP_BEVEL = 0.12  # EMPIRICAL: reference cap corners read about 8 px rounded at 2x
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
 FOOT_WALL = 0.06  # ASSUMED: upright strip at the foot of every wall
@@ -41,34 +47,37 @@ def _section(y, z, top_x, left=-CAP_W / 2):
     hb, zl = CAP_W / 2, CAP_LIFT
     v = min(FOOT_WALL, z * 0.5)  # short upright wall: every bottom edge is 90 deg, so the
     # bevel shrinks the outline the same everywhere (sloped walls would bevel deeper)
+    f = min(FLARE_H, z * 0.6)  # flared foot: steep inward kink, then the tapered wall
+    fx = hb - (hb - top_x[1]) * 0.5 * f / max(z, 1e-6) - 0.03 * (f / FLARE_H)
     return [
         (left, y, zl),
         (hb, y, zl),
         (hb, y, zl + v),
+        (fx, y, zl + f),
         (top_x[1], y, zl + z),
         (top_x[0], y, zl + z),
+        (-fx, y, zl + f),
         (left, y, zl + v),
     ]
 
 
 def fader_cap(m, key):
-    """Drawbar cap, one loft from back to front: base lip, tall upright rear block, step
-    down onto the low full-width nose (the bevel makes the fillet), curved nose front."""
-    ht, hn, e = CAP_HT, CAP_HN, 0.005
+    """Drawbar cap, one loft from back to front: base lip, tall rear block whose front face
+    slopes onto the full-width nose, chamfered nose top, upright front wall (the end cap of
+    the loft). Smooth shading plus an unclamped bevel round every edge (photo)."""
+    ht, hn = CAP_HT, CAP_HN
     top = (-CAP_W / 2 * (1 - CAP_TAPER), CAP_W / 2 * (1 - CAP_TAPER))
     secs = [
-        (CAP_BACK, LIP_H, top),
-        (CAP_BACK - LIP_L, LIP_H, top),
-        (CAP_BACK - LIP_L - e, ht, top),
-        (BLOCK_FRONT + 0.06, ht, top),
-        (BLOCK_FRONT, ht - 0.06, top),  # rounded top front edge (sketch)
-        (BLOCK_FRONT - e, hn, top),
-        (NOSE_TOP_FRONT, hn, top),
-        (-0.72, 0.10, top),  # EMPIRICAL (sketch): curved nose front
-        (CAP_FRONT, NOSE_FRONT_H, top),
+        (CAP_BACK, LIP_H),
+        (CAP_BACK - LIP_L, LIP_H),
+        (CAP_BACK - LIP_L - STEP, ht),
+        (BLOCK_TOP_FRONT, ht),
+        (BLOCK_FRONT, hn),
+        (NOSE_TOP_FRONT, hn),
+        (CAP_FRONT, NOSE_FRONT_H),
     ]
-    rings = [_section(y, z, tx) for y, z, tx in secs]
-    return [loft("cap_body", rings, m[key], smooth=False, bevel=CAP_BEVEL, segments=8)]
+    rings = [_section(y, z, top) for y, z in secs]
+    return [loft("cap_body", rings, m[key], smooth=True, bevel=CAP_BEVEL, segments=8)]
 
 
 def layer_cap(m, key):
