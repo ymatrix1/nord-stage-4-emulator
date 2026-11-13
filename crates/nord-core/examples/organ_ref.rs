@@ -5,7 +5,10 @@
 //! can compare the two. Method and results: `docs/research/organ-oracle-audio.md`.
 //!
 //! ```text
-//! --mode layer       OrganLayer with percussion, crosstalk, rotary and scanner off (only mode)
+//! --mode layer       OrganLayer with percussion, crosstalk, rotary and scanner off (default)
+//! --mode vox         the Vox note bank (`ToneWheelSource::Vox`, spec 3.1.6): weight 1 per key, the
+//!                     output stage `0x1229B3`; drawbars, --weights and --detuned do not apply
+//! --vibrato N        vox mode: vibrato type 0 (off), 1..3 (V1..V3: Vox depths 0.70, 1.15, 1.76 %)
 //! --notes 60,64,67    MIDI notes (default C4 E4 G4)       --drawbars 888000000
 //! --frames N          frames to render (default 16384)    --detuned   vibrato level 1: detuned table,
 //!                     stereo-blend lanes in L/R (compare per lane with `organ_oracle_audio.py compare --lanes`)
@@ -20,7 +23,8 @@
 //! --out PREFIX        writes PREFIX.wav (float32 stereo) and PREFIX.csv (index,L,R)
 //! ```
 use nord_core::organ::{
-    drawbar_gain_law, DrawbarLaw, OrganLayer, RotarySpeed, ScannerMode, ToneWheelSource, WeightMode,
+    drawbar_gain_law, DrawbarLaw, OrganLayer, OrganModel, RotarySpeed, ScannerMode,
+    ToneWheelSource, WeightMode,
 };
 use std::fmt::Write as _;
 
@@ -42,6 +46,7 @@ struct Opts {
     level: f32,
     velocity: u8,
     keyoff_at: Option<usize>,
+    vibrato: u8,
     out: String,
 }
 
@@ -60,6 +65,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         level: 1.0,
         velocity: 127,
         keyoff_at: None,
+        vibrato: 0,
         out: "organ_ref".into(),
     };
     let mut it = args.iter();
@@ -101,6 +107,12 @@ fn parse(args: &[String]) -> Result<Opts, String> {
                     return Err("--velocity is 1..127".into());
                 }
             }
+            "--vibrato" => {
+                o.vibrato = val("0..3")?.parse().map_err(|_| "bad --vibrato")?;
+                if o.vibrato > 3 {
+                    return Err("--vibrato is 0..3".into());
+                }
+            }
             "--keyoff-at" => o.keyoff_at = Some(val("N")?.parse().map_err(|_| "bad --keyoff-at")?),
             _ => return Err(format!("unknown option {a}")),
         }
@@ -118,6 +130,17 @@ fn render_layer(o: &Opts) -> Vec<[f32; 2]> {
     organ.rotary_enabled = false;
     organ.rotary_speed = RotarySpeed::Slow;
     organ.scanner_mode = ScannerMode::Off;
+    if o.mode == "vox" {
+        organ.model = OrganModel::Vox;
+        organ.tonewheel_source = ToneWheelSource::Vox;
+        organ.key_click_enabled = false;
+        organ.scanner_mode = [
+            ScannerMode::Off,
+            ScannerMode::V1,
+            ScannerMode::V2,
+            ScannerMode::V3,
+        ][usize::from(o.vibrato)];
+    }
     organ.drawbars = o.drawbars;
     organ.drawbar_law = if o.linear {
         DrawbarLaw::Linear
@@ -238,6 +261,18 @@ mod tests {
         };
         assert!(rms(360, 400) < 0.5 * rms(0, 100), "release tail decays");
         assert!(rms(360, 400) > 0.0);
+    }
+
+    #[test]
+    fn vox_mode_renders_the_note_bank_with_vibrato_options() {
+        let mut o = parse(&strings(&["--mode", "vox", "--vibrato", "3"])).unwrap();
+        assert_eq!((o.mode.as_str(), o.vibrato), ("vox", 3));
+        assert!(parse(&strings(&["--vibrato", "4"])).is_err());
+        o.frames = 4000;
+        let f = render_layer(&o);
+        assert!(f.iter().flatten().all(|v| v.is_finite()));
+        let peak = f.iter().flatten().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak > 0.05 && peak < 0.3, "{peak}");
     }
 
     #[test]
