@@ -6,6 +6,7 @@
 //! generator), `keyclick`, `scanner`, `rotary`.
 
 mod b3_keys;
+mod b3_tail;
 mod b3_weights;
 mod b3_wheels;
 mod drawbar;
