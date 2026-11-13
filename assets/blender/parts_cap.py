@@ -24,7 +24,8 @@ NOSE_TOP_FRONT = -0.62  # front edge of the nose top
 # right wall slopes down to the full-width base
 NOSE_TOP_X = (-0.43, 0.12)
 NOSE_LEFT = -0.45  # EMPIRICAL: the nose base sticks out left of the block (silhouette fit)
-BASE_H = 0.14  # EMPIRICAL: low base band in front of the nose; kept above CAP_BEVEL so it rounds like the rest
+# EMPIRICAL: low base band in front of the nose; kept above CAP_BEVEL so it rounds evenly
+BASE_H = 0.14
 CAP_TAPER = 0.12  # EMPIRICAL: block top is about 0.88 of its base width (photo, front view)
 CAP_BEVEL = 0.12  # EMPIRICAL: reference cap corners read about 8 px rounded at 2x
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
