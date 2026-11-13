@@ -189,6 +189,9 @@ pub struct Core {
     pub mr: [i128; 2],
     /// When set, compute operations that are not modelled are skipped and counted instead of faulting.
     pub lenient: bool,
+    /// SHARC+ core (ADSP-2157x): the system-register write masks differ from the ADSP-2148x
+    /// (`sysregs.rs`). Set by `enable_sc57x` and by a `plus` line in census cases.
+    pub sharc_plus: bool,
     /// Number of skipped unmodelled compute operations and the pc of the first one.
     pub skipped: u64,
     pub first_skipped: Option<u32>,
@@ -266,6 +269,7 @@ impl Core {
             ustat: [0; 4],
             mr: [0; 2],
             lenient: false,
+            sharc_plus: false,
             skipped: 0,
             first_skipped: None,
             skipped_pcs: Vec::new(),

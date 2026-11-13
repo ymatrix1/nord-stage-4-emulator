@@ -21,6 +21,7 @@ impl Bus for CoreBus<'_> {
 impl Core {
     /// Switches on the ADSP-2157x peripheral models for core `core` (0 = Core1).
     pub fn enable_sc57x(&mut self, core: usize) {
+        self.sharc_plus = true;
         self.periph.get_or_insert_with(Default::default).sc57x = Some(Sc57x::new(core));
     }
 
