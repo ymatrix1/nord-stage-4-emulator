@@ -146,6 +146,23 @@ target/release/sharc-bank SRAM/core1_sram.bin --calls 2 --script l1.script --out
 
 Not done: the organ vs piano vs synth reachability of `0xC022D9F0` / `0xC0236410` (static callers only: organ apply `0xC01209C4/0xC0120C60`, part routing `0xC0236410`; no piano id was driven), the vibrato / percussion / rotary / model ids through `0xC011CB60`, and the weights/post-stage words.
 
+## 8. Id sweep through the notify path and the piano layer (VERIFIED run, mostly negative)
+
+In the booted state (`boot_until(G_CTOR_PROGRESS)`, organ layer built by `0xC0019BAC`), every `Edt_Org_*`, `Edt_OrgCom_*`, `Edt_Sys_kLeslie*`, `Edt_Pno_*` and rotary id of `arm-edit-params.csv` (67 ids, values 1 and 2) was set through the real store setter `0xC00D051C(store, 0, &{id, 1}, v)` with a call tracer and the fake DSP ports:
+
+| Ids | Reached code | Messages |
+|---|---|---|
+| `Edt_Org_Preset_kDb1..9` (`0x16D..0x175`) | `0xC01E8968 -> 0xC011AB8C -> 0xC022AB2C` (record word `0x10 + k`, section 6) | none directly (the record update sends, section 6/7) |
+| `Edt_OrgCom_kLayerLevelOrgA/B` (`0xB1`, `0xB2`) | `0xC01E8968 -> 0xC011AB8C` (the float branch at `0xC011AC38`) | none |
+| vibrato enable `0x16C`, percussion `0x16B/0x177..0x179`, `Edt_Org_kModel` `0x166`, key zone/octave/sustain, all `Edt_OrgCom_*` vibrato/Leslie ids, `Edt_Sys_kLeslie*` | no handler code reached | none |
+| all 15 `Edt_Pno_*` ids (`0x14D..0x15E`) | no handler code reached | none |
+
+So in this harness only the drawbar and layer-level ids have a live handler: the others need clients (vibrato bank programmer `0xC022D9F0` is called from the organ apply `0xC01209C4/0xC0120C60` with the `Edt_Org_Preset_kVibratoEnable` flag, Leslie from the effects layer) that are created by later parts of the boot. **Not captured:** vibrato / percussion / model / rotary messages. Their DSP effect for the bank is covered by section 7 (`0xC022D9F0` with level 1 versus others).
+
+**Piano layer.** The piano layer constructor is `0xC00194B8(layer, index, 0, 0)` (subscriptions `0xC0019634..0xC0019A50`, ids `0x14D..0x15E` among others, vtable `0xC027ACA0`). It runs with zero null calls in the booted state, but its edit store is not at `[layer + 0x5000 + 0x6C8]` (that pointer is 0 for the piano layer) and setting the piano ids through the organ layer's store reaches no handler either. The organ-versus-piano comparison of PNO core 1 usage is therefore **not decided here**; the static fact from section 7 stays: the organ drawbar record path and the bank programmer both write PNO comm 1 core 1 words.
+
+**Sender of the 7-bit array.** Not found. The array `[record+0x28]+0x18` is read by `0xC00BE348` itself (section 7) and no other reader fired in the harness.
+
 ## Implications
 
 - `arm-edit-params.csv` is the authoritative id, name and range list for the 422 edit parameters; the organ drawbar field is a 0..8 integer at the ARM edit layer, which settles the "scaled 7-bit?" question for *that* layer only.
