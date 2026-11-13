@@ -2,6 +2,7 @@
 
 import random
 
+import fx_closed_delay as cd
 import fx_closed_forms as cf
 import fx_models
 import fx_oracle as fo
@@ -10,8 +11,9 @@ import pytest
 #: relative error ceiling per routine over the seeds below (float64 equations against 40-bit
 #: registers and truncating stores; measured worst cases 9.8e-5, 2.8e-5, 6.2e-5 and 1.9e-3 where a
 #: table index sits next to a rounding boundary)
-TOLERANCE = {"resonant": 3e-4, "resonant4": 1e-4, "allpass": 2e-4, "lfo": 5e-3}
+TOLERANCE = {"delay": 1e-4, "resonant": 3e-4, "resonant4": 1e-4, "allpass": 2e-4, "lfo": 5e-3}
 CLOSED = {
+    "delay": cd.delay,
     "resonant": cf.resonant2,
     "resonant4": cf.resonant4,
     "allpass": cf.allpass,
@@ -27,8 +29,11 @@ def test_closed_form_matches_the_model(name):
     for _ in range(120):
         case = rt.scenario(rng)
         mem, written = fo.model_run(rt, case)
-        want = CLOSED[name]({**rt.static, **case})
-        assert set(want) >= written, f"{name}: unmodelled writes {sorted(written - set(want))}"
+        full = {**rt.static, **case}
+        want = CLOSED[name](full)
+        # words the model writes back unchanged (the second word of a pair store) need no equation
+        extra = {a for a in written - set(want) if mem[a] != full.get(a)}
+        assert not extra, f"{name}: unmodelled writes {sorted(extra)}"
         for addr, value in want.items():
             if isinstance(value, int):  # integer words (the phase sum) must be exact
                 assert mem[addr] == value

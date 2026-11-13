@@ -148,7 +148,7 @@ Not decoded: which ARM words fill the context (`Edt_Effects_kCmpAmt` 0..127 defa
 
 Rust parity: `FwCompressor` reproduces the oracle golden vector with a worst relative output error of 2.1e-7 (f32 arithmetic against 40-bit registers and truncating stores); `MasterBus::set_fw_compressor(Some(..))` swaps it in for the peak-envelope compressor with a 4-frame latency. Default off: `render_hash` is `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0` before and after.
 
-Other routines asked for (delay `0x1206B0`, LFO `0x1228CF`, phaser all-pass `0x122C39`, resonant filter `0x1243F4`) are **not modelled yet**. Their listings interleave two or three dependent chains per instruction group (multi-function `f12=f2*f4, f2=f8+f12`, averages `(f14+f2)/2`, `CLIP`, `RECIPS`, 16-bit `FPACK`); the next step is a listing driven generator of the transliteration (the compressor needed the `BDCST1` and load-order facts above, which such a generator would take from the listing).
+The delay `0x1206B0`, the table LFO `0x1228CF`, the all-pass `0x122C39` and the resonant filters `0x1243F4` / `0x124497` are modelled the same way (instruction-level transliterations checked against the oracle word for word and, through a new `sharc-fx --trace`, register for register); equations, tools and Rust ports are in [fx-routine-models](fx-routine-models.md).
 
 ## Implications
 

@@ -8,15 +8,23 @@ use std::f32::consts::TAU;
 mod amp_eq;
 mod biquad;
 mod delay;
+mod fw_allpass;
 mod fw_coeffs;
 mod fw_compressor;
+mod fw_delay;
+mod fw_lfo;
+mod fw_resonant;
+mod fw_short_float;
 mod fw_stage;
+mod fw_words;
 mod master_iir;
 mod modulation;
 mod reverb;
 #[cfg(test)]
 mod support;
 mod tables;
+#[cfg(test)]
+mod tests_allpass_golden;
 #[cfg(test)]
 mod tests_biquad_golden;
 #[cfg(test)]
@@ -26,11 +34,21 @@ mod tests_compressor_golden;
 #[cfg(test)]
 mod tests_delay;
 #[cfg(test)]
+mod tests_delay_golden;
+#[cfg(test)]
+mod tests_lfo_golden;
+#[cfg(test)]
 mod tests_master_golden;
+#[cfg(test)]
+mod tests_resonant_golden;
 mod types;
 
 pub use biquad::*;
+pub use fw_allpass::{ctx as fw_allpass_ctx, FwAllpass};
 pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
+pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
+pub use fw_lfo::{ctx as fw_lfo_ctx, FwLfo, LfoTables};
+pub use fw_resonant::{ctx as fw_resonant_ctx, FwResonant2, FwResonant4};
 pub use tables::*;
 pub use types::*;
 
