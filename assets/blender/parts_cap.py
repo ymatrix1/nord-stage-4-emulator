@@ -24,10 +24,11 @@ NOSE_TOP_FRONT = -0.62  # front edge of the nose top
 # right wall slopes down to the full-width base
 NOSE_TOP_X = (-0.43, 0.12)
 NOSE_LEFT = -0.45  # EMPIRICAL: the nose base sticks out left of the block (silhouette fit)
-BASE_H = 0.10  # EMPIRICAL: low base band seen in front of the nose (reference)
+BASE_H = 0.14  # EMPIRICAL: low base band in front of the nose; kept above CAP_BEVEL so it rounds like the rest
 CAP_TAPER = 0.12  # EMPIRICAL: block top is about 0.88 of its base width (photo, front view)
-CAP_BEVEL = 0.09
+CAP_BEVEL = 0.12  # EMPIRICAL: reference cap corners read about 8 px rounded at 2x
 CAP_LIFT = 0.03  # cap floats above the plate so the slot shows under it
+FOOT_WALL = 0.06  # ASSUMED: upright strip at the foot of every wall
 # Layer-fader cap EMPIRICAL from its photo: a frustum, top smaller than the base on all sides,
 # rounded edges. Base 96 x 74 reference px.
 LAYER_W, LAYER_L, LAYER_H = 0.74, 0.61, 0.36
@@ -40,7 +41,16 @@ SLOT_W, SLOT_LEN, SLOT_DEPTH, PLATE_T = 0.17, 3.4, 0.16, 0.2
 def _section(y, z, top_x, left=-CAP_W / 2):
     """Cross-section at y: bottom from `left` to the right edge, top edge between `top_x`."""
     hb, zl = CAP_W / 2, CAP_LIFT
-    return [(left, y, zl), (hb, y, zl), (top_x[1], y, zl + z), (top_x[0], y, zl + z)]
+    v = min(FOOT_WALL, z * 0.5)  # short upright wall: every bottom edge is 90 deg, so the
+    # bevel shrinks the outline the same everywhere (sloped walls would bevel deeper)
+    return [
+        (left, y, zl),
+        (hb, y, zl),
+        (hb, y, zl + v),
+        (top_x[1], y, zl + z),
+        (top_x[0], y, zl + z),
+        (left, y, zl + v),
+    ]
 
 
 def fader_cap(m, key):
@@ -49,7 +59,8 @@ def fader_cap(m, key):
     the left because its right wall slopes steeply (reference and photos)."""
     ht, hn = CAP_HT, CAP_HN
     blk = (-CAP_W / 2 * (1 - CAP_TAPER), CAP_W / 2 * (1 - CAP_TAPER))
-    base = (-CAP_W / 2 + 0.02, CAP_W / 2 - 0.02)
+    side = CAP_W / 2 * (1 - CAP_TAPER * BASE_H / CAP_HT)  # same wall slope as the block
+    base = (-side, side)
     secs = [
         (CAP_BACK, ht * 0.86, blk),
         (CAP_BACK - 0.08, ht, blk),

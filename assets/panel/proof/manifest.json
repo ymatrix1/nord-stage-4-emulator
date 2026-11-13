@@ -44,38 +44,38 @@
       "height": 256
     },
     "drawbar_cap_black_1x.png": {
-      "sha256": "a7c5111bb1186db70a38e96aafc52f6e2984d13a2c70365ca31b37756c7a301e",
-      "bytes": 9768,
+      "sha256": "fcee8f74357796242e246a9e7cde21ff73662c2949a59340a51f8ff78caa6015",
+      "bytes": 9831,
       "width": 96,
       "height": 160
     },
     "drawbar_shadow_black_1x.png": {
-      "sha256": "207d5a8a01bbcc867effb3b4f3127eea2652c49b266ae95803b92c217c84b22b",
-      "bytes": 8588,
+      "sha256": "64ae647387db18f3209f46ab2093ce39447fcfd5f3e1f2d3d8f127db08294668",
+      "bytes": 8356,
       "width": 96,
       "height": 160
     },
     "drawbar_cap_white_1x.png": {
-      "sha256": "bb182a1fbb9f3527f198a00afeec02ea5b84dff5729fd6717f3f982d0fd6847b",
-      "bytes": 10382,
+      "sha256": "df661741d565900ddbd95657f15f2ddd4a7f425ac43e9c3758c9e7829d1ef1bf",
+      "bytes": 10457,
       "width": 96,
       "height": 160
     },
     "drawbar_shadow_white_1x.png": {
-      "sha256": "6922b9ec54d94b3d1fc8ffc130532899899567d19833d8da3e23b968c6362a8f",
-      "bytes": 8685,
+      "sha256": "e175c300eb18b756284ac340decd92ded685c21429952fa2425ef312c77bc3ce",
+      "bytes": 8321,
       "width": 96,
       "height": 160
     },
     "layer_cap_grey_1x.png": {
-      "sha256": "f3d1e10e0972b7113d1bf9d61be84382d9e2b9c78a8b15b6bb09e88d6b211c26",
+      "sha256": "a222cc70e486309c626d7af760109ac0f6d6ba484499d727602d76f523280241",
       "bytes": 4926,
       "width": 96,
       "height": 96
     },
     "layer_shadow_grey_1x.png": {
-      "sha256": "da005a1b315fe06891ef3f4d32c42ccb168b2ef3c30e3b5adcf860f86be47cf8",
-      "bytes": 5736,
+      "sha256": "5aa294e274c2d11b06ec94dc56e5e32dc05f9e5b61008919fe69d8fe820ce0cc",
+      "bytes": 5757,
       "width": 96,
       "height": 96
     },
@@ -272,38 +272,38 @@
       "height": 512
     },
     "drawbar_cap_black_2x.png": {
-      "sha256": "b92726c3f21d092acb64bb8b918b79c79d7850b6cd8f6d5ecb72e2f121724f16",
-      "bytes": 30883,
+      "sha256": "760fe26065b92cbc4db151dc4e0c4ed4c29952a9e4c8274b00460499b618629b",
+      "bytes": 31135,
       "width": 192,
       "height": 320
     },
     "drawbar_shadow_black_2x.png": {
-      "sha256": "89d553016e5d1c6b2fef4398d1ef2545a7b85fed49356ca5b7049f58aba3060d",
-      "bytes": 24403,
+      "sha256": "99de47d85d22a52482cdff0f58993597e1658bb01ce6c6482f3d3728dd903b22",
+      "bytes": 23738,
       "width": 192,
       "height": 320
     },
     "drawbar_cap_white_2x.png": {
-      "sha256": "8fe7ef207ad70450f7aba61775bfa228ff8ee4cc3f24f9e5a8eb44df05a70631",
-      "bytes": 31945,
+      "sha256": "4adc3c545cb3f37f6499165e2677b6e4aec781106e57c4124ce43d6c129b8880",
+      "bytes": 32858,
       "width": 192,
       "height": 320
     },
     "drawbar_shadow_white_2x.png": {
-      "sha256": "8ba74c944107ac003bad2282d57e8e2d043448abf671d41b94f3fbc2866a4678",
-      "bytes": 24043,
+      "sha256": "1ec9d65726e83e545a81022a359db68dac2af067dae39e5d8b1b1adc36dcfda0",
+      "bytes": 24066,
       "width": 192,
       "height": 320
     },
     "layer_cap_grey_2x.png": {
-      "sha256": "8231cc858bffc4699e7f5ce24d959cfb97e4c6be20f04e86309217db8b68cae3",
+      "sha256": "c483b5e26b38d7ed73a952ef3a35c7c0d6b7736a7595cb418f1d3d49fd8a9305",
       "bytes": 14122,
       "width": 192,
       "height": 192
     },
     "layer_shadow_grey_2x.png": {
-      "sha256": "0ea76c4903a09be42e7c521952b05d7043be372fc91c2ab6b8225ae3b4aa4506",
-      "bytes": 15934,
+      "sha256": "d21fa583355514ad40f08fad4c375f1851cb3c7a650292055fe9e375b65b265a",
+      "bytes": 15489,
       "width": 192,
       "height": 192
     },

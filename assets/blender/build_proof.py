@@ -38,6 +38,9 @@ import proof_scene as S  # noqa: E402
 ARGV = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
 QUICK = "--quick" in ARGV
 QUICK_FRAMES = (0, 9, 16, 32, 47, 63)
+# EMPIRICAL: the reference cap shadows are darker than the scene sun gives; shadow pass only
+CAP_SHADOW_GAIN = 1.4
+CAP_SHADOW_ANGLE = math.radians(45)  # EMPIRICAL: soft, wide penumbra like the reference
 
 
 def fresh(scale: int, name: str, lean: str) -> dict:
@@ -112,6 +115,8 @@ def render_caps(out: Path, scale: int) -> None:
         cy.use_denoising, cy.samples = False, 64  # unlit texture: no noise, keep it sharp
         S.render(out / f"{name}_{scale}x.png")
         m = fresh(scale, shadow, name)
+        sun = bpy.data.objects["sun"].data
+        sun.energy, sun.angle = S.SUN_STRENGTH * CAP_SHADOW_GAIN, CAP_SHADOW_ANGLE
         S.flags(C.plate_slot(M.catcher_mats()), catcher=True)
         S.flags(make(m, "cap_black"), holdout=True)
         S.render(out / f"{shadow}_{scale}x.png")
