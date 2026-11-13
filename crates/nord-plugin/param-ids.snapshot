@@ -386,6 +386,8 @@ pianoy_pedal_noise_1|1|1.000000
 pianoy_pedal_noise_2|1|1.000000
 pianoy_string_res_1|1|1.000000
 pianoy_string_res_2|1|1.000000
+prog_level_db|cont|0.500000
+prog_transpose|12|0.500000
 rotary_drive|cont|0.000000
 rotary_speed_fast|1|0.000000
 split_1_crossfade|2|0.000000
