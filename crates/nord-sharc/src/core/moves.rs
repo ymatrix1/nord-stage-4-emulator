@@ -129,18 +129,19 @@ impl Core {
                 }
             }
             Kind::T14a => {
-                self.mem_transfer(
-                    d,
-                    bits(w, 31, 0) as u32,
-                    bits(w, 38, 32) as u8,
-                    write_bit(40),
-                )?;
+                let (addr, ureg) = (bits(w, 31, 0) as u32, bits(w, 38, 32) as u8);
+                let second = self.lw_prepare(d, ureg)?;
+                self.mem_transfer(d, addr, ureg, write_bit(40))?;
+                self.lw_complete(d, addr, ureg, write_bit(40), second)?;
             }
             Kind::T15a => {
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 44, 44));
                 let addr = self.dag_out(ii, self.i[ii].wrapping_add(bits(w, 31, 0) as u32));
-                self.mem_transfer(d, addr, bits(w, 38, 32) as u8, write_bit(40))?;
-                self.broadcast_load(ii, bits(w, 38, 32) as u8, write_bit(40));
+                let ureg = bits(w, 38, 32) as u8;
+                let second = self.lw_prepare(d, ureg)?;
+                self.mem_transfer(d, addr, ureg, write_bit(40))?;
+                self.lw_complete(d, addr, ureg, write_bit(40), second)?;
+                self.broadcast_load(ii, ureg, write_bit(40));
             }
             Kind::T15b => {
                 // UREG 29..23, signed DATA7 22..16 (VERIFIED, docs 5.28)
@@ -148,8 +149,11 @@ impl Core {
                 // G bit 37 selects program memory with the DAG2 index (ADI `i5=pm(0x8,i9)`)
                 let ii = bits(w, 43, 41) as usize + Self::dag_bank(bits(w, 37, 37));
                 let addr = self.dag_out(ii, self.i[ii].wrapping_add(offset));
-                self.mem_transfer(d, addr, bits(w, 29, 23) as u8, write_bit(40))?;
-                self.broadcast_load(ii, bits(w, 29, 23) as u8, write_bit(40));
+                let ureg = bits(w, 29, 23) as u8;
+                let second = self.lw_prepare(d, ureg)?;
+                self.mem_transfer(d, addr, ureg, write_bit(40))?;
+                self.lw_complete(d, addr, ureg, write_bit(40), second)?;
+                self.broadcast_load(ii, ureg, write_bit(40));
             }
             Kind::T16a => {
                 // DM/PM(Ii, Mm) = <data32>, post-modify with update
@@ -214,8 +218,10 @@ impl Core {
                 };
                 let ureg = bits(w, 29, 23) as u8;
                 let captured = self.capture(ureg);
+                let second = self.lw_prepare(d, ureg)?;
                 self.run_move_compute(d, with_compute)?;
                 self.mem_transfer_with(d, addr, ureg, write_bit(31), captured)?;
+                self.lw_complete(d, addr, ureg, write_bit(31), second)?;
                 self.broadcast_load(ii, ureg, write_bit(31));
                 if let Some(u) = update {
                     self.i[ii] = u;

@@ -20,6 +20,8 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D12](#d12-pursue-track-b-reverse-engineering-for-cnsp-sample-codec-and-firmware-decompression) | 2026-11-11 | Pursue Track B reverse engineering for `CNSP` sample codec and full LZ firmware decompression | accepted |
 | [D13](#d13-adopt-the-third-party-ns4decode-bit-map-for-synth-0x32--0x2f-fields) | 2026-11-11 | Adopt the third-party ns4decode bit map for Synth `0x32` / `0x2F` fields | accepted |
 | [D14](#d14-nih-plug-framework-for-clap-vst3-and-au-daw-plugin-architecture) | 2026-11-11 | NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture | accepted |
+| [D15](#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering) | 2026-11-12 | Hybrid Blender-baked sprite + egui painter 2.5D rendering on `nih_plug_egui` | accepted |
+| [D16](#d16-phase-6b-scope-original-art-functional-or-stub-controls-ha88-first-additive-host-ids) | 2026-11-12 | Phase 6b scope: original art, functional-or-stub controls, HA88 first, additive host IDs | accepted |
 
 ---
 
@@ -167,3 +169,39 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** Avoids rewriting DSP logic; supports all required formats from a single trait implementation; guarantees real-time zero-allocation processing; integrates directly with existing `Stage4Engine` and `ProgramDecoded` preset serialization.
 - **Alternatives:** `clack-plugin` (CLAP only, lacks native VST3 and AU wrappers); manual C-FFI / COM shims (unmaintainable boilerplate).
 - **Impact:** Adds `crates/nord-plugin` workspace crate with targets for CLAP, VST3, and Standalone.
+
+### D15. Hybrid Blender-baked sprite + egui painter 2.5D rendering
+
+- **Status:** accepted 2026-11-12
+- **Decided by:** Yuri Olive
+- **Context:** Phase 6b ([ROADMAP](ROADMAP.md#phase-6b-11-hardware-parity--25d-panel-ns4-xc5n)) needs a 2.5D panel (depth, shadows, materials) shared by the standalone app and the plugin editor. `nord-gui` is `eframe` 0.31 on the `glow` (OpenGL) backend; the plugin editor uses `nih_plug_egui`, which runs on `baseview` + OpenGL. Checked 2026-11-12: the nih-plug checkout in the cargo cache pins `egui-baseview` (commit `ec70c3f`, 2025-02-04), which depends on `egui` / `egui_glow` 0.31, the same minor as `nord-gui` (`Cargo.lock`: egui 0.31.1); `nih_plug_egui` exposes only the OpenGL backend. Not yet verified by compiling a `nord-panel` crate against both. Drawing is GUI-thread only and must never lock the engine.
+- **Decision:**
+  - **Toolkit:** `nih_plug_egui` for the plugin editor, `eframe` for the standalone app, one shared `crates/nord-panel`. `nord-panel` pins egui 0.31 and upgrades only together with `nih_plug_egui`. Control state and hit-testing stay free of egui types so only the drawing layer is toolkit-specific.
+  - **Baker:** hardware parts (chassis, plates, fader slots, knob caps, fader caps, buttons, keys) are modelled in Blender from our own geometry and rendered offline (scripted, headless) at 1x and 2x: static plates as atlases, knobs as 64-128 frame filmstrips (or one frame rotated for symmetric caps), fader caps and buttons as separate sprites so their shadows stay on their own layer. `xtask bake-panel` packs the committed renders into atlases deterministically. Flat vector layers (silkscreen text, section outlines, lines) are drawn with `tiny-skia` in the same command.
+  - **Reproducibility:** Blender (Cycles/EEVEE) output is not bit-identical across GPUs, so the rendered PNGs are the committed source of truth with content hashes; CI verifies the hashes of the committed files and the atlas packing, and does not re-render. The render scripts and `.blend` sources are committed so renders can be regenerated deliberately.
+  - **Dynamic layers (egui painter):** LED ladders and LED glow (dark off-image plus lit overlay), OLED pixels, text and Morph LEDs. One top-left light for the whole panel; a per-element height token drives shadow offset and blur for anything drawn live. Textures upload once; repaint at most 60 Hz and only on change.
+  - **Reference asset:** `.reference/HIGH_POLY_KEYBOARD_STAGE_PIANO` (a Sketchfab fan model with Nord's panel artwork, licence unchecked) is a private layout and material reference only: control positions and proportions may be measured into data files. No render, trace or texture derived from it is committed or shipped (D16).
+- **Why:** Pre-rendered 3D images give soft shadows, real materials and ambient occlusion that a 2D painter cannot reach, which is how commercial instrument UIs get their look. The egui painter keeps dynamic state exact and runs on both OpenGL hosts without custom GPU code, and sharing `nord-panel` with `nord-gui` avoids writing the panel twice. Committing renders with hashes keeps assets testable by the golden-image harness (B6) without requiring Blender in CI.
+- **Alternatives:**
+  - A. egui painter only: simplest, but flat materials, and per-frame cost rises with gradient/shadow meshes.
+  - B. `tiny-skia` as the only baker (the original proposal): deterministic and light, but 2D vector cannot match rendered materials. Kept for the flat vector layers.
+  - C. wgpu shader callbacks with real-time lighting: highest ceiling, rejected for now. `nord-gui` is `eframe`/`glow` and `nih_plug_egui` uses `baseview`/OpenGL, so a wgpu path would need a second backend in both hosts. A live lighting pass can be tried later because only the drawing layer would change.
+  - D. `nih_plug_vizia`: nicer CSS-style widgets, but it uses a vizia fork tagged 2024-05-06 (upstream vizia 0.4.0 released 2026-04-23) and cannot share code with `nord-gui`.
+  - E. Webview UI: heavy and unreliable inside plugin hosts.
+- **Impact:** New `xtask bake-panel` command, committed renders, Blender sources and scripts, and atlases with hashes; Blender becomes an optional development dependency (not needed by CI or normal builds). `crates/nord-panel` render modules (`theme`, `material`, `shadow`, `atlas`, per-widget painters); spec [visual-style-and-panel.md](specs/visual-style-and-panel.md) updates in B7/B8. B7 (`ns4-77s9`) first proves one knob filmstrip and one fader cap end to end and measures atlas size before the full set. B6 (golden images) keeps its `tiny-skia` CPU raster. Renderer fragility on macOS OpenGL is to be checked in B11/B13 host testing.
+
+### D16. Phase 6b scope: original art, functional-or-stub controls, HA88 first, additive host IDs
+
+- **Status:** accepted 2026-11-12
+- **Decided by:** Yuri Olive
+- **Context:** Phase 6b ([ROADMAP](ROADMAP.md#phase-6b-11-hardware-parity--25d-panel-ns4-xc5n)) targets full front-panel parity with a 2.5D look. OQ8, OQ9, OQ10, OQ11 and OQ14 blocked the renderer and parameter lanes.
+- **Decision:**
+  1. **Art and branding (was OQ8):** all shipped art is original. No Nord logo or wordmark, no photo textures and nothing traced or rendered from Nord's imagery or third-party models of the hardware. Use a neutral wordmark such as "Stage 4 Emulator" and our own typeface and layout art; control labels may name the feature they control. Reference photos and models stay private in `.reference/`. **Photos as reference (clarified 2026-11-12):** photos and models of the hardware may be used to measure layout and proportions, sample colours into our own theme tokens, and judge shapes (knobs, faders, buttons) and how materials respond to light, so we can model and shade our own parts to match. They are never a source of pixels: no cropped or sampled patches, no tracing, no photogrammetry or image-to-3D, and textures are built procedurally or from our own or freely licensed sources. Only the measured numbers (positions, ratios, colour values) go into the repo, as data. This is a project decision, not legal advice.
+  2. **Parity scope (was OQ9):** every manual control exists on the panel. A control is functional where the engine supports it (Undo and the Num Pad are included); otherwise it is a visible stub bound as `Unsupported` per [control-inventory.md](specs/control-inventory.md), and stubs are promoted one at a time. Preset Library, System, Organize and Extern menus start as stubs. Rear connectors are not drawn, or drawn as static decoration.
+  3. **Keybed (was OQ10):** HA88 first, with the key count and width as layout parameters so the 73-key and Compact variants can be added later.
+  4. **Per-layer host IDs (was OQ11):** additive only. Existing shared IDs (for example `synth_filter_cutoff`) keep their meaning as Layer A; `synth_b_*` and `synth_c_*` are added, built from wrapper structs (the pattern of `fx_params.rs`) so IDs come from one definition. B3 (`ns4-xhbf`) enforces additive-only with a snapshot test.
+  5. **Phase structure (was OQ14):** reopen the Phase 6 bay ticks and add Phase 6b, as in the roadmap.
+  6. **Egui pinning (was OQ12):** see D15.
+- **Why:** Original art removes the trademark and copyright risk at no cost in quality. Functional-or-stub keeps the panel honest about what works. Host parameter IDs are a stable contract for saved DAW projects, so only additions are safe.
+- **Alternatives:** Photo-derived art (rejected: rights); full menus before release (delays the visual goal); renaming per-layer IDs (breaks saved projects); all keybed variants up front (more layout work for no early benefit).
+- **Impact:** Unblocks B7 art direction, B8d/B9d scope, B8g layout and B9a-c parameter work. The remaining Phase 6b unknown is OQ13 (hardware behaviour).

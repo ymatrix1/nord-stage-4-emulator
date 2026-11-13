@@ -117,7 +117,8 @@ impl Core {
             1 => self.i[n] = v,
             2 => self.m[n] = v,
             3 => self.l[n] = v,
-            // VERIFIED (census diff): loading Bx also loads Ix with the same value
+            // VERIFIED (census diff on the ADI simulator): loading Bx also loads Ix with the same
+            // value; the SMP voice loop `0x1C07D8` relies on it (`B1 = DM(..)` then `R12 = DM(I1, M4)`).
             4 => {
                 self.b[n] = v;
                 self.i[n] = v;
@@ -186,6 +187,19 @@ mod tests {
             c.dm_write(a, 1).unwrap();
         }
         assert_eq!(c.watch_addrs, vec![0x9_0011, 0x9_0013]);
+    }
+
+    /// A write to `Bn` also loads `In` (the SMP voice loop `B1 = DM(rec-26)` then reads through `I1`);
+    /// a write to `In` leaves `Bn` alone.
+    #[test]
+    fn writing_a_b_register_also_loads_the_index_register() {
+        let mut c = Core::new(&[]);
+        c.write_ureg(0x41, 0x9B200); // B1
+        assert_eq!((c.b[1], c.i[1]), (0x9B200, 0x9B200));
+        c.write_ureg(0x11, 0x9B210); // I1
+        assert_eq!((c.b[1], c.i[1]), (0x9B200, 0x9B210));
+        c.write_ureg(0x4D, 0x4000); // B13 (PM side)
+        assert_eq!(c.i[13], 0x4000);
     }
 
     #[test]

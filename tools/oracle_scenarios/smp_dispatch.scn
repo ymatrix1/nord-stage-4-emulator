@@ -1,0 +1,19 @@
+# SMP image: audio interrupt, command FIFO and the voice loop under the interrupt controller.
+# Checks (docs/research/sy-smp-audio.md section 7): `msg` reaches DM(0xA0000) through the FIFO at
+# 0x92196, and one voice with an all-zero record runs the loop 0x1C07D8 to completion (adds 0 to
+# the bus; the bus pointer is record word -18, docs/research/smp-voice.md). Run:  sharc-ref smp.bin tools/oracle_scenarios/smp_dispatch.scn --out target/oracle/smp
+meta rate 48000
+warmup 0x1c11e0 100000 flag12=1
+poke 0x5201 0x40
+fifo 0x92196
+irq 13
+msg 0xA0000 0x1234
+irq 17
+capture fifo_store 0xA0000 1
+poke 0x9268b 1
+poke 0x92534 0x9b000
+poke 0x9afee 0x9c000
+irq 13
+irq 17
+capture bus 0x9c000 4
+capture isr_count 0x9425a 1
