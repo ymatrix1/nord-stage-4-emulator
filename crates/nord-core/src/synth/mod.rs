@@ -18,18 +18,30 @@ use crate::synth_wavetable::{sample_wavetable, wavetable_bank};
 
 mod arp;
 mod dsp;
+mod fw_env_rates;
+mod fw_filter;
+mod fw_filter_tables;
 mod gain_dezip;
 mod hw_saw;
 mod render;
 mod sample_osc;
 use dsp::unison_pan;
 pub use dsp::{poly_blep, ZdfFilter, FM_RATIOS};
+pub use fw_env_rates::{
+    attack_coeff, attack_time_passes, decay_release_coeff, rate_index_from_word, RATE_INDEX_MAX,
+};
+pub use fw_filter::{
+    cutoff_to_r, FilterEngine, FwCoefs, FwFilter, FwFilterType, TablePos, FW_CLIP_LIMIT,
+    FW_CUTOFF_MAX_FRACTION, FW_CUTOFF_MIN_HZ,
+};
 pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
 pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 pub use voice::SynthVoice;
 #[cfg(test)]
 mod tests_envelope;
+#[cfg(test)]
+mod tests_fw_filter_golden;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
@@ -128,6 +140,8 @@ pub struct SynthLayer {
     pub wavetable_position: f32,
     pub sample_timbre: SampleTimbre,
     pub filter_model: FilterModel,
+    /// Filter implementation (default `Zdf`; `Firmware` is the Core2 stage family of `fw_filter.rs`).
+    pub filter_engine: FilterEngine,
     pub cutoff_hz: f32,
     pub resonance: f32,
     pub filter_drive: f32,
@@ -243,6 +257,7 @@ impl SynthLayer {
             wavetable_position: 0.0,
             sample_timbre: SampleTimbre::Off,
             filter_model: FilterModel::Ladder24,
+            filter_engine: FilterEngine::Zdf,
             cutoff_hz: 2400.0,
             resonance: 0.3,
             filter_drive: 0.2,

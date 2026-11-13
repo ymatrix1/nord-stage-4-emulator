@@ -135,6 +135,8 @@ impl SynthLayer {
             amp_env: 0.01,
             filter: self.voices[idx].filter,
             filter_right: self.voices[idx].filter_right,
+            fw_filter: self.voices[idx].fw_filter,
+            fw_filter_right: self.voices[idx].fw_filter_right,
             sample_zone_idx,
             sample_pos: 0.0,
             sample_step,
