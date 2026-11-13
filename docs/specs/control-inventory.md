@@ -75,6 +75,21 @@ Modelling choices: a button with its own LED is one entry; standalone LEDs, LED 
 
 The old code-review gap list is replaced by the 141 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects/rotary, `ns4-h7he` organ/piano, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
+## 5b. Behaviour layer
+
+`crates/nord-panel/src/behaviour/` holds the panel logic shared by both front ends; it takes caller-supplied millisecond time and never touches the engine.
+
+| Piece | Rule | Status |
+|---|---|---|
+| Hold | 500 ms, fires once while held | `VERIFIED` (text, manual p.18 "roughly half a second") |
+| Double tap | second press within 300 ms of the previous tap's release | `ASSUMED`; manual p.39, p.43 describe the gesture without an interval |
+| SHIFT resolve | tap + SHIFT held on a control with a printed shifted function = shifted; hold on such a control = shifted (p.44); hold otherwise = Hold (Layer Off, SOLO) | manual p.44 |
+| Latch | double tap toggles; Shift/Exit clears (Morph Assign p.39, Section Edit p.43) | manual |
+| Selector | next/previous index wraps over the LED count | manual p.12 |
+| Pot pick-up | after a stored-value change the knob ignores input until it crosses or comes within 2 % of the stored value | `ASSUMED`, OQ13 |
+| Live Mode | Program buttons 1-8 pick slots; dirty slot is saved on switch or leave | manual p.13, p.44 |
+| `PanelHost` | `get`/`set`/`begin_gesture`/`end_gesture` by host parameter id; `PanelAction::Press` is panel-internal | design |
+
 ## 6. Decisions and open questions
 
 Answered: trademark and art, parity scope, keybed variant, per-layer IDs and Phase 6 ticks in [D16](../DECISIONS.md#d16-phase-6b-scope-original-art-functional-or-stub-controls-ha88-first-additive-host-ids); toolkit, egui pinning and baker in [D15](../DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering). Still open: OQ13 (unconfirmed hardware behaviour) in [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
