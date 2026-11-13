@@ -16,6 +16,12 @@ Question: does the model run the real oscillator-bank routine (pc 0x122620, mix 
 
 **Decision (coordinator, 2026-11-12):** keep the model's `DO` semantics (they match the ADI listing and the exact count). The divergence on `lcntr = 2, do (pc, 0xff800055)` is tagged *SHARC+ `DO` extension not honoured by the 21489 simulator; the 21489 simulator is not a valid reference for this routine*.
 
+## ADSP-21571 (SHARC+) cycle-accurate simulator
+`sim_batch.py --target 21571` works (one 140 s start-up, then about 0.3 s per case; the PC cannot be set, so the `--plus` probe loops back to its loader). First comparison: the 40 condition-code cases of the census sweep (every combination of AZ AV AN AC x AF, four conditions). **All 107-word dumps agree with the model in every register, including the conditional moves (the AF/ALUSAT rules of `sharc-census-diff.md` hold on SHARC+), except three system registers**: ASTATy, STKYx and STKYy keep different bits of a random write on SHARC+ (the 21489 masks of `sysregs.rs` are `VERIFIED` for the 21489 only; on the 21571 STKYx/STKYy read back almost only the stack-status bits, `0x0540_0000` plus a few). The model keeps the 21489 masks until the 2157x masks are measured.
+
+### Routine 0x122620 on the SHARC+ simulator: bit-exact
+6 random cases (random registers, `MODE1 = 0xE10000`, random words in DM `0xC2400..0xC2800`, image tables elsewhere), whole routine including the `DO (PC, 0xFF800055)` outer loop: **every R, S, B, L, I, M register, MODE1, ASTATx, MR0..2 and the 1 024 output words in DM match the model**. The only differences are the three SHARC+ system-register write masks above (ASTATy, STKYx, STKYy; not touched by the routine). So the `DO` bit 7 is indeed a SHARC+ feature the 21489 simulator ignores, and the model's loop semantics are right for it. This is the oscillator-bank inner loop (91 passes x 2): the bank is bit-exact with the SHARC+ simulator on this input class.
+
 ## Implications
 The bank routine is not yet verified. Everything before the loop exit matches, so the multiplier, `FEXT`, dual-memory and SIMD paths it uses are consistent with the instruction-level census (`sharc-census-diff.md`).
 
