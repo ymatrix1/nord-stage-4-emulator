@@ -169,5 +169,5 @@ To add a module (ORG tonewheel, PNO string, FX reverb): write the scenario with 
 
 1. ~~Apply section 5 items 1 and 2 in `sinc.rs` and invert the pinned test.~~ Done (TD-08): floor phase, f64 cutoffs, `sinc::ext40`. Re-measured after the change with the section 6 commands: table max 5.96e-8, 9,355 of 18,432 bit-exact; renders with the engine kernel and `--accum ext40` max 5.96e-8 (golden, resample L), 2.98e-8 (sine L), `--kernel-from` still bit-exact.
 2. Decode the second FIR pass (mask words) with an input that makes it observable (two-position scenario).
-3. Add Stage A (voice start, rate and gain slewing: `0x1C07B0`, ISR step 3) to a scenario so gain and step come from firmware, not from the script.
+3. ~~Add Stage A (voice start, rate and gain slewing: `0x1C07B0`, ISR step 3) to a scenario so gain and step come from firmware, not from the script.~~ Done in [sy-smp-audio.md](sy-smp-audio.md): real FIFO messages and audio interrupt, gain and step from the firmware, 240 of 240 frames bit-exact with the oracle table.
 4. ORG tonewheel and FX scenarios on the same format, starting from the `sharc-org` pass entries.

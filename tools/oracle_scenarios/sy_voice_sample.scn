@@ -1,0 +1,41 @@
+# SY1SY2 with a real decoded factory sample (128 frames of 'Weltmeister 4 Accordion_PS 4.1', local only):
+#   ns4 backup "Nord Stage 4 Factory Restore RevK v1.66.ns4b" --extract "Samp Lib/Accordion_Harm/Weltmeister 4 Accordion_PS 4.1.nsmp4" target/oracle/accordion.nsmp4
+#   cargo run -p nord-core --example sample_dump -- target/oracle/accordion.nsmp4 target/oracle/accordion.f32 --start 1000 --frames 128
+# Same sequence as sy_voice_sine.scn; a sample voice started through the real command sequence and the real audio ISR.
+#
+# Sequence (docs/research/sy-smp-audio.md section 3): FIFO reset interrupt (vector 13), message
+# `rec+0x14 <- 0x1C07CD` (Stage A "prepare"), audio ISR (vector 17), message `rec+0x14 <- 0x1C084C`
+# ("go": Stage A installs the resampler 0x1C10EE into Stage B), then one audio ISR per output frame.
+# The firmware slews gain and step itself (ISR step 3 and 4); the harness
+#   * fills the 128-frame ring (the external-port refill DMA and the unpacker are not modelled),
+#   * writes the pitch table entry the ARM would send (DM 0x93580, 16-bit packed float),
+#   * keeps the refill bookkeeping word rec+0x10 above the refill threshold (see the document).
+# Run:  sharc-ref sy.bin tools/oracle_scenarios/sy_voice_sine.scn --out target/oracle/sy_voice --wav
+#       sinc_ref target/oracle/sy_voice.csv   (reads srcL/srcR, gainL/gainR and step from the dump)
+meta rate 48000
+meta ref.mode resample
+meta ref.kernel 0
+meta ref.gain 1.0
+meta ref.ratio 0.8749
+meta ref.pos_frames -2.5
+meta ref.ring 128
+warmup 0x1c0b2d 100000 flag12=1
+irq 13
+msg 0x92414 0x1c07cd
+irq 17
+fill 0xC0000 128 raw stride=2 path=target/oracle/accordion.f32 chan=0
+fill 0xC0001 128 raw stride=2 path=target/oracle/accordion.f32 chan=1
+poke 0x93580 0x0b33
+irq 13
+msg 0x92414 0x1c084c
+loop 240
+poke 0x92410 0x200
+irq 17
+capture L 0x932ca 1
+capture R 0x932cb 1
+capture gainL 0x92408 1
+capture gainR 0x92409 1
+capture step 0x9242d 1
+end
+capture srcL 0xC0000 128 stride=2
+capture srcR 0xC0001 128 stride=2
