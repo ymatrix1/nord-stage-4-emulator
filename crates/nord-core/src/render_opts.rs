@@ -51,6 +51,14 @@ pub fn apply_synth_chain(engine: &mut Stage4Engine, chain: Option<SynthChain>) {
     }
 }
 
+/// Switches both piano layers to the firmware level law (`PianoLayer::firmware_velocity_level`).
+pub fn apply_piano_level(engine: &mut Stage4Engine, on: bool) {
+    if on {
+        engine.piano_a.firmware_velocity_level = true;
+        engine.piano_b.firmware_velocity_level = true;
+    }
+}
+
 /// Parses an `--b3-tail` value: `on | off`.
 pub fn parse_on_off(name: &str, v: &str) -> Result<bool, String> {
     match v.to_ascii_lowercase().as_str() {
@@ -69,11 +77,22 @@ pub fn apply_b3_tail(engine: &mut Stage4Engine, tail: Option<bool>) {
     }
 }
 
-/// Switches both piano layers to the firmware level law (`PianoLayer::firmware_velocity_level`).
-pub fn apply_piano_level(engine: &mut Stage4Engine, on: bool) {
+/// Selects the amp path of every layer (`Some(true)` firmware drive stage and cabinet, the
+/// default; `Some(false)` the engine drive and RBJ cabinet; `None` leaves the engine untouched).
+pub fn apply_amp_path(engine: &mut Stage4Engine, firmware: Option<bool>) {
+    if let Some(on) = firmware {
+        for chain in engine.fx_chains.iter_mut() {
+            chain.firmware_fx.amp = on;
+        }
+    }
+}
+
+/// Selects the unity-gain rotary drive law `tanh(g x) / g` of both organ layers (`false` keeps the
+/// engine law).
+pub fn apply_rotary_unity(engine: &mut Stage4Engine, on: bool) {
     if on {
-        engine.piano_a.firmware_velocity_level = true;
-        engine.piano_b.firmware_velocity_level = true;
+        engine.organ_a.rotary_drive_unity = true;
+        engine.organ_b.rotary_drive_unity = true;
     }
 }
 
@@ -161,7 +180,7 @@ mod tests {
         apply_firmware_options(&mut e, None, None, false);
         assert_eq!(e.organ_a.tonewheel_source, ToneWheelSource::ModelDefault);
         assert_eq!(e.synth_c.filter_engine, FilterEngine::Zdf);
-        assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::OFF);
+        assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::DEFAULT);
         apply_firmware_options(
             &mut e,
             Some(ToneWheelSource::Vox),

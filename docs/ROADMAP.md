@@ -202,7 +202,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Captured streams replay into the DSP images (`sharc-org --msg-script`, `sharc-pass --script`, `sharc-chain --script`)
 - [x] ARM-side maps: organ weights and key to wheel map ([organ-weights](research/organ-weights.md)), model to slot table ([organ-model-paths](research/organ-model-paths.md), [b3-tone-source](research/b3-tone-source.md)), PNO module chain ([pno-module-chain](research/pno-module-chain.md)), FX chain install, type map and contexts ([fx-chain-install](research/fx-chain-install.md), [fx-type-map](research/fx-type-map.md), [fx-contexts](research/fx-contexts.md)), piano path ([piano-dsp-path](research/piano-dsp-path.md))
 - [ ] Key-down capture: the keybed link (UART2 ring consumer) is not emulated, so no key event reaches the DSP messages (piano velocity law and organ key-down remain open; [piano-dsp-path](research/piano-dsp-path.md) follow-up 1)
-- [ ] Real flash and SPI downloads (sample maps, stroke tables) instead of stubs
+- [x] Boot message log: every ARM to DSP store from reset (80,815 boot messages, real EMIFA ports) kept, fingerprinted and replayed into `sharc-pass` / `sharc-org` (PNO core 1 8,300 / 8,306 words, ORG 12,102 / 12,102); census of the stubbed SPI routines ([arm-bulk-tables](research/arm-bulk-tables.md), `tools/arm_bulk_tables.py`)
+- [ ] L2 table replay (5,910 words per target) and FX equality check; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 
@@ -225,7 +226,10 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Routine models with opt-in Rust ports: delay `0x1206B0`, table LFO `0x1228CF`, all-pass `0x122C39`, resonant `0x1243F4` / `0x124497` ([fx-routine-models](research/fx-routine-models.md))
 - [x] FX type map: 28 modules own all 100 routines; Amp type is data plus a mode word ([fx-type-map](research/fx-type-map.md)); client and context words with measured scalings ([fx-contexts](research/fx-contexts.md))
 - [x] FX delay time law: `kDlyRateClkDiv` to the tap word and the oracle echo law, opt-in `FirmwareFx::delay_time` ([fx-delay-time](research/fx-delay-time.md))
-- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); reverb network and Leslie still open
+- [x] FX Amp type words (`kAmpTypeNew` 1..6) decoded, the Amp drive stage and cabinet verified against the oracle and default (`FirmwareFx::amp`, Vox score 3.98 to 1.30); Leslie drive found to be `v / 127` into a null-stub row ([fx-type-map](research/fx-type-map.md) s8, s9)
+- [x] Amp cabinet `0x122A1D` as a measured impulse response (`fx/fw_cabinet.rs`), unity rotary drive flag
+- [ ] Organ unit EQ routines (`0x124344`, `0x124270`), routine `0x122B1D`, cabinet bank transliteration, JC / Small recordings; Leslie drive nonlinearity (ORG image)
+- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); the reverb half-rate wrapper `0x12417E` / `0x12435C` is modelled and ported (`FwRvbWrap`, not wired); the reverb core `0x123F61` and Leslie still open
 - [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); the reverb tables (`ns4-ca0i`); the delay time law (`kDlyRateClkDiv`, [fx-delay-time](research/fx-delay-time.md)) is decoded and wired behind `FirmwareFx::delay_time`
 - [ ] Enable gating and the command consumer ([fx-contexts](research/fx-contexts.md) s7; wiring plan s8), then sweep the four type ids with the effects enabled
 

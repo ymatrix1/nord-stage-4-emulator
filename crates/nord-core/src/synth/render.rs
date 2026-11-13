@@ -81,6 +81,21 @@ impl SynthLayer {
         self.vib_phase =
             (self.vib_phase + TAU * self.vibrato_rate_hz.clamp(0.1, 20.0) * inv_fs) % TAU;
         let vib_sin = self.vib_phase.sin();
+        // Opt-in measured laws (`measured.rs`); the defaults keep the older scales.
+        let (tau_frac, env_octaves, oenv_pitch_oct) = if self.measured_laws {
+            (
+                ENV_DECAY_TAU_FRACTION_MEASURED,
+                FILTER_ENV_OCTAVES_MEASURED,
+                OSC_ENV_PITCH_OCTAVES_MEASURED,
+            )
+        } else {
+            (ENV_DECAY_TAU_FRACTION, FILTER_ENV_OCTAVES, 1.0)
+        };
+        let vib_scale = if self.measured_laws {
+            VIBRATO_DEPTH_SCALE_MEASURED
+        } else {
+            1.0
+        };
         let uni_level = usize::from(self.unison.min(3));
         let uni_count = UNISON_VOICE_COUNT[uni_level];
         // Per voice gains: constant power over the partner voices, measured weak-channel leakage.
@@ -170,7 +185,7 @@ impl SynthLayer {
                         v.oenv_attack_done = true;
                     }
                 } else if self.osc_env_decay_sec < 44.0 {
-                    let dec = (self.osc_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
+                    let dec = (self.osc_env_decay_sec * tau_frac).max(0.003);
                     v.oenv -= v.oenv * (inv_fs / dec).min(1.0);
                 }
             } else {
@@ -192,7 +207,7 @@ impl SynthLayer {
             // blip" clip, Env Amt +5.5 shows ~6-7 semitone onset peaks (+6.6 predicted), accuracy
             // limited to ~1 semitone by 5 ms onset detection. ASSUMED: +/-0.5 of Osc Ctrl range.
             let env_pitch = if self.osc_env_to_pitch {
-                2.0f32.powf(osc_env_mod)
+                2.0f32.powf(osc_env_mod * oenv_pitch_oct)
             } else {
                 1.0
             };
@@ -209,7 +224,8 @@ impl SynthLayer {
                     self.vibrato_ctrl.clamp(0.0, 1.0)
                 }
             };
-            let vib_pitch = 2.0f32.powf(vib_amount * self.vibrato_depth_cents * vib_sin / 1200.0);
+            let vib_pitch =
+                2.0f32.powf(vib_amount * self.vibrato_depth_cents * vib_scale * vib_sin / 1200.0);
 
             // Filter envelope: dedicated ADR, or mirror the amp decay (legacy).
             let fenv_peak = 1.0 - self.filter_env_vel_amount.clamp(0.0, 1.0) * (1.0 - v.velocity);
@@ -225,7 +241,7 @@ impl SynthLayer {
                             v.fenv_attack_done = true;
                         }
                     } else if self.filter_env_decay_sec < 44.0 {
-                        let dec = (self.filter_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
+                        let dec = (self.filter_env_decay_sec * tau_frac).max(0.003);
                         v.fenv -= v.fenv * (inv_fs / dec).min(1.0);
                     }
                 } else {
@@ -257,6 +273,7 @@ impl SynthLayer {
                                 waveform,
                                 saw_model,
                                 self.supersaw_detune,
+                                self.measured_laws,
                                 self.pulse_width,
                                 self.lfo_dest,
                                 self.lfo_amount,
@@ -279,6 +296,7 @@ impl SynthLayer {
                                 waveform,
                                 saw_model,
                                 self.supersaw_detune,
+                                self.measured_laws,
                                 self.pulse_width,
                                 self.lfo_dest,
                                 self.lfo_amount,
@@ -363,6 +381,7 @@ impl SynthLayer {
                             waveform,
                             saw_model,
                             self.supersaw_detune,
+                            self.measured_laws,
                             self.pulse_width,
                             self.lfo_dest,
                             self.lfo_amount,
@@ -389,9 +408,8 @@ impl SynthLayer {
                 1.0
             };
             let env_scale = if self.filter_env_amount.abs() > 1e-4 {
-                2.0f32.powf(
-                    self.filter_env_amount.clamp(-1.0, 1.0) * FILTER_ENV_OCTAVES * filter_env_level,
-                )
+                2.0f32
+                    .powf(self.filter_env_amount.clamp(-1.0, 1.0) * env_octaves * filter_env_level)
             } else {
                 1.0
             };

@@ -25,6 +25,7 @@ mod fw_filter_tables;
 mod fw_strip_cutoff;
 mod gain_dezip;
 mod hw_saw;
+mod measured;
 mod render;
 mod render_va;
 mod sample_osc;
@@ -43,6 +44,11 @@ pub use fw_filter::{
 pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
 pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
 pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
+pub use measured::{
+    supersaw_outer_cents, supersaw_voice_ratio, ENV_DECAY_TAU_FRACTION_MEASURED,
+    FILTER_ENV_OCTAVES_MEASURED, OSC_ENV_PITCH_OCTAVES_MEASURED, SUPERSAW_OUTER_CENTS,
+    SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
+};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 use strip_map::strip_cutoff_hz;
 pub use strip_map::{
@@ -130,7 +136,11 @@ const SUPERSAW_DETUNES: [f32; 7] = [
 ];
 
 /// Initial phase offsets for the 7 SuperSaw oscillators to prevent constructive crests.
-const SUPERSAW_PHASE_INITS: [f32; 7] = [0.0, 0.24, 0.46, 0.68, 0.82, 0.15, 0.57];
+/// The 16 voices of the measured Super Saw (`measured_laws`) continue the sequence; the first
+/// seven are the legacy values so the default render does not change.
+const SUPERSAW_PHASE_INITS: [f32; SUPERSAW_VOICES] = [
+    0.0, 0.24, 0.46, 0.68, 0.82, 0.15, 0.57, 0.33, 0.91, 0.07, 0.62, 0.39, 0.76, 0.21, 0.52, 0.88,
+];
 
 /// Single 16-Voice Polyphonic Synth Layer (`Synth A`, `Synth B`, or `Synth C`) with LFO and Arpeggiator.
 #[derive(Debug, Clone)]
@@ -157,6 +167,10 @@ pub struct SynthLayer {
     pub fm_sub_amount: f32,
     pub fm_env_amount: f32,
     pub supersaw_detune: f32,
+    /// Opt-in: use the laws measured on the Audible Genius lesson clips (`measured.rs`): 16-voice
+    /// Super Saw detune, filter envelope depth, decay time constant and Env To Pitch depth.
+    /// Default `false` keeps the older scales (`render_hash` unchanged).
+    pub measured_laws: bool,
     pub wavetable_index: u8,
     pub wavetable_position: f32,
     pub sample_timbre: SampleTimbre,
@@ -277,6 +291,7 @@ impl SynthLayer {
             fm_sub_amount: 0.0,
             fm_env_amount: 0.35,
             supersaw_detune: 0.3,
+            measured_laws: false,
             wavetable_index: 0,
             wavetable_position: 0.0,
             sample_timbre: SampleTimbre::Off,

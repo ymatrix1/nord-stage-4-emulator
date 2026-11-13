@@ -32,8 +32,8 @@ pub struct SynthVoice {
     pub age_sec: f32,
     /// Unison detuned oscillator phases (low, high).
     pub uni_phase: [f32; 4],
-    pub uni_supersaw: [[f32; 7]; 4],
-    pub supersaw_phases: [f32; 7],
+    pub uni_supersaw: [[f32; SUPERSAW_VOICES]; 4],
+    pub supersaw_phases: [f32; SUPERSAW_VOICES],
     pub amp_env: f32,
     pub filter: ZdfFilter,
     pub filter_right: ZdfFilter,
