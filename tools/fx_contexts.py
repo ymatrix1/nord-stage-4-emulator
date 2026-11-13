@@ -93,6 +93,11 @@ def f32(word: int) -> float:
     return struct.unpack("<f", struct.pack("<I", word & 0xFFFFFFFF))[0]
 
 
+def f32_word(value: float) -> int:
+    """Bit pattern of `value` as an IEEE single."""
+    return struct.unpack("<I", struct.pack("<f", value))[0]
+
+
 def join_rows(table: list[Block], rows: Iterable[dict[str, str]]) -> list[dict[str, str]]:
     """Rows of a `fx_clients` CSV with the owning block and the context offset appended."""
     out = []
@@ -106,9 +111,62 @@ def join_rows(table: list[Block], rows: Iterable[dict[str, str]]) -> list[dict[s
                 "list": f"{b.list_addr:#x}" if b else "",
                 "entry": str(b.entry) if b else "",
                 "row": str(b.row) if b else "",
-                "ctx": f"{b.offset(word):#x}"
-                if b and b.offset(word) >= 0
-                else (str(b.offset(word)) if b else ""),
+                "ctx": str(b.offset(word)) if b else "",
+            }
+        )
+    return out
+
+
+def type_modules(joined: Iterable[dict[str, str]]) -> dict[tuple, dict[tuple, dict[str, str]]]:
+    """Modules touched by the type switch: `{(kind, slot, type): {(list, entry): {ctx: word}}}`.
+
+    Only rows of stage `type` count; the last word written to a context offset wins."""
+    out: dict[tuple, dict[tuple, dict[str, str]]] = {}
+    for r in joined:
+        if r["stage"] != "type":
+            continue
+        mod = out.setdefault((r["kind"], r["slot"], r["type"]), {})
+        mod.setdefault((r["list"], r["entry"]), {})[r["ctx"]] = r["word"]
+    return out
+
+
+def param_series(joined: Iterable[dict[str, str]]) -> dict[tuple, dict[int, int]]:
+    """Samples of every context word under a tuning id:
+    `{(kind, slot, type, id, list, entry, ctx): {value: word}}` (last message per value wins)."""
+    out: dict[tuple, dict[int, int]] = {}
+    for r in joined:
+        if r["stage"] != "param" or not r["list"]:
+            continue
+        key = (r["kind"], r["slot"], r["type"], r["id"], r["list"], r["entry"], r["ctx"])
+        out.setdefault(key, {})[int(r["value"])] = int(r["word"], 0)
+    return out
+
+
+def fit_rows(series: dict[tuple, dict[int, int]]) -> list[dict[str, str]]:
+    """One CSV row per series with the closed form of `fx_fit.fit_series`."""
+    import fx_fit as ff
+
+    out = []
+    for key, samples in sorted(series.items(), key=lambda kv: tuple(map(str, kv[0]))):
+        values = sorted(samples)
+        fit = ff.fit_series(values, [samples[v] for v in values])
+        out.append(
+            {
+                "kind": key[0],
+                "slot": key[1],
+                "type": key[2],
+                "id": key[3],
+                "list": key[4],
+                "entry": key[5],
+                "ctx": key[6],
+                "n": str(len(values)),
+                "form": fit.kind,
+                "float": "1" if fit.is_float else "0",
+                "a": f"{fit.a:.9g}",
+                "b": f"{fit.b:.9g}",
+                "c": f"{fit.c:.9g}",
+                "err": f"{fit.err:.2g}",
+                "samples": ";".join(f"{v}:{samples[v]:#010x}" for v in values),
             }
         )
     return out
@@ -119,6 +177,39 @@ def read_capture(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(fh))
 
 
+def type_table(
+    tm: dict[tuple, dict[tuple, dict[str, str]]], pcs: dict[str, dict[int, list[int]]]
+) -> list[dict[str, str]]:
+    """Flat rows of `type_modules`: the module (descriptor list) each type switch writes, its
+    routines (`fx_type_map.class_pcs`) and how many context words the switch sends to it."""
+    out = []
+    for (kind, slot, typ), mods in sorted(
+        tm.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2].zfill(3))
+    ):
+        for (lst, entry), words in sorted(mods.items()):
+            per_core = pcs.get(lst, {})
+            out.append(
+                {
+                    "kind": kind,
+                    "slot": slot,
+                    "type": typ,
+                    "list": lst,
+                    "entry": entry,
+                    "words": str(len(words)),
+                    "core1_pcs": " ".join(f"{p:#x}" for p in per_core.get(1, [])),
+                    "core2_pcs": " ".join(f"{p:#x}" for p in per_core.get(2, [])),
+                }
+            )
+    return out
+
+
+def write_rows(path: Path, rows: list[dict[str, str]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs unicorn + firmware
     import argparse
 
@@ -127,15 +218,21 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs unic
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("code", type=Path)
     ap.add_argument("sram", type=Path)
-    ap.add_argument("capture", type=Path)
-    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("capture", type=Path, nargs="+")
+    ap.add_argument("--out", type=Path, help="every message with its block and context offset")
+    ap.add_argument("--types", type=Path, help="type -> module table")
+    ap.add_argument("--fits", type=Path, help="closed form of every context word under an id")
     ns = ap.parse_args(argv)
     emu = ab._fresh(ns.code, ns.sram)
-    joined = join_rows(blocks(emu.read32), read_capture(ns.capture))
-    with ns.out.open("w", encoding="utf-8", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(joined[0]))
-        w.writeheader()
-        w.writerows(joined)
+    rows = [r for path in ns.capture for r in read_capture(path)]
+    joined = join_rows(blocks(emu.read32), rows)
+    if ns.out:
+        write_rows(ns.out, joined)
+    if ns.types:
+        pcs = ftm.class_pcs(ftm.inventory_rows(emu.read32))
+        write_rows(ns.types, type_table(type_modules(joined), pcs))
+    if ns.fits:
+        write_rows(ns.fits, fit_rows(param_series(joined)))
     return 0
 
 

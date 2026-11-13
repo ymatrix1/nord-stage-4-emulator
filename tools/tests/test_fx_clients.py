@@ -116,6 +116,15 @@ def test_value_grid_large_range_has_ends_and_is_sorted() -> None:
     assert w[0] == 0 and w[-1] == 16383 and len(w) < 20
 
 
+def test_cell_word_scales_continuous_ids_to_q16_and_keeps_enums_raw() -> None:
+    amt = cap.Param(0x196, "Edt_Effects_kFx1Amt", 0, 127)
+    kind = cap.Param(0x198, "Edt_Effects_kFx1Type", 0, 11)
+    gain = cap.Param(0x19F, "Edt_Effects_kAmpTreble", -60, 60)
+    assert fxc.cell_word(amt, 64) == 64 << 16
+    assert fxc.cell_word(kind, 11) == 11
+    assert fxc.cell_word(gain, -1) == 0xFFFF0000
+
+
 def test_apply_series_tags_messages_with_value_and_stage() -> None:
     m1, m2 = ae.Message(2, 1, 0x28000000, 5), ae.Message(2, 1, 0x28000004, 6)
 

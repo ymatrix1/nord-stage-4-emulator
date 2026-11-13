@@ -85,7 +85,7 @@ def test_join_rows_appends_block_and_offset() -> None:
         {"core": "1", "dm_word": "0x10"},
     ]
     joined = fc.join_rows(table, capture)
-    assert joined[0]["ctx"] == "0x3" and joined[0]["row"] == "0"
+    assert joined[0]["ctx"] == "3" and joined[0]["row"] == "0"
     assert joined[1]["ctx"] == "-28" and joined[1]["row"] == "0"
     assert joined[2]["list"] == "" and joined[2]["ctx"] == ""
 
@@ -99,3 +99,70 @@ def test_read_capture_roundtrip(tmp_path) -> None:
 @pytest.mark.parametrize("size,expected", [(0x83, 9), (0x20, 3)])
 def test_words_of_size_small(size: int, expected: int) -> None:
     assert fc.words_of_size(size) == expected
+
+
+def joined_row(**kw: str) -> dict[str, str]:
+    base = {
+        "kind": "organ",
+        "slot": "Fx2",
+        "type": "1",
+        "id": "Amt",
+        "stage": "param",
+        "value": "0",
+        "word": "0x3f800000",
+        "list": "0xc0",
+        "entry": "1",
+        "ctx": "-5",
+    }
+    return {**base, **kw}
+
+
+def test_type_modules_keeps_type_rows_and_last_word() -> None:
+    rows = [
+        joined_row(stage="type", word="0x1"),
+        joined_row(stage="type", word="0x2"),
+        joined_row(stage="type", ctx="3", entry="2"),
+        joined_row(stage="param"),
+    ]
+    got = fc.type_modules(rows)
+    assert got == {
+        ("organ", "Fx2", "1"): {("0xc0", "1"): {"-5": "0x2"}, ("0xc0", "2"): {"3": "0x3f800000"}}
+    }
+
+
+def test_param_series_groups_values_and_skips_unjoined() -> None:
+    rows = [
+        joined_row(value="0", word="0x0"),
+        joined_row(value="64", word="0x3f800000"),
+        joined_row(value="64", word="0x40000000"),
+        joined_row(list=""),
+        joined_row(stage="type"),
+    ]
+    got = fc.param_series(rows)
+    assert got == {("organ", "Fx2", "1", "Amt", "0xc0", "1", "-5"): {0: 0, 64: 0x40000000}}
+
+
+def test_type_table_lists_pcs_and_word_counts(tmp_path) -> None:
+    tm = {
+        ("organ", "Fx2", "10"): {("0xc0", "1"): {"-5": "0x1"}},
+        ("organ", "Fx2", "2"): {("0xc0", "1"): {"-5": "0x1", "3": "0x2"}, ("", ""): {"0": "0x0"}},
+    }
+    pcs = {"0xc0": {1: [0x123456], 2: [0x1206B0, 0x1208AF]}}
+    rows = fc.type_table(tm, pcs)
+    assert [r["type"] for r in rows] == ["2", "2", "10"]
+    assert rows[1]["list"] == "0xc0" and rows[1]["words"] == "2"
+    assert rows[1]["core1_pcs"] == "0x123456" and rows[1]["core2_pcs"] == "0x1206b0 0x1208af"
+    assert rows[0]["list"] == "" and rows[0]["core2_pcs"] == ""
+    out = tmp_path / "t.csv"
+    fc.write_rows(out, rows)
+    assert out.read_text(encoding="utf-8").splitlines()[0].startswith("kind,slot,type,list")
+
+
+def test_fit_rows_describes_a_linear_word() -> None:
+    values = [0, 16, 32, 64, 127]
+    series = {
+        ("organ", "Fx2", "1", "Amt", "0xc0", "1", "4"): {v: fc.f32_word(v / 127) for v in values}
+    }
+    (row,) = fc.fit_rows(series)
+    assert row["form"] == "linear" and row["float"] == "1" and row["n"] == "5"
+    assert float(row["b"]) == pytest.approx(1 / 127, rel=1e-4)

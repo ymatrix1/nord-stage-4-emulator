@@ -195,6 +195,20 @@ def value_grid(lo: int, hi: int) -> list[int]:
     return sorted(pts)
 
 
+# VERIFIED (run, `docs/research/fx-contexts.md` s4): the handlers of continuous ids read their value
+# cell as a Q16.16 number (`Edt_Effects_kFx1Amt` cell `v << 16` gives the word `v / 127`; the raw
+# cell `v` gives `v / 127 / 65536`). Enum and flag ids (range below `Q16_MIN_SPAN`) are raw.
+Q16_SHIFT = 16
+Q16_MIN_SPAN = 12
+
+
+def cell_word(p: cap.Param, value: int) -> int:
+    """32-bit word to store in the value cell of `p` for the UI value `value`."""
+    if p.maximum - p.minimum >= Q16_MIN_SPAN:
+        return (value << Q16_SHIFT) & 0xFFFFFFFF
+    return value & 0xFFFFFFFF
+
+
 def apply_series(
     apply: Callable[[int], tuple[list[ae.Message], list[ae.Message], str]], values: list[int]
 ) -> list[tuple[int, str, ae.Message]]:
@@ -214,6 +228,7 @@ def capture_slot(  # pragma: no cover - needs the booted firmware
     params: dict[str, cap.Param],
     window: int = 400_000,
     noise: set[tuple] | None = None,
+    with_params: bool = True,
 ) -> list[dict[str, object]]:
     """Every message of the type switch (stage `type`) and of each tuning id under each type."""
     import arm_steady as ast
@@ -232,6 +247,8 @@ def capture_slot(  # pragma: no cover - needs the booted firmware
                 lambda v, tp=tp: cap.apply_value(emu, unit.address, tp.edit_id, v, window), [t]
             )
             rows += _rows(unit, slot, t, slot.type_id, "type", series, noise)
+        if not with_params:
+            continue
         base = ast.snapshot(emu)
         for name in slot.params:
             p = params.get(name)
@@ -241,7 +258,7 @@ def capture_slot(  # pragma: no cover - needs the booted firmware
             emu.install_dsp_ports()
             series = apply_series(
                 lambda v, p=p: cap.apply_value(
-                    emu, unit.address, p.edit_id, v & 0xFFFFFFFF, window
+                    emu, unit.address, p.edit_id, cell_word(p, v), window
                 ),
                 value_grid(p.minimum, min(p.maximum, 0x7FFFFFFF)),
             )
@@ -304,6 +321,9 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap.add_argument("--summary", type=Path)
     ap.add_argument("--slots", type=Path, help="per type / per param capture of the effect slots")
     ap.add_argument("--slot", help="comma separated slot names for --slots (default: all)")
+    ap.add_argument(
+        "--types-only", action="store_true", help="--slots: type switches only (use a long window)"
+    )
     ns = ap.parse_args(argv)
     import arm_steady as ast
 
@@ -320,7 +340,9 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         out: list[dict[str, object]] = []
         for u in (u for u in units if not wanted or u.index in wanted):
             for slot in (s for s in SLOTS if s.name in names):
-                out += capture_slot(emu, blob, u, slot, by_name, ns.window, noise)
+                out += capture_slot(
+                    emu, blob, u, slot, by_name, ns.window, noise, not ns.types_only
+                )
                 print(f"unit {u.index} {slot.name}: {len(out)} rows", flush=True)
         write_capture(ns.slots, out)
         return 0
