@@ -52,12 +52,11 @@ pub fn apply_synth_chain(engine: &mut Stage4Engine, chain: Option<SynthChain>) {
     }
 }
 
-/// Switches both piano layers to the firmware level law (`PianoLayer::firmware_velocity_level`).
+/// Sets the firmware level law of both piano layers (`PianoLayer::firmware_velocity_level`,
+/// default on); `ns4 render-patch --legacy-piano-level` turns it off.
 pub fn apply_piano_level(engine: &mut Stage4Engine, on: bool) {
-    if on {
-        engine.piano_a.firmware_velocity_level = true;
-        engine.piano_b.firmware_velocity_level = true;
-    }
+    engine.piano_a.firmware_velocity_level = on;
+    engine.piano_b.firmware_velocity_level = on;
 }
 
 /// Parses an `--b3-tail` value: `on | off`.
@@ -125,7 +124,7 @@ pub fn apply_firmware_options(
 /// `None` / `false` leave the engine default untouched. [`apply_to`](Self::apply_to) only ever
 /// switches paths on (render-patch semantics); [`apply_exact`](Self::apply_exact) also switches
 /// them back to the default so a running engine can be A/B toggled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FirmwareOptions {
     /// `--tone-source` (`None` = `ModelDefault`).
     pub tone_source: Option<ToneWheelSource>,
@@ -143,7 +142,31 @@ pub struct FirmwareOptions {
     pub measured_laws: bool,
 }
 
+/// The engine defaults: every opt-in path off, except the firmware piano level, which is the
+/// default for `.npno` sounds (D23).
+impl Default for FirmwareOptions {
+    fn default() -> Self {
+        Self {
+            tone_source: None,
+            filter_engine: None,
+            synth_chain: None,
+            b3_tail: None,
+            firmware_fx: false,
+            piano_firmware_level: true,
+            measured_laws: false,
+        }
+    }
+}
+
 impl FirmwareOptions {
+    /// Every opt-in path off and the legacy piano velocity response (`--legacy-all`).
+    pub fn legacy_all() -> Self {
+        Self {
+            piano_firmware_level: false,
+            ..Self::default()
+        }
+    }
+
     /// Every verified firmware path on (`--firmware-all`): firmware tone wheels, firmware filter,
     /// strip chain, firmware FX, firmware piano level. `measured_laws` (EMPIRICAL) stays off.
     pub fn firmware_all() -> Self {
@@ -174,7 +197,7 @@ impl FirmwareOptions {
             o = Self::firmware_all();
         }
         if has("--legacy-all") {
-            o = Self::default();
+            o = Self::legacy_all();
         }
         if let Some(v) = value("--tone-source") {
             o.tone_source = Some(parse_tone_source(v)?);
@@ -269,8 +292,8 @@ impl FirmwareOptions {
         if self.firmware_fx {
             parts.push("fx".into());
         }
-        if self.piano_firmware_level {
-            parts.push("piano-level".into());
+        if !self.piano_firmware_level {
+            parts.push("legacy-piano".into());
         }
         if self.measured_laws {
             parts.push("measured".into());
@@ -327,7 +350,7 @@ mod tests {
         assert_eq!(over.tone_source, Some(ToneWheelSource::Vox));
         assert!(!over.piano_firmware_level);
         let legacy = FirmwareOptions::from_args(&args(&["--firmware-all", "--legacy-all"]));
-        assert_eq!(legacy, Ok(FirmwareOptions::default()));
+        assert_eq!(legacy, Ok(FirmwareOptions::legacy_all()));
         assert!(FirmwareOptions::from_args(&args(&["--tone-source", "bogus"])).is_err());
     }
 
@@ -337,7 +360,7 @@ mod tests {
         let mut b = Stage4Engine::new(48_000.0);
         FirmwareOptions::default().apply_to(&mut a);
         assert_eq!(a.organ_a.tonewheel_source, ToneWheelSource::ModelDefault);
-        assert!(!a.synth_a.measured_laws && !a.piano_a.firmware_velocity_level);
+        assert!(!a.synth_a.measured_laws && a.piano_a.firmware_velocity_level);
         FirmwareOptions::firmware_all().apply_to(&mut a);
         apply_firmware_options(
             &mut b,
@@ -376,14 +399,19 @@ mod tests {
         assert_eq!(e.synth_a.filter_engine, FilterEngine::Zdf);
         assert_eq!(e.synth_a.chain, SynthChain::Legacy);
         assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::OFF);
-        assert!(!e.synth_a.measured_laws && !e.piano_b.firmware_velocity_level);
+        assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
+        FirmwareOptions::legacy_all().apply_exact(&mut e);
+        assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
     }
 
     #[test]
     fn summary_lists_active_paths() {
         assert_eq!(FirmwareOptions::default().summary(), "defaults");
         let s = FirmwareOptions::firmware_all().summary();
-        assert!(s.contains("tone=Firmware") && s.contains("fx") && s.contains("piano-level"));
+        assert!(s.contains("tone=Firmware") && s.contains("fx") && !s.contains("legacy-piano"));
+        assert!(FirmwareOptions::legacy_all()
+            .summary()
+            .contains("legacy-piano"));
     }
 
     #[test]
@@ -435,6 +463,7 @@ mod tests {
     #[test]
     fn piano_level_switch_reaches_both_layers() {
         let mut e = Stage4Engine::new(48_000.0);
+        assert!(e.piano_a.firmware_velocity_level && e.piano_b.firmware_velocity_level);
         apply_piano_level(&mut e, false);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
         apply_piano_level(&mut e, true);

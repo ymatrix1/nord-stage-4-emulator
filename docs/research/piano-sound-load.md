@@ -209,6 +209,29 @@ The firmware gain brings the level 5.3 dB closer to the hardware recording (the 
 
 **Decision: not the default.** The criteria were main voice, extra voices and the gain mapping verified across sounds. The levels (main + extra voices, 96 of 96) and the gain word are verified, but the engine does not yet play the extra voice (a second stroke per note on five classes), the SMP slews after the level word are not modelled, and the legacy render golden covers velocity shaping that the firmware law replaces; flipping the default would change every `.npno` piano render without the extra voice that the same law requires. The switch stays opt-in (`PianoLayer::firmware_velocity_level`, `ns4 render-patch --firmware-piano-level`); `render_hash` is unchanged.
 
+## 11. Extra voice in the engine, SMP slews, and the default flip (VERIFIED run / EMPIRICAL)
+
+**Voice gains equal the SMP record (VERIFIED, 12 of 12).** Capturing the SMP voice record per note-on (note 60, velocities 30 and 90) on Clavinet D6, Bright Grand, Amber Upright and Wurlitzer 1 finds, for every voice the firmware starts, the float `level_q23 / 2^23` of that voice: the extra voice at DM `0x9251E`, the main voice at DM `0x9252A` (the single Clavinet voice at `0x9252A`). `NpnoLevel::voices` reproduces all 12 gains exactly (test `voice_gains_equal_the_smp_record_floats`, derived fixtures of the four sounds). The sum the SMP bus carries is therefore `gain_extra * stroke_extra + gain_main * stroke_main`, each stroke scaled by `y / 8192`.
+
+**Record index = stroke index (VERIFIED).** For Clavinet D6, Bright Grand and Wurlitzer 1 `NpnoSound::strokes[k].root_key` equals the root of file record `k` for every `k` (test `record_index_equals_stroke_index_on_real_files`, run with `NS4_NPNO_DIR` pointing at local files; it skips when unset). `VoiceLevel::record` can index `NpnoSound::strokes` directly.
+
+**SMP slews (EMPIRICAL, small).** The other floats the ARM writes with the voice (`1.0`, `0.0`, `0.979` = `0x3F7AB576`, DM `0x93933..0x93938`, `0x9396A..0x9396E`, ...) are identical for every velocity and note (message lists over velocities 1, 64, 127 and notes 36, 60, 84 differed only in the level word), so they are fixed envelope constants (about 0.98 and 1.0), not a velocity-dependent attack or decay. Their time behaviour was not traced; they are not modelled, and the engine keeps its own envelope (`env` and release).
+
+**Engine.** `piano/extra_voice.rs` (`PianoLayer::start_firmware_voices`): a note-on of an `.npno` sound with a level model starts the voices of `NpnoLevel::voices` in ordinary pre-allocated `PianoVoice` slots (no heap allocation; `VoiceList` is inline), each with its own stroke (`VoiceLevel::record`), step from the stroke's root key and the tuning cents, and amplitude `level_q23 / 2^23` (dyn comp and una corda still apply). The extra voice is flagged `extra`: it releases with its note but starts no release sample of its own. A damper-down note keeps the legacy path (the sympathetic-harp strokes are selected there); a note whose record has no stroke, an unmapped note, SFZ/WAV and synthetic sounds use the legacy path.
+
+**Default flip.** `PianoLayer::firmware_velocity_level` is now `true`, which only matters for `.npno` sounds (they are the only ones with `NpnoSound::firmware_level`); `ns4 render-patch --legacy-piano-level` restores the touch curve. Decision [D23](../DECISIONS.md): the algorithm (level law, voice rule, gain word) is VERIFIED against the real firmware and the mapping from the program into it (note -> root -> records) is VERIFIED on four sounds. `render_hash` `25baa387...` is unchanged because the golden render uses only the synthetic piano sound; the changed renders are the `.npno` piano renders (a different velocity response, two voices on classes 1, 2, 3, 5, 6).
+
+**Emulator against hardware** (`tools/emu_vs_hw.py --only piano_dry`, Velvet Grand A:61, local video; variants: `default` = firmware level, `legacy-piano-level`):
+
+| Variant | RMS dB (emu - hw) | centroid Hz | brilliance | attack hw/emu ms | score |
+|---|---|---|---|---|---|
+| legacy-piano-level (old default) | +11.8 | -61 | +5.6 | 86.9 / 85.5 | 3.00 |
+| default (firmware level, two voices) | +12.2 | -71 | +5.4 | 86.9 / 78.9 | 3.15 |
+
+The firmware level does **not** close the piano gap on this segment: the level is 0.4 dB hotter and the score 0.15 worse. The main-voice-only opt-in of the previous PR gave +6.5 dB probably because it kept the engine's own (quieter) stroke choice and a single voice; with the firmware strokes of both voices the emulator is as hot as before, so the remaining ~+12 dB is downstream of the voice (the piano layer / master gain structure of the engine against the hardware's mix and master chain), not the voice level, and needs its own calibration. The earlier doc figure `+9.3` (`emulator-vs-hardware-audio.md`) is from an older `main`; the legacy row of today's `main` re-measures at +11.8 (same video, segment and program; the +2.5 dB drift was not investigated and is not caused by this change, since the legacy path is unchanged).
+
+**Open.** The engine-side calibration of the piano layer level against the hardware output (about +12 dB hot on Velvet Grand), the slew time behaviour, damper-down strokes with the firmware lists, and the layer-2 strokes (never selected by any voice rule found).
+
 ## Implications
 
 - The chain load -> select (bind) -> note-on -> voice start -> level method now runs on real firmware code with two library stubs and one DSP-ready hook; velocity reaches the level method as `X` and as the stroke record choice.

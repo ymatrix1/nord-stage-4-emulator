@@ -284,3 +284,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Switch defaults as soon as a routine matches (rejected after #87); keep firmware paths in research tools only (the engine would never benefit).
 - **Impact:** Open defaults are tracked in TD-04, TD-10 and TD-11. The `render_hash` SHA-256 is recorded in each PR that touches it.
 - **Update 2026-11-13 (amp):** `FirmwareFx::amp` became the default for Twin, JC and Small (and their variations) after the rule was met: algorithm and words VERIFIED against the oracle (drive stage golden, cabinet impulse response and chain golden), the ARM mapping VERIFIED (`kAmpTypeNew` words captured from the ARM, `kAmpDrive` = `127 drive / 10`), and the end-to-end comparison with the video improves (Vox score 3.98 to 1.30, RMS +0.2 to +0.5 dB). `FirmwareFx::OFF` / `--amp-path engine` keep the old path. `render_hash` `25baa387...` to `c7f06ca7ff6f8663be3bf2af772c6d6854f23593808ff3382d1895cf5f5ddbd5`. Open: JC and Small have no recording, piano and synth cabinets are ASSUMED equal ([fx-type-map](research/fx-type-map.md) s11).
+
+### D23. The firmware piano level is the default for `.npno` sounds
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PR for `feat/piano-extra-voice`; evidence [piano-sound-load](research/piano-sound-load.md) sections 9 to 11)
+- **Context:** D22 keeps firmware paths opt-in until the algorithm and the mapping into it are VERIFIED. The piano velocity response was the touch curve `VelocityTouch` (ASSUMED powers) plus a shaping rule.
+- **Decision:** `PianoLayer::firmware_velocity_level` defaults to `true`. For an `.npno` sound the note-on starts the firmware's voices (`NpnoLevel::voices`) with the gain `level_q23 / 2^23` each; SFZ/WAV and synthetic sounds and damper-down notes keep the legacy path. `ns4 render-patch --legacy-piano-level` restores the old response.
+- **Why:** The level law, the stroke selection, the per-key bytes, the extra-voice rule and the gain word equal the real firmware (ARM run with the loaded sound) in 96 of 96 random notes on four sounds and 12 of 12 SMP record gains; the mapping from note and velocity into them is derived from the file, not guessed (D22 conditions 1 and 2).
+- **Alternatives:** Stay opt-in (kept the ASSUMED touch curve although the firmware law is known); make the SFZ/WAV path follow the same law (no stroke records, no model).
+- **Impact:** `render_hash` `25baa387...` unchanged (synthetic piano only); the `.npno` piano renders change. The emulator-versus-hardware piano gap does not shrink (RMS +11.8 -> +12.2 dB on Velvet Grand): the excess level is downstream of the voice and is tracked in the research note.
