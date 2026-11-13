@@ -49,7 +49,7 @@ d(t) = \begin{cases} -(1 - t/2)^2 & 0 \le t < 2 \\ +(1 + t/2)^2 & -2 < t < 0 \\ 
 y = g(i)\,\bigl(1 - 2p + d(t)\bigr)
 $$
 
-$g(i) = C\,(B + \operatorname{clip}(A - 2i, \pm B))$ with $A = 0.3456062$, $B = 0.1152021$, $C = 4.3401995$ (image words `0x3EB0F34D`, `0x3DEBEF11`, `0x408AE2EA`): $g = 1$ up to $i = 0.1152$ and fades linearly to silence at $i = 0.2304$ cycles per sample (5.5 kHz to 11.1 kHz at 48 kHz; a `SuperSaw` partner above that is silent too).
+$g(i) = C\,(B + \operatorname{clip}(A - 2i, \pm B))$ with $A = 0.3456062$, $B = 0.1152021$, $C = 4.3401995$ (image words `0x3EB0F34D`, `0x3DEBEF11`, `0x408AE2EA`): $g = 1$ up to $i = 0.1152$ and fades linearly to silence at $i = 0.2304$ cycles per sample (5.0 kHz to 10.0 kHz at the SY frame rate of 43,402 Hz, [dsp-frame-rate](../research/dsp-frame-rate.md) s3.4: `B * F = 5000.04`, `A * F = 15000.12`; the engine currently applies the increments at the engine rate, 5.5 kHz to 11.1 kHz at 48 kHz, TD in the research follow-ups; a `SuperSaw` partner above that is silent too).
 
 | | `Classic` (default) | `Firmware` |
 |---|---|---|
@@ -66,7 +66,7 @@ VERIFIED in the oracle (research doc section 4): SY smooths each voice gain per 
 | Item | Rule | Status |
 |---|---|---|
 | Law | `gain_state += (1 - pole)(gain_target - gain_state)` once per `render_frame` | VERIFIED (first frames match the oracle series within 2e-6) |
-| Pole at engine rate | `0.979^(48000 / fs)`: the same 0.98 ms time constant (47.1 frames at 48 kHz) at any `fs` | the 48 kHz SY frame rate is ASSUMED |
+| Pole at engine rate | `0.979^(43402.34 / fs)`: the same 1.08 ms time constant (47.1 frames at the SY frame rate) at any `fs` | SY frame rate 43,402.34 Hz VERIFIED ([dsp-frame-rate](../research/dsp-frame-rate.md) s3.4; was ASSUMED 48 kHz, 0.98 ms) |
 | Target | `gain_target` takes `gain` at note-on and every `fs / 1000` frames (control tick); `set_voice_gain(note, g)` writes `gain`, the tick latches it | 1 kHz tick ASSUMED (ARM timer irq 22) |
 | Start state | a slot keeps the `gain_state` of the voice it replaces; a never used slot starts at 0 (a 1 ms fade in) | ASSUMED (the SY initial block is zero except the pole) |
 

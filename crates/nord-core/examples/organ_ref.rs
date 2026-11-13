@@ -13,7 +13,9 @@
 //! --frames N          frames to render (default 16384)    --detuned   vibrato level 1: detuned table,
 //!                     stereo-blend lanes in L/R (compare per lane with `organ_oracle_audio.py compare --lanes`)
 //! --rate HZ           sample rate / bank frame rate (default: the rate at which wheel 0 equals the
-//!                     firmware increment of the exact table, 43,156 Hz)
+//!                     firmware increment of the exact table at the image's unity tune, 43,156 Hz:
+//!                     the oracle-matching rate; the real DSP frame rate is 43,402.34 Hz,
+//!                     `docs/research/dsp-frame-rate.md`, and Vox runs need `--rate 43402.34375`)
 //! --linear            DrawbarLaw::Linear instead of the firmware curve
 //! --weights firmware WeightMode::Firmware: ARM per-wheel weights, one-pole smoothing, absolute scale
 //!                     (default `legacy`); also drops the pickup tables and the key click
