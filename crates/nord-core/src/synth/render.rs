@@ -15,8 +15,11 @@ impl SynthLayer {
             self.control_tick();
         }
 
+        self.update_hold();
+
         // 1. Advance LFO
-        self.lfo_phase = (self.lfo_phase + TAU * self.lfo_rate_hz * inv_fs) % TAU;
+        let lfo_hz = self.lfo_hz();
+        self.lfo_phase = (self.lfo_phase + TAU * lfo_hz * inv_fs) % TAU;
         let lfo_val = match self.lfo_shape {
             LfoShape::Triangle => 1.0 - 4.0 * ((self.lfo_phase / TAU) - 0.5).abs(),
             LfoShape::Saw => 2.0 * (self.lfo_phase / TAU) - 1.0,
@@ -29,7 +32,7 @@ impl SynthLayer {
                 }
             }
             LfoShape::SampleAndHold => {
-                if self.lfo_phase < (TAU * self.lfo_rate_hz * inv_fs) {
+                if self.lfo_phase < (TAU * lfo_hz * inv_fs) {
                     self.lfo_sh_val = ((self.lfo_phase * 1234.56).sin() * 43_758.547).fract();
                 }
                 self.lfo_sh_val
@@ -472,6 +475,10 @@ impl SynthLayer {
             }
         }
 
+        if self.arp_mode == ArpMode::Gate {
+            let g = self.perf.gate_level;
+            return [mix_l * g, mix_r * g];
+        }
         [mix_l, mix_r]
     }
 }

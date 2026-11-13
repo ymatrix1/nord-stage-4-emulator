@@ -26,6 +26,7 @@ mod fw_strip_cutoff;
 mod gain_dezip;
 mod hw_saw;
 mod measured;
+mod perf;
 mod render;
 mod render_va;
 mod sample_osc;
@@ -49,6 +50,7 @@ pub use measured::{
     FILTER_ENV_OCTAVES_MEASURED, OSC_ENV_PITCH_OCTAVES_MEASURED, SUPERSAW_OUTER_CENTS,
     SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
 };
+pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 use strip_map::strip_cutoff_hz;
 pub use strip_map::{
@@ -65,6 +67,8 @@ mod tests_fw_filter_golden;
 mod tests_hw_saw_golden;
 #[cfg(test)]
 mod tests_osc_lfo;
+#[cfg(test)]
+mod tests_perf;
 #[cfg(test)]
 mod tests_strip;
 mod voice;
@@ -259,6 +263,8 @@ pub struct SynthLayer {
     held_gains: [f32; 128],
     arp_active_notes: [Option<u8>; MAX_SYNTH_VOICES],
     arp_rng: u32,
+    /// Gate, Pattern, KB Hold, KB Sync and Master Clock sync (`perf.rs`).
+    pub perf: PerfState,
 
     // Pre-decoded multisample instrument (`SAMPLES` mode)
     sample_sound: Option<Arc<SynthSampleSound>>,
@@ -353,6 +359,7 @@ impl SynthLayer {
             held_gains: [1.0; 128],
             arp_active_notes: [None; MAX_SYNTH_VOICES],
             arp_rng: 0xA341_316C,
+            perf: PerfState::default(),
 
             sample_sound: None,
             sinc_kernels: sample_osc::shared_sinc_kernels(),

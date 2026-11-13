@@ -10,11 +10,12 @@ impl SynthLayer {
 
     pub fn note_on_with_gain(&mut self, note: u8, velocity: u8, gain: f32) {
         let note_idx = (note as usize).min(127);
+        self.on_key_down(note_idx);
         self.held_keys[note_idx] = true;
         self.held_velocities[note_idx] = velocity.clamp(1, 127);
         self.held_gains[note_idx] = gain.clamp(0.0, 1.0);
 
-        if self.arp_mode != ArpMode::Off {
+        if self.arp_consumes_notes() {
             return;
         }
 
@@ -149,9 +150,15 @@ impl SynthLayer {
     /// Releases a held note across the polyphonic voices.
     pub fn note_off(&mut self, note: u8) {
         let note_idx = (note as usize).min(127);
+        self.perf.phys_keys[note_idx] = false;
+        if self.hold_active() {
+            // KB Hold: the key stays logically held until a new chord replaces it.
+            self.perf.hold_latched = true;
+            return;
+        }
         self.held_keys[note_idx] = false;
 
-        if self.arp_mode != ArpMode::Off {
+        if self.arp_consumes_notes() {
             return;
         }
 
