@@ -373,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn firmware_source_is_default_and_all_sources_render_bounded_audio() {
+    fn model_default_source_and_all_sources_render_bounded_audio() {
         for (source, copies) in [
             (ToneWheelSource::Firmware, false),
             (ToneWheelSource::Firmware, true),
@@ -397,7 +397,7 @@ mod tests {
         }
         assert_eq!(
             OrganLayer::new(48_000.0).tonewheel_source,
-            ToneWheelSource::Firmware
+            ToneWheelSource::ModelDefault
         );
     }
 
