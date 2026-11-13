@@ -55,7 +55,11 @@ Rather than ideal equal temperament ($2^{n/12}$), the 12 drive gears use integer
 
 Each octave doubles the number of teeth on the rotating wheel (`2, 4, 8, 16, 32, 64, 128`, with top-octave tonewheels `tw >= 84` using physical `192`-tooth wheels paired with a $4/3$ step-up gear). All 91 tonewheel phase accumulators advance continuously on every audio sample (`phase[i] = (phase[i] + 2*pi * f[i] / fs) mod 2*pi`), ensuring authentic phase interaction when multiple keys share a tonewheel.
 
-### 3.1.1 Firmware oscillator-bank parity (`ToneWheelSource::Firmware`, default)
+### 3.1.1 Firmware oscillator-bank parity (`ToneWheelSource::Firmware`, opt-in, role disputed)
+
+**Status:** the bank ALGORITHM is VERIFIED against the SHARC oracle; its ROLE as the organ tonewheel generator is ASSUMED and disputed. The bank is installed by the PNO Core1 piano state machine (state 1 generators: `0x122620` oscillator bank, `0x12272D` post stage, `0x122A71` LFO delay) and by no ORG/Core2 module id ([pno-module-chain](../research/pno-module-chain.md), branch `research/pno-module-chain`). Current lean: about 65 % piano string resonance (unison-style detuned pair; the ARM has `Edt_Sys_kStringResonanceLevel`), about 35 % B3 tonewheels. The default is therefore `ToneWheelSource::Legacy`; `Firmware` stays available as an option with the same code. The organ tone source remains unlocated.
+
+What would settle it: (1) the ARM writer of the bank's weights (`0x9566E`, `0x95726`, `0x957DE`) and whether `Edt_Sys_kToneWheelMode` / `Buffer_kOrgDrawbar` or `Edt_Sys_kStringResonanceLevel` drives them; (2) the piano-versus-organ program selector (which program runs the PNO Core1 state machine when an organ layer is active); (3) a running boot capture of the DSP data memory with an organ patch sounding.
 
 Source: [organ-tonewheel-bank](../research/organ-tonewheel-bank.md) (oracle run, 0 mismatches over 29,440 words). For `OrganModel::B3` each wheel runs
 
@@ -65,13 +69,13 @@ Source: [organ-tonewheel-bank](../research/organ-tonewheel-bank.md) (oracle run,
 | Accumulate | `phase = (phase + step) mod 2^32` (`u32`), before the table read | VERIFIED |
 | Index | `idx = phase >> 20`, 4096 entries, no interpolation | VERIFIED |
 | Waveform | `x = sin t - 0.1122 cos 2t - 0.01585 cos 3t - 0.00631 cos 4t - 0.00398 cos 5t` (harmonics 0, -19.0, -36.0, -44.0, -48.0 dB), `T[i] = x(2 pi i / 4096)` built once in `new` | VERIFIED harmonics, table phase origin ASSUMED |
-| Role | the x wave on every B3 wheel, replacing the sine and the extra low-wheel harmonics | ASSUMED (about 60 %, the bank may be a string-resonance bank) |
+| Role | the x wave on every B3 wheel, replacing the sine and the extra low-wheel harmonics (opt-in only) | ASSUMED/disputed (about 35 % tonewheels, about 65 % piano string resonance) |
 
-Other models and `ToneWheelSource::Legacy` keep the float-phase sine path unchanged. The pickup calibration, crosstalk and drawbar mapping are unchanged and `ASSUMED`. Tests: `firmware_bank::tests` (closed form at chosen steps, harmonic levels, `fracmul` rounding), `bank_golden::tests` (Rust bank vs the Python model, vectors from `python tools/organ_bank_ref.py golden`, synthetic table, no firmware data).
+The default (`ToneWheelSource::Legacy`) and every other model keep the float-phase sine path; the `Firmware` variant is selected by setting `OrganLayer::tonewheel_source`. The pickup calibration, crosstalk and drawbar mapping are unchanged and `ASSUMED`. Tests: `firmware_bank::tests` (closed form at chosen steps, harmonic levels, `fracmul` rounding), `bank_golden::tests` (Rust bank vs the Python model, vectors from `python tools/organ_bank_ref.py golden`, synthetic table, no firmware data).
 
-**Detuned copies** (`OrganLayer::detuned_copies`, default off): each wheel runs two accumulators at `-0.945` and `+0.945` cent (`COPY_SPREAD_CENTS = 1.89`, EMPIRICAL: rms of `1200 log2(v[2k+1] / v[2k])` over the ARM default table; the firmware signs are random, the constant pair is ASSUMED) and the outputs are averaged. Not default because the role of the copies is unproven.
+**Detuned copies** (`OrganLayer::detuned_copies`, default off): each wheel runs two accumulators at `-0.945` and `+0.945` cent (`COPY_SPREAD_CENTS = 1.89`, EMPIRICAL: rms of `1200 log2(v[2k+1] / v[2k])` over the ARM default table; the firmware signs are random, the constant pair is ASSUMED) and the outputs are averaged. Off by default, and only effective with `ToneWheelSource::Firmware`; the role of the copies is unproven.
 
-**Render change** (`render_hash`, 2,240,000 bytes): SHA-256 `25baa387...7b59a` before, `181c4fcb...3029` after; only the engine timeline (default organ layer) and the standalone organ segment change, synth, piano and FX segments are bit-identical. Organ level changes by +0.08 dB RMS; the 4th and higher partials of each wheel appear.
+**Render change** (`render_hash`, 2,240,000 bytes): PR #83 made `Firmware` the default and moved the SHA-256 from `25baa387...7b59a` to `181c4fcb...3029`; restoring `Legacy` as the default returns it to `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a` (re-run after this change). The `181c4fcb` figure now applies only to `Firmware` selected explicitly. In that mode only the engine timeline and the standalone organ segment change; synth, piano and FX segments are bit-identical. Organ level changes by +0.08 dB RMS; the 4th and higher partials of each wheel appear.
 
 - **Pickup Calibration (`B3` vs `B3 Bass`):** Standard `B3` tapers the bottom 12 complex wheels (`0.74..0.94`) and softens upper wheels above `tw 60` (`1.0..0.84`). `B3 Bass` boosts low wheels `0..24` (`1.32..1.05`) for prominent pedal/bass weight.
 

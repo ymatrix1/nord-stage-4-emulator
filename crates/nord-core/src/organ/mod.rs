@@ -55,7 +55,7 @@ pub struct OrganLayer {
     /// When `true`, engages brake/stop mode regardless of `rotary_speed`.
     pub rotary_stop_mode: bool,
     pub scanner_mode: ScannerMode,
-    /// `B3` tonewheel waveform and phase arithmetic (default = firmware bank parity).
+    /// `B3` tonewheel waveform and phase arithmetic (default `Legacy`; `Firmware` is opt-in, role ASSUMED).
     pub tonewheel_source: ToneWheelSource,
     /// Runs two detuned copies per wheel (`COPY_SPREAD_CENTS`) in the firmware bank (EMPIRICAL,
     /// default off).
@@ -330,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn firmware_source_is_default_and_renders_bounded_audio_for_all_sources() {
+    fn legacy_source_is_default_and_all_sources_render_bounded_audio() {
         for (source, copies) in [
             (ToneWheelSource::Firmware, false),
             (ToneWheelSource::Firmware, true),
@@ -354,7 +354,7 @@ mod tests {
         }
         assert_eq!(
             OrganLayer::new(48_000.0).tonewheel_source,
-            ToneWheelSource::Firmware
+            ToneWheelSource::Legacy
         );
     }
 }

@@ -1,7 +1,8 @@
 //! Tonewheel frequencies, pickup calibration and the 91-wheel generator.
 //!
-//! Spec: `docs/specs/organ-engine.md` section 3.1. `B3` with [`ToneWheelSource::Firmware`] reads
-//! the PNO Core1 bank arithmetic (`firmware_bank.rs`); every other model, and `Legacy`, keeps the
+//! Spec: `docs/specs/organ-engine.md` section 3.1. `B3` with the opt-in
+//! [`ToneWheelSource::Firmware`] reads the PNO Core1 bank arithmetic (`firmware_bank.rs`, algorithm
+//! VERIFIED, organ role ASSUMED/disputed); the default, and every other model, keeps the
 //! float-phase sine path.
 
 use super::types::{HAMMOND_GEAR_RATIOS, HAMMOND_MOTOR_HZ, NUM_TONEWHEELS};
@@ -204,9 +205,9 @@ mod tests {
     fn firmware_and_legacy_sources_agree_on_pitch() {
         let fs = 48_000.0;
         let mut fw = OrganLayer::new(fs);
-        assert_eq!(fw.tonewheel_source, ToneWheelSource::Firmware);
+        fw.tonewheel_source = ToneWheelSource::Firmware;
         let mut legacy = OrganLayer::new(fs);
-        legacy.tonewheel_source = ToneWheelSource::Legacy;
+        assert_eq!(legacy.tonewheel_source, ToneWheelSource::Legacy);
         let f_fw = measured_hz(&mut fw, 45, fs);
         let f_lg = measured_hz(&mut legacy, 45, fs);
         assert!(
@@ -219,9 +220,10 @@ mod tests {
     fn firmware_waveform_differs_from_legacy_and_copies_stay_in_pitch() {
         let fs = 48_000.0;
         let mut fw = OrganLayer::new(fs);
+        fw.tonewheel_source = ToneWheelSource::Firmware;
         let mut legacy = OrganLayer::new(fs);
-        legacy.tonewheel_source = ToneWheelSource::Legacy;
         let mut dual = OrganLayer::new(fs);
+        dual.tonewheel_source = ToneWheelSource::Firmware;
         dual.detuned_copies = true;
         let (mut d_legacy, mut d_dual) = (0.0f32, 0.0f32);
         for _ in 0..2000 {
