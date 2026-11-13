@@ -59,3 +59,15 @@ fn model_runs_the_loop_probe_like_the_simulator() {
 fn model_runs_the_entry_probe_like_the_simulator() {
     assert_no_difference(&check(ENTRY_FIXTURE, ENTRY_MEASURED, 6));
 }
+
+/// `nested.asm` on the simulator: an outer `LCNTR = 2` loop around an inner `LCNTR = 3` loop (A: the inner
+/// loop ends on a plain compute, B: on a compute with a memory access, C: inner count 1 in an outer
+/// loop of 3). Found while diffing the PNO bank routine (`docs/research/sharc-routine-diff.md`).
+#[test]
+fn model_runs_nested_counter_loops_like_the_simulator() {
+    assert_no_difference(&check(
+        include_str!("../../../../docs/research/sharc-seq/nested_fixture.txt"),
+        include_str!("../../../../docs/research/sharc-seq/nested_measured.txt"),
+        9,
+    ));
+}

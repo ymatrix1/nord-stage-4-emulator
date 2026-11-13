@@ -21,11 +21,38 @@ fn words(tokens: &[&str]) -> Vec<u32> {
         .collect()
 }
 
-fn one_case(f: &Fixture, scr: &[u32], parcels: &str, state: &[u32]) -> Result<String, String> {
+/// Memory set-up shared by all cases of a file (`code`, `dm` and `watch` header lines).
+#[derive(Default)]
+struct Setup {
+    code: Vec<(u32, Vec<u16>)>,
+    dm: Vec<(u32, Vec<u32>)>,
+    watch: Vec<(u32, usize)>,
+}
+
+fn one_case(
+    f: &Fixture,
+    scr: &[u32],
+    setup: &Setup,
+    parcels: &str,
+    state: &[u32],
+    chunks: &[(u32, Vec<u32>)],
+) -> Result<String, String> {
     let sym = |n: &str| f.sym(n).ok_or_else(|| format!("fixture lacks sym {n}"));
     let (slot, st, res, scr_a) = (sym("_slot")?, sym("_st")?, sym("_res")?, sym("_scr")?);
     let mut c = Core::new(&[]);
     f.load(&mut c)?;
+    for (addr, ps) in &setup.code {
+        for (i, p) in ps.iter().enumerate() {
+            let o = (*addr as usize + i) * 2;
+            c.sram[o..o + 2].copy_from_slice(&p.to_le_bytes());
+        }
+    }
+    for (addr, ws) in setup.dm.iter().chain(chunks) {
+        for (i, w) in ws.iter().enumerate() {
+            c.dm_write(addr + i as u32, *w)
+                .map_err(|e| format!("dm write {e:x}"))?;
+        }
+    }
     let mut ps: Vec<u16> = (0..parcels.len() / 4)
         .map(|i| u16::from_str_radix(&parcels[4 * i..4 * i + 4], 16).unwrap_or(NOP))
         .collect();
@@ -44,6 +71,34 @@ fn one_case(f: &Fixture, scr: &[u32], parcels: &str, state: &[u32]) -> Result<St
     }
     c.pc = f.entry;
     let mut steps = 0;
+    // debugging aid: `CENSUS_STOP=hex` prints R, S, I, M when the pc first reaches that address
+    if let Some(stop) = std::env::var("CENSUS_STOP")
+        .ok()
+        .and_then(|v| u32::from_str_radix(&v, 16).ok())
+    {
+        let mut hits: usize = std::env::var("CENSUS_HIT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1);
+        while c.pc != f.exit && steps <= MAX_STEPS {
+            if c.pc == stop {
+                hits -= 1;
+                if hits == 0 {
+                    break;
+                }
+            }
+            c.step().map_err(|e| format!("pc {:x}: {e:?}", c.pc))?;
+            steps += 1;
+        }
+        let regs = c.r.iter().chain(&c.s).chain(&c.i).chain(&c.m);
+        return Ok(format!(
+            "{:x} {}",
+            c.pc,
+            regs.map(|w| format!("{w:08X}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+    }
     while c.pc != f.exit {
         c.step()
             .map_err(|e| format!("pc {:x} after {steps} steps: {e:?}", c.pc))?;
@@ -53,7 +108,11 @@ fn one_case(f: &Fixture, scr: &[u32], parcels: &str, state: &[u32]) -> Result<St
         }
     }
     let mut out = Vec::new();
-    for a in (res..scr_a).chain(scr_a..scr_a + SCR_WORDS as u32) {
+    let watched = setup.watch.iter().flat_map(|(a, n)| *a..*a + *n as u32);
+    for a in (res..scr_a)
+        .chain(scr_a..scr_a + SCR_WORDS as u32)
+        .chain(watched)
+    {
         let w = c.dm_read(a).map_err(|e| format!("read {e:x}"))?;
         out.push(format!("{w:08X}"));
     }
@@ -90,14 +149,38 @@ pub fn scratch_of(cases: &str) -> Vec<u32> {
 pub fn run_cases(fixture: &str, cases: &str) -> Result<String, String> {
     let f = Fixture::parse(fixture);
     let mut scr = vec![0u32; SCR_WORDS];
+    let mut setup = Setup::default();
     let mut out = String::new();
     for line in cases.lines() {
-        let t: Vec<&str> = line.split_whitespace().collect();
-        match t.as_slice() {
+        let mut parts = line.split('|');
+        let head: Vec<&str> = parts.next().unwrap_or("").split_whitespace().collect();
+        let chunks: Vec<(u32, Vec<u32>)> = parts
+            .filter_map(|c| {
+                let t: Vec<&str> = c.split_whitespace().collect();
+                let (a, rest) = t.split_first()?;
+                Some((u32::from_str_radix(a, 16).ok()?, words(rest)))
+            })
+            .collect();
+        match head.as_slice() {
             [] => {}
             ["scr", rest @ ..] => scr = words(rest),
+            ["code", a, hex] => {
+                let ps = (0..hex.len() / 4)
+                    .map(|i| u16::from_str_radix(&hex[4 * i..4 * i + 4], 16).unwrap_or(NOP))
+                    .collect();
+                setup
+                    .code
+                    .push((u32::from_str_radix(a, 16).unwrap_or(0), ps));
+            }
+            ["dm", a, rest @ ..] => setup
+                .dm
+                .push((u32::from_str_radix(a, 16).unwrap_or(0), words(rest))),
+            ["watch", a, n] => setup.watch.push((
+                u32::from_str_radix(a, 16).unwrap_or(0),
+                n.parse().unwrap_or(0),
+            )),
             [parcels, rest @ ..] => {
-                let line = one_case(&f, &scr, parcels, &words(rest))
+                let line = one_case(&f, &scr, &setup, parcels, &words(rest), &chunks)
                     .unwrap_or_else(|e| format!("FAULT {e}"));
                 out.push_str(&line);
                 out.push('\n');
