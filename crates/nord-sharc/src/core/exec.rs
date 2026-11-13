@@ -88,6 +88,24 @@ impl Core {
         if self.steps >= self.irq.due && self.sequencer_event() {
             return Ok(()); // the core slept in IDLE for this step
         }
+        if let Some((lo, hi, limit)) = self.trace {
+            if self.pc >= lo && self.pc <= hi && self.trace_log.len() < limit {
+                let hex = |v: &[u32; 16]| {
+                    v.iter()
+                        .map(|x| format!("{x:x}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
+                self.trace_log.push(format!(
+                    "pc {:x} R {} S {} I {} M {}",
+                    self.pc,
+                    hex(&self.r),
+                    hex(&self.s),
+                    hex(&self.i),
+                    hex(&self.m)
+                ));
+            }
+        }
         let d = self.fetch(self.pc);
         let mut next = d.pc.wrapping_add(if self.isa_at(d.pc) {
             1
@@ -237,5 +255,25 @@ mod tests {
         .unwrap();
         assert_eq!((c.astat(0) >> 6) & 1, 0);
         assert_eq!((c.astat(1) >> 6) & 1, 1);
+    }
+
+    #[test]
+    fn trace_logs_registers_before_steps_inside_the_window() {
+        let mut c = core_with(&[0x0001, 0x0001, 0x0001]);
+        c.r[3] = 0xABCD;
+        let start = c.pc;
+        c.trace = Some((start, start, 10));
+        for _ in 0..3 {
+            c.step().unwrap();
+        }
+        assert_eq!(c.trace_log.len(), 1, "only the step at the window pc");
+        let want = format!("pc {start:x} R 0 0 0 abcd");
+        assert!(c.trace_log[0].starts_with(&want), "{}", c.trace_log[0]);
+        c.trace = Some((0, u32::MAX, 1));
+        c.trace_log.clear();
+        c.pc = start;
+        c.step().unwrap();
+        c.step().unwrap();
+        assert_eq!(c.trace_log.len(), 1, "the limit stops the log");
     }
 }
