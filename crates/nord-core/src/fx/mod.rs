@@ -11,13 +11,17 @@ mod delay;
 mod firmware_fx;
 mod fw_allpass;
 mod fw_amp_drive;
+mod fw_amp_stage;
+mod fw_amp_types;
 mod fw_coeffs;
 mod fw_compressor;
 mod fw_delay;
 mod fw_delay_table;
 pub mod fw_delay_time;
+mod fw_drive_tables;
 pub mod fw_map;
 mod fw_params;
+mod fw_rvb_wrap;
 mod fw_short_float;
 mod fw_stage;
 mod fw_tone_stack;
@@ -32,6 +36,8 @@ mod tables;
 #[cfg(test)]
 mod tests_allpass_golden;
 #[cfg(test)]
+mod tests_amp_golden;
+#[cfg(test)]
 mod tests_biquad_golden;
 #[cfg(test)]
 mod tests_chain;
@@ -43,6 +49,8 @@ mod tests_delay;
 mod tests_delay_golden;
 #[cfg(test)]
 mod tests_firmware_fx;
+#[cfg(test)]
+mod tests_fw_amp_chain;
 #[cfg(test)]
 mod tests_fw_delay_time;
 #[cfg(test)]
@@ -57,6 +65,8 @@ mod tests_lfo_golden;
 mod tests_master_golden;
 #[cfg(test)]
 mod tests_resonant_golden;
+#[cfg(test)]
+mod tests_rvb_wrap_golden;
 mod types;
 
 pub use biquad::*;
@@ -70,6 +80,7 @@ pub use fw_params::{
     compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,
     set_tone_stack, CMP_SLOPE,
 };
+pub use fw_rvb_wrap::{mix2 as fw_rvb_mix2, FwRvbWrap};
 pub use fw_tone_stack::{ctx as fw_tone_stack_ctx, FwToneStack2, FwToneStack4};
 pub use master::MasterBus;
 pub use tables::*;
@@ -160,6 +171,7 @@ pub struct LayerFxChain {
     /// `firmware_fx.delay_time` (the engine sets it from the preset). `None`: engine time.
     pub delay_rate_raw: Option<u16>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
+    fw_amp: Option<fw_amp_stage::FwAmpStage>,
     fw_comp_amount: f32,
     mod1_phase: f32,
     wah_state_l: [f32; 2],
@@ -249,6 +261,7 @@ impl LayerFxChain {
             firmware_fx: FirmwareFx::OFF,
             delay_rate_raw: None,
             fw_comp: None,
+            fw_amp: None,
             fw_comp_amount: 0.0,
             mod1_phase: 0.0,
             wah_state_l: [0.0; 2],
