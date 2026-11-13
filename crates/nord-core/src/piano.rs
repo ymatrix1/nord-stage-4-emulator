@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 pub mod level_q23;
+pub mod npno_level;
 pub mod q31_kernel;
 pub mod smp_page;
 pub mod smp_unpack;
@@ -109,9 +110,21 @@ pub struct NpnoSound {
     pub strokes: Vec<LoadedPianoStroke>,
     /// Optional multi-velocity and `trigger=release` zone list (used by SFZ multisamples).
     pub zones: Vec<PianoSampleZone>,
+    /// Hardware level model parsed from the `.npno` header and stroke records (`None` for
+    /// synthetic and SFZ sounds); used only when `PianoLayer::firmware_velocity_level` is set.
+    pub firmware_level: Option<Arc<npno_level::NpnoLevel>>,
 }
 
 impl NpnoSound {
+    /// Gain in `0..=1` of `note` at `velocity` relative to the same note at velocity 127 from the
+    /// firmware's level law (`None` when the sound has no model or the note is unmapped).
+    pub fn firmware_velocity_gain(&self, note: u8, velocity: u8) -> Option<f32> {
+        let model = self.firmware_level.as_ref()?;
+        let level = model.main_voice_q23(note, velocity.clamp(1, 127))?;
+        let reference = model.main_voice_q23(note, 127)?.max(1);
+        Some((level as f32 / reference as f32).min(1.0))
+    }
+
     /// Creates a playable `NpnoSound` from parsed `NpnoInstrument` and raw file bytes.
     pub fn from_npno_bytes(bytes: &[u8]) -> Result<Self, String> {
         let inst = NpnoInstrument::parse(bytes)?;
@@ -189,6 +202,7 @@ impl NpnoSound {
             stroke_by_key,
             strokes,
             zones,
+            firmware_level: npno_level::NpnoLevel::parse(bytes).map(Arc::new),
         })
     }
 
@@ -267,6 +281,7 @@ impl NpnoSound {
             stroke_by_key,
             strokes,
             zones: Vec::new(),
+            firmware_level: None,
         }
     }
 
@@ -359,6 +374,7 @@ impl NpnoSound {
             stroke_by_key,
             strokes,
             zones,
+            firmware_level: None,
         })
     }
 
@@ -815,6 +831,9 @@ pub struct PianoLayer {
     pub sostenuto_pedal_down: bool,
     pub soft_pedal_down: bool,
     pub sound: Option<Arc<NpnoSound>>,
+    /// Opt-in: scale the velocity response by the firmware level law of the loaded `.npno`
+    /// (`NpnoSound::firmware_velocity_gain`) instead of the touch curve. Default off.
+    pub firmware_velocity_level: bool,
     /// Sample interpolation: hardware-parity SMP kernel (default) or the older cubic.
     pub sample_interp: SampleInterp,
     kernel: &'static SmpKernel,
@@ -891,6 +910,7 @@ impl PianoLayer {
             sostenuto_pedal_down: false,
             soft_pedal_down: false,
             sound,
+            firmware_velocity_level: false,
             sample_interp: SampleInterp::default(),
             kernel: SmpKernel::shared(),
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
@@ -996,7 +1016,14 @@ impl PianoLayer {
             }
         }
 
-        let base_amp = self.touch.map_velocity(velocity);
+        let firmware_gain = if self.firmware_velocity_level {
+            self.sound
+                .as_ref()
+                .and_then(|snd| snd.firmware_velocity_gain(effective_note, velocity))
+        } else {
+            None
+        };
+        let base_amp = firmware_gain.unwrap_or_else(|| self.touch.map_velocity(velocity));
         let compressed_amp = match self.dyn_comp {
             1 => base_amp.powf(0.82),
             2 => base_amp.powf(0.68),
@@ -1004,7 +1031,10 @@ impl PianoLayer {
             _ => base_amp,
         };
         // Multisample .npno strokes already encode ~6 dB of hammer dynamics; add natural acoustic expression on top.
-        let shaped_amp = if has_multi_vel {
+        let shaped_amp = if firmware_gain.is_some() {
+            // The firmware level law already includes the hammer dynamics of the strokes.
+            compressed_amp
+        } else if has_multi_vel {
             0.22 + 0.78 * compressed_amp.powf(0.9)
         } else {
             compressed_amp
@@ -1491,6 +1521,43 @@ mod tests {
             out.extend_from_slice(&q.to_le_bytes());
         }
         out
+    }
+
+    /// Opt-in firmware level law: off by default, and when on the voice amplitude follows the
+    /// firmware level of the loaded `.npno` relative to velocity 127.
+    #[test]
+    fn firmware_velocity_level_is_opt_in_and_follows_the_level_law() {
+        let image = npno_level::test_image(60, &[(0, 66, 0), (0, 56, 16), (0, 36, 46)], 40);
+        let model = Arc::new(npno_level::NpnoLevel::parse(&image).unwrap());
+        let mut sound = NpnoSound::new_synthetic("fw", 60, &[0.1; 64], 48_000.0);
+        sound.firmware_level = Some(model.clone());
+        let sound = Arc::new(sound);
+
+        let mut layer = PianoLayer::new(48_000.0);
+        layer.set_sound(Some(sound.clone()));
+        assert!(!layer.firmware_velocity_level, "default stays off");
+        layer.note_on(60, 40);
+        let default_amp = layer.voices[0].amp;
+        assert!((default_amp - layer.touch.map_velocity(40)).abs() < 1e-6);
+
+        let mut fw = PianoLayer::new(48_000.0);
+        fw.set_sound(Some(sound));
+        fw.firmware_velocity_level = true;
+        fw.note_on(60, 40);
+        let want = model.main_voice_q23(60, 40).unwrap() as f32
+            / model.main_voice_q23(60, 127).unwrap() as f32;
+        assert!(
+            (fw.voices[0].amp - want).abs() < 1e-6,
+            "{} vs {want}",
+            fw.voices[0].amp
+        );
+        assert!(fw.voices[0].amp < 1.0);
+        fw.note_on(61, 40);
+        let fallback = fw.voices[1].amp;
+        assert!(
+            (fallback - fw.touch.map_velocity(40)).abs() < 0.3,
+            "unmapped note falls back"
+        );
     }
 
     #[test]
