@@ -146,6 +146,23 @@ target/release/sharc-bank SRAM/core1_sram.bin --calls 2 --script l1.script --out
 
 Not done: the organ vs piano vs synth reachability of `0xC022D9F0` / `0xC0236410` (static callers only: organ apply `0xC01209C4/0xC0120C60`, part routing `0xC0236410`; no piano id was driven), the vibrato / percussion / rotary / model ids through `0xC011CB60`, and the weights/post-stage words.
 
+## 8. Id sweep through the notify path and the piano layer (VERIFIED run, mostly negative)
+
+In the booted state (`boot_until(G_CTOR_PROGRESS)`, organ layer built by `0xC0019BAC`), every `Edt_Org_*`, `Edt_OrgCom_*`, `Edt_Sys_kLeslie*`, `Edt_Pno_*` and rotary id of `arm-edit-params.csv` (67 ids, values 1 and 2) was set through the real store setter `0xC00D051C(store, 0, &{id, 1}, v)` with a call tracer and the fake DSP ports:
+
+| Ids | Reached code | Messages |
+|---|---|---|
+| `Edt_Org_Preset_kDb1..9` (`0x16D..0x175`) | `0xC01E8968 -> 0xC011AB8C -> 0xC022AB2C` (record word `0x10 + k`, section 6) | none directly (the record update sends, section 6/7) |
+| `Edt_OrgCom_kLayerLevelOrgA/B` (`0xB1`, `0xB2`) | `0xC01E8968 -> 0xC011AB8C` (the float branch at `0xC011AC38`) | none |
+| vibrato enable `0x16C`, percussion `0x16B/0x177..0x179`, `Edt_Org_kModel` `0x166`, key zone/octave/sustain, all `Edt_OrgCom_*` vibrato/Leslie ids, `Edt_Sys_kLeslie*` | no handler code reached | none |
+| all 15 `Edt_Pno_*` ids (`0x14D..0x15E`) | no handler code reached | none |
+
+So in this harness only the drawbar and layer-level ids have a live handler: the others need clients (vibrato bank programmer `0xC022D9F0` is called from the organ apply `0xC01209C4/0xC0120C60` with the `Edt_Org_Preset_kVibratoEnable` flag, Leslie from the effects layer) that are created by later parts of the boot. **Not captured:** vibrato / percussion / model / rotary messages. Their DSP effect for the bank is covered by section 7 (`0xC022D9F0` with level 1 versus others).
+
+**Piano layer.** The piano layer constructor is `0xC00194B8(layer, index, 0, 0)` (subscriptions `0xC0019634..0xC0019A50`, ids `0x14D..0x15E` among others, vtable `0xC027ACA0`). It runs with zero null calls in the booted state, but its edit store is not at `[layer + 0x5000 + 0x6C8]` (that pointer is 0 for the piano layer) and setting the piano ids through the organ layer's store reaches no handler either. The organ-versus-piano comparison of PNO core 1 usage is therefore **not decided here**; the static fact from section 7 stays: the organ drawbar record path and the bank programmer both write PNO comm 1 core 1 words.
+
+**Sender of the 7-bit array.** Not found. The array `[record+0x28]+0x18` is read by `0xC00BE348` itself (section 7) and no other reader fired in the harness.
+
 ## Implications
 
 - `arm-edit-params.csv` is the authoritative id, name and range list for the 422 edit parameters; the organ drawbar field is a 0..8 integer at the ARM edit layer, which settles the "scaled 7-bit?" question for *that* layer only.
@@ -156,3 +173,11 @@ Not done: the organ vs piano vs synth reachability of `0xC022D9F0` / `0xC0236410
 1. Identify the call at `0xC001B82C` and what the harness did not build; add the missing SPI model (the SPI driver `0xC0066E64` is a TI SPI master: TXFULL `0x2000` and RXEMPTY `0x8000` at `+0x42`, data at `+0x40`/`+0x3C`) so the DSP downloads can run instead of being skipped.
 2. After the application constructor returns, call `0xC00D2B94` (set and notify) for `0x16D + k` and read `emu.messages`; if the engine callback sends nothing itself, trace the member pointer stored at `engine + 0x48`.
 3. Find the constructor that fills `engine + 0x48 / 0x4C` (store with a literal function address into a `0x50`-byte-plus object whose words `0x14..0x1C` are the drawbars).
+
+## 9. Boot past `0xC00FC9F4` (VERIFIED runs, `tools/arm_boot_full.py`)
+
+Checked 2026-11-12. Sources: `bank0_CODE.bin` v1.66 disassembly, `unicorn` runs. Question: why does the boot die at `blx r3` `0xC001B82C`, and how far can it go.
+
+**Root cause 1: the harness skipped the C++ static initialisers.** `__rt_lib_init` (`0xC026BA04`) calls every word of `[0xC052B890, 0xC052B8A0)` = `0xC00002A4, 0xC024D1A0, 0xC024DC64, 0xC025DBBC`. `arm_emu.run_static_init` ran the first with every `bl` skipped. Run for real (all four, `arm_boot_full.run_init_array`, instant) they fill BSS tables the constructors read, for example the edit id table `0xC0572EC0` (`0xE8, 0xEB, ...`). With it zero, a client constructor (`0xC0149B94`, called from `0xC019FA24`) passed id 0 to the subscribe routine `0xC00DCA30`, whose range check (`id - 0x31 < 0x200`) failed into the compiler trap at `0xC00DCC5C` (`mov r3,#0; ldr r3,[r3,#0x14]; udf`). That was the second stop after the stubs below.
+
+**The `blx r3` at `0xC001B82C` itself** is not a garbage vtable. `0xC001B67C(queue, a, b, desc)` is a timer event queue insert (sorted by the time word `[ev + 8]`, queue count at `[queue + 0x18]`). It is called by `0xC001ED84` (five call sites `0xC0168658..0xC0168724`, UI/display setup) with `desc = [[0xC055EF70 + 0x308] + 0x28 + 4 i]`. `[0xC055EF70 + 0x308]` is never written before this point, so `desc` is null and `[desc]` (the vtable) reads 0. Fix: `EVENT_INSERT` is a documented no-op stub (ASSUMED harmless: it only schedules display refresh). The text measure routines (`0xC001B9D0`) dereference a null font glyph table (`[font + 8]`, LCD driver not modelled): stubbed to return 0, and the page `0xFFFF0000` is mapped so the resulting `0xFFFFFFFC` read returns zero.
