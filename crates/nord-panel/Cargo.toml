@@ -1,0 +1,12 @@
+[package]
+name = "nord-panel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Nord Stage 4 front-panel control inventory (shared by the standalone GUI and the plugin editor)"
+
+[lib]
+name = "nord_panel"
+path = "src/lib.rs"

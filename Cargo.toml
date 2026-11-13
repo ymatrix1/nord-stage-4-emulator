@@ -5,6 +5,7 @@ members = [
     "crates/nord-sharc",
     "crates/nord-gui",
     "crates/nord-plugin",
+    "crates/nord-panel",
     "crates/xtask",
 ]
 

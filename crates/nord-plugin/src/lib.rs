@@ -8,12 +8,18 @@
 #![allow(semicolon_in_expressions_from_macros)]
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
+pub mod fx_extra_params;
 pub mod fx_params;
 pub mod fx_selectors;
 pub mod midi;
 pub mod morph_assign;
+pub mod organ_params;
+pub mod param_snapshot;
 pub mod params;
+pub mod piano_params;
 pub mod state;
+pub mod synth_mod_params;
+pub mod synth_params;
 
 use nih_plug::prelude::*;
 use nord_core::engine::Stage4Engine;

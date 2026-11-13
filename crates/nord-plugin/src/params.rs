@@ -82,6 +82,26 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fxsel", group = "Layer FX Selectors")]
     pub layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank,
 
+    /// Per-layer Piano Soft Release, Unison, Dyn Comp and Octave Shift.
+    #[nested(id_prefix = "pianox", group = "Piano Layers")]
+    pub piano_layers: crate::piano_params::PianoLayerBank,
+
+    /// Per-layer Synth voice, kb track and envelope amounts.
+    #[nested(id_prefix = "synthx", group = "Synth Layers")]
+    pub synth_layers: crate::synth_params::SynthLayerBank,
+
+    /// Per-layer Synth LFO, Arpeggiator and Vibrato.
+    #[nested(id_prefix = "synthm", group = "Synth Mod")]
+    pub synth_mod: crate::synth_mod_params::SynthModBank,
+
+    /// Per-layer Organ B3 Bass, octave and vibrato/chorus plus Rotary switches.
+    #[nested(id_prefix = "organx", group = "Organ Layers")]
+    pub organ_layers: crate::organ_params::OrganLayerBank,
+
+    /// Per-layer FX extras: mod amounts, EQ mid freq, filter res, variations, delay analog.
+    #[nested(id_prefix = "fxx", group = "Layer FX Extra")]
+    pub layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -297,6 +317,11 @@ impl Default for Stage4Params {
             morph_assign: crate::morph_assign::MorphAssignParams::default(),
             layer_fx: crate::fx_params::LayerFxBank::default(),
             layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank::default(),
+            piano_layers: crate::piano_params::PianoLayerBank::default(),
+            synth_layers: crate::synth_params::SynthLayerBank::default(),
+            synth_mod: crate::synth_mod_params::SynthModBank::default(),
+            organ_layers: crate::organ_params::OrganLayerBank::default(),
+            layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -558,6 +583,11 @@ impl Stage4Params {
         self.morph_assign.sync_to_engine(engine);
         self.layer_fx.sync_to_engine(engine);
         self.layer_fx_selectors.sync_to_engine(engine);
+        self.piano_layers.sync_to_engine(engine);
+        self.synth_layers.sync_to_engine(engine);
+        self.synth_mod.sync_to_engine(engine);
+        self.organ_layers.sync_to_engine(engine);
+        self.layer_fx_extra.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();
