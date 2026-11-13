@@ -7,8 +7,8 @@
 //! modelled by its effect: word 2 is stored at `base + word 1` (ASSUMED mapping, default base
 //! [`STRIP_BASE`] = the channel strips), and `--rx-irq` raises the Core1 receive interrupt with a
 //! SEC source id so that the P4I service routine (not the harness) starts the pass.
-use crate::args::{parse_number, parse_value};
-use nord_sharc::core::{vector_by_name, Core};
+use super::{parse_number, parse_value};
+use crate::core::{vector_by_name, Core};
 
 /// First channel strip (`DM(0xE0000)`, 62 words per strip, stage pointers in words 0 and 1).
 /// VERIFIED: `docs/research/dsp-rx-protocol.md` section 3 (a stage pointer written here selects

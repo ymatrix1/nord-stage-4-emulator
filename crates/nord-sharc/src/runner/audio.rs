@@ -1,5 +1,5 @@
 //! Capture of audio buffers from the oracle's data memory and WAV / CSV output.
-use nord_sharc::core::Core;
+use crate::core::Core;
 
 /// Sample format of a captured buffer word.
 #[derive(Clone, Copy, Debug, PartialEq)]

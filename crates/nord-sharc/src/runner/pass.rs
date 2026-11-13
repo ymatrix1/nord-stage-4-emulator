@@ -1,6 +1,6 @@
 //! One processing pass of a Core2-style section: write the start trigger, run until the poll loop
 //! is reached again and report which data words changed.
-use nord_sharc::core::{Core, Fault};
+use crate::core::{Core, Fault};
 
 /// Normal-word range backed by the flat SRAM image (blocks 1 to 3).
 pub const SRAM_WORDS: std::ops::Range<u32> = 0x9_0000..0x10_0000;
