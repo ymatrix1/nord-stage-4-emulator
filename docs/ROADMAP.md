@@ -218,7 +218,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Firmware Amp biquad sets, master 4-section IIR, compressor gain computer `0x120630` as opt-in paths (`fx/fw_*.rs`)
 - [x] Routine models with opt-in Rust ports: delay `0x1206B0`, table LFO `0x1228CF`, all-pass `0x122C39`, resonant `0x1243F4` / `0x124497` ([fx-routine-models](research/fx-routine-models.md))
 - [x] FX type map: 28 modules own all 100 routines; Amp type is data plus a mode word ([fx-type-map](research/fx-type-map.md)); client and context words with measured scalings ([fx-contexts](research/fx-contexts.md))
-- [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); delay time `0x1208AF` / `0x120AB5` / `0x120D15` and the reverb tables (`ns4-ca0i`)
+- [x] FX delay time law: `kDlyRateClkDiv` to the tap word and the oracle echo law, opt-in `FirmwareFx::delay_time` ([fx-delay-time](research/fx-delay-time.md))
+- [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); the reverb tables (`ns4-ca0i`); the delay time law (`kDlyRateClkDiv`, [fx-delay-time](research/fx-delay-time.md)) is decoded and wired behind `FirmwareFx::delay_time`
 - [ ] Enable gating and the command consumer ([fx-contexts](research/fx-contexts.md) s7; wiring plan s8), then sweep the four type ids with the effects enabled
 
 ### 7b.5 Piano
