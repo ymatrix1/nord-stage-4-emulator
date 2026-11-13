@@ -230,7 +230,9 @@ The firmware gain brings the level 5.3 dB closer to the hardware recording (the 
 
 The firmware level does **not** close the piano gap on this segment: the level is 0.4 dB hotter and the score 0.15 worse. The main-voice-only opt-in of the previous PR gave +6.5 dB probably because it kept the engine's own (quieter) stroke choice and a single voice; with the firmware strokes of both voices the emulator is as hot as before, so the remaining ~+12 dB is downstream of the voice (the piano layer / master gain structure of the engine against the hardware's mix and master chain), not the voice level, and needs its own calibration. The earlier doc figure `+9.3` (`emulator-vs-hardware-audio.md`) is from an older `main`; the legacy row of today's `main` re-measures at +11.8 (same video, segment and program; the +2.5 dB drift was not investigated and is not caused by this change, since the legacy path is unchanged).
 
-**Open.** The engine-side calibration of the piano layer level against the hardware output (about +12 dB hot on Velvet Grand), the slew time behaviour, damper-down strokes with the firmware lists, and the layer-2 strokes (never selected by any voice rule found).
+**Update:** the downstream audit ([piano-downstream-level](piano-downstream-level.md), D24) finds no 12 dB engine stage: the segment gap is the fixed replay velocity (+4.8 dB at velocity 64) and the recording gain; the only engine-side difference is the 0.83 dB sample scale (opt-in `--firmware-piano-bus`).
+
+**Open.** ~~The engine-side calibration of the piano layer level against the hardware output (about +12 dB hot on Velvet Grand)~~ (answered, see the update), the slew time behaviour, damper-down strokes with the firmware lists, and the layer-2 strokes (never selected by any voice rule found).
 
 ## Implications
 

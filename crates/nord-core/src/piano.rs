@@ -9,6 +9,7 @@ use std::f32::consts::TAU;
 use std::path::Path;
 use std::sync::Arc;
 
+pub mod downstream;
 pub mod level_q23;
 pub mod npno_level;
 pub mod q31_kernel;
@@ -840,6 +841,9 @@ pub struct PianoLayer {
     /// (`piano/extra_voice.rs`). SFZ/WAV and synthetic sounds have no model and always use the
     /// legacy touch curve; set `false` to force the legacy path for `.npno` sounds too.
     pub firmware_velocity_level: bool,
+    /// Scale the sample path by the SMP bus convention (`downstream::FIRMWARE_SAMPLE_SCALE`,
+    /// 0.5) instead of the legacy 0.55. Default `false`: the Q31 receiver convention is ASSUMED.
+    pub firmware_bus_scale: bool,
     /// Sample interpolation: hardware-parity SMP kernel (default) or the older cubic.
     pub sample_interp: SampleInterp,
     kernel: &'static SmpKernel,
@@ -917,6 +921,7 @@ impl PianoLayer {
             soft_pedal_down: false,
             sound,
             firmware_velocity_level: true,
+            firmware_bus_scale: false,
             sample_interp: SampleInterp::default(),
             kernel: SmpKernel::shared(),
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
@@ -1401,7 +1406,8 @@ impl PianoLayer {
                 }
             };
 
-            let sample_scale = if v.stroke_idx.is_some() { 0.55 } else { 0.2 };
+            let sample_scale =
+                downstream::sample_scale(v.stroke_idx.is_some(), self.firmware_bus_scale);
             let voice_gain = v.amp * v.env * v.gain * sample_scale;
             sum_l += sig_l * voice_gain;
             sum_r += sig_r * voice_gain;

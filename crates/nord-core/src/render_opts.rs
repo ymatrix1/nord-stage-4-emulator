@@ -138,6 +138,8 @@ pub struct FirmwareOptions {
     pub firmware_fx: bool,
     /// `--firmware-piano-level`: `PianoLayer::firmware_velocity_level`.
     pub piano_firmware_level: bool,
+    /// `--firmware-piano-bus`: `PianoLayer::firmware_bus_scale` (opt-in, ASSUMED receiver scale).
+    pub piano_bus_scale: bool,
     /// `--measured-laws`: `SynthLayer::measured_laws` (EMPIRICAL, Audible Genius clips).
     pub measured_laws: bool,
 }
@@ -153,6 +155,7 @@ impl Default for FirmwareOptions {
             b3_tail: None,
             firmware_fx: false,
             piano_firmware_level: true,
+            piano_bus_scale: false,
             measured_laws: false,
         }
     }
@@ -177,6 +180,7 @@ impl FirmwareOptions {
             b3_tail: None,
             firmware_fx: true,
             piano_firmware_level: true,
+            piano_bus_scale: false,
             measured_laws: false,
         }
     }
@@ -216,6 +220,7 @@ impl FirmwareOptions {
         if has("--legacy-piano-level") {
             o.piano_firmware_level = false;
         }
+        o.piano_bus_scale |= has("--firmware-piano-bus");
         o.measured_laws |= has("--measured-laws");
         Ok(o)
     }
@@ -230,6 +235,8 @@ impl FirmwareOptions {
             self.firmware_fx,
         );
         apply_piano_level(engine, self.piano_firmware_level);
+        engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
         apply_b3_tail(engine, self.b3_tail);
         apply_synth_chain(engine, self.synth_chain);
         if self.measured_laws {
@@ -337,6 +344,12 @@ mod tests {
         assert_eq!(o.tone_source, Some(ToneWheelSource::B3Wheels));
         assert_eq!(o.b3_tail, Some(false));
         assert!(o.firmware_fx && o.piano_firmware_level && o.measured_laws);
+        assert!(!o.piano_bus_scale, "the bus scale is opt-in");
+        let bus = FirmwareOptions::from_args(&args(&["--firmware-piano-bus"])).unwrap();
+        assert!(bus.piano_bus_scale);
+        let mut e = Stage4Engine::new(48_000.0);
+        bus.apply_to(&mut e);
+        assert!(e.piano_a.firmware_bus_scale && e.piano_b.firmware_bus_scale);
         let all = FirmwareOptions::from_args(&args(&["--firmware-all"])).unwrap();
         assert_eq!(all, FirmwareOptions::firmware_all());
         assert!(!all.measured_laws);

@@ -294,3 +294,14 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** The level law, the stroke selection, the per-key bytes, the extra-voice rule and the gain word equal the real firmware (ARM run with the loaded sound) in 96 of 96 random notes on four sounds and 12 of 12 SMP record gains; the mapping from note and velocity into them is derived from the file, not guessed (D22 conditions 1 and 2).
 - **Alternatives:** Stay opt-in (kept the ASSUMED touch curve although the firmware law is known); make the SFZ/WAV path follow the same law (no stroke records, no model).
 - **Impact:** `render_hash` `25baa387...` unchanged (synthetic piano only); the `.npno` piano renders change. The emulator-versus-hardware piano gap does not shrink (RMS +11.8 -> +12.2 dB on Velvet Grand): the excess level is downstream of the voice and is tracked in the research note.
+
+### D24. The SMP bus scale of the piano stays opt-in
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PR for `feat/piano-downstream-level`; evidence [piano-downstream-level](research/piano-downstream-level.md))
+- **Context:** After D23 the Velvet Grand segment reads about +12 dB against the recording. The firmware path after the voice was traced: the SMP output stage `bus += (y << 17) * gain >> 31` (VERIFIED), the layer level, master, string resonance, dyn comp and unison of the engine.
+- **Decision:** Add `PianoLayer::firmware_bus_scale` (`ns4 render-patch --firmware-piano-bus`, `piano/downstream.rs`): the sample path uses 0.5 (bus word read as a fraction of `2^31`) instead of the legacy 0.55. Default `false`.
+- **Why:** The bus word is VERIFIED but the receiver's full-scale convention is not decoded (ASSUMED), and the video check improves by 0.83 dB only (+12.2 to +11.4 dB), not to within 3 dB (D22). The large gap is the fixed replay velocity 100 and the unknown recording gain: velocity 64 reads +4.8 dB, and against the oracle-verified Pipe path the piano is +2.4 dB.
+- **Alternatives:** Make 0.5 the default now (changes every `.npno` render by 0.83 dB on an assumption); attenuate the piano layer by 12 dB to match the video (fits a replay artefact, would be wrong at the real velocities).
+- **Impact:** `render_hash` unchanged. No engine stage other than the 0.55 constant differs from the firmware at default settings.
+

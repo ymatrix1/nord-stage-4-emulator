@@ -25,11 +25,16 @@ Maps incoming MIDI velocity $v \in [1, 127]$ to normalized gain/timbre excitatio
 - **`Medium` (Default):** $\left(\dfrac{v}{127}\right)^{1.00}$ (linear response)
 - **`Heavy`:** $\left(\dfrac{v}{127}\right)^{1.55}$ (wider pianissimo dynamic control)
 
+### Downstream level after the voice (`piano/downstream.rs`)
+
+Voice output stage (VERIFIED, `smp_voice.rs`): `bus += (y << 17) * gain >> 31`, so a bus word read as a fraction of Q31 full scale is `(y / 8192) * 0.5 * gain` (`FIRMWARE_SAMPLE_SCALE`). The engine sample path multiplies `y / 8192` by `LEGACY_SAMPLE_SCALE = 0.55` (ASSUMED, legacy); `PianoLayer::firmware_bus_scale` (default `false`, `ns4 render-patch --firmware-piano-bus`) uses 0.5 (-0.83 dB). The receiver's full-scale convention is ASSUMED. After the voice the engine adds no level at default settings (layer level 1.0, master compressor amount 0, FX off, timbre `Off`, dyn comp 0, unison 0; string resonance < 1e-5 of RMS), measured in [piano-downstream-level](../research/piano-downstream-level.md) (D24). The video comparison level depends on the replay velocity (0.37 dB per step), see that note.
+
 ### Firmware velocity -> level law (opt-in, `piano/velocity_level.rs`)
 
 VERIFIED against the real firmware (OS v1.66, `docs/research/piano-sound-load.md` sections 6 and 7; Clavinet D6, Bright Grand, Amber Upright, note 60, 79 velocities): the piano class level method `0xC00A1EB4` stores the Q23 voice amplitude
 
-$$n = \mathrm{rec}[\mathtt{0x5E}] + 2X + 60 - (b_1 + b_2 + b_3), \qquad A = G[n mod 60] \gg \lfloor n / 60 floor,\quad G[k] = \mathrm{round}(2^{23} \cdot 2^{-k/60})$$
+$$n = \mathrm{rec}[\mathtt{0x5E}] + 2X + 60 - (b_1 + b_2 + b_3), \qquad A = G[n mod 60] \gg \lfloor n / 60 
+floor,\quad G[k] = \mathrm{round}(2^{23} \cdot 2^{-k/60})$$
 
 (`piano/level_q23.rs`; 60 steps per octave, 0.1003 dB per step). `X` is the velocity attenuation `clamp(d + ((128 - c) T) >> 7, 0, 249)`, `T` a byte of the firmware velocity curve for the internal velocity (`0..=1023`), `(c, d)` = `(0x13, 0)` for the zone used; it falls from 170 (velocity 1) to 0 (velocity 121 and above) and was identical for the three sounds swept. `rec[0x5E]` is a field of the selected stroke record (depends on the root key and the velocity layer; file specific), `b1 + b2 + b3` are three signed per-key bytes of the sound object (40 / 49 / 54 at note 60 for the three sounds; they vary with the note). The module provides the `X` table (VERIFIED at 79 velocities, EMPIRICAL interpolation between), the stroke step function (EMPIRICAL between swept velocities) and the index formula; it is **not wired into the default render** (`render_hash` unchanged). `rec[0x5E]`, the stroke choice and the per-key bytes are read from the `.npno` by `piano/npno_level.rs` (`NpnoSound::firmware_level`); `PianoLayer::firmware_velocity_level` (default `true`, D23) makes a note-on of an `.npno` sound start the firmware's voices (`NpnoLevel::voices`: main voice, plus an extra first voice on classes 1, 2, 3, 5, 6) with the gain `level_q23 / 2^23` each (`piano/extra_voice.rs`); the touch curve remains for SFZ/WAV, synthetic sounds and damper-down notes. Open: the downstream level calibration against the hardware recording and the SMP slew times.
 
