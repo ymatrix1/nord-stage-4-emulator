@@ -97,4 +97,4 @@ Consequence for the gain law: the ARM level law is a 60-steps-per-octave attenua
 2. Decode `0xC00A9274` and `0xC00B64D8` to attribute the velocity and gain writes, then replay them on `sharc-ref` with the SMP image.
 3. Decode the structure of `0xC00A1C60` (`r3`, `-4`) with a stroke from a real `.npno`.
 4. Locate the effects/Leslie/EQ client that is not in the dispatcher list at the main loop.
-5. Sound load via the stubbed library volume (`tools/arm_piano_load.py`) works; binder and per-key table builder still missing: [piano-sound-load](piano-sound-load.md).
+5. Sound load via the stubbed library volume (`tools/arm_piano_load.py`) works; binder found, voice start and the level method `0xC00A1EB4` reached, level law reproduced 17 of 17 (velocity sweep): [piano-sound-load](piano-sound-load.md).
