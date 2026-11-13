@@ -56,6 +56,8 @@ def main():
     ap.add_argument('cases')
     ap.add_argument('--output', required=True)
     ap.add_argument('--n-state', type=int, default=107)
+    ap.add_argument('--target', choices=['21489', '21571'], default='21489',
+                    help='simulator: ADSP-21489 (functional) or ADSP-21571 (SHARC+, cycle-accurate)')
     ap.add_argument('--no-reexec', action='store_true')
     a = ap.parse_args()
     if not sim_run.is_py36_32() and not a.no_reexec:
@@ -71,7 +73,10 @@ def main():
     os.environ['PATH'] = os.path.join(sim_run.cces_home(), 'System') + os.pathsep + os.environ['PATH']
     os.environ.setdefault('CCES_HOME', sim_run.cces_home())
     import TpsdkServer.TpsdkServer as T
-    T.Connect(*sim_run.TARGET)
+    target = sim_run.TARGET if a.target == '21489' else ('ChipFactory Simulator', 'ADSP-21571 Cycle-Accurate-Sim', 'ADSP-21571')
+    dm_id = sim_run.DM_MEMORY_ID if a.target == '21489' else 5          # 21571: "L1 32-bit (NW) Block 0" (any block reaches the whole space)
+    pm_id = PM_SHORT_WORD_ID if a.target == '21489' else 17             # 21571: "L1 16-bit (SW) Block 0"
+    T.Connect(*target)
     out = open(a.output, 'w')
     t0 = time.time()
     try:
@@ -80,22 +85,28 @@ def main():
         flag = bytearray(4)
         for k, (parcels, state, chunks) in enumerate(cases):
             T.LoadProgram(0, dxe, False)   # fresh memory and registers: Reset is slow and leaves no program
+            if a.target == '21571':   # the SHARC+ simulator may still be running after the load
+                try:
+                    T.Halt(0, True)
+                except RuntimeError:
+                    pass
+                T.RemoveAllBreakpoints(0)
             T.SetBreakpointAtAddress(0, exit_a)
             ps = [int(parcels[i:i + 4], 16) for i in range(0, len(parcels), 4)]
             ps += [0x0001] * (SLOT_PARCELS - len(ps))
-            T.SetMemory(0, sim_run.DM_MEMORY_ID, st, len(state), 1, bytearray(words_bytes(state)))
-            T.SetMemory(0, sim_run.DM_MEMORY_ID, scr_a, SCR_WORDS, 1, bytearray(words_bytes(scr)))
-            T.SetMemory(0, PM_SHORT_WORD_ID, slot, SLOT_PARCELS, 1, bytearray(struct.pack('>%dH' % SLOT_PARCELS, *ps)))
+            T.SetMemory(0, dm_id, st, len(state), 1, bytearray(words_bytes(state)))
+            T.SetMemory(0, dm_id, scr_a, SCR_WORDS, 1, bytearray(words_bytes(scr)))
+            T.SetMemory(0, pm_id, slot, SLOT_PARCELS, 1, bytearray(struct.pack('>%dH' % SLOT_PARCELS, *ps)))
             for addr, hexp in setup['code']:
                 n = len(hexp) // 4
-                T.SetMemory(0, PM_SHORT_WORD_ID, addr, n, 1, bytearray(bytes.fromhex(hexp)))
+                T.SetMemory(0, pm_id, addr, n, 1, bytearray(bytes.fromhex(hexp)))
             for addr, ws in setup['dm'] + chunks:
-                T.SetMemory(0, sim_run.DM_MEMORY_ID, addr, len(ws), 1, bytearray(words_bytes(ws)))
+                T.SetMemory(0, dm_id, addr, len(ws), 1, bytearray(words_bytes(ws)))
             T.Run(0, False)
             t1 = time.time()
             while True:   # the state reads HALTED until the run starts: wait for the done flag instead
                 try:
-                    T.GetMemory(0, sim_run.DM_MEMORY_ID, done, 1, 1, flag)
+                    T.GetMemory(0, dm_id, done, 1, 1, flag)
                     if struct.unpack('>I', bytes(flag))[0] == 0xD0E5:
                         break
                 except RuntimeError:
@@ -103,15 +114,15 @@ def main():
                 if time.time() - t1 > 3:
                     break
             try:
-                T.GetMemory(0, sim_run.DM_MEMORY_ID, res, a.n_state, 1, buf_res)
-                T.GetMemory(0, sim_run.DM_MEMORY_ID, scr_a, SCR_WORDS, 1, buf_scr)
+                T.GetMemory(0, dm_id, res, a.n_state, 1, buf_res)
+                T.GetMemory(0, dm_id, scr_a, SCR_WORDS, 1, buf_scr)
             except RuntimeError as e:   # the simulator stopped on the instruction (bad access, ...)
                 out.write('HALT %s\n' % str(e).split(':')[-1].strip().replace(' ', '_'))
                 continue
             ws = struct.unpack('>%dI' % a.n_state, bytes(buf_res)) + struct.unpack('>%dI' % SCR_WORDS, bytes(buf_scr))
             for addr, n in setup['watch']:
                 wb = bytearray(4 * n)
-                T.GetMemory(0, sim_run.DM_MEMORY_ID, addr, n, 1, wb)
+                T.GetMemory(0, dm_id, addr, n, 1, wb)
                 ws += struct.unpack('>%dI' % n, bytes(wb))
             out.write(' '.join('%08X' % w for w in ws) + '\n')
     finally:

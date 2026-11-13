@@ -147,7 +147,7 @@ def run(cmd, outfile=None):
         sys.exit('failed: %s' % ' '.join(cmd))
 
 
-def run_sim(dxe, cases, out, jobs):
+def run_sim(dxe, cases, out, jobs, target='21489'):
     """Runs sim_batch.py on `jobs` shards of the case file in parallel (one simulator per process)."""
     lines = open(cases).read().split(chr(10))
     head, body = lines[0], [l for l in lines[1:] if l]
@@ -157,7 +157,7 @@ def run_sim(dxe, cases, out, jobs):
     for k, sh in enumerate(shards):
         c, o = '%s.%d' % (cases, k), '%s.%d' % (out, k)
         open(c, 'w').write(head + chr(10) + chr(10).join(sh) + chr(10))
-        cmd = [sys.executable, os.path.join(HERE, 'sim_batch.py'), dxe, c, '--output', o]
+        cmd = [sys.executable, os.path.join(HERE, 'sim_batch.py'), dxe, c, '--output', o, '--target', target]
         procs.append((subprocess.Popen(cmd, stdout=subprocess.DEVNULL), o))
     with open(out, 'w') as f:
         for p, o in procs:
@@ -204,6 +204,7 @@ def main():
     ap.add_argument('--states', type=int, default=6)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--reuse-sim', action='store_true', help='keep sim.txt, rerun only the model and the report')
+    ap.add_argument('--target', default='21489', choices=['21489', '21571'], help='simulator the cases run on')
     ap.add_argument('--jobs', type=int, default=1, help='parallel simulator processes')
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
@@ -217,9 +218,9 @@ def main():
     if a.reuse_sim:   # sim.txt from an earlier run with the same --seed/--states/--sample
         pass
     elif a.jobs > 1:
-        run_sim(a.dxe, cases, simo, a.jobs)
+        run_sim(a.dxe, cases, simo, a.jobs, a.target)
     else:
-        run([sys.executable, os.path.join(HERE, 'sim_batch.py'), a.dxe, cases, '--output', simo])
+        run([sys.executable, os.path.join(HERE, 'sim_batch.py'), a.dxe, cases, '--output', simo, '--target', a.target])
     run(['cargo', 'run', '-q', '-p', 'nord-sharc', '--bin', 'sharc_census_run', '--', a.fixture, cases], modo)
     bad = report(meta, simo, modo, gen.N_STATE, os.path.join(a.work, 'report.txt'))
     print('%d differing cases, see %s' % (bad, os.path.join(a.work, 'report.txt')))
