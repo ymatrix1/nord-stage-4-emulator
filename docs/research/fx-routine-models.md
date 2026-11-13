@@ -59,6 +59,8 @@ Closed form: `tools/fx_closed_delay.py` (agrees with the model to 5e-6; the pack
 
 ## 4. Table LFO `0x1228CF`
 
+> **Role correction (2026-11-13, [fx-contexts](fx-contexts.md) s5.2):** the ARM writes `kAmpDrive / 127` into `c[-0x20]`, the word this section calls the LFO phase target. The stage is the **Amp drive**, the two tables are drive curves and the equations below are unchanged. Likewise `0x1243F4 / 0x124497` (s6) are driven by the Amp treble, mid and bass ids (tone stack).
+
 Per call: a phase step, two table LFO gains, then a loop of `ctx[0x15]` blocks of two stereo frames (146 instructions with one block, +103 per further block). Words are floats unless noted; `K` as above.
 
 | Stage | Equation | Words |
