@@ -77,6 +77,25 @@ pub fn apply_b3_tail(engine: &mut Stage4Engine, tail: Option<bool>) {
     }
 }
 
+/// Selects the amp path of every layer (`Some(true)` firmware drive stage and cabinet, the
+/// default; `Some(false)` the engine drive and RBJ cabinet; `None` leaves the engine untouched).
+pub fn apply_amp_path(engine: &mut Stage4Engine, firmware: Option<bool>) {
+    if let Some(on) = firmware {
+        for chain in engine.fx_chains.iter_mut() {
+            chain.firmware_fx.amp = on;
+        }
+    }
+}
+
+/// Selects the unity-gain rotary drive law `tanh(g x) / g` of both organ layers (`false` keeps the
+/// engine law).
+pub fn apply_rotary_unity(engine: &mut Stage4Engine, on: bool) {
+    if on {
+        engine.organ_a.rotary_drive_unity = true;
+        engine.organ_b.rotary_drive_unity = true;
+    }
+}
+
 /// Applies the opt-in firmware switches to every layer of `engine`.
 pub fn apply_firmware_options(
     engine: &mut Stage4Engine,
@@ -161,7 +180,7 @@ mod tests {
         apply_firmware_options(&mut e, None, None, false);
         assert_eq!(e.organ_a.tonewheel_source, ToneWheelSource::ModelDefault);
         assert_eq!(e.synth_c.filter_engine, FilterEngine::Zdf);
-        assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::OFF);
+        assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::DEFAULT);
         apply_firmware_options(
             &mut e,
             Some(ToneWheelSource::Vox),

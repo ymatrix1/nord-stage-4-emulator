@@ -10,7 +10,13 @@ use std::f32::consts::TAU;
 impl OrganLayer {
     /// Processes Model 122 Rotary Speaker with Doppler delay, Close Mic, Angle, Stop Mode, and cabinet reflections.
     pub(super) fn process_rotary(&mut self, scanner_out: f32, inv_fs: f32) -> [f32; 2] {
-        let driven = ((1.0 + 3.0 * self.rotary_drive) * scanner_out).tanh();
+        let gain = 1.0 + 3.0 * self.rotary_drive;
+        let driven = (gain * scanner_out).tanh();
+        let driven = if self.rotary_drive_unity {
+            driven / gain
+        } else {
+            driven
+        };
         let alpha = (TAU * ROTARY_CROSSOVER_HZ * inv_fs).clamp(0.01, 0.99);
         self.lp_state += alpha * (driven - self.lp_state);
         let bass = self.lp_state;
@@ -140,6 +146,29 @@ mod tests {
             stopped.horn_rate_hz,
             stopped.drum_rate_hz
         );
+    }
+
+    #[test]
+    fn unity_drive_law_keeps_the_small_signal_gain_and_the_clip_level() {
+        let level = |unity: bool, amp: f32| {
+            let mut o = OrganLayer::new(48_000.0);
+            o.rotary_drive = 2.44;
+            o.rotary_drive_unity = unity;
+            let mut peak = 0.0f32;
+            for i in 0..4096 {
+                let x = amp * (i as f32 * 0.05).sin();
+                let [l, _] = o.process_rotary(x, 1.0 / 48_000.0);
+                if i > 2048 {
+                    peak = peak.max(l.abs());
+                }
+            }
+            peak
+        };
+        // engine law: +18 dB on a quiet input; unity law: about the input level (rotary losses aside)
+        assert!(level(false, 0.001) > 5.0 * level(true, 0.001));
+        assert!(level(true, 0.001) < 0.002);
+        // a loud input clips below 1/g under the unity law
+        assert!(level(true, 4.0) < 0.2);
     }
 
     #[test]
