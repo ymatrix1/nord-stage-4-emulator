@@ -94,6 +94,19 @@ mod tests {
     }
 
     #[test]
+    fn fade_constants_are_5_and_15_khz_at_the_dsp_frame_rate() {
+        // B = 5 kHz / fs and A = 15 kHz / fs for fs = 43,402 Hz (float32 words), so the knee is at
+        // 5.0 kHz and the end at 10.0 kHz in Hz: the SY frame rate is not 48 kHz
+        // (docs/research/dsp-frame-rate.md section 3.4).
+        let fs = crate::organ::FIRMWARE_FRAME_RATE_HZ;
+        assert!((f64::from(SAW_B) * fs - 5_000.0).abs() < 0.1);
+        assert!((f64::from(SAW_A) * fs - 15_000.0).abs() < 0.2);
+        assert!((5_000.0 / f64::from(SAW_B) - 43_402.0).abs() < 0.05);
+        // at 48 kHz these words would put the knee at 5.53 kHz, not a round number
+        assert!((f64::from(SAW_B) * 48_000.0 - 5_529.7).abs() < 0.1);
+    }
+
+    #[test]
     fn fade_is_unity_below_the_knee_and_silent_above_the_end() {
         assert!((firmware_saw_fade(0.05) - 1.0).abs() < 1e-6);
         assert!((firmware_saw_fade(0.1152) - 1.0).abs() < 1e-4);

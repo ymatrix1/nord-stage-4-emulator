@@ -1,7 +1,9 @@
 //! Tests of the vibrato-level selection, the smoothed lane gains and the stereo blend of the
 //! organ's `Firmware` link (`tonewheel.rs`, `lane_mix.rs`, `mod.rs::render_frame`).
 
-use super::{OrganLayer, OrganModel, ScannerMode, ToneWheelSource, VibratoLink};
+use super::{
+    OrganLayer, OrganModel, ScannerMode, ToneWheelSource, VibratoLink, FIRMWARE_FRAME_RATE_HZ,
+};
 
 const FS: f32 = 48_000.0;
 const SETTLE: usize = 4000;
@@ -146,7 +148,10 @@ fn smoothing_follows_the_sample_rate() {
     let mut o = bank_layer(96_000.0);
     o.scanner_mode = ScannerMode::C3;
     o.render_tonewheel_lanes(1.0 / 96_000.0);
-    assert!((f64::from(o.lane_mixer.keep()) - 0.99f64.powf(43_156.4 / 96_000.0)).abs() < 1e-6);
+    assert!(
+        (f64::from(o.lane_mixer.keep()) - 0.99f64.powf(FIRMWARE_FRAME_RATE_HZ / 96_000.0)).abs()
+            < 1e-6
+    );
 }
 
 #[test]

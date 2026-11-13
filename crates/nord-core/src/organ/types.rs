@@ -141,6 +141,11 @@ pub enum ToneWheelSource {
     /// firmware are not modelled yet (`docs/research/b3-generator.md`). Applies to `B3` only; the
     /// other models fall back to `Legacy`.
     B3Wheels,
+    /// Farfisa generator `0x122A71` of PNO core 1: 12 top-octave phase accumulators with an 8 or 9
+    /// row octave ladder of soft pulse waves (`farfisa_wheels.rs`, spec section 3.1.8). Opt-in: the
+    /// processor `0x122B85` (weights, filters) is not modelled. Applies to `Farfisa` only; the other
+    /// models fall back to their default source.
+    FarfisaWheels,
 }
 
 impl ToneWheelSource {
@@ -154,6 +159,8 @@ impl ToneWheelSource {
             (Self::Vox, m) => m.default_tone_source(),
             (Self::Firmware, OrganModel::Vox | OrganModel::Farfisa) => Self::Legacy,
             (Self::B3Wheels, m) if !matches!(m, OrganModel::B3) => Self::Legacy,
+            (Self::FarfisaWheels, OrganModel::Farfisa) => Self::FarfisaWheels,
+            (Self::FarfisaWheels, m) => m.default_tone_source(),
             (explicit, _) => explicit,
         }
     }

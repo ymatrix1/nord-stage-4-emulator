@@ -27,7 +27,7 @@ STRIDE = 25  # one record every STRIDE frames
 NOTES_PLAIN = (0, 12, 36, 60, 83)
 NOTES_VIB = (24, 40, 71)
 DEPTH_WORD = 0x240B700  # Vox 3, `0x240B7 << 8`
-FW_RATE = 43_156.4  # frame rate of the Rust bank (ASSUMED, lane_mix.rs)
+FW_RATE = 43_402.34375  # DSP frame rate (VERIFIED, docs/research/dsp-frame-rate.md)
 RATE_BASE = 0x62C2E7
 # EMPIRICAL: cutoff of the note low-pass per group of 4 notes in units of the cycles per frame of
 # the group's lowest note; same list as `CUTOFF_RATIO` in vox_bank.rs (checked by the tests).

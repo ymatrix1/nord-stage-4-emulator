@@ -57,6 +57,6 @@ def test_sidebands_of_a_phase_modulated_carrier_follow_the_modulation_index() ->
 
 def test_load_csv_reads_the_two_lanes(tmp_path) -> None:
     f = tmp_path / "o.csv"
-    f.write_text("# mode: vox\n# rate: 43156.4\nindex,L,R\n0,0.5,0.25\n1,-0.5,-0.25\n")
+    f.write_text("# mode: vox\n# rate: 43402.34375\nindex,L,R\n0,0.5,0.25\n1,-0.5,-0.25\n")
     out = vc.load_csv(str(f))
     assert out.shape == (2, 2) and out[1, 0] == -0.5

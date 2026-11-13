@@ -2,14 +2,14 @@
 """Per-partial comparison of the Rust Vox source with the oracle chord (`sharc-pass`).
 
 Both signals are in firmware frames (the oracle `pno_full_pass.py run --out PREFIX` writes
-`PREFIX.f32.npy`; the Rust side is `organ_ref --mode vox --rate 43156.4 --out PREFIX`, columns
+`PREFIX.f32.npy`; the Rust side is `organ_ref --mode vox --rate 43402.34375 --out PREFIX`, columns
 `index,L,R`). The amplitude of every partial `h` of every note is read with a Hann window at its
 exact 12-TET frequency (`cycles_per_frame`), relative to the fundamental of the same note.
 
     python tools/pno_full_pass.py run SRAM/core1_sram.bin --exe target/release/sharc-pass \
         --script docs/research/data/pno-pass-install-vox.script \
         --script docs/research/data/pno-pass-vox-weights-c4e4g4.script --passes 20000 --out vox
-    cargo run --release -p nord-core --example organ_ref -- --mode vox --rate 43156.4 \
+    cargo run --release -p nord-core --example organ_ref -- --mode vox --rate 43402.34375 \
         --frames 40000 --out rust_vox
     python tools/organ_vox_compare.py vox.f32.npy rust_vox.csv
 """

@@ -55,7 +55,8 @@ Technical specifications and component-level verification for the Clavia Nord St
   - $\div 512 = 48{,}000\text{ Hz}$ ($f_s$, base audio DSP frame rate).
   - $\div 256 = 96{,}000\text{ Hz}$ ($2 \times f_s$, available for internal oversampled distortion/filter stages).
   - $\div 8 = 3.072\text{ MHz}$ (Bit Clock / BCLK for 64-bit stereo $I^2S$ frames at 48 kHz).
-- **Direct Consequence:** Nord Stage 4 DSP executes natively at **$48\text{ kHz}$**. No internal $44.1\text{ kHz} \leftrightarrow 48\text{ kHz}$ sample rate conversion is performed on the audio bus.
+- **Correction (2026-11-13):** this crystal derivation is not supported by the firmware: the DSP images run at **43,402.34 Hz** ([dsp-frame-rate](dsp-frame-rate.md)). The emulator's engine sample rate stays a free parameter.
+- **Direct Consequence (superseded by the correction above):** Nord Stage 4 DSP executes natively at **$48\text{ kHz}$**. No internal $44.1\text{ kHz} \leftrightarrow 48\text{ kHz}$ sample rate conversion is performed on the audio bus.
 
 ### 3.4 Keybed Triple-Sensor Scanning
 - Fatar TP/400 (hammer action) keybeds connect via ribbon cables to high-speed digital I/O lines on the mainboard.

@@ -140,6 +140,27 @@ mod tests {
     }
 
     #[test]
+    fn delay_time_words_of_the_arm_are_ms_times_the_dsp_frame_rate() {
+        // `Edt_Effects_kDlyRateClkDiv` context word `c[0x15]` (docs/research/data/fx-delay-time.csv,
+        // float words from the ARM) is truncate(ms * fs / 1000) for fs = 43,402.34 Hz at the display
+        // values the table lists exactly: (step, samples). 43,400 Hz would give 54,250, 32,550,
+        // 27,125 for the last three; 48 kHz gives 72,000 samples at 1500 ms (clamped to 61,438).
+        let fs = crate::organ::FIRMWARE_FRAME_RATE_HZ;
+        for (step, samples) in [
+            (127usize, 868.0f64),
+            (96, 6510.0),
+            (24, 27_126.0),
+            (16, 32_551.0),
+            (4, 54_252.0),
+        ] {
+            let ms = f64::from(DELAY_TIME_MS[step]);
+            assert_eq!((ms * fs / 1000.0).floor(), samples, "step {step}: {ms} ms");
+        }
+        // the writer's own constant: 250 ms = c[0x16] = 10850
+        assert_eq!((250.0 * fs / 1000.0).floor(), 10_850.0);
+    }
+
+    #[test]
     fn test_delay_time_table_and_sync_fractions() {
         assert_eq!(DELAY_TIME_MS[0], 1500.0);
         assert_eq!(DELAY_TIME_MS[127], 20.0);

@@ -98,7 +98,7 @@ Routine `0x12272D`: triangle LFO (`|phase| - 0.5`, `*4`, clip), `fix`, interpola
 | Item | State |
 |---|---|
 | Role of the bank (B3 tonewheels vs string resonance vs both) | ASSUMED; decisive check: which ARM parameter ids drive the `0x957DE` weights (`Edt_Sys_kToneWheelMode`, `Edt_Sys_kStringResonanceLevel`, `Buffer_kOrgDrawbar` at `0xC02D6938`) |
-| Frame rate of the bank, absolute pitch, tune index at run time | open (48 kHz gives D1 -16 cent; unity tune gives A = 436.4 Hz at element 43) |
+| Frame rate of the bank, absolute pitch, tune index at run time | **settled** in [dsp-frame-rate](dsp-frame-rate.md): `F` = 43,402.34 Hz, tune index `0x1F3` (word `0x3FA02A00`), wheel `k` = C1 + k semitones within 0.35 cent (48 kHz and unity tune were wrong) |
 | Drawbar to weight mapping (curve, tapering, foldback), key contacts | open: the weights are written by the ARM into `0x9566E..0x95949`; senders not decoded (see the `research/arm-param-messages` work, not on `main` when this was written) |
 | Percussion, key click, key-on envelope | not in the bank (it has no per-note state); either in the weights (ARM ramps) or the ORG strip image |
 | Meaning of selectors 0..9 of `0xC022A594` | only the DSP bases are decoded |

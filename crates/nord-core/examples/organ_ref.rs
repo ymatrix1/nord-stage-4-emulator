@@ -8,12 +8,17 @@
 //! --mode layer       OrganLayer with percussion, crosstalk, rotary and scanner off (default)
 //! --mode vox         the Vox note bank (`ToneWheelSource::Vox`, spec 3.1.7): weight 1 per key, the
 //!                     output stage `0x1229B3`; drawbars, --weights and --detuned do not apply
+//! --mode b3          the B3 per-key weight path (`ToneWheelSource::B3Wheels`, spec 3.1.6): wheel
+//!                     tables times the captured `A * W` weights; --drawbars act (the oracle replay of
+//!                     `keydown-b3-c4e4g4.script` has the 16', 5 1/3', 8' and 4' items: `888800000`)
 //! --vibrato N        vox mode: vibrato type 0 (off), 1..3 (V1..V3: Vox depths 0.70, 1.15, 1.76 %)
 //! --notes 60,64,67    MIDI notes (default C4 E4 G4)       --drawbars 888000000
 //! --frames N          frames to render (default 16384)    --detuned   vibrato level 1: detuned table,
 //!                     stereo-blend lanes in L/R (compare per lane with `organ_oracle_audio.py compare --lanes`)
 //! --rate HZ           sample rate / bank frame rate (default: the rate at which wheel 0 equals the
-//!                     firmware increment of the exact table, 43,156 Hz)
+//!                     firmware increment of the exact table at the image's unity tune, 43,156 Hz:
+//!                     the oracle-matching rate; the real DSP frame rate is 43,402.34 Hz,
+//!                     `docs/research/dsp-frame-rate.md`, and Vox runs need `--rate 43402.34375`)
 //! --linear            DrawbarLaw::Linear instead of the firmware curve
 //! --weights firmware WeightMode::Firmware: ARM per-wheel weights, one-pole smoothing, absolute scale
 //!                     (default `legacy`); also drops the pickup tables and the key click
@@ -140,6 +145,11 @@ fn render_layer(o: &Opts) -> Vec<[f32; 2]> {
             ScannerMode::V2,
             ScannerMode::V3,
         ][usize::from(o.vibrato)];
+    }
+    if o.mode == "b3" {
+        organ.model = OrganModel::B3;
+        organ.tonewheel_source = ToneWheelSource::B3Wheels;
+        organ.key_click_enabled = false;
     }
     organ.drawbars = o.drawbars;
     organ.drawbar_law = if o.linear {

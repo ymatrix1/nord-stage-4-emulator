@@ -7,6 +7,7 @@
 //! ([`note_step`]) and read through a 128 + 1 point cyclic table with linear interpolation, the
 //! table chosen by note ([`wheel_table`]). Wheel `w` of the 91-wheel bus is note `24 + w`.
 
+use super::lane_mix::FIRMWARE_FRAME_RATE_HZ;
 use super::types::NUM_TONEWHEELS;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
@@ -25,9 +26,27 @@ pub const PHASE_INC: [u32; 12] = [
 
 /// Fine tune word `DM(0xB33B8)`, a fractional multiplier (`r8 = r0 * r7 (ssfr)`, 63/128).
 ///
-/// VERIFIED: image value; `round` instead of `floor` in [`base_step`] is what the oracle frequencies
-/// require (5.9e-7 relative difference on pitch classes 1, 3, 5, 6, 9, 11).
+/// VERIFIED: image value (the oracle replays ran with it; [`ARM_FINE_WORD`] replaces it once the
+/// ARM writes Fine Tune); `round` instead of `floor` in [`base_step`] is what the oracle frequencies
+/// require (5.9e-7 relative difference on pitch classes 1, 3, 5, 6, 9, 11). Read with this word and
+/// note 60 = C4 the frame rate would be 43,829 Hz, the old b3-generator figure.
 pub const FINE_WORD: u64 = 0x3F00_0000;
+
+/// Fine tune word the ARM writes to `DM(0xB33B8)` at the default Fine Tune: `table[0x1F3] << 8`
+/// (the same ARM table and index as the Pipe bank rate factor, handler `0xC011D1F4`).
+///
+/// VERIFIED: `0x3FA02A00` from `tools/organ_bank_ref.py defaults`. With it note 60 steps
+/// 51,784,672 units per call, which at 2 frames per call and `FIRMWARE_FRAME_RATE_HZ` is 261.652 Hz
+/// (+0.18 cent from C4; `tests::frame_rate_follows_from_the_arm_fine_tune_word`,
+/// `docs/research/dsp-frame-rate.md`).
+pub const ARM_FINE_WORD: u64 = 0x3FA0_2A00;
+
+/// DSP frames per call of the generator.
+///
+/// VERIFIED by agreement: only with 2 frames per call does the 8' of key 60 sound at C4 for the
+/// frame rate that the ARM literal, the SY constants, the FX delays and the Pipe bank give (one
+/// frame would put it an octave up).
+pub const FRAMES_PER_CALL: f64 = 2.0;
 
 /// Wheel-table length (128 points plus the repeated first point).
 pub const TABLE_POINTS: usize = 129;
@@ -69,27 +88,25 @@ const PHASE_T3: [f64; HARMONICS] = [
     -FRAC_PI_2, -PI, PI, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 ];
 
-/// Per-note ring amplitude `A` written by the ARM key-down at `DM 0x95122 + (note - 36)`, notes
-/// 36..115.
-///
-/// EMPIRICAL: median of the oracle fits over footages that are not percussion-overwritten; gaps
-/// (74, 80..83, 109..115) interpolated; the value varies by up to 10 % with the key. Not applied by
-/// the bus: the matching weights `W(key, footage)` (taper bytes) are not tabulated, so a flat
-/// level is the neutral choice (`docs/research/b3-generator.md` section 4).
-pub const WHEEL_GAIN: [f32; 80] = [
-    0.4858, 0.5192, 0.4802, 0.4829, 0.4336, 0.4646, 0.4344, 0.3784, 0.4075, 0.3669, 0.3902, 0.3823,
-    0.3755, 0.3758, 0.3680, 0.3569, 0.3758, 0.3632, 0.3630, 0.3406, 0.3502, 0.3451, 0.3465, 0.3439,
-    0.2940, 0.2824, 0.2904, 0.3298, 0.2879, 0.4095, 0.3988, 0.3425, 0.3510, 0.3498, 0.3845, 0.3739,
-    0.3704, 0.3805, 0.3901, 0.3998, 0.3998, 0.4093, 0.3842, 0.4501, 0.4627, 0.4753, 0.4879, 0.5004,
-    0.5130, 0.5015, 0.5148, 0.5059, 0.5465, 0.4932, 0.5497, 0.6399, 0.5505, 0.5713, 0.5731, 0.5833,
-    0.4720, 0.7005, 0.5863, 0.7624, 0.6681, 0.5948, 0.4731, 0.5536, 0.6951, 0.7180, 0.7569, 0.7214,
-    0.5104, 0.5515, 0.5926, 0.6336, 0.6747, 0.6747, 0.6747, 0.6747,
-];
-
 /// Phase step of the base oscillator `pitch_class` (octave 0) in 2^-32 cycle per DSP call:
 /// `(inc * 0x3F000000 + 2^30) >> 31` (SHARC `ssfr` rounding).
 pub const fn base_step(pitch_class: usize) -> u32 {
-    ((PHASE_INC[pitch_class % 12] as u64 * FINE_WORD + (1 << 30)) >> 31) as u32
+    base_step_at(pitch_class, FINE_WORD)
+}
+
+/// [`base_step`] for an arbitrary fine tune word.
+pub const fn base_step_at(pitch_class: usize, fine_word: u64) -> u32 {
+    ((PHASE_INC[pitch_class % 12] as u64 * fine_word + (1 << 30)) >> 31) as u32
+}
+
+/// Frequency of `note` in Hz as the firmware sounds it: the step at the ARM's fine tune word
+/// ([`ARM_FINE_WORD`]), [`FRAMES_PER_CALL`] frames per call, at `FIRMWARE_FRAME_RATE_HZ`.
+///
+/// VERIFIED (note 60 = C4 +0.18 cent, the ladder at most 1.3 cent from 12-TET); [`note_hz`] keeps
+/// the engine's exact-C anchor.
+pub fn firmware_note_hz(note: usize) -> f64 {
+    let step = base_step_at(note % 12, ARM_FINE_WORD) << (note / 12);
+    f64::from(step) / 4_294_967_296.0 * FIRMWARE_FRAME_RATE_HZ / FRAMES_PER_CALL
 }
 
 /// Phase step of MIDI `note`: the base step shifted up by the octave (separate accumulators).
@@ -100,8 +117,9 @@ pub const fn note_step(note: usize) -> u32 {
 /// Frequency of `note` in Hz: the C of every octave is exact 12-TET (`A4 = 440` Hz), the other
 /// pitch classes follow the ladder ([`PHASE_INC`], 0.94 cent from 12-TET at most).
 ///
-/// ASSUMED: the absolute anchor (the DSP frame rate behind it is only known to 1.6 %,
-/// `docs/research/b3-generator.md` section 1); the ladder ratios are VERIFIED.
+/// The absolute anchor is the engine's exact C: [`firmware_note_hz`] (frame rate and Fine Tune word
+/// VERIFIED, `docs/research/dsp-frame-rate.md`) differs from it by 0.18 cent at note 60 and by at
+/// most 1.3 cent over 24..115; the ladder ratios are VERIFIED.
 pub fn note_hz(note: usize) -> f64 {
     let c4 = 440.0 * (-9.0f64 / 12.0).exp2();
     c4 * f64::from(note_step(note)) / f64::from(note_step(60))
@@ -241,6 +259,35 @@ mod tests {
     }
 
     #[test]
+    fn frame_rate_follows_from_the_arm_fine_tune_word() {
+        let cents = |a: f64, b: f64| 1200.0 * (a / b).log2();
+        let c4 = 440.0 * (-9.0f64 / 12.0).exp2();
+        // frame rate that makes note 60 = C4 for a fine tune word (2 frames per call)
+        let implied = |w: u64| {
+            let step = f64::from(base_step_at(0, w) << 5);
+            c4 * FRAMES_PER_CALL * 4_294_967_296.0 / step
+        };
+        // image default word: the old 43,829 Hz
+        let old = implied(FINE_WORD);
+        assert!((old - 43_829.0).abs() < 1.0, "{old}");
+        // ARM-written word: the ARM's sample-rate literal within 0.3 cent
+        let f = implied(ARM_FINE_WORD);
+        assert!(cents(f, FIRMWARE_FRAME_RATE_HZ).abs() < 0.3, "{f}");
+        assert_eq!(base_step_at(0, ARM_FINE_WORD) << 5, 51_784_672);
+        // the two words differ by 17.11 cent: the +0.18 cent of note 60 plus the -16.93 cent it has at
+        // the image word
+        let r = cents(ARM_FINE_WORD as f64, FINE_WORD as f64);
+        assert!((r - 17.11).abs() < 0.01, "{r}");
+        // firmware pitch: note 60 within 0.2 cent of C4, every wheel within 1.3 cent of 12-TET
+        assert!(cents(firmware_note_hz(60), c4).abs() < 0.2);
+        for note in 24..115usize {
+            let ideal = 440.0 * ((note as f64 - 69.0) / 12.0).exp2();
+            let c = cents(firmware_note_hz(note), ideal);
+            assert!(c.abs() < 1.3, "note {note}: {c} cent");
+        }
+    }
+
+    #[test]
     fn wheel_table_classes() {
         assert_eq!(wheel_table(24), 0);
         assert_eq!(wheel_table(39), 0);
@@ -309,13 +356,5 @@ mod tests {
             a.advance(&mut out);
         }
         assert_eq!(a.phase_of(w), a.step[w].wrapping_mul(10_000));
-    }
-
-    #[test]
-    fn gain_table_spot_values_follow_the_arm_key_down_floats() {
-        // DM 0x9513A (note 60) 0x3E9689D0 = 0.2939 -> 0.2940 (fit); 0x95152 (note 84) 0.5129
-        assert!((WHEEL_GAIN[60 - 36] - 0.294).abs() < 1e-3);
-        assert!((WHEEL_GAIN[84 - 36] - 0.5129).abs() < 2e-3);
-        assert!((WHEEL_GAIN[67 - 36] - 0.3427).abs() < 3e-3);
     }
 }

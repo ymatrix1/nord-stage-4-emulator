@@ -127,10 +127,10 @@ Engine status: the 92 wheels exist in `ToneBank` (`BANK_WHEELS`); the layer feed
 | `Firmware` (default) | vibrato-enable level 1 = detuned table + stereo-blend gains, any other level = exact table + copy-0-on-both-lanes gains (VERIFIED, `0xC022D9F0`). The level follows `scanner_mode` (`Off` = 0, any `V1..C3` = 1: ASSUMED, the ARM passes the layer vibrato-enable byte `(value == 1)`); `detuned_copies = true` forces level 1 | gains `g5..g8` and the level ramp with `s = 0.01 t + 0.99 s` (VERIFIED) per firmware frame; the two lanes drive the stereo path |
 | `Manual` | `detuned_copies` only | previous behaviour: instant mono mean `copy_weights`, organ mono until the rotary |
 
-- **Smoothing at the engine rate:** the VERIFIED coefficient is per firmware frame. The per-sample keep factor is `0.99^(F / fs)` with `F = FIRMWARE_FRAME_RATE_HZ` = 43,156.4 Hz (ASSUMED: the rate at which wheel 0 equals the engine's C1), so the time constant is 100 frames = 2.32 ms at any sample rate (`keep_for_rate`; 0.9910 at 48 kHz). Differences below `5e-5` snap to the target (the f32 fixed point sits about 7e-6 off).
+- **Smoothing at the engine rate:** the VERIFIED coefficient is per firmware frame. The per-sample keep factor is `0.99^(F / fs)` with `F = FIRMWARE_FRAME_RATE_HZ` = 43,402.34 Hz (VERIFIED: the ARM's sample-rate literal, [dsp-frame-rate](../research/dsp-frame-rate.md)), so the time constant is 100 frames = 2.30 ms at any sample rate (`keep_for_rate`; 0.9909 at 48 kHz). Differences below `5e-5` snap to the target (the f32 fixed point sits about 7e-6 off).
 - **Lanes:** `x = m00 a + m01 b`, `y = m10 a + m11 b` with the smoothed matrix `[[g5, g8], [g7, g6]] * level`; detuned steady state `x = 0.75 a + 0.375 b`, `y = 0.375 a + 0.75 b`. The lane split is done before the pickup/crosstalk stages (linear, so equivalent). While the table is exact and the ramp has settled only one lane exists and the old code path runs bit-exactly (render hash unchanged). Leaving level 1 keeps both copies running until the ramp settles, then retunes to the exact table.
 - **Stereo routing:** `mid = (x + y) / 2` goes through key click, scanner and rotary exactly as the mono signal did; `side = (x - y) / 2` is added to L and subtracted from R after the rotary. `(L + R) / 2` therefore equals the `Manual` mono mean (test `mono_sum_equals_the_manual_mono_mean`); without rotary `L = x`, `R = y`.
-- **Against the oracle** (`organ_ref --detuned` vs `organ_oracle_audio.py render --detuned`, `compare --lanes`, C4 E4 G4, 888000000, 43,156 Hz, first 2,048 frames dropped): lane x 37.7 dB, lane y 37.6 dB SNR after one gain; the old mono path against the same lanes gave 22.6 / 23.3 dB. Exact table: 37.7 dB on both lanes.
+- **Against the oracle** (`organ_ref --detuned` vs `organ_oracle_audio.py render --detuned`, `compare --lanes`, C4 E4 G4, 888000000, 43,156 Hz, the oracle-matching `organ_ref` default rate; not re-run with `F` = 43,402.34 Hz, which changes the smoother time by 0.6 %, first 2,048 frames dropped): lane x 37.7 dB, lane y 37.6 dB SNR after one gain; the old mono path against the same lanes gave 22.6 / 23.3 dB. Exact table: 37.7 dB on both lanes.
 - **Per-wheel weights:** the mix stage also smooths the per-wheel weights (`wA <- a wB + b wA`, `a` = 0.0096 on key-down, 0.0043 on a full update, [organ-weights](../research/organ-weights.md)); implemented as the opt-in `WeightMode::Firmware`, section 3.1.5.
 - Tests: `lane_mix::tests` (time constant, step response, both gain sets, level selection), `vibrato_link::tests`, `stereo_lanes::tests` (level/table selection, 0.75 / 0.375 blend, ramp, mono-sum equivalence, dual-mono when exact), `drawbar_sum::tests`.
 
@@ -153,7 +153,7 @@ d7             = 0, 3, 6, 13, 22, 39, 62, 87, 127           (DrawbarLaw is ignor
 
 Chords add on shared wheels; there is no tapering (all taper bytes are 127). One key at velocity 127 on a drawbar at 8 gives `UNIT_WEIGHT = 0.0152607`. The velocity is `round(gain * 127)` clamped to 1..127 (`note_on_with_gain`; ASSUMED that the engine gain is `velocity / 127`, the organ velocity source of the firmware is open). Targets are rebuilt only when a key, the drawbars or the octave shift change.
 
-Smoothing (VERIFIED coefficients and recurrence, [organ-weights](../research/organ-weights.md) s2, s4): per wheel and per firmware frame `wA <- a wB + (1 - a) wA` with `a = 0.0096406` (`0x3C1DF380`) on the wheels a key-down writes and `a = 0.0042715` (`0x3B8BF800`) on every wheel after a full update. At the engine rate the per-sample keep factor is `(1 - a)^(F / fs)` with `F` = 43,156.4 Hz (ASSUMED, as in 3.1.4), so the ramp lasts the same time at any rate (`weights::keep_for`). Differences below `1e-6` (-84 dB re one key) snap onto the target so a release ends in exact silence; the render early-out waits for the tail.
+Smoothing (VERIFIED coefficients and recurrence, [organ-weights](../research/organ-weights.md) s2, s4): per wheel and per firmware frame `wA <- a wB + (1 - a) wA` with `a = 0.0096406` (`0x3C1DF380`) on the wheels a key-down writes and `a = 0.0042715` (`0x3B8BF800`) on every wheel after a full update. At the engine rate the per-sample keep factor is `(1 - a)^(F / fs)` with `F` = 43,402.34 Hz (VERIFIED, as in 3.1.4), so the ramp lasts the same time at any rate (`weights::keep_for`). Differences below `1e-6` (-84 dB re one key) snap onto the target so a release ends in exact silence; the render early-out waits for the tail.
 
 | Event | Targets | `a` |
 |---|---|---|
@@ -173,17 +173,21 @@ Opt-in tone source of the `B3` model, from the PNO core 1 generator `0x121BBE` (
 |---|---|---|
 | Phase step per DSP call | `((PHASE_INC[n % 12] * 0x3F000000 + 2^30) >> 31) << (n / 12)`, `PHASE_INC` = `DM 0x95172..0x9517D` | VERIFIED (81 oracle-fitted ring frequencies, max relative error 2.5e-11; `tools/organ_b3_gen.py scan`, test `steps_match_the_oracle_fits`) |
 | Ladder | 12-TET to 0.94 cent (the fifth is 1.4983, not 1.5) | VERIFIED |
-| Hz anchor | every C exact 12-TET, `A4 = 440` Hz; the DSP frame rate behind it is known to 1.6 % only (43,829 vs 43,156.4 Hz) | ASSUMED |
+| Hz anchor | every C exact 12-TET, `A4 = 440` Hz (`note_hz`); the firmware's own pitch (`firmware_note_hz`: ARM fine tune word `0x3FA02A00`, 2 frames per call, `F` = 43,402.34 Hz) is note 60 = 261.652 Hz (+0.18 cent) and within 1.3 cent of 12-TET over 24..115. The old 43,829 vs 43,156.4 Hz split was the fine tune word, [dsp-frame-rate](../research/dsp-frame-rate.md) | VERIFIED |
 | Wheel tables | notes < 40: `DM 0xB314B`, 40..47: `0xB31CC`, 48 and up: `0xB324D`, as 12-harmonic fits (reconstruction error 4.2e-3, 6e-7, 7e-7) | VERIFIED (oracle series equal `A * table`, residual 3e-8) |
-| Per-note amplitude `A` (`B3_WHEEL_GAIN`) | ARM key-down float at `DM 0x95122 + note - 36`; exposed, **not applied** | EMPIRICAL |
+| Per-wheel amplitude `A` (`B3_WHEEL_GAIN`, `b3_keys.rs`) | ARM key-down float at `DM 0x95122 + note - 36`, wheels 12..88 (`fold(key - 24 + footage offset)` into 12..88 by octaves); first write per wheel is constant over keys | VERIFIED (44 wheels, [keydown-b3-wheels.csv](../research/data/keydown-b3-wheels.csv), test `gain_table_matches_the_captured_first_writes`), EMPIRICAL elsewhere |
+| Footage weight `W(key, footage)` (`KEY_W`, `b3_keys.rs`) | `DM 0x951F1 + partial note - 36` per footage item, `d7 * taper`, columns 16' / 5 1/3' / 8' / 4' for 24 captured keys ([b3-key-weights.csv](../research/data/b3-key-weights.csv), `tools/organ_b3_keys.py`); linear in the note between keys; no velocity | VERIFIED (24 keys), EMPIRICAL between, ASSUMED for footages 2 2/3' and up (the 4' column) |
+| Partial of a held key | `A[wheel] * W(key, footage) * drawbar_gain(level) * table(phase)`, summed over keys (`b3_weights.rs`, 2 ms weight ramp ASSUMED), times `DRY_GAIN` = 1.0 (`DM 0xB44C0`, no ARM writer found); percussion keeps the `0.12 / 0.08` legacy gain on the 4' weight; active on `B3` when not in B3 Bass mode | factors VERIFIED, dry gain and percussion ASSUMED |
 
-Not modelled (why it stays opt-in): per-key weights `W(key, footage)` (taper bytes `0x25..0xFF`), the amplitude `A` with its key dependence, the percussion on the shared wheels, the scanner line-box tail (`DM 0x95471..`) of the processor. The existing drawbar bus, percussion, key click, scanner and rotary run unchanged on the wheel outputs with a flat pickup (1.0, no `pickup_calibration`). The default render hash is unchanged (`render_hash`: 25baa387b0219c08 before and after).
+Oracle chord (`organ_ref --mode b3`, `tools/organ_partials.py b3`, C4 E4 G4 at 888, ARM constructor and key-down, `DM 0xB44C0 = 1.0`, [organ-keydown-weights](../research/organ-keydown-weights.md) section 2): the Rust partials are **+12.7 dB (wheel 48, 131 Hz) to +31.8 dB (wheel 74, 587 Hz)** above the oracle. The processor adds a filtered branch (the 33 / 61 / 14 tap tables of the engine constructor, the output is not proportional to `0xB44C0`: 2.0 gives 1.63 x) that rolls off about 9 dB per octave and is not modelled, so the `A W` dry sum alone is not verified end to end and the source stays opt-in (D22). Hardware clip (`organ_b3`): RMS gap +14.9 to +3.1 dB, clipping 10.3 % to 0.022 %, crest 17.5 dB against 17.7 dB.
+
+Not modelled (why it stays opt-in): the processor tail (constructor taps `DM 0x95471..`, filtered branch), the taper bytes of the footages 2 2/3' and up, the percussion on the shared wheels (the key-down's fourth write is not a drawbar item in the oracle chord), the scanner line box. The drawbar bus of the legacy path is replaced on this source by the weight sum; key click, scanner and rotary run unchanged on it with a flat pickup (1.0, no `pickup_calibration`). The default render hash is unchanged (`render_hash`: 25baa387b0219c08 before and after).
 
 ### 3.1.7 Vox note bank (`ToneWheelSource::Vox`, `vox_bank.rs`, `vox_shaper.rs`, `vox_output.rs`, `vox_source.rs`, `vox_layer.rs`)
 
 Opt-in tone source of the `Vox` model (firmware `Edt_Org_kModel = 1`), the PNO core 1 post stage `0x12272D` and output stage `0x1229B3` ([organ-post-stage](../research/organ-post-stage.md), [organ-model-paths](../research/organ-model-paths.md), [pno-full-pass](../research/pno-full-pass.md)). It is not a tonewheel bank: 84 note oscillators with a built-in pitch LFO, a waveshaper and a per-note low-pass, summed with per-key weights through three 2-tap sections. `ToneWheelSource::Vox` applies to `OrganModel::Vox` only (other models fall back to their default); `ModelDefault` on `Vox` stays `Legacy`. Everything is allocated in `OrganLayer::new()`; `render_frame` runs 84 oscillators, one table lookup and one one-pole each per sample, with no allocation or lock.
 
-Per firmware frame (`F = 43,156.4 Hz`, ASSUMED, the Pipe bank rate of `lane_mix.rs`; the engine converts with `scale = F / fs`: phase steps and the LFO scale, the one-poles and sections are redesigned at the engine rate with the cutoff in Hz unchanged):
+Per firmware frame (`F = 43,402.34 Hz`, VERIFIED, `lane_mix.rs`; the engine converts with `scale = F / fs`: phase steps and the LFO scale, the one-poles and sections are redesigned at the engine rate with the cutoff in Hz unchanged):
 
 ```text
 lfo      phase += 0x905A3;  tri = clip(4 (|s| - 0.5), 1);  tri' = clip(tri - 0.08, 0.91) + 0.08
@@ -206,13 +210,13 @@ output   T = sum_k w_k Y_k;  3 sections (DC blocker, two low-passes);  y = out_3
 | Fine Tune | `m` scaled by `2^(cents / 1200)` (`DM(0xE20E0)` offset) | VERIFIED (law), cents mapping ASSUMED |
 | Output sections `(a0, a1, b0, b1)` | `(0.9891, -0.9944, 0.9944, 0)` high-pass, `(0.9514, 0.0305, 0.0161, 0)`, `(0.8348, 0.1035, 0.0546, 0)` low-passes (corners about 340 Hz and 1.1 kHz at `F`); redesigned at the engine rate by the bilinear transform of their analog equivalent | VERIFIED (image values), rate conversion mine |
 | Gains | `g1 -> 1.0`, `g2 -> 0` (0.001 per frame), gain word 1.0; start state settled | targets VERIFIED, word and start ASSUMED |
-| Key to oscillator map, weights | held key `n` drives oscillator `n - 24 - 12 octave_shift` with weight 1.0 times its velocity gain times `weight_level`, ramped over 2 ms (the firmware writes weights instantly) | ASSUMED |
-| Sine bank (36 sines, 12 buckets, weights 84..95) | not implemented: weight 0 in the assumed map; at the image default base word the sines run at 0.1 to 0.45 cycles per frame (above 4 kHz), so they are not pitch carriers | open |
-| Absolute pitch | oscillator 0 is 32.52 Hz at `F`, 9.9 cent flat of the Pipe bank (`pno-full-pass` s4) | ASSUMED (frame rate) |
+| Key to row map, weights (`vox_keys.rs`) | a held key `n` drives the rows `fold(n - 36 + I[slot])` (`fold` by octaves into 0..95, `I = [0, 7, 12, 19, 19, 24, 24, 28, 31, 31, 36, 36, 36, 40, 40, 43, 48, 48, 52, 60]`) of the four default level slots 0, 2, 5, 10 (16', 8', 4', 2') with weight `2076180 / 2^23` = 0.2475 each, summed where rows fold together, times `weight_level`, no velocity, ramped over 2 ms (the firmware writes weights instantly); the 8' slot lands on oscillator `n - 24` | VERIFIED (all 20 flags of 24 keys, [keydown-vox-flags.csv](../research/data/keydown-vox-flags.csv), test `flag_table_matches_the_capture`; weights `0x3E7D70A0` in [keydown-organ-keys.csv](../research/data/keydown-organ-keys.csv)); drawbar to level-slot mapping ASSUMED (none) |
+| Sine bank (36 sines, 12 buckets, rows 84..95) | not implemented: key rows that fold there (keys above about note 96 for the 8' to 2' footages) are dropped; at the image default base word the sines run at 0.1 to 0.45 cycles per frame (above 4 kHz), so they are not pitch carriers | open |
+| Absolute pitch | oscillator 0 is 32.7032 Hz at `F` = 43,402.34 Hz (C1 + 0.0001 cent, the word is `round(C1 / F * 2^33)`); the "9.9 cent flat of the Pipe bank" of `pno-full-pass` s4 came from reading the Pipe bank at unity tune (it is on C1 at the ARM's Fine Tune word, [dsp-frame-rate](../research/dsp-frame-rate.md) s3.6) | VERIFIED (frame rate); key map ASSUMED |
 
-Not applied on this source: drawbars, percussion, the Vox "Tone" morph of `render_frame` step 3 (the footage to weight map is not decoded), crosstalk and pickup tables. The key click and the rotary speaker are unchanged.
+Not applied on this source: drawbars, percussion, the Vox "Tone" morph of `render_frame` step 3 (the ARM map from the Vox footage edits to the 20 level slots was not captured), crosstalk and pickup tables. The key click and the rotary speaker are unchanged.
 
-Comparison with the oracle chord (C4 E4 G4, weight 1 on oscillators 36, 40, 43, `pno-pass-install-vox.script` + `pno-pass-vox-weights-c4e4g4.script`, 20,000 passes; Rust `organ_ref --mode vox --vibrato N --rate 43156.4`; `python tools/organ_vox_compare.py ORACLE.npy RUST.csv`, partial amplitudes with a Hann window at the exact 12-TET frequencies, skip 4,000 frames, 32,768 analysed; table of the last run in [organ-post-stage](../research/organ-post-stage.md) section 8):
+Comparison with the oracle chord (C4 E4 G4, weight 1 on oscillators 36, 40, 43, `pno-pass-install-vox.script` + `pno-pass-vox-weights-c4e4g4.script`, 20,000 passes; Rust `organ_ref --mode vox --vibrato N --rate 43402.34375` (`--rate 43156.4` was used before the frame rate was settled; the table below was not re-run); `python tools/organ_vox_compare.py ORACLE.npy RUST.csv`, partial amplitudes with a Hann window at the exact 12-TET frequencies, skip 4,000 frames, 32,768 analysed; table of the last run in [organ-post-stage](../research/organ-post-stage.md) section 8):
 
 | Quantity | Result (Rust against oracle) |
 |---|---|
@@ -223,7 +227,32 @@ Comparison with the oracle chord (C4 E4 G4, weight 1 on oscillators 36, 40, 43, 
 | First vibrato sidebands, V3, oracle against Rust, relative to the carrier | C4 0.458 / 0.432 against 0.457 / 0.433; E4 0.611 / 0.576 against 0.610 / 0.577; G4 0.781 / 0.732 against 0.780 / 0.733 |
 | First vibrato sidebands, V1 | C4 0.168 / 0.160 against 0.167 / 0.161; E4 0.213 / 0.203 against 0.212 / 0.204; G4 0.256 / 0.244 against 0.255 / 0.244 |
 
+Comparison with the key-down weights (`keydown-vox-c4e4g4.script`: 12 rows 24, 28, 31, 36, 40, 43, 48, 52, 55, 60, 64, 67 at 0.2475; `tools/organ_partials.py vox`, absolute dB, no normalisation, [organ-keydown-weights](../research/organ-keydown-weights.md) section 3): fundamentals of rows 24, 28, 31 +0.02 dB; 31 of 39 lines above 1e-4 within 1 dB; the other 8 lines are two coincident frequencies (rows 43 and 55, where C4 harmonics land on G4 fundamentals) at -3.4 and -2.1 dB; G4 alone matches within 0.14 dB on every line, so the difference is the relative start phase of free-running oscillators (Rust 0, oracle the settled image state, ASSUMED), not the weights. Hardware clip (`organ_vox`): score 7.66 to 3.44 (Legacy default 5.68), centroid -921 to -308 Hz, presence and brilliance -8 to -2.4 dB. Not yet verified end to end (phase-dependent lines, sine bank, footage edits), so `ToneWheelSource::Vox` stays opt-in (D22).
+
 The odd harmonics are far below the unfiltered single-note values of organ-post-stage section 5 (3rd -22.7 dB against -16.4 dB for C4) because the output sections low-pass the sum (corners about 340 Hz and 1.1 kHz). The Rust chord is mono; the oracle `L` and `R` lanes of the full pass carry the same partials.
+
+### 3.1.8 Farfisa divider (`ToneWheelSource::FarfisaWheels`, `farfisa_wheels.rs`)
+
+Opt-in tone source of the `Farfisa` model, the PNO core 1 generator `0x122A71` ([organ-farfisa-bass](../research/organ-farfisa-bass.md)). It is a free-running top-octave divider, not a tonewheel bank, but its 98 outputs are one signal per note, so it plugs into the 91-wheel bus: wheel `w` = note `24 + w`, oscillator `n` (semitone 0..11), row `r` = note `12 + n + 12 r` (8 rows, 9 for `n < 2`). Row 0 (notes 12..23) is below the bus and dropped; wheels 86..90 (notes 110..114) have no source and stay silent. `ToneWheelSource::FarfisaWheels` applies to `OrganModel::Farfisa` only (other models fall back to their default); `ModelDefault` on `Farfisa` stays `Legacy`. All state is in `OrganLayer::new()` (12 oscillators x 9 rows of `f32`); `advance` has no allocation or lock.
+
+```text
+phase_n += step_n                        u32, 1 cycle = 2^32, step_n = (inc_n >> 1) rho fine,  inc_n = round(3236192 2^(n/12))
+phase_(r+1) = 2 phase_r + 0xAAAAAC11     wrapping
+u = (|phase_r / 2^31| - 0.66666645) slope_(n,r)         slope_(n,r) = -1327.1669 2^-r 2^(-n/12) / rho
+y = max(b clip(u) + a y_prev, clip(u))   a = exp(-0.0047343 2^r 2^(n/12) rho)  (r <= 6),  2^11 for r = 7,  0 for r = 8;  b = 1 - a
+```
+
+`rho = 43,402.6 Hz / sample rate` keeps the pitch (12-TET at `A = 440` Hz) and the edge and release widths in samples; Fine Tune scales `step`.
+
+| Item | Law | Tag |
+|---|---|---|
+| Structure (the LFO is excluded: the image depth is 0), ladder, offsets, edge, release | bit-exact SHARC model `tools/organ_farfisa_ref.py` (4 random scenarios and 40 consecutive image-state calls, 0 differing words); the Rust code matches the oracle ring over 60,000 frames to max 4.0e-5, SNR 104.5 dB, spectral error 0.00 dB (`python tools/organ_farfisa_oracle.py compare`) and the Python golden vectors (`farfisa_golden.rs`) to 2e-4 | VERIFIED (structure) |
+| `inc_n`, `S`, `off`, `slope` | closed forms of the image tables (1 unit, exact, exact, 1e-7) | VERIFIED (fit) |
+| `a_(n,r)` | `exp(-0.0047343 ...)`, rows 7 and 8 as above; error 1e-6 | EMPIRICAL (fit) |
+| Frame rate 43,402.6 Hz | puts oscillator 0 row 0 on C0 = 16.3516 Hz; the Vox offset (-9.9 cent against the Pipe bank rate) agrees | ASSUMED |
+| LFO (rate `DM 0xC27D6`, depth `0xC27D7`, the Farfisa vibrato) | modelled in Python, not in Rust (the depth is an ARM word with unknown mapping) | VERIFIED in Python, not ported |
+
+Not modelled (why it stays opt-in): the processor `0x122B85` (four weighted sums of the ring, filter sections, lattice, gains; every coefficient is an ARM word that no captured burst writes, so the oracle pass is silent), the Farfisa vibrato, the per-key weights. The existing drawbar bus, percussion and rotary run unchanged on the wheel outputs. Default render hash unchanged (`25baa387b0219c08`). Tests: `farfisa_wheels::tests` (steps, wheel map, pitch, golden rows, release, sample rate, Fine Tune), `farfisa_source_tests` (resolution, host-rate pitch, Fine Tune, determinism, silent top, other models unchanged), `tools/tests/test_organ_farfisa_ref.py`, `test_organ_farfisa_oracle.py`, `test_organ_fb_pass.py`.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 
@@ -301,6 +330,8 @@ The firmware tone source of this model (opt-in `ToneWheelSource::Vox`, 84 note o
 - Drawbar 9: Acts as the classic Vox **Tone / Wave** control (morphing between pure Flute/Sine and rich Reed/Square wave).
 
 ### 6.2 Farfisa Compact Model
+The firmware tone source of this model (opt-in `ToneWheelSource::FarfisaWheels`, the 12 top-octave dividers of the generator `0x122A71`) is specified in section 3.1.8; the description below is the default `Legacy` path.
+
 Multi-contact keying feeding multi-tab resonant bandpass filter banks:
 - **Flute 8'**, **Oboe 8'**, **Clarinet 16'**, **Strings 4'**: Emulated via parallel resonant 2-pole bandpass filters with formant peaks at 750 Hz, 1.2 kHz, 2.5 kHz, and 4.2 kHz.
 
