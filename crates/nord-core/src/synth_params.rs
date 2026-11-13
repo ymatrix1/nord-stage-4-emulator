@@ -39,6 +39,7 @@ fn apply_oscillator(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
     let ctrl_norm = (dec.detune / 10.0).clamp(0.0, 1.0);
     synth.osc_mode = dec.osc_mode;
     synth.waveform = dec.waveform;
+    synth.osc_shape_category = dec.osc_mode == SynthOscMode::Analog && dec.osc_category == 3;
     synth.fm_amount = ctrl_norm;
     synth.fm_ratio = FM_RATIOS[usize::from(dec.wave_id) % FM_RATIOS.len()];
     synth.fm_feedback = if (dec.wave_id & 1) != 0 { 0.25 } else { 0.0 };
