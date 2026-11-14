@@ -299,3 +299,25 @@ fn link_records_before_attach_then_replays_in_order() {
     assert!(matches!(kinds[1], AudioCommand::SwapState(_)));
     assert_eq!(link.undo_status().0, Some(UndoOp::LayerInit));
 }
+
+#[test]
+fn keyboard_controllers_reach_the_shadow_only_while_local_control_is_on() {
+    let wheel = MidiEvent::ControlChange {
+        channel: 0,
+        controller: nord_core::midi::cc::MOD_WHEEL,
+        value: 100,
+    };
+    let mut r = Rig::new();
+    r.control.shadow.midi_menu.local_control = false;
+    r.control.observe(&AudioCommand::Keyboard(wheel));
+    assert_eq!(r.control.shadow.morph_controllers.mod_wheel, 0.0_f32);
+    r.control.observe(&AudioCommand::Midi(wheel));
+    assert!(
+        r.control.shadow.morph_controllers.mod_wheel > 0.7_f32,
+        "MIDI In always applies"
+    );
+    r.control.shadow.morph_controllers.mod_wheel = 0.0_f32;
+    r.control.shadow.midi_menu.local_control = true;
+    r.control.observe(&AudioCommand::Keyboard(wheel));
+    assert!(r.control.shadow.morph_controllers.mod_wheel > 0.7_f32);
+}

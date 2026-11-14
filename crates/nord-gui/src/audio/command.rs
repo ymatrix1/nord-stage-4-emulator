@@ -21,7 +21,11 @@ pub enum AudioCommand {
     Fx(FxEdit),
     /// Program-area panel edit.
     Program(ProgramEdit),
+    /// MIDI from outside (a MIDI input port): plays the engines whatever Local Control says.
     Midi(MidiEvent),
+    /// Event from the instrument's own keyboard / panel (on-screen keybed, wheels): goes through
+    /// `Stage4Engine::handle_keyboard_midi`, so Local Control Off only transmits it.
+    Keyboard(MidiEvent),
     SetMasterVolume(f32),
     SetDrawbars([u8; 9]),
     SetOrganModel(OrganModel),

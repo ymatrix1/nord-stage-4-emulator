@@ -180,6 +180,7 @@ pub fn probe_commands() -> Vec<C> {
         })),
         C::Synth(SynthEdit::Sustped(true)),
         C::Synth(SynthEdit::Pstick(true)),
+        C::Synth(SynthEdit::PstickRange(7)),
         sp(SynthParam::KbHoldExclude(true)),
         sp(SynthParam::KbSync(true)),
         sp(SynthParam::LfoClockSync(true)),

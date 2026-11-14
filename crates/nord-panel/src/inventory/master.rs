@@ -14,7 +14,7 @@ pub fn controls() -> Vec<ControlEntry> {
             .assumed("named as a Morph source on p.38; physical wheel not described")
             .bound("mod_wheel"),
         e("master.pitch_stick", s, K::Stick, "PITCH STICK", 18)
-            .ui("MIDI pitch bend, no host parameter; range set per layer by PSTICK"),
+            .ui("MIDI pitch bend through the keyboard path (Local Control gate), no host parameter; range: Synth PSTICK/RNG list, Organ and Piano fixed at 2 semitones"),
         e("rotary.drive", s, K::Knob, "ROTARY DRIVE", 53).bound("rotary_drive"),
         e("rotary.speed", s, K::Button, "SLOW/STOP - FAST", 53)
             .morph()
