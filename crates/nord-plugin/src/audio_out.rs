@@ -78,8 +78,8 @@ mod tests {
     use super::*;
     use nord_core::midi::MidiEvent;
 
-    fn engine() -> Stage4Engine {
-        let mut e = Stage4Engine::new(48_000.0);
+    fn engine() -> Box<Stage4Engine> {
+        let mut e = Box::new(Stage4Engine::new(48_000.0));
         for note in [48u8, 60, 64, 67] {
             e.handle_midi(MidiEvent::NoteOn {
                 channel: 0,
