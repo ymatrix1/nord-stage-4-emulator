@@ -107,6 +107,8 @@ This resolves the 4-stage feedback loop algebraically on every sample without in
 
 ### 4.1 Firmware filter family (`SynthLayer::filter_engine = FilterEngine::Firmware`, opt-in)
 
+**Ladder24 (`kFltType` 2, stage `0x12549D`, `synth/fw_ladder.rs`, VERIFIED 1840 of 1840 oracle words, [synth-stage-models-9](../research/synth-stage-models-9.md)):** four one-pole sections $n_{j+1} = (a\,o_j + b\,n_j) - c\,o_{j+1}$ (DC gain 1) in a loop $u = x - fb$, $fb = h_0 s_0 + h_1 t - h_2 s_2$, $t = T(k_f\,y)$ (soft clip table, 1025 words). The coefficients $b, a, c, k_f$ come from the 129-word rows at the cutoff position $p$ (a log-frequency position, $-c$ is the pole: 8 Hz at $p = 0$, 4 kHz at 0.8 at 48 kHz) and the resonance $q = (idx + fr)/128$: $k_f = row_4(p)\,q/4$. Selected by `FwFilterType::from_model_stages` only in the strip chain with `strip_stages`; the panel cutoff to $p$ law (`LadderCoefs::from_r`, pole $= e^{-2rctan R}$) is ASSUMED.
+
 VERIFIED bit-exact against the SHARC oracle (`docs/research/synth-stage-equations.md` section 3): the Core2 stages `0x12566E` (LP), `0x125913` (BP) and `0x125A50` (HP) are two identical resonant sections in series (four poles), trapezoidal, not a ladder. With $R = \tan(\pi f_c / f_s)$, table position $(idx, fr)$ and the 129-entry tables $A$, $B$, $C$ (`synth/fw_filter_tables.rs`, linear interpolation):
 
 $$

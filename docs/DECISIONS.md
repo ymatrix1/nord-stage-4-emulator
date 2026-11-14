@@ -37,6 +37,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D35](#d35-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
 | [D38](#d38-the-samples-defaults-stay-the-sample-loader-0xc01d710c-runs-but-the-voice-update-is-not-reached) | 2026-11-14 | The SAMPLES defaults stay; the sample loader `0xC01D710C` runs but the voice update is not reached | accepted |
 | [D39](#d39-the-fx-receiver-of-the-smp-stream-is-found-unity-with-one-common-path-the-piano-defaults-stay) | 2026-11-14 | The FX receiver of the SMP stream is found: unity, one path for piano and organ; the piano defaults stay | accepted |
+| [D40](#d40-the-ladder24-filter-stage-is-modelled-and-wired-opt-in-under-the-strip-chain) | 2026-11-14 | The Ladder24 filter stage `0x12549D` is modelled bit exactly and wired opt-in under the strip chain with an assumed cutoff law | accepted |
 | [D37](#d37-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
@@ -492,3 +493,13 @@ Velvet Grand (level 127) reads same flag on.
 - **Why:** The transport is verified, but the level word `DM(0xB6518)` is 0 in the image and its writer is not found, `0xC023195C` sends the layer word as a parameter message to a chip that is not resolved, and the two clip calibrations (organ `K`, piano 0.55) disagree by 20 dB under the same path, so no end-to-end check supports a new default (D22).
 - **Alternatives:** Flip `firmware_bus_scale` to 0.7464 (the piano peaks support the DAC reading, but one clip with a free velocity is not an end-to-end check); keep the helper out of the code (rejected: the verified words and arithmetic belong next to `FIRMWARE_SAMPLE_SCALE`).
 - **Impact:** None on rendering. OQ24 narrows (`K` is not applied in the FX unit); OQ20 keeps the master level word, the layer word target, stream edges and damper strokes.
+
+### D40. The Ladder24 filter stage is modelled and wired opt-in under the strip chain
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-9`; evidence [synth-stage-models-9](research/synth-stage-models-9.md))
+- **Context:** `kFltType = 2` (`Ladder24`, 68 of 442 filter layers) maps to `0x12549D`, the last filter stage without a model; the Rust engine approximated it with the four-pole low pass `Lp4` (ASSUMED).
+- **Decision:** Port the stage (`synth/fw_ladder.rs`, `FwFilterType::Ladder`) and select it for `Ladder24` in the strip chain when `strip_stages` (`--synth-stages`) is on; `FilterEngine::Firmware` without the strip chain keeps `Lp4`. The panel cutoff reaches the stage as the table position whose section pole equals `exp(-2 atan R)`.
+- **Why:** The stage equals the oracle word for word (1840 of 1840), so the DSP is verified; only the strip word to position law is not (the stage reads a log-frequency position, the other stages the tangent coefficient `R`), hence ASSUMED and opt-in per D22.
+- **Alternatives:** Keep `Lp4` for `Ladder24` (rejected: different shape and resonance); feed `R` straight to the position word (rejected: the table runs 8 Hz to 28 kHz over `0..0.95`, so 6 kHz would play near 400 Hz); make the stage the default outside `--synth-stages` (rejected until the ARM cutoff word for type 2 is traced).
+- **Impact:** Ladder24 layers change sound under the firmware strip chain with stage oscillators (the default of `SynthLayer::new`, off in `legacy_all`); the test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
