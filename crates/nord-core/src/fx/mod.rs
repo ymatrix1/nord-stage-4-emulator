@@ -22,6 +22,8 @@ mod fw_delay;
 mod fw_delay_table;
 pub mod fw_delay_time;
 mod fw_drive_tables;
+mod fw_eq;
+mod fw_eq_tables;
 mod fw_ext40;
 pub mod fw_leslie;
 mod fw_leslie_callee;
@@ -82,6 +84,8 @@ mod tests_firmware_fx;
 mod tests_fw_amp_chain;
 #[cfg(test)]
 mod tests_fw_delay_time;
+#[cfg(test)]
+mod tests_fw_eq_chain;
 #[cfg(test)]
 mod tests_fw_leslie_data;
 #[cfg(test)]
@@ -243,6 +247,8 @@ pub struct LayerFxChain {
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
+    /// The firmware Amp EQ (`firmware_fx.eq`), built when first needed.
+    fw_eq: Option<fw_eq::FwEqStage>,
     /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
     fw_reverb: Option<Box<FwReverb>>,
     fw_comp_amount: f32,
@@ -349,6 +355,7 @@ impl LayerFxChain {
             fw_mod1: None,
             fw_comp: None,
             fw_amp: None,
+            fw_eq: None,
             fw_reverb: None,
             fw_comp_amount: 0.0,
             clock_bpm: 120.0,

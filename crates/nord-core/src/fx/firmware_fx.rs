@@ -47,6 +47,15 @@
 ///   rate scale is 0.03 .. 5.3 Hz. **Latency 4 frames** on that layer. Free running only
 ///   (Master Clock sync keeps the engine path); RM, A-WAH, WAH and PUMP keep the engine models.
 ///
+/// * `eq`: the Amp EQ (`kAmpBass`, `kAmpMid`, `kAmpMidFreq`, `kAmpTreble`) runs the ported tone
+///   stack `0x1243F4` ([`super::FwToneStack2`]) with the ARM's words (`fw_eq`,
+///   `docs/research/fx-eq-words.md`) instead of the engine's three biquads. Routine and words
+///   VERIFIED; the joint mid words, the interpolation between captured indices and the
+///   organ unit's routine layout are ASSUMED; the recurrence runs at the engine rate (the
+///   firmware's is 43,402 Hz, so frequencies are 1.106 times higher at 48 kHz). **Latency 2
+///   frames** on that layer. The compressor (`compressor`) needs no extra switch for
+///   `kCmpResponse`: the firmware ignores it, and so does this path.
+///
 /// Not switchable yet, because the audio path needs words or tables that are not decoded: the
 /// tone stack (`FwToneStack2`, base words of the Amp type switch), the all-pass (`FwAllpass`, Fx1 type to engine `Mod1Type` map) and the
 /// delay line itself (`FwDelay` / the ring variant `0x120AB5`: ring length and routing words).
@@ -68,6 +77,9 @@ pub struct FirmwareFx {
     /// Firmware A-PAN (Fx1 types 0, 1) and TREM (types 2, 3) with the `kFx1Amt` /
     /// `kFx1RateClkDiv` words.
     pub mod1: bool,
+    /// Firmware Amp EQ (tone stack `0x1243F4` with the `kAmpTreble` / `kAmpBass` / `kAmpMid` /
+    /// `kAmpMidFreq` words) in place of the engine's three biquads.
+    pub eq: bool,
 }
 
 impl Default for FirmwareFx {
@@ -92,6 +104,7 @@ impl FirmwareFx {
         reverb: false,
         amp: false,
         mod1: false,
+        eq: false,
     };
 
     /// Every switch on.
@@ -103,6 +116,7 @@ impl FirmwareFx {
         reverb: true,
         amp: true,
         mod1: true,
+        eq: true,
     };
 }
 
@@ -124,9 +138,11 @@ mod tests {
                 && all.reverb
                 && all.amp
                 && all.mod1
+                && all.eq
         );
         assert!(!d.reverb, "the firmware reverb is opt-in");
         assert!(!d.mod1 && all.mod1, "the firmware Mod 1 is opt-in");
+        assert!(!d.eq && all.eq, "the firmware EQ is opt-in");
         assert_ne!(all, FirmwareFx::OFF);
     }
 }
