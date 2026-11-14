@@ -6,8 +6,10 @@
 //! checks (sizes, schema ids, CRC-32): `tools/preset_check.py`.
 
 use crate::cbin::{CbinFile, Ns4BackupArchive, PresetSection, SectionPreset};
-use crate::engine::Stage4Engine;
+use crate::engine::{invert_fx_chain, FxParams, Stage4Engine};
 use crate::midi::MidiEvent;
+use crate::program_check::check_program;
+use crate::synth_params_export::invert_decoded_layer;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -61,7 +63,7 @@ fn check_edit(preset: &SectionPreset, file: &CbinFile, problems: &mut Vec<String
 
 /// Loads `preset` into a fresh engine, plays a note and reports a non-finite output.
 fn renders_finite(preset: &SectionPreset, sample_rate: f32) -> bool {
-    let mut engine = Stage4Engine::new(sample_rate);
+    let mut engine = Box::new(Stage4Engine::new(sample_rate));
     engine.load_section_preset(preset, None);
     let mut l = [0.0f32; 256];
     let mut r = [0.0f32; 256];
@@ -72,6 +74,70 @@ fn renders_finite(preset: &SectionPreset, sample_rate: f32) -> bool {
     });
     engine.process_block(&mut l, &mut r);
     l.iter().chain(r.iter()).all(|v| v.is_finite())
+}
+
+/// The unconditional inverse of the engine mapping (`invert_decoded_layer`, `invert_fx_chain`)
+/// must return the decoded preset: `pack(inverse(engine(preset))) == pack(preset)`, i.e. every
+/// field the inverse writes round-trips to the same bits.
+fn check_inverse(preset: &SectionPreset, sample_rate: f32, problems: &mut Vec<String>) {
+    let mut engine = Box::new(Stage4Engine::new(sample_rate));
+    engine.load_section_preset(preset, None);
+    let fx = |i: usize| FxParams::capture(&engine.fx_chains[i]);
+    let mut back = preset.clone();
+    match &mut back {
+        SectionPreset::Organ(o) => invert_fx_chain(&fx(0), &mut o.fx),
+        SectionPreset::Piano(p) => {
+            invert_fx_chain(&fx(2), &mut p.fx_a);
+            invert_fx_chain(&fx(3), &mut p.fx_b);
+        }
+        SectionPreset::Synth(s) => {
+            let layers = [&mut s.layer_a, &mut s.layer_b, &mut s.layer_c];
+            let synths = [&engine.synth_a, &engine.synth_b, &engine.synth_c];
+            for (i, (dec, synth)) in layers.into_iter().zip(synths).enumerate() {
+                invert_decoded_layer(synth, &engine.synth_cutoff_morph[i], dec);
+            }
+            invert_fx_chain(&fx(4), &mut s.fx_a);
+            invert_fx_chain(&fx(5), &mut s.fx_b);
+            invert_fx_chain(&fx(6), &mut s.fx_c);
+        }
+    }
+    if back.pack().ok() != preset.pack().ok() {
+        problems.push("the engine inverse does not return the decoded bits".to_string());
+    }
+}
+
+/// STORE round trip: the preset loaded into an engine and captured again must give the file back
+/// byte for byte (the Synth sound and the FX chains come back through `synth_params_export` /
+/// `program_fx_export`), and one panel edit must reach the stored preset without touching the rest.
+fn check_store(
+    preset: &SectionPreset,
+    file: &CbinFile,
+    sample_rate: f32,
+    problems: &mut Vec<String>,
+) {
+    let mut engine = Box::new(Stage4Engine::new(sample_rate));
+    engine.load_section_preset(preset, None);
+    let section = preset.section();
+    let same = engine.capture_section_preset(section, Some(preset));
+    match same.to_file_like(file) {
+        Ok(f) if f.to_bytes() == file.to_bytes() => {}
+        Ok(_) => problems.push("an unedited STORE changed the file".to_string()),
+        Err(e) => problems.push(format!("store: {e}")),
+    }
+    if let SectionPreset::Synth(base) = preset {
+        let hz = base.layer_a.filter_cutoff_hz;
+        engine.synth_a.cutoff_hz = if hz > 1000.0 { hz * 0.5 } else { hz * 2.0 };
+        let SectionPreset::Synth(edited) = engine.capture_section_preset(section, Some(preset))
+        else {
+            return;
+        };
+        let moved = (edited.layer_a.filter_cutoff_hz / hz - 1.0).abs() > 0.1;
+        let mut rest = (*edited).clone();
+        rest.layer_a.filter_cutoff_hz = hz;
+        if !moved || SectionPreset::Synth(Box::new(rest)) != *preset {
+            problems.push("a cutoff edit did not reach the stored preset alone".to_string());
+        }
+    }
 }
 
 /// Checks one preset entry: header checksum, decode, bit-identical re-encode, a merged edit and a
@@ -108,14 +174,29 @@ pub fn check_entry(bytes: &[u8], sample_rate: f32) -> EntryReport {
         Err(e) => rep.problems.push(format!("to_file_like: {e}")),
     }
     check_edit(&preset, &file, &mut rep.problems);
+    check_inverse(&preset, sample_rate, &mut rep.problems);
+    check_store(&preset, &file, sample_rate, &mut rep.problems);
     if !renders_finite(&preset, sample_rate) {
         rep.problems.push("engine output is not finite".to_string());
     }
     rep
 }
 
+/// Stack of the checking thread: a debug build captures whole engine states on the stack.
+const CHECK_STACK_BYTES: usize = 64 << 20;
+
 /// `ns4 preset-check`: `args` are the words after the subcommand.
 pub fn preset_check(args: &[String]) -> Result<String, String> {
+    let args = args.to_vec();
+    std::thread::Builder::new()
+        .stack_size(CHECK_STACK_BYTES)
+        .spawn(move || check_archive(&args))
+        .map_err(|e| format!("preset-check thread: {e}"))?
+        .join()
+        .map_err(|_| "preset-check panicked".to_string())?
+}
+
+fn check_archive(args: &[String]) -> Result<String, String> {
     let path = args.first().ok_or_else(|| CHECK_USAGE.to_string())?;
     let archive = Ns4BackupArchive::open(path).map_err(|e| format!("{path}: {e}"))?;
     let mut reader = BufReader::new(File::open(path).map_err(|e| format!("{path}: {e}"))?);
@@ -123,8 +204,20 @@ pub fn preset_check(args: &[String]) -> Result<String, String> {
     let mut lossy: BTreeMap<PresetSection, usize> = BTreeMap::new();
     let mut lines = Vec::new();
     let mut failed = 0usize;
+    let mut programs = 0usize;
     for (i, e) in archive.entries().iter().enumerate() {
         let Some(section) = PresetSection::from_entry(&e.name) else {
+            if e.name.starts_with("Program/") && e.name.ends_with(".ns4p") {
+                let bytes = archive
+                    .read_entry_by_index(&mut reader, i)
+                    .map_err(|err| format!("{}: {err}", e.name))?;
+                programs += 1;
+                let problems = check_program(&bytes, 48_000.0);
+                if !problems.is_empty() {
+                    failed += 1;
+                    lines.push(format!("PROBLEM {}: {}", e.name, problems.join("; ")));
+                }
+            }
             continue;
         };
         let bytes = archive
@@ -145,6 +238,7 @@ pub fn preset_check(args: &[String]) -> Result<String, String> {
         lines.push(format!("{s:?}: {n} presets, {l} with a lossy decode"));
     }
     let total: usize = counts.values().sum();
+    lines.push(format!("{programs} programs (STORE round trip + edits)"));
     lines.push(format!("{total} presets; problems: {failed}"));
     if failed > 0 {
         return Err(lines.join("\n"));
