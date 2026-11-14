@@ -63,21 +63,40 @@ impl FwCabinet {
     }
 
     /// One stereo frame through the cabinet.
+    ///
+    /// Each output is `a + b` with `a` the sequential sum over the older part of the circular
+    /// history and `b` over the newer part. The four chains (two channels, `a` and `b`) are
+    /// independent, so they run in lockstep: the float additions of every chain stay in the same
+    /// order (bit-identical result) while the CPU overlaps their 4-cycle add latencies.
     #[inline]
     pub(super) fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
         // `hist[c][pos]` is the newest sample; older ones follow at increasing (wrapping) index.
         self.pos = if self.pos == 0 { LEN - 1 } else { self.pos - 1 };
-        let mut out = [0.0; 2];
-        for (ch, y) in out.iter_mut().enumerate() {
-            let h = &mut self.hist[ch];
-            h[self.pos] = frame[ch];
-            let (newer, older) = h.split_at(self.pos);
-            let (t_head, t_tail) = self.taps.split_at(older.len());
-            let a: f32 = older.iter().zip(t_head).map(|(x, t)| x * t).sum();
-            let b: f32 = newer.iter().zip(t_tail).map(|(x, t)| x * t).sum();
-            *y = a + b;
+        let pos = self.pos;
+        self.hist[0][pos] = frame[0];
+        self.hist[1][pos] = frame[1];
+        let [h0, h1] = &self.hist;
+        let (n0, o0) = h0.split_at(pos);
+        let (n1, o1) = h1.split_at(pos);
+        let (t_head, t_tail) = self.taps.split_at(o0.len());
+        // `-0.0` is the start value of `Iterator::sum` for floats.
+        let mut acc = [-0.0f32; 4];
+        let common = o0.len().min(n0.len());
+        for i in 0..common {
+            acc[0] += o0[i] * t_head[i];
+            acc[1] += o1[i] * t_head[i];
+            acc[2] += n0[i] * t_tail[i];
+            acc[3] += n1[i] * t_tail[i];
         }
-        out
+        for i in common..o0.len() {
+            acc[0] += o0[i] * t_head[i];
+            acc[1] += o1[i] * t_head[i];
+        }
+        for i in common..n0.len() {
+            acc[2] += n0[i] * t_tail[i];
+            acc[3] += n1[i] * t_tail[i];
+        }
+        [acc[0] + acc[2], acc[1] + acc[3]]
     }
 }
 
@@ -98,6 +117,44 @@ mod tests {
                     "{kind} {n}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn lockstep_sums_equal_the_sequential_iterator_sums_bit_for_bit() {
+        // The straightforward formulation: one `Iterator::sum` per half and channel.
+        fn reference(c: &mut FwCabinet, frame: [f32; 2]) -> [f32; 2] {
+            c.pos = if c.pos == 0 { LEN - 1 } else { c.pos - 1 };
+            let mut out = [0.0; 2];
+            for (ch, y) in out.iter_mut().enumerate() {
+                let h = &mut c.hist[ch];
+                h[c.pos] = frame[ch];
+                let (newer, older) = h.split_at(c.pos);
+                let (t_head, t_tail) = c.taps.split_at(older.len());
+                let a: f32 = older.iter().zip(t_head).map(|(x, t)| x * t).sum();
+                let b: f32 = newer.iter().zip(t_tail).map(|(x, t)| x * t).sum();
+                *y = a + b;
+            }
+            out
+        }
+        let mut fast = FwCabinet::new(1).unwrap();
+        let mut slow = FwCabinet::new(1).unwrap();
+        let mut state = 0x1234_5678u32;
+        for n in 0..1500 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            // silence first (signed zeros), then noise
+            let x = if n < 450 {
+                0.0
+            } else {
+                (state >> 8) as f32 / 16_777_216.0 - 0.5
+            };
+            let f = [x, -x * 0.5];
+            let (a, b) = (fast.process_frame(f), reference(&mut slow, f));
+            assert_eq!(
+                [a[0].to_bits(), a[1].to_bits()],
+                [b[0].to_bits(), b[1].to_bits()],
+                "frame {n}"
+            );
         }
     }
 
