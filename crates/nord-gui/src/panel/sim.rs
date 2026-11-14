@@ -17,6 +17,10 @@ pub(super) struct Sim {
     pub(super) origin: egui::Pos2,
     pub(super) time: f64,
     pub(super) shapes: Vec<ClippedShape>,
+    /// Render the whole panel through `render_stage4_panel` (view modes) instead of two bays.
+    pub(super) full: bool,
+    /// Area the detailed view occupied in the last full-panel frame.
+    pub(super) visible: Rect,
 }
 
 impl Sim {
@@ -30,7 +34,19 @@ impl Sim {
             origin: pos2(0.0, 0.0),
             time: 1.0,
             shapes: Vec::new(),
+            full: false,
+            visible: Rect::NOTHING,
         };
+        s.frame(vec![], Modifiers::NONE);
+        s
+    }
+
+    /// A sim that draws the full panel at a fixed 1:1 zoom (so points equal logical px).
+    pub(super) fn full_panel() -> Self {
+        let mut s = Self::new();
+        s.full = true;
+        s.state.view.fixed_zoom = Some(1.0);
+        s.frame(vec![], Modifiers::NONE);
         s.frame(vec![], Modifiers::NONE);
         s
     }
@@ -46,8 +62,17 @@ impl Sim {
         };
         let (state, audio) = (&mut self.state, &self.audio);
         let mut origin = self.origin;
+        let (full, mut visible) = (self.full, self.visible);
         let out = self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
+                if full {
+                    let region = state.view.region();
+                    let top_left = ui.cursor().min;
+                    origin = super::view::region_origin(region, top_left);
+                    visible = Rect::from_min_size(top_left, super::view::region_size(region));
+                    super::render_stage4_panel(ui, state, audio);
+                    return;
+                }
                 let (rect, _) = ui.allocate_exact_size(vec2(1560.0, 420.0), Sense::hover());
                 origin = rect.min;
                 let painter = ui.painter().clone();
@@ -56,6 +81,7 @@ impl Sim {
             });
         });
         self.origin = origin;
+        self.visible = visible;
         self.shapes = out.shapes;
     }
 

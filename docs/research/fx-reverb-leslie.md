@@ -217,6 +217,8 @@ So the match is **exact (0 differing words, sign of zero aside)** on the 40-bit 
 
 ## 11. Types 2..11: routine identification and the blocker (fourth pass, 2026-11-14)
 
+> **Superseded in part by s13:** the "zero in the image" blocker below holds for the two organ rows only; the ten piano and synth rows are static data of the image.
+
 Checked with `sharc-disasm` on the FX Core 2 flat image (byte offset = 2 x parcel address), [fx-contexts](fx-contexts.md) s4 and [data/fx-type-words.csv](data/fx-type-words.csv). Time-boxed; no port was written, D22 is unchanged.
 
 | Finding | Evidence | Tag |
@@ -232,6 +234,8 @@ Next steps, in order: (1) hook the DSP-message writer while the harness enables 
 
 ## 12. Types 2..11: instance layout read from the code, capture attempt (fifth pass, 2026-11-14)
 
+> **Superseded in part by s13:** `c[0] = 0x95033` was a guess for the organ block; the real rows hold `c[0]`, `c[1]` = row base + 108 and + 124 and the pointer words of the table in s13.
+
 The aim was the instance context of `0xC02BB44C` (ctx `0xB0F28`) so that `0x120FDB` plus `0x120D8A` can be modelled on a real instance as in s8. Result: **the layout is now read from the listing, the pointer words are still not obtainable**; no model, port or response table was produced.
 
 | Finding | Evidence | Tag |
@@ -246,13 +250,54 @@ Why no response table: the model needs `c[0]`, `c[1]`, `c[-24 .. -13]`, `c[-6]`,
 
 Next steps (unchanged in order): (1) drive the part's command consumer (`[part + 0xC8]` list, node `{-1, counter}`) in the harness after `kRvbEnable` and capture the DSP messages of `0xC02BB44C` (hook `0xC006CA48`, `0xC001C6A0`); (2) model `0x120D8A`, `0x120FDB`, `0x120F7E` with `FPACK`/`FUNPACK`/`FDEP`/`FEXT` in `tools/fx_rvbcore_gen.py` and check word for word against `sharc-fx --trace`; (3) golden vectors, E40 port, response table, UI names, video check; D22 only after those.
 
+## 13. Types 2..11: the instance is static in the image (sixth pass, 2026-11-14)
+
+**Result: the blocker of s11, s12 was a wrong row.** The "zero in the image" context `0xB0F28` belongs to the two **organ** units (rows 10, 11 of the module's state table, DM `0xB0F08`, `0xB0F74`, target 2). The module `0xC02BB44C` has 14 state rows (table `0xC0548A78`, read from the settled harness snapshot, `tools/arm_steady.py --save`): rows 0..4 at core 1 DM `0xC1AC8 + 108 k`, rows 5..9 at core 2 DM `0xC1A28 + 108 k` (the piano and synth units L0, L1, L2, L4, L5 and L6, L7, L8, L10, L11), each `size >> 4 = 76` context words plus a 32 word tap table before the next row. **Those ten rows are static initial DM of the FX image** (`python tools/fx_rvbmulti.py layout|instance`, [data/fx-rvbmulti-instance.csv](data/fx-rvbmulti-instance.csv), 24 to 32 words per row):
+
+| Word (ctx offset) | Value (row 0 / core 1) | Reading | Tag |
+|---|---|---|---|
+| `c[-32]` | `0x3F7DC91D` (0.99132) | smoothing pole (the same pole as the type 0, 1 instance `c[0x11]`) | VERIFIED (image), reading EMPIRICAL |
+| `c[-31]`, `c[-30]` | `0x3E88A393` | send and dry targets (`kRvbAmt` overwrites them) | VERIFIED |
+| `c[-27]`, `c[-19 .. -16]`, `c[-11]`, `c[-8]`, `c[-7]` | image defaults, replaced by the ARM type words | coefficients | VERIFIED |
+| `c[-24]`, `c[-22]`, `c[-6]` | `0xE0000`, `0xE0C4D`, `0xE189A`, `0xE24E7`, `0xE3134` (rows 0..4, step 3149 words) | base and start pointers of the second ring (`B6 = c[-24]`, `I6 = c[-22]`, and `c[-6]` for the clear routine) in DM `0xE0000 ..` | VERIFIED (image), role from the listing `0x241be0 ..` |
+| `c[-23]` | `0xC44` (3140) | length `L6` of that ring | VERIFIED |
+| `c[-20]` | `0x94384`, `0x943AF`, `0x943DA`, `0x94405`, `0x94430` | PM list pointer `I11` (43 words per unit; the ARM type words land here) | VERIFIED |
+| `c[-15]`, `c[-14]`, `c[-13]`, `c[-4]` | `0x08004000 + 0x5000 k` (core 1), `0x08020000 + 0x5000 k` (core 2); `0x5000`; again the base; again the base | **line base, length 20480 words, write pointer**: what s11 called the missing pointer words | VERIFIED |
+| `c[0]`, `c[1]` | next row base, + 16 | the two 16 word tap tables sit behind the row (`DM(-32 .. -17, I4)` = `c[44 .. 75]`) | VERIFIED |
+| `c[44 .. 75]` | `-4`, `-2`, `0x9438D`, `0x346DC`, `0xE0C46`, `0x622`, `0x2800`, `0x9439E`, ... | tap table: PM list pointers `I10` (`0x9438D`, `0x9439E`), the FIR pointer `0xE0C46` (the ARM's seven words `0xE0C46 ..`) | VERIFIED |
+| `c[42]`, `c[43]` | 1.0, 1.0 | output scales; the enable sender `0xC0212220` rewrites only these two (`+0x4A`, `+0x4B` from the row base: 1.0 / 0) | VERIFIED |
+
+So the fresh angles of the task resolve as follows. **No allocator exists on either side**: (1) ARM side, `kRvbEnable` handler `0xC0212220` (vtable slot 25 of the module object `0xC02BB474`) sends two words (`c[42]`, `c[43]`); the type switch `0xC0211F68` (slot 23) only fills an ARM parameter record from table `0xC0560EFC`; the coefficient update `0xC020E314` sends coefficients at `c[-19 .. -7]`, `c[0]` (a float) and the type block, no pointer; the 96,111-message boot log has no write to any row of the module (core 1 and 2, `0xC1A28 .. 0xC1D00`) except the type words of the default program. (2) SHARC side: the wrapper `0x120FDB`, the core `0x120D8A` and the clear routine `0x120F7E` only **read** `c[-15 .. -13]`, `c[-24 .. -19]`, `c[0]`, `c[1]`; none writes a base. The pointers are linked-in data; the earlier searches looked at the organ rows only. The words of the **organ** units (rows 10, 11) are zero in the image and are not sent either; how the organ part's reverb gets them stays open (OQ21).
+
+**Oracle run on the real instance.** `tools/fx_rvbmulti.py` lays out core 2 row 5 (synth unit L6, DM `0xC1A28`), overlays the ARM type words of kind synth (`fx-type-words.csv`, shifted from the row-0 addresses) and the `kRvbAmt` pair (`fx-param-fits.csv` table points: 127 = `(1.0, 0)`, 63 = `(0x3EBB0410, 0x3F6E4FB0)`), and calls `0x120FDB` (4 frames per call, in place) in `sharc-fx`: 483 steps per call, no fault. The first wet output appears at call 848 (type 2), 1912 (3), 1061 (4), 2557 (5), 1219 (7), 2157 (8, 9), 3025 (10, 11) (4 frames per call, 48 kHz equivalent: 71 ms to 252 ms). `tools/fx_rvbmulti.py golden` writes the oracle output fingerprints (FNV-1a over every output word, non-zero count, first call) of an impulse at amount 127 and of noise at amount 63 for the nine captured types into [data/fx-rvbmulti-golden.csv](data/fx-rvbmulti-golden.csv); a Rust port must reproduce them.
+
+**Responses** (`python tools/fx_rvbmulti.py responses SRAM/core2_sram.bin --calls 30000 --type T`, oracle, amount 127 (wet only) for the impulse, noise at amount 127, 2.5 s window at 48 kHz, left channel, impulse response trimmed to the first echo; T60 from the -5 to -35 dB Schroeder slope, EDT 0 to -10 dB; echo density 0.0 means a silent window; wet-to-input per band 60-250, 250-500, 0.5-1k, 1-2k, 2-4k, 4-8k, 8-16k Hz in dB):
+
+| Type | First output (call) | T60 | EDT | Echo density at 0.1 / 0.2 / 0.4 / 0.8 s (1 = gaussian) | Wet-to-input per band (dB) |
+|---|---|---|---|---|---|
+| 2 | 848 | 0.55 s | 0.98 s | 0.47 / 0.77 / 0.7 / 0.0 | -6.3, -6.8, -8.3, -11.7, -17.1, -23.9, -37.8 |
+| 3 | 1912 | 0.55 s | 1.01 s | 0.48 / 0.51 / 0.59 / 0.0 | -6.5, -7.1, -8.5, -11.7, -17.1, -24.2, -38.0 |
+| 4 | 1061 | 0.75 s | 1.37 s | 0.2 / 0.56 / 0.7 / 0.42 | -4.5, -5.1, -6.8, -9.8, -15.2, -22.4, -36.1 |
+| 5 | 2557 | 0.73 s | 1.42 s | 0.23 / 0.6 / 0.68 / 0.52 | -4.7, -5.0, -7.2, -10.2, -15.4, -22.8, -36.4 |
+| 7 | 1219 | 0.95 s | 1.84 s | 0.6 / 0.99 / 0.94 / 0.99 | -5.2, -5.6, -6.4, -8.9, -13.8, -20.9, -34.4 |
+| 8 | 2157 | 1.22 s | 2.59 s | 0.94 / 0.93 / 1.17 / 0.98 | -8.1, -8.4, -8.6, -10.4, -14.5, -21.4, -35.0 |
+| 9 | 2157 | 1.22 s | 2.66 s | 0.81 / 0.86 / 0.94 / 1.01 | -8.0, -7.9, -8.7, -10.6, -14.4, -21.3, -34.9 |
+| 10 | 3025 | 1.22 s | 2.64 s | 0.97 / 0.94 / 1.05 / 1.0 | -8.1, -8.6, -8.8, -10.5, -15.1, -21.6, -35.4 |
+| 11 | 3025 | 1.21 s | 2.68 s | 0.94 / 0.87 / 1.19 / 0.95 | -8.7, -8.6, -8.8, -10.7, -14.9, -21.6, -35.4 |
+
+EMPIRICAL: numbers of the firmware routine on the real instance of the synth unit L6 with the ARM's type words; no hardware comparison (the video has no clean release, s10), so the type-to-UI-name mapping stays ASSUMED.
+
+Reading (EMPIRICAL): the multi-tap reverbs are shorter and darker than types 0, 1 (T60 0.55 to 1.22 s against 4.3 and 5.4 s; wet-to-input -4.5 to -8.7 dB below 500 Hz, -34 to -38 dB at 8 to 16 kHz). Types 8 and 9 have the same first echo and nearly the same band shape (the pair structure of s3: two types per module); types 10 and 11 are the same to within 0.5 dB. The UI names stay at the s3 reading (size rises with `0xB0F0D`); no program-decode evidence was gathered.
+
+**Not done (the port).** There is no Python model of `0x120D8A` / `0x120FDB` yet, so there is no Rust port: the core needs the forms `FPACK` / `FUNPACK` / `FDEP` / `FEXT` (16:16) and the `I6` / `I5` pre-modify forms in `tools/fx_pe.py` and `tools/fx_rvbcore_gen.py`, about 120 core instructions plus the 150 of the wrapper (three fs/4 biquad stages, hold, second bank at PM `0x9437F`, mix with `c[-28]`, `c[42]`, `c[43]`). Next steps: (1) extend `fx_pe` / `fx_model_*` with the packed-float forms and model the core on the layout of `fx_rvbmulti.layout` (first ring `B2 = c[-15]` at SDRAM word `0x08020000`, `L2 = c[-14]` = 20480 words; second ring `B6 = c[-24]` in DM, `L6 = c[-23]` = 3140 words); (2) check word for word against `sharc-fx --trace` as in s6; (3) generate steps with `tools/fx_rvbcore_gen.py`, golden test against `fx-rvbmulti-golden.csv`, opt-in `FirmwareFx::reverb` for types 2..11, then the video check and D22.
+
 ## Implications
 
-- The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are not.
+- The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are not ported, but their real instance is known and the oracle responses and golden fingerprints exist (s13).
 - `kCmpResponse` is closed: no word depends on it.
 
 ## Follow-ups
 
 1. A hardware clip with a clean release into a Spring reverb (decay), and the SPRING name check of types 0, 1; then re-run the s10 comparison and revisit the default (D22).
-3. Types 2..11: module `0xC02BB44C`, wrapper `0x120FDB` plus packed multi-tap core `0x120D8A`, not `0x123ABE` / `0x12314A` / `0x12329B` (s11); blocked on the pointer words (ARM activation path).
+3. Types 2..11: module `0xC02BB44C`, wrapper `0x120FDB` plus packed multi-tap core `0x120D8A`, not `0x123ABE` / `0x12314A` / `0x12329B` (s11). Unblocked by s13 (the pointer words are static in the image for the piano and synth rows): model the core with the packed-float forms, generate the Rust steps, match `fx-rvbmulti-golden.csv`. Organ rows (zero) stay open.
 4. Leslie: capture the rotor words over many ARM ticks per `kEffectsLeslieSpeed` value.

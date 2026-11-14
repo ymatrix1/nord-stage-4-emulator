@@ -10,12 +10,20 @@ use egui::{vec2, Vec2};
 /// `(control id, dx, dy)`: shift of the control's rectangle in logical px.
 pub const TWEAKS: &[(&str, f32, f32)] = &[
     // The LFO RATE name collided with the "GROUP" Shift legend of the LFO waveform button above.
-    ("synth.lfo.rate", 0.0, 8.0),
-    ("synth.lfo.rate_mst_clk", 0.0, 8.0),
+    ("synth.lfo.rate", 0.0, 12.0),
+    ("synth.lfo.rate_mst_clk", 0.0, 12.0),
     // The FREQ name collided with the "GROUP" Shift legend of the filter TYPE button above.
     ("synth.filter.freq", 0.0, 8.0),
     // The two KB ZONE legends under OCTAVE / SHIFT printed into the zone LEDs.
     ("synth.zone_leds", 0.0, 9.0),
+    // The OSC CTRL name printed into the ENV TO PITCH legend of the PITCH/SMP button above.
+    ("synth.osc.ctrl", 0.0, 5.0),
+    // "ENV AMT" / "RES" touched the VELOCITY legend of the ENVELOPE button above.
+    ("synth.osc.env_amt", 0.0, 4.0),
+    ("synth.filter.res", 0.0, 4.0),
+    // The PROG VIEW name printed into the PANIC legend of the TRANSP button above.
+    ("program.prog_view", 0.0, 5.0),
+    ("program.preset_name", 0.0, 5.0),
     // "DECAY FAST" and "HARMONIC 3RD" touched; the third button moves right.
     ("organ.perc_third", 12.0, 0.0),
 ];

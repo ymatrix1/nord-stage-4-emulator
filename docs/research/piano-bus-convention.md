@@ -61,7 +61,7 @@ Not worked on in this pass (time box); the listing facts of [smp-voice](smp-voic
 
 ## Decision
 
-D26 (opt-in layer law; defaults unchanged), D27 (post stage measured unity; `firmware_bus_scale` stays opt-in).
+D29 (opt-in layer law; defaults unchanged), D30 (post stage measured unity; `firmware_bus_scale` stays opt-in).
 
 ## Implications
 

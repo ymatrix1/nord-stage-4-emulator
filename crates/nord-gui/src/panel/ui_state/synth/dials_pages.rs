@@ -6,6 +6,7 @@ use super::{Scope, SynthUi};
 #[cfg(test)]
 use crate::audio::PatternParam;
 use crate::audio::SynthParam;
+use nord_core::synth::PATTERN_PRESET_MAX;
 
 fn bump(v: u8, steps: i32, max: u8) -> u8 {
     (i32::from(v) + steps).clamp(0, i32::from(max)) as u8
@@ -30,7 +31,7 @@ impl SynthUi {
             }
             (1, _) => self.set_zigzag(steps > 0),
             (2, 1) => {
-                let p = bump(self.layer().pattern_preset, steps, 7);
+                let p = bump(self.layer().pattern_preset, steps, PATTERN_PRESET_MAX);
                 self.choose_preset(p);
             }
             (2, _) => self.step_pattern_len(steps),
@@ -136,13 +137,20 @@ mod tests {
         s.turn_dial(2, -1, false);
         assert!(!s.layer().zigzag);
         s.page = SynthPage::Arp(2);
-        s.turn_dial(1, 3, false);
-        assert_eq!(s.layer().pattern_preset, 3);
-        assert!(params(&mut s).contains(&SynthParam::PatternPreset(3)));
+        s.turn_dial(1, 6, false);
+        assert_eq!(s.layer().pattern_preset, 6);
+        assert!(params(&mut s).contains(&SynthParam::PatternPreset(6)));
         s.turn_dial(2, 4, false);
-        // Preset 4 selected by the dial above (preset index 3): the length dial adds 4 steps.
-        let want = nord_core::synth::PATTERN_PRESETS[3].len + 4;
-        assert_eq!(s.layer().pattern_len, want, "preset 4 length + 4");
+        // Preset 6 has 8 steps: the length dial adds 4.
+        let want = nord_core::synth::PATTERN_PRESETS[6].len + 4;
+        assert_eq!(want, 12);
+        assert_eq!(s.layer().pattern_len, want, "preset 6 length + 4");
+        s.turn_dial(1, 99, false);
+        assert_eq!(
+            s.layer().pattern_preset,
+            PATTERN_PRESET_MAX,
+            "dial clamps at 28"
+        );
         assert!(params(&mut s).contains(&SynthParam::Pattern(PatternParam::Len(want))));
     }
 

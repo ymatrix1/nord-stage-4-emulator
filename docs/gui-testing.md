@@ -76,21 +76,48 @@ one) to zoom that section to fill the window (up to 4x, crisp text: the egui zoo
 bitmap scale); `Esc` returns, `1`-`5` jump to Organ, Piano, Program, Synth, Layer Effects. In the
 overview the window scale-to-fits the panel. Code: `crates/nord-gui/src/panel/view.rs`.
 
+Panorama (B12): `P` shows a pannable / zoomable part of the panel with a strip of the whole
+instrument under it (drag or click the strip, wheel or `+` / `-` zoom, arrows pan, `Esc` leaves);
+`L` toggles the library drawer. `--screenshot` never enters the panorama and never draws the
+drawer, so `gui_shots.py` output is unchanged. Code: `panel/panorama.rs`, tests
+`panel/panorama_tests.rs`.
+
 Scale: the panel is drawn at `LAYOUT_SCALE` = 2 (3120 x 840 logical px, `panel/layout_px.rs`) so
 that 7.5 px labels fit between neighbours. A 1900 px window therefore shows the overview at about
 0.6x: read labels in the focus view or in `gui_shots.py` output.
 
-`panel/legibility_tests.rs` renders the real panel headless and fails on: any text under
-`MIN_FONT_PX` (7.5), two overlapping labels, or a label overlapping a control rectangle it
-does not belong to. `legibility_allow.txt` lists tolerated collisions (empty now; the test also
-fails on stale entries). Nudges for tight neighbours live in `panel/layout_tweaks.rs`, never in
-the `ASSUMED` photo tables. Before/after: `docs/img/gui/`.
+`panel/legibility_tests.rs` (collector, control rectangles) and `panel/legibility_rules.rs`
+(geometry rules) render the real panel headless and record every painted text galley with its
+clip rectangle, plus the group frames and knob extents the widgets report through the test-only
+`widgets/probe.rs`. The audit fails on:
+
+| Rule | Meaning |
+|---|---|
+| min font | any text under `MIN_FONT_PX` (7.5 px) |
+| `L` | two labels overlap or are closer than 0.9 px |
+| `C` | a label overlaps (bezel +1.5 px) a control rectangle whose body it is not printed on |
+| `K` | a label is clipped by the clip rectangle it was painted with (OLED soft labels) |
+| `S` | a label crosses the edge of a section rectangle (text cut by the section) |
+| `G` | a label crosses a group frame (Rotary Speaker box, `group_frame`) other than its own title |
+| `N` | a label touches a knob body or its tick ring (the ring is open below the knob) |
+
+`legibility_allow.txt` lists tolerated violations (empty now; the test also fails on stale
+entries). Run with `NS4_WRITE_COLLISIONS=<file> cargo test -p nord-gui collisions_match` to dump
+the current list. Fixes go into the shared helpers first: `widgets::label_fit` / `fit_size`
+shrink a text to the room it has (never below 7.5 px), `ctl::tag_fit` stacks a two-word name,
+`ctl::shift_legend` puts its LED after the measured text, `bay_effects::ctx::CAPTION_DROP` /
+`CAPTION_LINE` keep captions clear of knobs and bezels. Per-control nudges for tight neighbours
+live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one exception: the
+`rotary.speed_leds` rectangle was widened so the row holds its two names). Before/after:
+`docs/img/gui/`.
 
 | State | Labels >= 7.5 px | Collisions |
 |---|---|---|
 | Before (original fonts 4.5-7 px, 1560 px panel) | no (smallest 4.5) | 33 |
 | 7.5 px minimum at 1560 px | yes | 98 (with the stricter 1 px-gap rule: more) |
-| 7.5 px minimum at 3120 px plus 6 nudges | yes | 0 |
+| 7.5 px minimum at 3120 px plus 6 nudges (first audit: L and C only) | yes | 0 |
+| Same panel, audit extended with K, S, G, N, 0.9 px gap, bezel margin (B8 label legibility) | yes | 30 |
+| After the legibility fixes (Rotary box widened, captions, OLED soft labels, SOLO, nudges) | yes | 0 |
 
 ## What each switch changes
 

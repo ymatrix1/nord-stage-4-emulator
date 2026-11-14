@@ -119,7 +119,7 @@ Not in the image (VERIFIED by census): biquad filters (0 `fA=fB*fY, fA+1=fB+1*fY
 | Item | Status |
 |---|---|
 | Which of the two Stage-B read positions is which (loop splice, crossfade, or 2x oversample) | open; needs a run with a voice set up |
-| Selection of the kernel by the ARM (value `0xE3400 + 0xC00 k` sent to record word `+0x3B`) | open; ARM literal at `0xC0001BAC` is the lead |
+| Selection of the kernel by the ARM (value `0xE3400 + 0xC00 k` sent to record word `+0x3B`) | **decoded** in [synth-sample-kernel-rule](synth-sample-kernel-rule.md): by voice key (`<= 47` kernel 0, then every 12 keys), not by ratio; `0xC0001BAC` is a static channel record |
 | Handlers of opcodes 1 to 15 | table read back and handlers described in [sy-smp-audio](sy-smp-audio.md) section 3; the voice start needs opcode 0 only |
 | The parameter-slewing math of step 3 | shape only (`RECIPS`, `FUNPACK`, `CLIP`) |
 | 16-bit unpacker | not found |

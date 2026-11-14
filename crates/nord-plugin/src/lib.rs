@@ -68,7 +68,7 @@ impl Default for NordStage4Plugin {
 impl Plugin for NordStage4Plugin {
     const NAME: &'static str = "Nord Stage 4";
     const VENDOR: &'static str = "OpenNord";
-    const URL: &'static str = "https://github.com/yuriolive/nord-stage-4-emulator";
+    const URL: &'static str = "https://github.com/ymatrix1/nord-stage-4-emulator";
     const EMAIL: &'static str = "yuri@github.com";
 
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -296,6 +296,21 @@ mod tests {
         }
         assert!(plugin.note_rx.is_empty(), "process() must drain the queue");
         assert!(peak > 0.0, "queued key press produced no audio");
+    }
+
+    /// Host-visible metadata must point at the live repository and carry no manufacturer name.
+    #[test]
+    fn test_plugin_metadata_url_matches_cargo_repository_and_has_no_vendor_name() {
+        assert_eq!(NordStage4Plugin::URL, env!("CARGO_PKG_REPOSITORY"));
+        let shown = [
+            NordStage4Plugin::NAME,
+            NordStage4Plugin::VENDOR,
+            NordStage4Plugin::URL,
+            <NordStage4Plugin as ClapPlugin>::CLAP_ID,
+        ];
+        for text in shown {
+            assert!(!text.to_lowercase().contains("clavia"), "{text}");
+        }
     }
 
     #[test]

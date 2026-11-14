@@ -5,37 +5,9 @@
 
 use super::*;
 
-/// Number of preset gate patterns.
-pub const PATTERN_PRESET_COUNT: usize = 8;
-
-/// A gate pattern: `len` steps, each a gate length in eighths of a step (`0` = rest, `8` = full step).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GatePattern {
-    pub len: u8,
-    pub steps: [u8; 16],
-}
-
-const fn pat(len: u8, steps: [u8; 16]) -> GatePattern {
-    GatePattern { len, steps }
-}
-
-/// ASSUMED: the factory pattern presets (hardware `Edt_Syn_kArpPtnPreset`, 0..28 = 29 presets) are
-/// not stored in a patch and the firmware table was not located (`docs/research/synth-arp-patterns.md`),
-/// so this list is not the hardware list. Slots 3 to 5 use rhythms that recur unedited in the
-/// factory backup (EMPIRICAL as rhythm shapes, not as preset identities): `E..E..E..` (9 steps, 3
-/// programs), `EEE.E.EEE.E.` (12 steps, 4 programs) and `.EEE` (4 steps, 3 programs; reproduce with
-/// `python tools/ns4_arp_patterns.py <backup>.ns4b`). The gate length of an "on" step stays 4
-/// eighths: which of the hardware gate codes `E q Q` is which length is unmeasured.
-pub const PATTERN_PRESETS: [GatePattern; PATTERN_PRESET_COUNT] = [
-    pat(4, [4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(4, [0, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(4, [6, 2, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(9, [4, 0, 0, 4, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(12, [4, 4, 4, 0, 4, 0, 4, 4, 4, 0, 4, 0, 0, 0, 0, 0]),
-    pat(4, [0, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(2, [8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(16, [4, 0, 4, 4, 0, 4, 0, 4, 4, 0, 4, 0, 4, 4, 0, 0]),
-];
+pub use super::pattern_presets::{
+    GatePattern, PATTERN_PRESETS, PATTERN_PRESET_COUNT, PATTERN_PRESET_MAX,
+};
 
 /// Plain gate (Pattern off): a 50 % duty gate on every step.
 /// ASSUMED: 50 % duty (4/8); the manual only says the level is gated at the Rate setting.
@@ -215,7 +187,7 @@ impl SynthLayer {
         let idx = self.perf.gate_step % usize::from(p.len);
         self.perf.gate_step = (idx + 1) % usize::from(p.len);
         self.perf.cur_accent = false;
-        self.perf.cur_pan = PatternPan::Center;
+        self.perf.cur_pan = p.pan[idx];
         p.steps[idx]
     }
 
@@ -350,15 +322,6 @@ mod tests {
         assert!((ClockDivision::ThirtySecondT.beats() - 1.0 / 12.0).abs() < 1e-6);
         assert_eq!(ClockDivision::from_index(0), ClockDivision::Half);
         assert_eq!(ClockDivision::from_index(99), ClockDivision::ThirtySecondT);
-    }
-
-    #[test]
-    fn presets_are_well_formed() {
-        for p in PATTERN_PRESETS {
-            assert!((2..=16).contains(&p.len));
-            assert!(p.steps.iter().all(|&s| s <= 8));
-            assert!(p.steps[..usize::from(p.len)].iter().any(|&s| s > 0));
-        }
     }
 
     #[test]
