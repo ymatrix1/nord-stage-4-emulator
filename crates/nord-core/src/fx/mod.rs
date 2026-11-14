@@ -25,6 +25,7 @@ mod fw_delay;
 mod fw_delay_table;
 pub mod fw_delay_time;
 mod fw_drive_tables;
+mod fw_ens;
 mod fw_eq;
 mod fw_eq_tables;
 mod fw_ext40;
@@ -45,7 +46,10 @@ mod fw_leslie_ring;
 pub mod fw_map;
 mod fw_mod1;
 mod fw_mod2;
+mod fw_mod2_data;
+mod fw_mod2_law_stage;
 mod fw_mod2_run;
+mod fw_mod2_tables;
 mod fw_params;
 mod fw_pe;
 mod fw_pe_ops;
@@ -62,6 +66,7 @@ mod fw_rvbm_steps_core;
 mod fw_rvbm_steps_wrap;
 mod fw_rvbm_words;
 mod fw_short_float;
+mod fw_spin;
 mod fw_stage;
 mod fw_tone_stack;
 mod fw_vibe;
@@ -276,12 +281,14 @@ pub struct LayerFxChain {
     pub mod1_type_raw: Option<u8>,
     /// 7 bit `kFx2RateClkDiv` value (`0..=127`) of the program; read only with `firmware_fx.mod2`.
     pub mod2_rate_raw: Option<u8>,
-    /// Raw `kFx2Type` (`0..=11`) of the program; the firmware Mod 2 runs for 4 and 5 (`CHOR`).
+    /// Raw `kFx2Type` (`0..=11`) of the program; the firmware Mod 2 runs for every type 0 to 11.
     pub mod2_type_raw: Option<u8>,
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
     /// The firmware chorus (`firmware_fx.mod2`), boxed: the ring is 4 KB.
     fw_mod2: Option<Box<fw_mod2::FwMod2Stage>>,
     fw_vibe: Option<Box<fw_vibe_stage::FwVibeStage>>,
+    /// The firmware `PHAS` / `FLANG` / `ENS` / `SPIN` stages (`firmware_fx.mod2`, types 0 to 3, 8 to 11).
+    fw_law: Option<Box<fw_mod2_law_stage::FwLawStage>>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
     /// The firmware Amp EQ (`firmware_fx.eq`), built when first needed.
@@ -397,6 +404,7 @@ impl LayerFxChain {
             fw_mod1: None,
             fw_mod2: None,
             fw_vibe: None,
+            fw_law: None,
             fw_comp: None,
             fw_amp: None,
             fw_eq: None,
