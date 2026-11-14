@@ -6,6 +6,7 @@ pub mod backup;
 pub mod bitstream;
 pub mod container;
 pub mod fx_preset;
+pub mod kb_zone;
 pub mod manifest;
 pub mod organ_preset;
 pub mod piano_preset;

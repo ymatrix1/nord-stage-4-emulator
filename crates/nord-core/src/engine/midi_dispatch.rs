@@ -31,7 +31,7 @@ impl Stage4Engine {
                         continue;
                     };
                     let split_gain = if route == NoteRoute::Global {
-                        self.split_router.note_gain(layer, note)
+                        self.keybed_gain(layer, note)
                     } else {
                         1.0
                     };
@@ -48,7 +48,7 @@ impl Stage4Engine {
                     self.layer_note_on(layer, sounding, velocity, split_gain);
                 }
                 if recipients != 0 {
-                    self.held_transpose[channel_idx][note as usize] = self.transpose;
+                    self.held_transpose[channel_idx][note as usize] = self.effective_transpose();
                 }
                 for layer in LayerId::ALL {
                     if recipients & (1 << (layer as u8)) != 0 {

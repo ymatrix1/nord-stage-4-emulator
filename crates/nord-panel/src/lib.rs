@@ -9,6 +9,7 @@
 pub mod behaviour;
 pub mod inventory;
 pub mod layout;
+pub mod menus;
 pub mod types;
 
 pub use inventory::all_controls;
