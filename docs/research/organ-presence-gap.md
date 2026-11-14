@@ -83,14 +83,18 @@ Peakiness (95th percentile minus median bin level): hardware 24.3 / 22.0 / 20.3 
 
 `tools/organ_gap.py` makes the three checks above repeatable on any `emu_vs_hw.py` work directory: a 12-band table of the long-term spectrum, the tonal peakiness per band, and the per-octave histogram of the detected notes (all and video-confirmed). It reads only the files in that directory. Tests: `tools/tests/test_organ_gap.py`.
 
+## 4b. Amp port check (2026-11-14)
+
+The "amp" rows above already include the ported Twin drive stage and cabinet (`FirmwareFx::amp`, default since D22); the follow-up that asks for a type-289 port is therefore answered: it exists, it is oracle-exact, and with it the Vox residual is still -7.5 / -9.7 dB. Amp input level (+24 dB), the other `FirmwareFx` ports and every other amp type do not close it, and B3 is bit identical with either amp path because its program has the amp off. The residual is not an amp or cabinet error ([fx-type-map](fx-type-map.md) s12).
+
 ## Implications
 
 - Do not tune the organ banks to the Part A B3 / Vox clips as they are replayed: the B3 verdict needs the right-hand notes, the Vox verdict needs the Twin amp.
-- The next lever for Vox is the type-289 amp port (FX lane), then a re-run of this table with `--firmware-fx`; only then can the 7.5 / 9.7 dB residual be assigned to the organ.
+- The type-289 amp port exists (D22) and the table above was measured with it: the 7.5 / 9.7 dB Vox residual belongs to the organ bank (2 to 6 kHz harmonics) or to the unported Mod 2 type 6, not to the amp ([fx-type-map](fx-type-map.md) s12).
 - The B3 note set must include the solo register before presence is judged (OQ16): a confirmed-note filter that keeps notes above C4 once their harmonic lines are present in the audio, or a manual note list for the clip.
 
 ## Follow-ups
 
 1. B3: a replay note list for `organ_b3` with the right-hand register (audio-line tracking of the 0.8 to 3 kHz partials), then repeat the table; if lines are still 12 dB short, the tail table with the type-5 vibrato (OQ16) is the next suspect.
-2. Vox: the same table with a ported Twin amp; a Vox clip without an amp program (none known in the factory set or the course clips).
+2. Vox: done with the ported Twin amp (s4b); next, Mod 2 type 6 of the program and a Vox clip without an amp program (none known in the factory set or the course clips).
 3. A clip of a lone Vox or B3 note with the amp / rotary off would separate bank from post chain; none of the local clips has one.
