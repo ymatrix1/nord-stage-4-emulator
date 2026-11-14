@@ -207,7 +207,7 @@ impl Screen {
             Self::Split => ["Note", "Low", "Mid", "High"],
             Self::Clock => ["KBS", "", "", ""],
             Self::Preset { .. } => ["Num", "Cat", "Cancel", ""],
-            Self::Undo => ["UNDO", "", "", ""],
+            Self::Undo => ["UNDO", "REDO", "", ""],
             Self::LayerInit => ["All", "Org AB", "Pno", "Syn"],
             Self::Copy => ["Layer", "Fx", "Morph", "Prog"],
             Self::Paste => ["Paste", "Swap", "", ""],

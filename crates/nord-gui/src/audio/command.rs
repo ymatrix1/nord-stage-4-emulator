@@ -101,6 +101,8 @@ pub enum AudioCommand {
         layer_idx: usize,
         sound: Option<Arc<nord_core::synth::SynthSampleSound>>,
     },
+    /// Swaps prepared program state into the engine without allocating (see `audio/control`).
+    SwapState(super::control::SwapState),
     /// Sets every opt-in firmware path at once (A/B switching, see `firmware_panel`).
     SetFirmwareOptions(nord_core::render_opts::FirmwareOptions),
 }

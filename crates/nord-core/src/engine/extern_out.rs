@@ -69,6 +69,7 @@ pub struct MidiOutQueue {
     head: usize,
     len: usize,
     dropped: u32,
+    pushed: u32,
 }
 
 impl Default for MidiOutQueue {
@@ -78,6 +79,7 @@ impl Default for MidiOutQueue {
             head: 0,
             len: 0,
             dropped: 0,
+            pushed: 0,
         }
     }
 }
@@ -91,6 +93,7 @@ impl MidiOutQueue {
         }
         self.buf[(self.head + self.len) % MIDI_OUT_CAPACITY] = event;
         self.len += 1;
+        self.pushed = self.pushed.wrapping_add(1);
         true
     }
     pub fn pop(&mut self) -> Option<MidiOut> {
@@ -111,6 +114,10 @@ impl MidiOutQueue {
     /// Events discarded because the queue was full.
     pub fn dropped(&self) -> u32 {
         self.dropped
+    }
+    /// Events accepted since creation (wraps); the GUI blinks the EXTERN / MIDI-out LED on change.
+    pub fn pushed(&self) -> u32 {
+        self.pushed
     }
 }
 

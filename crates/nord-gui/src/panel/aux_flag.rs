@@ -8,10 +8,16 @@
 use super::ctl::led_small;
 use super::prelude::*;
 
-/// The flag to display for one layer. Today the UI value; the telemetry PR replaces the body with
-/// the engine's `AuxKb::is_aux_layer` read-back.
-pub(super) fn aux_flag_from_telemetry(ui_value: bool) -> bool {
-    ui_value
+/// The flag to display for engine layer `layer`: the engine's `AuxKb::is_aux_layer` read-back when
+/// telemetry is live, else the UI value (no audio device, headless tests).
+pub(super) fn aux_flag_from_telemetry(
+    tele: &crate::telemetry::PanelTelemetry,
+    layer: usize,
+    ui_value: bool,
+) -> bool {
+    tele.get().map_or(ui_value, |t| {
+        crate::telemetry::aux_flag_from_telemetry(t, layer)
+    })
 }
 
 /// Draw one Aux KB LED in `rect`; returns `true` when it was clicked.
@@ -32,14 +38,25 @@ pub(super) fn aux_led(ui: &mut Ui, rect: Rect, id: &str, lit: bool, tip: &str) -
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
 
     #[test]
-    fn the_flag_is_the_ui_value_until_telemetry_exists() {
-        assert!(aux_flag_from_telemetry(true));
-        assert!(!aux_flag_from_telemetry(false));
+    fn the_flag_is_the_ui_value_until_telemetry_exists_then_the_engine_flag() {
+        use crate::telemetry::PanelTelemetry;
+        let none = PanelTelemetry::default();
+        assert!(aux_flag_from_telemetry(&none, 0, true));
+        assert!(!aux_flag_from_telemetry(&none, 0, false));
+        let mut t = nord_core::engine::Telemetry::default();
+        t.aux_mask = 0b100;
+        let live = PanelTelemetry(Some(t));
+        assert!(aux_flag_from_telemetry(&live, 2, false), "engine says aux");
+        assert!(
+            !aux_flag_from_telemetry(&live, 0, true),
+            "engine overrides the UI"
+        );
     }
 
     #[test]

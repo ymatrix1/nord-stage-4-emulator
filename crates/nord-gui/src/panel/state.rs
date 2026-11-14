@@ -101,6 +101,10 @@ pub struct Stage4PanelState {
     pub sync_knobs_on_program_load: bool,
     pub mouse_held_note: Option<u8>,
     pub midi_active_keys: [bool; 128],
+
+    /// Engine telemetry of this frame and the MIDI / EXTERN blink timers (see `telemetry.rs`).
+    pub telemetry: crate::telemetry::PanelTelemetry,
+    pub leds: crate::telemetry::PanelLeds,
 }
 
 impl Default for Stage4PanelState {
@@ -193,6 +197,8 @@ impl Default for Stage4PanelState {
             sync_knobs_on_program_load: false,
             mouse_held_note: None,
             midi_active_keys: [false; 128],
+            telemetry: Default::default(),
+            leds: Default::default(),
         }
     }
 }

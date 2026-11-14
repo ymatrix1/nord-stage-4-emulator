@@ -203,10 +203,13 @@ pub(super) fn render_strip(
             ui,
             rc(ladder_id),
             ladder_id,
-            lvl,
-            state.organ_layer_active(l),
+            // The engine's level after fader and Morph (UI value without an engine).
+            state
+                .telemetry
+                .ladder_level(l, lvl, state.organ_layer_active(l)),
+            true,
         );
-        let lit = aux_flag_from_telemetry(state.organ_ui.aux[l]);
+        let lit = aux_flag_from_telemetry(&state.telemetry, l, state.organ_ui.aux[l]);
         let tip = "AUX KB: this layer is played by the aux keyboard (click to switch)";
         if aux_led(ui, rc(aux_id), aux_id, lit, tip) {
             state.organ_ui.aux[l] = !state.organ_ui.aux[l];
