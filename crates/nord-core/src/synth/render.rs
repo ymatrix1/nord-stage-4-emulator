@@ -502,7 +502,7 @@ impl SynthLayer {
                     } else {
                         voice_cutoff
                     };
-                    FwCoefs::from_params(fw_kind, fc, self.resonance, self.sample_rate)
+                    v.fw_memo.get(fw_kind, fc, self.resonance, self.sample_rate)
                 });
 
             let filtered_l = if !self.filter_on {

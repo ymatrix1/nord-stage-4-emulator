@@ -20,6 +20,7 @@ mod arp;
 mod arp_order;
 mod dsp;
 mod fw_adr_chain;
+mod fw_coef_memo;
 mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_table_d;
