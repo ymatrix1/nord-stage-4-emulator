@@ -46,6 +46,6 @@ ANALOG layers with a bit-exact stage model: **302 of 312 (96.8 %)**, unchanged. 
 
 ## Follow-ups
 
-1. Re-run `tools/arm_edit_capture.py` with `value << 16` for the integer-knob synth ids and refresh `synth-edit-messages.csv`.
+1. Done ([synth-knob-laws](synth-knob-laws.md), D55): `tools/arm_edit_knobs.py` re-ran the synth ids with `value << 16`; [data/synth-knob-laws.csv](data/synth-knob-laws.csv) replaces the value dependence column of `synth-edit-messages.csv`.
 2. SUPER 2..4 through the stage-A harness, then SHAPE 3 / 4.
 3. The osc-ratio and P block knob words (`DM(0xC2716)`, `0xB069B`).

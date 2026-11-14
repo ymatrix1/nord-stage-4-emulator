@@ -44,7 +44,10 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D32](#d32-fx-mod-2-chor-uses-the-firmware-routines-behind-firmwarefxmod2) | 2026-11-14 | FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2` | accepted |
 | [D40](#d40-fx-mod-2-phas-0-and-flang-use-the-firmware-routines-behind-firmwarefxmod2-ens-and-spin-are-verified-and-ported-only-delays-are-rescaled-to-the-engine-rate) | 2026-11-14 | FX Mod 2: PHAS 0 and FLANG use the firmware routines behind `FirmwareFx::mod2`; ENS and SPIN are verified and ported only; delays are rescaled to the engine rate | accepted |
 | [D41](#d41-the-b3-bass-stage-is-wired-opt-in-the-generator-weights-follow-a-table-of-held-writes-no-default-flips) | 2026-11-14 | The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips | accepted |
-| [D50](#d50-the-ladder24-filter-stage-is-modelled-and-wired-opt-in-under-the-strip-chain) | 2026-11-14 | The Ladder24 filter stage `0x12549D` is modelled bit exactly and wired opt-in under the strip chain with an assumed cutoff law [D48](#d48-the-master-level-word-and-the-layer-word-targets-are-found-the-organ-chain-word-is-16-the-level-defaults-stay) master level word layer word targets are found; organ word 1.6; level defaults stay [D49](#d49-the-layer-mode-flag-is-reverb-global-the-verified-chain-is-exposed-opt-in-the-level-defaults-stay) layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay | accepted |
+| [D52](#d52-the-ladder24-filter-stage-is-modelled-and-wired-opt-in-under-the-strip-chain) | 2026-11-14 | The Ladder24 filter stage `0x12549D` is modelled bit exactly and wired opt-in under the strip chain with an assumed cutoff law | accepted |
+| [D53](#d53-shape-waves-3-and-4-are-modelled-and-wired-opt-in-super-24-waits-for-its-wavetable) | 2026-11-14 | SHAPE waves 3 and 4 are modelled and wired opt-in; SUPER 2..4 waits for its wavetable | accepted |
+| [D54](#d54-the-ladder24-stage-position-is-the-strip-table-value-r-the-host-keeps-the-pole-frequency-law) | 2026-11-14 | The Ladder24 stage position is the strip table value `R`; the host keeps the pole-frequency law | accepted |
+| [D55](#d55-edit-value-cells-are-q1616-the-knob-laws-are-captured-the-envelope-rate-index-from-the-knob-is-opt-in) | 2026-11-14 | Edit value cells are Q16.16; the knob laws are captured; the envelope rate index from the knob is opt-in | accepted |
 | [D49](#d49-the-layer-mode-flag-is-reverb-global-the-verified-chain-is-exposed-opt-in-the-level-defaults-stay) | 2026-11-14 | The layer mode flag is Reverb GLOBAL; the verified chain is exposed opt-in; the level defaults stay | accepted |
 | [D50](#d50-fx-mod-1-rm-a-wah-wah-and-pump-use-the-firmware-routines-behind-firmwarefxmod1-boot-words-complete-phas-1-and-spin-chor-delays-are-rescaled) | 2026-11-14 | FX Mod 1 RM, A-WAH, WAH and PUMP use the firmware routines behind `FirmwareFx::mod1`; boot words complete PHAS 1 and SPIN; CHOR delays are rescaled | accepted |
 
@@ -559,6 +562,24 @@ equals (1840 1840), verified; strip position law (the reads log-frequency positi
 Keep `Lp4` `Ladder24` different shape resonance); feed `R` straight position table runs 8 Hz 28 kHz over `0..0.95`, 6 kHz play near 400 Hz); make default outside `--synth-stages` (rejected until cutoff 2 traced).
 Ladder24 layers change sound strip chain oscillators (the default `SynthLayer::new`, off `legacy_all`); test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
 
+### D52. The Ladder24 filter stage is modelled and wired opt-in under the strip chain
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-9`; evidence [synth-stage-models-9](research/synth-stage-models-9.md))
+- **Context:** `kFltType = 2` (`Ladder24`, 68 of 442 filter layers) maps to `0x12549D`, the last filter stage without a model; the Rust engine approximated it with the four-pole low pass `Lp4` (ASSUMED).
+- **Decision:** Port the stage (`synth/fw_ladder.rs`, `FwFilterType::Ladder`) and select it for `Ladder24` in the strip chain when `strip_stages` (`--synth-stages`) is on; `FilterEngine::Firmware` without the strip chain keeps `Lp4`. The panel cutoff reaches the stage as the table position whose section pole equals `exp(-2 atan R)`.
+- **Why:** The stage equals the oracle word for word (1840 of 1840), so the DSP is verified; only the strip word to position law is not (the stage reads a log-frequency position, the other stages the tangent coefficient `R`), hence ASSUMED and opt-in per D22.
+- **Alternatives:** Keep `Lp4` for `Ladder24` (rejected: different shape and resonance); feed `R` straight to the position word (rejected: the table runs 8 Hz to 28 kHz over `0..0.95`, so 6 kHz would play near 400 Hz); make the stage the default outside `--synth-stages` (rejected until the ARM cutoff word for type 2 is traced).
+- **Impact:** Ladder24 layers change sound under the firmware strip chain with stage oscillators (the default of `SynthLayer::new`, off in `legacy_all`); the test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
+D49. layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay
+
+`feat/organ-k-derivation`; [piano-receiver-scale](research/piano-receiver-scale.md) s6, `tools/arm_master_level.py modes`)
+D48 left layer mode flag `[mixer + scene + 0x5B8]` FX bus scale cells (2.5, 3.25, 0.25) open candidates 13.4 dB between organ `K 2.8` piano reading, plus source volume sender.
+(1) Record flag Reverb GLOBAL state (`0xC010E36C`, edit id `0x1B9`) sender's slot map: Reverb GLOBAL organ 1.6 (PNO words), piano 1.0 (SMP stream rows), synth 1.0; on piano 2.5 synth 3.25; cells 1.3, 1.14, 0.25 are reachable from layer slots (`layer_scale_cell`). (2) Add verified opt-in: `--organ-level chain` (`OutputLevel::Chain`, `1.6 * 0.3732 0.597`) `--firmware-piano-chain` (`PianoLayer::receiver_chain_scale`, `4 G 0.7464`). (3) every default, `K 2.8` `render_hash`.
+cells cannot close gap (they apply global reverb). clips are 14 15 dB (B3, Vox) 10 12 dB (Velvet Grand) on same video, verified end end (D22).
+Lower `K` 1.75 apply 1.6 same 25 dB piano / organ spread remains clips decide sum, words); flip piano 0.7464 +10 dB on Velvet Grand clip).
+Two new switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults `render_hash` unchanged. OQ20 OQ24 narrow: flag cells are resolved; open are 25 dB spread, rows `0..4` `0xB2FF0` family writers, White Grand / DSoundman clips chain.
+
 ### D53. SHAPE waves 3 and 4 are modelled and wired opt-in; SUPER 2..4 waits for its wavetable
 
 - **Status:** accepted 2026-11-14
@@ -568,17 +589,23 @@ Ladder24 layers change sound strip chain oscillators (the default `SynthLayer::n
 - **Why:** SHAPE 3 and 4 equal the oracle word for word (320 of 320 each). `0x124985` reads a wavetable at `0x08030000` and a PM table at `0x9631F` that the oracle only has from the ARM boot log, and the boot log does not carry the wavetable, so a port would play silence or an invented table.
 - **Alternatives:** Port `0x124985` with a synthetic band-limited table (rejected: it would be a sound design guess presented as a firmware stage); commit a poked random table (rejected: no musical content).
 - **Impact:** SHAPE waves 3 and 4 change sound under the firmware strip chain with stage oscillators; defaults and `render_hash` of the legacy chain are unchanged. ANALOG coverage 304 of 312; OQ22 narrows.
-D49. layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay
 
-`feat/organ-k-derivation`; [piano-receiver-scale](research/piano-receiver-scale.md) s6, `tools/arm_master_level.py modes`)
-D48 layer mode flag `[mixer + scene + 0x5B8]` bus scale cells (2.5, 3.25, 0.25) open candidates 13.4 dB between organ `K 2.8` reading, plus source volume sender.
-Record flag Reverb GLOBAL state (`0xC010E36C`, edit id `0x1B9`) sender's slot map: Reverb GLOBAL organ 1.6 (PNO words), 1.0 (SMP stream rows), synth 1.0; 2.5 synth 3.25; cells 1.3, 1.14, 0.25 reachable layer slots (`layer_scale_cell`). Add verified opt-in: `--organ-level chain` (`OutputLevel::Chain`, `1.6 * 0.3732 0.597`) `--firmware-piano-chain` (`PianoLayer::receiver_chain_scale`, `4 G 0.7464`). every default, `K 2.8` `render_hash`.
-cells cannot close gap (they apply global reverb). clips 14 15 dB (B3, Vox) 10 12 dB (Velvet Grand) same video, verified end end (D22).
-Lower `K` 1.75 apply 1.6 same 25 dB organ spread remains clips decide sum, words); flip 0.7464 +10 dB Velvet Grand clip).
-Two switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults OQ20 OQ24 narrow: flag cells resolved; open 25 dB spread, `0..4` `0xB2FF0` family writers, White Grand DSoundman clips D51. Ladder24 position strip table value `R`; host keeps pole-frequency law
+### D54. The Ladder24 stage position is the strip table value `R`; the host keeps the pole-frequency law
 
-`feat/synth-stages-rest-10`; [synth-stage-models-10](research/synth-stage-models-10.md) s1)
-D50 strip position law `0x12549D` ASSUMED cutoff `kFltType = 2` was traced.
-Record that reads same `R` every filter (`LadderCoefs::from_strip_r`) that cutoff sender `0xC01C56CC` independent knob law `i = knob 52` (Q16.16 values, `tools/arm_synth_freq_law.py`). Keep `LadderCoefs::from_r` (host Hz = pole frequency) - **Why:** The coefficient words equal the oracle for 14 of 14 lane sets with the real pass control block; the pole frequency is exponential in the knob (74 Hz to 7.8 kHz), which is what a Hz fed engine expects, while feeding the tangent `R` of a host cutoff would play the ladder two decades low (ten synth tests broke in the experiment).
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-10`; evidence [synth-stage-models-10](research/synth-stage-models-10.md) s1)
+- **Context:** D52 left the strip word to position law of `0x12549D` ASSUMED because the ARM cutoff word for `kFltType = 2` was not traced.
+- **Decision:** Record that the stage reads the same `R` as every filter stage (`LadderCoefs::from_strip_r`) and that the ARM cutoff sender `0xC01C56CC` is type independent with the knob law `i = knob - 52` (Q16.16 values, `tools/arm_synth_freq_law.py`). Keep `LadderCoefs::from_r` (host Hz = pole frequency) in the voice chain.
+- **Why:** The coefficient words equal the oracle for 14 of 14 lane sets with the real pass control block; the pole frequency is exponential in the knob (74 Hz to 7.8 kHz), which is what a Hz fed engine expects, while feeding the tangent `R` of a host cutoff would play the ladder two decades low (ten synth tests broke in the experiment).
 - **Alternatives:** Feed `R` of the host cutoff into the position (rejected: pole near 20 Hz for 2 kHz); wait for a knob driven strip chain (rejected: the finding is useful now).
 - **Impact:** No rendering change (`from_strip_r` is not wired). OQ22 narrows; the `R = tan` reading of the other filter types is flagged for a hardware sweep.
+
+### D55. Edit value cells are Q16.16; the knob laws are captured; the envelope rate index from the knob is opt-in
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/edit-capture-q16`; evidence [synth-knob-laws](research/synth-knob-laws.md))
+- **Context:** [synth-stage-models-10](research/synth-stage-models-10.md) s1 found that the `kFltFreq` handler reads a Q16.16 cell, so the first edit capture (plain integers) saw position 0 and called the id value independent. The synth capture, the FX small-range ids and the organ / piano capture had to be audited, and the knob to strip word maps (ASSUMED) re-derived.
+- **Decision:** (1) Capture with `tools/arm_edit_knobs.py` (both encodings, every value of ranges up to 128 steps) and commit the derived laws ([data/synth-knob-laws.csv](research/data/synth-knob-laws.csv), [data/fx-small-id-laws.csv](research/data/fx-small-id-laws.csv)). (2) Add `synth/fw_knob_laws.rs` (rate index = knob - 64, cutoff word, resonance / osc control word) with every-knob tests against the CSV. (3) Wire the rate index opt-in as `--synth-knob-laws` (`SynthLayer::knob_laws`, `SynthLayerDecoded::knobs`); defaults stay. (4) Renumber the Ladder24 decisions of the stage branches to D52 / D54 (D50, D51 and D53 were taken by FX Mod 1, the CBIN checksum and SHAPE 3 / 4) and restore their text, which the merge into `main` had garbled.
+- **Why:** The knob maps are VERIFIED by run for every knob and they verify the ASSUMED pass length of two SY frames (attack time equals the display at the first knob of each plateau) and show the displayed decay time is `ln 100` time constants; the clip set cannot be re-scored here (the harness examples were removed from the tree), so the D22 bar is not shown for the new path.
+- **Alternatives:** Flip the strip chain to knob indices now (rejected: no clip evidence, decay constant 0.217 against the fitted 0.18); wire the cutoff word (rejected: the tangent reading of `R` disagrees with the displayed Hz, needs a hardware sweep); re-capture only the synth ids (rejected: `kCmpResponse`, `kDlyFbkFilt` and `kDlyFbkPingPong` were blind too).
+- **Impact:** One new opt-in switch (CLI, `FirmwareOptions`); defaults and `render_hash` unchanged. OQ22 narrows (knob to rate index closed, cutoff reading and P block open), TD-11 notes the opt-in; [fx-contexts](research/fx-contexts.md) s7 corrected for `kCmpResponse` and the delay feedback ids.

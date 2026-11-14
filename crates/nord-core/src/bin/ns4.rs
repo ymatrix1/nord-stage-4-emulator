@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 
 const SAMPLE_RATE: f32 = 48_000.0;
-const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--synth-chain legacy|strip] [--b3-tail on|off] [--farfisa-processor on|off] [--amp-path engine|firmware] [--rotary-drive engine|unity|scaled] [--firmware-fx] [--firmware-reverb] [--legacy-piano-level] [--firmware-routing] [--measured-laws] [--firmware-all|--legacy-all]...";
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--synth-chain legacy|strip] [--b3-tail on|off] [--farfisa-processor on|off] [--amp-path engine|firmware] [--rotary-drive engine|unity|scaled] [--firmware-fx] [--firmware-reverb] [--firmware-fx-ports delay-laws,delay-time,reverb-mix,reverb,compressor,mod1,mod2,eq] [--legacy-piano-level] [--firmware-routing] [--measured-laws] [--firmware-all|--legacy-all]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
