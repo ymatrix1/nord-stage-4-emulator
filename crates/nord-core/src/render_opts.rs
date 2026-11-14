@@ -89,6 +89,14 @@ pub fn apply_b3_tail(engine: &mut Stage4Engine, tail: Option<bool>) {
     }
 }
 
+/// Switches the Farfisa processor stage of both organ layers (`None` leaves the engine untouched).
+pub fn apply_farfisa_processor(engine: &mut Stage4Engine, on: Option<bool>) {
+    if let Some(on) = on {
+        engine.organ_a.farfisa_processor = on;
+        engine.organ_b.farfisa_processor = on;
+    }
+}
+
 /// Selects the amp path of every layer (`Some(true)` firmware drive stage and cabinet, the
 /// default; `Some(false)` the engine drive and RBJ cabinet; `None` leaves the engine untouched).
 pub fn apply_amp_path(engine: &mut Stage4Engine, firmware: Option<bool>) {
@@ -205,6 +213,9 @@ pub struct FirmwareOptions {
     pub synth_chain: Option<SynthChain>,
     /// `--b3-tail on|off` (`None` = the `B3Wheels` default, tail on).
     pub b3_tail: Option<bool>,
+    /// `--farfisa-processor on|off` (`None` = off): the Farfisa key-down weights and measured line
+    /// gain of the processor `0x122B85` on `--tone-source farfisa`-style `FarfisaWheels` layers.
+    pub farfisa_processor: Option<bool>,
     /// `--firmware-fx`: every `FirmwareFx` port on every FX chain.
     pub firmware_fx: bool,
     /// `--firmware-reverb`: only the firmware Spring reverb (`FirmwareFx::reverb`) on every chain,
@@ -252,6 +263,7 @@ impl Default for FirmwareOptions {
             filter_engine: None,
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
+            farfisa_processor: None,
             firmware_fx: false,
             firmware_reverb: false,
             piano_firmware_level: true,
@@ -290,6 +302,7 @@ impl FirmwareOptions {
             filter_engine: Some(FilterEngine::Firmware),
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
+            farfisa_processor: None,
             firmware_fx: true,
             firmware_reverb: false,
             piano_firmware_level: true,
@@ -336,6 +349,9 @@ impl FirmwareOptions {
         }
         if let Some(v) = value("--b3-tail") {
             o.b3_tail = Some(parse_on_off("--b3-tail", v)?);
+        }
+        if let Some(v) = value("--farfisa-processor") {
+            o.farfisa_processor = Some(parse_on_off("--farfisa-processor", v)?);
         }
         o.firmware_fx |= has("--firmware-fx");
         o.firmware_reverb |= has("--firmware-reverb");
@@ -404,6 +420,7 @@ impl FirmwareOptions {
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
         apply_b3_tail(engine, self.b3_tail);
+        apply_farfisa_processor(engine, self.farfisa_processor);
         apply_leslie_firmware(
             engine,
             self.leslie_firmware,
@@ -541,6 +558,12 @@ impl FirmwareOptions {
         }
         if let Some(b) = self.b3_tail {
             parts.push(format!("b3-tail={}", if b { "on" } else { "off" }));
+        }
+        if let Some(b) = self.farfisa_processor {
+            parts.push(format!(
+                "farfisa-processor={}",
+                if b { "on" } else { "off" }
+            ));
         }
         if self.firmware_fx {
             parts.push("fx".into());
@@ -750,6 +773,7 @@ mod tests {
         let on = FirmwareOptions {
             measured_laws: true,
             b3_tail: Some(false),
+            farfisa_processor: None,
             ..FirmwareOptions::firmware_all()
         };
         on.apply_exact(&mut e);
@@ -861,6 +885,7 @@ mod tests {
         let o = FirmwareOptions {
             tone_source: Some(ToneWheelSource::B3Wheels),
             b3_tail: Some(false),
+            farfisa_processor: None,
             ..Default::default()
         };
         let mut e = Stage4Engine::new(48_000.0);
@@ -894,6 +919,19 @@ mod tests {
         assert!(FirmwareOptions::legacy_all()
             .summary()
             .contains("legacy-piano"));
+    }
+
+    #[test]
+    fn farfisa_processor_switch_parses_applies_and_describes() {
+        let o = FirmwareOptions::from_args(&args(&["--farfisa-processor", "on"])).unwrap();
+        assert_eq!(o.farfisa_processor, Some(true));
+        assert!(o.summary().contains("farfisa-processor=on"));
+        let mut e = Stage4Engine::new(48_000.0);
+        apply_farfisa_processor(&mut e, None);
+        assert!(!e.organ_a.farfisa_processor);
+        apply_farfisa_processor(&mut e, Some(true));
+        assert!(e.organ_a.farfisa_processor && e.organ_b.farfisa_processor);
+        assert!(parse_on_off("--farfisa-processor", "x").is_err());
     }
 
     #[test]
