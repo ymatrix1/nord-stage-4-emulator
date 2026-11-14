@@ -45,7 +45,7 @@ const ROTARIES: [Choice<RotaryDrive>; 3] = [
     (RotaryDrive::Unity, "Unity", "tanh(g x) / g, EMPIRICAL"),
     (RotaryDrive::Scaled, "Scaled /10", "drive / 10, EMPIRICAL"),
 ];
-const ORGAN_LEVELS: [Choice<OutputLevel>; 3] = [
+const ORGAN_LEVELS: [Choice<OutputLevel>; 4] = [
     (
         OutputLevel::ModelDefault,
         "Model default",
@@ -56,6 +56,11 @@ const ORGAN_LEVELS: [Choice<OutputLevel>; 3] = [
         OutputLevel::Firmware,
         "Firmware",
         "swell word, EMPIRICAL gain K",
+    ),
+    (
+        OutputLevel::Chain,
+        "Verified chain",
+        "word 1.6 x FX path 0.3732, VERIFIED (13 dB under the clips)",
     ),
 ];
 const CHAINS: [Choice<Option<SynthChain>>; 2] = [
@@ -174,6 +179,7 @@ pub fn show(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
                 group(ui, "Piano", false, |ui| {
                     dropdown(ui, &info::PIANO_LEVEL, &mut o.piano_firmware_level, &LEVELS);
                     checkbox(ui, &info::PIANO_BUS, &mut o.piano_bus_scale);
+                    checkbox(ui, &info::PIANO_CHAIN, &mut o.piano_chain_scale);
                 });
                 group(ui, "FX", false, |ui| {
                     dropdown(ui, &info::AMP, &mut o.amp_path, &AMPS);

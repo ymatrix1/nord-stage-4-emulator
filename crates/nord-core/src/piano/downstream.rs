@@ -61,6 +61,17 @@ pub fn sample_scale(has_stroke: bool, firmware_bus: bool) -> f32 {
     }
 }
 
+/// Per-voice scale including the verified receiver path: `chain` selects
+/// [`receiver_path_sample_scale`] for stroke voices, otherwise [`sample_scale`].
+#[inline]
+pub fn voice_scale(has_stroke: bool, firmware_bus: bool, chain: bool) -> f32 {
+    if chain && has_stroke {
+        receiver_path_sample_scale()
+    } else {
+        sample_scale(has_stroke, firmware_bus)
+    }
+}
+
 /// Q31 gain word of a voice from its Q23 level (`gain = level_q23 / 2^23` as a float, written
 /// to the SMP record; the SMP's `SSF` multiplier is that float times `2^31`).
 ///
@@ -285,6 +296,16 @@ mod tests {
         assert!((bus_word_dac_fraction(w) - 0.1866).abs() < 1e-6);
         // a full-scale unity stroke (2^30, ring 2.0) reads 0.7464 of 2^31 through the receiver path
         assert!((bus_word_dac_fraction(1 << 30) - 0.7464).abs() < 1e-6);
+    }
+
+    #[test]
+    fn voice_scale_takes_the_receiver_path_for_strokes_only() {
+        let g = receiver_path_sample_scale();
+        assert_eq!(voice_scale(true, false, true), g);
+        assert_eq!(voice_scale(true, true, true), g, "chain wins over the bus");
+        assert_eq!(voice_scale(false, false, true), SYNTHETIC_VOICE_SCALE);
+        assert_eq!(voice_scale(true, false, false), LEGACY_SAMPLE_SCALE);
+        assert_eq!(voice_scale(true, true, false), FIRMWARE_SAMPLE_SCALE);
     }
 
     #[test]
