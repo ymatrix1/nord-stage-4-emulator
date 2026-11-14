@@ -114,8 +114,12 @@ pub(super) const RINGS: [Choice<RingAdvance>; 3] = [
     ),
 ];
 pub(super) const KERNELS: [Choice<bool>; 2] = [
-    (false, "Ratio (default)", "ASSUMED ratio rule"),
-    (true, "Key", "firmware key rule, key field ASSUMED"),
+    (false, "Ratio", "ASSUMED ratio rule"),
+    (
+        true,
+        "Key (default)",
+        "firmware key rule, key field ASSUMED",
+    ),
 ];
 pub(super) const PITCHES: [Choice<bool>; 2] = [
     (false, "Equal (default)", "exact 2^(n/12)"),

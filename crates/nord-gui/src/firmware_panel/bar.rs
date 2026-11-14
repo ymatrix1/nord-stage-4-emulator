@@ -168,6 +168,9 @@ fn organ_row(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
             ui.add_enabled_ui(b3, |ui| {
                 dropdown(ui, &info::B3_TAIL, &mut next.b3_tail, &TAILS);
             });
+            let mut bass = next.b3_bass_processor == Some(true);
+            checkbox(ui, &info::B3_BASS, &mut bass);
+            next.b3_bass_processor = bass.then_some(true);
             let mut far = next.farfisa_processor == Some(true);
             checkbox(ui, &info::FARFISA, &mut far);
             next.farfisa_processor = far.then_some(true);

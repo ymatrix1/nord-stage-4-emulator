@@ -179,6 +179,14 @@ pub const FARFISA: SwitchInfo = sw(
     Assumed,
     "Key-down weights and measured line gain of the Farfisa processor 0x122B85 (Farfisa wheels source; partial).",
 );
+/// B3 Bass processor (`--b3-bass-processor`).
+pub const B3_BASS: SwitchInfo = sw(
+    "Organ",
+    "--b3-bass-processor",
+    "B3 Bass processor",
+    Mixed,
+    "B3 Bass key stage (generator weights, window words, measured line gain of 0x122296); needs B3 wheels on a B3 Bass layer, replaces the B3 tail.",
+);
 /// Firmware Leslie (`--leslie`).
 pub const LESLIE: SwitchInfo = sw(
     "Organ",
@@ -217,7 +225,7 @@ pub const SAMPLE_KERNEL: SwitchInfo = sw(
     "--sample-kernel",
     "Sample kernel",
     Mixed,
-    "SAMPLES oscillator 12-tap kernel pick: firmware key rule (run VERIFIED, key field ASSUMED) or the ASSUMED ratio rule.",
+    "SAMPLES oscillator 12-tap kernel pick: firmware key rule (default; run VERIFIED, key field ASSUMED) or the ASSUMED ratio rule (--sample-kernel ratio).",
 );
 /// Sample pitch (`--sample-pitch`).
 pub const SAMPLE_PITCH: SwitchInfo = sw(
@@ -310,10 +318,11 @@ pub const ROUTING: SwitchInfo = sw(
 );
 
 /// All switches in bar order.
-pub const ALL: [SwitchInfo; 30] = [
+pub const ALL: [SwitchInfo; 31] = [
     TONE,
     B3_TAIL,
     FARFISA,
+    B3_BASS,
     ROTARY,
     ORGAN_LEVEL,
     LESLIE,

@@ -37,7 +37,7 @@ opt-in field of `FirmwareOptions` has a control:
 
 | Group | Controls |
 |---|---|
-| Organ | Source, B3 tail (enabled with B3 wheels), Farfisa processor, Rotary drive, Level, Leslie (engine / firmware), Ring and Leslie gain (enabled with the firmware Leslie) |
+| Organ | Source, B3 tail (enabled with B3 wheels), B3 Bass processor, Farfisa processor, Rotary drive, Level, Leslie (engine / firmware), Ring and Leslie gain (enabled with the firmware Leslie) |
 | Piano | Level, SMP bus scale, Layer law |
 | Global | Firmware routing |
 | Synth | Chain, Stage oscillators, P table, Filter, Measured laws, Shape (checkbox + slider), Sample kernel, Sample pitch |
@@ -154,6 +154,7 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | `--tone-source` (Organ: Source) | `firmware` pipe bank VERIFIED vs SHARC oracle; `b3wheels` ladder VERIFIED 2.5e-11, per-key weights not modelled; `vox`, `farfisa` partial; `legacy` ASSUMED | MIXED per choice |
 | `--b3-tail on\|off` (Organ: B3 tail) | B3 processor-tail response (`docs/research/b3-vox-video-gap.md`) | EMPIRICAL |
 | `--rotary-drive engine\|unity\|scaled` (Organ: Rotary drive) | `tanh(g x)`, `tanh(g x)/g`, or drive/10 (`docs/research/b3-rotary.md`) | EMPIRICAL |
+| `--b3-bass-processor on\|off` (Organ: B3 Bass processor) | B3 Bass key stage (generator weights, window words, line gain of `0x122296`); replaces the B3 tail | MIXED |
 | `--farfisa-processor on\|off` (Organ: Farfisa processor) | Key-down weights and line gain of the Farfisa processor `0x122B85` (Farfisa wheels source; partial) | ASSUMED |
 | `--leslie firmware\|engine` (Organ: Leslie) | Firmware Leslie processor instead of the engine rotary (`docs/research/fx-leslie.md`) | MIXED (routine VERIFIED, ring EMPIRICAL) |
 | `--leslie-ring firmware\|advance\|frozen` (Organ: Ring) | History ring pointers of the firmware Leslie: advance (default), booted pass routine, first oracle state | EMPIRICAL |
@@ -162,7 +163,7 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | `--synth-chain legacy\|strip` (Synth: Chain) | Per-voice chain: firmware strip (default since D22, `docs/research/synth-validation.md`) or the classic engine chain; `--legacy-all` selects the classic chain | MIXED (partly VERIFIED) |
 | `--synth-stages` / `--no-synth-stages` (Synth: Stage oscillators) | Bit-exact firmware oscillator stages on the strip chain (noise, Shape Square, SUPER, MULTI, SHAPE SINE); on by default | MIXED (stages VERIFIED, voice weights ASSUMED) |
 | `--synth-p table\|fitted\|off\|g,w2,r2,shape,cutoff` (Synth: P table) | Per-wave oscillator level, cutoff factor and SHAPE word law fitted to hardware clips (`synth/p_table.rs`) | EMPIRICAL |
-| `--sample-kernel key\|ratio` (Synth: Sample kernel) | `SAMPLES` oscillator 12-tap kernel pick: firmware key rule or the ratio rule | MIXED (run VERIFIED, key field ASSUMED) |
+| `--sample-kernel key\|ratio` (Synth: Sample kernel) | `SAMPLES` oscillator 12-tap kernel pick: firmware key rule (default, D46) or the ratio rule | MIXED (run VERIFIED, key field ASSUMED) |
 | `--sample-pitch fw\|equal` (Synth: Sample pitch) | `SAMPLES` step from the ARM exponent tables or exact `2^(n/12)` | MIXED (law VERIFIED, root and rate ASSUMED) |
 | `--filter-engine zdf\|firmware` (Synth: Filter) | Firmware synth filter (`synth-engine.md`) | VERIFIED vs oracle |
 | `--measured-laws` (Synth: Measured laws) | 16-voice Super Saw, envelope depth, decay, pitch, vibrato (`audible-genius-synth-lessons.md`) | EMPIRICAL |

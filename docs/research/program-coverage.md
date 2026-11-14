@@ -237,70 +237,68 @@ Uses count a path once per layer or enabled FX unit that needs it; one layer or 
 | `synth.osc=Analog` | 193 | 314 | assumed | assumed | synth-engine: VA waveforms approximate the strip stages |
 | `synth.osc=Fm` | 25 | 38 | assumed | assumed | synth-engine: FM ratio index decoded, wave audio ASSUMED |
 | `synth.osc=Sample` | 119 | 215 | verified | verified | synth-engine: .nsmp4 PCM played through the verified 12-tap sinc kernels (kernel choice ASSUMED) |
+| `synth.sample.kernel=0` | 115 | 208 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=1` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=2` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=3` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=4` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=5` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
 | `synth.osc=Wavetable` | 12 | 14 | unmodelled | unmodelled | synth-engine: WAVE bank is a synthetic 64-table placeholder |
-| `synth.sample.kernel=0` | 115 | 208 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
-| `synth.sample.kernel=1` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
-| `synth.sample.kernel=2` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
-| `synth.sample.kernel=3` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
-| `synth.sample.kernel=4` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
-| `synth.sample.kernel=5` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
 
 | Configuration | verified | assumed | unmodelled |
 |---|---|---|---|
-| default | 1008 (15%) | 5656 (83%) | 119 (2%) |
-| firmware-all | 2623 (39%) | 4041 (60%) | 119 (2%) |
+| default | 1008 (18%) | 4373 (80%) | 119 (2%) |
+| firmware-all | 2623 (48%) | 2758 (50%) | 119 (2%) |
 
 Use-weighted: a path used by two layers counts twice. A `verified` row means the algorithm is firmware-verified, not that its parameters or the panel mapping are.
 
 ## 8. Render health
 
-- `default`: 384 of 384 rendered without panic; non-finite 0, silent 0, any clipped sample 36, clipping >= 0.1%: 9.
-- `firmware`: 384 of 384 rendered without panic; non-finite 0, silent 0, any clipped sample 41, clipping >= 0.1%: 9.
+- `default`: 384 of 384 rendered without panic; non-finite 0, silent 0, any clipped sample 34, clipping >= 0.1%: 9.
+- `firmware`: 384 of 384 rendered without panic; non-finite 0, silent 0, any clipped sample 41, clipping >= 0.1%: 8.
 
-Level difference firmware minus default (RMS, dB) over 384 programs: min -7.54, p10 -1.83, median 0.39, p90 2.79, max 18.39, mean 0.44.
+Level difference firmware minus default (RMS, dB) over 384 programs: min -7.34, p10 -1.46, median 0.41, p90 2.5, max 18.41, mean 0.53.
 
 ### Outliers
 
-Counts: panic 0, non-finite 0, silent 0, clipping 18, level jump 11.
+Counts: panic 0, non-finite 0, silent 0, clipping 17, level jump 10.
 
 **Clipping (top 30)**
 
 | entry | mode | peak | clip_fraction |
 |---|---|---|---|
-| Program/Bank D/Windhoek B3 II.ns4p | firmware | 1.0 | 0.135667 |
-| Program/Bank B/Burning Lead.ns4p | firmware | 1.0 | 0.114094 |
+| Program/Bank D/Windhoek B3 II.ns4p | firmware | 1.0 | 0.11037 |
 | Program/Bank D/Windhoek B3 II.ns4p | default | 1.0 | 0.09574 |
+| Program/Bank B/Burning Lead.ns4p | firmware | 1.0 | 0.091635 |
 | Program/Bank A/B3 Shade.ns4p | default | 1.0 | 0.037714 |
 | Program/Bank A/B3 Shade.ns4p | firmware | 1.0 | 0.021974 |
-| Program/Bank D/Vox Inna-Gadda.ns4p | firmware | 1.0 | 0.019714 |
 | Program/Bank B/Solo n Walk B3.ns4p | default | 1.0 | 0.019104 |
 | Program/Bank D/Door Knob.ns4p | default | 1.0 | 0.017057 |
+| Program/Bank D/Vox Inna-Gadda.ns4p | firmware | 1.0 | 0.011245 |
 | Program/Bank D/Vox Inna-Gadda.ns4p | default | 1.0 | 0.009443 |
 | Program/Bank B/Burning Lead.ns4p | default | 1.0 | 0.008812 |
 | Program/Bank C/LoFi Piano.ns4p | default | 1.0 | 0.008177 |
-| Program/Bank B/Q and A.ns4p | firmware | 1.0 | 0.004323 |
-| Program/Bank C/Vox Like Me.ns4p | firmware | 1.0 | 0.002406 |
+| Program/Bank B/Q and A.ns4p | firmware | 1.0 | 0.004365 |
+| Program/Bank C/Vox Like Me.ns4p | firmware | 1.0 | 0.00149 |
 | Program/Bank C/TapePiano AT.ns4p | default | 1.0 | 0.001396 |
 | Program/Bank A/Bubbles Mk I.ns4p | firmware | 1.0 | 0.00124 |
 | Program/Bank E/Cinema Rise.ns4p | firmware | 1.0 | 0.001146 |
 | Program/Bank C/Vox Like Me.ns4p | default | 1.0 | 0.001047 |
-| Program/Bank B/Solo n Walk B3.ns4p | firmware | 1.0 | 0.001 |
 
 **Level jumps (top 30)**
 
 | entry | rms_delta_db |
 |---|---|
-| Program/Bank C/Farfisa II.ns4p | 18.39 |
-| Program/Bank B/Fan Club Piano.ns4p | 9.22 |
-| Program/Bank D/16th Note Bass.ns4p | 8.73 |
-| Program/Bank A/Jazz Guitar II.ns4p | 8.64 |
-| Program/Bank E/Snappy D6.ns4p | 8.35 |
-| Program/Bank B/Wormhole Organ.ns4p | -7.54 |
-| Program/Bank C/Bounce Clav.ns4p | 7.53 |
-| Program/Bank C/LoFi Piano.ns4p | -7.47 |
+| Program/Bank C/Farfisa II.ns4p | 18.41 |
+| Program/Bank B/Fan Club Piano.ns4p | 10.65 |
+| Program/Bank C/Bounce Clav.ns4p | 9.86 |
+| Program/Bank D/16th Note Bass.ns4p | 8.67 |
+| Program/Bank E/Snappy D6.ns4p | 8.11 |
+| Program/Bank B/Wormhole Organ.ns4p | -7.34 |
 | Program/Bank A/B3 Old Forest.ns4p | -7.15 |
-| Program/Bank A/Dual Gates.ns4p | -6.51 |
-| Program/Bank F/OD Rock Bass.ns4p | 6.46 |
+| Program/Bank E/Sine Rain Pad.ns4p | -7.05 |
+| Program/Bank C/LoFi Piano.ns4p | -6.85 |
+| Program/Bank F/Time Warp Saw.ns4p | 6.39 |
 
 ## 9. Implications
 

@@ -85,21 +85,21 @@ fn apply_exact_round_trips_farfisa_sample_and_piano_law_switches() {
     let o = FirmwareOptions {
         farfisa_processor: Some(true),
         piano_layer_law: true,
-        sample_kernel_key: true,
+        sample_kernel_key: false,
         sample_pitch_fw: true,
         ..Default::default()
     };
     o.apply_exact(&mut e);
     assert!(e.organ_a.farfisa_processor && e.organ_b.farfisa_processor);
     assert!(e.piano_a.firmware_layer_law && e.piano_b.firmware_layer_law);
-    assert!(e.synth_c.sample_kernel_by_key && e.synth_a.sample_pitch_fw);
+    assert!(!e.synth_c.sample_kernel_by_key && e.synth_a.sample_pitch_fw);
     FirmwareOptions {
         farfisa_processor: Some(false),
         ..Default::default()
     }
     .apply_exact(&mut e);
     assert!(!e.organ_a.farfisa_processor && !e.piano_a.firmware_layer_law);
-    assert!(!e.synth_c.sample_kernel_by_key && !e.synth_a.sample_pitch_fw);
+    assert!(e.synth_c.sample_kernel_by_key && !e.synth_a.sample_pitch_fw);
 }
 
 #[test]
@@ -114,4 +114,19 @@ fn leslie_ring_names_invert_the_parser() {
         }),
         "custom"
     );
+}
+
+#[test]
+fn apply_exact_switches_the_b3_bass_processor_on_and_off() {
+    let mut e = Stage4Engine::new(48_000.0);
+    let on = FirmwareOptions {
+        b3_bass_processor: Some(true),
+        ..Default::default()
+    };
+    on.apply_exact(&mut e);
+    assert!(e.organ_a.b3_bass_processor_on() && e.organ_b.b3_bass_processor_on());
+    on.apply_exact(&mut e);
+    assert!(e.organ_a.b3_bass_processor_on(), "repeat keeps it on");
+    FirmwareOptions::default().apply_exact(&mut e);
+    assert!(!e.organ_a.b3_bass_processor_on() && !e.organ_b.b3_bass_processor_on());
 }

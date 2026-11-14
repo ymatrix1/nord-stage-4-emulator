@@ -37,6 +37,7 @@ pub fn copy_engine(dst: &mut FirmwareOptions, src: &FirmwareOptions, engine: Eng
             dst.tone_source = src.tone_source;
             dst.b3_tail = src.b3_tail;
             dst.farfisa_processor = src.farfisa_processor;
+            dst.b3_bass_processor = src.b3_bass_processor;
             dst.rotary_drive = src.rotary_drive;
             dst.organ_level = src.organ_level;
             dst.leslie_firmware = src.leslie_firmware;

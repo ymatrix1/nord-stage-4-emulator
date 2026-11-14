@@ -241,7 +241,7 @@ mod tests {
             leslie_ring: RingAdvance::FROZEN,
             farfisa_processor: Some(true),
             piano_layer_law: true,
-            sample_kernel_key: true,
+            sample_kernel_key: false,
             sample_pitch_fw: true,
             ..FirmwareOptions::default()
         });
@@ -252,7 +252,7 @@ mod tests {
         let f = engine.fx_chains[0].firmware_fx;
         assert!(f.reverb && f.mod1 && f.mod2 && f.eq && f.compressor && !f.delay_laws);
         assert!(engine.organ_a.leslie_fw.is_some() && engine.organ_b.farfisa_processor);
-        assert!(engine.piano_a.firmware_layer_law && engine.synth_b.sample_kernel_by_key);
+        assert!(engine.piano_a.firmware_layer_law && !engine.synth_b.sample_kernel_by_key);
         assert!(engine.synth_c.sample_pitch_fw);
         panel.opts = FirmwareOptions::default();
         panel.push(&handle);
@@ -262,7 +262,7 @@ mod tests {
             nord_core::fx::FirmwareFx::DEFAULT
         );
         assert!(engine.organ_a.leslie_fw.is_none() && !engine.organ_b.farfisa_processor);
-        assert!(!engine.piano_a.firmware_layer_law && !engine.synth_b.sample_kernel_by_key);
+        assert!(!engine.piano_a.firmware_layer_law && engine.synth_b.sample_kernel_by_key);
     }
 
     #[test]
