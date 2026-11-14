@@ -189,7 +189,7 @@ fn store(ui: &ProgramUi) -> OledText {
         return OledText {
             big: "STORE PROGRAM AS".into(),
             sub: marked,
-            rows: vec![format!("Category: {}", ed.category_label())],
+            rows: vec![format!("Cat: {}", ed.category_label())],
             soft: ui.screen.soft_labels(),
         };
     }
@@ -198,10 +198,17 @@ fn store(ui: &ProgramUi) -> OledText {
         Some(StoreTarget::Bank(l)) => (l.label(), name_at(ui, l)),
         None => (String::new(), String::new()),
     };
+    // VERIFIED: hardware lists the name now at the target (`<empty>` when unused) and then
+    // `As: <name>` (piano-pad video, 5:40-5:45).
+    let existing = if existing.is_empty() {
+        super::nav::EMPTY_NAME.to_string()
+    } else {
+        existing
+    };
     OledText {
         big: "STORE PROGRAM TO".into(),
         sub: target,
-        rows: vec![ui.store.editor.name(), format!("Replaces: {existing}")],
+        rows: vec![existing, format!("As: {}", ui.store.editor.name())],
         ..Default::default()
     }
 }
@@ -258,6 +265,18 @@ fn preset(ui: &ProgramUi, kind: PresetKind, single: bool) -> OledText {
     }
 }
 
+/// Layers a Layer Init of each section would reset, as the display prints them above the soft
+/// buttons: Organ always `AB`, Piano and Synth the focused layer.
+fn layer_init_letters(focus: LayerId) -> String {
+    let piano = if focus == LayerId::PianoB { 'B' } else { 'A' };
+    let synth = match focus {
+        LayerId::SynthB => 'B',
+        LayerId::SynthC => 'C',
+        _ => 'A',
+    };
+    format!("Organ AB  Piano {piano}  Synth {synth}")
+}
+
 /// Compose the text for the current screen.
 pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
     let t = |big: &str, sub: String, rows: Vec<String>| OledText {
@@ -301,10 +320,13 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
             .into(),
             Vec::new(),
         ),
+        // VERIFIED: title, prompt and the per-section layer letters (`AB`, `A`, `A`) above the
+        // All / Organ / Piano / Synth soft buttons (soft-piano video `NVMtX0epXog` 1:16,
+        // piano-pad video `hR31DQrxfT4` 1:02). PAGE picking the layer is emulator-only.
         Screen::LayerInit => t(
             "LAYER INIT",
-            format!("Layer: {}", layer_label(ui.focus)),
-            vec!["PAGE picks the layer".into()],
+            "Press to initialize".into(),
+            vec![layer_init_letters(ui.focus), "PAGE picks the layer".into()],
         ),
         Screen::Copy => t(
             "MON/COPY",
@@ -388,6 +410,20 @@ mod tests {
     }
 
     #[test]
+    fn layer_init_screen_matches_the_hardware_prompt_and_letters() {
+        let mut u = ProgramUi::default();
+        u.screen = Screen::LayerInit;
+        u.focus = LayerId::SynthC;
+        let t = compose(&u, &sum());
+        assert_eq!(t.big, "LAYER INIT");
+        assert_eq!(t.sub, "Press to initialize");
+        assert_eq!(t.rows[0], "Organ AB  Piano A  Synth C");
+        assert_eq!(t.soft, ["All", "Organ", "Piano", "Synth"]);
+        u.focus = LayerId::PianoB;
+        assert_eq!(compose(&u, &sum()).rows[0], "Organ AB  Piano B  Synth A");
+    }
+
+    #[test]
     fn store_screens_show_target_and_name_cursor() {
         let mut u = ProgramUi::default();
         u.title = "Rusty".into();
@@ -395,11 +431,14 @@ mod tests {
         let t = compose(&u, &sum());
         assert_eq!(t.big, "STORE PROGRAM AS");
         assert!(t.sub.starts_with("[R]usty"), "{}", t.sub);
-        assert_eq!(t.soft, ["ABC", "Cat", "Del", "Ins"]);
+        assert_eq!(t.soft, ["Abc", "Cat", "Del", "Ins"]);
+        assert_eq!(t.rows[0], "Cat: None");
         u.store_press();
         let t = compose(&u, &sum());
         assert_eq!(t.big, "STORE PROGRAM TO");
         assert_eq!(t.sub, "A:11");
+        // Unused target: `<empty>`, then the name that will be stored.
+        assert_eq!(t.rows, ["<empty>", "As: Rusty"]);
     }
 }
 
