@@ -44,12 +44,14 @@ pub(super) fn taps_for(kind: u8) -> Option<&'static [f32; LEN]> {
     }
 }
 
-/// Capacity of the linear history of one channel.
-const BUF: usize = 2 * LEN;
-
 /// Samples kept when the buffer is full and its newest part moves to the start: the `LEN - 1`
-/// before a sample plus three more, so that a group of four frames never loses its history.
-const KEEP: usize = LEN + 3;
+/// before a sample plus four more, so that a group of four frames never loses its history.
+const KEEP: usize = LEN + 4;
+
+/// Capacity of the linear history of one channel: `KEEP` plus room for 64 new samples, so the
+/// move happens every 64 frames (a few floats per frame) and the cabinet stays small (it lives
+/// inside every FX chain, and the engine is built by value in debug-build tests).
+const BUF: usize = KEEP + 64;
 
 /// Start value of `Iterator::sum` for floats (the sums below keep that order and start).
 const SUM_START: f32 = -0.0;
