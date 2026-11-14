@@ -53,6 +53,26 @@ The real stage is less bright than the saw placeholder when it runs as one oscil
 
 Stay opt-in. Oracle exact: met for this stage (section 3) and for the envelope and filter words ([synth-strip-path](synth-strip-path.md) s3). Video presence within about 3 dB: **failed** (-9.0 dB with the placeholder, -12.3 dB with the stage at the idle shape). RMS within about 3 dB: **failed** (+3.8 / +4.2 dB). `render_hash` unchanged.
 
+## 6. More stages (same skeleton, same 40-bit model)
+
+The oscillator stages share one skeleton: pitch and two ratios give two increments, a helper produces four samples per oscillator, the two lanes and two oscillators are mixed with the `P` weights and scaled by `P[16]`. `mix_lanes` in `tools/synth_wave_model.py` is that common part.
+
+| Stage | ANALOG waves (names from the ns4decode map, category / wave) | Helper | Oracle result |
+|---|---|---|---|
+| `0x1215FB` | PURE (0, 2) saw: the most common wave of the factory programs (108 layers) | `0x12501F`: falling band-limited saw `-amp g (xo - copysign(w^2, xo))`, `w = 1 - min(1, \|xf\| 0.5 / a)` | `stage_saw`: 320 of 320 words equal (`--stage 0x1215FB`) |
+| `0x121B99` | PURE (0, 3..5) square / pulse 33 / pulse 10 | `0x1250C9`: `M0 - g saw(ph) + g saw(ph - off)` with `off = 2 DM(-8, I1)` (one word for both lanes, `0xC15AE` for channel 0; `M0` = 0) | `stage_pulse`: 320 of 320 words equal (`--stage 0x121B99`) |
+| `0x1212D3` | SHAPE (3, 0) Shape Triangle | `0x1251D4` parabola difference | 320 of 320 (section 1) |
+
+Six recorded oracle cases per new stage are in [data/synth-stage-oracle-cases.json](data/synth-stage-oracle-cases.json). Not modelled: PURE sine (`0x120CD0`) and triangle (`0x121183`), SUB OSC, SYNC, the other SHAPE waves (Shape Saw `0x12169D` is the most common wave of the factory set, 182 layers), SHAPE SINE, MULTI, SUPER, MISC.
+
+## 7. Preset category / wave against the edit-id domain (VERIFIED by range)
+
+The harness grid ([synth-wave-stages](synth-wave-stages.md)) gives 7, 3, 9, 5, 7, 6, 5, 3 valid waves for ANALOG categories 0..7. The ns4decode name lists have exactly these sizes (PURE 7, SUB OSC 3, SYNC 9, SHAPE 5, SHAPE SINE 7, MULTI 6, SUPER 5, MISC 3). The decoded `.ns4p` layers agree: over the 384 factory programs, all 578 ANALOG layers have `(osc_category, osc_wave)` inside that table, and every category reaches its last wave index (PURE 6, SYNC 8, SHAPE 4, SHAPE SINE 5, ...). So the preset fields and the edit ids are the same domain. Smooth Lead is SHAPE wave 0 ("Shape Triangle"), which matches the triangle-like waveform of the stage at the default shape. Check: `python` over `ns4 inspect --json` of `factory_programs/Program/*/*.ns4p` (scratch script, not committed).
+
+## 8. The program words stay open
+
+The P block (`P[-32]`, `P[-30]` ratios, `P[-14..-10]` weights, `P[16]` gain) and the shape words `DM(17, I2)`, `DM(19, I2)` are not derived from the strip words by the ORG or PNO core 2 pass of the harness: poking each of the 62 words of strip 0 and the 32 common words changes only the pitch word (strip word 2, common word 0). The pass installs only `0x12082F` / `0x120C68` from strip words 0 / 1, and no stage in slot 0, so the real device must reach these words through a path the oracle pass does not run (the apply flag `DM(0xC136C)`, the setup routine `0x120300`, which now runs without a fault). A loaded program in the ARM harness only produces the ARM side messages (controller bytes), not the DSP-side words. Capturing them needs the DSP-side installer, not more ARM work.
+
 ## Implications
 
 - The SHAPE category is a morphing parabola-difference oscillator (a triangle to saw-like family), not a triangle and not the saw helper: the decoder placeholder is wrong in kind. The stage, bit exact, is available (`SynthLayer::strip_shape`).
@@ -60,6 +80,6 @@ Stay opt-in. Oracle exact: met for this stage (section 3) and for the envelope a
 
 ## Follow-ups
 
-1. Capture the program words the ARM computes for Smooth Lead (needs a loaded program in the ARM harness) and set ratios, weights and shape.
-2. Model the other stages of [synth-wave-stages](synth-wave-stages.md) the same way (SAW `0x1215FB`: two saw helper calls; SQUARE / PULSE `0x121B99`; SUB; SYNC); the 40-bit register model and the oracle frame are reusable.
-3. Confirm that the preset category / wave fields equal the edit-id values on a decoded program with a known wave (not done here; still ASSUMED).
+1. Find the DSP-side path that builds the P block and the shape words from the controller words (section 8): run the apply flag / setup routine `0x120300` chain in `sharc-org` with the strip and controller words of a program, then set ratios, weights and shape.
+2. Model the remaining stages of [synth-wave-stages](synth-wave-stages.md) (sine, triangle, SUB OSC, SYNC, Shape Saw / Square / Half Sine / Parabolic, SHAPE SINE, MULTI, SUPER, MISC) with `mix_lanes` and the 40-bit helpers.
+3. Port the saw and pulse stages to Rust as two-oscillator modules once the weights are known (the single-oscillator saw already exists as `SawModel::FirmwareSy`).

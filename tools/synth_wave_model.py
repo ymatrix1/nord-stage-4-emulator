@@ -293,6 +293,7 @@ class Lane:
     ratio2: int  # P[-30]
     weights: tuple  # (P[-14], P[-16], P[-12], P[-10]) = wA1, wB1, wA2, wB2
     out_gain: int  # P[16]
+    pulse: int = 0  # DM(-8, I1): pulse width offset word (stage `0x121B99`), doubled as an integer
 
 
 @dataclass
@@ -347,11 +348,8 @@ def oscillator(phase: int, inc: int, st_: Setup):
     return [sub(x, y) for x, y in zip(first, second, strict=True)], ph[3]
 
 
-def stage(lanes: list[Lane]):
-    """Both lanes: `(out_bits[lane][4], phase1[lane], phase2[lane])`."""
-    sts = [lane_setup(ln) for ln in lanes]
-    o1 = [oscillator(ln.phase1, s_.inc1, s_) for ln, s_ in zip(lanes, sts, strict=True)]
-    o2 = [oscillator(ln.phase2, s_.inc2, s_) for ln, s_ in zip(lanes, sts, strict=True)]
+def mix_lanes(lanes: list[Lane], o1, o2, scales: list[X]):
+    """Mixes of the two lanes (listing `0x242742..0x2428BA`): returns the stored output words."""
     out = []
     for i in (0, 1):
         me, other = lanes[i], lanes[1 - i]
@@ -366,6 +364,76 @@ def stage(lanes: list[Lane]):
                 mul(o2[1 - i][0][k], ld(other.weights[3])),
             )
             row.append(ld(st(m2)))
-        scale = mul(mul(ld(me.out_gain), sts[i].g), sts[i].inv_d)
-        out.append([st(mul(v, scale)) for v in row])
-    return out, [o[1] for o in o1], [o[1] for o in o2]
+        out.append([st(mul(v, scales[i])) for v in row])
+    return out
+
+
+def stage(lanes: list[Lane]):
+    """Stage `0x1212D3`, both lanes: `(out_bits[lane][4], phase1[lane], phase2[lane])`."""
+    sts = [lane_setup(ln) for ln in lanes]
+    o1 = [oscillator(ln.phase1, s_.inc1, s_) for ln, s_ in zip(lanes, sts, strict=True)]
+    o2 = [oscillator(ln.phase2, s_.inc2, s_) for ln, s_ in zip(lanes, sts, strict=True)]
+    scales = [mul(mul(ld(ln.out_gain), s_.g), s_.inv_d) for ln, s_ in zip(lanes, sts, strict=True)]
+    return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]
+
+
+def saw_helper(phase: int, inc: int, amp: X = ONE):
+    """Helper `0x12501F` (listing `0x24A03E..0x24A160`): four band-limited falling saw samples."""
+    a = flt(inc, -31)
+    g = mul(C_FADE, add(clip(sub(A_FADE, a), B_FADE), B_FADE))
+    neg = -mul(amp, g)
+    r7 = recip_refined(a, HALF)
+    ph = [u32(phase + k * inc) for k in (1, 2, 3, 4)]
+    out = []
+    for x in ph:
+        xf = flt(x, -31)
+        xo = flt(x ^ 0x80000000, -31)
+        w = sub(ONE, clip(ONE, mul(xf, r7)))
+        w2 = mul(w, w)
+        out.append(mul(sub(xo, -w2 if xo < 0 else w2), neg))
+    return out, ph[3]
+
+
+def stage_saw(lanes: list[Lane]):
+    """Stage `0x1215FB` (ANALOG PURE saw): two saw helper calls per lane, scale `P[16]`."""
+    incs = []
+    for ln in lanes:
+        pitch = ld(ln.pitch)
+        incs.append((fix(mul(pitch, ld(ln.ratio1)), 31), fix(mul(pitch, ld(ln.ratio2)), 31)))
+    o1 = [saw_helper(ln.phase1, inc[0]) for ln, inc in zip(lanes, incs, strict=True)]
+    o2 = [saw_helper(ln.phase2, inc[1]) for ln, inc in zip(lanes, incs, strict=True)]
+    scales = [ld(ln.out_gain) for ln in lanes]
+    return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]
+
+
+def pulse_helper(phase: int, inc: int, offset: int, m0: int = 0, amp: X = ONE):
+    """Helper `0x1250C9` (listing `0x24A192..0x24A3A6`): four samples of
+    `M0 - g saw(ph) + g saw(ph - offset)`; returns the stored (truncated) words and the phase."""
+    a = flt(inc, -31)
+    g = mul(amp, mul(C_FADE, add(clip(sub(A_FADE, a), B_FADE), B_FADE)))
+    r7 = recip_refined(a, HALF)
+    ph = [u32(phase + k * inc) for k in (1, 2, 3, 4)]
+
+    def saw(x: int):
+        xf = flt(x, -31)
+        xo = flt(x ^ 0x80000000, -31)
+        w = sub(ONE, clip(ONE, mul(xf, r7)))
+        w2 = mul(w, w)
+        return sub(xo, -w2 if xo < 0 else w2)
+
+    first = [ld(st(sub(ld(m0), mul(saw(x), g)))) for x in ph]
+    second = [add(f, mul(saw(u32(x - offset)), g)) for f, x in zip(first, ph, strict=True)]
+    return [ld(st(v)) for v in second], ph[3]
+
+
+def stage_pulse(lanes: list[Lane]):
+    """Stage `0x121B99` (ANALOG PURE square / pulse): pulse helper twice per lane, same mix."""
+    incs, offs = [], []
+    for ln in lanes:
+        pitch = ld(ln.pitch)
+        incs.append((fix(mul(pitch, ld(ln.ratio1)), 31), fix(mul(pitch, ld(ln.ratio2)), 31)))
+        offs.append(u32(ln.pulse + ln.pulse))
+    o1 = [pulse_helper(ln.phase1, c[0], o) for ln, c, o in zip(lanes, incs, offs, strict=True)]
+    o2 = [pulse_helper(ln.phase2, c[1], o) for ln, c, o in zip(lanes, incs, offs, strict=True)]
+    scales = [ld(ln.out_gain) for ln in lanes]
+    return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]
