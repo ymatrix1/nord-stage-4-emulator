@@ -21,6 +21,7 @@ mod tests {
         let sizes = [
             std::mem::size_of::<OrganEdit>(),
             std::mem::size_of::<PianoEdit>(),
+            std::mem::size_of::<SynthEdit>(),
             std::mem::size_of::<FxEdit>(),
             std::mem::size_of::<ProgramEdit>(),
         ];
