@@ -89,4 +89,13 @@ Gain staging (open): the booted state has `kEffectsLeslieEnable` 1 and the same 
 | Registers before every instruction, rotor running at the ARM speed words | **11,310 of 11,310 steps** (6 calls, 1,885 steps each), then 56,550 of 56,550 (30 calls, speed words x12) |
 | Output words (`DM(0xB6000..3)`, the in-place signal pair) over a long run, model carrying its own registers and memory | **4,000 of 4,000 calls identical** (speed words x12, so the rotor phase wraps several times) |
 
+Response per band (oracle, seeded white noise 0.3, 4,000 calls = 8,000 frames, Welch cross spectrum output over input, dB, bands 100-200, 200-400, 400-800, 0.8-1.6k, 1.6-3.2k, 3.2-6.4k, 6.4-12.8k Hz):
+
+| Run | in L to out L | in L to out R | in R to out L | in R to out R |
+|---|---|---|---|---|
+| rotor frozen at angle 0 (`0xB2F21 = 0`) | -55.8, -47.3, -49.0, -50.2, -52.2, -54.9, -60.1 | -53.1, -47.3, -48.9, -49.8, -50.6, -56.1, -60.6 | -62.3, -54.5, -60.0, -62.4, -59.3, -58.3, -63.4 | -58.6, -54.4, -61.2, -60.0, -56.6, -58.5, -63.9 |
+| rotor running, speed words x10 | -51.1, -50.1, -49.7, -54.9, -55.5, -56.1, -61.7 | -51.8, -50.0, -50.4, -54.2, -52.6, -56.5, -60.8 | -56.7, -57.1, -58.3, -58.2, -57.0, -58.5, -61.7 | -57.7, -57.3, -57.5, -58.2, -57.9, -56.9, -62.1 |
+
+Reading (EMPIRICAL, one run each): the left input reaches both outputs at the same level (the two mics), the right input about 6 to 10 dB lower; the response is a low pass with a roll-off of 10 to 13 dB from 200 Hz to 6 to 12 kHz (no horn boost: presence and brilliance sit 5 to 8 dB under the mids); the running rotor flattens the average (it spreads the notches) and keeps the same 12 kHz fall; the absolute level is -47 to -62 dB for the booted data, as in s5. Modulation depth: 15 to 17 dB peak to peak at 200 Hz, 1 kHz and 3 kHz (s5), the same at every tone, so no separate horn depth was found.
+
 That is 100 % of the steps checked in the traced runs and 100 % of the calls of the long run: the model is a word for word transliteration of the Leslie processor and its cabinet callee for this context (noise input, boot log state). Not covered: other signal levels or tones (the arithmetic is data independent; a sine or an impulse run would only add inputs), and states the boot log does not reach (a different limit word, the ARM's own writes of `0xB2F21` while the rotor ramps).
