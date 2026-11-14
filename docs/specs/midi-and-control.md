@@ -123,14 +123,14 @@ Manual OS v1.6x ch. 11 (p.57-63) plus Organize (p.45-46) is modelled as toolkit-
 |---|---:|---:|---|
 | System (1) | 6 | 6 | transpose, fine tune bound; memory protect, LED, reset, version `UiOnly` |
 | Sound (2) | 11 | 11 | all bound except Organ trigger point |
-| Organize (3) | 2 | 7 | Swap/Move: `Unsupported` |
+| Organize (3) | 2 | 7 | Program page `UiOnly` (acts on the in-memory library, section 5.2); Preset page `Unsupported` |
 | Aux KB (4) | 3 | 5 | all bound to `auxkb_*` |
 | Output (5) | 6 | 21 | routing `Unsupported`; `sys_mono` is the emulator's Mono Output |
 | Pedal (6) | 7 | 19 | Func/Gain/Right/Rotor bound; jack types `UiOnly`; Triple Pedal Left/Middle `Unsupported` |
 | MIDI (7) | 10 | 23 | channels bound to engine fields; filters and PC modes `Unsupported` |
 | Extern (8) | 13 | 37 | Extern layer fields bound; Device toggles, velocity, Echo `Unsupported` |
 
-Totals: 58 pages, 129 items; 61 bound, 11 `UiOnly`, 57 `Unsupported` (bean `ns4-zb9o`). Tests (`menus/tests.rs`): unique ids, pages `1..n` per menu, defaults match the kind and lie in range, every `Bound` host id or engine path exists in the sources, every `Unsupported` bean exists in `.beans/`.
+Totals: 58 pages, 129 items; 61 bound, 16 `UiOnly`, 52 `Unsupported` (bean `ns4-zb9o`). Tests (`menus/tests.rs`): unique ids, pages `1..n` per menu, defaults match the kind and lie in range, every `Bound` host id or engine path exists in the sources, every `Unsupported` bean exists in `.beans/`.
 
 Provenance: names, ranges, defaults and page numbers come from the manual text (`VERIFIED`). `ASSUMED`: Program Levels range, 0.5 dB step of the two piano levels, pedal gain default/step, foot switch defaults, Device page order, Preset Organize ranges. Web sources (names only, no values copied): Stage 3 Sound menu <https://manualshive.com/en/manual/nord/stage-3/1701214?page=20>, Stage 4 user forum <https://www.norduserforum.com/viewtopic.php?p=183703>; they did not change any value.
 
@@ -146,7 +146,15 @@ Shift+Program 1..8 opens the menu on the Program OLED (`panel/bay_program/menu_s
 
 System page 5 Reset All Settings restores every default and sends the bound ones; it keeps Memory Protect. Memory Protect (page 1, default On, manual p.57) blocks STORE to a bank location with the message "Memory Protect is on"; storing to a Live slot is exempt.
 
-Mapping notes: the Aux KB synth choices (`---`, `A--`, `-B-`, `--C`, `AB-`, `A-C`, `-BC`, `ABC`) are mapped to layer masks by label (the host parameter `auxkb_synth` is a plain bitmask, so its index differs for `--C`, `AB-`); pedal Left/Middle and Sustain Type (Pedal pages 3-4) are `Bound` to the `pedal_assign` state; Foot Switch SW A choices without an engine function map to Off; Extern bank `--` (-1) is stored as 0. Still `Unsupported`: Organ Trigger Point, Output routing (pages 1-5 except Mono), Organize, MIDI Local Control / Sect On / Type / Ctrl / Dev / PC / Transpose At, Extern Echo / Velocity / Device MIDI, Pedal SW B.
+Mapping notes: the Aux KB synth choices (`---`, `A--`, `-B-`, `--C`, `AB-`, `A-C`, `-BC`, `ABC`) are mapped to layer masks by label (the host parameter `auxkb_synth` is a plain bitmask, so its index differs for `--C`, `AB-`); pedal Left/Middle and Sustain Type (Pedal pages 3-4) are `Bound` to the `pedal_assign` state; Foot Switch SW A choices without an engine function map to Off; Extern bank `--` (-1) is stored as 0. Still `Unsupported`: Organ Trigger Point, Output routing (pages 1-5 except Mono), Preset Organize, MIDI Local Control / Sect On / Type / Ctrl / Dev / PC / Transpose At, Extern Echo / Velocity / Device MIDI, Pedal SW B.
+
+### 5.2 Organize (Shift+Program 3, manual p.45-46)
+
+Pure functions in [`nord_core::library_ops`](../../crates/nord-core/src/library_ops.rs) work on any bank array (programs and presets): `swap(bank, a, b)` interchanges two locations; `move_item(bank, src, dst)` takes the source out and inserts it at the destination, shifting the locations in between by one towards the source (`rotate_left` when moving down the list, `rotate_right` when moving up); both return `false` and change nothing for equal or out-of-range locations. `OrganizeUndo` keeps one snapshot. Only the manual text is `VERIFIED`; the behaviour at the ends of the list is `ASSUMED` equal to the middle (no wrap).
+
+The Program Organize page (`bay_program/organize.rs`) is a dedicated screen: the PROGRAM dial moves the location pointer (item `organize.1.location`, 0..511), the soft buttons are **Swap**, **Move**, **Ok**, **Undo**. Swap or Move remembers the pointer as the source (pressing the same button again cancels), the dial then picks the destination, Ok runs the operation on the in-memory library (`UserLibrary`: stored programs plus the archive entries of the opened `.ns4b`, moved together as cells), Undo takes back the last operation or cancels a pending choice. Memory Protect blocks Ok and Undo with "Memory Protect is on", like a bank STORE. With a `.ns4b` open, program recall by location follows the archive headers (so moved programs recall from their new location) instead of the sorted catalog position. The Preset Organize page stays `Unsupported`: the in-memory model has no preset bank (the pure functions already cover it). Export backup ([cbin-and-presets.md](cbin-and-presets.md) section 5.5) writes the new layout.
+
+Live slots: `.ns4l` files load back into the eight Live slots (`LiveSlots::import_live_file`; the GUI button **Load Live slots** loads all of an opened backup).
 
 ### Engine-audible settings (`engine/settings.rs`)
 

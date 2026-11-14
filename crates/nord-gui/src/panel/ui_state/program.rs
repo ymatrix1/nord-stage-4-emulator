@@ -11,6 +11,7 @@ use crate::panel::bay_program::catalog::{Catalog, LoadRequest};
 use crate::panel::bay_program::clock::{ClockUi, TransposeUi};
 use crate::panel::bay_program::model::{ListMode, ProgView, Screen};
 use crate::panel::bay_program::morph::MorphUi;
+use crate::panel::bay_program::organize::OrganizeFlow;
 use crate::panel::bay_program::split::SplitUi;
 use crate::panel::bay_program::store::{PendingSnapshot, ProgLoc, StoreFlow, UserLibrary};
 use crate::panel::ui_state::MenuUi;
@@ -50,6 +51,8 @@ pub struct ProgramUi {
     pub last_prog_id: String,
     pub store: StoreFlow,
     pub library: UserLibrary,
+    /// Swap / Move progress of the Organize menu.
+    pub organize: OrganizeFlow,
     pub live: LiveMode,
     /// LIVE MODE pressed: the next Program button picks the Live slot.
     pub live_armed: bool,
@@ -123,6 +126,7 @@ impl Default for ProgramUi {
             last_prog_id: "A:11".to_string(),
             store: StoreFlow::default(),
             library: UserLibrary::default(),
+            organize: OrganizeFlow::default(),
             live: LiveMode::default(),
             live_armed: false,
             num_pad: false,

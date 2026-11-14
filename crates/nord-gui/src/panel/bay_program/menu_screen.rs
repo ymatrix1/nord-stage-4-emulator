@@ -65,6 +65,9 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
             ..Default::default()
         };
     }
+    if m == MenuId::Organize && ui.on_organize_page() {
+        return super::organize::compose(ui);
+    }
     let page = menu.page();
     let focus = menu.focus();
     let start = menu.block_start();

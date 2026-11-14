@@ -38,6 +38,9 @@ pub struct Ns4BackupEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ns4BackupArchive {
     entries: Vec<Ns4BackupEntry>,
+    cd_offset: u64,
+    cd_size: u64,
+    zip64: bool,
 }
 
 impl Ns4BackupArchive {
@@ -96,6 +99,7 @@ impl Ns4BackupArchive {
         let mut total_entries = u64::from(u16::from_le_bytes([eocd[10], eocd[11]]));
         let mut cd_size = u64::from(u32::from_le_bytes([eocd[12], eocd[13], eocd[14], eocd[15]]));
         let mut cd_offset = u64::from(u32::from_le_bytes([eocd[16], eocd[17], eocd[18], eocd[19]]));
+        let mut zip64 = false;
 
         // Optional ZIP64 EOCD locator immediately before standard EOCD
         if cd_offset == u64::from(u32::MAX)
@@ -128,6 +132,7 @@ impl Ns4BackupArchive {
                     total_entries = u64::from_le_bytes(z64[32..40].try_into().unwrap());
                     cd_size = u64::from_le_bytes(z64[40..48].try_into().unwrap());
                     cd_offset = u64::from_le_bytes(z64[48..56].try_into().unwrap());
+                    zip64 = true;
                 }
             }
         }
@@ -206,7 +211,27 @@ impl Ns4BackupArchive {
             p = rec_end;
         }
 
-        Ok(Self { entries })
+        Ok(Self {
+            entries,
+            cd_offset,
+            cd_size,
+            zip64,
+        })
+    }
+
+    /// File offset of the central directory (the end of the local-file region).
+    pub fn central_directory_offset(&self) -> u64 {
+        self.cd_offset
+    }
+
+    /// Byte length of the central directory.
+    pub fn central_directory_size(&self) -> u64 {
+        self.cd_size
+    }
+
+    /// The archive carries a ZIP64 end-of-central-directory record.
+    pub fn is_zip64(&self) -> bool {
+        self.zip64
     }
 
     /// All parsed entries in archive central-directory order.

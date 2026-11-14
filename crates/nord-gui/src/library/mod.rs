@@ -4,6 +4,7 @@
 //! retained `Arc` references on the UI thread so the real-time CPAL audio callback never drops
 //! heap allocations when hot-swapping instruments.
 
+mod export;
 mod loaders;
 mod piano_bridge;
 mod poll;
@@ -12,8 +13,9 @@ mod program;
 mod support;
 mod ui;
 
+use crate::panel::bay_program::store::PER_BANK;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded};
+use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded, SlotIndex};
 use nord_core::piano::NpnoSound;
 use nord_core::synth::SynthSampleSound;
 use std::collections::HashMap;
@@ -69,6 +71,12 @@ pub struct BackupLibraryState {
     pub pending_jobs: usize,
     pub status_message: String,
     pub error_message: Option<String>,
+    /// Where Export backup writes (empty: `<name>-edited.ns4b` next to the opened backup).
+    pub export_path: String,
+    /// `(flat location, entry path)` of every program of the opened backup, from the entry headers.
+    program_slots: Vec<(u16, String)>,
+    layout_rev: u32,
+    synced_layout_rev: u32,
     piano_cache: HashMap<String, Arc<NpnoSound>>,
     sample_cache: HashMap<String, Arc<SynthSampleSound>>,
     retired_pianos: Vec<Arc<NpnoSound>>,
@@ -106,6 +114,10 @@ impl BackupLibraryState {
             pending_jobs: 0,
             status_message: "No .ns4b backup loaded".to_string(),
             error_message: None,
+            export_path: String::new(),
+            program_slots: Vec::new(),
+            layout_rev: 0,
+            synced_layout_rev: 0,
             piano_cache: HashMap::new(),
             sample_cache: HashMap::new(),
             retired_pianos: Vec::new(),
@@ -145,6 +157,17 @@ impl BackupLibraryState {
             .read_manifest(&mut reader)
             .ok()
             .map(|m| format!("v{} build {}", m.product_version, m.product_build));
+
+        // Which entry sits at which location (header bank/location), for Organize and Export.
+        let slots = SlotIndex::read(&archive, &mut reader)
+            .map(|idx| {
+                idx.programs
+                    .into_iter()
+                    .filter(|(b, l, _)| *b < 8 && *l < PER_BANK)
+                    .map(|(b, l, n)| (b * PER_BANK + l, n))
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let mut programs: Vec<String> = archive
             .entries_with_ext(".ns4p")
@@ -188,6 +211,9 @@ impl BackupLibraryState {
         self.error_message = None;
         self.path_input = path.display().to_string();
         self.backup_path = Some(path.to_path_buf());
+        self.export_path = export::default_export_path(path).display().to_string();
+        self.program_slots = slots;
+        self.layout_rev = self.layout_rev.wrapping_add(1);
         self.archive = Some(Arc::new(archive));
         self.manifest_summary = manifest_summary;
         self.programs = programs;

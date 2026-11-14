@@ -228,5 +228,5 @@ fn binding_totals_are_pinned() {
             Binding::Unsupported(_) => un += 1,
         }
     }
-    assert_eq!((bound, ui, un), (61, 11, 57));
+    assert_eq!((bound, ui, un), (61, 16, 52));
 }

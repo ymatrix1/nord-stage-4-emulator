@@ -13,6 +13,11 @@ impl BackupLibraryState {
         panel
             .program_ui
             .sync_catalog(&self.programs, &self.pianos, &self.samples);
+        if self.synced_layout_rev != self.layout_rev {
+            panel.program_ui.library.set_factory(&self.program_slots);
+            panel.program_ui.organize.reset();
+            self.synced_layout_rev = self.layout_rev;
+        }
         for req in panel.program_ui.take_requests() {
             match req {
                 LoadRequest::Program(entry) => self.load_program_entry(&entry, panel, audio),
