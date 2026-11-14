@@ -102,6 +102,21 @@ Source: `Nord Stage 4 User Manual v1.6X-Edition-N.pdf` (local, `.reference/`), p
 
 Consequence for Jazz Guitar II (A:78): Mod 2 = `VIBE variation` is a *mono* vibe, so the hardware stereo width (0.96, coherence 0.06 at 1..2 kHz) cannot come from Mod 2; the remaining candidates are the delay feedback `CHOR variation` (stereo widening pedal) and the reverb.
 
+### 2.7b Rotary ANGLE: rotor stop position (implemented, `ns4-uo53`)
+
+Manual p.53: with STOP MODE active, Shift + STOP MODE selects ANGLE from a list so the rotor and horn always stop at the same position; the default `Free` leaves the stop position to chance. Course video ORG 10:08-10:22 shows the screen `ROTOR STOP ANGLE` with `Free`, `1: Front Center`, `2: Front Left`, `4: Back Left`, `6: Back Center`.
+
+| Item | Behaviour | Fields / code |
+|---|---|---|
+| Value | `rotary_stop_angle`: `0` Free, `1..=6` = `STOP_ANGLE_LABELS`; clamped by `clamp_stop_angle` | `organ/rotor_stop.rs`, `OrganLayer::rotary_stop_angle` (mirrored to the TO ROTARY bus) |
+| Free | The rotors keep their residual rate (no pull to a fixed phase), so the rest phase depends on where they stopped. Before this change the legacy path always pulled to phase 0 | `organ/rotary.rs` |
+| Angle 1..6 | Once Stop is active and a rate is below 0.05 Hz, horn (6/s) and drum (3/s) phases ease along the shortest arc to `STOP_ANGLE_RAD[angle]`; no allocation, deterministic | `ease_phase`, test `stop_angle_parks_horn_and_rotor_at_the_picked_position_from_any_start` |
+| Firmware Leslie | The firmware Leslie path (`leslie_fw`, opt-in) does not use the angle: its rotor phase lives in the ported state | not modelled |
+| Host | `organy_stop_angle_{1,2}` (int `0..=6`, default 0, additive; `organ_extra_params.rs`) | `param-ids.snapshot` |
+| GUI | `OrganEdit::RotaryStopAngle`; popup `panel/rotor_angle.rs` opened by Shift + STOP MODE (a last row keeps the wide/narrow mic toggle, previously the Shift function) | inventory `rotary.stop_angle` |
+
+Provenance: list text `VERIFIED` for the five entries seen on screen; entries 3 (Front Right) and 5 (Back Right) `ASSUMED`; the rest phases (0, +-60, +-120, 180 degrees) are `ASSUMED` and the horn and drum share one phase (no recording of the hardware at each angle).
+
 ### 2.8 Variations, PED, TO ROTARY, GLOBAL and GROUP (implemented, `ns4-e3zs`)
 
 Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant below is ASSUMED (no firmware or recording source).

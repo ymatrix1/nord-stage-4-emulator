@@ -17,6 +17,7 @@ pub mod controls;
 mod coverage_tests;
 pub mod edited;
 pub mod frame;
+pub mod fw_messages;
 pub mod interact;
 pub mod list;
 pub mod menu_actions;
