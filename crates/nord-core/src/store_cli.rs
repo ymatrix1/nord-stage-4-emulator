@@ -12,7 +12,7 @@ const SAMPLE_RATE: f32 = 48_000.0;
 
 /// Usage of `ns4 store-program`.
 pub const STORE_USAGE: &str =
-    "usage: ns4 store-program <base.ns4p> <out.ns4p> [--tempo BPM] [--bank N] [--loc N]";
+    "usage: ns4 store-program <base.ns4p> <out.ns4p> [--tempo BPM] [--bank N] [--loc N] [--layer A|B|C] [--cutoff HZ] [--resonance 0-1] [--reverb-mix 0-1]";
 /// Usage of `ns4 export-live`.
 pub const LIVE_USAGE: &str =
     "usage: ns4 export-live <out-dir> <slot1.ns4p|-> ... <slot8.ns4p|-> (writes live-N.ns4l; '-' leaves a slot empty)";
@@ -37,6 +37,43 @@ fn flag<'a>(args: &'a [String], name: &str) -> Result<Option<&'a str>, String> {
     }
 }
 
+fn number(args: &[String], name: &str) -> Result<Option<f32>, String> {
+    flag(args, name)?
+        .map(|v| v.parse::<f32>().map_err(|e| format!("{name}: {e}")))
+        .transpose()
+}
+
+/// Synth sound and effect edits of `ns4 store-program`: the engine fields the panel writes, so
+/// the export has to carry them (OQ30). `--layer` picks the Synth layer (default A); the reverb
+/// edit hits the same layer's effect chain.
+fn apply_sound_edits(engine: &mut Stage4Engine, args: &[String]) -> Result<(), String> {
+    let layer = match flag(args, "--layer")? {
+        None | Some("A") => 0,
+        Some("B") => 1,
+        Some("C") => 2,
+        Some(other) => return Err(format!("--layer: expected A, B or C, got {other}")),
+    };
+    let synth = match layer {
+        0 => &mut engine.synth_a,
+        1 => &mut engine.synth_b,
+        _ => &mut engine.synth_c,
+    };
+    if let Some(hz) = number(args, "--cutoff")? {
+        synth.cutoff_hz = hz.clamp(10.0, 0.49 * synth.sample_rate);
+    }
+    if let Some(r) = number(args, "--resonance")? {
+        synth.resonance = r.clamp(0.0, 1.0);
+    }
+    if let Some(m) = number(args, "--reverb-mix")? {
+        let fx = &mut engine.fx_chains[4 + layer];
+        fx.reverb_mix = m.clamp(0.0, 1.0);
+        if fx.reverb_model == crate::fx::ReverbModel::Off && fx.reverb_mix > 0.0 {
+            fx.reverb_model = crate::fx::ReverbModel::Hall;
+        }
+    }
+    Ok(())
+}
+
 /// `ns4 store-program`: `args` are the words after the subcommand.
 pub fn store_program(args: &[String]) -> Result<String, String> {
     let (base_path, out_path) = match (args.first(), args.get(1)) {
@@ -49,6 +86,7 @@ pub fn store_program(args: &[String]) -> Result<String, String> {
     if let Some(t) = flag(args, "--tempo")? {
         engine.master_clock.bpm = t.parse::<f32>().map_err(|e| format!("--tempo: {e}"))?;
     }
+    apply_sound_edits(&mut engine, args)?;
     let mut out = engine.export_program(&prog);
     if let Some(b) = flag(args, "--bank")? {
         out.bank_index = b.parse().map_err(|e| format!("--bank: {e}"))?;
@@ -217,6 +255,39 @@ mod tests {
         assert_eq!(file.header.location_index, 9);
         assert!(store_program(&words(&[&base])).is_err());
         assert!(store_program(&words(&[&base, &out, "--tempo"])).is_err());
+    }
+
+    #[test]
+    fn store_program_carries_synth_sound_and_effect_edits() {
+        let dir = tmp("sound");
+        let base = write_base(&dir, 97.0);
+        let out = dir.join("out.ns4p").to_string_lossy().into_owned();
+        let edits = [
+            "--layer",
+            "B",
+            "--cutoff",
+            "2000",
+            "--resonance",
+            "0.6",
+            "--reverb-mix",
+            "0.5",
+        ];
+        let mut all = vec![base.as_str(), out.as_str()];
+        all.extend(edits);
+        store_program(&words(&all)).unwrap();
+        let (_, before) = load(&base).unwrap();
+        let (_, after) = load(&out).unwrap();
+        let (a, b) = (&before.synth.layer_b, &after.synth.layer_b);
+        assert!((b.filter_cutoff_hz / 2000.0 - 1.0).abs() < 0.05);
+        assert!((b.filter_resonance - 0.6).abs() < 0.01);
+        assert!(after.synth.fx_b.reverb_enabled);
+        assert!((after.synth.fx_b.reverb_amount - 0.5).abs() < 0.01);
+        assert_ne!(a.filter_cutoff_hz, b.filter_cutoff_hz);
+        // The other layers are untouched.
+        assert_eq!(before.synth.layer_a, after.synth.layer_a);
+        assert_eq!(before.synth.fx_c, after.synth.fx_c);
+        assert!(store_program(&words(&[&base, &out, "--layer", "D"])).is_err());
+        assert!(store_program(&words(&[&base, &out, "--cutoff", "x"])).is_err());
     }
 
     #[test]

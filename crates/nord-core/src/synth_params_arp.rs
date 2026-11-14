@@ -58,6 +58,70 @@ pub fn apply_arp_modes(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
     }
 }
 
+/// The smallest stored rate raw value whose Master Clock subdivision is `idx` (`0..9`).
+fn rate_raw_for_division(idx: usize) -> usize {
+    (idx * 128).div_ceil(CLOCK_DIVISIONS)
+}
+
+/// Inverse of [`apply_arp_modes`] (and of `arp_rate_bpm`): writes the engine's arpeggiator state
+/// into `dec`. A stored value that still projects onto the engine value stays (the RANGE raw
+/// spreads over 10 detents, the Rate raw over 9 divisions), so only an edit changes bits.
+pub fn invert_arp_modes(synth: &SynthLayer, dec: &mut SynthLayerDecoded) {
+    let perf = &synth.perf;
+    dec.arp_enabled = synth.arp_mode != ArpMode::Off;
+    if engine_arp_mode(dec) != synth.arp_mode {
+        let (mode, direction) = match synth.arp_mode {
+            ArpMode::Poly => (1, dec.arp.direction),
+            ArpMode::Gate => (2, dec.arp.direction),
+            ArpMode::Down => (0, 1),
+            ArpMode::UpDown => (0, 2),
+            ArpMode::Random => (0, 3),
+            ArpMode::Up => (0, 0),
+            ArpMode::Off => (dec.arp.mode, dec.arp.direction),
+        };
+        dec.arp.mode = mode;
+        dec.arp.direction = direction;
+    }
+    dec.arp.zigzag = perf.zigzag;
+    dec.arp.kb_sync = perf.kb_sync;
+    dec.arp.mst_clk = perf.arp_clock_sync;
+    if dec.arp.mode == 2 {
+        if dec.arp.gate_env() != perf.gate_env {
+            dec.arp.range = (perf.gate_env.clamp(0.0, 1.0) * 127.0).round() as u8;
+        }
+    } else {
+        let thirds = synth.arp_octave_range.saturating_sub(1) * 3 + perf.range_extra_thirds;
+        if dec.arp.range_thirds() != thirds {
+            let n = f32::from(thirds.min(9)) / 9.0;
+            dec.arp.range = (n * 127.0).round() as u8;
+        }
+    }
+    let division = usize::from(perf.arp_division.index()).min(CLOCK_DIVISIONS - 1);
+    if dec.arp.mst_clk && CLOCK_DIVISIONS * rate_raw(dec) / 128 != division {
+        dec.arp_bpm = 30.0 + 270.0 * rate_raw_for_division(division) as f32 / 127.0;
+    } else {
+        dec.arp_bpm = synth.arp_rate_bpm;
+    }
+}
+
+/// Copies the arpeggiator fields of `inv` into `dec` where the engine value of `s` differs from
+/// the reference `rf` (what the base produces); see `synth_params_export`.
+pub fn sync_arp_modes(
+    rf: &SynthLayer,
+    s: &SynthLayer,
+    inv: &SynthLayerDecoded,
+    dec: &mut SynthLayerDecoded,
+) {
+    use crate::synth_params_export::sync;
+    sync!(dec, inv, rf, s;
+        arp_enabled => arp_mode, arp.mode => arp_mode, arp.direction => arp_mode,
+        arp.zigzag => perf.zigzag, arp.kb_sync => perf.kb_sync, arp.mst_clk => perf.arp_clock_sync,
+        arp.range => perf.gate_env, arp.range => arp_octave_range,
+        arp.range => perf.range_extra_thirds,
+        arp_bpm => arp_rate_bpm, arp_bpm => perf.arp_division,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

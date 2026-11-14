@@ -220,4 +220,4 @@ Storing a new preset and loading presets into the engine are section 5.4.
 | Data | A stored preset is a program snapshot plus the base entry (`bay_program/preset_user.rs`); its cell holds the virtual path `~user/<n>/<name>.<ext>`, so Preset Organize moves it and the browser lists it. Overwritten or organized-away presets are forgotten | |
 | Export | Export backup writes each stored preset as a file at its location (`library/preset_export.rs`, `PresetPut`); other entries stay byte-identical (`library/export_presets_tests.rs`) | hardware acceptance open (OQ31) |
 
-Not built: "Cancel" reverting to the previous sound, sorting by Cat, and the Synth sound edits in a stored preset (OQ30).
+Not built: "Cancel" reverting to the previous sound, and sorting by Cat. The Synth sound and the effect chains of a stored preset follow the panel ([cbin-and-presets](cbin-and-presets.md) section 5.7; the fields left with the base are in OQ30).
