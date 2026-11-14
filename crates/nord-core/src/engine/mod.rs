@@ -27,6 +27,7 @@ mod aux_kb;
 mod clipboard;
 mod extern_out;
 mod fx_params;
+mod handoff;
 mod layer_init;
 mod live_slots;
 mod midi_dispatch;
@@ -44,6 +45,8 @@ mod settings;
 mod sharing;
 mod snapshot;
 mod sound_init;
+mod telemetry;
+mod telemetry_cell;
 #[cfg(test)]
 mod tests_extern;
 #[cfg(test)]
@@ -60,6 +63,7 @@ mod zone_assign;
 
 pub use clipboard::{Clip, ClipboardError, LayerClip};
 pub use fx_params::FxParams;
+pub use handoff::{StateMask, UndoHint};
 pub use layer_init::LayerInitTarget;
 pub use live_slots::{LiveSlots, LIVE_SLOT_COUNT};
 pub use morph_clip::MorphClip;
@@ -71,10 +75,14 @@ pub use settings::{
     PIANO_LEVEL_DB_RANGE,
 };
 pub use snapshot::ProgramState;
+pub use telemetry::{Telemetry, TelemetrySink, WORDS as TELEMETRY_WORDS};
+pub use telemetry_cell::TelemetryCell;
 pub use undo::UndoOp;
 pub use zone_assign::zone_code;
 #[cfg(test)]
 mod tests_sharing;
+#[cfg(test)]
+mod tests_telemetry;
 
 pub use organ_modes::model_shares_vibrato;
 pub use sharing::FxSharing;
@@ -134,6 +142,14 @@ pub struct Stage4Engine {
     pub clipboard: Option<Clip>,
     /// Single-level Undo snapshot. Control thread only.
     pub undo: undo::UndoSlot,
+    /// Undo / Redo availability told by a control thread that owns the snapshots (see `handoff.rs`).
+    undo_hint: UndoHint,
+    /// Boxes leaked because the control thread's return queue was full (see `handoff.rs`).
+    retire_overflow: u32,
+    /// MIDI events handled since start (wraps); published as telemetry.
+    midi_in_count: u32,
+    /// Where [`Self::publish_telemetry`] stores the snapshot (see `telemetry.rs`).
+    telemetry_out: TelemetrySink,
 }
 
 impl Stage4Engine {
@@ -176,6 +192,10 @@ impl Stage4Engine {
             program_gain: 1.0,
             clipboard: None,
             undo: undo::UndoSlot::default(),
+            undo_hint: UndoHint::default(),
+            retire_overflow: 0,
+            midi_in_count: 0,
+            telemetry_out: TelemetrySink::default(),
         }
     }
 
@@ -233,7 +253,14 @@ impl Stage4Engine {
         for (i, raw) in raw_layers.into_iter().enumerate() {
             self.fx_chains[i].apply_morph(&self.morph_controllers);
             let [fx_l, fx_r] = self.fx_chains[i].process_frame_with_bpm(raw, self.master_clock.bpm);
-            let gain = self.layer_levels[i].evaluate(&self.morph_controllers) * self.program_gain;
+            let level = self.layer_levels[i].evaluate(&self.morph_controllers);
+            // organ layers follow the firmware level law `(v / 127)^2` when it is selected
+            let level = match i {
+                0 => self.organ_a.level_law().layer_gain(level),
+                1 => self.organ_b.level_law().layer_gain(level),
+                _ => level,
+            };
+            let gain = level * self.program_gain;
             // TO ROTARY (Piano / Synth layers): the mono sum after the fader feeds the shared rotary.
             if i >= 2 && self.fx_chains[i].amp_cabinet == AmpCabinet::ToRotary {
                 rot_in += 0.5 * (fx_l + fx_r) * gain;
@@ -292,6 +319,7 @@ impl Stage4Engine {
             left[i] = l;
             right[i] = r;
         }
+        self.publish_telemetry();
     }
 }
 

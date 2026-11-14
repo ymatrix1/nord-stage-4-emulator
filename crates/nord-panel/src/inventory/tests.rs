@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 /// Host parameter sources; a `Bound` id must appear as a quoted literal here.
-const HOST_SOURCES: [&str; 15] = [
+const HOST_SOURCES: [&str; 16] = [
     include_str!("../../../nord-plugin/src/params.rs"),
     include_str!("../../../nord-plugin/src/fx_params.rs"),
     include_str!("../../../nord-plugin/src/fx_selectors.rs"),
@@ -22,12 +22,14 @@ const HOST_SOURCES: [&str; 15] = [
     include_str!("../../../nord-plugin/src/program_params.rs"),
     include_str!("../../../nord-plugin/src/organ_live_params.rs"),
     include_str!("../../../nord-plugin/src/organ_extra_params.rs"),
+    include_str!("../../../nord-plugin/src/fx_variation_params.rs"),
 ];
 /// Engine sources an `engine:<path>` binding must be found in.
-const ENGINE_SOURCES: [&str; 3] = [
+const ENGINE_SOURCES: [&str; 4] = [
     include_str!("../../../nord-core/src/engine/mod.rs"),
     include_str!("../../../nord-core/src/engine/zone_assign.rs"),
     include_str!("../../../nord-core/src/morph.rs"),
+    include_str!("../../../nord-core/src/synth/sound_init.rs"),
 ];
 /// Source of the top-level struct that declares the nested `id_prefix` values.
 const PARAMS_SRC: &str = include_str!("../../../nord-plugin/src/params.rs");
@@ -49,13 +51,14 @@ fn host_id_exists(id: &str) -> bool {
             .any(|s| s.contains(&format!("#[id = \"{name}\"]")))
 }
 
-/// Every dot-separated segment of an `engine:` path is a field of an engine source.
+/// Every dot-separated segment of an `engine:` path is a public field (`pub seg:`) or a public
+/// method (`pub fn seg(`) of an engine source.
 fn engine_path_exists(path: &str) -> bool {
     path.split('.').all(|seg| {
         !seg.is_empty()
-            && ENGINE_SOURCES
-                .iter()
-                .any(|s| s.contains(&format!("pub {seg}:")))
+            && ENGINE_SOURCES.iter().any(|s| {
+                s.contains(&format!("pub {seg}:")) || s.contains(&format!("pub fn {seg}("))
+            })
     })
 }
 
@@ -181,7 +184,7 @@ fn per_section_counts_are_pinned() {
     assert_eq!(count(Section::Piano), 32);
     assert_eq!(count(Section::Program), 56);
     assert_eq!(count(Section::Synth), 73);
-    assert_eq!(count(Section::Effects), 50);
+    assert_eq!(count(Section::Effects), 51);
     assert_eq!(count(Section::Keybed), 2);
 }
 
@@ -198,16 +201,16 @@ fn per_kind_counts_are_pinned() {
 
 #[test]
 fn total_is_the_sum_of_sections() {
-    assert_eq!(all_controls().len(), 273);
+    assert_eq!(all_controls().len(), 274);
 }
 
 #[test]
 fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
-    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 138);
+    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 141);
     assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 57);
-    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 78);
+    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 76);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)
@@ -234,6 +237,8 @@ fn host_id_resolver_accepts_literals_and_nested_ids_only() {
     assert!(host_id_exists("organy_rotary_on_{n}"));
     assert!(host_id_exists("organy_mic_angle_{n}"));
     assert!(host_id_exists("auxkb_organ"));
+    assert!(host_id_exists("fxz_mod1_beats_{n}"));
+    assert!(host_id_exists("fxz_rev_var_{n}"));
     assert!(!host_id_exists("pianox_nope_{n}"));
     assert!(!host_id_exists("organz_nope_{n}"));
     assert!(!host_id_exists("nopex_unison_{n}"));
@@ -244,7 +249,24 @@ fn host_id_resolver_accepts_literals_and_nested_ids_only() {
 fn engine_path_resolver_accepts_fields_and_rejects_unknown_ones() {
     assert!(engine_path_exists("split_router.layer_zone_masks"));
     assert!(!engine_path_exists("split_router.nonexistent_field"));
+    assert!(engine_path_exists("synth_a.sound_init"), "a method segment");
+    assert!(!engine_path_exists("synth_a.no_such_method"));
     assert!(!engine_path_exists(""));
+}
+
+#[test]
+fn rewired_synth_and_effects_controls_are_bound() {
+    let all = all_controls();
+    for id in [
+        "synth.sound_init",
+        "reverb.variation",
+        "mod1.mst_clk",
+        "mod1.variation",
+        "mod2.variation",
+    ] {
+        let c = all.iter().find(|c| c.id == id).unwrap();
+        assert!(matches!(c.binding, Binding::Bound(_)), "{id}");
+    }
 }
 
 #[test]

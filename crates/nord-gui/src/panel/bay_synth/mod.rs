@@ -10,6 +10,7 @@ mod controls;
 mod coverage;
 mod graphics;
 mod oled;
+mod oled_arp;
 mod oled_types;
 mod oled_view;
 mod strip;
@@ -87,6 +88,7 @@ pub(super) fn render_bay_synth(
         &mut active,
         state.fx_focus,
         audio_handle,
+        &state.telemetry,
     );
     [
         state.synth_a_level,

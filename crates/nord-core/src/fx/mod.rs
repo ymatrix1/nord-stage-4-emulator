@@ -39,6 +39,7 @@ mod mod1_dynamic;
 mod mod2_spin;
 mod modulation;
 mod reverb;
+mod reverb_variation;
 mod sharing;
 #[cfg(test)]
 mod support;
@@ -194,9 +195,11 @@ pub struct LayerFxChain {
     pub delay_mix: f32,
     pub reverb_model: ReverbModel,
     pub reverb_color: ReverbColor,
-    /// Reverb variation flag (`kRvbType` low bit: Spring 2 and the like); picks firmware type 1.
-    pub reverb_variation: bool,
     pub reverb_mix: f32,
+    /// Reverb VARIATION of Spring (longer tail; also picks firmware reverb type 1) and Booth / Room
+    /// (longer pre-delay), manual p.52-53;
+    /// the right-hand types use `ReverbColor::Chorale`. Default off (bit-identical to before).
+    pub reverb_variation: bool,
     /// Skips this chain's reverb (the engine sets it while Reverb GLOBAL mode is active, manual p.52).
     pub bypass_reverb: bool,
     pub morph: FxMorphSet,
@@ -256,6 +259,7 @@ pub struct LayerFxChain {
     rev_ap_bufs: Box<[[f32; 512]; FDN_SIZE]>,
     rev_ap_indices: [usize; FDN_SIZE],
     reverb_chorale_phase: f32,
+    rev_predelay: reverb_variation::RevPredelay,
 }
 
 impl LayerFxChain {
@@ -355,6 +359,7 @@ impl LayerFxChain {
             rev_ap_bufs: Box::new([[0.0; 512]; FDN_SIZE]),
             rev_ap_indices: [0; FDN_SIZE],
             reverb_chorale_phase: 0.0,
+            rev_predelay: reverb_variation::RevPredelay::new(),
         }
     }
 

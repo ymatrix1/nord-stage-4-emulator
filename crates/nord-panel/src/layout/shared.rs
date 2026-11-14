@@ -86,6 +86,7 @@ pub const SHARED: &[(&str, &str)] = &[
     ("fx.focus.group_piano", "fx.focus.piano"),
     ("fx.focus.group_synth", "fx.focus.synth"),
     ("mod1.variation", "mod1.selector"),
+    ("mod1.mst_clk", "mod1.rate"),
     ("mod2.variation", "mod2.selector"),
     ("delay.global", "delay.on"),
     ("delay.mst_clk", "delay.tempo"),

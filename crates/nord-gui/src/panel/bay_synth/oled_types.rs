@@ -15,9 +15,9 @@ pub enum Graphic {
     Filter { ty: u8, cutoff: f32, res: f32 },
     /// One LFO cycle.
     Lfo(u8),
-    /// Gate pattern grid of preset `preset`, `len` steps, optional cursor.
+    /// Gate pattern grid: gate length (eighths) of each of the first `len` steps, optional cursor.
     Pattern {
-        preset: u8,
+        steps: [u8; 16],
         len: u8,
         cursor: Option<u8>,
     },

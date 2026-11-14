@@ -146,6 +146,13 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fxy", group = "Layer FX Sharing")]
     pub layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank,
 
+    /// Editor window size, persisted with the plugin state (not a host parameter).
+    #[persist = "editor-state"]
+    pub editor_state: std::sync::Arc<nih_plug_egui::EguiState>,
+    /// Per-layer Mod 1 Master Clock division and Reverb VARIATION.
+    #[nested(id_prefix = "fxz", group = "Layer FX Variation")]
+    pub layer_fx_variation: crate::fx_variation_params::LayerFxVariationBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -377,6 +384,8 @@ impl Default for Stage4Params {
             piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
             layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
             layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank::default(),
+            editor_state: crate::editor::default_editor_state(),
+            layer_fx_variation: crate::fx_variation_params::LayerFxVariationBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -651,6 +660,7 @@ impl Stage4Params {
         self.organ_layers.sync_to_engine(engine);
         self.layer_fx_extra.sync_to_engine(engine);
         self.layer_fx_sharing.sync_to_engine(engine);
+        self.layer_fx_variation.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();

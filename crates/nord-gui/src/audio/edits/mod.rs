@@ -8,11 +8,11 @@ mod settings;
 mod synth;
 
 pub use fx::{chain_of_slot, FxEdit, FxFlag, FxFloat, FX_SLOTS};
-pub use organ::OrganEdit;
+pub use organ::{OrganEdit, ANGLE_NARROW_DEG, ANGLE_WIDE_DEG};
 pub use piano::PianoEdit;
 pub use program::{CopyItem, MorphTarget, ProgramEdit, SplitCfg};
 pub use settings::SettingsEdit;
-pub use synth::{SynthEdit, SynthGroup, SynthParam, SynthTarget};
+pub use synth::{PatternParam, SynthEdit, SynthGroup, SynthParam, SynthTarget};
 
 #[cfg(test)]
 mod tests {

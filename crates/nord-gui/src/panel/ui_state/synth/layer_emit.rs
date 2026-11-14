@@ -99,11 +99,12 @@ impl SynthLayerUi {
             VIBRATO_DELAYS[usize::from(self.vib_delay) % 4],
         ));
         f(SynthParam::ArpMode(self.arp_engine_mode()));
-        f(SynthParam::ArpRange(self.arp_range.round().max(1.0) as u8));
+        f(SynthParam::ArpRange(self.arp_octaves()));
         f(SynthParam::ArpRate(self.arp_rate));
         f(SynthParam::GateEnv(self.gate_env));
         f(SynthParam::PatternOn(self.pattern_on));
         f(SynthParam::PatternPreset(self.pattern_preset));
+        self.emit_pattern(f);
         f(SynthParam::KbSync(self.kb_sync));
         f(SynthParam::ArpClockSync(self.arp_sync));
         f(SynthParam::ArpDivision(self.arp_div));

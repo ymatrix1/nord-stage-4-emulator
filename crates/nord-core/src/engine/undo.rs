@@ -19,6 +19,25 @@ pub enum UndoOp {
 }
 
 impl UndoOp {
+    /// Every operation, in declaration order (`index` is the position here).
+    pub const ALL: [UndoOp; 10] = [
+        Self::LoadPreset,
+        Self::SynthGroup,
+        Self::FxFocusGroup,
+        Self::GlobalFx,
+        Self::AllFxOff,
+        Self::ClearMorph,
+        Self::CopyPaste,
+        Self::SynthInit,
+        Self::LayerInit,
+        Self::ProgramChange,
+    ];
+
+    /// Position in [`Self::ALL`] (the telemetry wire code is `index + 1`, `0` = none).
+    pub fn index(self) -> u8 {
+        Self::ALL.iter().position(|o| *o == self).unwrap_or(0) as u8
+    }
+
     /// Text for the display ("Undo ...").
     pub fn label(self) -> &'static str {
         match self {
@@ -51,9 +70,13 @@ impl Stage4Engine {
         self.undo.1 = None; // a new operation invalidates the redo branch
     }
 
-    /// The operation Undo would revert, if any.
+    /// The operation Undo would revert, if any (or the control thread's [`UndoHint`] in the standalone).
     pub fn undo_available(&self) -> Option<UndoOp> {
-        self.undo.0.as_ref().map(|(op, _)| *op)
+        self.undo
+            .0
+            .as_ref()
+            .map(|(op, _)| *op)
+            .or(self.undo_hint.undo)
     }
 
     /// Reverts to the state before the last undoable operation; returns it. Single level; the
@@ -68,7 +91,11 @@ impl Stage4Engine {
 
     /// The operation Redo would re-apply, if an Undo just happened.
     pub fn redo_available(&self) -> Option<UndoOp> {
-        self.undo.1.as_ref().map(|(op, _)| *op)
+        self.undo
+            .1
+            .as_ref()
+            .map(|(op, _)| *op)
+            .or(self.undo_hint.redo)
     }
 
     /// Re-applies the state an Undo replaced and makes the operation undoable again.
@@ -129,6 +156,13 @@ mod tests {
         e.undo();
         e.discard_undo();
         assert_eq!(e.redo_available(), None);
+    }
+
+    #[test]
+    fn index_round_trips_through_all() {
+        for (i, op) in UndoOp::ALL.iter().enumerate() {
+            assert_eq!(op.index() as usize, i);
+        }
     }
 
     #[test]

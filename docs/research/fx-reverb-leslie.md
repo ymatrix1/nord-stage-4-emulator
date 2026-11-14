@@ -14,7 +14,7 @@ Tags follow `.agents/rules/provenance-in-code.md`.
 | `kRvbType` words | types 2..11 write 64 words each; only 10 to 21 of them differ from type 2 (s3) | VERIFIED (capture) |
 | `kCmpResponse` | the handler (jump table entry reached from `0xC010C990`, gate `0xC010D0AC`, body `0xC0012270`) **ignores the value**: it re-sends the four constants attack `0.102071`, `1.0`, release `4.607e-4`, `0.04` for 0 and 1, in every state tried (fresh, `kCmpEnable` 1, `kCmpAmt` 64, `Edt_Com_kEffectsCmpGlobal` 0 and 1). The 253-instruction trace is identical for both values | EMPIRICAL (4 states x 2 values; the jump-table path never reads the value) |
 | Types 0, 1 routines | `0x12417E` / `0x12435C` are a half-rate wrapper (fs/4 Butterworth banks, hold, dry/wet mix) around the core `0x123F61`; wrapper bit-exact (6000 of 6000 words), core modelled instruction by instruction against the oracle (s6); its pointer words and PM coefficient list are not found (s6, s7) | wrapper and core code VERIFIED, data open |
-| Leslie | no code record in the 100 FX routines; the rotor runs from the ARM tick state machine and the ORG DSP image. Only `kEffectsLeslieDrv` (`v / 127`, words 3 and 7 of its row) is mapped | open (not attempted beyond [fx-contexts](fx-contexts.md) s6) |
+| Leslie | no code record in the 100 FX routines; the rotor runs from the ARM tick state machine and the ORG DSP image. Only `kEffectsLeslieDrv` (`v / 127`, words 3 and 7 of its row) is mapped | open; superseded by [fx-leslie](fx-leslie.md): the boot installs `0x1237F8` in the Leslie row and the ARM sends rotor speed words |
 
 ## 2. Reverb amount
 

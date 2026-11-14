@@ -6,7 +6,7 @@
 
 use super::pots::{norm_of, FREQ_MAX, FREQ_MIN, GLIDE_MAX, LFO_MAX, LFO_MIN};
 use super::{Scope, SynthUi};
-use crate::audio::SynthParam;
+use crate::audio::{PatternParam, SynthParam};
 
 /// Pots of the Synth section.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -152,9 +152,17 @@ impl SynthUi {
                 self.edit(Scope::Arp, SynthParam::GateEnv(n), |l| l.gate_env = n);
             }
             Knob::ArpRange => {
-                let r = n * 4.0;
-                let oct = r.round().max(1.0) as u8;
-                self.edit(Scope::Arp, SynthParam::ArpRange(oct), |l| l.arp_range = r);
+                // 10 detents: 1 octave .. 4 octaves in steps of 1/3 octave (manual p.35).
+                let d = (n * 9.0).round() as u8;
+                let (oct, thirds) = (1 + d / 3, d % 3);
+                self.edit(Scope::Arp, SynthParam::ArpRange(oct), |l| {
+                    l.arp_range = 1.0 + f32::from(d) / 3.0
+                });
+                self.edit(
+                    Scope::Arp,
+                    SynthParam::Pattern(PatternParam::RangeThirds(thirds)),
+                    |_| {},
+                );
             }
         }
     }
@@ -236,6 +244,30 @@ mod tests {
         assert!(p.iter().any(|x| matches!(x, SynthParam::Glide(_))));
         assert!(p.iter().any(|x| matches!(x, SynthParam::ArpRate(_))));
         assert!(p.iter().any(|x| matches!(x, SynthParam::ArpRange(_))));
+    }
+
+    #[test]
+    fn arp_range_moves_in_thirds_of_an_octave() {
+        let mut s = SynthUi::new();
+        for (pos, oct, thirds, range) in [
+            (0.0, 1, 0, 1.0),
+            (1.0 / 9.0, 1, 1, 1.0 + 1.0 / 3.0),
+            (2.0 / 9.0, 1, 2, 1.0 + 2.0 / 3.0),
+            (4.0 / 9.0, 2, 1, 2.0 + 1.0 / 3.0),
+            (1.0, 4, 0, 4.0),
+        ] {
+            s.pots.tr[Knob::ArpRange.idx()] = PotTracker::new(pos);
+            s.take_edits();
+            s.knob_input(Knob::ArpRange, pos);
+            let p = sent(&mut s);
+            assert!(p.contains(&SynthParam::ArpRange(oct)), "{pos}");
+            assert!(
+                p.contains(&SynthParam::Pattern(PatternParam::RangeThirds(thirds))),
+                "{pos}"
+            );
+            assert!((s.layer().arp_range - range).abs() < 1e-5);
+            assert!((s.layer().arp_range - s.layer().arp_range.round()).abs() < 0.5);
+        }
     }
 
     #[test]

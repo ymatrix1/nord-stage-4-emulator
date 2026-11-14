@@ -64,15 +64,30 @@ fn layer_pad(
     if let Some((sid, legend)) = sub {
         sui.mark(sid);
         let why = unsupported_reason(sid);
+        let lit = if i == 0 { sui.sustped } else { sui.pstick };
+        let col = match (why.is_some(), lit) {
+            (true, _) => LEGEND_DIM,
+            (false, true) => LED_AMBER,
+            (false, false) => LEGEND,
+        };
         tiny(
             p,
             pos2(rect.center().x, rect.bottom() + 3.0),
             legend,
-            if why.is_some() { LEGEND_DIM } else { LEGEND },
+            col,
             Align2::CENTER_TOP,
         );
         if let Some(why) = why {
             let _ = resp.on_hover_text(format!("{legend} (Shift): {why}"));
+        } else {
+            let _ = resp.on_hover_text(format!(
+                "{legend} (Shift+click): the Synth layers follow the {}",
+                if i == 0 {
+                    "sustain pedal"
+                } else {
+                    "pitch stick"
+                }
+            ));
         }
     }
     action
@@ -89,6 +104,7 @@ pub(super) fn paint_strip(
     active: &mut [bool; 3],
     fx_focus: usize,
     audio: &AudioHandle,
+    tele: &crate::telemetry::PanelTelemetry,
 ) {
     let before_on = sui.section_on;
     pad(ui, p, o, sui, Btn::On, "ON");
@@ -113,7 +129,8 @@ pub(super) fn paint_strip(
         ladder(
             p,
             rect_or_empty(LADDERS[i], o),
-            if on { levels[i] } else { 0.0 },
+            // Engine level after fader and Morph (Synth A/B/C are layers 4..7).
+            tele.ladder_level(4 + i, levels[i], on),
             10,
         );
         sui.mark(FOCUS_LEDS[i]);
@@ -129,8 +146,8 @@ pub(super) fn paint_strip(
         );
         sui.mark(AUX_LEDS[i]);
         let aux = rect_or_empty(AUX_LEDS[i], o);
-        dot(p, aux.center(), false, LED_GREEN, LED_GREEN_DIM);
-        if let Some(why) = unsupported_reason(AUX_LEDS[i]) {
+        dot(p, aux.center(), tele.aux(4 + i), LED_GREEN, LED_GREEN_DIM);
+        if let Some(why) = unsupported_reason(AUX_LEDS[i]).filter(|_| tele.get().is_none()) {
             let _ = ui
                 .interact(aux.expand(2.0), ui.id().with(AUX_LEDS[i]), Sense::hover())
                 .on_hover_text(format!("AUX KB: {why}"));
@@ -186,7 +203,17 @@ mod tests {
         let mut act = [true, false, false];
         let n = shapes_painted(|ui, p, rect, _s, a| {
             sui.begin_frame();
-            paint_strip(ui, p, rect.min, &mut sui, &mut lv, &mut act, 2, a);
+            paint_strip(
+                ui,
+                p,
+                rect.min,
+                &mut sui,
+                &mut lv,
+                &mut act,
+                2,
+                a,
+                &Default::default(),
+            );
         });
         assert!(n > 40, "painted {n}");
         for id in [

@@ -39,6 +39,8 @@ pub struct ChainUi {
     pub mod1_variation: bool,
     pub mod1_ped: bool,
     pub mod1_ped_pos: f32,
+    /// Mod 1 MST CLK step (`0` = free Rate, `n` = `DELAY_SYNC_BEATS[n - 1]`).
+    pub mod1_mst: usize,
     pub mod2_on: bool,
     pub mod2_sel: usize,
     pub mod2_rate: f32,
@@ -72,7 +74,7 @@ pub struct ChainUi {
     pub reverb_on: bool,
     pub rev_sel: usize,
     pub rev_tone: Tone,
-    /// CHORALE (right-hand types) or VARIATION (left-hand types, UI only: the engine has none).
+    /// CHORALE (right-hand types) or VARIATION (left-hand types: `reverb_variation` in the engine).
     pub rev_alt: bool,
     pub reverb_mix: f32,
 }
@@ -88,6 +90,7 @@ impl Default for ChainUi {
             mod1_variation: false,
             mod1_ped: false,
             mod1_ped_pos: 0.5,
+            mod1_mst: 0,
             mod2_on: false,
             mod2_sel: 0,
             mod2_rate: 0.8,
@@ -180,9 +183,29 @@ impl ChainUi {
         }
     }
 
-    /// Whether the Mod 1 shift function means PED (Wah) rather than VARIATION.
-    pub fn mod1_is_wah(&self) -> bool {
-        MOD1[self.mod1_sel.min(5)].engine == Some(Mod1Type::Wah)
+    /// Selected Mod 1 type, whether or not the unit is on.
+    pub fn mod1_selected(&self) -> Mod1Type {
+        MOD1[self.mod1_sel.min(5)].engine.unwrap_or(Mod1Type::Off)
+    }
+
+    /// Whether the Mod 1 shift function means PED (Wah, Pump) rather than VARIATION.
+    pub fn mod1_has_ped(&self) -> bool {
+        matches!(self.mod1_selected(), Mod1Type::Wah | Mod1Type::Pump)
+    }
+
+    /// Whether the selected Mod 1 type can follow the Master Clock (A-PAN, TREM, WAH, PUMP; the
+    /// engine's `modulation.rs` has no clock for RM, which is a pitch, nor for A-WAH).
+    pub fn mod1_has_clock(&self) -> bool {
+        matches!(
+            self.mod1_selected(),
+            Mod1Type::AutoPan | Mod1Type::Tremolo | Mod1Type::Wah | Mod1Type::Pump
+        )
+    }
+
+    /// Reverb VARIATION is on (Spring longer, Booth / Room longer pre-delay); the right-hand types
+    /// use CHORALE instead.
+    pub fn reverb_variation_engine(&self) -> bool {
+        self.rev_alt && self.rev_sel < tables::REVERB_CHORALE_FROM
     }
 
     /// GLOBAL Delay: copy the Delay settings of `src`.
@@ -248,8 +271,10 @@ mod tests {
             ..ChainUi::default()
         };
         assert_eq!(c.color_engine(), ReverbColor::Normal);
+        assert!(c.reverb_variation_engine(), "left-hand type: VARIATION");
         c.rev_sel = 4;
         assert_eq!(c.color_engine(), ReverbColor::Chorale);
+        assert!(!c.reverb_variation_engine(), "right-hand type: CHORALE");
         c.rev_alt = false;
         c.rev_tone = Tone::Dark;
         assert_eq!(c.color_engine(), ReverbColor::Dark);
@@ -284,5 +309,22 @@ mod tests {
         assert_eq!(c.reverb_mix, reference.reverb_mix);
         assert_eq!(c.mid_freq, reference.eq_mid_freq_hz);
         assert_eq!(c.mod1_ped_pos, reference.mod1_ped_pos);
+    }
+
+    #[test]
+    fn ped_and_clock_follow_the_selected_mod1_type() {
+        let mut c = ChainUi::default();
+        for (sel, ped, clock) in [
+            (0, false, true),  // A-PAN
+            (1, false, true),  // TREM
+            (2, false, false), // RM
+            (3, false, false), // A-WAH
+            (4, true, true),   // WAH
+            (5, true, true),   // PUMP
+        ] {
+            c.mod1_sel = sel;
+            assert_eq!(c.mod1_has_ped(), ped, "ped {sel}");
+            assert_eq!(c.mod1_has_clock(), clock, "clock {sel}");
+        }
     }
 }

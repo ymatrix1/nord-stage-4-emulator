@@ -9,9 +9,9 @@ use crate::panel::layout_px::rect_or_empty;
 use crate::panel::ui_state::fx::ChainUi;
 use egui::{pos2, vec2, Pos2, Rect};
 
-/// All 50 inventory ids of the Layer Effects section, drawn by this bay.
+/// All 51 inventory ids of the Layer Effects section, drawn by this bay.
 #[cfg_attr(not(test), allow(dead_code))]
-pub(super) const HANDLED: [&str; 50] = [
+pub(super) const HANDLED: [&str; 51] = [
     "fx.layer_effects_on",
     "fx.focus.organ",
     "fx.focus.piano",
@@ -23,6 +23,7 @@ pub(super) const HANDLED: [&str; 50] = [
     "mod1.selector",
     "mod1.variation",
     "mod1.rate",
+    "mod1.mst_clk",
     "mod1.amount",
     "mod2.on",
     "mod2.selector",
@@ -65,10 +66,11 @@ pub(super) const HANDLED: [&str; 50] = [
 ];
 
 /// Shifted functions: `(id, base control, caption line below the base)`.
-const LEGENDS: [(&str, &str, usize); 14] = [
+const LEGENDS: [(&str, &str, usize); 15] = [
     ("fx.focus.group_piano", "fx.focus.piano", 1),
     ("fx.focus.group_synth", "fx.focus.synth", 1),
     ("mod1.variation", "mod1.selector", 0),
+    ("mod1.mst_clk", "mod1.rate", 1),
     ("mod2.variation", "mod2.selector", 0),
     ("delay.global", "delay.on", 0),
     ("delay.mst_clk", "delay.tempo", 1),
@@ -111,9 +113,15 @@ pub(super) fn draw_rect(id: &str, origin: Pos2) -> Rect {
     }
 }
 
+/// Why Ring Mod and A-WAH cannot follow the Master Clock.
+pub(super) const NO_CLOCK: &str =
+    "the engine has no Master Clock for Ring Mod (a pitch) or A-WAH (envelope driven)";
+
 /// Why control `id` cannot be honoured by the engine right now (`None`: fully functional).
 ///
-/// Per-LED gaps (A-WAH, PUMP, ENS, SPIN) are in `ui_state::fx::tables`, not here.
+/// Every Mod type and the Reverb VARIATION are in the engine; what is left dimmed is the Amp
+/// VARIATION (stored, no distinct voicing), TO ROTARY on the Organ slot and the Mod 1 MST CLK of
+/// Ring Mod and A-WAH.
 pub(super) fn dim_reason(id: &str, c: &ChainUi, slot: usize) -> Option<&'static str> {
     match id {
         "amp.to_rotary" if slot == 0 => {
@@ -122,9 +130,7 @@ pub(super) fn dim_reason(id: &str, c: &ChainUi, slot: usize) -> Option<&'static 
         "amp.variation" => Some(
             "the engine stores the Amp VARIATION but has no separate voicing for it yet",
         ),
-        "reverb.variation" if c.rev_sel < crate::panel::ui_state::fx::REVERB_CHORALE_FROM => Some(
-            "the engine has no VARIATION for Spring, Booth and Room (only CHORALE on Stage, Hall and Cathedral)",
-        ),
+        "mod1.mst_clk" if !c.mod1_has_clock() => Some(NO_CLOCK),
         _ => None,
     }
 }
@@ -188,11 +194,18 @@ mod tests {
         let mut c = ChainUi::default();
         assert!(dim_reason("amp.to_rotary", &c, 0).is_some());
         assert!(dim_reason("amp.to_rotary", &c, 1).is_none());
-        c.rev_sel = 1;
-        assert!(dim_reason("reverb.variation", &c, 1).is_some());
-        c.rev_sel = 4;
-        assert!(dim_reason("reverb.variation", &c, 1).is_none());
+        for sel in [0, 1, 4] {
+            c.rev_sel = sel;
+            assert!(
+                dim_reason("reverb.variation", &c, 1).is_none(),
+                "VARIATION (left) and CHORALE (right) both reach the engine"
+            );
+        }
         assert!(dim_reason("amp.variation", &c, 1).is_some());
+        c.mod1_sel = 2; // RM
+        assert!(dim_reason("mod1.mst_clk", &c, 1).is_some());
+        c.mod1_sel = 5; // PUMP
+        assert!(dim_reason("mod1.mst_clk", &c, 1).is_none());
         assert!(dim_reason("mod1.rate", &c, 1).is_none());
     }
 }

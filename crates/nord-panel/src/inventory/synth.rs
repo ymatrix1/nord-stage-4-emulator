@@ -59,7 +59,7 @@ pub fn controls() -> Vec<ControlEntry> {
             37,
         )
         .shift()
-        .todo(bean),
+        .bound("engine:synth_a.sound_init"),
     );
     // Oscillators
     v.push(

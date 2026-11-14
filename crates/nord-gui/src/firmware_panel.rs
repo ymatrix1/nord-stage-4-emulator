@@ -49,7 +49,7 @@ impl HeadlessRequest {
 
 /// Window title that names the active firmware set.
 pub fn window_title(opts: &FirmwareOptions) -> String {
-    format!("Clavia Nord Stage 4 [{}]", opts.summary())
+    format!("Nord Stage 4 Emulator [{}]", opts.summary())
 }
 
 /// Builds an engine, applies `opts` through the audio command path and renders `frames` frames of
