@@ -236,7 +236,9 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [ ] Vox default: organ output level stage (RMS -13.7 dB) and the 1.5 to 8 kHz deficit (mid +7.8, presence -7.3, brilliance -9.5 dB) (`ns4-58cz`)
 - [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
 - [x] Oracle chords of the Farfisa and B3 Bass processors with the corrected boot log and key-down words (`tools/organ_proc_oracle.py`, `sharc-pass --rec`, [organ-farfisa-bass](research/organ-farfisa-bass.md) s7)
-- [ ] Farfisa processor `0x122B85` and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust (inputs known, OQ18)
+- [x] Farfisa key stage (`--farfisa-processor on`: key-down weights `1/48` x measured per-sum line gain, chord a peak within 0.2 dB, [organ-farfisa-bass](research/organ-farfisa-bass.md) s9)
+- [x] `--firmware-routing`: an enabled section with no layer on plays layer A (OQ25, the 9 silent programs become audible)
+- [ ] Farfisa processor `0x122B85` bit-exact (lattice, phase) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust (inputs known, OQ18)
 - [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
 
 ### 7b.4 Effects
