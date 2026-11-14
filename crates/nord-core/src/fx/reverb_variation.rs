@@ -58,9 +58,11 @@ impl LayerFxChain {
 
     /// Reverb input after the pre-delay of BOOTH / ROOM VARIATION (the dry path stays undelayed).
     pub(super) fn reverb_input(&mut self, l: f32, r: f32) -> [f32; 2] {
-        let delayed = self
-            .rev_predelay
-            .process(l, r, (PREDELAY_VARIATION_SEC * self.sample_rate).round() as usize);
+        let delayed = self.rev_predelay.process(
+            l,
+            r,
+            (PREDELAY_VARIATION_SEC * self.sample_rate).round() as usize,
+        );
         let wants = self.reverb_variation
             && matches!(self.reverb_model, ReverbModel::Booth | ReverbModel::Room);
         if wants {

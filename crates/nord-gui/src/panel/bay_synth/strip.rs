@@ -82,7 +82,11 @@ fn layer_pad(
         } else {
             let _ = resp.on_hover_text(format!(
                 "{legend} (Shift+click): the Synth layers follow the {}",
-                if i == 0 { "sustain pedal" } else { "pitch stick" }
+                if i == 0 {
+                    "sustain pedal"
+                } else {
+                    "pitch stick"
+                }
             ));
         }
     }

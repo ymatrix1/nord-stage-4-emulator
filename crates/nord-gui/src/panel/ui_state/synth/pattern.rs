@@ -108,14 +108,10 @@ impl SynthUi {
     pub(super) fn step_pattern_len(&mut self, steps: i32) {
         self.ensure_custom();
         let n = (i32::from(self.layer().pattern_len) + steps).clamp(2, i32::from(MAX_LEN)) as u8;
-        self.edit(
-            Scope::Arp,
-            SynthParam::Pattern(PatternParam::Len(n)),
-            |l| {
-                l.pattern_len = n;
-                l.pattern_cursor = l.pattern_cursor.min(n - 1);
-            },
-        );
+        self.edit(Scope::Arp, SynthParam::Pattern(PatternParam::Len(n)), |l| {
+            l.pattern_len = n;
+            l.pattern_cursor = l.pattern_cursor.min(n - 1);
+        });
     }
 
     /// POSITION dial of pages 3-5: moves the step cursor (UI only).
@@ -290,7 +286,10 @@ mod tests {
         s.group_arp.double_tap();
         s.take_edits();
         s.step_accent(1);
-        assert!(s.layers.iter().all(|l| l.step_accent[0] && l.pattern_custom));
+        assert!(s
+            .layers
+            .iter()
+            .all(|l| l.step_accent[0] && l.pattern_custom));
         assert!(s
             .take_edits()
             .iter()

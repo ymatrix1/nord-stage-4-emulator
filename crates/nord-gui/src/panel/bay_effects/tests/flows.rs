@@ -99,10 +99,10 @@ fn mod1_mst_clk_is_inert_on_ring_mod() {
     s.state.fx_ui.chains[0].mod1_sel = 2; // RM
     s.state.fx_ui.chains[0].mod1_mst = 5;
     s.drag_up("mod1.rate", 40.0);
-    assert!(s.fx_edits().iter().all(|e| !matches!(
-        e,
-        FxEdit::Mod1Sync { beats: Some(_), .. }
-    )));
+    assert!(s
+        .fx_edits()
+        .iter()
+        .all(|e| !matches!(e, FxEdit::Mod1Sync { beats: Some(_), .. })));
     assert!(s.chain().mod1_rate > 4.0, "the knob edits the free rate");
 }
 

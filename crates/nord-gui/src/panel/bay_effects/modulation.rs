@@ -159,9 +159,15 @@ fn unit(f: &mut Fx, st: &mut Stage4PanelState, slot: usize, s: &Spec) {
             _ => {
                 let mut n = to_log(*v.rate, s.rate_range.0, s.rate_range.1);
                 let tip = if v.auto_wah {
-                    format!("A-WAH SENS: sensitivity and range of the envelope follower ({:.2})", *v.rate)
+                    format!(
+                        "A-WAH SENS: sensitivity and range of the envelope follower ({:.2})",
+                        *v.rate
+                    )
                 } else {
-                    format!("{} RATE ({:.2} Hz). Shift + turn: MST CLK", s.title, *v.rate)
+                    format!(
+                        "{} RATE ({:.2} Hz). Shift + turn: MST CLK",
+                        s.title, *v.rate
+                    )
                 };
                 if f.knob(s.rate, &mut n, (0.0, 1.0), &tip, None) {
                     *v.rate = from_log(n, s.rate_range.0, s.rate_range.1);

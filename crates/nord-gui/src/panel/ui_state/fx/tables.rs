@@ -170,11 +170,7 @@ mod tests {
 
     #[test]
     fn cycling_skips_a_type_the_engine_lacks() {
-        let t = [
-            ok("A", 1u8),
-            missing_for_test("B"),
-            ok("C", 3u8),
-        ];
+        let t = [ok("A", 1u8), missing_for_test("B"), ok("C", 3u8)];
         assert_eq!(next_supported(&t, 0), 2);
         assert_eq!(next_supported(&t, 2), 0);
         let none = [missing_for_test("X"), missing_for_test("Y")];

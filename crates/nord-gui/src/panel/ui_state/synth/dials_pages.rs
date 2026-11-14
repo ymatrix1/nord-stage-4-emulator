@@ -3,9 +3,9 @@
 use super::page::{SynthPage, ARP_PAGES};
 use super::tables::VIBRATO_DELAYS;
 use super::{Scope, SynthUi};
-use crate::audio::SynthParam;
 #[cfg(test)]
 use crate::audio::PatternParam;
+use crate::audio::SynthParam;
 
 fn bump(v: u8, steps: i32, max: u8) -> u8 {
     (i32::from(v) + steps).clamp(0, i32::from(max)) as u8
@@ -152,22 +152,28 @@ mod tests {
         assert_eq!(s.layer().pattern_cursor, 2);
         s.take_edits();
         s.turn_dial(2, 2, false);
-        assert!(params(&mut s).contains(&SynthParam::Pattern(PatternParam::Gate {
-            step: 2,
-            eighths: 6
-        })));
+        assert!(
+            params(&mut s).contains(&SynthParam::Pattern(PatternParam::Gate {
+                step: 2,
+                eighths: 6
+            }))
+        );
         s.page = SynthPage::Arp(4);
         s.turn_dial(2, 1, false);
-        assert!(params(&mut s).contains(&SynthParam::Pattern(PatternParam::Accent {
-            step: 2,
-            on: true
-        })));
+        assert!(
+            params(&mut s).contains(&SynthParam::Pattern(PatternParam::Accent {
+                step: 2,
+                on: true
+            }))
+        );
         s.page = SynthPage::Arp(5);
         s.turn_dial(2, -1, false);
-        assert!(params(&mut s).contains(&SynthParam::Pattern(PatternParam::Pan {
-            step: 2,
-            pan: nord_core::synth::PatternPan::Left
-        })));
+        assert!(
+            params(&mut s).contains(&SynthParam::Pattern(PatternParam::Pan {
+                step: 2,
+                pan: nord_core::synth::PatternPan::Left
+            }))
+        );
         for n in 1..=5 {
             s.page = SynthPage::Arp(n);
             assert!(s.dial_unsupported(1).is_none() && s.dial_unsupported(2).is_none());

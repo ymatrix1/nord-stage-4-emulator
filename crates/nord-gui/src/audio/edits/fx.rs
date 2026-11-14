@@ -317,7 +317,11 @@ mod tests {
         assert_eq!(e.fx_chains[5].mod1_sync_beats, Some(0.5));
         assert_eq!(e.fx_chains[4].mod1_sync_beats, None);
         for bad in [Some(f32::NAN), Some(-1.0), Some(0.0), None] {
-            FxEdit::Mod1Sync { slot: 4, beats: bad }.apply(&mut e);
+            FxEdit::Mod1Sync {
+                slot: 4,
+                beats: bad,
+            }
+            .apply(&mut e);
             assert_eq!(e.fx_chains[5].mod1_sync_beats, None, "{bad:?}");
         }
     }

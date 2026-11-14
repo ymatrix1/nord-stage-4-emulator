@@ -4,10 +4,10 @@
 //! DSP thread applies it without allocating. The panel (`panel/ui_state/synth`) decides which
 //! layer(s) receive it; see [`super::SynthEdit`].
 
+use super::pattern::PatternParam;
 use nord_core::synth::{
     ClockDivision, FilterModel, SampleTimbre, SynthLayer, SynthOscMode, VaWaveform,
 };
-use super::pattern::PatternParam;
 use nord_core::synth_types::{ArpMode, LfoDestination, LfoShape, NotePriority, VibratoMode};
 
 /// Highest cutoff the filter accepts, as a fraction of the sample rate (`dsp-and-realtime.md`).

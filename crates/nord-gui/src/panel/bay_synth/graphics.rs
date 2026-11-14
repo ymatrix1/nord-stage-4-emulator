@@ -159,8 +159,8 @@ pub(super) fn paint_graphic(p: &Painter, area: Rect, g: &Graphic) {
         Graphic::Pattern { steps, len, cursor } => {
             let len = usize::from((*len).clamp(2, 16));
             let w = area.width() / len as f32;
-            for i in 0..len {
-                let g = f32::from(steps[i]) / 8.0;
+            for (i, &step) in steps.iter().take(len).enumerate() {
+                let g = f32::from(step) / 8.0;
                 let x = area.left() + i as f32 * w;
                 let h = (area.height() - 2.0) * g.max(0.08);
                 let r = Rect::from_min_max(

@@ -111,6 +111,10 @@ Conventions: a drawbar rect is its slot (8 px wide) and its LED ladder the 15 px
 
 What would confirm or replace the table: a higher-resolution front photo (at least 4000 px wide) or a tape measure on the instrument for the 36 estimated entries and the overall scale. The B8 renderers must not hard-code positions; they read these rects.
 
+## 7b. Engine bindings (`engine:<path>`)
+
+A control that has no host parameter but acts on the engine through the panel is `Bound("engine:<path>")`, as in `menus/`. `inventory/tests.rs` accepts the id when each dot-separated segment is a field (`seg:`) or method (`fn seg(`) in the engine sources it lists (`engine/mod.rs`, `pedals.rs`, `aux_kb.rs`, `synth/sound_init.rs`, `synth/pattern.rs`, `fx/mod.rs`). Used by `synth.sound_init` (`engine:synth_a.sound_init`). Rewired by the Synth / Effects bays: `synth.sound_init`, `reverb.variation` (`fxz_rev_var_{n}`) and the new `mod1.mst_clk` (`fxz_mod1_beats_{n}`, a Shift function of the Mod 1 RATE knob, shared rectangle). The three Synth OLED dials stay `Unsupported` in the inventory although the pages now work: one dial maps to many host ids, so it has no single binding.
+
 ## 8. Standalone Program area and keybed (`crates/nord-gui`, B8d / B8g)
 
 `panel/bay_program/` draws every `program.*`, `morph.*`, `split.*`, `mst_clk.*`, `transp.*`, `preset_library.*` id and `panel/keybed.rs` the two `keybed.*` ids at `layout_px::rect_or_empty`. Shifted ids share the base rectangle and draw a legend. Gestures use `nord_panel::behaviour` (`ButtonTracker`, `resolve`, `Latch`, `LiveMode`); a long press on SPLIT, MST CLK, TRANSP, SECTION EDIT and the Morph buttons is their primary function (screen or hold), not the shifted one. Program buttons 1-4 are soft buttons on screens that label them (Shift+n still opens the menu).
