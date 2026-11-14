@@ -38,6 +38,9 @@ pub struct OledText {
     /// Title-bar screens: `Some(counter)` paints `big` in an inverted bar with the (possibly
     /// empty) page counter right-aligned; `sub` is then the label and `rows` the body.
     pub bar: Option<String>,
+    /// Title-bar screens: the first body row is a lone value drawn in the 13 px font (menu pages
+    /// with one item); `false` keeps every body row in the 8 px font.
+    pub body_big: bool,
     /// Index of the lit soft button.
     pub soft_on: Option<usize>,
     /// Parameter popup `(label, value)` in the lower half of the home screen.

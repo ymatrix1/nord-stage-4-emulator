@@ -1,6 +1,6 @@
 # ARM OLED render (local research tooling)
 
-Status: v1.2 (2026-11-14) · Evidence: [research/arm-oled-render](../research/arm-oled-render.md) · Beans `ns4-2gdc`, `ns4-pyqg`
+Status: v1.3 (2026-11-14) · Evidence: [research/arm-oled-render](../research/arm-oled-render.md) · Beans `ns4-2gdc`, `ns4-pyqg`
 
 Purpose: run the OS v1.66 host firmware on the ARM harness with both OLED panels, the program-memory EEPROMs and a front-panel key matrix attached, press keys and capture the pixels and the widget text it produces, so the Program / Synth OLED layout of the GUI can be compared with the real screens. Local only: the firmware, the font bitmaps and every captured frame stay under `target/` or `.reference/` (git-ignored). The repo holds code, tests with synthetic fixtures and small derived numbers.
 
@@ -13,6 +13,7 @@ Purpose: run the OS v1.66 host firmware on the ARM harness with both OLED panels
 | `tools/arm_i2c.py` | `I2cBus`: register-level I2C0 model (`ICSTR` / `ICCNT` / `ICSAR` / `ICDXR` / `ICDRR` / `ICMDR`) with four 64 KB 24xx `Eeprom` slaves at `0x50..0x53`; `install_i2c` hooks it to the `0x01C22000` window |
 | `tools/arm_keys.py` | `KeyMatrix`: idle-high key matrix (strobe `0x60000015`, ports `0x60000010` / `0x60000020`), `all_keys()` (98 bits), `ENCODER_PAIRS` / `encoder_steps` (Gray sequences for strobe `0x80`) |
 | `tools/arm_screens.py` | `Session`: boot once, save / restore the machine plus EEPROMs, `load_eeproms`, `press` keys for N ticks, `turn` an encoder, `Capture` of frames and widget strings (`TextEvent`: widget, font, upper-case flag, text); CLI `boot [--eeprom image]` / `press` / `sweep [--shift]` |
+| `tools/arm_events.py` | Event chain of the panel (encoder counter -> queue entry `{tag, source, index, delta}` -> UI task -> screen -> value widget): constants, `decode_event`, `ENCODER_PAIR_OF_ID`, `trace_turn(session, pair, detents)` and a `turn` CLI that prints the dispatched events |
 | `tools/arm_store.py` | Program-store record layout (`pack_clusters`, `unpack_clusters`, `unpack_record`, `set_name`, `join_image` / `split_image`) and `store_current`: Store key twice with Memory Protect forced off, then the storage task step by hand (`flush`); CLI `store` writes a 256 KB EEPROM image for `boot --eeprom` |
 | `tools/arm_boot_full.py` | `prepare(..., display_stubs=False)` / `install_ui_stubs(..., display_stubs=False)` leave `EVENT_INSERT` and `TEXT_MEASURE` unstubbed |
 
@@ -35,7 +36,7 @@ Purpose: run the OS v1.66 host firmware on the ARM harness with both OLED panels
 | I2C driver | polls `ICSTR` `ARDY` `0x04` / `RRDY` `0x08` / `NACK` `0x02`; `MST` `0x0400` clears after a stop (`0xC005B09C..0xC005B2B0`) | VERIFIED (disassembly), bit layout ASSUMED (TI TRM) |
 | Key scan | one column per call (`0x800014E8`): strobe `0x01..0x40` (keys), `0x80` (kind 1); `word = byte[0x20] \| halfword[0x10] << 16`, stored `~(word & mask)`; a pressed key reads 0 | VERIFIED (table `0xC05298D8`), polarity ASSUMED then confirmed by the run |
 | Keys | Shift `(0x02, 1, 4)`; Program 1 .. 8 = `(0x10, 0, 2)` `(0x10, 0, 3)` `(0x08, 0, 2)` `(0x04, 0, 2)` `(0x10, 0, 4)` `(0x10, 0, 5)` `(0x08, 0, 4)` `(0x04, 0, 4)`; Shift + these open System, Sound (`PROGRAM LEVELS`), Program Organize, AUX KB, Output, Pedal, MIDI, EXTERN; Store `(0x10, 0, 1)`; Page next `(0x08, 0, 6)`; Layer Init = Shift + `(0x08, 0, 3)`; Preset keys `(0x08, 0, 0 / 1 / 5)` | EMPIRICAL (sweep, 100-tick holds) |
-| Encoders | strobe `0x80`: five A / B pairs, decoded by `0xC0082A9C` into +1 / -1 counters (indices 7, 6, 15, 14, 13); each Gray state held about 30 ticks; no screen reacts yet | EMPIRICAL |
+| Encoders | strobe `0x80`: five A / B pairs, decoded by `0xC0082A9C` into +1 / -1 counters (indices 7, 6, 15, 14, 13), posted as events (`0xC007B0BC`) on the UI ring and dispatched by `0xC00A0240`; **pair 1 (index 6) is the Program dial** (pages the menus, steps the presets, opens the program list `Import into A:11`); pair 0 (index 7) reaches the menu value widget but the parameter step `0xC00EEEB0` finds an empty container; pairs 2 to 4 find no widget | VERIFIED (hooks, frames; research note s15) |
 | Text widget | set-text routine `0xC007E3AC`: text at `[w + 0x54]` (0x40 bytes), font `[w + 0x2C]`, upper-case flag `[w + 0x88]` applied before the hook address `0xC007E43C` | VERIFIED (disassembly, run) |
 | Screen geometry | home: title y = 3, name y = 18 (13 px), rule y = 33, rows from y = 36 pitch 10 (8 px); title bar rows 0 to 10 inverted with the page counter right-aligned; menu label y = 15 (8 px), value y = 26 (13 px); popup label y = 45, value y = 55 under the home header; soft buttons rows 53 to 63, outlined, the active one lit; home rows start with an 8 px icon, text from x = 12 | VERIFIED (measured, research note s9, s12; GUI: `oled_paint::grid` / `bar`, `oled_icons`) |
 
@@ -51,7 +52,7 @@ Purpose: run the OS v1.66 host firmware on the ARM harness with both OLED panels
 ## Known limits
 
 - The store holds the default program only (renamed in the image); other locations need the directory entry format (device 3 `0xFE98`), Store As and the name entry need the encoders; the program body (824 bytes) is not decoded (research note s13).
-- Encoders decode to counters but no consumer reacts; dials behind SPI / ADC are not driven; Undo (Shift + Solo) and Page previous are not found in the 97 matrix keys (research note s12.1, s12.4).
+- Encoder events are delivered; only the Program dial changes a screen. Menu values, Store As name entry and dials behind SPI / ADC are not driven (research note s15.2); Undo (Shift + Solo): the dialog class and its refresh method `0xC01327BC` are found, its constructor and trigger are not (s15.4); Page previous is not found in the 97 matrix keys (s12.1).
 - Display 1 only shows the Synth section pages (they need the Synth page open first); it is blank on every other screen, as on the unit.
 - Title case: settled for the screens reached (title bars upper-case through the widget flag); `UNDO`, `FILTER`, `OSC PITCH`, arp `LEFT` / `RIGHT` still open (research note s14).
 - The row texts `B3` and `Pure Saw` of the home screen are set but not in the final frame (no DSP, sound not loaded: ASSUMED).

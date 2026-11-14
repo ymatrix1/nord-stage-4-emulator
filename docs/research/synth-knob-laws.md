@@ -14,7 +14,7 @@ Tags follow `.agents/rules/provenance-in-code.md`. All laws below are **VERIFIED
 | Envelope times | ARM writes rate index `knob - 64` (top byte of the ADR word) for amp, filter and osc ADR and for glide. With this index the pass of **two SY frames** that `strip_map.rs` assumed is **VERIFIED** (attack ramp time equals the displayed time at the first knob of each table plateau, ratio 1.00 to 1.01), and the displayed decay time is `ln 100` time constants (time to fall 40 dB), tau = 0.217 x display, not the EMPIRICAL 0.18 |
 | Cutoff / resonance | `kFltFreq`: top byte `knob - 52` (knobs 0..117; steeper above) as in #324; `kFltRes`, `kOscCtrl`: `-0.5 + knob / 127` (float32 word) |
 | Oscillator tuning | `kOscTuneCoarse` / `kOscTuneFine` share common word 0: `(coarse + fine / 100) x 2^24` (Q8.24 semitones, the note-term scale `0x01000000` per semitone) |
-| Engine | New opt-in `--synth-knob-laws` (`SynthLayer::knob_laws`): the strip chain takes the ADR rate indices from the stored knobs (`SynthLayerDecoded::knobs`) instead of searching the table for a displayed time. Defaults and `render_hash` unchanged (D52) |
+| Engine | New opt-in `--synth-knob-laws` (`SynthLayer::knob_laws`): the strip chain takes the ADR rate indices from the stored knobs (`SynthLayerDecoded::knobs`) instead of searching the table for a displayed time. Defaults and `render_hash` unchanged (D55) |
 
 ## 2. Audit: which datasets fed plain integers
 

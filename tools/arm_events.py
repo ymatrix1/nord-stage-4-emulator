@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Panel events of the host firmware: from the scan, through the event queue, to the widgets.
+
+Fourth pass answer to "nothing reads the encoder counters": they are read, by the firmware's UI
+event loop. The chain (all addresses VERIFIED by hooks in `Session`, research note s15):
+
+1. The scan decoder `0xC0082A9C` adds +1 / -1 per Gray step to the counter of encoder `index`
+   and calls `0xC007AEBC(obj, index, entry, ..)` (acceleration / repeat limiter).
+2. That calls the listener `[obj + 8]` (vtable slot 0 = `0xC007B0BC`), which **posts an event** on
+   the per-task ring queue `table[0xC05613F4 + [0x8000C000] * 16]` (index 3 for the UI task): a
+   64-byte entry `{tag, source id, encoder index, delta}`. A second post with the same tag, source
+   and index is merged into the first by adding the deltas (`0xC007B170`), so a slow turn is one
+   event with a small delta.
+3. The UI task polls the ring in `0xC00A0240..0xC00A03FC`, and calls every subscriber registered
+   for the tag (`blx` at `0xC00A035C`). Encoder events carry the tag `0xC053F9CC`, key events
+   `0xC053F9D0` (`{tag, 0, key id, 1 / 0}`).
+4. The focused screen routes the event (`0xC018933C`: widget tree, then the key table of the
+   screen) to a value widget `0xC0137CC4`, which compares the encoder index with the two ids
+   `[widget + 0x44]` / `[widget + 0x48]` and calls the step method of the bound parameter
+   (`vtable[6]`, `0xC00EEEB0`) with the delta.
+
+Only the dial is wired on the screens reached so far (see `ENCODER_PAIR_OF_ID`): encoder index 6
+(pair 1) is the **Program dial** (paging the menus, the preset lists and the program list `Import
+into A:11`); index 7 (pair 0) reaches the value widget of the menu pages but its step method
+returns without a change (the value container `[param + 0x34]` is empty in the harness, the
+parameter store is not populated without the DSP); the other three (13, 14, 15) are dispatched
+and found no widget on any screen reached.
+
+    uv run --with unicorn python tools/arm_events.py turn target/fw_unpacked/bank0_CODE.bin \
+        target/fw_unpacked/bank0_SRAM.bin --state target/oled/state.bin --pair 1 --detents 3
+
+Evidence and limits: `docs/research/arm-oled-render.md` section 15.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+# VERIFIED (hooks during `Session.turn`, research note s15): event tags, queue table and the
+# dispatcher call site.
+TAG_ENCODER = 0xC053F9CC
+TAG_KEY = 0xC053F9D0
+QUEUE_TABLE = 0xC05613F4
+TASK_INDEX_ADDRESS = 0x8000C000
+DISPATCH_CALL = 0xC00A035C
+EVENT_BYTES = 64
+# VERIFIED: value widget handler and the parameter step method behind it.
+VALUE_WIDGET = 0xC0137CC4
+PARAM_STEP = 0xC00EEEB0
+# VERIFIED (`arm_keys.encoder_steps`, event ids seen at the dispatcher): encoder pair -> index.
+ENCODER_PAIR_OF_ID: dict[int, int] = {7: 0, 6: 1, 15: 2, 14: 3, 13: 4}
+ID_OF_ENCODER_PAIR: dict[int, int] = {v: k for k, v in ENCODER_PAIR_OF_ID.items()}
+
+
+@dataclass(frozen=True)
+class Event:
+    """One dispatched event: its tag, the flags word, the id (key or encoder index) and value."""
+
+    tag: int
+    flags: int
+    ident: int
+    value: int
+
+    @property
+    def kind(self) -> str:
+        return {TAG_ENCODER: "encoder", TAG_KEY: "key"}.get(self.tag, "other")
+
+    @property
+    def delta(self) -> int:
+        """Signed value of an encoder event (the queue stores it as a 32-bit word)."""
+        return self.value - (1 << 32) if self.value >= 1 << 31 else self.value
+
+
+def decode_event(words: tuple[int, int, int, int]) -> Event:
+    """`Event` from the first four words of a queue entry."""
+    return Event(*words)
+
+
+def merge_delta(pending: int, delta: int) -> int:
+    """Delta after the queue merged a repeated encoder event (`0xC007B170`: plain addition)."""
+    return pending + delta
+
+
+def queue_depth(head: int, tail: int) -> int:
+    """Entries waiting in a ring whose head / tail counters only grow (`tail - head`)."""
+    return tail - head
+
+
+def ring_slot(index: int, mask: int) -> int:
+    """Slot of counter value `index` in a ring of `mask + 1` entries."""
+    return index & mask
+
+
+def encoder_pair_for(ident: int) -> int | None:
+    """Encoder pair (`arm_keys.ENCODER_PAIRS` index) whose events carry `ident`."""
+    return ENCODER_PAIR_OF_ID.get(ident)
+
+
+def trace_turn(session, pair: int, detents: int):  # noqa: ANN001, ANN201 - needs unicorn
+    """Turn encoder `pair` and return `(capture, [Event, ...])` dispatched during it."""
+    emu, events = session.emu, []
+
+    def on_dispatch(_uc, _addr, _size, _user) -> None:  # noqa: ANN001
+        entry = emu.read32(emu.reg(13) + 4)
+        events.append(decode_event(tuple(emu.read32(entry + 4 * i) for i in range(4))))
+
+    handle = emu.uc.hook_add(
+        emu._u.UC_HOOK_CODE, on_dispatch, begin=DISPATCH_CALL, end=DISPATCH_CALL
+    )
+    try:
+        cap = session.turn(pair, detents)
+    finally:
+        emu.uc.hook_del(handle)
+    return cap, events
+
+
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs the local firmware
+    import arm_screens as sc
+
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    ap.add_argument("cmd", choices=["turn"])
+    ap.add_argument("image", type=Path)
+    ap.add_argument("sram", type=Path)
+    ap.add_argument("--state", type=Path, default=Path("target/oled/state.bin"))
+    ap.add_argument("--pair", type=int, default=1)
+    ap.add_argument("--detents", type=int, default=3)
+    ap.add_argument("--out", type=Path, default=Path("target/oled/turn"))
+    ns = ap.parse_args(argv)
+    session = sc.Session(ns.image, ns.sram)
+    session.load_state(ns.state.read_bytes())
+    cap, events = trace_turn(session, ns.pair, ns.detents)
+    for ev in events:
+        print(f"{ev.kind} id={ev.ident} flags={ev.flags} value={ev.delta}")
+    print("strings:", cap.strings())
+    sc.save_capture(cap, ns.out, f"pair{ns.pair}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -16,7 +16,9 @@ use nord_core::render_opts::FirmwareOptions;
 use std::path::{Path, PathBuf};
 
 pub mod bar;
+pub mod choices;
 pub mod info;
+pub mod presets;
 
 /// Headless-run request parsed from `--self-test <out.wav>` / `--dump-options`.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -225,6 +227,42 @@ mod tests {
         apply_audio_command(rx.try_recv().unwrap(), &mut engine, &mut vol);
         assert!(engine.fx_chains[0].firmware_fx.amp && !engine.organ_a.rotary_drive_unity);
         assert!(!engine.piano_b.firmware_bus_scale && engine.synth_a.strip_shape.is_none());
+    }
+
+    #[test]
+    fn new_switches_reach_the_engine_through_the_command_channel_and_revert() {
+        use nord_core::fx::RingAdvance;
+        let (handle, rx) = AudioHandle::new();
+        let mut fx = nord_core::fx::FirmwareFx::DEFAULT;
+        fx.enable_ports("reverb,mod1,mod2,eq,compressor").unwrap();
+        let mut panel = FirmwarePanelState::new(FirmwareOptions {
+            fx,
+            leslie_firmware: true,
+            leslie_ring: RingAdvance::FROZEN,
+            farfisa_processor: Some(true),
+            piano_layer_law: true,
+            sample_kernel_key: false,
+            sample_pitch_fw: true,
+            ..FirmwareOptions::default()
+        });
+        panel.push(&handle);
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut vol = 1.0;
+        apply_audio_command(rx.try_recv().unwrap(), &mut engine, &mut vol);
+        let f = engine.fx_chains[0].firmware_fx;
+        assert!(f.reverb && f.mod1 && f.mod2 && f.eq && f.compressor && !f.delay_laws);
+        assert!(engine.organ_a.leslie_fw.is_some() && engine.organ_b.farfisa_processor);
+        assert!(engine.piano_a.firmware_layer_law && !engine.synth_b.sample_kernel_by_key);
+        assert!(engine.synth_c.sample_pitch_fw);
+        panel.opts = FirmwareOptions::default();
+        panel.push(&handle);
+        apply_audio_command(rx.try_recv().unwrap(), &mut engine, &mut vol);
+        assert_eq!(
+            engine.fx_chains[0].firmware_fx,
+            nord_core::fx::FirmwareFx::DEFAULT
+        );
+        assert!(engine.organ_a.leslie_fw.is_none() && !engine.organ_b.farfisa_processor);
+        assert!(!engine.piano_a.firmware_layer_law && engine.synth_b.sample_kernel_by_key);
     }
 
     #[test]

@@ -29,6 +29,7 @@ mod fw_ladder;
 mod fw_ladder_tables;
 mod fw_misc;
 mod fw_shape;
+mod fw_shape34;
 mod fw_sine3;
 mod fw_sine_hp;
 mod fw_sine_warps;
@@ -126,6 +127,8 @@ mod tests_fw_stage_golden6;
 mod tests_fw_stage_golden7;
 #[cfg(test)]
 mod tests_fw_stage_golden8;
+#[cfg(test)]
+mod tests_fw_stage_golden9;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
