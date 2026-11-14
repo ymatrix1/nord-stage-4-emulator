@@ -2,13 +2,35 @@
 
 use super::{BackupLibraryState, LibraryLoadOutcome};
 use crate::audio::{AudioCommand, AudioHandle};
-use crate::panel::Stage4PanelState;
+use crate::panel::{LoadRequest, Stage4PanelState};
 use nord_core::synth::SynthOscMode;
 use std::sync::Arc;
 
 impl BackupLibraryState {
+    /// Hands the backup names to the Program area (LIST, Preset Library, Num order) and runs the
+    /// load requests it queued (program dial, program buttons, preset browser).
+    pub fn sync_program_panel(&mut self, panel: &mut Stage4PanelState, audio: &AudioHandle) {
+        panel
+            .program_ui
+            .sync_catalog(&self.programs, &self.pianos, &self.samples);
+        for req in panel.program_ui.take_requests() {
+            match req {
+                LoadRequest::Program(entry) => self.load_program_entry(&entry, panel, audio),
+                LoadRequest::Piano { entry, slot_b } => {
+                    self.piano_slot_b = slot_b;
+                    self.request_piano_entry(&entry);
+                }
+                LoadRequest::Sample { entry, layer } => {
+                    self.synth_layer_idx = layer.min(2);
+                    self.request_sample_entry(&entry);
+                }
+            }
+        }
+    }
+
     /// Polls decoded results from background threads and dispatches them to `AudioHandle` and `Stage4PanelState`.
     pub fn poll_results(&mut self, panel: &mut Stage4PanelState, audio: &AudioHandle) {
+        self.sync_program_panel(panel, audio);
         while let Ok(outcome) = self.result_rx.try_recv() {
             self.pending_jobs = self.pending_jobs.saturating_sub(1);
             match outcome {
@@ -102,6 +124,32 @@ impl BackupLibraryState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_program_panel_receives_names_and_its_requests_are_run() {
+        let mut lib = BackupLibraryState::new();
+        let (audio, _rx) = AudioHandle::new();
+        let mut panel = Stage4PanelState::default();
+        lib.programs = vec!["Program/Bank A/One.ns4p".to_string()];
+        lib.pianos = vec!["Piano/p.npno".to_string()];
+        lib.sync_program_panel(&mut panel, &audio);
+        assert_eq!(panel.program_ui.catalog.programs.len(), 1);
+        panel
+            .program_ui
+            .requests
+            .push(LoadRequest::Program("Program/Bank A/One.ns4p".into()));
+        panel.program_ui.requests.push(LoadRequest::Piano {
+            entry: "Piano/p.npno".into(),
+            slot_b: true,
+        });
+        lib.sync_program_panel(&mut panel, &audio);
+        assert!(panel.program_ui.requests.is_empty(), "queue drained");
+        assert!(lib.piano_slot_b, "slot B was requested");
+        assert!(
+            lib.error_message.is_some(),
+            "no archive open is reported, not dropped"
+        );
+    }
 
     #[test]
     fn test_poll_results_reports_error_outcome() {

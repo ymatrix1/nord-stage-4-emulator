@@ -9,8 +9,8 @@ mod synth;
 pub use fx::FxEdit;
 pub use organ::OrganEdit;
 pub use piano::PianoEdit;
-pub use program::ProgramEdit;
-pub use synth::SynthEdit;
+pub use program::{CopyItem, MorphTarget, ProgramEdit, SplitCfg};
+pub use synth::{SynthEdit, SynthGroup, SynthParam, SynthTarget};
 
 #[cfg(test)]
 mod tests {

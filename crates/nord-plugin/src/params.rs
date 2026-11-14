@@ -102,6 +102,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "ped", group = "Pedals")]
     pub pedals: crate::aux_pedal_params::PedalBank,
 
+    /// System / Sound / Output menu settings (global transpose, fine tune, rotary, mono).
+    #[nested(id_prefix = "sys", group = "System Menu")]
+    pub settings: crate::settings_params::SettingsParams,
+
     /// Aux KB enable, channel, curve and layer assignment.
     #[nested(id_prefix = "auxkb", group = "Aux KB")]
     pub aux_kb: crate::aux_pedal_params::AuxKbParams,
@@ -110,9 +114,17 @@ pub struct Stage4Params {
     #[nested(id_prefix = "synthg", group = "Synth Gate")]
     pub synth_gate: crate::synth_gate_params::SynthGateBank,
 
+    /// Per-layer Arp Zig Zag, fractional Range and the custom Pattern (steps, accent, pan).
+    #[nested(id_prefix = "synthp", group = "Synth Pattern")]
+    pub synth_pattern: crate::synth_pattern_params::SynthPatternBank,
+
     /// Per-layer Organ B3 Bass, octave and vibrato/chorus plus Rotary switches.
     #[nested(id_prefix = "organx", group = "Organ Layers")]
     pub organ_layers: crate::organ_params::OrganLayerBank,
+
+    /// Per-layer POLY percussion, Preset / Drawbar Live (+ SYNC) and shared Vox/Farf vibrato.
+    #[nested(id_prefix = "organz", group = "Organ Live")]
+    pub organ_live: crate::organ_live_params::OrganLiveBank,
 
     /// Per-layer Organ model override, key click, rotary on/angle, fine tune, crosstalk, detune.
     #[nested(id_prefix = "organy", group = "Organ Layers Extra")]
@@ -351,9 +363,12 @@ impl Default for Stage4Params {
             synth_mod: crate::synth_mod_params::SynthModBank::default(),
             pedals: crate::aux_pedal_params::PedalBank::default(),
             aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
+            settings: crate::settings_params::SettingsParams::default(),
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
+            synth_pattern: crate::synth_pattern_params::SynthPatternBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
             organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
+            organ_live: crate::organ_live_params::OrganLiveBank::default(),
             piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
             layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
             layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank::default(),
@@ -622,9 +637,11 @@ impl Stage4Params {
         self.synth_layers.sync_to_engine(engine);
         self.program.sync_to_engine(engine);
         self.synth_mod.sync_to_engine(engine);
+        self.settings.sync_to_engine(engine);
         self.aux_kb.sync_to_engine(engine);
         self.pedals.sync_to_engine(engine);
         self.synth_gate.sync_to_engine(engine);
+        self.synth_pattern.sync_to_engine(engine);
         self.organ_layers.sync_to_engine(engine);
         self.layer_fx_extra.sync_to_engine(engine);
         self.layer_fx_sharing.sync_to_engine(engine);
@@ -758,6 +775,7 @@ impl Stage4Params {
 
         // Per-layer extras override the global Organ/Piano blocks above.
         self.organ_extra.sync_to_engine(engine);
+        self.organ_live.sync_to_engine(engine);
         self.piano_extra.sync_to_engine(engine);
     }
 }

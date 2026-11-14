@@ -18,7 +18,7 @@ from __future__ import annotations
 from fractions import Fraction
 
 import fx_pe
-from fx_pe import Machine, fpass, swap, wd
+from fx_pe import M32, Machine, fpass, swap, wd
 
 #: VERIFIED (oracle, 60 calls): a float result below the smallest normal number flushes to zero.
 TINY = Fraction(1, 2**126)
@@ -38,13 +38,14 @@ def _ops(m: Machine):
     return (
         m.step, m.r, m.ld, m.ldb, lambda k, o: m.a(f"i{k}", o),
         lambda k: m.ir[f"i{k}"], lambda k: m.ir[f"m{k}"], m.mod, m.x, m.y,
+        lambda k, j: (m.ir[f"i{k}"] + m.ir[f"m{j}"]) & M32,
     )  # fmt: skip
 
 
 # fmt: off
 def _body(m: Machine) -> None:
     """One pass of the 21-pass loop (`0x124033 .. 0x124060`, 17 instructions)."""
-    step, r, ld, ldb, A, I, M, mod, x, y = _ops(m)  # noqa: E741
+    step, r, ld, ldb, A, I, M, mod, x, y, plain = _ops(m)  # noqa: E741
     step(0x124033,w={12:ld(I(6)),8:fmul(r(0),r(4)),6:fsub(r(8),r(12))},d={"i6":mod(6,2)})
     step(0x124036,w={14:ld(I(6)),10:fmul(r(2),r(4)),7:fsub(r(10),r(14))},d={"i6":mod(6,2)})
     step(0x124039,w={8:fmul(r(0),r(5)),0:fadd(r(8),r(12))},st=[(A(3,-26),r(0))])
@@ -68,7 +69,7 @@ def _body(m: Machine) -> None:
 def run(m: Machine) -> Machine:
     """Run the core on `m` (`R0`, `R4`, DAG registers set by the caller); `m.mem` is updated."""
     mem = m.mem
-    step, r, ld, ldb, A, I, M, mod, x, y = _ops(m)  # noqa: E741
+    step, r, ld, ldb, A, I, M, mod, x, y, plain = _ops(m)  # noqa: E741
     step(0x123F61,d={"i3":I(1)})
     step(0x123F63,w={3:ldb(A(1,17))})
     step(0x123F65,w={5:ld(A(3,20))})
@@ -201,9 +202,9 @@ def run(m: Machine) -> Machine:
     step(0x1240BC,d={"m4":wd(y[1])})
     step(0x1240BE,d={"i4":mod(6,3)})
     step(0x1240C0,d={"i5":mod(6,4)})
-    P4=mod(4,0)
+    P4=plain(4,0)
     step(0x1240C2,w={1:ld(P4)})
-    P5=mod(5,6)
+    P5=plain(5,6)
     step(0x1240C4,w={9:ld(P5)})
     step(0x1240C6,w={2:fmul(r(5),r(0))})
     step(0x1240C8,w={10:fmul(r(5),r(8))})
@@ -213,18 +214,18 @@ def run(m: Machine) -> Machine:
     step(0x1240D0,w={10:fmul(r(6),r(9))})
     step(0x1240D2,w={0:r(1),2:fadd(r(2),r(0))})
     step(0x1240D5,w={8:r(9),10:fadd(r(10),r(8))})
-    P6=mod(6,0)
+    P6=plain(6,0)
     step(0x1240D8,st=[(P6,r(2))])
-    P6=mod(6,6)
+    P6=plain(6,6)
     step(0x1240DA,st=[(P6,r(10))])
     step(0x1240DC,w={1:ld(A(3,26))})
     step(0x1240DE,d={"m3":wd(x[1])})
     step(0x1240E0,d={"m4":wd(y[1])})
     step(0x1240E2,d={"i2":mod(6,3)})
     step(0x1240E4,d={"i7":mod(6,4)})
-    P2=mod(2,0)
+    P2=plain(2,0)
     step(0x1240E6,w={1:ld(P2)})
-    P7=mod(7,6)
+    P7=plain(7,6)
     step(0x1240E8,w={9:ld(P7)})
     step(0x1240EA,w={2:fmul(r(5),r(0))})
     step(0x1240EC,w={10:fmul(r(5),r(8))})
@@ -234,18 +235,18 @@ def run(m: Machine) -> Machine:
     step(0x1240F4,w={10:fmul(r(6),r(9))})
     step(0x1240F6,w={0:r(1),2:fadd(r(2),r(0))})
     step(0x1240F9,w={8:r(9),10:fadd(r(10),r(8))})
-    P4=mod(4,0)
+    P4=plain(4,0)
     step(0x1240FC,st=[(P4,r(2))])
-    P5=mod(5,6)
+    P5=plain(5,6)
     step(0x1240FE,st=[(P5,r(10))])
     step(0x124100,w={1:ld(A(3,28))})
     step(0x124102,d={"m3":wd(x[1])})
     step(0x124104,d={"m4":wd(y[1])})
     step(0x124106,d={"i4":mod(6,3)})
     step(0x124108,d={"i5":mod(6,4)})
-    P4=mod(4,0)
+    P4=plain(4,0)
     step(0x12410A,w={1:ld(P4)})
-    P5=mod(5,6)
+    P5=plain(5,6)
     step(0x12410C,w={9:ld(P5)})
     step(0x12410E,w={2:fmul(r(5),r(0))})
     step(0x124110,w={10:fmul(r(5),r(8))})
@@ -255,18 +256,18 @@ def run(m: Machine) -> Machine:
     step(0x124118,w={10:fmul(r(6),r(9))})
     step(0x12411A,w={0:r(1),2:fadd(r(2),r(0))})
     step(0x12411D,w={8:r(9),10:fadd(r(10),r(8))})
-    P2=mod(2,0)
+    P2=plain(2,0)
     step(0x124120,st=[(P2,r(2))])
-    P7=mod(7,6)
+    P7=plain(7,6)
     step(0x124122,st=[(P7,r(10))])
     step(0x124124,w={1:ld(A(3,30))})
     step(0x124126,d={"m3":wd(x[1])})
     step(0x124128,d={"m4":wd(y[1])})
     step(0x12412A,d={"i2":mod(6,3)})
     step(0x12412C,d={"i7":mod(6,4)})
-    P2=mod(2,0)
+    P2=plain(2,0)
     step(0x12412E,w={1:ld(P2)})
-    P7=mod(7,6)
+    P7=plain(7,6)
     step(0x124130,w={9:ld(P7)})
     step(0x124132,w={2:fmul(r(5),r(0))})
     step(0x124134,w={10:fmul(r(5),r(8))})
@@ -276,9 +277,9 @@ def run(m: Machine) -> Machine:
     step(0x12413C,w={10:fmul(r(6),r(9))})
     step(0x12413E,w={0:r(1),2:fadd(r(2),r(0))})
     step(0x124141,w={8:r(9),10:fadd(r(10),r(8))})
-    P4=mod(4,0)
+    P4=plain(4,0)
     step(0x124144,st=[(P4,r(2))])
-    P5=mod(5,6)
+    P5=plain(5,6)
     step(0x124146,st=[(P5,r(10))])
     step(0x124148,d={"i6":mod(6,2)})
     step(0x12414A,w={11:[I(6)]*2})

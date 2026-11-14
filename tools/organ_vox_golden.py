@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import organ_post_ref as pr
@@ -97,6 +99,49 @@ def memory(depth_word: int) -> pr.Mem:
         m[pr.FILT + 12 * g + 4 + j] = pr.f2u(c)  # cA
         m[pr.FILT + 12 * g + 8 + j] = pr.f2u(1 - 2 * c)  # cC
     return m
+
+
+IMAGE_RS = Path(__file__).resolve().parents[1] / "crates/nord-core/src/organ/vox_image.rs"
+
+
+def image_words(name: str) -> list[int]:
+    """The u32 words of one `pub(super) const NAME` array (or scalar) of `vox_image.rs`."""
+    text = IMAGE_RS.read_text()
+    body = re.search(rf"const {name}: [^=]*= ([^;]*);", text, re.S).group(1)
+    return [int(w, 16) for w in re.findall(r"0x([0-9A-Fa-f]+)", body)]
+
+
+def sine_memory() -> pr.Mem:
+    """Sine bank memory of the image start state (no vibrato, offset word 0.5)."""
+    m = pr.Mem()
+    m[pr.OFFSET], m[pr.DEPTH] = 0x40000000, 0
+    ladder, phases = image_words("SINE_LADDER"), image_words("SINE_START")
+    gains, poly = image_words("SINE_GAIN_WORDS"), image_words("SINE_POLY_WORDS")
+    for j in range(pr.SINES):
+        m[pr.SINE_PH + j] = phases[0 if j < 24 else 1 if j < 32 else 2]
+        m[pr.LADDER + j] = ladder[j]
+        m[pr.GAINS + j] = gains[0 if j < 12 else 1 if j < 24 else 2 if j < 32 else 3]
+    for lane in (0, 1):
+        m[pr.BASE_IN + lane] = image_words("SINE_BASE")[0]
+        m[pr.CONSTS + lane] = 0xFFFFFFE2  # float scale -30
+        m[pr.CONSTS + 2 + lane] = pr.f2u(-1.0)
+        for t, w in enumerate(poly):
+            m[pr.CONSTS + 4 + 2 * t + lane] = w
+    for q, v in enumerate(pr.BUCKET_PAIRS):
+        m[pr.BUCKET_INDEX + 2 * q], m[pr.BUCKET_INDEX + 2 * q + 1] = v, 0
+    return m
+
+
+def bucket_signals(frames: int = FRAMES, stride: int = STRIDE):
+    """`records[r][b]` = bucket `b` of frame `r * stride` (two frames per post stage call)."""
+    m = sine_memory()
+    per_frame = []
+    for _ in range(frames // 2 + 1):
+        pr.sines(m)
+        for rep in range(2):
+            base = pr.Y0 + pr.NOTES + pr.BUCKET_STRIDE * rep
+            per_frame.append([float(np.float32(float(pr.ld(m[base + b])))) for b in range(12)])
+    return [per_frame[f] for f in range(0, frames, stride)]
 
 
 def note_signals(depth_word: int, notes, frames: int = FRAMES, stride: int = STRIDE):
@@ -187,6 +232,11 @@ def rust_file() -> str:
         lines.append(f"pub(super) const {name}: [[f32; {len(notes)}]; {len(rec)}] = [")
         lines += ["    [" + ", ".join(fmt(v) for v in r) + "]," for r in rec]
         lines.append("];")
+    rec = bucket_signals()
+    lines.append("#[rustfmt::skip]")
+    lines.append(f"pub(super) const B_PLAIN: [[f32; 12]; {len(rec)}] = [")
+    lines += ["    [" + ", ".join(fmt(v) for v in r) + "]," for r in rec]
+    lines.append("];")
     xs = output_input()
     for name, vals in (("OUT_INPUT", xs), ("OUT_EXPECTED", output_signals(xs))):
         lines.append("#[rustfmt::skip]")
@@ -202,6 +252,8 @@ def rust_file() -> str:
         "fn vectors_have_the_declared_shape() {",
         "    assert_eq!(Y_PLAIN.len(), FRAMES.div_ceil(STRIDE));",
         "    assert_eq!(Y_VIB.len(), Y_PLAIN.len());",
+        "    assert_eq!(B_PLAIN.len(), Y_PLAIN.len());",
+        "    assert!(B_PLAIN.iter().flatten().any(|v| v.abs() > 0.5));",
         "    assert_eq!(OUT_INPUT.len(), OUT_EXPECTED.len());",
         "    assert!(Y_PLAIN.iter().flatten().all(|v| v.is_finite() && v.abs() < 1.5));",
         "    assert!(OUT_EXPECTED.iter().any(|v| v.abs() > 0.01));",

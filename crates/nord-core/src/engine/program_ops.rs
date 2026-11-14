@@ -44,7 +44,7 @@ impl Stage4Engine {
 
     /// Note after transpose, or `None` when it leaves the MIDI range.
     pub(super) fn transposed_note(&self, note: u8) -> Option<u8> {
-        let n = i16::from(note) + i16::from(self.transpose);
+        let n = i16::from(note) + i16::from(self.effective_transpose());
         (0..=127).contains(&n).then_some(n as u8)
     }
 

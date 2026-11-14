@@ -31,7 +31,7 @@ impl Stage4Engine {
                         continue;
                     };
                     let split_gain = if route == NoteRoute::Global {
-                        self.split_router.note_gain(layer, note)
+                        self.keybed_gain(layer, note)
                     } else {
                         1.0
                     };
@@ -48,7 +48,7 @@ impl Stage4Engine {
                     self.layer_note_on(layer, sounding, velocity, split_gain);
                 }
                 if recipients != 0 {
-                    self.held_transpose[channel_idx][note as usize] = self.transpose;
+                    self.held_transpose[channel_idx][note as usize] = self.effective_transpose();
                 }
                 for layer in LayerId::ALL {
                     if recipients & (1 << (layer as u8)) != 0 {
@@ -94,7 +94,11 @@ impl Stage4Engine {
                     cc::DRAWBAR_1_16..=cc::DRAWBAR_9_1 => {
                         let idx = (controller - cc::DRAWBAR_1_16) as usize;
                         let step = ((norm * 8.0).round() as u8).min(8);
-                        self.organ_a.drawbars[idx] = step;
+                        // the physical bar always moves; the stored preset only follows in Preset mode
+                        self.organ_a.live_drawbars[idx] = step;
+                        if !self.organ_a.drawbar_live {
+                            self.organ_a.drawbars[idx] = step;
+                        }
                     }
                     cc::SUSTAIN_PEDAL => self.set_sustain_pedal(PedalSource::Global, value),
                     cc::SOSTENUTO_PEDAL => {

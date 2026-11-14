@@ -62,3 +62,11 @@ def test_the_core_reads_the_pointer_words_it_is_given():
         seen.append(mem[ptr] - chk.LA)
     assert seen == [2, 4, 6, 8, 10, 12, 14, 0, 2, 4]  # length 16 words
     assert core.PC == 0x123F61 and core.END == 0x12417D
+
+
+def test_golden_words_after_the_all_pass_taps_are_pinned():
+    """Call 130 is past the first all-pass tap (114 calls): pins the two-copy buffer path."""
+    g = chk.golden_words(135, 1)
+    assert g[130] == (1007177485, 1007177485, 3159033076, 3159033076)
+    assert g[133] == (3155418116, 3155418116, 1003793353, 1003793353)
+    assert hashlib.sha256(repr(g).encode()).hexdigest()[:16] == "935e9b06d4374f03"
