@@ -9,6 +9,7 @@
 
 use super::fw_ext40::{Fp, E40};
 use super::fw_leslie_core::Core;
+use super::fw_leslie_ring::RingAdvance;
 
 /// Slow speed words as the ARM re-sends them (`0xB2F25`, `0xB2F26`, `0xB2FA1`).
 pub const SLOW_SPEED_WORDS: [u32; 3] = [0x22b00, 0x26000, 0x15d00];
@@ -40,6 +41,14 @@ impl<F: Fp> Leslie<F> {
             held: None,
             out: [[0.0; 2]; 2],
         }
+    }
+
+    /// The processor with another history ring behaviour ([`RingAdvance::FROZEN`] reproduces the
+    /// first oracle runs, about 50 dB under the input; `new()` uses [`RingAdvance::ADVANCE`]).
+    pub fn with_ring(ring: RingAdvance) -> Self {
+        let mut l = Self::new();
+        l.core.set_ring(ring);
+        l
     }
 
     /// Sets the rotor speed words (`0xB2F25`, `0xB2F26`, `0xB2FA1`).
