@@ -68,7 +68,7 @@ ANALOG layers with a bit-exact stage model: **302 of 312 (96.8 %)**, unchanged. 
 ## Implications
 
 - Every filter type of the factory presets now has a verified stage; what is left for filters is the panel to strip word law (s4), not the DSP.
-- The Ladder24 default stays `Lp4` outside `--synth-stages`; with it on, the Ladder24 layers change sound (D48).
+- The Ladder24 default stays `Lp4` outside `--synth-stages`; with it on, the Ladder24 layers change sound (D50).
 
 ## Follow-ups
 

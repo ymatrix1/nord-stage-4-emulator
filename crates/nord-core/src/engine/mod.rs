@@ -159,11 +159,11 @@ pub struct Stage4Engine {
     pub output_routing: OutputRouting,
     /// Sound menu Organ Keyboard Trigger Point.
     pub organ_trigger: OrganTrigger,
-    note_hold_counts: [[[u8; 7]; 128]; 16],
+    note_hold_counts: Box<[[[u8; 7]; 128]; 16]>,
     /// Per-program transpose in semitones (`-6..=6`, manual p.40).
     transpose: i8,
     /// Transpose each held `(channel, note)` key started with, so note-off matches note-on.
-    held_transpose: [[i8; 128]; 16],
+    held_transpose: Box<[[i8; 128]; 16]>,
     /// Program Levels offset in dB (manual p.46) and its linear gain (`1.0` when `0 dB`).
     program_level_db: f32,
     program_gain: f32,
@@ -219,9 +219,9 @@ impl Stage4Engine {
             extern_menu: ExternMenu::default(),
             output_routing: OutputRouting::default(),
             organ_trigger: OrganTrigger::default(),
-            note_hold_counts: [[[0; 7]; 128]; 16],
+            note_hold_counts: Box::new([[[0; 7]; 128]; 16]),
             transpose: 0,
-            held_transpose: [[0; 128]; 16],
+            held_transpose: Box::new([[0; 128]; 16]),
             program_level_db: 0.0,
             program_gain: 1.0,
             clipboard: None,
