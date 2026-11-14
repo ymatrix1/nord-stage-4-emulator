@@ -173,6 +173,7 @@ fn render_panel_at(
     render_bay_piano(ui, painter, panel_rect, state, audio_handle);
     render_bay_program(ui, painter, panel_rect, state, audio_handle);
     render_bay_synth(ui, painter, panel_rect, state, audio_handle);
+    bay_program::after_synth(painter, panel_rect, state);
     render_bay_effects(ui, painter, panel_rect, state, audio_handle);
     render_keybed(ui, panel_rect, state, audio_handle);
 }

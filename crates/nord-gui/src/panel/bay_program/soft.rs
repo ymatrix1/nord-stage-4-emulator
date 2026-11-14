@@ -30,6 +30,7 @@ impl ProgramUi {
                 self.sync_list_cursor();
                 Vec::new()
             }
+            Screen::Import => self.import_soft(n),
             Screen::StoreAs => {
                 match n {
                     1 => self.store.editor.press_abc(),

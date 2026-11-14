@@ -110,6 +110,11 @@ impl PanelTelemetry {
         self.0.as_ref().map_or(ui, Telemetry::split_leds)
     }
 
+    /// Sixteenth `0..=3` inside the current Master Clock beat; `None` without an engine.
+    pub fn arp_step(&self) -> Option<u8> {
+        self.0.as_ref().map(|t| t.arp_step)
+    }
+
     /// `true` only when the engine is running and reports nothing to undo.
     pub fn undo_blocked(&self) -> bool {
         self.0.as_ref().is_some_and(|t| t.undo.is_none())

@@ -16,6 +16,9 @@ pub const BPM_RANGE: (f32, f32) = (30.0, 300.0);
 pub struct ClockUi {
     pub bpm: f32,
     pub kbs: KbsMode,
+    /// Beat `0..4` of the engine clock (the lit box of the Master Clock popup).
+    pub beat: u8,
+    last_step: Option<u8>,
     taps: [u32; 8],
     count: usize,
 }
@@ -25,6 +28,8 @@ impl Default for ClockUi {
         Self {
             bpm: 120.0,
             kbs: KbsMode::Off,
+            beat: 0,
+            last_step: None,
             taps: [0; 8],
             count: 0,
         }
@@ -53,6 +58,22 @@ impl ClockUi {
         }
         self.bpm = (60_000.0 / avg).clamp(BPM_RANGE.0, BPM_RANGE.1);
         Some(self.bpm)
+    }
+
+    /// Follows the engine clock: `step` is the sixteenth `0..=3` inside the current beat
+    /// (`Telemetry::arp_step`); a step that falls back (3 to 0) is the next beat. `None` (no
+    /// engine) keeps the beat.
+    ///
+    /// ASSUMED: the real unit counts beats of a bar (four boxes); the engine publishes no beat
+    /// counter, so the beat is counted here from the wraps of the step, which a frame rate above
+    /// 20 Hz sees at every tempo of 30 to 300 BPM.
+    pub fn observe_step(&mut self, step: Option<u8>) {
+        if let (Some(last), Some(now)) = (self.last_step, step) {
+            if now < last {
+                self.beat = (self.beat + 1) % 4;
+            }
+        }
+        self.last_step = step.or(self.last_step);
     }
 
     /// Dial turned by `delta` steps of 1 BPM.

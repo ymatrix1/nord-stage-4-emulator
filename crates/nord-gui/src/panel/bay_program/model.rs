@@ -183,6 +183,8 @@ pub enum Screen {
     StoreTo,
     /// STORE PROGRAM AS: naming with ABC / Cat / Del / Ins.
     StoreAs,
+    /// The program list `Import into A:11` (Program dial, `import.rs`).
+    Import,
     /// Keyboard Split screen (hold SPLIT ON/SET).
     Split,
     /// Master Clock tempo and KBS page.
@@ -211,6 +213,7 @@ impl Screen {
         match self {
             Self::List => ["Num", "Abc", "Cat", ""],
             Self::StoreAs => ["Abc", "Cat", "Del", "Ins"],
+            Self::Import => ["Ok", "", "", "Cancel"],
             Self::Split => ["Note", "Low", "Mid", "High"],
             Self::Clock => ["KBS", "", "", ""],
             Self::Preset { .. } => ["Num", "Cat", "Cancel", ""],

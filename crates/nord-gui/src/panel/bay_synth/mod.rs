@@ -52,6 +52,11 @@ fn store_legacy(s: &mut Stage4PanelState, l: Legacy) {
     s.synth_octave = l.octave;
 }
 
+/// Rectangle of display 1 (the Program area blanks it while a program list is open).
+pub(super) fn display_rect(o: egui::Pos2) -> Rect {
+    oled::glass_rect(o)
+}
+
 /// Draw this bay and apply its input to `state` / the audio thread.
 pub(super) fn render_bay_synth(
     ui: &mut Ui,

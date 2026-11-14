@@ -20,6 +20,7 @@ mod coverage_tests;
 pub mod edited;
 pub mod frame;
 pub mod fw_messages;
+pub mod import;
 pub mod interact;
 pub mod list;
 pub mod menu_actions;
@@ -37,10 +38,12 @@ pub mod oled_hint;
 pub mod oled_home;
 pub mod oled_icons;
 pub mod oled_lists;
+pub mod oled_popup;
 pub mod oled_paint;
 pub mod oled_store;
 pub mod organize;
 pub mod organize_presets;
+pub mod popups;
 pub mod preset_browse;
 pub mod preset_store;
 pub mod preset_user;
@@ -139,6 +142,20 @@ fn dial(
     steps
 }
 
+/// Work of the Program area that needs the Synth bay drawn first: the Octave Shift popup watches
+/// the focused Synth layer, and display 1 goes blank while a program list is open (ARM frames).
+pub(super) fn after_synth(painter: &Painter, panel_rect: Rect, state: &mut Stage4PanelState) {
+    let layer = state.synth_ui.focus;
+    let octave = state.synth_ui.layer().octave;
+    let now = state.program_ui.now_ms;
+    state.program_ui.popups.watch_octave(layer, octave, now);
+    if state.program_ui.display1_blank() {
+        let glass = super::bay_synth::display_rect(panel_rect.min);
+        painter.rect_filled(glass.expand(2.5), 3.0, Color32::from_rgb(10, 11, 13));
+        painter.rect_filled(glass, 2.0, OLED_BG);
+    }
+}
+
 /// Draw this bay and apply its input to `state` / the audio thread.
 pub(super) fn render_bay_program(
     ui: &mut Ui,
@@ -156,6 +173,7 @@ pub(super) fn render_bay_program(
         .program_ui
         .begin_frame(now, &keys, &state.prog_id, &state.prog_title);
     state.program_ui.sync_edits(audio_handle.edit_count());
+    state.program_ui.clock.observe_step(state.telemetry.arp_step());
     state.program_ui.undo_blocked = state.telemetry.undo_blocked();
     state.program_ui.redo_available = state.telemetry.redo_available();
 
@@ -262,7 +280,7 @@ pub(super) fn render_bay_program(
     }
     pu.mark("split.leds");
 
-    if pu.needs_repaint() || state.leds.needs_repaint() {
+    if pu.needs_repaint() || pu.popups.is_showing(now) || state.leds.needs_repaint() {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(40));
     }

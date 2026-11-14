@@ -175,6 +175,9 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
             // The value row keeps its second part (after a tab) at the right edge.
             line(top + b.popup_y[1], value, f_row);
         }
+        if let Some(g) = text.graphic {
+            super::oled_popup::paint(painter, rect, g, fg);
+        }
         for (i, r) in text.rows.iter().enumerate() {
             let y = top + g.rows_y + i as f32 * g.row_pitch;
             if y + f_row > soft_top && text.soft.iter().any(|l| !l.is_empty()) {
