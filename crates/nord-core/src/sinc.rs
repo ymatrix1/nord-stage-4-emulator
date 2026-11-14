@@ -26,6 +26,7 @@
 //! oscillator path only.
 
 pub mod ext40;
+pub mod key_rule;
 mod model;
 
 pub use model::kernel_value;

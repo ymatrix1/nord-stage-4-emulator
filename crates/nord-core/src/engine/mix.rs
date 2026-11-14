@@ -63,6 +63,8 @@ impl Stage4Engine {
             let level = match i {
                 0 => self.organ_a.level_law().layer_gain(level),
                 1 => self.organ_b.level_law().layer_gain(level),
+                2 => crate::piano::downstream::layer_gain(level, self.piano_a.firmware_layer_law),
+                3 => crate::piano::downstream::layer_gain(level, self.piano_b.firmware_layer_law),
                 _ => level,
             };
             let gain = level * self.program_gain;
@@ -141,5 +143,34 @@ mod tests {
             sub_differs |= f[2] != f[3];
         }
         assert!(sub_differs, "the sub pair keeps its stereo image");
+    }
+
+    #[test]
+    fn piano_layer_law_squares_the_fader_only_when_selected() {
+        let rms = |law: bool| {
+            let mut e = Stage4Engine::new(44_100.0);
+            e.scene.scene_1_mask = 1 << LayerId::PianoA as u8;
+            e.piano_a.firmware_layer_law = law;
+            e.layer_levels[LayerId::PianoA as usize] = MorphParameter::new(0.5);
+            e.handle_midi(MidiEvent::NoteOn {
+                channel: 0,
+                note: 60,
+                velocity: 100,
+            });
+            let mut sum = 0.0f64;
+            for _ in 0..8192 {
+                let f = e.render_frame_multi();
+                sum += f64::from(f[0]) * f64::from(f[0]) + f64::from(f[1]) * f64::from(f[1]);
+            }
+            sum.sqrt()
+        };
+        let (linear, squared) = (rms(false), rms(true));
+        assert!(linear > 0.0, "the piano sounds");
+        // level 0.5: linear 0.5, firmware law 0.25 (the engine path is linear after the fader)
+        assert!(
+            (squared / linear - 0.5).abs() < 0.02,
+            "{}",
+            squared / linear
+        );
     }
 }

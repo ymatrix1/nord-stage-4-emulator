@@ -34,6 +34,23 @@ pub const FIRMWARE_SAMPLE_SCALE: f32 = 0.5;
 /// ASSUMED: inherited from the first piano engine, no recorded source.
 pub const SYNTHETIC_VOICE_SCALE: f32 = 0.2;
 
+/// Gain the engine applies for a piano layer level `level` (`v / 127`, 0..1).
+///
+/// VERIFIED (run): the layer level handler `0xC011A7A4` (ids `0xB7`, `0xB8`), executed in the
+/// ARM harness (`tools/arm_layer_level.py`, `docs/research/piano-bus-convention.md` s3) stores
+/// `(v / 127)^2` for `v` = 0, 1, 2, 10, 32, 63, 64, 100, 126, 127 (relative error below 1e-6)
+/// and the mute sentinel `-0.05` for 0. Whether the stored word reaches the SMP voice gains
+/// unchanged is not traced, so the squared law is opt-in (`PianoLayer::firmware_layer_law`).
+#[inline]
+pub fn layer_gain(level: f32, firmware_law: bool) -> f32 {
+    if firmware_law {
+        let x = level.clamp(0.0, 1.0);
+        x * x
+    } else {
+        level
+    }
+}
+
 /// Per-voice scale of the sample path: `firmware_bus` selects the bus convention.
 #[inline]
 pub fn sample_scale(has_stroke: bool, firmware_bus: bool) -> f32 {
@@ -156,6 +173,17 @@ mod tests {
             "{}",
             firmware / legacy
         );
+    }
+
+    #[test]
+    fn layer_gain_is_linear_or_the_squared_firmware_law() {
+        assert_eq!(layer_gain(0.5, false), 0.5);
+        assert_eq!(layer_gain(0.5, true), 0.25);
+        assert_eq!(layer_gain(1.0, true), 1.0);
+        assert_eq!(layer_gain(0.0, true), 0.0);
+        // v = 100: (100 / 127)^2 = 0.62000 (the live handler stored 0.6200012)
+        assert!((layer_gain(100.0 / 127.0, true) - 0.620_001_2).abs() < 1e-6);
+        assert_eq!(layer_gain(1.7, true), 1.0);
     }
 
     #[test]

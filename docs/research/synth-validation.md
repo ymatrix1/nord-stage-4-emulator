@@ -13,7 +13,7 @@ Tags follow `.agents/rules/provenance-in-code.md`. The audio is lossy YouTube au
 | D22 flip | **Done**: `SynthLayer::new` now plays the strip chain, the stage oscillators and the P table (`FirmwareOptions::default()` the same, `--legacy-all` / `SynthLayer::legacy` keep the classic chain). Over 15 clips: mean score 6.6 (legacy) to 4.1 (default), 9 clips better, 3 equal, 3 worse; over the 9 hold-out clips mean gain 3.8 dB of score, 7 better; no clip worse than 3 dB in presence (all) or RMS (Part A) | EMPIRICAL |
 | Common law of the SHAPE oscillator | the shape word equals the **Osc Ctrl knob** (`shape = ctrl`), no second oscillator: Smooth Lead (A:87, fit) 0.69, Crunch Synth (A:66, hold-out) 1.18. The octave-up second oscillator of the earlier fit (ratio 2.0, weight 0.35) was compensating a wrong shape word (idle 0.5) and is dropped; the "factor 2 for pitch" is therefore not needed | EMPIRICAL (two programs) |
 | Per-wave level | saw 0.4, pulse 0.27 (= saw x 0.68), SHAPE 0.6, MULTI 0.26, SUPER 2.0 (linear, velocity 100, Part A level convention) | EMPIRICAL |
-| Per-wave cutoff factor | SHAPE 1.75, MULTI 1.4, saw / pulse 0.9, SUPER 1.5: **only SHAPE and MULTI are stable**; saw (filter_bank 1.25 vs laser-zap 0.8) and SUPER (pad_silk 0.5 vs mega_line 2.0) have clips that disagree, the values are compromises | EMPIRICAL, weak |
+| Per-wave cutoff factor | SHAPE 1.75, MULTI 1.4, saw / pulse 0.9, SUPER 1.5: **only SHAPE and MULTI are stable**; saw (filter_bank 1.25 vs laser-zap 0.8) and SUPER (pad_silk 0.5 vs mega_line 2.0) had clips that disagree; section 7 splits the saw disagreement into a band pass type factor (saw 0.85, BP 1.4) and shows the SUPER one is the filter envelope of pad_silk, not a factor (SUPER 1.07 x LP12 1.4 = 1.5) | EMPIRICAL, weak |
 | Super Saw level against Detune | the SUPER stage keeps the level within 1.2 dB from Detune 0 to 10 (hardware: flat), the legacy 7-voice saw falls 8 dB (-20.1 to -11.9 dB against the hardware) | EMPIRICAL (3 settings) |
 | Program sweep, 384 factory programs | 0 NaN / Inf, 0 newly silent, programs with more than 0.1 % clipped samples 18 to 9, none clips more than before; 279 of 384 programs change by 3 dB or less in RMS, the extremes are -23.1 and +15.7 dB (section 6) | measured |
 
@@ -135,6 +135,42 @@ Decision: the bar is met, so `SynthLayer::new` and `FirmwareOptions::default()` 
 | Largest RMS rises | | Horizon Whl +15.7 dB, Dual Gates +15.4, Silk Pad +13.3 (the hardware clip says +12.5), Synth Orchestra +13.0, Syn Flute +11.8 |
 
 The sweep rows of `docs/research/data/program-sweep.json` and `program-coverage.md` were not regenerated (they document the pre-flip default); the per-program level shifts of up to 23 dB are the largest open risk of the flip and need hardware clips of those programs (Follow-ups).
+
+## 7. Filter law investigation (2026-11-14, follow-up 1)
+
+Data: `docs/research/data/synth_filter_law_results.json` (score per clip per configuration). All runs: the 15 clips of section 2, variant `strip+st+tbl`, same notes and velocity 100; the only changes are the named cutoff factors / envelope scale.
+
+**What is established about the stages** (VERIFIED, [synth-stage-equations](synth-stage-equations.md), [synth-filter-type-map](synth-filter-type-map.md)): the stage turns `R = tan(pi fc / F)` into the natural frequency of `1 / (s^2 + P s + 1)` per section; the first -3 dB point sits at `x3(P) * fc` (`P = 2`: 0.64 fc, `P = sqrt 2`: fc, `P = 0.3`: 1.4 fc for one section). What stays unknown (ASSUMED) is the number the panel word stands for: the displayed Hz.
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Displayed Hz is the first -3 dB corner (natural fc = display / x3(P)), no per-wave factor | all row factors 1.0 plus the corner law (`x1n`) | **rejected**: mean score 4.80 against 4.11; with the old rows on top 4.45; opposite sign 4.60 |
+| One LP24 factor for every wave | LP24 1.3 | **rejected**: `lead_smooth` 0.69 to 2.53, `ag_zap_saw` 6.93 to 13.5 (the two LP24 clips want 1.75 and 0.85 as total factors, so the SHAPE row and the saw row differ at the same type) |
+| The saw disagreement (`filter_bank` 1.25, `ag_zap_saw` 0.8) is a filter type effect | BP factor 1.4, saw row 0.85 | **supported**: `filter_bank` presence -2.6 to -0.7 dB, brilliance -4.3 to +1.0, RMS +1.6 to +0.3, `ag_zap_saw` 6.93 to 6.59; no other clip changes |
+| LP12 needs a different factor from LP24 | LP12 grid 0.7 / 1.0 / 1.2 / 1.4 / 1.7 (SUPER row rescaled so SUPER x LP12 = 1.5) | **supported for 3 of 5 LP12 clips**: `sweep_12db` 4.59 to 3.04, `mega_line` 2.03 to 1.87, `sine_pluck` 7.03 to 6.40; `lead_crunch` +0.05, `pad_silk` unchanged. 1.7 is better for the first three (2.52, 1.26, 5.80) and worsens `pad_silk` (8.24) |
+| The SUPER / LP12 conflict (`pad_silk` 0.5 against `mega_line` 2.0) is a cutoff factor | `NS4_ENVOCT` scan of the filter envelope octaves per full amount (8 default) | **it is the filter envelope**: `pad_silk` (env amount 0.346, decay 9.5 s, filter velocity on) reaches score 1.50, presence -0.2 dB at 2 octaves per full amount, but every other clip with an envelope wants 6 to 8 (`ag_zap_saw` 24.1 at 2, 11.1 at 4, 6.6 at 6.2; `sweep_12db` 17.1 at 2; `filter_bank` 8.5 at 2). No monotonic law in the amount, the decay or the type separates `pad_silk` from them; the replay velocity (100, amp velocity 0 and filter velocity 1 on this program) is the open suspect |
+
+Adopted (`synth/p_table.rs::type_cutoff_scale`, applied with the P table): LP12 1.4, BP 1.4, LP24 / Ladder24 / HP 1.0 (EMPIRICAL); saw and pulse rows 0.9 to 0.85, SUPER row 1.5 to 1.07 (SUPER x LP12 = 1.5, unchanged for the two SUPER clips).
+
+| Clip | Role | Before (PR 261 default) | After | Legacy |
+|---|---|---|---|---|
+| lead_smooth | fit | 0.69 | 0.69 | 4.93 |
+| lead_crunch | holdout | 1.18 | 1.23 | 8.33 |
+| pad_silk | fit | 7.63 | 7.62 | 6.53 |
+| mega_line | holdout | 2.03 | 1.87 | 2.98 |
+| sci_fi_80s | fit | 0.24 | 0.24 | 2.03 |
+| filter_bank | fit | 4.46 | 4.37 | 3.15 |
+| phat_3osc | holdout | 2.91 | 2.91 | 3.21 |
+| sweep_12db | holdout | 4.59 | 3.04 | 21.38 |
+| sine_pluck | holdout | 7.03 | 6.40 | 5.99 |
+| ag_blip_saw / square | fit | 5.31 / 3.29 | 5.31 / 3.29 | 5.28 / 3.29 |
+| ag_zap_saw | holdout | 6.93 | 6.59 | 8.99 |
+| ag_supersaw_0 / 3 / 10 | holdout | 4.38 / 6.02 / 4.96 | unchanged | 11.31 / 6.83 / 4.96 |
+| **mean (15)** | | **4.11** | **3.93** | 6.6 |
+
+Cross-validation caveat: with 15 clips and five LP12 clips, the LP12 factor is chosen by the grid on `sweep_12db`, `mega_line` and `sine_pluck`, which were hold-outs of the earlier fit and are therefore not independent any more; `lead_crunch` (SHAPE, LP12) and `pad_silk` are the clips that argue against a larger factor (1.7). The BP factor has one clip (`filter_bank`, fit for the saw row); `ag_zap_saw` is the independent check for the saw row (improves). `render_hash` is unchanged (`b1c91b53...c9aa`): its scenarios use the idle row, Ladder24 (factor 1.0) and sample layers.
+
+Still open: `pad_silk` (13 dB too bright, an envelope or velocity issue, not the cutoff factor), `filter_bank` and `sine_pluck` stay above legacy (4.37 against 3.15, 6.40 against 5.99; `sine_pluck` presence -17 dB is the SHAPE SINE words / wheel morph of the program, not a filter effect), the knob to strip word law needs a hardware run with an active voice (the ARM sends the cutoff only with a sounding voice, [synth-voice-control](synth-voice-control.md) s3), and `x3` above shows why the answer cannot come from the stage equations alone.
 
 ## Stop point
 

@@ -194,3 +194,26 @@ fn stage_oscillators_play_only_with_the_strip_chain_and_the_opt_in() {
         );
     }
 }
+
+#[test]
+fn table_type_factor_opens_lp12_and_band_pass_but_not_lp24() {
+    // Same layer with the P table on (type factor) and with it off: the level changes with the
+    // row gain, so compare the share of energy above the cutoff, which is level free.
+    let share = |model: FilterModel, table: bool| {
+        let mut s = layer(SynthChain::FirmwareStrip);
+        s.p_table = table.then_some(PTable::FITTED);
+        s.p_wave = PWave::Other; // idle row: only the type factor acts
+        s.filter_model = model;
+        s.cutoff_hz = 800.0;
+        s.note_on(45, 100);
+        let _ = render_n(&mut s, 2_000);
+        high_share(&render_n(&mut s, 1_024), 1_500.0)
+    };
+    assert!(share(FilterModel::Lp12, true) > 1.2 * share(FilterModel::Lp12, false));
+    assert!(share(FilterModel::BandPass, true) != share(FilterModel::BandPass, false));
+    let (a, b) = (
+        share(FilterModel::Lp24, true),
+        share(FilterModel::Lp24, false),
+    );
+    assert!((a / b - 1.0).abs() < 1e-4, "Lp24 factor is 1: {a} vs {b}");
+}
