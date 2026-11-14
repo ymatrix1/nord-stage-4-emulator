@@ -15,6 +15,7 @@ pub mod clock;
 pub mod controls;
 #[cfg(test)]
 mod coverage_tests;
+pub mod edited;
 pub mod frame;
 pub mod interact;
 pub mod list;
@@ -27,6 +28,7 @@ pub mod morph;
 pub mod name;
 pub mod nav;
 pub mod oled;
+pub mod oled_home;
 pub mod oled_paint;
 pub mod organize;
 pub mod soft;
@@ -133,6 +135,7 @@ pub(super) fn render_bay_program(
     state
         .program_ui
         .begin_frame(now, &keys, &state.prog_id, &state.prog_title);
+    state.program_ui.sync_edits(audio_handle.edit_count());
     state.program_ui.undo_blocked = state.telemetry.undo_blocked();
     state.program_ui.redo_available = state.telemetry.redo_available();
 
