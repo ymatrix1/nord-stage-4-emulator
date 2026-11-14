@@ -42,6 +42,46 @@ const FOOTAGES: [&str; 9] = [
     "16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'",
 ];
 
+/// Register names printed over the ladders (manual p.19: the original register of each drawbar).
+const NAMES: [&str; 9] = [
+    "BASS16", "STR16", "FLUTE8", "OBOE8", "TRMP8", "STR8", "FLUTE4", "STR4", "2 2/3",
+];
+
+/// Distance (px) from the ladder top to the centre of its register name: clears the control
+/// margin of the legibility audit (2.5 px) and the half height of the text.
+const NAME_RISE: f32 = 7.0;
+/// Distance (px) of a ladder numeral from the LED column: past the LED bezel (5.2 px at the
+/// ladder pitch) and inside the ladder rectangle, so the numeral belongs to the ladder.
+const NUMERAL_DX: f32 = 9.2;
+
+/// Register name over the ladder and the numerals 1-8 beside its LEDs (photo
+/// `NS4_HA88_Organ-01`: numbers beside each ladder, the name above it).
+fn ladder_labels(p: &Painter, ladder: Rect, name: &str) {
+    let ink = Color32::from_gray(215);
+    label(
+        p,
+        pos2(ladder.center().x, ladder.top() - NAME_RISE),
+        name,
+        7.5,
+        ink,
+        Align2::CENTER_CENTER,
+    );
+    let pitch = ladder.height() / 8.0;
+    for n in 1..=8 {
+        label(
+            p,
+            pos2(
+                ladder.center().x + NUMERAL_DX,
+                ladder.top() + (n as f32 - 0.5) * pitch,
+            ),
+            &n.to_string(),
+            7.5,
+            ink,
+            Align2::CENTER_CENTER,
+        );
+    }
+}
+
 /// Drawbars 3, 4, 6 and 9 (8', 4', 2', 1') have white caps, the others black.
 fn is_white(i: usize) -> bool {
     matches!(i, 2 | 3 | 5 | 8)
@@ -82,7 +122,9 @@ pub(super) fn render_drawbars(
         }
         let shown = state.telemetry.drawbar(false, i, state.organ_drawbars[i]);
         let lit = ladder_value(shown, live);
-        drawbar_ladder(ui, rect_or_empty(LADDER_IDS[i], origin), LADDER_IDS[i], lit);
+        let ladder = rect_or_empty(LADDER_IDS[i], origin);
+        drawbar_ladder(ui, ladder, LADDER_IDS[i], lit);
+        ladder_labels(painter, ladder, NAMES[i]);
         label(
             painter,
             pos2(slot.center().x + 4.0, slot.bottom() + FOOTAGE_DROP),
@@ -121,6 +163,25 @@ mod tests {
         assert_eq!(ladder_value(5, false), 5);
         assert_eq!(ladder_value(5, true), 0);
         assert_eq!(ladder_value(200, false), 8);
+    }
+
+    #[test]
+    fn registers_are_named_like_the_manual_and_footages_match() {
+        assert_eq!(NAMES.len(), FOOTAGES.len());
+        assert_eq!(NAMES[0], "BASS16");
+        assert_eq!(NAMES[8], "2 2/3");
+    }
+
+    #[test]
+    fn every_ladder_prints_its_name_and_eight_numerals() {
+        let (labs, _) = crate::panel::legibility_tests::labels_of(None, egui::vec2(3300.0, 900.0));
+        for name in NAMES {
+            assert!(labs.iter().any(|l| l.text == name), "{name}");
+        }
+        for n in 1..=8 {
+            let count = labs.iter().filter(|l| l.text == n.to_string()).count();
+            assert!(count >= 9, "numeral {n}: {count}");
+        }
     }
 
     #[test]

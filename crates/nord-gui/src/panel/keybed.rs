@@ -83,6 +83,9 @@ fn release_held(state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
     }
 }
 
+/// Letters printed beside the three split-point LEDs (low, middle, high).
+const SPLIT_NAMES: [&str; 3] = ["L", "M", "H"];
+
 /// 88-key keyboard with mouse playing and the three split-point LEDs.
 pub(super) fn render_keybed(
     ui: &mut Ui,
@@ -185,6 +188,16 @@ pub(super) fn render_keybed(
         if bloom {
             painter.circle_stroke(c, 4.2, Stroke::new(1.2_f32, LED_GREEN.gamma_multiply(0.4)));
         }
+        // L / M / H: which split point the LED belongs to (manual p.15; the Program area prints
+        // the same letters over the SPLIT button).
+        label(
+            &painter,
+            c + vec2(6.5, 0.0),
+            SPLIT_NAMES[i],
+            7.5,
+            Color32::from_gray(235),
+            Align2::LEFT_CENTER,
+        );
     }
     resp.on_hover_text("88 keys: click or drag to play. SET KEY then a key moves the split point");
     state.program_ui.mark("keybed.keys");
@@ -253,6 +266,20 @@ mod tests {
     fn keybed_paints_88_keys_and_three_leds() {
         let n = shapes_painted(|ui, _p, rect, state, audio| render_keybed(ui, rect, state, audio));
         assert!(n >= 88 + 3 * 2, "keybed painted only {n} shapes");
+    }
+
+    #[test]
+    fn split_leds_are_labelled_l_m_h() {
+        let strip = rect_or_empty("keybed.split_leds", egui::pos2(0.0, 0.0));
+        let (labs, _) = crate::panel::legibility_tests::labels_of(None, vec2(3300.0, 900.0));
+        for name in SPLIT_NAMES {
+            assert!(
+                labs.iter().any(|l| l.text == name
+                    && l.size >= crate::widgets::MIN_FONT_PX
+                    && strip.expand(2.0).contains(l.rect.center())),
+                "{name} not printed beside its LED"
+            );
+        }
     }
 
     #[test]
