@@ -171,6 +171,24 @@ Wired: `organ/farfisa_keys.rs`, opt-in `--farfisa-processor on` ([organ-engine](
 
 B3 Bass: **not ported.** What is known for a port: the oracle chords of s7 show only the 8' partial of each key (C4 E4 G4 at 0, -2, -2 dB, nothing at 16' within 38 dB), so the Bass processor reads the ring at note `n` and the note an octave above with weights that the ARM key-down writes at `DM 0x951F1..` (`keydown-organ-models.csv`, model 5, notes 36, 60, 84, index words at `DM 0xB4246..`); the sums feed the 33-tap FIR, two lattice groups, the 9-tap scanner delay and three biquads (s4.2). A line-gain stage like the Farfisa one needs the same `sharc-chain` measurement for the Bass record (`0xB472C`) on the B3 generator ring; it was not made, and the per-key weight words of model 5 were not decoded into a closed form. Until then `b3_bass_mode` keeps its ASSUMED pickup table ([organ-engine](../specs/organ-engine.md) s3.1.1).
 
+## 10. B3 Bass key-down weights for every key, and why there is no line-gain table (2026-11-14)
+
+Tools: `tools/organ_bass_keys.py capture` (the real ARM key-down of `Edt_Org_kModel = 5`, drawbars `888888888`, velocity 100, keys 24..108, one emulator session; data [bass-keydown.csv](data/bass-keydown.csv) = `key,window,index,value_bits`), `tools/organ_bass_proc.py chain` / `measure` (`sharc-chain`: generator `0x121BBE` + processor `0x122296` per call, ring slots of both frames at `+0x68`).
+
+| Finding | Result | Tag |
+|---|---|---|
+| Weight windows (listing `0x122296`) | window 1 `DM 0x951F1 + k` (56 words, ring slot `0xB32E8 + k`), window 2 `DM 0x95241 + k` (68 words, ring slot `0xB32F4 + k`), both added | VERIFIED (listing, `adi_dis`) |
+| Closed form of the key-down | the **percussion item** writes one word per key into window 2 at index `n - 24` (keys 24..91, 68 of 68 keys; keys 92..108 none, key 103 folds onto index 67); value = per-key taper table (0.00908 up to key 36, 0.0166 at key 66, 0.0116 at key 84), `organ/b3_bass_keys.rs` | VERIFIED (ARM run, test `table_matches_the_derived_csv`) |
+| Window 1 (drawbar item, footages 16' / 5 1/3' / 8' at partial note `- 36`) | inaudible: with window 1 zeroed the chord `60 64 67` is bit-identical (`chain --zero 1`); with window 2 zeroed the output is 0 | VERIFIED (run) |
+| Chord goldens of the oracle (`sharc-chain`, 8192-point Hann, line amplitude) | keys 60, 64, 67: 0.02548, 0.02449, 0.02050; the same keys alone: 0.0259, 0.02491, 0.02565 (-0.15, -0.15, -1.95 dB for the chord) | VERIFIED (run) |
+| 2nd harmonic of the output | -38 dB below the fundamental (ring harmonic -15.7 dB): the processor attenuates harmonics | VERIFIED (run) |
+
+**Why the Farfisa recipe (`G(f)` per weight window, `farfisa-proc-gain`) does not carry over.** The gain `|Y| / |R|` of one weight word at 1.0 and one ring slot is **state dependent**: for ring note 60 it is +16.1 dB after the chord script (3 keys) and +2.3 dB after the 85-key script (`measure`; linear in the weight in both). The difference is not the weight windows: the key-down also writes the lattice and filter words `DM 0x954E6..0x95529` (117 words differ between the two scripts: pointers `0xB33xx` into the generator ring, `0xB45xx` into the delay line, coefficients about -0.004 .. -0.024), i.e. per-key resonator sections (`arm_model_paths.py`: "resonator B") that the ARM allocates in key order. The output of a chord therefore depends on the slot a key lands in and on the A words that several keys share (C4 E4 G4 gives G4 -1.95 dB below its single-key level; C4's 5 1/3' partial rewrites the A word of note 67, ASSUMED cause).
+
+Consequence: a Rust port that meets the 1 dB line criterion against the oracle needs the per-key section words (`0x954E6..`, `0x955B0..`) and the A-word accumulation rule, not a per-sum gain table. The weight table of this section is exact and committed (`b3_bass_keys.rs`) but **not wired**: `b3_bass_mode` keeps its ASSUMED pickup table, defaults and `render_hash` are unchanged, and no hardware clip comparison (`emu_vs_hw.py`) was made.
+
+Follow-ups: (1) decode the section words the key-down writes per key (slot allocation by key order, pointer pairs, coefficient closed form) from the same ARM capture; (2) the A-word accumulation (several footages and keys onto one ring note, `keydown-zones.md` s6.2); (3) then the per-key response, the Rust stage and chord goldens within 1 dB.
+
 ## Implications
 
 - The Farfisa generator is fully decoded and ported; the Farfisa audio is not reachable until the ARM weights and the filter table are captured (OQ19). The documented structure (four weighted sums, biquads, 8 lattice sections, four gains) gives the model target.

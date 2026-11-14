@@ -1,6 +1,7 @@
 //! Cross-section checks of the inventory (`docs/specs/control-inventory.md` §4).
 
 use super::all_controls;
+use super::synth_dials::DialTarget;
 use crate::types::{Binding, ControlKind, Provenance, Section};
 use std::collections::HashSet;
 use std::path::Path;
@@ -113,7 +114,15 @@ fn every_binding_is_set() {
 fn bound_ids_exist_in_the_host_parameter_list() {
     for c in all_controls() {
         if let Binding::Bound(id) = c.binding {
-            if let Some(path) = id.strip_prefix("engine:") {
+            if id.starts_with("dial:") {
+                let cells = super::synth_dials::cells_of(id);
+                assert!(!cells.is_empty(), "{}: no dial cells for {id}", c.id);
+                for cell in cells {
+                    if let DialTarget::Edit { host: Some(h), .. } = cell.target {
+                        assert!(host_id_exists(h), "{}: dial host id {h} not found", c.id);
+                    }
+                }
+            } else if let Some(path) = id.strip_prefix("engine:") {
                 assert!(
                     engine_path_exists(path),
                     "{}: engine path {path} not found in nord-core",
@@ -209,9 +218,9 @@ fn total_is_the_sum_of_sections() {
 fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
-    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 150);
+    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 153);
     assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 58);
-    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 67);
+    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 64);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)

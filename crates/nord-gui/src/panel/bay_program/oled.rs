@@ -9,6 +9,7 @@ use super::split::{note_name, xfade_label, SplitRow};
 use super::store::{ProgLoc, StoreStage, StoreTarget};
 use crate::panel::ui_state::ProgramUi;
 use nord_core::morph::LayerId;
+use nord_core::piano::label::PianoSize;
 
 /// What the display shows besides the Program area's own state.
 #[derive(Debug, Clone, Default)]
@@ -16,6 +17,11 @@ pub struct Summary {
     pub organ: String,
     pub piano: String,
     pub synth: String,
+    /// Size of the loaded piano file (`S`, `M`, `L`, `XL`), when its header names one.
+    pub piano_size: Option<PianoSize>,
+    /// Drawbar positions `0..=8` of the Organ preset while the model is the B3 (the only model
+    /// with drawbars); `None` for Vox, Farfisa and the pipe models.
+    pub organ_bars: Option<[u8; 9]>,
     /// Layers on in the active scene, in `LayerId::ALL` order.
     pub layers_on: [bool; 7],
 }
@@ -385,6 +391,8 @@ mod tests {
             organ: "B3".into(),
             piano: "Grand".into(),
             synth: "SuperSaw".into(),
+            piano_size: None,
+            organ_bars: None,
             layers_on: [true, false, true, false, true, false, false],
         }
     }
