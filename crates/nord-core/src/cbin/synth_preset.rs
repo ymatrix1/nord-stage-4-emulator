@@ -10,6 +10,7 @@ use super::presets::{
     MorphDeltas, ENV_ATTACK_MS_TABLE, ENV_DECAY_MS_TABLE, ENV_RELEASE_MS_TABLE,
     FILTER_CUTOFF_HZ_TABLE, LFO_RATE_HZ_TABLE,
 };
+use super::synth_arp::SynthArpDecoded;
 use super::synth_osc::map_osc_mode_and_wave;
 use super::synth_osc::wave_from_flat_index;
 use super::synth_pattern::SynthPatternDecoded;
@@ -80,6 +81,9 @@ pub struct SynthLayerDecoded {
     /// Arpeggiator / Gate pattern words (`cbin::synth_pattern`); the engine imports them as the
     /// layer's custom pattern.
     pub pattern: SynthPatternDecoded,
+    /// Arpeggiator mode fields (Arp / Poly / Gate, direction, zig zag, Master Clock, KB sync,
+    /// range; `cbin::synth_arp`).
+    pub arp: SynthArpDecoded,
     /// `false` = filter envelope mirrors the amp envelope decay (programmatic default).
     pub filter_env_dedicated: bool,
     pub filter_env_attack_ms: f32,
@@ -157,6 +161,7 @@ impl Default for SynthLayerDecoded {
             arp_enabled: false,
             arp_bpm: 120.0,
             pattern: SynthPatternDecoded::default(),
+            arp: SynthArpDecoded::default(),
             filter_env_dedicated: false,
             filter_env_attack_ms: 10.0,
             filter_env_decay_ms: 300.0,
@@ -299,6 +304,7 @@ fn unpack_synth_layer_pair(
     let (arp_rate_raw, _) = read_morph(r, layer_base + 175, 7, 127)?;
     let arp_bpm = 30.0 + (arp_rate_raw as f32 / 127.0) * 270.0;
     let pattern = SynthPatternDecoded::read(r, layer_base)?;
+    let arp = SynthArpDecoded::read(r, layer_base)?;
     r.set_bit_pos(layer_base + 306)?;
     let unison = r.read_bits(2)? as u8;
     r.set_bit_pos(layer_base + 372)?;
@@ -416,6 +422,7 @@ fn unpack_synth_layer_pair(
         arp_enabled,
         arp_bpm,
         pattern,
+        arp,
         filter_env_dedicated: true,
         filter_env_attack_ms: ENV_ATTACK_MS_TABLE[fenv_atk.min(127)],
         filter_env_decay_ms: ENV_DECAY_MS_TABLE[fenv_dcy.min(127)],
@@ -500,6 +507,7 @@ fn pack_synth_layer_pair(
         127,
     )?;
     layer.pattern.write(w, layer_base)?;
+    layer.arp.write(w, layer_base)?;
     w.set_bit_pos(layer_base + 306)?;
     w.write_bits(u32::from(layer.unison.min(3)), 2)?;
     w.set_bit_pos(layer_base + 372)?;

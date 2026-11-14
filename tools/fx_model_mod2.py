@@ -205,6 +205,59 @@ def fix_spin(rng: random.Random, mem: dict[int, int], count: int) -> None:
     })  # fmt: skip
 
 
+def fix_rm(rng: random.Random, mem: dict[int, int], count: int) -> None:
+    """`0x1239D0`: phase `c[-0x1F]` advanced by `c[-0x20] << c[-0x10]` only when the pointer
+    `c[-0x1D]` is the address of the phase word itself (one call in six reads another word); the
+    shift `c[-0x10]` doubles as the block count."""
+    own = rng.randrange(6) != 0
+    mem.update({
+        CTX - 0x1D: CTX - 0x1F if own else CTX - 0x1E,
+        CTX - 0x1F: rng.randrange(1 << 32),
+        CTX - 0x1E: rng.randrange(1 << 32),
+        CTX - 0x20: rng.randrange(1 << 24),
+        CTX - 0x1C: rng.randrange(1 << 32),
+        CTX - 0x10: count,
+    })  # fmt: skip
+
+
+def fix_wah(rng: random.Random, mem: dict[int, int], count: int) -> None:
+    """`0x123DD2`: phase `c[-0x1F] = [c[-0x1D]] + c[-0x20]`, scaled by `c[-0x1C]` and offset by
+    `c[4]` to a triangle; the word `c[3]` selects the wah or the plain path (`IF NE`); `c[7]`
+    blocks."""
+    mem.update({
+        CTX - 0x1D: CTX - 0x1F,
+        CTX - 0x1F: rng.randrange(1 << 32),
+        CTX - 0x20: rng.randrange(1 << 24),
+        CTX - 0x1C: rng.randrange(1 << 16),
+        CTX + 4: rng.randrange(1 << 32),
+        CTX + 3: 0 if rng.randrange(3) == 0 else rng.randrange(1, 1 << 32),
+        CTX + 7: count,
+    })  # fmt: skip
+
+
+def fix_awah(rng: random.Random, mem: dict[int, int], count: int) -> None:
+    """`0x123E9B`: envelope word `c[-4]` cleared, `c[4]` blocks."""
+    mem[CTX + 4] = count
+
+
+def fix_pump(rng: random.Random, mem: dict[int, int], count: int) -> None:
+    """`0x122D2C`: phase `c[-0x1F] += c[-0x20]` (reset to `0x80000000` when `c[-0x15] != c[-0x14]`,
+    capped by `c[-0x16]`), the word at the pointer `c[-0x1D]` scaled by `c[-0x1C]` (unsigned);
+    `c[-8]` blocks."""
+    same = rng.randrange(2) == 0
+    mem.update({
+        CTX - 0x1D: CTX - 0x1F,
+        CTX - 0x1F: rng.randrange(1 << 32),
+        CTX - 0x20: rng.randrange(1 << 24),
+        CTX - 0x1C: rng.randrange(1 << 16),
+        CTX - 0x16: rng.randrange(1 << 32),
+        CTX - 0x15: 7,
+        CTX - 0x14: 7 if same else 9,
+        CTX - 0x12: rng.randrange(1 << 32),
+        CTX - 8: count,
+    })  # fmt: skip
+
+
 SPECS: dict[str, Spec] = {
     "vibe": Spec("vibe", 0x123C84, 0x123DB3, gen.vibe, fixup=fix_vibe, blocks=0x14),
     "flang": Spec("flang", 0x12348D, 0x123538, gen.flang, fixup=fix_flang, blocks=2),
@@ -216,6 +269,10 @@ SPECS: dict[str, Spec] = {
     "spin": Spec(
         "spin", 0x123557, 0x12377C, gen.spin, fixup=fix_spin, blocks=0x21, window=(-0x20, 0x2A)
     ),
+    "rm": Spec("rm", 0x1239D0, 0x123A7A, gen.rm, fixup=fix_rm, blocks=-0x10, ring=False),
+    "wah": Spec("wah", 0x123DD2, 0x123E9A, gen.wah, fixup=fix_wah, blocks=7, ring=False),
+    "awah": Spec("awah", 0x123E9B, 0x123F60, gen.awah, fixup=fix_awah, blocks=4, ring=False),
+    "pump": Spec("pump", 0x122D2C, 0x122D92, gen.pump, fixup=fix_pump, blocks=-8, ring=False),
 }
 
 

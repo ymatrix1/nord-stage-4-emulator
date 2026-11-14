@@ -37,6 +37,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D38](#d38-the-samples-defaults-stay-the-sample-loader-0xc01d710c-runs-but-the-voice-update-is-not-reached) | 2026-11-14 | The SAMPLES defaults stay; the sample loader `0xC01D710C` runs but the voice update is not reached | accepted |
 | [D46](#d46-the-samples-kernel-rule-by-key-is-the-default-the-voice-key-is-the-effective-key) | 2026-11-14 | The SAMPLES kernel rule by key is the default; the voice key is the effective key | accepted |
 | [D47](#d47-the-samples-pitch-law-stays-opt-in-the-voice-update-runs-in-the-harness-with-a-queue-pump-and-one-dsp-status-bit) | 2026-11-14 | The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit | accepted |
+| [D51](#d51-cbin-checksum-is-crc-32-from-0x2c-preset-files-re-encode-by-bit-merge-and-load-through-the-program-section-functions) | 2026-11-14 | `CBIN` checksum is CRC-32 from `0x2C`; preset files re-encode by bit merge and load through the program section functions | accepted |
 | [D39](#d39-the-fx-receiver-of-the-smp-stream-is-found-unity-with-one-common-path-the-piano-defaults-stay) | 2026-11-14 | The FX receiver of the SMP stream is found: unity, one path for piano and organ; the piano defaults stay | accepted |
 | [D45](#d45-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
@@ -45,6 +46,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D41](#d41-the-b3-bass-stage-is-wired-opt-in-the-generator-weights-follow-a-table-of-held-writes-no-default-flips) | 2026-11-14 | The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips | accepted |
 | [D50](#d50-the-ladder24-filter-stage-is-modelled-and-wired-opt-in-under-the-strip-chain) | 2026-11-14 | The Ladder24 filter stage `0x12549D` is modelled bit exactly and wired opt-in under the strip chain with an assumed cutoff law [D48](#d48-the-master-level-word-and-the-layer-word-targets-are-found-the-organ-chain-word-is-16-the-level-defaults-stay) master level word layer word targets are found; organ word 1.6; level defaults stay [D49](#d49-the-layer-mode-flag-is-reverb-global-the-verified-chain-is-exposed-opt-in-the-level-defaults-stay) layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay | accepted |
 | [D49](#d49-the-layer-mode-flag-is-reverb-global-the-verified-chain-is-exposed-opt-in-the-level-defaults-stay) | 2026-11-14 | The layer mode flag is Reverb GLOBAL; the verified chain is exposed opt-in; the level defaults stay | accepted |
+| [D50](#d50-fx-mod-1-rm-a-wah-wah-and-pump-use-the-firmware-routines-behind-firmwarefxmod1-boot-words-complete-phas-1-and-spin-chor-delays-are-rescaled) | 2026-11-14 | FX Mod 1 RM, A-WAH, WAH and PUMP use the firmware routines behind `FirmwareFx::mod1`; boot words complete PHAS 1 and SPIN; CHOR delays are rescaled | accepted |
 
 ---
 
@@ -427,6 +429,16 @@ cabinet taps fingerprint response test.
 - **Alternatives:** Forge the status bit in the firmware image (rejected: a harness hook is enough and visible); rebuild `sample_pitch_fw` on the per-zone fields now (rejected: the source of those fields in the sample map is not decoded).
 - **Impact:** None on renders; a new tool and tests; OQ22 and TD-08 narrowed.
 
+### D51. `CBIN` checksum is CRC-32 from `0x2C`; preset files re-encode by bit merge and load through the program section functions
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/preset-library-store-load`; evidence [cbin-and-presets](specs/cbin-and-presets.md) section 5.6)
+- **Context:** Storing a new preset into the Preset Library (manual p.42) and loading `.ns4o` / `.ns4n` / `.ns4y` files needs an encoder that writes a valid file. The header checksum at `0x18` was an open question (OQ3) and the program encoder used a wrapping byte sum (`ASSUMED`), which matched none of the 544 factory presets. The decoders (`OrganPresetDecoded`, `PianoPresetDecoded`, `SynthPresetDecoded`) are lossy for some raw values: 4 Piano and 136 Synth factory presets do not re-pack to their own bits.
+- **Decision:** (1) The checksum is the standard CRC-32 (`zlib.crc32`) of the file bytes from `0x2C` to the end; `CbinFile::refresh_checksum` writes it and the program encoders use it. (2) `SectionPreset::to_file_like(template)` merges at bit level: a payload bit changes only where the encoding of the edited preset differs from the encoding of the preset decoded from the template, so every untouched bit (including the ones the decoder cannot represent) stays; an unedited preset re-encodes to the identical file. (3) A section preset loads through the same `apply_organ_section` / `apply_piano_section` / `apply_synth_section` functions as `apply_program`, as the undoable control operation `ProgramEdit::LoadPreset`.
+- **Why:** (1) 937 of 937 CBIN files of the Factory Restore backup match (`python tools/preset_check.py`, `ns4 preset-check`), the byte sum matched 0. (2) Rule 5 of AGENTS.md (lossless round trip of untouched fields) holds without first making every decoder lossless. (3) A preset payload is byte for byte the program's section block, so one code path keeps program load and preset load equal, and the control thread keeps the audio thread allocation free.
+- **Alternatives:** Keep the byte sum (rejected: wrong for every factory file, a restore would likely reject it); make the decoders lossless first (rejected: the meaning of the unmapped Synth bits is open, OQ31); apply presets on the audio thread (rejected: effect chain setup and the Undo snapshot allocate).
+- **Impact:** Programs written by `to_cbin_file` / `to_cbin_file_like` and by `ns4 store-program` get the CRC-32 checksum instead of the byte sum; OQ3 answered and removed; OQ30 and OQ31 added; hardware acceptance of an edited backup stays open.
+
 ### D45. The SAMPLES defaults stay; the sample set cannot be served through the library loader
 
 - **Status:** accepted 2026-11-14
@@ -529,30 +541,34 @@ unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
 - **Alternatives:** Lower `K` to 1.75 and apply the 1.6 word (rejected: the same 25 dB piano / organ spread remains and the clips decide the sum, not the words); flip the piano to 0.7464 (rejected: +10 dB on the Velvet Grand clip).
 - **Impact:** Two new opt-in switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults and `render_hash` unchanged. OQ20 and OQ24 narrow: the flag and cells are resolved; open are the 25 dB engine spread, the rows `0..4` and `0xB2FF0` family writers, and White Grand / DSoundman clips under the chain.
 
-### D50. The Ladder24 filter stage is modelled and wired opt-in under the strip chain
+### D50. FX Mod 1 RM, A-WAH, WAH and PUMP use the firmware routines behind `FirmwareFx::mod1`; boot words complete PHAS 1 and SPIN; CHOR delays are rescaled
 
 - **Status:** accepted 2026-11-14
-- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-9`; evidence [synth-stage-models-9](research/synth-stage-models-9.md))
-- **Context:** `kFltType = 2` (`Ladder24`, 68 of 442 filter layers) maps to `0x12549D`, the last filter stage without a model; the Rust engine approximated it with the four-pole low pass `Lp4` (ASSUMED).
-- **Decision:** Port the stage (`synth/fw_ladder.rs`, `FwFilterType::Ladder`) and select it for `Ladder24` in the strip chain when `strip_stages` (`--synth-stages`) is on; `FilterEngine::Firmware` without the strip chain keeps `Lp4`. The panel cutoff reaches the stage as the table position whose section pole equals `exp(-2 atan R)`.
-- **Why:** The stage equals the oracle word for word (1840 of 1840), so the DSP is verified; only the strip word to position law is not (the stage reads a log-frequency position, the other stages the tangent coefficient `R`), hence ASSUMED and opt-in per D22.
-- **Alternatives:** Keep `Lp4` for `Ladder24` (rejected: different shape and resonance); feed `R` straight to the position word (rejected: the table runs 8 Hz to 28 kHz over `0..0.95`, so 6 kHz would play near 400 Hz); make the stage the default outside `--synth-stages` (rejected until the ARM cutoff word for type 2 is traced).
-- **Impact:** Ladder24 layers change sound under the firmware strip chain with stage oscillators (the default of `SynthLayer::new`, off in `legacy_all`); the test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
+- **Decided by:** Yuri Olive (PR for `feat/fx-mod1-rest`; evidence [fx-mod-types](research/fx-mod-types.md) s7, [fx-mod2-types](research/fx-mod2-types.md) s8.3)
+- **Context:** After D26 only A-PAN and TREM (70 of 89 Mod 1 programs) ran the firmware; RM, A-WAH, WAH and PUMP had routines named but no model, and PHAS 1, ENS and SPIN were ported without a stage because instance words were missing. CHOR kept its delays in DSP frames.
+- **Decision:** (1) Model RM `0x1239D0`, A-WAH `0x123E9B`, WAH `0x123DD2` and PUMP `0x122D2C` with the committed listing to model to Rust pipeline (500/500 twice and per-instruction traces for each; new ops: `ashift`, `(uui)` multiply, integer `comp`, `gt` / `lt` / `le`), and wire them through `FwMod1Rest` (`fx/fw_mod1_rest.rs`) behind `FirmwareFx::mod1`: row, type words and the 11 sample laws as derived data (`tools/fx_mod1_laws.py`, `fw_mod1_data.rs`, `fx-mod1-rows.csv`), 2-frame latency, phase increments by `F / fs`. (2) Take the instance rows of PHAS 1, ENS and SPIN from the image under the **boot words** of the ARM (`tools/arm_bulk_tables.py capture`), wire PHAS 1 and SPIN, leave ENS on the engine (right output only). (3) Rescale the six CHOR delay and swing words by `fs / F`, capped at 250 frames.
+- **Why:** The routines reproduce the oracle word for word; the boot log is the ARM's own word list, so the pointers, block counts and gains are not guessed. ENS would be wrong on the left channel.
+- **Alternatives:** Hand-written ports of the four routines (rejected: D37 chose generated ports); wiring ENS with an assumed second voice (rejected); rescaling the ring size as well (rejected: the ring is a context word set by the ARM).
+- **Impact:** `FirmwareFx::ALL` changes the 20 Mod 1 programs of RM, A-WAH, WAH, PUMP and the PHAS 1 and SPIN programs (2 to 4 frames of latency); `DEFAULT` and `render_hash` are unchanged. OQ21 keeps: ENS left voice, hardware clips, the 2-frame versus 4-frame call of the A-PAN / TREM stages on the piano unit, the PUMP Master Clock counter.
+Ladder24 filter modelled wired opt-in strip chain
+
+`feat/synth-stages-rest-9`; [synth-stage-models-9](research/synth-stage-models-9.md))
+`kFltType = 2` (`Ladder24`, 68 442 filter layers) maps `0x12549D`, last filter model; approximated it four-pole low pass `Lp4` (ASSUMED).
+Port (`synth/fw_ladder.rs`, `FwFilterType::Ladder`) select it `Ladder24` strip chain when `strip_stages` (`--synth-stages`) on; `FilterEngine::Firmware` strip chain keeps `Lp4`. panel cutoff reaches table position whose section pole equals `exp(-2 atan R)`.
+equals (1840 1840), verified; strip position law (the reads log-frequency position, other tangent coefficient `R`), hence ASSUMED opt-in per D22.
+Keep `Lp4` `Ladder24` different shape resonance); feed `R` straight position table runs 8 Hz 28 kHz over `0..0.95`, 6 kHz play near 400 Hz); make default outside `--synth-stages` (rejected until cutoff 2 traced).
+Ladder24 layers change sound strip chain oscillators (the default `SynthLayer::new`, off `legacy_all`); test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
 D49. layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay
 
 `feat/organ-k-derivation`; [piano-receiver-scale](research/piano-receiver-scale.md) s6, `tools/arm_master_level.py modes`)
-D48 left layer mode flag `[mixer + scene + 0x5B8]` FX bus scale cells (2.5, 3.25, 0.25) open candidates 13.4 dB between organ `K 2.8` piano reading, plus source volume sender.
-(1) Record flag Reverb GLOBAL state (`0xC010E36C`, edit id `0x1B9`) sender's slot map: Reverb GLOBAL organ 1.6 (PNO words), piano 1.0 (SMP stream rows), synth 1.0; on piano 2.5 synth 3.25; cells 1.3, 1.14, 0.25 are reachable from layer slots (`layer_scale_cell`). (2) Add verified opt-in: `--organ-level chain` (`OutputLevel::Chain`, `1.6 * 0.3732 0.597`) `--firmware-piano-chain` (`PianoLayer::receiver_chain_scale`, `4 G 0.7464`). (3) every default, `K 2.8` `render_hash`.
-cells cannot close gap (they apply global reverb). clips are 14 15 dB (B3, Vox) 10 12 dB (Velvet Grand) on same video, verified end end (D22).
-Lower `K` 1.75 apply 1.6 same 25 dB piano / organ spread remains clips decide sum, words); flip piano 0.7464 +10 dB on Velvet Grand clip).
-Two new switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults `render_hash` unchanged. OQ20 OQ24 narrow: flag cells are resolved; open are 25 dB spread, rows `0..4` `0xB2FF0` family writers, White Grand / DSoundman clips chain.
+D48 layer mode flag `[mixer + scene + 0x5B8]` bus scale cells (2.5, 3.25, 0.25) open candidates 13.4 dB between organ `K 2.8` reading, plus source volume sender.
+Record flag Reverb GLOBAL state (`0xC010E36C`, edit id `0x1B9`) sender's slot map: Reverb GLOBAL organ 1.6 (PNO words), 1.0 (SMP stream rows), synth 1.0; 2.5 synth 3.25; cells 1.3, 1.14, 0.25 reachable layer slots (`layer_scale_cell`). Add verified opt-in: `--organ-level chain` (`OutputLevel::Chain`, `1.6 * 0.3732 0.597`) `--firmware-piano-chain` (`PianoLayer::receiver_chain_scale`, `4 G 0.7464`). every default, `K 2.8` `render_hash`.
+cells cannot close gap (they apply global reverb). clips 14 15 dB (B3, Vox) 10 12 dB (Velvet Grand) same video, verified end end (D22).
+Lower `K` 1.75 apply 1.6 same 25 dB organ spread remains clips decide sum, words); flip 0.7464 +10 dB Velvet Grand clip).
+Two switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults OQ20 OQ24 narrow: flag cells resolved; open 25 dB spread, `0..4` `0xB2FF0` family writers, White Grand DSoundman clips D51. Ladder24 position strip table value `R`; host keeps pole-frequency law
 
-### D51. The Ladder24 stage position is the strip table value `R`; the host keeps the pole-frequency law
-
-- **Status:** accepted 2026-11-14
-- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-10`; evidence [synth-stage-models-10](research/synth-stage-models-10.md) s1)
-- **Context:** D50 left the strip word to position law of `0x12549D` ASSUMED because the ARM cutoff word for `kFltType = 2` was not traced.
-- **Decision:** Record that the stage reads the same `R` as every filter stage (`LadderCoefs::from_strip_r`) and that the ARM cutoff sender `0xC01C56CC` is type independent with the knob law `i = knob - 52` (Q16.16 values, `tools/arm_synth_freq_law.py`). Keep `LadderCoefs::from_r` (host Hz = pole frequency) in the voice chain.
-- **Why:** The coefficient words equal the oracle for 14 of 14 lane sets with the real pass control block; the pole frequency is exponential in the knob (74 Hz to 7.8 kHz), which is what a Hz fed engine expects, while feeding the tangent `R` of a host cutoff would play the ladder two decades low (ten synth tests broke in the experiment).
+`feat/synth-stages-rest-10`; [synth-stage-models-10](research/synth-stage-models-10.md) s1)
+D50 strip position law `0x12549D` ASSUMED cutoff `kFltType = 2` was traced.
+Record that reads same `R` every filter (`LadderCoefs::from_strip_r`) that cutoff sender `0xC01C56CC` independent knob law `i = knob 52` (Q16.16 values, `tools/arm_synth_freq_law.py`). Keep `LadderCoefs::from_r` (host Hz = pole frequency) - **Why:** The coefficient words equal the oracle for 14 of 14 lane sets with the real pass control block; the pole frequency is exponential in the knob (74 Hz to 7.8 kHz), which is what a Hz fed engine expects, while feeding the tangent `R` of a host cutoff would play the ladder two decades low (ten synth tests broke in the experiment).
 - **Alternatives:** Feed `R` of the host cutoff into the position (rejected: pole near 20 Hz for 2 kHz); wait for a knob driven strip chain (rejected: the finding is useful now).
 - **Impact:** No rendering change (`from_strip_r` is not wired). OQ22 narrows; the `R = tan` reading of the other filter types is flagged for a hardware sweep.

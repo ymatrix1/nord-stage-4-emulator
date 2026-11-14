@@ -24,6 +24,16 @@ pub fn route_plugin_event(
     mode: MidiRoutingMode,
     event: NoteEvent<()>,
 ) {
+    // A wildcard key (CLAP `-1` arrives as 255) is not a MIDI note; the per-layer note tables
+    // are indexed by `note`, so drop it here before the multitimbral path touches them.
+    if let NoteEvent::NoteOn { note, .. }
+    | NoteEvent::NoteOff { note, .. }
+    | NoteEvent::Choke { note, .. } = event
+    {
+        if note >= 128 {
+            return;
+        }
+    }
     match mode {
         MidiRoutingMode::OmniSplit => {
             // OmniSplit: translate NoteEvent into CoreMidiEvent and feed engine.handle_midi
@@ -169,6 +179,48 @@ pub fn to_core_midi_event(event: &NoteEvent<()>) -> Option<CoreMidiEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression for `clap-validator` `process-note-wildcard` (key -1 arrives as 255).
+    #[test]
+    fn wildcard_keys_are_dropped_in_every_routing_mode() {
+        let params = Stage4Params::default();
+        for mode in [
+            MidiRoutingMode::OmniSplit,
+            MidiRoutingMode::MultitimbralPerLayer,
+        ] {
+            let mut engine = Stage4Engine::new(48_000.0);
+            for channel in 0..8u8 {
+                for event in [
+                    NoteEvent::NoteOn {
+                        timing: 0,
+                        voice_id: None,
+                        channel,
+                        note: 255,
+                        velocity: 0.8,
+                    },
+                    NoteEvent::NoteOff {
+                        timing: 0,
+                        voice_id: None,
+                        channel,
+                        note: 255,
+                        velocity: 0.0,
+                    },
+                    NoteEvent::Choke {
+                        timing: 0,
+                        voice_id: None,
+                        channel,
+                        note: 255,
+                    },
+                ] {
+                    route_plugin_event(&mut engine, &params, mode, event);
+                }
+            }
+            let mut l = [0.0f32; 32];
+            let mut r = [0.0f32; 32];
+            engine.process_block(&mut l, &mut r);
+            assert!(l.iter().chain(&r).all(|s| *s == 0.0), "{mode:?} sounded");
+        }
+    }
 
     #[test]
     fn pitch_bend_event_maps_to_14_bit_value() {

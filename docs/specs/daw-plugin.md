@@ -39,7 +39,7 @@
 
 - OmniSplit routes supported MIDI events through the core split router. Multitimbral mode maps zero-based channels 0–6 to Organ A/B, Piano A/B, and Synth A/B/C; channels 7–15 fall back to OmniSplit.
 - Pitch bend (`MidiPitchBend`) is decoded into `MidiEvent::PitchBend` and drives every layer with PSTICK on (Synth range per layer via `ped_range_5..7`, default 2 semitones; Organ and Piano always bend 2 semitones and ignore `ped_range_1..4`) and Aux KB layers.
-- Automated unit tests verify conversion, routing, parameter synchronization, state JSON compatibility, and program import. DAW host compatibility remains unverified until the plugin is loaded and exercised in each host.
+- Automated unit tests verify conversion, routing, parameter synchronization, state JSON compatibility, and program import. DAW host compatibility remains unverified until the plugin is loaded and exercised in each host. Headless evidence (B13, 2026-11-14: `clap-validator` 30 of 44 pass, host-lifecycle test, zero-allocation tests, a fix for CLAP wildcard note events) and the manual smoke checklist are in [HOST_COMPATIBILITY](../HOST_COMPATIBILITY.md) section 7.
 - AUv2 is not exported or tested by this crate; external wrapper packaging is separate.
 
 ## Editor (Phase 6b B11, `ns4-hud1`)

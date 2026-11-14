@@ -135,6 +135,7 @@ impl AudioCommand {
                     | P::Split(_)
                     | P::MasterBpm(_)
                     | P::LayerScene2(_)
+                    | P::LoadPreset { .. }
             ),
             Self::Midi(_)
             | Self::SetMasterVolume(_)

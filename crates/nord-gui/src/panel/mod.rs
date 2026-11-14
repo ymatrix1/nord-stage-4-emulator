@@ -12,6 +12,8 @@ mod bay_piano_select;
 pub(crate) mod bay_program;
 mod bay_synth;
 mod ctl;
+#[cfg(test)]
+mod frame_cost_tests;
 mod frames;
 mod kb_zone;
 mod keybed;
@@ -42,6 +44,7 @@ mod piano_logic;
 pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
+mod preset_sync;
 mod rotor_angle;
 mod section_edit;
 #[cfg(test)]

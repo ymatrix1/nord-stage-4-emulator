@@ -1,6 +1,7 @@
 //! `FirmwareFx::mod2` in the layer chain: the firmware stages replace the engine Mod 2 for
-//! `kFx2Type` 0, 2 to 7 (`PHAS 0`, `FLANG`, `CHOR`, `VIBE`); types 1, 8 to 11 stay on the engine
-//! (instance words of `PHAS 1`, `ENS`, `SPIN` not all known).
+//! `kFx2Type` 0 to 7, 10, 11 (`PHAS`, `FLANG`, `CHOR`, `VIBE`, `SPIN`); `ENS` (8, 9) and the types
+//! above 11 stay on the engine (the boot words complete `PHAS 1` and `SPIN`; the `ENS` output is
+//! right only, `docs/research/fx-mod-types.md` s8).
 
 use super::*;
 
@@ -28,7 +29,7 @@ fn run(fx: &mut LayerFxChain, n: usize) -> Vec<[f32; 2]> {
 
 #[test]
 fn the_firmware_stages_have_a_four_frame_delay_and_stay_bounded() {
-    for ty in [0, 2, 3, 4, 5, 6, 7] {
+    for ty in [0, 1, 2, 3, 4, 5, 6, 7, 10, 11] {
         let mut fx = chain(true, ty);
         let y = run(&mut fx, 20_000);
         assert!(y[..4].iter().all(|f| *f == [0.0, 0.0]), "type {ty}");
@@ -48,7 +49,7 @@ fn the_engine_path_is_used_when_the_switch_is_off_or_the_type_is_not_a_firmware_
     let first_frames_live =
         |fx: &mut LayerFxChain| run(fx, 3).iter().any(|f| f[0] != 0.0 || f[1] != 0.0);
     assert!(first_frames_live(&mut chain(false, 4)));
-    for ty in [1, 8, 9, 10, 11, 12] {
+    for ty in [8, 9, 12] {
         assert!(
             first_frames_live(&mut chain(true, ty)),
             "type {ty} stays on the engine"
