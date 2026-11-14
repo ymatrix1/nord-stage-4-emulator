@@ -74,6 +74,8 @@ fn summary(state: &Stage4PanelState) -> oled::Summary {
 
 fn led_dot(painter: &Painter, rect: Rect, on: bool, col: Color32, dim: Color32) {
     let r = (rect.width().max(rect.height()) * 0.5).max(1.5);
+    #[cfg(test)]
+    crate::widgets::probe::led(painter, rect.center(), r + 1.0);
     painter.circle_filled(rect.center(), r + 1.0, Color32::from_rgb(14, 16, 19));
     painter.circle_filled(rect.center(), r, if on { col } else { dim });
 }

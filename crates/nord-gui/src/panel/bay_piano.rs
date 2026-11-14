@@ -106,6 +106,7 @@ fn draw_strip(
 
     // FX focus LED mirrors the focused section.
     let fx = r("piano.fx_focus_led");
+    super::ctl::fx_focus_caption(p, fx.center());
     w::mini_led(
         p,
         fx.center(),
