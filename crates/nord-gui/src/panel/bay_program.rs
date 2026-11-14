@@ -33,6 +33,7 @@ pub mod nav;
 pub mod oled;
 pub mod oled_hint;
 pub mod oled_home;
+pub mod oled_icons;
 pub mod oled_paint;
 pub mod organize;
 pub mod organize_presets;

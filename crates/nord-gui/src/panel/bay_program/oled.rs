@@ -5,6 +5,8 @@ use super::model::{ListMode, PresetKind, ProgView, Screen};
 use super::morph::source_label;
 use super::nav::ORGAN_PRESETS;
 use super::oled_home::{location_title, name_line, section_rows};
+#[cfg(test)]
+use super::oled_icons::{ICON_ORGAN, ICON_PIANO, ICON_SYNTH};
 use super::split::{note_name, xfade_label, SplitRow};
 use super::store::{ProgLoc, StoreStage, StoreTarget};
 use crate::panel::ui_state::ProgramUi;
@@ -33,19 +35,31 @@ pub struct OledText {
     pub sub: String,
     pub rows: Vec<String>,
     pub soft: [&'static str; 4],
+    /// Title-bar screens: `Some(counter)` paints `big` in an inverted bar with the (possibly
+    /// empty) page counter right-aligned; `sub` is then the label and `rows` the body.
+    pub bar: Option<String>,
+    /// Index of the lit soft button.
+    pub soft_on: Option<usize>,
+    /// Parameter popup `(label, value)` in the lower half of the home screen.
+    pub popup: Option<(String, String)>,
 }
 
 impl OledText {
     /// All text joined for the hover tooltip.
     pub fn plain(&self) -> String {
-        let mut s = format!(
-            "{}\n{}\n",
-            super::oled_home::strip_marks(&self.big),
-            self.sub
-        );
+        let title = super::oled_home::strip_marks(&self.big);
+        let mut s = match &self.bar {
+            Some(counter) => format!("{title} {counter}\n{}\n", self.sub),
+            None => format!("{title}\n{}\n", self.sub),
+        };
         for r in &self.rows {
-            s.push_str(r.trim_start_matches(super::menu_screen::DIM));
+            s.push_str(&super::oled_home::strip_marks(
+                r.trim_start_matches(super::menu_screen::DIM),
+            ));
             s.push('\n');
+        }
+        if let Some((label, value)) = &self.popup {
+            s.push_str(&format!("{label}\n{value}\n"));
         }
         if self.soft.iter().any(|l| !l.is_empty()) {
             s.push_str(&format!("[{}]", self.soft.join("] [")));
@@ -175,6 +189,7 @@ fn list(ui: &ProgramUi) -> OledText {
             .unwrap_or_else(|| "No backup open".into()),
         rows: window(&names, ui.list_cursor, 4),
         soft: ui.screen.soft_labels(),
+        ..Default::default()
     }
 }
 
@@ -198,6 +213,7 @@ fn store(ui: &ProgramUi) -> OledText {
             sub: marked,
             rows: vec![format!("Cat: {}", ed.category_label())],
             soft: ui.screen.soft_labels(),
+            ..Default::default()
         };
     }
     let (target, existing) = match ui.store.target {
@@ -248,6 +264,7 @@ fn split(ui: &ProgramUi) -> OledText {
         sub: String::new(),
         rows: vec![format!("{a}Note {note}"), format!("{b}xFade {xf}")],
         soft: ui.screen.soft_labels(),
+        ..Default::default()
     }
 }
 
@@ -262,6 +279,7 @@ fn preset(ui: &ProgramUi, kind: PresetKind, single: bool) -> OledText {
         rows.insert(0, format!("Layer: {}", layer_label(ui.focus)));
     }
     OledText {
+        bar: Some(String::new()),
         big: kind.title().into(),
         sub: names
             .get(ui.preset_cursor)
@@ -269,6 +287,7 @@ fn preset(ui: &ProgramUi, kind: PresetKind, single: bool) -> OledText {
             .unwrap_or_else(|| "No backup open".into()),
         rows,
         soft: ui.screen.soft_labels(),
+        ..Default::default()
     }
 }
 
@@ -291,6 +310,7 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         sub,
         rows,
         soft: ui.screen.soft_labels(),
+        ..Default::default()
     };
     match ui.screen {
         Screen::Home => home(ui, sum),
@@ -306,15 +326,19 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
                 "External clock: none".into(),
             ],
         ),
-        Screen::Transpose => t(
-            "TRANSPOSE",
-            format!(
-                "{:+} st {}",
-                ui.transp.semitones,
-                if ui.transp.on { "on" } else { "off" }
-            ),
-            Vec::new(),
-        ),
+        // VERIFIED: Transpose is a popup in the lower half of the home screen, label and value
+        // (`Transpose` / `+1 semi`, ARM frames, research note s12). ASSUMED: `Off` for the off state.
+        Screen::Transpose => OledText {
+            popup: Some((
+                "Transpose".into(),
+                if ui.transp.on {
+                    format!("{:+} semi", ui.transp.semitones)
+                } else {
+                    "Off".into()
+                },
+            )),
+            ..home(ui, sum)
+        },
         Screen::Preset { kind, single } => preset(ui, kind, single),
         Screen::Undo => t(
             "UNDO",
@@ -330,11 +354,14 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         // VERIFIED: title, prompt and the per-section layer letters (`AB`, `A`, `A`) above the
         // All / Organ / Piano / Synth soft buttons (soft-piano video `NVMtX0epXog` 1:16,
         // piano-pad video `hR31DQrxfT4` 1:02). PAGE picking the layer is emulator-only.
-        Screen::LayerInit => t(
-            "LAYER INIT",
-            "Press to initialize".into(),
-            vec![layer_init_letters(ui.focus), "PAGE picks the layer".into()],
-        ),
+        Screen::LayerInit => OledText {
+            bar: Some(String::new()),
+            ..t(
+                "LAYER INIT",
+                "Press to initialize".into(),
+                vec![layer_init_letters(ui.focus), "PAGE picks the layer".into()],
+            )
+        },
         Screen::Copy => t(
             "MON/COPY",
             format!("Layer: {}", layer_label(ui.focus)),
@@ -383,74 +410,28 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
 pub use super::oled_paint::paint;
 
 #[cfg(test)]
-mod tests {
+mod unit {
     use super::*;
 
-    fn sum() -> Summary {
-        Summary {
-            organ: "B3".into(),
-            piano: "Grand".into(),
-            synth: "SuperSaw".into(),
-            piano_size: None,
-            organ_bars: None,
-            layers_on: [true, false, true, false, true, false, false],
-        }
+    #[test]
+    fn window_centres_the_cursor_and_marks_it() {
+        let items: Vec<String> = ["a", "b", "c", "d", "e", "f"].map(String::from).to_vec();
+        assert_eq!(window(&items, 0, 4), [">a", " b", " c", " d"]);
+        assert_eq!(window(&items, 3, 4), [" b", " c", ">d", " e"]);
+        assert_eq!(window(&items, 5, 4), [" c", " d", " e", ">f"]);
+        assert!(window(&[], 0, 4).is_empty());
     }
 
     #[test]
-    fn four_prog_views_and_preset_name() {
-        let mut u = ProgramUi::default();
-        u.title = "Sweet".into();
-        let t = compose(&u, &sum());
-        assert_eq!((t.big.as_str(), t.sub.as_str()), ("A:11", "Sweet"));
-        u.preset_name = true;
-        assert!(compose(&u, &sum()).sub.contains("B3 / Grand / SuperSaw"));
-        u.preset_name = false;
-        u.view = u.view.next();
-        let t = compose(&u, &sum());
-        assert_eq!(t.rows, ["Organ B3", "Piano Grand", "Synth SuperSaw"]);
-        assert!(t.big.contains("Sweet"));
-        u.view = u.view.next();
-        let t = compose(&u, &sum());
-        assert!(t.rows[0].contains("Org A") && t.rows[0].contains("Syn A"));
-        u.view = u.view.next();
-        let t = compose(&u, &sum());
-        assert_eq!(t.rows.len(), 8);
-        assert!(t.rows[0].starts_with('>'), "current program is highlighted");
-    }
-
-    #[test]
-    fn layer_init_screen_matches_the_hardware_prompt_and_letters() {
-        let mut u = ProgramUi::default();
-        u.screen = Screen::LayerInit;
-        u.focus = LayerId::SynthC;
-        let t = compose(&u, &sum());
-        assert_eq!(t.big, "LAYER INIT");
-        assert_eq!(t.sub, "Press to initialize");
-        assert_eq!(t.rows[0], "Organ AB  Piano A  Synth C");
-        assert_eq!(t.soft, ["All", "Organ", "Piano", "Synth"]);
-        u.focus = LayerId::PianoB;
-        assert_eq!(compose(&u, &sum()).rows[0], "Organ AB  Piano B  Synth A");
-    }
-
-    #[test]
-    fn store_screens_show_target_and_name_cursor() {
-        let mut u = ProgramUi::default();
-        u.title = "Rusty".into();
-        u.store_as();
-        let t = compose(&u, &sum());
-        assert_eq!(t.big, "STORE PROGRAM AS");
-        assert!(t.sub.starts_with("[R]usty"), "{}", t.sub);
-        assert_eq!(t.soft, ["Abc", "Cat", "Del", "Ins"]);
-        assert_eq!(t.rows[0], "Cat: Undefined");
-        u.store_press();
-        let t = compose(&u, &sum());
-        assert_eq!(t.big, "STORE PROGRAM TO");
-        assert_eq!(t.sub, "A:11");
-        // Unused target: `<empty>`, then the name that will be stored.
-        assert_eq!(t.rows, ["<empty>", "As: Rusty"]);
+    fn layer_labels_follow_the_hardware_short_names() {
+        assert_eq!(layer_label(LayerId::OrganA), "Org A");
+        assert_eq!(layer_label(LayerId::SynthC), "Syn C");
     }
 }
+
+#[cfg(test)]
+#[path = "oled_screens_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "oled_tests.rs"]

@@ -22,6 +22,7 @@ mod tests {
             sub: "Name".into(),
             rows: vec!["Org".into(), "Pno".into(), "Syn".into()],
             soft: [""; 4],
+            ..Default::default()
         }
     }
 
