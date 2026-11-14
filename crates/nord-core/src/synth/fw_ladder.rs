@@ -75,9 +75,10 @@ impl LadderCoefs {
     /// (`2 atan r` rad per sample), the one-pole frequency that is also the resonance peak of the
     /// four-section loop.
     ///
-    /// ASSUMED: the firmware strip word that the ARM writes for `kFltType = 2` and its relation to
-    /// the table position `p` were not traced (`synth-stage-models-9.md` section 4); only the
-    /// table (position to pole) is measured. The search inverts the 129 entry row 2 (monotone).
+    /// ASSUMED: the host cutoff is the section pole frequency. The firmware side is now traced
+    /// (the stage reads `R` of the strip word, [`Self::from_strip_r`], and the ARM knob law is
+    /// type independent, `synth-stage-models-10.md` s1); what stays assumed is that the host
+    /// cutoff taper equals the knob taper. The search inverts the 129 entry row 2 (monotone).
     #[inline]
     pub fn from_r(r: f32, res: TablePos) -> Self {
         let r = if r.is_finite() { r.max(0.0) } else { 0.0 };
@@ -94,6 +95,25 @@ impl LadderCoefs {
         let (c0, c1) = (f32::from_bits(ROW2[lo]), f32::from_bits(ROW2[lo + 1]));
         let fr = ((target - c0) / (c1 - c0)).clamp(0.0, 1.0);
         Self::new((lo as f32 + fr) / 128.0, res)
+    }
+
+    /// Coefficients for the strip table value `R` taken as the cutoff position, as the stage reads
+    /// the frame word `DM(-30)` that the pass control block fills for every filter stage.
+    ///
+    /// VERIFIED (stage input): with the pass control block of the ORG image in place, strip word 3
+    /// sweeps `R = 0.36083 .. 0.86` and the stage coefficients equal the rows at position `R`
+    /// word for word (14 of 14 lane sets, `tools/synth_filter_ladder_strip.py`, test
+    /// `strip_cases_match_the_stage`); the ARM sender of the cutoff words (`0xC01C56CC`) reads no
+    /// filter type. Behind the ARM knob law (`i = knob - 52`,
+    /// `docs/research/data/synth-filter-freq-law.csv`) the section pole frequency runs 74 Hz (knob
+    /// 40), 149 Hz (52), 302 Hz (64), 2.5 kHz (100) to 7.8 kHz (117) at 48 kHz (test
+    /// `pole_frequency_follows_the_knob_exponentially`): exponential in the knob, so the pole
+    /// match of [`Self::from_r`] (host Hz = pole frequency) agrees with the firmware wherever the
+    /// host taper is the knob taper. The voice chain keeps `from_r` because it is fed Hz, not the
+    /// knob (ASSUMED).
+    #[inline]
+    pub fn from_strip_r(r: f32, res: TablePos) -> Self {
+        Self::new(r, res)
     }
 
     /// Coefficients from the frame words (`w30` cutoff float word, `w28` resonance word).
@@ -216,6 +236,27 @@ mod tests {
         // outside the table the position saturates
         assert_eq!(LadderCoefs::from_r(1e-9, res).b.to_bits(), ROW0[0]);
         assert!(LadderCoefs::from_r(f32::NAN, res).b.is_finite());
+    }
+
+    #[test]
+    fn strip_value_is_the_table_position() {
+        let res = TablePos { idx: 0, fr: 0.0 };
+        for r in [0.0f32, 0.36083, 0.5, 0.7, 0.9] {
+            let (a, b) = (LadderCoefs::from_strip_r(r, res), LadderCoefs::new(r, res));
+            assert_eq!(a.b.to_bits(), b.b.to_bits());
+            assert_eq!(a.c.to_bits(), b.c.to_bits());
+        }
+        // the pole falls with the position and the range saturates at the top of the table
+        let (lo, hi) = (
+            LadderCoefs::from_strip_r(0.4, res),
+            LadderCoefs::from_strip_r(0.9, res),
+        );
+        assert!(-lo.c > -hi.c);
+        assert_eq!(
+            LadderCoefs::from_strip_r(5.0, res).c.to_bits(),
+            LadderCoefs::new(0.992, res).c.to_bits()
+        );
+        assert!(LadderCoefs::from_strip_r(f32::NAN, res).b.is_finite());
     }
 
     #[test]

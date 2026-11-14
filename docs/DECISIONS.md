@@ -557,3 +557,13 @@ D48 left layer mode flag `[mixer + scene + 0x5B8]` FX bus scale cells (2.5, 3.25
 cells cannot close gap (they apply global reverb). clips are 14 15 dB (B3, Vox) 10 12 dB (Velvet Grand) on same video, verified end end (D22).
 Lower `K` 1.75 apply 1.6 same 25 dB piano / organ spread remains clips decide sum, words); flip piano 0.7464 +10 dB on Velvet Grand clip).
 Two new switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults `render_hash` unchanged. OQ20 OQ24 narrow: flag cells are resolved; open are 25 dB spread, rows `0..4` `0xB2FF0` family writers, White Grand / DSoundman clips chain.
+
+### D51. The Ladder24 stage position is the strip table value `R`; the host keeps the pole-frequency law
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-10`; evidence [synth-stage-models-10](research/synth-stage-models-10.md) s1)
+- **Context:** D50 left the strip word to position law of `0x12549D` ASSUMED because the ARM cutoff word for `kFltType = 2` was not traced.
+- **Decision:** Record that the stage reads the same `R` as every filter stage (`LadderCoefs::from_strip_r`) and that the ARM cutoff sender `0xC01C56CC` is type independent with the knob law `i = knob - 52` (Q16.16 values, `tools/arm_synth_freq_law.py`). Keep `LadderCoefs::from_r` (host Hz = pole frequency) in the voice chain.
+- **Why:** The coefficient words equal the oracle for 14 of 14 lane sets with the real pass control block; the pole frequency is exponential in the knob (74 Hz to 7.8 kHz), which is what a Hz fed engine expects, while feeding the tangent `R` of a host cutoff would play the ladder two decades low (ten synth tests broke in the experiment).
+- **Alternatives:** Feed `R` of the host cutoff into the position (rejected: pole near 20 Hz for 2 kHz); wait for a knob driven strip chain (rejected: the finding is useful now).
+- **Impact:** No rendering change (`from_strip_r` is not wired). OQ22 narrows; the `R = tan` reading of the other filter types is flagged for a hardware sweep.
