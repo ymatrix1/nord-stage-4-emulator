@@ -105,7 +105,7 @@ Consequence: the structural evidence says the chain key is the layer note withou
 
 ## 10. SAMPLES layer in the ARM harness: what was tried (2026-11-14, `tools/arm_sample_probe.py`)
 
-Goal: serve a sample set from the local `.ns4b` so that a SAMPLES layer loads and plays, then capture the kernel record write, the pitch message and the record fields. **Not reached; the findings below narrow where the sample set enters.** No default changed (D37).
+Goal: serve a sample set from the local `.ns4b` so that a SAMPLES layer loads and plays, then capture the kernel record write, the pitch message and the record fields. **Not reached with the FAT loader; section 11 finds the real sample loader and binds a loaded sample to the layer.** No default changed (D37).
 
 | Item | Result | Tag |
 |---|---|---|
@@ -123,9 +123,23 @@ Run it: `uv run --with unicorn python tools/arm_sample_probe.py <CODE> <SRAM> --
 
 ### What remains (replaces follow-up 0 below)
 
-1. Find the sample loader (class with status table `0xC02FA318`, the SampLib flash read) and serve the `\0hdr`, `\0map` and `\0stk` headers to it; then the three captures of the task are one note-on: record write `0x9243B + 0x38 k`, pitch message, fields `+0x0A, +0x0C .. +0x0F, +0x13`.
+1. (loader done, section 11) Register the voice groups of the handler instance `0x9062E330` (or run the ring consumer task) so that `0xC01E00AC` reaches the key store `0xC01E0A00`; then the three captures are one note-on: record write `0x9243B + 0x38 k`, pitch message, fields `+0x0A, +0x0C .. +0x0F, +0x13`.
 2. Decode the DSP side of the pair-block write `0x9219E + 0x20` (which SY routine reads it and fills `DM(0x9354A + index)`), then compare the six measured steps with `sinc::pitch_law`.
 3. WAVE bank: unchanged (section 9, negative run on PNO core 2); the strip stages `0x124269 / 0x12453F` and the table read path are not decoded.
+
+## 11. The sample loader found and driven (2026-11-14, `tools/arm_sample_probe.py`)
+
+| Item | Result | Tag |
+|---|---|---|
+| Status table | `0xC02FA318` is a table of 10 string pointers (`Sample is ok`, `Sample type error`, `Sample parse error`, `Unsupported format`, `Sample is broken`, `Out of memory`, ...) followed by an exponent table the class math also uses; `0xC01D0BB0` returns the string of `[obj + 0xC]` | VERIFIED (listing) |
+| Class and pool | the sample object is `0x9D8` bytes, class table `0xC02FB2C0` (slot 0 `0xC01D0800` returns `[obj + 4]`, the sample id), constructed by `0xC01DAE64`; `[0xC055D9B0]` is the manager: `[0]` its own device object, `[4]` the pool (count `0x190`, vector `[+8 .. +0xC]`) | VERIFIED (listing, run) |
+| The loader | `0xC01D710C(manager, {u16 lib, u16 entry}, {u16, u16} skip)`: key `entry or lib << 15`, returns `0xA` when the id is already in the pool, else takes a free pool object, runs `0xC01D6EEC`, looks the entry up in the device directory `[dev + 0x60]` (`0xC00507A4`), reads the header with `0xC0095C0C`, compares the type word with `nsmp` (`0xC01D73D4`), parses the file name (`Name_Category Vx.y` into `+0x8C / +0xAD / +0xCE`), sizes the file with `0xC0096264` / `0xC00961B0` and walks the chunk stream with `0xC01D1910` (tags `NSMP`, `NSW`) | VERIFIED (listing, run) |
+| Run | with the real file read and directory lookup stubbed (`serve_sample`: device header `0x74` bytes = `0x68` name + type word `0x6E736D70` + two words, then the backup bytes from `NSMP`; descriptor `+4` = file length; one directory entry with the id at `+4`) `0xC01D710C` returns 0, `[obj + 0xC] == 0` ("Sample is ok"), `[obj + 4] == 1`, and the file is read in 256-byte pieces across the `hdr`, `map` and `stk` chunks. The failed attempts show the failure modes: an empty directory returns 1, a descriptor with `+4 == 0` gives status 5 ("Unsupported format"), a wrong type word gives status 3 ("Sample type error") | VERIFIED (run, Carina Accordion 1) |
+| Binding to a layer | `Edt_Syn_kSmpId` (`0x147`) and `Edt_Syn_kMode = 0` (`0xFA`, SAMPLES) through the layer client set `[layer + 0x4BC] = 1` (`0xC00171D4`: `value == 0x39`) and, with `0xC01E5978(slot list, id)` run directly, slot 0 of `[[layer + 0x4C0]]` becomes the pool object. The gate of `synth_gate` is then open and a note-on passes the sample check of `0xC01E72C4` | VERIFIED (run) |
+| Note-on with a loaded sample | `0xC01E7C64 .. 0xC01E7D14` runs: the voice event is posted (class `0xC02FB318`, `{vtable, 4, layer, event index}`) to the ring `[[sp + 0x4C] + 0xC]`, and one SY message `0x92414 = 0x1C0794` is sent; the pitch message and the key store `0xC01E0A00` are **not** reached, because the voice update `0xC01E00AC` (slot 1 of the handler class `0xC02FDB40`, instance `0x9062E330`) is run by a ring consumer task the harness does not run | VERIFIED (run) for the post; EMPIRICAL for the consumer |
+| Direct voice update | calling `0xC01E00AC(0x9062E330, {0xC02FB318, 4, 0, 60})` spins in the voice group loops `0xC01E0130..0xC01E0228` and `0xC01E0588..0xC01E07CC` (5,000,000 instructions, no store at `0xC01E0A00`): the voice groups of the handler are not registered in the settled state | EMPIRICAL (run) |
+
+Consequences: the loader question of section 10 is closed (it is `0xC01D710C`, not the FAT loader, and no flash is needed once the directory entry exists). The three captures stay open behind the voice group registration of the handler instance and the ring consumer; no default changes (D38). The DSP reader of `0x9219E + 0x20` was not decoded in this run.
 
 ## Implications
 

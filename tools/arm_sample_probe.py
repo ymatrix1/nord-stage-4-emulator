@@ -7,6 +7,9 @@ Findings (evidence and limits: `docs/research/synth-sample-kernel-rule.md` secti
   path. Serving an `.nsmp4` image through it ends in object state 3 / 4 (no object bound), because
   the loader only knows the type words `onpn`, `nsp\\0`, `npdl`, `map\\0`, `abc\\0` and checks a
   `CNSP` magic. `try_load` reproduces that run.
+* **The sample loader is `0xC01D710C`** (section 11 of the note): serving a `nsmp` device image
+  (`sample_device_image`) plus one directory entry (`serve_sample`) makes the real loader return 0
+  with status "Sample is ok"; `bind_layer` then fills the layer slot list.
 * The synth voice event `0xC01EC690 -> 0xC01E72C4` ends before any SY message for every layer of
   the settled state: the per-layer synth object `[0xC05B028C + 4 layer]` holds an empty sample slot
   list (`[[obj + 0x4C0]] == 0`) and zero polyphony limits. `synth_gate` reads those fields.
@@ -30,6 +33,7 @@ from pathlib import Path
 import arm_emu as ae
 import arm_keydown as kd
 import arm_piano_load as pl
+import arm_steady as ast
 
 # VERIFIED (all 195 `.nsmp4` of the factory backup, `survey`): 48-byte `CBIN` header whose kind
 # word at `+8` is `nsmp`, then `NSMP` at `0x2C`, a 12-byte prefix, and chunks
@@ -174,6 +178,88 @@ def synth_gate(emu: ae.ArmEmu, layer: int) -> Gate:
     )
 
 
+# VERIFIED (run, section 11 of the research note): the sample loader. `0xC01D710C(manager,
+# key_pair, skip_pair)` with `manager = [0xC055D9B0]` ([0] = its own device object, [4] = the pool
+# of `0x9D8`-byte sample objects, class table `0xC02FB2C0`) loads library entry `key_pair.hw1`
+# into the first free pool object and returns 0 with `[obj + 0xC] == 0` ("Sample is ok").
+SAMPLE_MANAGER = 0xC055D9B0
+SAMPLE_LOADER = 0xC01D710C
+SAMPLE_BIND = 0xC01E5978  # (slot list, id): puts the pool object whose `[obj + 4] == id` in slot 0
+# VERIFIED (disassembly of `0xC0095C0C`): the sample device header is `[dev + 0x6C] = 0x68` name
+# bytes, the type word at `0x68` (`nsmp` = LE `0x6E736D70`, compared at `0xC01D73D4`) and two more
+# words; the backup bytes from `NSMP` (`0x2C`) follow at `0x74`.
+SAMPLE_HEADER = 0x74
+SAMPLE_TYPE_OFFSET = 0x68
+SAMPLE_TYPE_WORD = 0x6E736D70
+# VERIFIED (run): directory vector fields the loader tests with `0xC00507A4` (lower bound on the
+# u16 id at `entry + 4`) in the device directory `[dev + 0x60]`.
+DIR_START, DIR_COUNT, DIR_VECTOR = 0x10, 0x14, 0x2C
+# VERIFIED (run, `edit ids of docs/research/arm-edit-params.csv`): `Edt_Syn_kSmpId`, `Edt_Syn_kMode`
+# (0 = SAMPLES, which sets the flag byte `[layer + 0x4BC]` at `0xC00171D4`).
+EDIT_SMP_ID, EDIT_MODE = 0x147, 0xFA
+
+
+def sample_device_image(data: bytes, name: str = "Sample") -> bytes:
+    """Sample device file: `SAMPLE_HEADER` bytes (name, type word), then the backup from `NSMP`."""
+    head = bytearray(SAMPLE_HEADER)
+    raw = name.encode("ascii", "replace")[:0x68]
+    head[: len(raw)] = raw
+    head[SAMPLE_TYPE_OFFSET : SAMPLE_TYPE_OFFSET + 4] = struct.pack("<I", SAMPLE_TYPE_WORD)
+    return bytes(head) + data[MAGIC_OFFSET:]
+
+
+def sample_descriptor(volume: int, entry: int, length: int) -> bytes:
+    """The `0x18`-byte directory descriptor `0xC0096264` fills: `+4` is the file length the sample
+    loader subtracts `0xC + 0x68` from (the piano loader ignores it), `+0x10` the byte size."""
+    return struct.pack("<HHIIIII", volume, entry, length, 0, 0, length, 0)
+
+
+def directory_entry(blocks: int, entry: int) -> bytes:
+    """Directory entry `0xC00961B0` reads: `u16 blocks`, `u16 +2`, `u16 id` at `+4`."""
+    return struct.pack("<HHH", blocks, 0, entry)
+
+
+def serve_sample(emu: ae.ArmEmu, image: bytes, entry: int = 1) -> pl.LibraryStub:
+    """Install the file read, the directory lookup and one directory entry for `image`."""
+    stub = pl.LibraryStub({entry: image}, 0).install(emu)
+
+    def lookup(_emu: ae.ArmEmu) -> int:
+        storage, wanted, out = emu.reg(0), emu.reg(1), emu.reg(2)
+        volume = emu.read32(storage + 0xC) & 0xFFFF
+        emu.write_bytes(out, sample_descriptor(volume, wanted, len(image)))
+        return 0
+
+    emu.add_stub(pl.DIR_LOOKUP, lookup)
+    device = emu.read32(emu.read32(SAMPLE_MANAGER))
+    directory = emu.read32(device + 0x60)
+    block = max(1, emu.read32(device + 0x10))
+    base = 0x90FE0000  # scratch RAM above the heap of the settled state
+    emu.write32(base, base + 0x100)
+    emu.write_bytes(
+        base + 0x100, directory_entry(-(-len(image) // block), entry).ljust(0x40, b"\0")
+    )
+    emu.write32(emu.read32(directory + DIR_VECTOR), base)
+    emu.write32(directory + DIR_START, 0)
+    emu.write32(directory + DIR_COUNT, 1)
+    return stub
+
+
+def load_sample(emu: ae.ArmEmu, entry: int = 1) -> int:
+    """Run the real sample loader for `entry` (after `serve_sample`); 0 = "Sample is ok"."""
+    manager = emu.read32(SAMPLE_MANAGER)
+    pair = 0x90FF0000
+    emu.write_bytes(pair, struct.pack("<HHHH", 0, entry, 0xFFFF, 0xFFFF))
+    return ast.call_preserving(emu, SAMPLE_LOADER, manager, pair, pair + 4, max_insns=20_000_000)
+
+
+def bind_layer(emu: ae.ArmEmu, layer: int, sample_id: int = 1) -> int:
+    """Put the loaded pool object `sample_id` in slot 0 of the layer's slot list; returns slot 0."""
+    obj = emu.read32(SYNTH_LAYER_TABLE + 4 * layer)
+    slot_list = emu.read32(obj + SLOT_LIST_OFFSET)
+    ast.call_preserving(emu, SAMPLE_BIND, slot_list, sample_id, max_insns=20_000_000)
+    return emu.read32(slot_list)
+
+
 def survey(ns4b: Path) -> dict[str, int]:
     """Counts over every `Samp Lib/*.nsmp4`: files, valid headers, chunk tag sequences."""
     import zipfile
@@ -210,6 +296,9 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     rig = kd.build_rig(ns.image, ns.sram, ns.cache)
     for layer in range(5):
         print(synth_gate(rig.emu, layer))
+    rig = kd.build_rig(ns.image, ns.sram, ns.cache)
+    serve_sample(rig.emu, sample_device_image(data, sample_name(data)))
+    print("sample loader status", load_sample(rig.emu), "slot 0", hex(bind_layer(rig.emu, 0)))
     return 0
 
 

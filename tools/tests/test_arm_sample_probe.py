@@ -96,3 +96,26 @@ def test_synth_gate_opens_with_a_slot_object_and_reads_counters() -> None:
 def test_synth_gate_of_a_missing_layer_object_is_all_zero() -> None:
     gate = sp.synth_gate(FakeEmu({}), 9)  # type: ignore[arg-type]
     assert gate.obj == 0 and not gate.open and gate.counters == ()
+
+
+def test_sample_device_image_has_name_type_word_and_body_from_magic() -> None:
+    data = synthetic_nsmp()
+    image = sp.sample_device_image(data, "Carina")
+    assert len(image) == sp.SAMPLE_HEADER + len(data) - sp.MAGIC_OFFSET
+    assert image[:6] == b"Carina"
+    word = struct.unpack_from("<I", image, sp.SAMPLE_TYPE_OFFSET)[0]
+    assert word == sp.SAMPLE_TYPE_WORD == 0x6E736D70
+    assert image[sp.SAMPLE_HEADER : sp.SAMPLE_HEADER + 4] == b"NSMP"
+
+
+def test_sample_descriptor_puts_the_file_length_at_plus_4_and_plus_0x10() -> None:
+    raw = sp.sample_descriptor(3, 5, 1234)
+    assert len(raw) == 0x18
+    assert struct.unpack_from("<HH", raw, 0) == (3, 5)
+    assert struct.unpack_from("<I", raw, 4)[0] == 1234
+    assert struct.unpack_from("<I", raw, 0x10)[0] == 1234
+
+
+def test_directory_entry_holds_the_id_at_plus_4() -> None:
+    raw = sp.directory_entry(7, 9)
+    assert struct.unpack("<HHH", raw) == (7, 0, 9)

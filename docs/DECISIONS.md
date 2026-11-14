@@ -33,6 +33,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D30](#d30-the-smp-post-stage-is-unity-the-piano-defaults-stay-until-the-receiver-is-found) | 2026-11-14 | The SMP post stage is unity (`bus * 2^-29`); piano defaults stay until the receiver is found | accepted |
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
 | [D35](#d35-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
+| [D38](#d38-the-samples-defaults-stay-the-sample-loader-0xc01d710c-runs-but-the-voice-update-is-not-reached) | 2026-11-14 | The SAMPLES defaults stay; the sample loader `0xC01D710C` runs but the voice update is not reached | accepted |
 | [D37](#d37-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
@@ -388,6 +389,16 @@ cabinet taps fingerprint response test.
 - **Why:** The exponent law is VERIFIED; the place where the root key and the sample rate enter the ARM word, and the DSP conversion of the pair-block word to the Stage B step, are not traced, so the absolute step is not firmware-derived.
 - **Alternatives:** Flip the kernel default on the structural evidence (changes every SAMPLES program on an unrun field); replace the `2^(n/12)` step outright (the join with the DSP step table is open).
 - **Impact:** `render_hash` unchanged (both flags default off).
+
+### D38. The SAMPLES defaults stay; the sample loader `0xC01D710C` runs but the voice update is not reached
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/arm-sample-loader`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) section 11)
+- **Context:** D37 found that the FAT library loader never binds an `.nsmp4`. The task was to decode the real sample loader, serve it a local sample, and capture the voice key write `0x9243B + 0x38 k`, the DSP reader of the pair-block word `0x9219E + 0x20`, and the record fields `+0x0A`, `+0x0C .. +0x0F`, `+0x13`.
+- **Decision:** No default flips. The sample loader is `0xC01D710C`; `arm_sample_probe.serve_sample` / `load_sample` run it to status 0 ("Sample is ok") on a real `.nsmp4` from the local backup, and `bind_layer` fills the layer slot list. A SAMPLES note-on then passes the sample check and posts the voice event, but the voice update `0xC01E00AC` was not reached (ring consumer not run; a direct call spins in unregistered voice groups). `--sample-kernel key` and `--sample-pitch fw` stay opt-in.
+- **Why:** D22 needs the key write and the step join from a run; neither was captured, so the kernel key (with or without transposition) and the scale of the firmware pitch word stay structural / law-only.
+- **Alternatives:** Flip on the structural evidence (rejected, as in D35 and D37); forge the voice groups (rejected without a decoded registration path).
+- **Impact:** None on renders or `render_hash`; the probe tool and its tests gain the loader driver.
 
 ### D37. The SAMPLES defaults stay; the sample set cannot be served through the library loader
 
