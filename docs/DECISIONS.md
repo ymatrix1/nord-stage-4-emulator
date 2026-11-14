@@ -353,7 +353,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Fit a presence shelf after the cabinet (rejected: the cabinet words are oracle exact, and the fit would hide the organ bank gap); flip `vox` on the clip score (rejected: D22 and D25 bars).
 - **Impact:** None on renders or `render_hash`; the cabinet taps gain a fingerprint and response test.
 
-### D29. FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2`
+### D32. FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2`
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (PR for `feat/fx-mod2-types`; evidence [fx-mod2-types](research/fx-mod2-types.md))

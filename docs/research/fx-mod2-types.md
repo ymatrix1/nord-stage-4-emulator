@@ -20,7 +20,7 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 | 8, 9 ENS | `0x123A7B`, `0x123BD0` | `0xC0441558` | not modelled | 3 |
 | 10, 11 SPIN | `0x123557`, `0x12377D` | `0xC0278FAC` | not modelled | 11 |
 
-CHOR is used by **93 of 156 programs with Mod 2 enabled (60 %)** and 153 of 255 occurrences (`program-coverage` s6). The wiring is opt-in (`FirmwareFx::mod2`, D22; D29): `ALL` includes it, `DEFAULT` does not.
+CHOR is used by **93 of 156 programs with Mod 2 enabled (60 %)** and 153 of 255 occurrences (`program-coverage` s6). The wiring is opt-in (`FirmwareFx::mod2`, D22; D32): `ALL` includes it, `DEFAULT` does not.
 
 ## 2. Models (VERIFIED against the oracle)
 
