@@ -13,6 +13,7 @@ mod fw_allpass;
 mod fw_amp_drive;
 mod fw_amp_stage;
 mod fw_amp_types;
+mod fw_autopan;
 mod fw_cabinet;
 mod fw_cabinet_taps;
 mod fw_coeffs;
@@ -36,6 +37,7 @@ mod fw_leslie_main_e;
 mod fw_leslie_ops;
 mod fw_leslie_ring;
 pub mod fw_map;
+mod fw_mod1;
 mod fw_params;
 mod fw_reverb;
 mod fw_rvb_core;
@@ -61,6 +63,8 @@ mod tables;
 mod tests_allpass_golden;
 #[cfg(test)]
 mod tests_amp_golden;
+#[cfg(test)]
+mod tests_apan_golden;
 #[cfg(test)]
 mod tests_biquad_golden;
 #[cfg(test)]
@@ -88,6 +92,8 @@ mod tests_fw_leslie_golden_data;
 #[cfg(test)]
 mod tests_fw_map;
 #[cfg(test)]
+mod tests_fw_mod1_chain;
+#[cfg(test)]
 mod tests_fw_reverb_chain;
 #[cfg(test)]
 mod tests_fw_reverb_mix;
@@ -111,6 +117,7 @@ pub use biquad::*;
 pub use firmware_fx::FirmwareFx;
 pub use fw_allpass::{ctx as fw_allpass_ctx, FwAllpass};
 pub use fw_amp_drive::{ctx as fw_amp_drive_ctx, DriveTables, FwAmpDrive};
+pub use fw_autopan::{ctx as fw_autopan_ctx, FwAutoPan};
 pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
 pub use fw_ext40::{Fp, E40};
@@ -229,6 +236,13 @@ pub struct LayerFxChain {
     /// 14 bit `kDlyRateClkDiv` value (`0..=16383`) of the program; read only with
     /// `firmware_fx.delay_time` (the engine sets it from the preset). `None`: engine time.
     pub delay_rate_raw: Option<u16>,
+    /// 7 bit `kFx1RateClkDiv` value (`0..=127`) of the program; read only with `firmware_fx.mod1`
+    /// (the engine sets it from the preset). `None`: engine rate.
+    pub mod1_rate_raw: Option<u8>,
+    /// Raw `kFx1Type` (`0..=11`) of the program; the firmware Mod 1 runs for 0..=3 only (the
+    /// engine's `Mod1Type` folds the Pump types 10, 11 into `Tremolo`). `None`: engine path.
+    pub mod1_type_raw: Option<u8>,
+    fw_mod1: Option<fw_mod1::FwMod1Stage>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
     /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
@@ -332,6 +346,9 @@ impl LayerFxChain {
             morph: FxMorphSet::default(),
             firmware_fx: FirmwareFx::DEFAULT,
             delay_rate_raw: None,
+            mod1_rate_raw: None,
+            mod1_type_raw: None,
+            fw_mod1: None,
             fw_comp: None,
             fw_amp: None,
             fw_reverb: None,

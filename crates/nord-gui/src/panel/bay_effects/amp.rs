@@ -2,6 +2,7 @@
 
 use super::ctx::{from_log, to_log, Fx};
 use super::ids::dim_reason;
+use crate::panel::param_hint::table::{EQ_DB, MID_HZ};
 use crate::panel::prelude::Stage4PanelState;
 use crate::panel::ui_state::fx::{ChainUi, Unit};
 use crate::style::{LED_RED, LED_RED_DIM};
@@ -15,11 +16,6 @@ const MODELS: [AmpCabinet; 4] = [
     AmpCabinet::Jc,
     AmpCabinet::Small,
 ];
-
-/// EQ gain range in dB (VERIFIED in `nord-plugin` `fx_params.rs`: 7-bit signed x 0.25 dB).
-const EQ_DB: (f32, f32) = (-16.0, 16.0);
-/// MID FREQ sweep (manual p.51: 200 Hz to 8 kHz).
-const MID_HZ: (f32, f32) = (200.0, 8000.0);
 
 /// Next model after `cur`; a filter or TO ROTARY selection counts as "no model".
 pub(super) fn next_model(cur: AmpCabinet) -> AmpCabinet {
@@ -67,11 +63,11 @@ pub(super) fn amp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             c.mid_freq = from_log(n, MID_HZ.0, MID_HZ.1);
             changed = true;
         }
-        // The RES knob sits under FREQ, so its caption goes above the knob.
+        // The RES knob sits under FREQ, so its caption goes above the knob, over its tick ring.
         let mf = f.rect("amp.mid_freq");
         crate::widgets::label(
             f.p,
-            egui::pos2(mf.center().x, mf.top() - 5.0),
+            egui::pos2(mf.center().x, mf.top() - 11.0),
             "FREQ",
             6.5,
             super::ctx::CAPTION,
@@ -141,7 +137,7 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
     }
     crate::widgets::label(
         f.p,
-        egui::pos2(flt.center().x, flt.top() - 4.0),
+        egui::pos2(flt.center().x, flt.top() - 8.5),
         name,
         5.5,
         super::ctx::CAPTION,
@@ -162,7 +158,7 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
     }
     crate::widgets::label(
         f.p,
-        egui::pos2(rot.center().x, rot.top() - 4.0),
+        egui::pos2(rot.center().x, rot.top() - 8.5),
         "ROT",
         5.5,
         super::ctx::CAPTION,
@@ -218,6 +214,10 @@ pub(super) fn comp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             ) {
                 c.comp_fast = v > 0.5;
                 changed = true;
+                f.hint(
+                    "comp.amount",
+                    if c.comp_fast { "Fast On" } else { "Fast Off" },
+                );
             }
         } else {
             let tip = format!(

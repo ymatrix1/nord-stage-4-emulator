@@ -4,8 +4,9 @@
 //! inventory ids it paints with `SynthUi::mark` (the headless coverage test reads them).
 
 use crate::panel::layout_px::rect_or_empty;
+use crate::panel::param_hint::{self, table::LFO_DEST_HINT};
 use crate::panel::prelude::*;
-use crate::panel::ui_state::{unsupported_reason, Btn, Knob, SynthUi};
+use crate::panel::ui_state::{unsupported_reason, Btn, Knob, SynthUi, DIVISIONS};
 use egui::{FontId, Pos2};
 use nord_panel::behaviour::{resolve, Gesture};
 
@@ -78,6 +79,10 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
     if let Some(g) = gesture_of(ui, sui, id, &resp) {
         let shift = ui.input(|i| i.modifiers.shift);
         sui.press(b, resolve(g, shift, b.has_shift_fn()));
+        if b == Btn::LfoDest && !shift {
+            let d = usize::from(sui.layer().lfo_dest) % 4;
+            param_hint::touch_value(ui.ctx(), id, LFO_DEST_HINT[d]);
+        }
     }
     let down = resp.is_pointer_button_down_on();
     p.rect_filled(rect.expand(1.0), 2.5, BUTTON_BEZEL);
@@ -132,16 +137,45 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
         } else {
             LEGEND
         };
-        tiny(
-            p,
-            pos2(rect.center().x, rect.bottom() + 3.0),
-            legend,
-            col,
-            Align2::CENTER_TOP,
-        );
+        let (pos, al) = legend_anchor(b, rect);
+        tiny(p, pos, legend, col, al);
         if let Some(why) = why {
             let _ = resp.on_hover_text(format!("{legend} (Shift): {why}"));
         }
+    }
+}
+
+/// Where the alias legend of `b` is printed. ON has the OLED right below it, so its SOLO legend
+/// goes to the right of the button (as on the hardware); the others print below.
+fn legend_anchor(b: Btn, rect: Rect) -> (Pos2, Align2) {
+    if b == Btn::On {
+        (
+            pos2(rect.right() + 4.0, rect.center().y),
+            Align2::LEFT_CENTER,
+        )
+    } else {
+        (
+            pos2(rect.center().x, rect.bottom() + 3.0),
+            Align2::CENTER_TOP,
+        )
+    }
+}
+
+/// Parameter hint of pot `k`: the value stored for the focused layer (the pot itself may not have
+/// picked it up yet), or the Master Clock division while the rate is synced.
+pub(super) fn pot_hint(ctx: &egui::Context, sui: &SynthUi, k: Knob) {
+    let l = sui.layer();
+    let div = match k {
+        Knob::LfoRate if l.lfo_sync => Some(l.lfo_div),
+        Knob::ArpRate if l.arp_sync => Some(l.arp_div),
+        _ => None,
+    };
+    if let Some(d) = div {
+        param_hint::touch_value(ctx, k.id(), DIVISIONS[usize::from(d) % DIVISIONS.len()]);
+    } else if k == Knob::ArpRange && l.arp_kind == 2 {
+        param_hint::touch_value(ctx, k.id(), &format!("Gate {:.0} %", l.gate_env * 100.0));
+    } else {
+        param_hint::touch(ctx, k.id(), sui.pots.stored(k));
     }
 }
 
@@ -168,6 +202,7 @@ pub(super) fn pot(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, k: Knob,
         } else {
             sui.knob_input(k, v);
         }
+        pot_hint(ui.ctx(), sui, k);
     }
     tiny(
         p,
@@ -316,6 +351,15 @@ pub(super) fn ladder(p: &Painter, rect: Rect, level: f32, n: usize) {
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    #[test]
+    fn on_prints_its_solo_legend_to_the_right_and_others_below() {
+        let r = Rect::from_min_size(pos2(10.0, 10.0), vec2(30.0, 12.0));
+        let (on, al) = legend_anchor(Btn::On, r);
+        assert!(on.x > r.right() && al == Align2::LEFT_CENTER);
+        let (other, _) = legend_anchor(Btn::FilterType, r);
+        assert!(other.y > r.bottom());
+    }
 
     #[test]
     fn pad_pot_dial_fader_and_ladder_paint_and_mark_their_ids() {

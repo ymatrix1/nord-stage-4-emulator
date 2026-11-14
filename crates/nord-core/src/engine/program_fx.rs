@@ -6,6 +6,9 @@ impl Stage4Engine {
     pub(super) fn apply_fx_chain(fx: &mut LayerFxChain, dec: &crate::cbin::FxDecoded) {
         fx.mod1_type = dec.mod1_type();
         fx.mod1_rate_hz = 0.1 + dec.mod1_rate.clamp(0.0, 1.0) * 14.9;
+        // 7 bit `kFx1RateClkDiv` value for the opt-in firmware Mod 1 (`FirmwareFx::mod1`).
+        fx.mod1_type_raw = Some(dec.mod1_type_raw);
+        fx.mod1_rate_raw = Some((dec.mod1_rate.clamp(0.0, 1.0) * 127.0).round() as u8);
         fx.mod1_amount = if dec.mod1_enabled {
             dec.mod1_amount.clamp(0.0, 1.0)
         } else {

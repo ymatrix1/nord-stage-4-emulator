@@ -417,6 +417,8 @@ impl SynthLayer {
                                 &mut v.sample_pos,
                                 v.sample_step * f64::from(pitch_mod),
                                 &mut v.active,
+                                self.sample_kernel_by_key
+                                    .then(|| crate::sinc::key_rule::kernel_for_key(v.note)),
                             );
                             let fl = Self::apply_sample_timbre(
                                 self.sample_timbre,
@@ -483,7 +485,15 @@ impl SynthLayer {
             let fw_co =
                 (strip.is_some() || self.filter_engine == FilterEngine::Firmware).then(|| {
                     let fc = if strip.is_some() {
-                        strip_cutoff_hz(voice_cutoff * p_block.map_or(1.0, |p| p.cutoff_scale))
+                        strip_cutoff_hz(
+                            voice_cutoff
+                                * p_block.map_or(1.0, |p| p.cutoff_scale)
+                                * if self.p_table.is_some() {
+                                    type_cutoff_scale(self.filter_model)
+                                } else {
+                                    1.0
+                                },
+                        )
                     } else {
                         voice_cutoff
                     };
