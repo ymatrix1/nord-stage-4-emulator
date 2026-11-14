@@ -22,12 +22,61 @@ impl LayerFxChain {
         }
     }
 
+    /// The `kRvbType` the multi-tap routine runs for a model and its variation flag, or `None`
+    /// for a model the port does not cover (Spring has its own routine, type 6 has no captured
+    /// block). ASSUMED mapping: the six models by increasing size onto the pairs `2/3` (Booth),
+    /// `4/5` (Room), `6/7` (Stage), `8/9` (Hall), `10/11` (Cathedral); the size order of the type
+    /// words is VERIFIED (`docs/research/fx-reverb-leslie.md` s3), the UI names are not.
+    pub(super) fn fw_multi_type(model: ReverbModel, variation: bool) -> Option<usize> {
+        let base = match model {
+            ReverbModel::Booth => 2,
+            ReverbModel::Room => 4,
+            ReverbModel::Stage => 6,
+            ReverbModel::Hall => 8,
+            ReverbModel::Cathedral => 10,
+            ReverbModel::Off | ReverbModel::Spring => return None,
+        };
+        let t = base + usize::from(variation);
+        FwReverbMulti::TYPES.contains(&t).then_some(t)
+    }
+
+    /// The firmware multi-tap reverb: like [`Self::process_fw_reverb`], the routine mixes dry and
+    /// wet itself from the `kRvbAmt` words. A type change retypes the instance in place.
+    fn process_fw_reverb_multi(&mut self, rvb_type: usize, l: f32, r: f32) -> [f32; 2] {
+        let ui = fw_map::unit_to_ui(self.reverb_mix.clamp(0.0, 1.0));
+        match &mut self.fw_reverb_multi {
+            Some(rv) => {
+                if rv.rvb_type() != rvb_type && rv.set_type(rvb_type) {
+                    rv.set_amount(ui, true);
+                }
+            }
+            None => {
+                self.fw_reverb_multi = FwReverbMulti::new(rvb_type).map(|mut rv| {
+                    rv.set_amount(ui, true);
+                    Box::new(rv)
+                });
+            }
+        }
+        match &mut self.fw_reverb_multi {
+            Some(rv) => {
+                rv.set_amount(ui, false);
+                rv.process_frame([l, r])
+            }
+            None => [l, r],
+        }
+    }
+
     pub(super) fn process_reverb(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {
         if self.reverb_model == ReverbModel::Off || self.reverb_mix <= 0.0 {
             return [l, r];
         }
         if self.firmware_fx.reverb && self.reverb_model == ReverbModel::Spring {
             return self.process_fw_reverb(l, r);
+        }
+        if self.firmware_fx.reverb {
+            if let Some(t) = Self::fw_multi_type(self.reverb_model, self.reverb_variation) {
+                return self.process_fw_reverb_multi(t, l, r);
+            }
         }
         let (decay_gain, room_scale) = match self.reverb_model {
             ReverbModel::Off => (0.0, 1.0),

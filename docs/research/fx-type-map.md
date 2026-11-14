@@ -146,7 +146,7 @@ Data flow (per block of 4 stereo frames; left = `PEx`, right = `PEy`; `P` = link
 
 Units: the level, threshold and excess are in log2 (octave) units of the block peak (`level` is a linear amplitude); `t` is the fraction of one octave of gain removed when `T0 = 1.0`, `T1 = 0.5`; the smoothing coefficients are one-pole weights per block (4 frames, 83 us at 48 kHz): `0.9908` is the same constant as the ORG and delay smoothers ([fx-dsp-map](fx-dsp-map.md) s5), so `k = 0.9908` is a likely `makeup` value (ASSUMED).
 
-Not decoded: which ARM words fill the context (`Edt_Effects_kCmpAmt` 0..127 default 95, `kCmpResponse` 0/1), so the numeric defaults of a real instance are unknown. In the Rust port (`fx/fw_compressor.rs`) the algorithm is VERIFIED and every parameter value is ASSUMED.
+Update (2026-11-14): the ARM words are decoded ([fx-contexts](fx-contexts.md) s5.5: `kCmpAmt` fills threshold and makeup; `kCmpResponse` re-sends constants and has no DSP effect, [fx-reverb-leslie](fx-reverb-leslie.md) s4; recheck in [fx-eq-words](fx-eq-words.md) s6). The Rust port (`fx/fw_compressor.rs`) has the algorithm and the `kCmpAmt` words VERIFIED; the slope word and the log gain scale stay ASSUMED.
 
 Rust parity: `FwCompressor` reproduces the oracle golden vector with a worst relative output error of 2.1e-7 (f32 arithmetic against 40-bit registers and truncating stores); `MasterBus::set_fw_compressor(Some(..))` swaps it in for the peak-envelope compressor with a 4-frame latency. Default off: `render_hash` is `cb8d83b758cc3596ba52f1444b0e1f5d40726d27f36e53205464b47b414aacd0` before and after.
 
