@@ -195,10 +195,16 @@ pub fn octave_step(s: &mut Stage4PanelState, delta: i8, out: &mut Vec<PianoEdit>
     });
 }
 
-/// KB ZONE +-1 (Shift + octave buttons): moves the focused layer's zone LED. UI only.
-pub fn zone_step(s: &mut Stage4PanelState, forward: bool) {
+/// KB ZONE +-1 (Shift + octave buttons): moves the focused layer's zone assignment and sends it
+/// (`PianoEdit::Zone`, see [`super::kb_zone`] for the positions).
+pub fn zone_step(s: &mut Stage4PanelState, forward: bool, out: &mut Vec<PianoEdit>) {
     let l = s.piano_ui.layer();
-    s.piano_ui.kb_zone[l] = cycle(usize::from(s.piano_ui.kb_zone[l]), 4, forward) as u8;
+    let pos = super::kb_zone::step(s.piano_ui.kb_zone[l], forward);
+    s.piano_ui.kb_zone[l] = pos;
+    out.push(PianoEdit::Zone {
+        layer: l as u8,
+        leds: super::kb_zone::leds(pos),
+    });
 }
 
 /// TYPE button: next of the six piano types.

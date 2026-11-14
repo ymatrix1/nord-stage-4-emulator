@@ -5,6 +5,7 @@
 //! audio thread.
 
 use nord_core::engine::Stage4Engine;
+use nord_core::morph::LayerId;
 use nord_core::piano::{PianoCategory, PianoLayer, PianoTimbre, VelocityTouch};
 
 /// Index of Piano A in `layer_levels` and the bit of Piano A in the scene masks.
@@ -41,6 +42,18 @@ pub enum PianoEdit {
     Sustped(bool),
     /// PSTICK of the Piano section (both layers follow the pitch stick).
     Pstick(bool),
+    /// KB ZONE of one layer as a set of the four zone LEDs (bit `u` = zone `u + 1`).
+    Zone { layer: u8, leds: u8 },
+    /// Aux KB LED of one layer: the layer is played by the aux keyboard.
+    AuxKb { layer: u8, on: bool },
+}
+
+fn layer_id(layer: u8) -> LayerId {
+    if layer == 0 {
+        LayerId::PianoA
+    } else {
+        LayerId::PianoB
+    }
 }
 
 fn layer_mut(engine: &mut Stage4Engine, layer: u8) -> &mut PianoLayer {
@@ -117,6 +130,8 @@ impl PianoEdit {
                 engine.pedals.pstick[a + 1] = on;
                 engine.refresh_pedal_routing();
             }
+            Self::Zone { layer, leds } => engine.set_layer_zone_leds(layer_id(layer), leds),
+            Self::AuxKb { layer, on } => engine.set_layer_aux(layer_id(layer), on),
         }
     }
 }
@@ -247,5 +262,21 @@ mod tests {
             (e.piano_a.unison, e.piano_a.dyn_comp, e.piano_a.octave_shift),
             (3, 3, 2)
         );
+    }
+
+    #[test]
+    fn zone_and_aux_edits_target_one_piano_layer() {
+        let mut e = eng();
+        PianoEdit::Zone {
+            layer: 1,
+            leds: 0b0011,
+        }
+        .apply(&mut e);
+        assert_eq!(e.layer_zone_leds(LayerId::PianoB), 0b0011);
+        assert_eq!(e.layer_zone_leds(LayerId::PianoA), 0b1111);
+        assert_eq!(e.layer_zone_leds(LayerId::OrganB), 0b1111);
+        PianoEdit::AuxKb { layer: 0, on: true }.apply(&mut e);
+        assert!(e.aux_kb.is_aux_layer(LayerId::PianoA));
+        assert!(!e.aux_kb.is_aux_layer(LayerId::PianoB));
     }
 }

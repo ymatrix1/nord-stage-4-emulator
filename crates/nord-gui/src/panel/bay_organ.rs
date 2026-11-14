@@ -4,17 +4,15 @@
 //! `organ_strip.rs`, the drawbars in `organ_drawbars.rs`; this file has the section frame, the
 //! model selector, PRESET/SYNC, vibrato/chorus and the percussion buttons.
 
-use super::ctl::{gesture_button, led_small, missing, shift_legend, tag, Face};
+use super::ctl::{gesture_button, led_small, shift_legend, tag, Face};
 use super::layout_px::{rect_or_empty, to_px};
 use super::organ_drawbars::render_drawbars;
 use super::organ_logic::{model_index, scanner_for, vib_index, MODELS, VIB_TYPES};
+use super::organ_preset::render_preset;
 use super::organ_strip::render_strip;
 use super::prelude::*;
 use crate::audio::OrganEdit;
 use nord_panel::behaviour::{cycle, Trigger};
-
-/// Bean tracking the missing section-level Organ behaviour.
-const BEAN: &str = "ns4-h7he";
 
 /// Draw this bay and apply its input to `state` / the audio thread.
 pub(super) fn render_bay_organ(
@@ -32,7 +30,7 @@ pub(super) fn render_bay_organ(
     section_frame(painter, frame, "ORGAN");
     render_strip(ui, origin, state, audio_handle);
     render_model(ui, painter, origin, state, audio_handle);
-    render_preset(ui, painter, origin, state);
+    render_preset(ui, painter, origin, state, audio_handle);
     render_vibrato(ui, painter, origin, state, audio_handle);
     render_percussion(ui, painter, origin, state, audio_handle);
     render_drawbars(ui, painter, origin, state, audio_handle);
@@ -95,29 +93,6 @@ fn render_model(
         );
     }
     super::ctl::mark(ui, "organ.model_leds");
-}
-
-fn render_preset(ui: &mut Ui, painter: &Painter, origin: egui::Pos2, state: &mut Stage4PanelState) {
-    let btn = rect_or_empty("organ.preset", origin);
-    let dim = missing("Preset / Drawbar Live programmer", BEAN);
-    let face = Face {
-        led: Some(!state.organ_ui.drawbar_live),
-        dim: Some(&dim),
-        ..Face::black()
-    };
-    if let Some(Trigger::Primary) = gesture_button(
-        ui,
-        &mut state.organ_ui.trackers,
-        btn,
-        "organ.preset",
-        true,
-        face,
-    ) {
-        state.organ_ui.drawbar_live = !state.organ_ui.drawbar_live;
-    }
-    tag(painter, btn, "PRESET", 8.0);
-    let sync_dim = missing("SYNC of live drawbars to the preset", BEAN);
-    shift_legend(ui, btn, "organ.sync", "SYNC", None, Some(&sync_dim));
 }
 
 fn render_vibrato(
@@ -202,7 +177,6 @@ fn render_percussion(
     state: &mut Stage4PanelState,
     audio: &AudioHandle,
 ) {
-    let poly_dim = missing("percussion POLY", BEAN);
     for (id, text, shift_fn) in [
         ("organ.perc_on", "ON", false),
         ("organ.perc_volume", "VOLUME SOFT", true),
@@ -231,7 +205,12 @@ fn render_percussion(
                 }
                 send_percussion(state, audio);
             }
-            Some(Trigger::Shifted) => state.organ_ui.perc_poly = !state.organ_ui.perc_poly,
+            Some(Trigger::Shifted) => {
+                state.organ_ui.perc_poly = !state.organ_ui.perc_poly;
+                audio.send_command(AudioCommand::Organ(OrganEdit::PercPoly(
+                    state.organ_ui.perc_poly,
+                )));
+            }
             _ => {}
         }
         tag(painter, rect, text, 8.0);
@@ -242,7 +221,7 @@ fn render_percussion(
                 "organ.perc_poly",
                 "POLY",
                 Some(state.organ_ui.perc_poly),
-                Some(&poly_dim),
+                None,
             );
         }
     }
