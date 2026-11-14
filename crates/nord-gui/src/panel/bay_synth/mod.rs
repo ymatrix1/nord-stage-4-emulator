@@ -15,6 +15,7 @@ mod oled;
 mod oled_arp;
 mod oled_types;
 mod oled_view;
+mod pots;
 mod strip;
 mod widgets;
 

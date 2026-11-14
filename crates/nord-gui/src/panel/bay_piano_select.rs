@@ -205,6 +205,13 @@ fn draw_acoustics(
     state.piano_ui.mark("piano.ped_noise");
 }
 
+/// Names under the three LEDs of UNISON and DYN COMP (photo `NS4_HA88_Piano-01`).
+const LED_NAMES_LEVEL: [&str; 3] = ["1", "2", "3"];
+/// Initials under the KB TOUCH LEDs: Heavy, Medium, Light.
+const LED_NAMES_TOUCH: [&str; 3] = ["H", "M", "L"];
+/// Distance (px) from the bottom of the button to the centre of those names.
+const LED_NAME_DROP: f32 = 15.5;
+
 fn draw_option_buttons(
     ui: &mut Ui,
     p: &Painter,
@@ -257,6 +264,24 @@ fn draw_option_buttons(
             vec2(rect.width(), 6.0),
         );
         w::led_strip(p, row, 3, |i| i == lit, RED, false);
+        // Printed under the LEDs: 1 2 3 (UNISON, DYN COMP) and H M L (KB TOUCH: Heavy, Medium,
+        // Light; the full names need more than the 13 px between the LEDs).
+        let names = if id == "piano.kb_touch" {
+            LED_NAMES_TOUCH
+        } else {
+            LED_NAMES_LEVEL
+        };
+        for (i, n) in names.iter().enumerate() {
+            let x = rect.left() + rect.width() * (i as f32 + 0.5) / 3.0;
+            crate::widgets::label(
+                p,
+                pos2(x, rect.bottom() + LED_NAME_DROP),
+                n,
+                crate::widgets::MIN_FONT_PX,
+                Color32::from_gray(205),
+                Align2::CENTER_CENTER,
+            );
+        }
         pr.resp.on_hover_text(tip);
         state.piano_ui.mark(id);
     }

@@ -1,6 +1,6 @@
 //! Tests of the parameter hint wiring of the Synth pots and the LFO DEST pad.
 
-use super::widgets::pot_hint;
+use super::pots::pot_hint;
 use crate::panel::param_hint::{self, table::LFO_DEST_HINT};
 use crate::panel::ui_state::{Knob, SynthUi};
 

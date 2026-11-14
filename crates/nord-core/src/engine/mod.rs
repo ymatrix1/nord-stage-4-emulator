@@ -51,6 +51,8 @@ mod organ_trigger;
 mod output_routing;
 mod pedal_assign;
 mod pedals;
+mod preset_capture;
+mod preset_load;
 mod program;
 mod program_export;
 mod program_fx;

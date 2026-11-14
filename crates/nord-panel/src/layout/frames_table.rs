@@ -108,7 +108,7 @@ pub const FRAMES: &[FrameDef] = &[
         Piano,
         "PIANO SELECT",
         &["piano.type_leds", "piano.type", "piano.select_dial"],
-        [0.0, 8.0, 0.0, 12.0],
+        [0.0, 8.0, 0.0, 8.0],
     ),
     // Synth.
     boxed(
@@ -154,7 +154,7 @@ pub const FRAMES: &[FrameDef] = &[
             "synth.lfo.mod_amt",
             "synth.lfo.dest",
         ],
-        [8.0, 14.0, 11.0, 12.0],
+        [8.0, 14.0, 9.0, 12.0],
     ),
     boxed(
         "synth.frame.osc",
@@ -166,7 +166,7 @@ pub const FRAMES: &[FrameDef] = &[
             "synth.osc.ctrl",
             "synth.osc.env_amt",
         ],
-        [3.0, 14.0, 11.0, 12.0],
+        [5.5, 14.0, 11.0, 12.0],
     ),
     boxed(
         "synth.frame.filter",
@@ -201,7 +201,7 @@ pub const FRAMES: &[FrameDef] = &[
         Effects,
         "MOD 1",
         &["mod1.rate", "mod1.amount", "mod1.selector", "mod1.on"],
-        [6.0, 4.6, 6.0, 7.0],
+        [6.0, 9.7, 6.0, 7.0],
     )
     .at(0.80),
     boxed(
@@ -209,8 +209,9 @@ pub const FRAMES: &[FrameDef] = &[
         Effects,
         "MOD 2",
         &["mod2.rate", "mod2.amount", "mod2.selector", "mod2.on"],
-        [6.0, 9.0, 6.0, 6.0],
-    ),
+        [6.0, 9.0, 6.0, 8.0],
+    )
+    .at(0.80),
     boxed(
         "fx.frame.amp",
         Effects,
@@ -224,7 +225,7 @@ pub const FRAMES: &[FrameDef] = &[
             "amp.mid",
             "amp.treble",
         ],
-        [12.0, 12.0, 4.0, 8.0],
+        [12.0, 12.0, 4.0, 10.5],
     )
     .at(0.25),
     boxed(
@@ -259,7 +260,7 @@ pub const FRAMES: &[FrameDef] = &[
             "reverb.dry_wet",
             "reverb.on",
         ],
-        [0.5, 14.0, 6.0, 12.0],
+        [3.0, 14.0, 6.0, 12.0],
     ),
     // Program area (the red central block).
     boxed(
@@ -315,7 +316,7 @@ pub const FRAMES: &[FrameDef] = &[
             "program.page_down",
             "program.page_up",
         ],
-        [0.0, 1.0, 4.0, 12.0],
+        [1.2, 1.0, 4.0, 12.0],
     )
     .at(0.0),
 ];

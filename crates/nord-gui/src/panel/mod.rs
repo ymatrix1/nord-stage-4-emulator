@@ -44,6 +44,7 @@ mod piano_logic;
 pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
+mod preset_sync;
 mod rotor_angle;
 mod section_edit;
 #[cfg(test)]

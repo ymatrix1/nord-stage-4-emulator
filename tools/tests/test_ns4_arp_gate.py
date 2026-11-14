@@ -54,3 +54,39 @@ def test_check_gates_reports_only_disagreements(monkeypatch):
     monkeypatch.setattr(g, "compile_slots", lambda _e, _g, _p=None: bad)
     (problem,) = g.check_gates(object(), rows)
     assert problem.startswith("preset 1 E.")
+
+
+def test_rate_formula_matches_the_firmware_constants():
+    # bpm / 60 * 2**19 / 24000 per time-base unit; 24000 units are one second.
+    assert g.rate_per_unit(120) == 120 / 60 * 524288 / 24000
+    assert g.rate_per_unit(32) * g.TIME_BASE_HZ == 32 / 60 * 524288
+    assert g.display_bpm(32) == 16
+
+
+def test_grid_spacing_is_half_a_firmware_beat():
+    # A firmware beat is 2**19 phase units: at table value 120 (60 displayed) it lasts 0.5 s,
+    # so the 2**18 grid spacing is 0.25 s.
+    assert abs(g.grid_seconds(120) - 0.25) < 1e-12
+    assert g.GRID_ENTRY_PHASE * 2 == g.PHASE_PER_BEAT
+
+
+def test_read_rate_table_and_grid_decode_little_endian_words():
+    code = bytearray(0x400000)
+    base = g.RATE_TABLE - 0xC0000000
+    for i, v in enumerate((32, 36, 40)):
+        code[base + 4 * i : base + 4 * i + 4] = v.to_bytes(4, "little")
+    assert g.read_rate_table(bytes(code), 3) == [32, 36, 40]
+    gb = g.FREE_RUN_GRID - 0xC0000000
+    code[gb : gb + 4] = (3).to_bytes(4, "little")
+    for k in range(3):
+        code[gb + 8 + 8 * k : gb + 16 + 8 * k] = (k * g.GRID_ENTRY_PHASE).to_bytes(8, "little")
+    assert g.read_grid(bytes(code)) == [0, 2**18, 2**19]
+
+
+def test_check_clock_reports_only_disagreements(monkeypatch):
+    table = [32, 120]
+    monkeypatch.setattr(g, "clock_rate", lambda _e, d: g.rate_per_unit(table[d]))
+    assert g.check_clock(object(), table) == []
+    monkeypatch.setattr(g, "clock_rate", lambda _e, d: 1.0)
+    problems = g.check_clock(object(), table)
+    assert [x.split(":")[0] for x in problems] == ["dial 0", "dial 1"]

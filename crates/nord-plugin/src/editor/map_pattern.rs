@@ -68,7 +68,8 @@ pub(super) fn map_pattern(p: PatternParam, n: u8, out: &mut Vec<W>) {
                 out.push(W::layer(id, n, pan_index(pan)));
             }
         }
-        PatternParam::Customize(_) => {}
+        // No host parameter carries the step ties yet (additive id left for a later change).
+        PatternParam::Tie { .. } | PatternParam::Customize(_) => {}
     }
 }
 

@@ -238,6 +238,17 @@ A user cannot find or understand a control without its name, frame or scale, so 
 
 Room for the boxes comes from `GROUP_TWEAKS` in `layout_tweaks.rs` (rows moved by 6 to 30 px so a 7.5 px legend, a border and a title fit between stacked boxes); the photo tables stay untouched. A few controls cannot sit exactly where the photo has them: the three OLED dials moved up 10 px, the Vibrato box right 5 px, the Piano TIMBRE button left 9 px.
 
+### Round 4: numerals and variation lists
+
+| Section | Added |
+|---|---|
+| Synth, Layer Effects, Rotary | numerals on the radial line of every tick of the knob ring (`widgets/scale.rs`): `0 ... 10` on pots, `-15 ... 15` on the EQ knobs, `-10 ... 10` on the oscillator ENV AMT, `200 250 400 600 1K 2K 4K 6K 8K` on the amp FREQ knob (`EMPIRICAL`, photos `NS4-Panel-synth`, `-effects`, `-organ`); Master level, the Piano dial, the OLED dials and the RES trimmer print none. A scaled knob body is drawn 3 px smaller (`ASSUMED`, least that keeps `10` and `-10` of neighbours apart); names moved below the `0` / `10` numerals (`KNOB_CAPTION_DROP`, `pots::NAME_DROP`) |
+| Layer Effects | variation lists (`bay_effects/lists.rs`): Mod 1 RM / TREM / A-PAN beside A-WAH / WAH / PUMP, Mod 2 CHOR / FLANG / PHAS beside VIBE / ENS / SPIN, Amp SMALL / JC / TWIN, Delay CHOR / VIBE / ENS beside FLAM / SPACE and HP / LP beside BP, Reverb ROOM / BOOTH / SPRING beside STAGE / HALL / CATH, BRIGHT / DARK (names `VERIFIED` against the manual p.49-53; LED order is the cycle order of `ui_state/fx/tables.rs`); the FLT and ROT buttons sit beside the amp model selector |
+| Piano | `1 2 3` under the UNISON and DYN COMP LEDs, `H M L` under KB TOUCH (full names do not fit 13 px) |
+| Program | the PROGRAM box has a 2 px left pad so the PAGE / BANK buttons sit inside its border |
+
+Remaining after round 4: SAMPLES / ANALOG LEDs in the Synth MODE box and MONO / LEGATO in VOICE (the button still shows its value), the TO ROTARY / LP FILTER / HP FILTER names beside the amp list (FLT / ROT buttons instead), MED / LIGHT / HEAVY in full, the `C2 V3 C3` vibrato matrix, a light tab behind the ROTARY SPEAKER title, the PROGRAM title still starts at the frame edge.
+
 Remaining differences against `.reference/crops` (kept: legibility over fidelity, or out of scope):
 
 | Section | Photo | Emulator |
