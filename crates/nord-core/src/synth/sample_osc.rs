@@ -64,8 +64,13 @@ impl SynthLayer {
         sample_pos: &mut f64,
         step: f64,
         active: &mut bool,
+        kernel_index: Option<usize>,
     ) -> (f32, Option<f32>) {
-        let kernel = kernels.for_ratio(step as f32);
+        // `Some(k)`: the firmware key rule (`sinc::key_rule`); `None`: the ASSUMED ratio rule.
+        let kernel = match kernel_index {
+            Some(k) => kernels.get(k),
+            None => kernels.for_ratio(step as f32),
+        };
         let len = zone.pcm.len();
         if len < 2 {
             *active = false;
@@ -209,9 +214,38 @@ mod tests {
             &mut pos,
             2.0,
             &mut active,
+            None,
         );
         assert!(active && r.is_none() && l.is_finite());
         assert!((pos - 5.25).abs() < 1e-12);
+    }
+
+    #[test]
+    fn key_rule_overrides_the_ratio_rule_and_kernel_index_matches_for_ratio() {
+        use crate::sinc::key_rule::kernel_for_key;
+        let kernels = shared_sinc_kernels();
+        let pcm: Vec<f32> = (0..64).map(|i| (i as f32 * 0.9).sin()).collect();
+        let sound = SynthSampleSound::new_synthetic("K", 60, &pcm, 48_000.0, None, 0);
+        let play = |idx: Option<usize>| {
+            let (mut pos, mut active) = (10.37f64, true);
+            SynthLayer::render_sample_zone_stereo(
+                &kernels,
+                &sound.zones[0],
+                &mut pos,
+                1.0,
+                &mut active,
+                idx,
+            )
+            .0
+        };
+        // Ratio 1.0 selects kernel 2 (fc 1.00); key 60 maps to kernel 2 as well.
+        assert_eq!(kernel_for_key(60), SincKernelSet::select(1.0));
+        assert_eq!(play(None), play(Some(kernel_for_key(60))));
+        // Key 0 (kernel 0, fc 1.10) and key 127 (kernel 5, fc 0.895) render differently.
+        assert_ne!(
+            play(Some(kernel_for_key(0))),
+            play(Some(kernel_for_key(127)))
+        );
     }
 
     #[test]
