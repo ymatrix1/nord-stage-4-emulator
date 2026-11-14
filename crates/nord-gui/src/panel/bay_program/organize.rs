@@ -421,7 +421,7 @@ mod tests {
         let mut u = ui();
         goto(&mut u, "A:12");
         let t = compose(&u);
-        assert_eq!(t.big, "PROGRAM ORGANIZE");
+        assert_eq!(t.big, "Program Organize");
         assert_eq!(t.sub, "1/2 Program Organize");
         assert_eq!(t.rows[0], ">A:12  Two");
         assert_eq!(t.rows[1], " Choose Swap or Move");
