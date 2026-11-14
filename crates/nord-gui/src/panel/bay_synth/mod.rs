@@ -79,6 +79,7 @@ pub(super) fn render_bay_synth(
         o,
     );
     section_frame(painter, frame, "SYNTH");
+    crate::panel::frames::paint_frames(painter, o, nord_panel::Section::Synth);
 
     let mut levels = [
         state.synth_a_level,

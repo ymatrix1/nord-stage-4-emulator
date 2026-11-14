@@ -22,7 +22,7 @@ Every subsystem of the Nord Stage 4 Emulator has a dedicated specification docum
 | [daw-plugin.md](daw-plugin.md) | Host parameter IDs, engine synchronization, MIDI routing, program import boundary, and verified host status | `crates/nord-plugin` |
 | [verification.md](verification.md) | CI pipeline, `tools/check_tests.py` coverage ratchet, deterministic offline audio verification, round-trip CBIN tests | `tools/check_tests.py`, `.github/workflows/ci.yml` |
 | [sharc-core.md](sharc-core.md) | Track B: ADSP-214xx core model used as a test oracle for single routines of the firmware's DSP images (scope from the instruction census, milestones, risks) | `crates/nord-sharc` (M1 decoder, M2 core, M3 start-up of all five images, `sharc-*` binaries; see [ARCHITECTURE](../ARCHITECTURE.md) s4) |
-| [arm-oled-render.md](arm-oled-render.md) | Local research tooling: ARM harness with both OLED panels attached (EMIFA CS2 link, SSD1309-class stream, firmware font objects, frame capture) to compare the real screens with the GUI OLED | `tools/arm_oled.py`, `tools/arm_panel.py` |
+| [arm-oled-render.md](arm-oled-render.md) | Local research tooling: ARM harness with both OLED panels, the I2C program-memory EEPROMs and a key matrix attached (EMIFA CS2 link, SSD1309-class stream, firmware font objects, key presses, frame and widget-text capture) to compare the real screens with the GUI OLED | `tools/arm_oled.py`, `tools/arm_panel.py`, `tools/arm_i2c.py`, `tools/arm_keys.py`, `tools/arm_screens.py` |
 
 ## Research Notes by Subsystem
 

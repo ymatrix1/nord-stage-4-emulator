@@ -20,6 +20,39 @@ fn boxed_e(painter: &Painter, at: Pos2, font: &FontId, color: Color32) -> f32 {
     frame.right() + 2.0
 }
 
+/// Row geometry of the real Program home screen on its 128 x 64 pixel grid.
+///
+/// VERIFIED (frames sent by the ARM emulator, `tools/arm_screens.py`, measured in
+/// `docs/research/arm-oled-render.md` section 9): the location title and the name line are both
+/// 13 px proportional text at the left edge, text boxes at y = 3 and y = 18 (15 px pitch); a 1 px
+/// rule at y = 33 spans the full width; the section rows below use the 8 px font from y = 36 every
+/// 10 px. The sizes here are those pixels divided by 64, so they scale with the rectangle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Grid {
+    /// Top of the title text box.
+    pub title_y: f32,
+    /// Top of the name line text box.
+    pub name_y: f32,
+    /// The full-width rule between the header and the rows.
+    pub rule_y: f32,
+    /// Top of the first row.
+    pub rows_y: f32,
+    /// Distance between rows.
+    pub row_pitch: f32,
+}
+
+/// Real pixel rows of [`Grid`] for a display `height` (in the unit of the caller).
+pub fn grid(height: f32) -> Grid {
+    let k = height / 64.0;
+    Grid {
+        title_y: 3.0 * k,
+        name_y: 18.0 * k,
+        rule_y: 33.0 * k,
+        rows_y: 36.0 * k,
+        row_pitch: 10.0 * k,
+    }
+}
+
 /// Paint the display text into `rect`, scaling the type to the rectangle.
 pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
     let fg = if dim {
@@ -30,13 +63,15 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
     painter.rect_filled(rect.expand(1.5), 2.0, Color32::from_rgb(10, 11, 13));
     painter.rect_filled(rect, 1.5, OLED_BG);
     let h = rect.height();
+    // The name line is the same 13 px font as the title on the real unit (not a smaller one).
     let (f_big, f_sub, f_row) = (
         (h * 0.19).max(5.0),
-        (h * 0.16).max(4.5),
+        (h * 0.19).max(5.0),
         (h * 0.12).max(4.0),
     );
-    let mut y = rect.top() + 1.0;
-    let line = |y: &mut f32, s: &str, size: f32| {
+    let g = grid(h);
+    let mut y = rect.top() + g.title_y;
+    let line = |y: &mut f32, s: &str, size: f32, pitch: f32| {
         // A row that starts with the DIM mark is an unsupported menu item: drawn faded.
         let (s, color) = match s.strip_prefix(DIM) {
             Some(rest) => (rest, fg.gamma_multiply(0.45)),
@@ -55,15 +90,15 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
                 .text(pos2(x, *y), Align2::LEFT_TOP, rest, font.clone(), color)
                 .right();
         }
-        *y += size * 1.15;
+        *y += pitch;
     };
-    line(&mut y, &text.big, f_big);
-    line(&mut y, &text.sub, f_sub);
+    line(&mut y, &text.big, f_big, g.name_y - g.title_y);
+    line(&mut y, &text.sub, f_sub, g.rule_y - g.name_y);
     painter.line_segment(
         [pos2(rect.left() + 1.0, y), pos2(rect.right() - 1.0, y)],
         Stroke::new(0.5_f32, fg),
     );
-    y += 1.0;
+    y += g.rows_y - g.rule_y;
     let soft_h = if text.soft.iter().any(|l| !l.is_empty()) {
         f_row * 1.4
     } else {
@@ -73,7 +108,7 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
         if y + f_row > rect.bottom() - soft_h {
             break;
         }
-        line(&mut y, r, f_row);
+        line(&mut y, r, f_row, g.row_pitch);
     }
     if soft_h > 0.0 {
         let w = rect.width() / 4.0;
@@ -101,6 +136,21 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    #[test]
+    fn grid_is_the_measured_pixel_rows_of_the_real_home_screen() {
+        let g = grid(64.0);
+        assert_eq!(
+            (g.title_y, g.name_y, g.rule_y, g.rows_y, g.row_pitch),
+            (3.0, 18.0, 33.0, 36.0, 10.0)
+        );
+        // The title and the name line are one 15 px pitch apart; the rule is two pitches down.
+        assert_eq!(g.name_y - g.title_y, 15.0);
+        assert_eq!(g.rule_y - g.title_y, 30.0);
+        // It scales with the display height.
+        let half = grid(32.0);
+        assert_eq!((half.name_y, half.rule_y), (9.0, 16.5));
+    }
 
     #[test]
     fn the_edited_mark_adds_a_box_and_the_e() {

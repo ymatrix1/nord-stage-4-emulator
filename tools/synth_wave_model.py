@@ -303,6 +303,8 @@ class Lane:
     octaves: tuple = ()  # MULTI: DM(-32 .. -30, I1) voice multipliers (shared by both lanes)
     # word that sets `DM(-5, I2)`: `s5 = clip(w, 0.5) + 0.5` (SYNC probes)
     s5_src: int | None = None
+    # word that sets the pitch (`DM(0xC2716)`, shared by both lanes, 0x01000000 per semitone)
+    pitch_src: int | None = None
 
 
 @dataclass

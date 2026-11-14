@@ -13,7 +13,9 @@ use nord_panel::behaviour::{resolve, Gesture};
 /// Silkscreen legend colour (printed text).
 pub(super) const LEGEND: Color32 = Color32::from_gray(205);
 /// Legend of a control that has no engine support.
-pub(super) const LEGEND_DIM: Color32 = Color32::from_gray(105);
+pub(super) fn legend_dim() -> Color32 {
+    dim_legend(Color32::from_gray(205))
+}
 
 /// Small silkscreen text.
 pub(super) fn tiny(p: &Painter, pos: Pos2, s: &str, col: Color32, al: Align2) {
@@ -133,7 +135,7 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
     if let Some((aid, legend)) = alias {
         let why = unsupported_reason(aid);
         let col = if why.is_some() {
-            LEGEND_DIM
+            legend_dim()
         } else if sui.alias_lit(b) {
             LED_AMBER
         } else {
@@ -242,6 +244,9 @@ pub(super) fn pot(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, k: Knob,
 /// The three inventory ids of the OLED dials.
 pub(super) const DIAL_IDS: [&str; 3] = ["synth.dial.left", "synth.dial.middle", "synth.dial.right"];
 
+/// Names printed under the three OLED dials, left to right.
+pub(super) const DIAL_NAMES: [&str; 3] = ["INFO", "LIST", "LIST"];
+
 /// An endless encoder under the OLED: drag or scroll to turn; Shift+turn is the LIST / INFO view.
 pub(super) fn dial(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, idx: usize) {
     let id = DIAL_IDS[idx];
@@ -289,6 +294,14 @@ pub(super) fn dial(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, idx: us
             c + vec2(a.cos(), a.sin()) * radius * 0.85,
         ],
         Stroke::new(1.6_f32, Color32::from_gray(235).gamma_multiply(k)),
+    );
+    // Printed under the knob: INFO, LIST, LIST (photo `NS4-Panel-synth`).
+    tiny(
+        p,
+        pos2(c.x, c.y + radius + 4.0),
+        DIAL_NAMES[idx],
+        LEGEND,
+        Align2::CENTER_TOP,
     );
     if let Some(why) = why {
         let _ = resp.on_hover_text(why);
