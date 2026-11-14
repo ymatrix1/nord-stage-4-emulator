@@ -6,6 +6,8 @@
 //! generator), `keyclick`, `scanner`, `rotary`.
 
 mod b3_bass_keys;
+#[allow(dead_code)] // not wired: the ring weights are open (research s11)
+mod b3_bass_state;
 mod b3_keys;
 mod b3_tail;
 mod b3_weights;

@@ -68,7 +68,7 @@ Each octave doubles the number of teeth on the rotating wheel (`2, 4, 8, 16, 32,
 | B3 (and B3 Bass mode) | `Legacy` (tone source not located) | bank, experiment only (attribution disproved) | gear-ratio sine |
 | Vox, Farfisa | `Legacy` | falls back to `Legacy` (no 92-wheel bank) | gear-ratio sine |
 
-B3 Bass key-down weights for all keys (`organ/b3_bass_keys.rs`, not wired, [organ-farfisa-bass](../research/organ-farfisa-bass.md) s10): VERIFIED; the `b3_bass_mode` pickup table stays ASSUMED because the processor output depends on per-key lattice words the key-down writes.
+B3 Bass key-down weights for all keys (`organ/b3_bass_keys.rs`, not wired, [organ-farfisa-bass](../research/organ-farfisa-bass.md) s10): VERIFIED; the `b3_bass_mode` pickup table stays ASSUMED. B3 Bass processor state (`organ/b3_bass_state.rs`, not wired, [organ-farfisa-bass](../research/organ-farfisa-bass.md) s11): both weight windows are additive per held key (`bass-state.csv`), the output gain word `G = phi(S)` is a piecewise linear soft clip of the plain per-key step sum and the output is scaled by `1 - 0.84 G` (VERIFIED, 6 ARM sequences); the line gain per window is a measured function of frequency (EMPIRICAL, `bass-proc-gain.csv`); with the oracle's ring lines the processor part reproduces 6 chords (1, 3, 10 keys, three press orders) within 1.45 dB. The ring needs the generator weights (`DM 0x95122..`, smaller on wheels shared by several keys), whose rule is open, so the stage is not in the render path; the per-key lattice words `0x954E6..` are not read by the processor.
 
 The tone source of B3, Farfisa and B3 Bass is open ([OPEN-QUESTIONS](../OPEN-QUESTIONS.md)); `WeightMode` stays `Legacy` by default.
 
