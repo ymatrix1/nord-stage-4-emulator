@@ -13,6 +13,7 @@ mod drawbar;
 mod drawbar_sum;
 mod farfisa_wheels;
 mod firmware_bank;
+mod globals;
 mod keyclick;
 mod lane_mix;
 mod percussion_poly;
@@ -69,6 +70,7 @@ pub use firmware_bank::{
     build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate,
     implied_frame_rate_at, phase_step, ToneBank, ARM_DEFAULT_TUNE_WORD, DEFAULT_TUNE_WORD,
 };
+pub use globals::OrganGlobals;
 pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
@@ -150,6 +152,8 @@ pub struct OrganLayer {
     pub weight_level: f32,
     /// Key-click transient on key-down / key-up (default on; off for oracle comparisons).
     pub key_click_enabled: bool,
+    /// Global Sound/System menu settings (defaults are exact no-ops).
+    pub globals: OrganGlobals,
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
     synced_fine_cents: f32,
@@ -232,6 +236,7 @@ impl OrganLayer {
             weight_mode: WeightMode::default(),
             weight_level: 1.0,
             key_click_enabled: true,
+            globals: OrganGlobals::default(),
             tonewheel_freqs: freqs,
             tonewheel_freqs_hz: freqs_hz,
             synced_fine_cents: 0.0,

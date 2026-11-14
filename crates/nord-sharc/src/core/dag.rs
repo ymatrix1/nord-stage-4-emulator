@@ -125,6 +125,20 @@ mod tests {
         assert_eq!(Core::dag_next(100, 0xFFFF_FFFF, 4, 100), 103);
     }
 
+    /// `4bbe 04bf` is `r9=dm(i5,m6) [pre-mod]` (FX reverb core `0x123F61`): the access is at
+    /// `I5 + M6`, `I5` stays, and the circular buffer does not fold the address back (the
+    /// firmware keeps two copies of a buffer `L` words apart and reads the second with it).
+    #[test]
+    fn pre_modify_with_a_register_does_not_wrap_or_update() {
+        let mut c = core_at_zero(&[0x4bbe, 0x04bf]);
+        c.mode1 = MODE1_CBUFEN;
+        (c.i[5], c.b[5], c.l[5], c.m[6]) = (0x9_0102, 0x9_0100, 4, 4);
+        c.dm_write(0x9_0102, 11).unwrap();
+        c.dm_write(0x9_0106, 22).unwrap();
+        assert!(c.step().is_ok());
+        assert_eq!((c.r[9], c.i[5]), (22, 0x9_0102));
+    }
+
     #[test]
     fn bank_offset_and_register_modify() {
         assert_eq!((Core::dag_bank(0), Core::dag_bank(1)), (0, 8));

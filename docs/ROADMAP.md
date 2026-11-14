@@ -208,6 +208,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
 - [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
 - [x] Corrected B3 tail ported with regenerated chord tests, oracle chords within 0.54 dB and video mid -1.1 dB ([b3-tail-bootstate](research/b3-tail-bootstate.md)); `B3Wheels` stays opt-in (RMS +8.0 dB)
+- [x] Engine layer routing: section / layer enables VERIFIED on the ARM (`tools/arm_program_routing.py`), per-layer KB zone codes decoded, opt-in `FirmwareRouting` / `--firmware-routing`; B3 clip sub +16.5 to -1.6 dB, crest 12.8 to 17.2 dB, RMS +8.0 to +3.8 dB ([engine-routing](research/engine-routing.md))
+- [ ] Firmware map from the `kKbZone` code to the key range (OQ23), then flip `FirmwareRouting` to the default with a `render_hash` re-baseline
 - [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
@@ -237,7 +239,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] FX Amp type words (`kAmpTypeNew` 1..6) decoded, the Amp drive stage and cabinet verified against the oracle and default (`FirmwareFx::amp`, Vox score 3.98 to 1.30); Leslie drive found to be `v / 127` into a null-stub row ([fx-type-map](research/fx-type-map.md) s8, s9)
 - [x] Amp cabinet `0x122A1D` as a measured impulse response (`fx/fw_cabinet.rs`), unity rotary drive flag
 - [ ] Organ unit EQ routines (`0x124344`, `0x124270`), routine `0x122B1D`, cabinet bank transliteration, JC / Small recordings; Leslie drive nonlinearity (ORG image)
-- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); the reverb half-rate wrapper `0x12417E` / `0x12435C` is modelled and ported (`FwRvbWrap`, not wired); the reverb core `0x123F61` is modelled instruction by instruction in Python (`tools/fx_model_rvbcore.py`, bit-exact against the oracle; pointer words and PM coefficient list missing, no Rust port yet); Leslie still open
+- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); the reverb half-rate wrapper `0x12417E` / `0x12435C` is modelled and ported (`FwRvbWrap`, not wired); the reverb core `0x123F61` is modelled instruction by instruction in Python (`tools/fx_model_rvbcore.py`, bit-exact against the oracle; real-instance data found in the image, oracle responses T60 4.3 s and 5.4 s for types 0, 1; no Rust port yet); Leslie still open
 - [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); the reverb tables (`ns4-ca0i`); the delay time law (`kDlyRateClkDiv`, [fx-delay-time](research/fx-delay-time.md)) is decoded and wired behind `FirmwareFx::delay_time`
 - [ ] Enable gating and the command consumer ([fx-contexts](research/fx-contexts.md) s7; wiring plan s8), then sweep the four type ids with the effects enabled
 
