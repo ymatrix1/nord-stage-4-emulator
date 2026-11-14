@@ -206,7 +206,12 @@ impl ProgramUi {
 
     /// STORE AS (Shift+Store): name the program first (manual p.42).
     pub fn store_as(&mut self) -> Vec<AudioCommand> {
-        self.store.begin_as(&self.title, self.loc);
+        let library = &self.library;
+        self.store
+            .begin_as(&self.title, self.loc, |n| library.name_exists(n));
+        if let Some(p) = self.library.get(self.loc) {
+            self.store.editor.category = p.category;
+        }
         self.screen = Screen::StoreAs;
         Vec::new()
     }
@@ -261,14 +266,17 @@ impl ProgramUi {
                 loc,
                 name,
                 category,
-            } => self.library.put(
-                loc,
-                UserProgram {
-                    name,
-                    category,
-                    state,
-                },
-            ),
+            } => {
+                self.library.put(
+                    loc,
+                    UserProgram {
+                        name,
+                        category,
+                        state,
+                    },
+                );
+                self.mark_clean(); // STORE clears the boxed `E`
+            }
             PendingSnapshot::Live(slot) => self.library.put_live(slot, state),
         }
     }

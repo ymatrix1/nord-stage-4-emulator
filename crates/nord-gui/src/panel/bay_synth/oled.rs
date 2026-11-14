@@ -16,17 +16,26 @@ pub(super) fn glass_rect(o: Pos2) -> Rect {
 }
 
 /// Draw the display for the current page.
-pub(super) fn paint_oled(p: &Painter, o: Pos2, sui: &mut SynthUi, sample: Option<&str>) {
+pub(super) fn paint_oled(
+    p: &Painter,
+    o: Pos2,
+    sui: &mut SynthUi,
+    sample: Option<&str>,
+    hint: Option<&str>,
+) {
     sui.mark("synth.oled");
     let disp = glass_rect(o);
     p.rect_filled(disp.expand(2.5), 3.0, Color32::from_rgb(10, 11, 13));
     p.rect_filled(disp, 2.0, OLED_BG);
     let p = p.with_clip_rect(disp);
     let v = view_of(sui, sample);
-    p.text(
+    // The title never runs under the layer letter at the right edge.
+    let title_clip = Rect::from_min_max(disp.min, pos2(disp.right() - 9.0, disp.top() + 9.5));
+    p.with_clip_rect(title_clip.intersect(disp)).text(
         disp.left_top() + vec2(2.0, 1.5),
         Align2::LEFT_TOP,
-        v.title,
+        // A moving knob replaces the page title with its hint line (`LFO Rate 0.08 Hz`).
+        hint.unwrap_or(v.title),
         FontId::monospace(crate::widgets::MIN_FONT_PX),
         FG,
     );
@@ -101,7 +110,9 @@ mod tests {
             SynthPage::Extern,
         ] {
             sui.page = page;
-            let n = shapes_painted(|_ui, p, rect, _s, _a| paint_oled(p, rect.min, &mut sui, None));
+            let n = shapes_painted(|_ui, p, rect, _s, _a| {
+                paint_oled(p, rect.min, &mut sui, None, None)
+            });
             assert!(n >= 5, "{page:?} painted {n} shapes");
         }
         assert!(sui.drawn().contains(&"synth.oled"));

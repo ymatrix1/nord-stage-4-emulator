@@ -27,7 +27,7 @@ pub use layer::{step_time, Env, SynthLayerUi};
 pub use layer_btn::LayerAction;
 pub use legacy::Legacy;
 pub use page::{dial_defs, DialDef, SynthPage, ARP_PAGES, EXTERN_WHY};
-pub use pots::Pots;
+pub use pots::{Pots, FREQ_MAX, FREQ_MIN, GLIDE_MAX, LFO_MAX, LFO_MIN};
 pub use samples::SampleBrowser;
 pub use tables::*;
 
@@ -71,6 +71,10 @@ pub struct SynthUi {
     pub sustped: bool,
     /// PSTICK of the section (Shift+Layer B): the layers follow the pitch stick.
     pub pstick: bool,
+    /// PSTICK/RNG bend range in semitones (Shift+Layer B, manual p.28), `1..=12`.
+    pub pstick_range: u8,
+    /// Fractional scroll points of the PSTICK/RNG list, kept between frames.
+    pub(crate) range_acc: f32,
     pub group_filter: Latch,
     pub group_lfo: Latch,
     pub group_arp: Latch,
@@ -109,6 +113,8 @@ impl SynthUi {
             kb_hold: false,
             sustped: false,
             pstick: false,
+            pstick_range: nord_core::engine::PSTICK_DEFAULT_RANGE,
+            range_acc: 0.0,
             group_filter: Latch::default(),
             group_lfo: Latch::default(),
             group_arp: Latch::default(),
