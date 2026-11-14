@@ -39,6 +39,8 @@ pub(super) fn render_bay_effects(
     super::frames::paint_frames(painter, origin, Section::Effects);
 
     let (now_ms, shift) = ui.input(|i| ((i.time * 1000.0) as u32, i.modifiers.shift));
+    // SECTION EDIT (manual p.43): a unit edit reaches every chain of the section.
+    state.fx_ui.section_edit = state.program_ui.section_edit_active();
     let trackers = std::mem::take(&mut state.fx_ui.trackers);
     let mut f = Fx {
         ui,
