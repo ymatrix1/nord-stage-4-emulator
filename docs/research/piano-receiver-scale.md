@@ -91,7 +91,7 @@ The organ `K = 2.8` therefore **cannot be replaced by a VERIFIED number yet**. R
 
 ## Decision
 
-D39: the receiver and the common FX path are recorded; `firmware_bus_scale`, `firmware_layer_law` and `piano_firmware_level` defaults stay. D46: the master level writer and the layer word targets are recorded (s5); defaults stay because the organ chain word (1.6) leaves 13.4 dB unexplained and no hardware clip was re-run.
+D39: the receiver and the common FX path are recorded; `firmware_bus_scale`, `firmware_layer_law` and `piano_firmware_level` defaults stay. D49: the master level writer and the layer word targets are recorded (s5); defaults stay because the organ chain word (1.6) leaves 13.4 dB unexplained and no hardware clip was re-run.
 
 ## Implications
 
