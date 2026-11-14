@@ -45,6 +45,12 @@ fn layer_pad(
     sui.mark(id);
     let resp = ui.interact(rect, ui.id().with(id), Sense::click_and_drag());
     let mut action = LayerAction::None;
+    if i == 1 && resp.hovered() && ui.input(|inp| inp.modifiers.shift) {
+        // PSTICK/RNG list (manual p.28): Shift + mouse wheel over Layer B moves the bend range.
+        // egui turns Shift+wheel into a horizontal scroll, so read both axes.
+        let pts = ui.input(|inp| inp.raw_scroll_delta.x + inp.raw_scroll_delta.y);
+        sui.pstick_range_scroll(pts);
+    }
     if let Some(g) = gesture_of(ui, sui, id, &resp) {
         let shift = ui.input(|i| i.modifiers.shift);
         action = sui.layer_button(i, g, shift, active);
@@ -72,10 +78,15 @@ fn layer_pad(
             (false, true) => LED_AMBER,
             (false, false) => LEGEND,
         };
+        let text = if i == 1 && lit {
+            format!("{legend} {}", sui.pstick_range)
+        } else {
+            legend.to_string()
+        };
         tiny(
             p,
             pos2(rect.center().x, rect.bottom() + 3.0),
-            legend,
+            &text,
             col,
             Align2::CENTER_TOP,
         );
@@ -85,9 +96,12 @@ fn layer_pad(
             let _ = resp.on_hover_text(format!(
                 "{legend} (Shift+click): the Synth layers follow the {}",
                 if i == 0 {
-                    "sustain pedal"
+                    "sustain pedal".to_string()
                 } else {
-                    "pitch stick"
+                    format!(
+                        "pitch stick, bend range {} semitones (Shift+wheel changes it)",
+                        sui.pstick_range
+                    )
                 }
             ));
         }

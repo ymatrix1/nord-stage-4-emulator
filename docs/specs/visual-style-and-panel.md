@@ -108,6 +108,27 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
    - Center graphic: Real-time anti-aliased waveform / wavetable / FM operator visualization + primary parameter readout (`Super Saw`, `DETUNE: 3.4`).
    - Bottom bar: 4 inverted/outlined soft-label tabs (`ANALOG`, `SUPER`, `1 (6)`, `WAVE`) controlled by the 3 encoders below the screen.
 
+#### Parameter hint line (`ns4-wxly`)
+
+While a knob moves, both OLEDs show `<label> <value>` (`LFO Rate 0.08 Hz`, `LFO Amount 7.1`, `Filter Frequency 1.2 kHz`) for 1.5 s after the last movement (hold time `ASSUMED`, no timing measured).
+
+| Display | Where the hint goes | Source |
+|---|---|---|
+| Synth OLED | replaces the page title in the header row (right-hand layer letter stays) | LFO course video 0:27-0:45 (EMPIRICAL) |
+| Program OLED | replaces the rows below the separator on the home screen; menus, STORE, LIST and split screens keep their text | manual p.42 (VERIFIED) |
+
+Data: `panel/param_hint/table.rs` maps an inventory control id to label and value formatter (`fmt.rs`); every `widgets::knob` drag records `(id, position)` in the egui context (`param_hint::touch`), owners with a non-linear value (Master Clock divisions, stored layer value, per-type mod rate) refine it with `touch_value`. The LFO DEST button taps raise `LFO Destination <Filter|Osc Pitch|OscCtrl|Off>`.
+
+| Item | Status |
+|---|---|
+| Labels `Oscillator Ctrl`, `Oscillator Env Amount`, `Filter Frequency`, `Filter Resonance`, `Filter Env Amount`, `LFO Destination`, `LFO Rate`, `LFO Amount`, `Glide Rate`, `Arpeggiator Rate`, `Arpeggiator Range`, `Filter`, `Osc Pitch`, `OscCtrl` | VERIFIED in the firmware pool, `tools/tests/test_ns4_oled_strings.py::test_param_hint_labels_are_in_the_firmware` |
+| Effects and Master labels (`Amp Bass`, `Delay Feedback`, `Master Level`, ...), `Off` | ASSUMED: not firmware strings; built from the panel silkscreen |
+| Hz precision (2 decimals below 1 Hz, 1 below 10 Hz, 0 above) | EMPIRICAL: LFO clip overlay readings, [dsoundman-synth-lfo](../research/dsoundman-synth-lfo.md) section 2 |
+| `dB` with one decimal, `bpm` integer | VERIFIED unit strings (`%.1f dB`, `%d bpm`, `0x2CA110..`) |
+| Panel-unit scale `0..10` (osc ctrl, resonance, LFO amount), `-10..10` (env amounts) | EMPIRICAL for LFO amount (`7.1`, one reading); ASSUMED for the others |
+| Knob laws (log or linear sweeps and their ranges) | ASSUMED, as in `ui_state/synth/pots.rs` |
+| Open | The hardware LFO RATE table (`LFO_RATE_HZ_TABLE`, 128 steps) is not used for the hint: it shows the emulator's own rate (log 0.05..40 Hz); moving the knob law to the table is a separate change |
+
 #### 4.5.1 Firmware messages and toasts (`bay_program/fw_messages.rs`, bean `ns4-0u5u`)
 
 The Program OLED shows short messages ("toasts") for events. They use the firmware's own strings; every offset is a file offset in `bank0_CODE.bin` (OS v1.66, local only), checked by `tools/tests/test_ns4_oled_strings.py::test_message_strings_are_in_the_firmware`.

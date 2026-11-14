@@ -8,16 +8,7 @@ use crate::panel::ui_state::{
     dial_defs, SynthPage, SynthUi, FILTER_TYPES, LFO_SHAPES, VIBRATO_DELAYS, WAVE_TYPES,
 };
 
-/// `103 ms`, `1.5 s`, `11 s`.
-pub fn fmt_time(s: f32) -> String {
-    if s < 1.0 {
-        format!("{:.0} ms", s * 1000.0)
-    } else if s < 10.0 {
-        format!("{s:.1} s")
-    } else {
-        format!("{s:.0} s")
-    }
-}
+pub use crate::panel::param_hint::fmt::time as fmt_time;
 
 fn icon_of(sui: &SynthUi) -> Icon {
     let l = sui.layer();

@@ -85,7 +85,8 @@ pub struct PedalState {
     pub sustped: [bool; 7],
     /// Per-layer PSTICK (pitch stick). Honoured by every layer (Extern layers forward it).
     pub pstick: [bool; 7],
-    /// Per-layer bend range in semitones (default 2, PSTICK/RNG list, p.28).
+    /// Per-layer bend range in semitones (default 2, PSTICK/RNG list, p.28). Only Synth layers
+    /// honour it; set through `Stage4Engine::set_pstick_range` (clamped 1-12).
     pub pstick_range: [u8; 7],
     /// Triple pedal Left/Middle functions, Sustain Pedal Type and tap-tempo state.
     pub triple: super::pedal_assign::TripleState,
@@ -331,7 +332,7 @@ impl Stage4Engine {
                 self.extern_forward_bend(i, norm);
                 continue;
             }
-            let cents = norm * f32::from(self.pedals.pstick_range[layer as usize]) * 100.0;
+            let cents = norm * f32::from(self.pstick_range_semitones(layer)) * 100.0;
             match layer {
                 LayerId::SynthA => self.synth_a.bend_cents = cents,
                 LayerId::SynthB => self.synth_b.bend_cents = cents,

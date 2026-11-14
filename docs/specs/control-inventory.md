@@ -70,6 +70,8 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 
 By binding: `Bound` 150, `UiOnly` 58, `Unsupported` 67. By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
 
+PSTICK range (`ns4-dsjv`): there is no separate range control. The Synth strip's `synth.pstick` entry is the printed `PSTICK/RNG` (manual p.28: hold the button and pick a semitone value) and its host binding `ped_pstick_{n}` pairs with `ped_range_{n}` (`1..=12`, default 2). Only the Synth layers honour the range; Organ and Piano `pstick` entries bend a fixed 2 semitones (p.18, p.23). `master.pitch_stick` stays `UiOnly` (the stick is MIDI pitch bend, no host parameter). The totals above did not change.
+
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
 ## Gap list

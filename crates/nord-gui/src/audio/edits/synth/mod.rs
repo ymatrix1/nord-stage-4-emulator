@@ -53,6 +53,9 @@ pub enum SynthEdit {
     ExternCc { layer: u8, slot: u8, value: u8 },
     /// PROGRAM dial of an Extern layer: Bank Select then Program Change.
     ExternProgram { layer: u8, program: u8 },
+    /// PSTICK/RNG (Shift+Layer B list, manual p.28): bend range of the three Synth layers in
+    /// semitones, clamped to `1..=12` by the engine.
+    PstickRange(u8),
 }
 
 /// Engine id of Synth layer `0..=2`; out-of-range values map to Synth C.
@@ -117,6 +120,11 @@ impl SynthEdit {
             | Self::AuxKb { .. }
             | Self::ExternCc { .. }
             | Self::ExternProgram { .. } => {}
+            Self::PstickRange(semitones) => {
+                for layer in [LayerId::SynthA, LayerId::SynthB, LayerId::SynthC] {
+                    engine.set_pstick_range(layer, semitones);
+                }
+            }
             Self::Group { src, group } => {
                 let [a, b, c] = layers(engine);
                 match src {
@@ -150,6 +158,22 @@ mod tests {
         assert_eq!(e.synth_b.cutoff_hz, 1234.0);
         assert_ne!(e.synth_a.cutoff_hz, 1234.0);
         assert_ne!(e.synth_c.cutoff_hz, 1234.0);
+    }
+
+    #[test]
+    fn pstick_range_sets_and_clamps_the_three_synth_layers_only() {
+        let mut e = Stage4Engine::new(48_000.0);
+        SynthEdit::Pstick(true).apply(&mut e);
+        SynthEdit::PstickRange(7).apply(&mut e);
+        assert_eq!(e.pedals.pstick_range[4..7], [7; 3]);
+        assert_eq!(e.pedals.pstick_range[..4], [2; 4]);
+        SynthEdit::PstickRange(99).apply(&mut e);
+        assert_eq!(e.pedals.pstick_range[4..7], [12; 3]);
+        e.handle_midi(nord_core::midi::MidiEvent::PitchBend {
+            channel: 0,
+            value: 16383,
+        });
+        assert!((e.synth_c.bend_cents - 1200.0).abs() < 0.5);
     }
 
     #[test]

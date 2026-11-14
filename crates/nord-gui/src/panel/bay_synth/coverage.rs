@@ -302,3 +302,46 @@ fn cat_and_sample_dials_queue_a_sample_load_for_the_focused_layer() {
     let v = super::oled_view::view_of(&state.synth_ui, None);
     assert_eq!(v.soft[1].as_ref().unwrap().value, "Choir");
 }
+
+#[test]
+fn shift_wheel_over_layer_b_sets_the_pstick_range_in_the_engine() {
+    let (ctx, mut state, audio, rx) = fresh();
+    let c = rect_or_empty("synth.layer.b", pos2(0.0, 0.0)).center();
+    run_frame(
+        &ctx,
+        &mut state,
+        &audio,
+        plain(vec![egui::Event::PointerMoved(c)], shift()),
+    );
+    let wheel = egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, 5.0 * 24.0),
+        modifiers: shift(),
+    };
+    run_frame(&ctx, &mut state, &audio, plain(vec![wheel], shift()));
+    assert_eq!(
+        state.synth_ui.pstick_range, 7,
+        "default 2 plus five notches"
+    );
+    let edits = synth_edits(&rx);
+    assert_eq!(edits, vec![SynthEdit::PstickRange(7)]);
+    let mut engine = Stage4Engine::new(48_000.0);
+    let mut vol = 0.8;
+    for e in edits {
+        apply_audio_command(AudioCommand::Synth(e), &mut engine, &mut vol);
+    }
+    assert_eq!(engine.pedals.pstick_range[4..7], [7; 3]);
+    // Without Shift the wheel over the button leaves the range alone.
+    let plain_wheel = egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, 48.0),
+        modifiers: egui::Modifiers::NONE,
+    };
+    run_frame(
+        &ctx,
+        &mut state,
+        &audio,
+        plain(vec![plain_wheel], egui::Modifiers::NONE),
+    );
+    assert_eq!(state.synth_ui.pstick_range, 7);
+}

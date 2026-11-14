@@ -83,15 +83,23 @@ impl ControlLink {
 
     /// Mirrors a MIDI event onto the shadow (called by `AudioHandle::send_midi`).
     pub fn observe_midi(&self, event: MidiEvent) {
+        self.observe_cmd(event, AudioCommand::Midi(event));
+    }
+
+    /// Mirrors an on-screen keyboard / wheel event (`AudioHandle::send_keyboard_midi`); the shadow
+    /// applies it through the same Local Control gate as the live engine.
+    pub fn observe_keyboard_midi(&self, event: MidiEvent) {
+        self.observe_cmd(event, AudioCommand::Keyboard(event));
+    }
+
+    fn observe_cmd(&self, event: MidiEvent, cmd: AudioCommand) {
         if matches!(event, MidiEvent::NoteOn { .. } | MidiEvent::NoteOff { .. }) {
             return;
         }
         let mut state = self.lock();
         match &mut *state {
-            State::Active(control) => control.observe(&AudioCommand::Midi(event)),
-            State::Waiting(backlog) if backlog.len() < BACKLOG_CAP => {
-                backlog.push(AudioCommand::Midi(event));
-            }
+            State::Active(control) => control.observe(&cmd),
+            State::Waiting(backlog) if backlog.len() < BACKLOG_CAP => backlog.push(cmd),
             State::Waiting(_) => {}
         }
     }
