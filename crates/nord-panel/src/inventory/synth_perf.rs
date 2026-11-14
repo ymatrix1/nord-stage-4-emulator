@@ -22,7 +22,7 @@ pub fn controls() -> Vec<ControlEntry> {
             34,
         )
         .shift()
-        .todo(bean),
+        .bound("synthg_lfo_sync_{n}"),
         e("synth.lfo.mod_amt", s, K::Knob, "LFO MOD AMT", 34)
             .morph()
             .bound("synthm_lfo_amount_{n}"),
@@ -65,7 +65,7 @@ pub fn controls() -> Vec<ControlEntry> {
             35,
         )
         .shift()
-        .todo(bean),
+        .bound("synthg_pat_on_{n}"),
         e(
             "synth.arp.kb_sync",
             s,
@@ -74,7 +74,7 @@ pub fn controls() -> Vec<ControlEntry> {
             37,
         )
         .shift()
-        .todo(bean),
+        .bound("synthg_kb_sync_{n}"),
         e("synth.arp.rate", s, K::Knob, "ARP RATE/TIME", 36)
             .morph()
             .bound("synthm_arp_rate_{n}"),
@@ -86,7 +86,7 @@ pub fn controls() -> Vec<ControlEntry> {
             36,
         )
         .shift()
-        .todo(bean),
+        .bound("synthg_arp_sync_{n}"),
         e("synth.arp.range", s, K::Knob, "ARP RANGE / GATE ENV", 36).bound("synthm_arp_range_{n}"),
         e("synth.arp.menu", s, K::Button, "ARP MENU", 36).todo(bean),
         e(
@@ -99,7 +99,7 @@ pub fn controls() -> Vec<ControlEntry> {
         .shift()
         .todo(bean),
         // KB Hold
-        e("synth.kb_hold", s, K::Button, "KB HOLD", 36).todo(bean),
+        e("synth.kb_hold", s, K::Button, "KB HOLD", 36).bound("synthg_kb_hold"),
         e(
             "synth.kb_hold_exclude",
             s,
@@ -108,7 +108,7 @@ pub fn controls() -> Vec<ControlEntry> {
             36,
         )
         .shift()
-        .todo(bean),
+        .bound("synthg_hold_excl_{n}"),
         // Amp envelope
         e("synth.amp.envelope", s, K::Button, "AMP ENVELOPE", 33).todo(bean),
         e(

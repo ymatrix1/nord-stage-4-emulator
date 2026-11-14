@@ -99,6 +99,25 @@ Source: `Nord Stage 4 User Manual v1.6X-Edition-N.pdf` (local, `.reference/`), p
 
 Consequence for Jazz Guitar II (A:78): Mod 2 = `VIBE variation` is a *mono* vibe, so the hardware stereo width (0.96, coherence 0.06 at 1..2 kHz) cannot come from Mod 2; the remaining candidates are the delay feedback `CHOR variation` (stereo widening pedal) and the reverb.
 
+### 2.8 Variations, PED, TO ROTARY, GLOBAL and GROUP (implemented, `ns4-e3zs`)
+
+Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant below is ASSUMED (no firmware or recording source).
+
+| Item | Behaviour | Fields / code |
+|---|---|---|
+| Mod 1 VARIATION | Tremolo: square-like wave `tanh(6 x)/tanh(6)`; A-Pan: harder pan `tanh(3 x)/tanh(3)`; Ring mod: right carrier 90 degrees ahead (stereo) | `mod1_variation`, `fx/modulation.rs` |
+| Mod 1 PED (Wah) | Filter position = `mod1_ped_pos` (0..1) instead of the LFO | `mod1_ped`, `mod1_ped_pos` |
+| Mod 2 VARIATION | Flanger and Vibe: one shared LFO (mono); Chorus: 7 ms base, 6.5 ms depth, 0.6 wet; Phaser (Bi-Phase): feedback 0.6 instead of 0.35, zero at minimum amount | `mod2_variation` |
+| Not implemented | A-WAH and PUMP (Mod 1), SPIN (Mod 2) have no engine type yet | |
+| TO ROTARY | A Piano / Synth layer (index 2..6) with `AmpCabinet::ToRotary` bypasses the master mix: its post-fader mono sum feeds one shared rotary instance (`rotary_bus`) whose speed, drive, mic and stop settings mirror `organ_a`. Organ layers keep their built-in rotary | `engine/mod.rs`, `OrganLayer::mirror_rotary_settings`, `process_external_rotary` |
+| GROUP | `FxSharing::piano_group` / `synth_group` (source layer): `copy_all_settings_from` copies every user setting to the other layers of the section (DSP state stays per layer) | `engine/sharing.rs`, `fx/sharing.rs` |
+| GLOBAL Delay / Compressor | `FxSharing::delay_global` / `comp_global`: the source layer's settings are copied to all layers, each keeps its own instance | same |
+| GLOBAL Reverb | `FxSharing::reverb_global`: every layer's reverb is bypassed (`bypass_reverb`) and one shared reverb (`global_reverb`, settings of the source layer) runs on the summed mix after the rotary and the level faders, before the master bus | `render_frame` |
+| Master Clock division | `delay_sync_beats` (17 hardware fractions) is exposed to hosts | `fxy_delay_beats_*` |
+| Reverb BRIGHT / DARK / CHORALE | already present as `ReverbColor` (`fxsel_rev_color`) | |
+
+`Stage4Engine::apply_fx_sharing` runs at the start of `process_block` (field copies only). Callers that drive `render_frame` directly call it after changing settings. All modes default off, so default rendering is bit-identical (existing golden tests unchanged). Limitation: the TO ROTARY bus keeps its own rotor phase, independent of the organ's rotor.
+
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
 After summing all 7 active layers:

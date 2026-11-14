@@ -18,7 +18,29 @@ MIDI channels are represented internally as `0..15` and displayed to users as ch
 
 These channel roles follow the [Nord Stage 4 User Manual, OS v1.6x](https://www.nordkeyboards.com/wt/documents/951/Nord%20Stage%204%20User%20Manual%20v1.6X-Edition-N.pdf), MIDI chapter. The hardware also provides per-section `Sect On` settings, a separate Aux KB channel, MIDI receive filters, and NRPN support; those controls are outside this channel-routing change.
 
-In this engine, incoming CC and channel aftertouch affect global controls only when received on the configured Global Channel. Layer-channel CC/NRPN receive filters and the separate Aux KB routing mode are not modeled by this change.
+In this engine, incoming CC and channel aftertouch affect global controls only when received on the configured Global Channel. Layer-channel CC/NRPN receive filters are not modeled. Aux KB routing is described in section 2a.
+
+## 2a. Aux KB, pedals, pitch stick and Extern (Phase 6b B9d, `ns4-ymci`)
+
+Source: manual OS v1.6x p.21-22, p.26-28, p.43-47, p.55-56, p.59-64. Code: `engine/aux_kb.rs`, `engine/pedals.rs`, `engine/extern_out.rs`, `midi.rs` (`MidiEvent::PitchBend`).
+
+| Area | Behaviour | Status |
+|---|---|---|
+| Aux KB | `AuxKb { enabled, channel (default 16), layers[7], curve }`. A layer in Aux KB mode ignores the Global channel (internal keybed) and answers only the Aux KB channel, bypassing keyboard zones. Direct layer channels still win. | Manual p.43-45 |
+| Aux curve | Soft/Medium/Hard: identity for Medium, power law 0.7 / 1.4 otherwise | `ASSUMED` exponents |
+| SUSTPED | Per layer. Default On for Piano A/B only (the previous hard-wired behaviour), Off elsewhere. Organ and Synth layers defer note release while the pedal is down (`held` bitmask, no allocation); Pianos use their damper model | Manual p.18, p.28 |
+| Aux sustain/bend | `CC64` and pitch bend on the Aux KB channel reach Aux layers regardless of SUSTPED/PSTICK; the internal pedal needs the flag | Manual p.45 |
+| Half pedaling | Sustain value `>= 64` = down. Between 20 % and 50 % depth the Pianos use the slow soft-release decay (`PianoLayer::damper_half`) | Manual p.26; band and mapping `ASSUMED` |
+| Sostenuto, soft | `CC66`, `CC67` on the Global channel, Piano layers (unchanged) | Manual p.27 |
+| Control pedal | `CC11` is the Morph source; `Ctrl + Swell` also drives Swell; gain 1-10 | Manual p.60 |
+| Swell | `CC4` scales the Organ layers. B3 floor 0.1 (-20 dB, `ASSUMED`); other models reach 0. Function `Volume` scales the master mix, `Wheel Morph` mirrors the mod wheel | Manual p.22, p.60 |
+| Rotor pedal, foot switch | `rotor_pedal(down)` and `foot_switch(down)`; Toggle/Hold; foot switch can switch Layer Scene or the rotor; Sustain+Rotor Hold/Toggle on the sustain jack. No MIDI CC exists for these jacks in the manual, so they are API/host-parameter inputs only | Manual p.53, p.61 |
+| Pitch stick | `MidiEvent::PitchBend` (14 bit). PSTICK per layer with range 1-12 semitones (default 2). Applied to Synth layers through `SynthLayer::bend_cents` (exactly neutral at centre). Organ and Piano bend is not implemented | Manual p.28 |
+| Extern mode | A Synth layer with `extern_out.layers[i].enabled` emits MIDI instead of audio. Notes are transposed by the octave shift, limited by the keyboard zones (crossfade gain scales velocity) and the sent pitch is remembered so Note Off always matches. CC VAL 1/2 (`extern_set_cc_value`), Bank Select + Program Change (`extern_set_program`), Send On Load, CC7 from the layer fader (`extern_sync_volume`, run once per `process_block`), CC64 and pitch bend forwarded when the layer's SUSTPED/PSTICK are on | Manual p.46-47, p.63-64 |
+| Output queue | `MidiOutQueue`: fixed 256-entry ring buffer; backends drain with `pop_midi_out()`; overflow drops the newest event and counts it (`dropped()`). No allocation on the audio path | `ASSUMED` capacity |
+| Channel helpers | `set_global_channel`, `set_layer_channel`, `set_aux_channel` take panel numbers 1-16 or `None` (Off); `route_for(layer, channel)` resolves `NoteRoute::{Layer, Aux, Global}` | Manual p.62 |
+
+Not modelled: Echo Global To Extern (the emulator has no separate internal keybed, so Global notes always reach Extern layers inside their zone), Extern device filters (mod wheel, aftertouch, control/swell/volume pedal forwarding), Extern keyboard velocity curve, Piano/Organ pitch bend, Triple Pedal left/middle assignments (Pump, Mst Clk Tap, Program Up/Down), the plugin MIDI output port for Extern.
 
 ---
 

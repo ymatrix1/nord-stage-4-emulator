@@ -28,3 +28,4 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
+- Second slice (feat/fx-global-rotary-variations): Mod 1/2 VARIATION, Wah PED, TO ROTARY routing, GLOBAL Delay/Comp/Reverb, GROUP Piano/Synth, Master Clock division host param (`fxy_*`). Still open: A-WAH, PUMP, SPIN engine types.
