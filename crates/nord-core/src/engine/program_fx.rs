@@ -6,6 +6,9 @@ impl Stage4Engine {
     pub(super) fn apply_fx_chain(fx: &mut LayerFxChain, dec: &crate::cbin::FxDecoded) {
         fx.mod1_type = dec.mod1_type();
         fx.mod1_rate_hz = 0.1 + dec.mod1_rate.clamp(0.0, 1.0) * 14.9;
+        // 7 bit `kFx1RateClkDiv` value for the opt-in firmware Mod 1 (`FirmwareFx::mod1`).
+        fx.mod1_type_raw = Some(dec.mod1_type_raw);
+        fx.mod1_rate_raw = Some((dec.mod1_rate.clamp(0.0, 1.0) * 127.0).round() as u8);
         fx.mod1_amount = if dec.mod1_enabled {
             dec.mod1_amount.clamp(0.0, 1.0)
         } else {
@@ -52,6 +55,8 @@ impl Stage4Engine {
         fx.comp_fast = dec.comp_fast;
         fx.delay_enabled = dec.delay_enabled;
         fx.delay_time_ms = dec.delay_time_ms();
+        // 14 bit `kDlyRateClkDiv` value for the opt-in firmware time law (`FirmwareFx::delay_time`).
+        fx.delay_rate_raw = Some((dec.delay_rate_norm.clamp(0.0, 1.0) * 16383.0).round() as u16);
         fx.delay_clock_sync = dec.delay_clock_sync;
         fx.delay_sync_beats = dec.delay_clock_sync.then(|| dec.delay_sync_beats());
         fx.delay_analog = dec.delay_analog_on();
@@ -79,6 +84,7 @@ impl Stage4Engine {
             0.0
         };
         fx.reverb_model = dec.reverb_model();
+        fx.reverb_variation = dec.reverb_variation();
         // Reverb Color: 0 none, 1 DARK, 2 BRIGHT (EMPIRICAL, `ns4decode`; the string `Dark` is in the
         // firmware at 0x2cc938). The variation of Stage/Hall/Cathedral is `Chorale` (VERIFIED names).
         fx.reverb_color = match dec.reverb_color {

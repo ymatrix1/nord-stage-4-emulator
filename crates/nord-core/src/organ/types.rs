@@ -78,22 +78,92 @@ pub enum RotarySpeed {
     Fast,
 }
 
-/// Source of the `B3` tonewheel waveform and phase arithmetic.
+impl OrganModel {
+    /// Value of `Edt_Org_kModel` in the firmware: `B3, Vox, Farfisa, Pipe1, Pipe2, B3 Bass` = 0..5
+    /// (the B3 Bass model is [`OrganLayer::b3_bass_mode`](super::OrganLayer) on `B3` here).
+    ///
+    /// VERIFIED: the model to routine map (string pool `0xC02C75F4`, chain step `0xC022F060`,
+    /// `docs/research/organ-model-paths.md`). ASSUMED: the value order matches the UI order.
+    pub const fn firmware_value(self) -> u8 {
+        match self {
+            Self::B3 => 0,
+            Self::Vox => 1,
+            Self::Farfisa => 2,
+            Self::Pipe1 => 3,
+            Self::Pipe2 => 4,
+        }
+    }
+
+    /// Tone source this model uses when [`ToneWheelSource::ModelDefault`] is selected.
+    ///
+    /// VERIFIED (model to routine map, `docs/research/organ-model-paths.md`): only the firmware
+    /// models Pipe1 and Pipe2 install the 92-wheel bank (`0x122620`) and its mix stage
+    /// (`0x12268F`); B3, Farfisa and B3 Bass install no generator in PNO Core1 and Vox installs
+    /// the 84-oscillator bank `0x12272D`. Their tone source is not located (OPEN-QUESTIONS), so
+    /// they keep the `Legacy` model (ASSUMED).
+    pub const fn default_tone_source(self) -> ToneWheelSource {
+        match self {
+            Self::Pipe1 | Self::Pipe2 => ToneWheelSource::Firmware,
+            Self::B3 | Self::Vox | Self::Farfisa => ToneWheelSource::Legacy,
+        }
+    }
+}
+
+/// Source of the tonewheel (oscillator bank) waveform and phase arithmetic.
 ///
-/// Default is [`ToneWheelSource::Firmware`]. ASSUMED (about 70 %): the algorithm of the bank is
-/// VERIFIED against the SHARC oracle, but its ROLE as the organ tone source is not proven (the
-/// bank is installed by the PNO Core1 state machine; the ARM drives it from the organ drawbar and
-/// vibrato edit ids, `docs/research/organ-tone-source.md`). `Legacy` stays selectable.
+/// Default is [`ToneWheelSource::ModelDefault`]: `Firmware` on the Pipe models, `Legacy` on the
+/// others ([`OrganModel::default_tone_source`]).
+///
+/// CORRECTION (`docs/research/organ-model-paths.md`, VERIFIED): the 92-wheel bank is installed by
+/// the firmware organ models Pipe1 / Pipe2 only. The earlier attribution to the B3 model is
+/// disproved; the bank algorithm, ladder and weights stay VERIFIED against the SHARC oracle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ToneWheelSource {
+    /// Pick the source from the model ([`OrganModel::default_tone_source`]).
+    #[default]
+    ModelDefault,
     /// PNO Core1 oscillator-bank parity: `u32` phase, `phase >> 20` into the 4096-point firmware
     /// `x` table, no interpolation, exact 12-TET pitches (`docs/research/organ-tonewheel-bank.md`).
-    /// Algorithm and ladder VERIFIED, role as organ tonewheels ASSUMED (about 70 %).
-    #[default]
+    /// Algorithm and ladder VERIFIED; the role is the Pipe organ bank (models Pipe1 / Pipe2).
+    /// Forcing it on `B3` is an experiment only (attribution disproved); Vox and Farfisa ignore
+    /// it (they use `Legacy`).
     Firmware,
     /// Pre-bank waveform: float phase, Hammond gear ratios, sine plus ad hoc low-wheel harmonics
     /// (ASSUMED).
     Legacy,
+    /// Opt-in Vox note oscillator bank (`vox_bank.rs`, spec section 3.1.6): the PNO Core1 post
+    /// stage `0x12272D` and output stage `0x1229B3`, installed by firmware model 1. Applies to
+    /// [`OrganModel::Vox`] only; other models fall back to their default source.
+    Vox,
+    /// B3 generator `0x121BBE` of PNO core 1: the firmware pitch ladder (12 oscillators, octave
+    /// doubling, `ssfr` rounding; VERIFIED to 2.5e-11 against the oracle) and the measured wheel
+    /// tables, one wheel per note. Opt-in: the per-key weights and per-note amplitudes of the
+    /// firmware are not modelled yet (`docs/research/b3-generator.md`). Applies to `B3` only; the
+    /// other models fall back to `Legacy`.
+    B3Wheels,
+    /// Farfisa generator `0x122A71` of PNO core 1: 12 top-octave phase accumulators with an 8 or 9
+    /// row octave ladder of soft pulse waves (`farfisa_wheels.rs`, spec section 3.1.8). Opt-in: the
+    /// processor `0x122B85` (weights, filters) is not modelled. Applies to `Farfisa` only; the other
+    /// models fall back to their default source.
+    FarfisaWheels,
+}
+
+impl ToneWheelSource {
+    /// Source in force for `model`: `ModelDefault` resolves per model, an explicit `Firmware`
+    /// applies to `B3` (experiment) and the Pipe models, and falls back to `Legacy` on Vox and
+    /// Farfisa, which have no 92-wheel bank.
+    pub const fn resolve(self, model: OrganModel) -> Self {
+        match (self, model) {
+            (Self::ModelDefault, m) => m.default_tone_source(),
+            (Self::Vox, OrganModel::Vox) => Self::Vox,
+            (Self::Vox, m) => m.default_tone_source(),
+            (Self::Firmware, OrganModel::Vox | OrganModel::Farfisa) => Self::Legacy,
+            (Self::B3Wheels, m) if !matches!(m, OrganModel::B3) => Self::Legacy,
+            (Self::FarfisaWheels, OrganModel::Farfisa) => Self::FarfisaWheels,
+            (Self::FarfisaWheels, m) => m.default_tone_source(),
+            (explicit, _) => explicit,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -104,11 +174,47 @@ mod tests {
     fn gear_table_and_defaults() {
         assert_eq!(HAMMOND_GEAR_RATIOS.len(), 12);
         assert_eq!(HAMMOND_GEAR_RATIOS[9], (88, 64));
-        assert_eq!(ToneWheelSource::default(), ToneWheelSource::Firmware);
+        assert_eq!(ToneWheelSource::default(), ToneWheelSource::ModelDefault);
         assert_eq!(ScannerMode::default(), ScannerMode::Off);
         assert_eq!(ROTARY_CROSSOVER_HZ, 800.0);
         assert_eq!(ROTARY_BASS_HORN_BALANCES[0], (0.70, 0.30));
         assert_eq!(ROTARY_BASS_HORN_BALANCES[4], (0.30, 0.70));
         assert_eq!(NUM_TONEWHEELS, 91);
+    }
+
+    #[test]
+    fn model_to_source_mapping() {
+        use OrganModel::*;
+        let fw = [(B3, 0), (Vox, 1), (Farfisa, 2), (Pipe1, 3), (Pipe2, 4)];
+        for (m, v) in fw {
+            assert_eq!(m.firmware_value(), v);
+        }
+        for m in [B3, Vox, Farfisa] {
+            assert_eq!(m.default_tone_source(), ToneWheelSource::Legacy);
+            assert_eq!(
+                ToneWheelSource::ModelDefault.resolve(m),
+                ToneWheelSource::Legacy
+            );
+        }
+        for m in [Pipe1, Pipe2] {
+            assert_eq!(
+                ToneWheelSource::ModelDefault.resolve(m),
+                ToneWheelSource::Firmware
+            );
+            assert_eq!(ToneWheelSource::Legacy.resolve(m), ToneWheelSource::Legacy);
+        }
+        // explicit Firmware: B3 experiment honoured, Vox/Farfisa have no 92-wheel bank
+        assert_eq!(
+            ToneWheelSource::Firmware.resolve(B3),
+            ToneWheelSource::Firmware
+        );
+        assert_eq!(
+            ToneWheelSource::Firmware.resolve(Vox),
+            ToneWheelSource::Legacy
+        );
+        assert_eq!(
+            ToneWheelSource::Firmware.resolve(Farfisa),
+            ToneWheelSource::Legacy
+        );
     }
 }

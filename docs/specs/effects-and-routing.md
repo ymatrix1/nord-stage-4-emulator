@@ -4,7 +4,7 @@
 
 Specifies the 7 independent per-layer effects pipelines (`Organ A`, `Organ B`, `Piano A`, `Piano B`, `Synth A`, `Synth B`, `Synth C`), the global Master Compressor, and the Master Clock.
 
-Implemented in [`crates/nord-core/src/fx.rs`](../../crates/nord-core/src/fx.rs) and [`crates/nord-core/src/engine.rs`](../../crates/nord-core/src/engine.rs).
+Implemented in [`crates/nord-core/src/fx/`](../../crates/nord-core/src/fx/mod.rs) and [`crates/nord-core/src/engine/`](../../crates/nord-core/src/engine/mod.rs).
 
 ---
 
@@ -14,8 +14,8 @@ Every one of the 7 layers processes its stereo audio through an isolated 5-stage
 
 ```text
 Layer Synth/Piano/Organ Output (Stereo)
-  └──► [1. Mod 1 (Tremolo / AutoPan / RingMod / Wah / PedalWah)]
-         └──► [2. Mod 2 (Phaser / Flanger / Chorus / Vibe / Spin)]
+  └──► [1. Mod 1 (Tremolo / AutoPan / RingMod / Wah / AutoWah / Pump)]
+         └──► [2. Mod 2 (Phaser / Flanger / Chorus / Vibe / Ensemble / Spin)]
                 └──► [3. Amp Sim & 3-Band EQ (Small / JC / Twin / British + Drive + Bass/Mid/Treble)]
                        └──► [4. Delay (Stereo / Ping-Pong / Analog Tape + HP/LP Feedback Filter)]
                               └──► [5. Layer Reverb (Booth / Room / Stage / Hall / Cathedral / Spring)]
@@ -27,21 +27,24 @@ Layer Synth/Piano/Organ Output (Stereo)
 - **`Tremolo`:** Stereo LFO amplitude modulation (`Rate`, `Amount`).
 - **`AutoPan`:** Constant-power left/right panning LFO (`Rate`, `Amount`).
 - **`RingMod`:** Quadrature carrier multiplier (`Rate` = carrier frequency $20\text{ Hz}..2\text{ kHz}$, `Amount` = wet mix).
-- **`Wah` / `AutoWah`:** Envelope-follower or LFO/Pedal-swept resonant 2-pole bandpass filter ($350\text{ Hz}..2.8\text{ kHz}$).
+- **`Wah`:** LFO/Pedal-swept resonant 2-pole bandpass filter (350 Hz to 2.8 kHz).
+- **`AutoWah`** (`fx/mod1_dynamic.rs`, manual p.49): envelope follower (stereo-linked rectified level, attack 5 ms, release 120 ms) sets the sweep s = 1 - exp(-env * g), g = 2 * 10^(2 * norm(Rate)) (the Rate knob is SENS). Standard model: band-pass at 350 * 8^s Hz. VARIATION (different model): resonant low-pass at 150 * 24^s Hz with lower damping. AMOUNT = dry/wet. Louder input opens the filter further (test `awah_louder_input_opens_the_filter_further`).
+- **`Pump`** (`fx/mod1_dynamic.rs`, manual p.50): gain = 1 - amt * d(p); phase p advances at the Rate or, with `mod1_sync_beats`, at bpm/60/beats Hz. d rises linearly over min(4 ms * rate, 0.1) of the cycle (quick duck), then recovers as (1-u)^2 (slow recovery). PED mode: one duck per rising edge of `mod1_ped_pos` through 0.5 (re-arm below 0.4), no LFO. The manual documents no VARIATION.
 
 ### 2.2 Slot 2 — Modulation 2 (`Mod 2`)
 
 - **`Chorus` / `Vibe`:** Dual modulated fractional delay lines ($7..18\text{ ms}$) with stereo $90^\circ$ phase offset.
 - **`Flanger`:** Short modulated delay line ($0.8..6\text{ ms}$) with regenerative feedback.
 - **`Phaser`:** 4-stage / 6-stage all-pass cascade swept by LFO.
-- **`Spin`:** Rotary-style horn modulation for non-organ layers.
+- **`Ensemble`** (`fx/mod2_spin.rs`, manual p.50): mono input into three modulated lines (centre 9 ms, depth 3 ms, 120 degrees apart) at the Rate; wet 0.6 x AMOUNT; VARIATION = mono.
+- **`Spin`** (`fx/mod2_spin.rs`, manual p.51): neutral rotating-speaker style effect, no separate rotor/horn. The Rate is approached with a 0.8 s exponential ramp (`spin_rate_hz`); Doppler delay (0.8 + 0.25 m) * amt ms, then an 800 Hz split with amplitude modulation 1 + depth * amt * m per band, m = sin(phase + ch * 90 degrees). Normal: treble depth 0.6, low 0.15; VARIATION swaps them (movement shifts to lower frequencies).
 
 ### 2.3 Slot 3 — Amp Simulation, Drive & 3-Band Semi-Parametric EQ
 
 - **Amp Sim / EQ modes (`amp_type_new & 0x0F`):** `0` Off, `1` Twin, `2` Twin II, `3` JC, `4` JC II, `5` Small Speaker, `6` Very Small Speaker, `7` To Rotary, `8` LP24, `9` HP24.
   - Names and order: **VERIFIED** from UI strings at `0x2cc6cc` in OS v1.66 `bank0_CODE.bin` (`Twin Type I/II`, `JC Type I/II`, `Small Speaker`, `Very Small Speaker`, `To Rotary`, `LP24`, `HP24`).
   - Numeric index: **EMPIRICAL**, identical to third-party `ns4decode` (MIT, Randy 2024) on 10 factory programs covering modes 0..9.
-  - `Twin` / `JC` / `Small` cabinet voicings (HP/LP/mid-peak Hz and dB): **ASSUMED**, inherited from the earlier 1-pole code. `II` variants are stored (`amp_variation`) but not modelled. `To Rotary` is a pass-through here (routing into the rotary is not implemented). The old `British` model does not exist on hardware and was removed.
+  - `Twin` / `JC` / `Small` cabinet voicings (HP/LP/mid-peak Hz and dB): **ASSUMED**, inherited from the earlier 1-pole code. The `II` variants (`amp_variation`, `Twin II` / `JC II` / `Small II`) have their own voicing rows in `fx/amp_eq.rs` (Twin II: 12 kHz low-pass, +1 dB at 900 Hz, +2 dB shelf; JC II: 9 kHz low-pass, +1.5 dB at 1.8 kHz, -3 dB shelf; Small II: 220 Hz..2.6 kHz): direction **VERIFIED** (manual p.51: less treble on both II amps, a smaller speaker for Small II; test `test_cabinet_variation_switch_redesigns_filters` and the Twin/JC/Small ordering test in `fx/tests_chain.rs`), every Hz and dB value **ASSUMED** (would be confirmed by a hardware sweep of each II type, `ns4-4p0s`). `To Rotary` is a pass-through here (the firmware Leslie is the PNO core 1 processor `0x1256AD`, ported as opt-in `--leslie firmware`, [fx-leslie](../research/fx-leslie.md) s8) (routing into the rotary is not implemented). The old `British` model does not exist on hardware and was removed.
   - `LP24` / `HP24`: cutoff = EQ Mid Freq knob, resonance `0..10` = Mid knob (`10 * (60 + 4 * mid_db) / 120`, from `ns4decode`); implemented as two cascaded 2nd-order sections (Butterworth-4 Q `0.5412` / `1.3066`, resonance scales the 2nd Q): topology **ASSUMED**.
 - **Overdrive (`Drive`):** Soft-clipping asymmetric saturation stage (`1.0..20.0x` pre-gain with makeup compensation).
 - **3-Band EQ:**
@@ -99,6 +102,60 @@ Source: `Nord Stage 4 User Manual v1.6X-Edition-N.pdf` (local, `.reference/`), p
 
 Consequence for Jazz Guitar II (A:78): Mod 2 = `VIBE variation` is a *mono* vibe, so the hardware stereo width (0.96, coherence 0.06 at 1..2 kHz) cannot come from Mod 2; the remaining candidates are the delay feedback `CHOR variation` (stereo widening pedal) and the reverb.
 
+### 2.7b Rotary ANGLE: rotor stop position (implemented, `ns4-uo53`)
+
+Manual p.53: with STOP MODE active, Shift + STOP MODE selects ANGLE from a list so the rotor and horn always stop at the same position; the default `Free` leaves the stop position to chance. Course video ORG 10:08-10:22 shows the screen `ROTOR STOP ANGLE` with `Free`, `1: Front Center`, `2: Front Left`, `4: Back Left`, `6: Back Center`.
+
+| Item | Behaviour | Fields / code |
+|---|---|---|
+| Value | `rotary_stop_angle`: `0` Free, `1..=6` = `STOP_ANGLE_LABELS`; clamped by `clamp_stop_angle` | `organ/rotor_stop.rs`, `OrganLayer::rotary_stop_angle` (mirrored to the TO ROTARY bus) |
+| Free | The rotors keep their residual rate (no pull to a fixed phase), so the rest phase depends on where they stopped. Before this change the legacy path always pulled to phase 0 | `organ/rotary.rs` |
+| Angle 1..6 | Once Stop is active and a rate is below 0.05 Hz, horn (6/s) and drum (3/s) phases ease along the shortest arc to `STOP_ANGLE_RAD[angle]`; no allocation, deterministic | `ease_phase`, test `stop_angle_parks_horn_and_rotor_at_the_picked_position_from_any_start` |
+| Firmware Leslie | The firmware Leslie path (`leslie_fw`, opt-in) does not use the angle: its rotor phase lives in the ported state | not modelled |
+| Host | `organy_stop_angle_{1,2}` (int `0..=6`, default 0, additive; `organ_extra_params.rs`) | `param-ids.snapshot` |
+| GUI | `OrganEdit::RotaryStopAngle`; popup `panel/rotor_angle.rs` opened by Shift + STOP MODE (a last row keeps the wide/narrow mic toggle, previously the Shift function) | inventory `rotary.stop_angle` |
+
+Provenance: list text `VERIFIED` for the five entries seen on screen; entries 3 (Front Right) and 5 (Back Right) `ASSUMED`; the rest phases (0, +-60, +-120, 180 degrees) are `ASSUMED` and the horn and drum share one phase (no recording of the hardware at each angle).
+
+### 2.8 Variations, PED, TO ROTARY, GLOBAL and GROUP (implemented, `ns4-e3zs`)
+
+Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant below is ASSUMED (no firmware or recording source).
+
+| Item | Behaviour | Fields / code |
+|---|---|---|
+| Mod 1 VARIATION | Tremolo: square-like wave `tanh(6 x)/tanh(6)`; A-Pan: harder pan `tanh(3 x)/tanh(3)`; Ring mod: right carrier 90 degrees ahead (stereo) | `mod1_variation`, `fx/modulation.rs` |
+| Mod 1 PED (Wah) | Filter position = `mod1_ped_pos` (0..1) instead of the LFO | `mod1_ped`, `mod1_ped_pos` |
+| Mod 2 VARIATION | Flanger and Vibe: one shared LFO (mono); Chorus: 7 ms base, 6.5 ms depth, 0.6 wet; Phaser (Bi-Phase): feedback 0.6 instead of 0.35, zero at minimum amount | `mod2_variation` |
+| Appended Mod types | `Mod1Type::AutoWah`, `Mod1Type::Pump`, `Mod2Type::Spin`, `Mod2Type::Ensemble` are appended after the existing variants (host indices stable); see 2.1 / 2.2. Provenance: every constant is ASSUMED or EMPIRICAL (generic envelope-filter, side-chain pump and rotary-speaker practice: Wikipedia "Envelope follower", "Auto-Wah", "Dynamic range compression", "Leslie speaker", "String ensemble"); the firmware DSP of these types is not decoded. Not yet wired from `.ns4p` presets (the Fx1/Fx2 type map in `cbin/fx_preset.rs` is unchanged) | `mod1_dynamic.rs`, `mod2_spin.rs` |
+| Mod 1 Master Clock | `mod1_sync_beats: Option<f32>` replaces the Rate of A-Pan / Trem / Wah / Pump by `bpm / 60 / beats` Hz (the `bpm` passed to `process_frame_with_bpm`); default `None`; exposed to hosts as `fxz_mod1_beats_*` (same 17 fractions as the delay) | `fx/modulation.rs`, `fx_variation_params.rs` |
+| Reverb VARIATION | `reverb_variation` (default off, bit-identical): Spring feedback gain 0.77 to 0.86 (about 1.7 times the decay, manual p.52 "longer"; ASSUMED), Booth and Room 35 ms pre-delay on the reverb input only (manual p.52-53 "longer pre-delay"; ASSUMED). Stage, Hall and Cathedral keep CHORALE (`ReverbColor::Chorale`). Exposed to hosts as `fxz_rev_var_*`; carried by GROUP / GLOBAL copies and `FxParams` | `fx/reverb_variation.rs` |
+| TO ROTARY | A Piano / Synth layer (index 2..6) with `AmpCabinet::ToRotary` bypasses the master mix: its post-fader mono sum feeds one shared rotary instance (`rotary_bus`) whose speed, drive, mic and stop settings mirror `organ_a`. Organ layers keep their built-in rotary | `engine/mod.rs`, `OrganLayer::mirror_rotary_settings`, `process_external_rotary` |
+| GROUP | `FxSharing::piano_group` / `synth_group` (source layer): `copy_all_settings_from` copies every user setting to the other layers of the section (DSP state stays per layer) | `engine/sharing.rs`, `fx/sharing.rs` |
+| GLOBAL Delay / Compressor | `FxSharing::delay_global` / `comp_global`: the source layer's settings are copied to all layers, each keeps its own instance | same |
+| GLOBAL Reverb | `FxSharing::reverb_global`: every layer's reverb is bypassed (`bypass_reverb`) and one shared reverb (`global_reverb`, settings of the source layer) runs on the summed mix after the rotary and the level faders, before the master bus | `render_frame` |
+| Master Clock division | `delay_sync_beats` (17 hardware fractions) is exposed to hosts | `fxy_delay_beats_*` |
+| Reverb BRIGHT / DARK / CHORALE | already present as `ReverbColor` (`fxsel_rev_color`) | |
+
+`Stage4Engine::apply_fx_sharing` runs at the start of `process_block` (field copies only). Callers that drive `render_frame` directly call it after changing settings. All modes default off, so default rendering is bit-identical (existing golden tests unchanged). Limitation: the TO ROTARY bus keeps its own rotor phase, independent of the organ's rotor.
+
+### 2.9 Standalone panel: Layer Effects bay (`ns4-hcuh`, B8f)
+
+`crates/nord-gui/src/panel/bay_effects/` draws all 51 inventory ids of the Effects section at their `nord_panel::layout` rectangles and edits the focused FX slot through `AudioCommand::Fx(FxEdit)` (`audio/edits/fx.rs`; allocation-free `apply`, every value clamped).
+
+| Item | Behaviour |
+|---|---|
+| FX slots | `0` Organ (engine chains 0 **and** 1: one shared chain, manual p.19), `1`/`2` Piano A/B (chains 2/3), `3`/`4`/`5` Synth A/B/C (chains 4/5/6). `Stage4PanelState::fx_focus` keeps its meaning (`0` Organ, `1` Piano, `2..=4` Synth A/B/C); `FxUi::piano_b` is the Piano layer |
+| FX FOCUS | ORGAN / PIANO / SYNTH buttons; pressing the focused Piano or Synth button again steps to its next Layer. LEDs: one per Layer (Organ, Piano A/B, Synth A/B/C); GROUP lights the whole Section |
+| ON buttons | The engine has no ON switch per unit: Mod 1 / Mod 2 send type `Off`, Amp sends cabinet `Off` with zero drive and EQ, Reverb sends model `Off`; LAYER EFFECTS ON gates all of them. TO ROTARY is a routing and survives Amp OFF |
+| Shift / hold | A button with a shifted function treats Shift (keyboard) + click, or a press held for 500 ms (`nord_panel::behaviour::HOLD_MS`), as the shifted press (VARIATION / PED, GLOBAL, GROUP, PING PONG, ANALOG). Shift + turn of TEMPO enters MST CLK (17 divisions, `DELAY_SYNC_BEATS`), Shift + turn of COMP AMOUNT sets FAST |
+| GROUP / GLOBAL | `FxUi` keeps the source slot of each mode and sends `FxEdit::Sharing`. Editing another Layer while a mode covers it re-points the source to that Layer, otherwise the engine copy would undo the edit |
+| Mod 1 PED | Wah and Pump: Shift + selector toggles PED and the RATE knob becomes the static pedal position (`mod1_ped_pos`; Wah filter position, Pump ducks once each time it rises through 0.5). A-WAH keeps VARIATION on the Shift function and its RATE knob is SENS; the other types have VARIATION |
+| Mod 1 MST CLK | `mod1.mst_clk` (Shift + turn RATE, manual p.50): A-PAN, TREM, WAH and PUMP follow the Master Clock with the delay's 17 divisions (`mod1_sync_beats`); dimmed for RM and A-WAH, which the engine does not clock |
+| Filter RES | UI `0..1`, sent as `0..10` (`eq_filter_res`, engine range). The plugin parameter `fxx_filter_res_*` is `0..1` and is written unscaled, so it only reaches the lowest tenth of the range (plugin follow-up, not changed here) |
+| Selector LEDs | Every LED of both selectors has an engine type: A-WAH, PUMP, ENS and SPIN are `Mod1Type::AutoWah`, `Pump`, `Mod2Type::Ensemble`, `Spin`. The panel keeps the printed LED order (A-PAN, TREM, RM, A-WAH, WAH, PUMP; PHAS, FLANG, CHOR, VIBE, ENS, SPIN) and maps LED to type by name, because the engine and host enums append the later types and so differ in order. Their DSP is ASSUMED (`mod1_dynamic.rs`, `mod2_spin.rs`) |
+| Still dimmed | TO ROTARY on the Organ slot (inert), Mod 1 MST CLK on RM and A-WAH (the Amp VARIATION is no longer dimmed: it has its own voicing, section 2.3) |
+| UI-only | Per-unit ON state, LAYER EFFECTS ON, focus, GROUP / GLOBAL sources and tap tempo live in `FxUi`; after a program load the legacy `mod1_type`, `delay_on`, `reverb_model` and knob fields are adopted into the focused chain (`StateEcho`), the other five slots keep their last panel view |
+
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
 After summing all 7 active layers:
@@ -143,6 +200,87 @@ pass then low pass, cases 6..9 none. Pole radii are inside the unit circle (unit
 (default `false`) replaces the RBJ cabinet by the case-5 sets for `Small Speaker` (non-variation) only; this mapping
 is `ASSUMED` (shape fit: -33 dB at 50 Hz, -39 dB at 20 kHz, +4.4 dB at 1 kHz, 48 kHz). The order of cases 0..3 against
 `Twin`/`JC` is not decoded, so they stay unmapped and the default path is unchanged.
+
+### 4.0a Firmware compressor gain computer (opt-in)
+
+Code: `fx/fw_compressor.rs` (`FwCompressor`, context offsets in `fw_compressor_ctx`), `fx/fw_stage.rs`,
+`MasterBus::set_fw_compressor`, golden vector `fx/tests_compressor_golden.rs`. Reference model and equations:
+[fx-type-map](../research/fx-type-map.md) s7 (`tools/fx_routine_models.py`).
+
+| Item | Rust | Status |
+|---|---|---|
+| Algorithm | block of 4 stereo frames: linked peak, release-smoothed level, `log2 = e + frac` estimate, threshold, attack/release excess smoother, linked reduction, `FIX` and a float-bit-pattern interpolation `T0 - T0 t + T1 t` (fractional `SSF` products), makeup smoother | VERIFIED: model equals the oracle on 2,100 random scenarios and a 6-block golden scenario, 0 differing words |
+| Precision | f32 (the DSP uses 40-bit registers and truncating stores) | worst relative output error 2.1e-7 against the golden vector (test bound 1e-6) |
+| Context layout | 26 words, offsets from `I1` (`-0x20 .. -0x07`); loads through `I1` are broadcast to both elements, the left threshold word overlaps the right makeup word | VERIFIED (oracle) |
+| Parameter values | `FwCompressor::new()`: unity makeup, threshold far above any level (no reduction), `k = 0.9908`, `T0 = 1.0`, `T1 = 0.5` | ASSUMED; the ARM words behind `kCmpAmt` (0..127, default 95) and `kCmpResponse` are not decoded |
+| Bus position and latency | replaces the peak-envelope compressor when set; 4 frames of latency (block collection) | ASSUMED position; default off, `render_hash` unchanged (`cb8d83b7...`) |
+
+### 4.0b Firmware routine ports: delay, amp drive, all-pass, tone stack (opt-in)
+
+Code: `fx/fw_delay.rs` (`FwDelay`, `DelayIo`), `fx/fw_amp_drive.rs` (`FwAmpDrive`, `DriveTables`), `fx/fw_allpass.rs`
+(`FwAllpass`), `fx/fw_tone_stack.rs` (`FwToneStack2`, `FwToneStack4`), shared `fx/fw_words.rs` and
+`fx/fw_short_float.rs`; golden vectors `fx/tests_{delay,lfo,allpass,resonant}_golden.rs` (the file names keep the model names). Role correction ([fx-contexts](../research/fx-contexts.md) s5.2, s5.3): `0x1228CF` is the Amp **drive** stage (`FwAmpDrive`, phase word = `kAmpDrive / 127`) and `0x1243F4` / `0x124497` the Amp **tone stack** (`FwToneStack2/4`). Equations, field tables and
+the verification record: [fx-routine-models](../research/fx-routine-models.md).
+
+| Item | Rust | Status |
+|---|---|---|
+| Algorithms | the five FX routines `0x1206B0`, `0x1228CF`, `0x122C39`, `0x1243F4`, `0x124497` as straight-line f32 code over the firmware's context words | VERIFIED: models equal the oracle on 2,200 to 4,600 random scenarios each and register for register on the trace |
+| Precision | f32 (the DSP uses 40-bit registers and truncating stores) | worst relative error against the golden vectors 3e-6 (resonant), 3e-6 (all-pass), 1.5e-5 (LFO), below 1e-6 (delay), packed delay words exact |
+| Wiring | exported types; the delay mix law and the compressor are wired through `FirmwareFx` (s4.0c), the rest only have parameter fills (`fw_params`) | default `render_hash` unchanged |
+| Parameter values | none shipped (`Default` is an all-zero context) | ASSUMED roles of the words (EMPIRICAL where an equation shows the role) |
+
+Module map of the FX library (which module owns which routine pcs, 28 ARM descriptor lists for all 100 code
+records) and the finding that the Amp unit's type values are coefficient data and a mode word, not routine
+pointers, are in [fx-type-map](../research/fx-type-map.md). Parity to-do list: (1) map `Edt_Effects_kFx1Type`,
+`kFx2Type`, `kRvbType`, `kDlyFbFxType` to their handlers (blocked on the part constructor chain), (2) reference
+models and ports for the delay `0x1206B0`, table LFO `0x1228CF`, phaser `0x12379B` / all-pass `0x122C39` and
+the resonant filter `0x1243F4`, (3) the 16-bit packed-float delay memory with the `0.9908` smoother once the delay
+routine is modelled, (4) legacy Amp types: the 12-way handler `0xC020506C` sends a 130-word FIR and up to 12
+biquad sets per type (`fx-type-map` s4).
+
+### 4.0c Firmware parameter maps and the `FirmwareFx` switch (opt-in)
+
+Code: `fx/fw_map.rs` (closed forms, `pub mod fw_map`), `fx/fw_delay_time.rs` + `fx/fw_delay_table.rs` (delay time law, `pub mod fw_delay_time`), `fx/fw_params.rs` (fills of the stage contexts), `fx/firmware_fx.rs`
+(`FirmwareFx`, `LayerFxChain::firmware_fx`), `fx/master.rs` (`MasterBus::use_fw_compressor_amount`). Source:
+[fx-contexts](../research/fx-contexts.md) s5 and s8, `tools/fx_forms.py`. Tests: `fx/tests_fw_map.rs` against the captured series words in
+`fx/tests_fw_series.rs` (copied from `docs/research/data/fx-param-fits.csv`, error below 1e-5 of the series range), `fx/tests_firmware_fx.rs`.
+
+The type value selects a module and data picks the variant (two types per module, `fx-type-modules.csv`); the Rust enums keep one
+parameter set per engine mode. The engine's `0..=1` fields are the presets' `raw7 / 127` (`cbin/fx_preset.rs`), so the firmware UI value is
+`v = 127 x` (`fw_map::unit_to_ui`, scale equality `ASSUMED` for the layer fields); EQ dB maps to counts with `EQ_GAIN_DB_PER_COUNT`.
+
+| Id | Context word | Form (v = UI value) | Wired | Tags |
+|---|---|---|---|---|
+| `kDlyMix` | send `c[-0x1B]`, dry `c[4]` | `min(1,(v/64)^2)`, `min(1,(2-v/64)^2)` | layer delay when `FirmwareFx::delay_laws` | words VERIFIED (11 values), roles EMPIRICAL |
+| `kDlyFbkAmt` | `c[-0x1A]`, `c[-0x19]` | `v/127` (= the engine scale; the engine keeps its 0.95 clamp) | identity, no change | VERIFIED words |
+| `kDlyRateClkDiv` (14 bit) | tap `c[0x15]`, old tap `c[0x16]`, cross-fade step `c[0x19]` | `c[0x15] = min(61438, floor(43.402339 k))`, `k` = fractional index in the 1501-entry list `fw_delay_table.rs`; first echo `trunc(c[0x15]) + 2` samples (18.1 ms to 1.280 s) | free-running delay when `FirmwareFx::delay_time` and `LayerFxChain::delay_rate_raw` is set; tempo sync and the 45 ms tap cross-fade stay the engine's | words VERIFIED (264 values), DSP echo law VERIFIED (oracle), constant `K` interval only, `c[0x14]` mode and ring length ASSUMED ([fx-delay-time](../research/fx-delay-time.md)) |
+| `kCmpAmt` | threshold `c[-0x1B]`, makeup target `c[-0x1C]` | `-36 v/127`, `1 + 5.72 (v/127)^2` | layer (`FirmwareFx::compressor`) and master (`use_fw_compressor_amount`) | words VERIFIED, roles EMPIRICAL |
+| attack / release pairs | `c[-0x20..-0x1D]` | `(0.102071, 1.0)`, `(4.607e-4, 0.04)` for every value | with `kCmpAmt` | VERIFIED words |
+| compressor slope, log gain | slope `c[-0x17]`, `c[-0x0B]` | `0.05` (`CMP_SLOPE`), `1.0` | with `kCmpAmt` | ASSUMED (base words of the Cmp type switch not captured) |
+| `kCmpResponse` | none | the handler ignores the value (same four constants, 4 states tried) | no (engine `comp_fast` keeps its legacy meaning) | closed: no DSP effect ([fx-reverb-leslie](../research/fx-reverb-leslie.md) s4) |
+| `kRvbAmt` | send `0xC02BB44C` word `-0x1F`, dry word `-0x1E` | `x^2 (2 - x)` with `x = v/128` (1 at 127), `sqrt(1 - wet^2)` | reverb dry and send when `FirmwareFx::reverb_mix`; the reverb network itself stays the engine FDN | words VERIFIED (all 128 values), role EMPIRICAL |
+| Reverb types 0, 1 routines | module `0xC02BB54C` | `0x12417E` / `0x12435C`: fs/4 Butterworth bank, hold, second bank, `out = in c[0x15] + wet` around the core `0x123F61` | `FwReverb` = `FwRvbWrap` + the generated core (`fw_rvb_core.rs`, `fw_rvb_steps.rs`), `FirmwareFx::reverb`, Spring (type 0, variation type 1) only, latency 4 frames, other types the engine FDN | wrapper and core VERIFIED word for word against the oracle (`tests_fw_rvb_golden.rs`: impulse and noise, types 0 and 1, 3000 calls each, 40-bit path; the `f32` path is 95 to 120 dB below the signal); real-instance data in the image and oracle responses ([fx-reverb-leslie](../research/fx-reverb-leslie.md) s5, s6, s8) |
+| `kAmpDrive`, `kAmpTypeNew` 1..6 | `c[-0x20]` of `FwAmpDrive` (`v/127`); type words `c[-0xD..-0xB]`, sections `c[7..0xB]`, `c[0x10..0x14]` (`fx/fw_amp_types.rs`, `docs/research/data/fx-amp-types.csv`) | `v/127`; type = amp mode (1 Twin, 2 Twin II, 3 JC, 4 JC II, 5 Small, 6 Small II) | layer amp when `FirmwareFx::amp` (`fx/fw_amp_stage.rs`, tables `fx/fw_drive_tables.rs`): replaces the engine `tanh` drive and RBJ cabinet for those six modes, 4 frame latency; the firmware cabinet FIR and the organ tone routines are not modelled, so the engine EQ and compressor still follow. Vox with the stage alone: mid +8.0 to -2.5 dB but presence -4.9 to -9.6 dB and RMS +11.4 dB, so it stays opt-in ([fx-type-map](../research/fx-type-map.md) s8) | words, tables and algorithm VERIFIED against the oracle (`tests_amp_golden.rs`, worst 1.4e-6 and 1.7e-4 of the peak); cabinet and level staging open |
+| `kAmpTreble`, `kAmpBass` | `F c[-0x1B]`, `E c[-0x1C]`, `A c[-0x20]`, `a c[-0x14]` | 13-point tables, linear in the word between points | fill only (`set_tone_stack`): the other tone-stack words come from the Amp type switch | words VERIFIED at the 13 counts, interpolation and unit tables (piano) EMPIRICAL |
+| `kAmpMid`, `kAmpMidFreq` | `C D B` and `0xC044398C` words | not mapped | no | open |
+| `kFx1RateClkDiv`, `kFx1Amt` (types 0, 1 A-PAN) | `c[-0x20]`, depth `c[-0x18]`, bound `c[-0x17]`, offset `c[-0x16]` of `FwAutoPan` (`0x122D93`) | `12800 + 16384 v`; soft `v/508`, bound 1; hard `v/127`, bound `v/127`; `1 - v/254` | `FirmwareFx::mod1` (`fx/fw_mod1.rs`), free running only | routine VERIFIED (oracle, 1000 scenarios + trace), words VERIFIED, [fx-mod-types](../research/fx-mod-types.md) |
+| `kFx1RateClkDiv`, `kFx1Amt` (types 2, 3 TREM) | `c[-0x20]`, `A_L` `c[-0x1A]`, `A_R` `c[-0x19]`, clip `c[-0x16]` of `FwAllpass` at mix 0 | `12800 + 16384 v`; soft `v/254`, clip 0.5; hard `8v/254`, clip `v/254`; `1 - v/254` | `FirmwareFx::mod1` (same stage); `set_allpass` keeps the old fill | routine VERIFIED, words VERIFIED, role EMPIRICAL |
+
+`FirmwareFx` is `Default` = `FirmwareFx::DEFAULT` (only `amp` on; every other switch off, `render_hash` unchanged by them, below). `delay_time` replaces the engine's `delay_time_ms` by `echo_samples_at(v, fs)` (`fx/delay.rs`, `target_delay_samples`) in the free-running delay when the program's raw 14 bit value is present (`engine/program_fx.rs` sets `delay_rate_raw`); it falls back to the engine time in tempo sync. Tests `fx/tests_fw_delay_time.rs` (first echo at sample 870 and 46500, fallbacks), `fx/fw_delay_time.rs` (34 captured words, plateaus, monotone), `tools/tests/test_fx_delay_time.py` (264 words, table fingerprint, oracle arguments). The engine's `DELAY_TIME_MS` table (`1500 ms .. 20 ms`, 128 steps) disagrees with the firmware law and stays the default. **Latency:** the firmware compressor works on blocks of 4 stereo frames, so
+the layer or master path gains 4 frames (83 us at 48 kHz) while it is on; the layer stage keeps running with amount 0 (unity) when
+`comp_enabled` is false so the latency does not depend on the compressor switch. Measured (687 Hz sine, 0.5 peak, RMS of the second half-second): amount 0 gives
+the unity RMS 0.3536, amount 0.5 gives 0.677 (+5.6 dB), amount 1.0 gives 1.337 (+11.6 dB): the makeup `1 + 5.72 u^2` dominates, because the
+slope and log gain are `ASSUMED`. There is no hardware recording to compare against, so the end-to-end comparison does **not** support turning
+`FirmwareFx` on by default.
+
+`FirmwareFx::reverb` (opt-in, `ns4 render-patch --firmware-reverb`, also in `--firmware-fx`) runs the firmware reverb of `kRvbType` 0 and 1 for `ReverbModel::Spring` (the variation flag `LayerFxChain::reverb_variation` picks type 1; `engine/program_fx.rs` sets it from the program): `FwReverb` = the half-rate wrapper `0x12417E` (`fw_rvb_wrap.rs`, generic over `Fp`) around the core `0x123F61` generated from the instruction model (`tools/fx_rvbcore_gen.py` to `fx/fw_rvb_steps.rs`, machine and memory in `fx/fw_rvb_core.rs`, 40-bit arithmetic `fx/fw_ext40.rs`). The routine mixes dry and wet itself from the `kRvbAmt` words (`fw_map::reverb_send` / `reverb_dry` into `c[0x12]`, `c[0x13]`), so `reverb_mix` is not applied on top; latency is 4 frames; no allocation in the audio path after the first use (the instance, 15 k words, is built on first use like `fw_amp`). Types 2..11 and the other models keep the engine FDN. Golden: `fx/tests_fw_rvb_golden.rs` (oracle output, impulse and noise, types 0, 1, 3000 calls, every word equal on the 40-bit path), `fx/tests_fw_reverb_chain.rs`, `render_opts` flag test. Default off: the video comparison (`fx_reverb`, `organ_b3`, `fx_amp` segments of `tools/emu_vs_hw.py`) shows a 0.75 dB closer spectrum at amount 0.62, neutral at 0.2, a narrower stereo image, and no measurable hardware decay ([fx-reverb-leslie](../research/fx-reverb-leslie.md) s10).
+
+`FirmwareFx::mod1` (opt-in, also in `ALL` / `--firmware-fx`) runs the Mod 1 types A-PAN (`kFx1Type` 0, 1) and TREM (2, 3) through the firmware routines with the instance words of the FX image and the `kFx1Amt` / `kFx1RateClkDiv` laws (`fx/fw_mod1.rs`, `fx/fw_autopan.rs`, [fx-mod-types](../research/fx-mod-types.md)). The LFO runs at the firmware frame rate (4 frames per call, `0.032 .. 5.3 Hz` against the engine's `0.1 .. 15 Hz`), the stage adds **4 frames of latency** and keeps the engine path for types 4..11, Master Clock sync and programs without raw values (`LayerFxChain::mod1_type_raw`, `mod1_rate_raw`). Tests: `fx/tests_fw_mod1_chain.rs`, `fx/fw_mod1.rs`, `fx/fw_autopan.rs` (oracle golden `tests_apan_golden.rs`). Default off (D22, D26): the hardware rate law has no recording behind it.
+
+`FirmwareFx::amp` (s4.0c table above) swaps the amp drive and cabinet for the firmware drive stage in the Twin, JC and Small families. Tests: `fx/tests_fw_amp_chain.rs` (off is bit identical, on differs and is finite with a 4 frame latency, Off / To Rotary / LP24 / HP24 keep the engine path, type changes rebuild the stage), `fx/fw_amp_stage.rs` (oracle golden for Twin at `kAmpDrive` 14 and JC at 100), `fx/fw_amp_types.rs`, `fx/fw_drive_tables.rs`. `FirmwareFx::amp` is **on by default** since the cabinet is modelled (`fx/fw_cabinet.rs`, measured impulse response of `0x122A1D`, oracle chain golden `fx/tests_cabinet_golden.rs`, Vox score 3.98 to 1.30, RMS +0.5 dB; [fx-type-map](../research/fx-type-map.md) s10, s11; `render_hash` now `c7f06ca7ff6f8663be3bf2af772c6d6854f23593808ff3382d1895cf5f5ddbd5`, D22); `render-patch --amp-path engine` or `FirmwareFx::OFF` restore the engine amp. The Leslie drive has no firmware counterpart to wire (`v/127` into a null-stub row, [fx-type-map](../research/fx-type-map.md) s9); the engine rotary keeps `tanh((1 + 3 drive) x)` by default; `--rotary-drive unity` (`OrganLayer::rotary_drive_unity`) selects `tanh(g x) / g` (s11).
+
+Stability tests (`tests_firmware_fx.rs`, `master.rs`): silence in gives exact silence out, loud (1.5) and quiet (1e-3) alternating input
+stays finite, bounded by the makeup and free of denormals, for amounts 0, 0.3, 1.
 
 ### 4.1 EQ gain per count
 

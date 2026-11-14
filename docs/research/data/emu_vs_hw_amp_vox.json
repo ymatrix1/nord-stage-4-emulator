@@ -1,0 +1,44 @@
+{
+  "video": "_zksT69H30c",
+  "note": "Vox segment with the firmware Amp drive stage (FirmwareFx::amp, docs/research/fx-type-map.md s8): vox = engine amp, vox_noamp = amp off, vox_fwamp = --firmware-fx (amp drive stage + the other opt-in laws).",
+  "segments": [
+    {
+      "id": "organ_vox",
+      "entry": "Program/Bank A/Vintage Vox J3.ns4p",
+      "engine": "organ Vox (drawbars 888422034, Twin amp 289 drive 1.1, bass -3 dB, delay ping-pong, reverb 0.24, mod2 type 6)",
+      "at_s": 2360,
+      "duration_s": 11,
+      "variants": [
+        {
+          "label": "default",
+          "flags": []
+        },
+        {
+          "label": "vox",
+          "flags": [
+            "--tone-source",
+            "vox"
+          ]
+        },
+        {
+          "label": "vox_noamp",
+          "flags": [
+            "--tone-source",
+            "vox"
+          ],
+          "edits": {
+            "organ.fx.amp_enabled": false
+          }
+        },
+        {
+          "label": "vox_fwamp",
+          "flags": [
+            "--tone-source",
+            "vox",
+            "--firmware-fx"
+          ]
+        }
+      ]
+    }
+  ]
+}

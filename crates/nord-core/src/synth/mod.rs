@@ -17,17 +17,92 @@ pub use crate::synth_wavetable::NUM_WAVETABLES;
 use crate::synth_wavetable::{sample_wavetable, wavetable_bank};
 
 mod arp;
+mod arp_order;
 mod dsp;
+mod fw_adr_chain;
+mod fw_env_rates;
+mod fw_filter;
+mod fw_filter_table_d;
+mod fw_filter_tables;
+mod fw_shape;
+mod fw_sine_hp;
+mod fw_sine_warps;
+mod fw_stages;
+mod fw_strip_cutoff;
+mod gain_dezip;
+mod hw_saw;
+mod key_velocity;
+mod measured;
+mod p_block;
+mod p_table;
+mod pattern;
+mod perf;
 mod render;
+mod render_va;
 mod sample_osc;
+mod sound_init;
+mod strip_map;
+mod strip_path;
+pub use arp_order::{extra_notes, zigzag_index, MAX_RANGE_EXTRA_THIRDS};
 use dsp::unison_pan;
 pub use dsp::{poly_blep, ZdfFilter, FM_RATIOS};
+pub use fw_adr_chain::{fw_adr_step, FwAdrAction, FwAdrRecord, FW_ADR_LIMIT};
+pub use fw_env_rates::{
+    attack_coeff, attack_time_passes, decay_release_coeff, rate_index_from_word, RATE_INDEX_MAX,
+};
+pub use fw_filter::{
+    cutoff_to_r, FilterEngine, FwCoefs, FwFilter, FwFilterType, TablePos, FW_CLIP_LIMIT,
+    FW_CUTOFF_MAX_FRACTION, FW_CUTOFF_MIN_HZ,
+};
+pub use fw_shape::{fw_shape_wave, fw_shape_width};
+pub use fw_stages::{noise_sample, noise_step, saw_diff, spread_u, FwStage, FwStageState};
+pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
+pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
+pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
+pub use key_velocity::{
+    key_velocity_g, key_velocity_g_fit, key_velocity_gain, KEY_CURVE_SATURATION, KEY_VELOCITY_G,
+};
+pub use measured::{
+    supersaw_outer_cents, supersaw_voice_ratio, ENV_DECAY_TAU_FRACTION_MEASURED,
+    FILTER_ENV_OCTAVES_MEASURED, OSC_ENV_PITCH_OCTAVES_MEASURED, SUPERSAW_OUTER_CENTS,
+    SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
+};
+pub use p_block::{PBlock, PSpec};
+pub use p_table::{PTable, PTableSpec, PWave, PWAVE_COUNT};
+pub use pattern::{pan_gains, CustomPattern, PatternPan, ACCENT_VELOCITY_BOOST, PATTERN_MAX_STEPS};
+pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
+use strip_map::strip_cutoff_hz;
+pub use strip_map::{
+    attack_index, attack_seconds, cutoff_hz_from_word, decay_index, decay_seconds,
+    strip_word_for_cutoff, STRIP_PASS_FRAMES,
+};
+pub use strip_path::{StripEnvRecords, StripParams, StripVoice, SynthChain};
 pub use voice::SynthVoice;
 #[cfg(test)]
 mod tests_envelope;
 #[cfg(test)]
+mod tests_fw_filter_golden;
+#[cfg(test)]
+mod tests_fw_shape_golden;
+#[cfg(test)]
+mod tests_fw_stage_golden;
+#[cfg(test)]
+mod tests_fw_stage_golden2;
+#[cfg(test)]
+mod tests_fw_stage_golden3;
+#[cfg(test)]
+mod tests_fw_stage_golden4;
+#[cfg(test)]
+mod tests_hw_saw_golden;
+#[cfg(test)]
 mod tests_osc_lfo;
+#[cfg(test)]
+mod tests_pattern_edit;
+#[cfg(test)]
+mod tests_perf;
+#[cfg(test)]
+mod tests_strip;
 mod voice;
 mod voice_alloc;
 
@@ -97,7 +172,11 @@ const SUPERSAW_DETUNES: [f32; 7] = [
 ];
 
 /// Initial phase offsets for the 7 SuperSaw oscillators to prevent constructive crests.
-const SUPERSAW_PHASE_INITS: [f32; 7] = [0.0, 0.24, 0.46, 0.68, 0.82, 0.15, 0.57];
+/// The 16 voices of the measured Super Saw (`measured_laws`) continue the sequence; the first
+/// seven are the legacy values so the default render does not change.
+const SUPERSAW_PHASE_INITS: [f32; SUPERSAW_VOICES] = [
+    0.0, 0.24, 0.46, 0.68, 0.82, 0.15, 0.57, 0.33, 0.91, 0.07, 0.62, 0.39, 0.76, 0.21, 0.52, 0.88,
+];
 
 /// Single 16-Voice Polyphonic Synth Layer (`Synth A`, `Synth B`, or `Synth C`) with LFO and Arpeggiator.
 #[derive(Debug, Clone)]
@@ -105,6 +184,36 @@ pub struct SynthLayer {
     pub sample_rate: f32,
     pub osc_mode: SynthOscMode,
     pub waveform: VaWaveform,
+    /// Saw shape of `Saw` / `SuperSaw` (default `Classic`; `Firmware` is the `0x12501F` model).
+    pub saw_model: SawModel,
+    /// Smooth the voice gain like the SY DSP (default off, see `gain_dezip.rs`).
+    pub gain_dezipper: bool,
+    /// The decoded oscillator is in the ANALOG SHAPE category (`osc_category == 3`); only the
+    /// strip chain reads it (`render.rs`).
+    pub osc_shape_category: bool,
+    /// Per-voice signal chain (default `Legacy`; `FirmwareStrip` is `strip_path.rs`).
+    pub chain: SynthChain,
+    /// Strip chain only: voice level from the key-down velocity series `g(vel) / 127` instead of the
+    /// linear velocity (`key_velocity.rs`, default on; no effect on the legacy chain).
+    pub strip_key_velocity: bool,
+    /// Strip chain only: the ANALOG SHAPE category plays as the firmware stage `0x1212D3` with this
+    /// shape word (`fw_shape.rs`; the idle frame holds 0.5, the knob scale is open); `None` keeps
+    /// the ASSUMED saw placeholder.
+    pub strip_shape: Option<f32>,
+    /// Strip chain only (opt-in): empirical oscillator-stage parameter block (`p_block.rs`).
+    pub p_block: Option<PBlock>,
+    /// Strip chain only (opt-in): the per-wave P table (`p_table.rs`); overrides `p_block` and also
+    /// scales the oscillators that have no stage block of their own.
+    pub p_table: Option<PTable>,
+    /// Row of the table the decoded oscillator plays through (set from `(category, wave)`).
+    pub p_wave: PWave,
+    /// ANALOG category / wave of the decoded oscillator as a modelled firmware stage (`fw_stages.rs`).
+    pub strip_stage: Option<FwStage>,
+    /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
+    /// with the firmware stage models instead of the decoded legacy waveform.
+    pub strip_stages: bool,
+    strip_cache: Option<([f32; 8], StripParams)>,
+    ctrl_counter: u32,
     pub pulse_width: f32,
     pub fm_amount: f32,
     pub fm_ratio: f32,
@@ -113,10 +222,16 @@ pub struct SynthLayer {
     pub fm_sub_amount: f32,
     pub fm_env_amount: f32,
     pub supersaw_detune: f32,
+    /// Opt-in: use the laws measured on the Audible Genius lesson clips (`measured.rs`): 16-voice
+    /// Super Saw detune, filter envelope depth, decay time constant and Env To Pitch depth.
+    /// Default `false` keeps the older scales (`render_hash` unchanged).
+    pub measured_laws: bool,
     pub wavetable_index: u8,
     pub wavetable_position: f32,
     pub sample_timbre: SampleTimbre,
     pub filter_model: FilterModel,
+    /// Filter implementation (default `Zdf`; `Firmware` is the Core2 stage family of `fw_filter.rs`).
+    pub filter_engine: FilterEngine,
     pub cutoff_hz: f32,
     pub resonance: f32,
     pub filter_drive: f32,
@@ -174,6 +289,10 @@ pub struct SynthLayer {
     pub vibrato_delay_sec: f32,
     /// Controller value `0..1` for `Wheel`/`Aftertouch`/`Pedal` vibrato modes.
     pub vibrato_ctrl: f32,
+    /// Live pitch-stick offset in cents, set by the engine pedal router (`0.0` = no bend).
+    pub bend_cents: f32,
+    /// System menu Fine Tune in cents (`0.0` = concert pitch, the default).
+    pub master_tune_cents: f32,
     vib_phase: f32,
     /// Octave offset in octaves (`-3..=3`).
     /// ASSUMED: range clamp of +/-3 octaves; confirm against the panel Octave Shift range.
@@ -199,6 +318,8 @@ pub struct SynthLayer {
     held_gains: [f32; 128],
     arp_active_notes: [Option<u8>; MAX_SYNTH_VOICES],
     arp_rng: u32,
+    /// Gate, Pattern, KB Hold, KB Sync and Master Clock sync (`perf.rs`).
+    pub perf: PerfState,
 
     // Pre-decoded multisample instrument (`SAMPLES` mode)
     sample_sound: Option<Arc<SynthSampleSound>>,
@@ -210,6 +331,18 @@ pub struct SynthLayer {
 }
 
 impl SynthLayer {
+    /// A layer on the legacy engine chain: no strip chain, no stage oscillators, no P table.
+    /// `new` is the firmware default (D22); this is the A/B reference and what the legacy-path
+    /// tests build on.
+    pub fn legacy(sample_rate: f32) -> Self {
+        Self {
+            chain: SynthChain::Legacy,
+            p_table: None,
+            strip_stages: false,
+            ..Self::new(sample_rate)
+        }
+    }
+
     pub fn new(sample_rate: f32) -> Self {
         // Warm up the static mipmapped wavetable bank at construction time so render_frame never initializes it.
         let _ = wavetable_bank();
@@ -217,6 +350,19 @@ impl SynthLayer {
             sample_rate: sample_rate.max(8000.0),
             osc_mode: SynthOscMode::Analog,
             waveform: VaWaveform::Saw,
+            saw_model: SawModel::Classic,
+            gain_dezipper: false,
+            chain: SynthChain::FirmwareStrip,
+            strip_key_velocity: true,
+            strip_shape: None,
+            p_block: None,
+            p_table: Some(PTable::FITTED),
+            p_wave: PWave::Other,
+            strip_stage: None,
+            strip_stages: true,
+            osc_shape_category: false,
+            strip_cache: None,
+            ctrl_counter: 0,
             pulse_width: 0.5,
             fm_amount: 0.35,
             fm_ratio: 2.0,
@@ -225,10 +371,12 @@ impl SynthLayer {
             fm_sub_amount: 0.0,
             fm_env_amount: 0.35,
             supersaw_detune: 0.3,
+            measured_laws: false,
             wavetable_index: 0,
             wavetable_position: 0.0,
             sample_timbre: SampleTimbre::Off,
             filter_model: FilterModel::Ladder24,
+            filter_engine: FilterEngine::Zdf,
             cutoff_hz: 2400.0,
             resonance: 0.3,
             filter_drive: 0.2,
@@ -264,6 +412,8 @@ impl SynthLayer {
             vibrato_depth_cents: 0.0,
             vibrato_delay_sec: 0.0,
             vibrato_ctrl: 0.0,
+            bend_cents: 0.0,
+            master_tune_cents: 0.0,
             vib_phase: 0.0,
             octave_offset: 0,
             last_freq_hz: 0.0,
@@ -285,6 +435,7 @@ impl SynthLayer {
             held_gains: [1.0; 128],
             arp_active_notes: [None; MAX_SYNTH_VOICES],
             arp_rng: 0xA341_316C,
+            perf: PerfState::default(),
 
             sample_sound: None,
             sinc_kernels: sample_osc::shared_sinc_kernels(),

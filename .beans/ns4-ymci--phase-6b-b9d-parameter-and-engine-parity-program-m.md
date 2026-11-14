@@ -1,7 +1,7 @@
 ---
 # ns4-ymci
 title: 'Phase 6b B9d: parameter and engine parity - program, menus and Extern'
-status: todo
+status: in-progress
 type: task
 created_at: 2026-11-12T21:36:10Z
 updated_at: 2026-11-12T21:36:10Z
@@ -28,3 +28,4 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
+Part 2 (branch `feat/aux-pedals-extern`): `MidiEvent::PitchBend`; engine Aux KB (`engine/aux_kb.rs`), pedals with SUSTPED/PSTICK, half pedaling, Swell, control/rotor/foot switch (`engine/pedals.rs`), Extern output queue (`engine/extern_out.rs`); host params `ped_*` and `auxkb_*` (`aux_pedal_params.rs`). Remaining: Extern host params and plugin MIDI output port, Organ/Piano pitch bend, Echo Global To Extern, Extern device filters, Triple Pedal left/middle assignments, program/menu state (Sound/Output menu values).

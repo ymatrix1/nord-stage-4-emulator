@@ -129,7 +129,7 @@ pub fn lane_matrix(gains: [u32; 4]) -> [[f32; 2]; 2] {
 /// Exact: `[1, 0]` (lane x = lane y = copy 0). Detuned: `[0.5625, 0.5625]` (lanes
 /// `0.75 a + 0.375 b` and `0.375 a + 0.75 b`, so the detuned ensemble is 1.02 dB louder than the
 /// exact one for equal copies; the old normalised `[0.5, 0.5]` hid that). VERIFIED arithmetic
-/// ([`lane_matrix`]); the mono mean is a modelling choice, the stereo spread is not routed.
+/// ([`lane_matrix`]); the mono mean is the `Manual` link; the `Firmware` link routes both lanes (`lane_mix.rs`).
 pub fn copy_weights(detuned: bool) -> [f32; 2] {
     let g = if detuned { GAINS_DETUNED } else { GAINS_EXACT };
     let m = lane_matrix(g);
@@ -143,7 +143,7 @@ pub fn copy_weights(detuned: bool) -> [f32; 2] {
 /// level is 0.999983 of the target (float rounding of the fixed point).
 pub const SMOOTH_KEEP: f32 = 0.99;
 
-/// Advances a mix-stage state one frame towards `target` (post-update value is the one used).
+/// Advances a mix-stage state one frame (`lane_mix::LaneMixer` applies the same law per engine sample) towards `target` (post-update value is the one used).
 pub fn smooth(state: f32, target: f32) -> f32 {
     (1.0 - SMOOTH_KEEP) * target + SMOOTH_KEEP * state
 }

@@ -118,6 +118,8 @@ impl Stage4Engine {
         // Organ (Layers A & B + shared Organ FX)
         self.organ_a.model = prog.organ.model;
         self.organ_b.model = prog.organ.model_b;
+        self.organ_a.b3_bass_mode = prog.organ.b3_bass_a;
+        self.organ_b.b3_bass_mode = prog.organ.b3_bass_b;
         self.organ_a.drawbars = prog.organ.drawbars_a;
         self.organ_b.drawbars = prog.organ.drawbars_b;
         self.organ_a.octave_shift = prog.organ.layer_a_octave.clamp(-2, 2);
@@ -133,7 +135,9 @@ impl Stage4Engine {
             organ.scanner_mode = prog.organ.scanner_mode(vib_on);
             organ.rotary_enabled = prog.organ.rotary_enabled;
             organ.rotary_speed = prog.organ.rotary_speed;
-            organ.rotary_drive = prog.organ.rotary_drive;
+            // preset unit 0..10 (`(v / 127) * 10`) to the engine unit 0..1 = the firmware `v / 127`
+            // (VERIFIED, docs/research/fx-type-map.md section 9); `rotary.rs` takes the fraction.
+            organ.rotary_drive = (prog.organ.rotary_drive / 10.0).clamp(0.0, 1.0);
         }
 
         // Piano (Layers A & B)
@@ -238,6 +242,8 @@ impl Stage4Engine {
             slot.delta_aftertouch = morph.aftertouch;
             slot.delta_pedal = morph.ctrl_pedal;
         }
+
+        self.record_program_routing(prog);
     }
 }
 
@@ -249,5 +255,27 @@ mod tests {
     fn loading_garbage_piano_bank_is_rejected() {
         let mut e = Stage4Engine::new(48_000.0);
         assert!(e.load_piano_npno_bytes(false, b"not an npno").is_err());
+    }
+
+    #[test]
+    fn rotary_drive_enters_the_engine_as_the_firmware_fraction() {
+        // the preset stores (v / 127) * 10; the firmware drive is v / 127 and `rotary.rs` takes it
+        let mut prog = crate::cbin::ProgramDecoded::default();
+        prog.organ.rotary_drive = 2.44;
+        let mut e = Stage4Engine::new(48_000.0);
+        e.apply_program(&prog);
+        assert!((e.organ_a.rotary_drive - 0.244).abs() < 1e-6);
+        assert!((e.organ_b.rotary_drive - 0.244).abs() < 1e-6);
+        prog.organ.rotary_drive = 12.0;
+        e.apply_program(&prog);
+        assert_eq!(e.organ_a.rotary_drive, 1.0, "clamped to the engine range");
+        prog.organ.rotary_drive = 7.5;
+        e.apply_program(&prog);
+        let out = e.export_program(&crate::cbin::ProgramDecoded::default());
+        assert!(
+            (out.organ.rotary_drive - 7.5).abs() < 1e-5,
+            "{}",
+            out.organ.rotary_drive
+        );
     }
 }

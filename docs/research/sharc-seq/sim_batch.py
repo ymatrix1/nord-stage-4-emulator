@@ -10,6 +10,7 @@ per case, the dumped state (`_res`, N words) followed by the scratch table (512 
 import argparse
 import os
 import struct
+import threading
 import sys
 import time
 
@@ -36,6 +37,8 @@ def read_cases(path):
         t = parts[0].split()
         if not t:
             continue
+        if t[0] == 'plus':   # model-side header (SHARC+ masks), nothing to do on the simulator
+            continue
         if t[0] == 'scr':
             scr = [int(x, 16) for x in t[1:]]
         elif t[0] == 'code':
@@ -58,6 +61,7 @@ def main():
     ap.add_argument('--n-state', type=int, default=107)
     ap.add_argument('--target', choices=['21489', '21571'], default='21489',
                     help='simulator: ADSP-21489 (functional) or ADSP-21571 (SHARC+, cycle-accurate)')
+    ap.add_argument('--case-timeout', type=float, default=60.0, help='21571: seconds before a case is halted')
     ap.add_argument('--no-reexec', action='store_true')
     a = ap.parse_args()
     if not sim_run.is_py36_32() and not a.no_reexec:
@@ -93,6 +97,7 @@ def main():
             T.SetBreakpointAtAddress(0, exit_a)
             T.Run(0, True)
         for k, (parcels, state, chunks) in enumerate(cases):
+            print('case %d (%.0fs)' % (k, time.time() - t0), file=sys.stderr, flush=True)
             if a.target != '21571':
                 T.LoadProgram(0, dxe, False)   # fresh memory and registers: Reset is slow and leaves no program
                 T.SetBreakpointAtAddress(0, exit_a)
@@ -106,9 +111,24 @@ def main():
                 T.SetMemory(0, pm_id, addr, n, 1, bytearray(bytes.fromhex(hexp)))
             for addr, ws in setup['dm'] + chunks:
                 T.SetMemory(0, dm_id, addr, len(ws), 1, bytearray(words_bytes(ws)))
+            print('  poked (%.0fs)' % (time.time() - t0), file=sys.stderr, flush=True)
             if a.target == '21571':
                 T.SetMemory(0, dm_id, done, 1, 1, bytearray(4))
-                T.Run(0, True)
+                # Run(wait) blocks until the exit breakpoint; a watchdog halts a case that never gets there
+                fired = []
+                dog = threading.Timer(a.case_timeout, lambda: (fired.append(1), T.Halt(0, False)))
+                dog.start()
+                try:
+                    T.Run(0, True)
+                finally:
+                    dog.cancel()
+                if fired:   # no PC write on SHARC+: reload and run the start-up again
+                    out.write('HALT timeout' + chr(10))
+                    T.LoadProgram(0, dxe, False)
+                    T.RemoveAllBreakpoints(0)
+                    T.SetBreakpointAtAddress(0, exit_a)
+                    T.Run(0, True)
+                    continue
             else:
                 T.Run(0, False)
             t1 = time.time()
@@ -133,6 +153,7 @@ def main():
                 T.GetMemory(0, dm_id, addr, n, 1, wb)
                 ws += struct.unpack('>%dI' % n, bytes(wb))
             out.write(' '.join('%08X' % w for w in ws) + '\n')
+            out.flush()
     finally:
         T.Disconnect()
         out.close()

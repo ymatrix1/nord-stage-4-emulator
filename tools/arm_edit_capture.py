@@ -234,6 +234,45 @@ def rows_csv(rows: list[CaptureRow]) -> str:
     return "\n".join(out) + "\n"
 
 
+def summary_csv(rows: list[CaptureRow]) -> str:
+    """One line per (id, layer kind, value): message counts, destinations and DM word range."""
+    groups: dict[tuple, list[CaptureRow]] = {}
+    for r in rows:
+        groups.setdefault((r.param.edit_id, r.param.name, r.store.kind, r.value), []).append(r)
+    out = ["id,name,kind,value,calls,ticks,destinations,dm_min,dm_max,distinct_dm,nonzero_values"]
+    order = sorted(groups, key=lambda k: (k[2], k[0], k[3]))
+    for eid, name, kind, value in order:
+        g = groups[(eid, name, kind, value)]
+        msgs = [r.message for r in g if r.stage != "error"]
+        if not msgs:
+            continue
+        dest = sorted({f"{m.chip}/{m.core}/{m.path}" for m in msgs})
+        dms = sorted({m.dm_word for m in msgs})
+        nonzero = sum(1 for m in msgs if m.word2)
+        out.append(
+            f"{eid:#x},{name},{kind},{value},{sum(r.stage == 'call' for r in g)},"
+            f"{sum(r.stage == 'tick' for r in g)},{' '.join(dest)},{dms[0]:#x},{dms[-1]:#x},"
+            f"{len(dms)},{nonzero}"
+        )
+    return "\n".join(out) + "\n"
+
+
+def bank_script(
+    rows: list[CaptureRow], name: str, value: int, call: int, layer: int | None = None
+) -> str:
+    """`sharc-bank --script` lines `CALL ADDR VALUE` for the PNO core 1 words of one capture."""
+    lines = []
+    for r in rows:
+        m = r.message
+        if r.param.name != name or r.value != value:
+            continue
+        if layer is not None and r.store.layer != layer:
+            continue
+        if m.chip == "PNO" and m.core == 1 and m.path == 2:
+            lines.append(f"{call} {m.dm_word:#x} {m.word2:#010x}  # {name}={value}")
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
 def settled_emulator(code: Path, sram: Path | None, cache: Path | None) -> tuple[ae.ArmEmu, bytes]:
     """Emulator in the settled steady state, from `cache` when it exists."""
     emu = bf.prepare(code, sram)
@@ -264,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap.add_argument("--window", type=int, default=WINDOW)
     ap.add_argument("--layers", help="comma separated client indices to sweep (default: all)")
     ap.add_argument("--csv", type=Path)
+    ap.add_argument("--summary", type=Path, help="per (id, kind, value) summary table")
     ns = ap.parse_args(argv)
     emu, blob = settled_emulator(ns.image, ns.sram, ns.cache)
     stores = first_store_per_layer(find_stores(emu))
@@ -278,6 +318,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     rows = sweep(emu, blob, stores, params, ns.window, noise)
     if ns.csv:
         ns.csv.write_text(rows_csv(rows), encoding="utf-8")
+    if ns.summary:
+        ns.summary.write_text(summary_csv(rows), encoding="utf-8")
     print(f"{len(rows)} messages from {len({r.param.edit_id for r in rows})} ids")
     return 0
 

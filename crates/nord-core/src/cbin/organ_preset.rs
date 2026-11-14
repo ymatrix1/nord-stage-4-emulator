@@ -14,6 +14,13 @@ use serde::{Deserialize, Serialize};
 pub struct OrganPresetDecoded {
     pub model: OrganModel,
     pub model_b: OrganModel,
+    /// Raw `Edt_Org_kModel` 5 (`B3 Bass`) on layer A: the model decodes to [`OrganModel::B3`] with this flag
+    /// (VERIFIED order, `docs/research/organ-model-paths.md`; 4 factory programs use it).
+    #[serde(default)]
+    pub b3_bass_a: bool,
+    /// Raw `Edt_Org_kModel` 5 (`B3 Bass`) on layer B (see [`Self::b3_bass_a`]).
+    #[serde(default)]
+    pub b3_bass_b: bool,
     pub percussion_on: bool,
     pub percussion_soft: bool,
     pub percussion_fast: bool,
@@ -47,6 +54,8 @@ impl Default for OrganPresetDecoded {
         Self {
             model: OrganModel::B3,
             model_b: OrganModel::B3,
+            b3_bass_a: false,
+            b3_bass_b: false,
             percussion_on: false,
             percussion_soft: false,
             percussion_fast: false,
@@ -80,6 +89,8 @@ impl PartialEq for OrganPresetDecoded {
     fn eq(&self, other: &Self) -> bool {
         self.model == other.model
             && self.model_b == other.model_b
+            && self.b3_bass_a == other.b3_bass_a
+            && self.b3_bass_b == other.b3_bass_b
             && self.percussion_on == other.percussion_on
             && self.percussion_soft == other.percussion_soft
             && self.percussion_fast == other.percussion_fast
@@ -109,6 +120,8 @@ impl PartialEq for OrganPresetDecoded {
 
 struct OrganLayerRaw {
     model: OrganModel,
+    /// Raw model 5 (`B3 Bass`): `model` is `B3`.
+    b3_bass: bool,
     octave: i8,
     drawbars: [u8; 9],
     drawbar_morphs: [MorphDeltas; 9],
@@ -125,12 +138,15 @@ fn decode_organ_model(idx: u32) -> OrganModel {
         1 => OrganModel::Vox,
         2 => OrganModel::Farfisa,
         3 => OrganModel::Pipe1,
+        // 5 = `B3 Bass`: `B3` plus the layer's bass flag (`OrganLayerRaw::b3_bass`).
+        5 => OrganModel::B3,
         _ => OrganModel::Pipe2,
     }
 }
 
-fn encode_organ_model(model: OrganModel) -> u32 {
+fn encode_organ_model(model: OrganModel, b3_bass: bool) -> u32 {
     match model {
+        OrganModel::B3 if b3_bass => 5,
         OrganModel::B3 => 0,
         OrganModel::Vox => 1,
         OrganModel::Farfisa => 2,
@@ -143,7 +159,8 @@ fn unpack_organ_layer_block(r: &mut BitReader, base: usize) -> Result<OrganLayer
     r.set_bit_pos(base + 12)?;
     let octave = decode_signed(r.read_bits(4)?, 4).clamp(-2, 2) as i8;
     r.set_bit_pos(base + 17)?;
-    let model = decode_organ_model(r.read_bits(3)?);
+    let raw_model = r.read_bits(3)?;
+    let model = decode_organ_model(raw_model);
 
     let mut drawbars = [0u8; 9];
     let mut drawbar_morphs = [MorphDeltas::default(); 9];
@@ -162,6 +179,7 @@ fn unpack_organ_layer_block(r: &mut BitReader, base: usize) -> Result<OrganLayer
 
     Ok(OrganLayerRaw {
         model,
+        b3_bass: raw_model == 5,
         octave,
         drawbars,
         drawbar_morphs,
@@ -183,7 +201,7 @@ fn pack_organ_layer_block(
     w.set_bit_pos(base + 12)?;
     w.write_bits(encode_signed(i32::from(layer.octave.clamp(-2, 2)), 4), 4)?;
     w.set_bit_pos(base + 17)?;
-    w.write_bits(encode_organ_model(layer.model), 3)?;
+    w.write_bits(encode_organ_model(layer.model, layer.b3_bass), 3)?;
 
     for i in 0..9 {
         write_morph(
@@ -260,6 +278,8 @@ impl OrganPresetDecoded {
         Ok(Self {
             model: lay_a.model,
             model_b: lay_b.model,
+            b3_bass_a: lay_a.b3_bass,
+            b3_bass_b: lay_b.b3_bass,
             percussion_on: lay_a.perc_on,
             percussion_soft: lay_a.perc_soft,
             percussion_fast: lay_a.perc_fast,
@@ -336,6 +356,7 @@ impl OrganPresetDecoded {
             144,
             &OrganLayerRaw {
                 model: self.model,
+                b3_bass: self.b3_bass_a,
                 octave: self.layer_a_octave,
                 drawbars: self.drawbars_a,
                 drawbar_morphs: self.drawbars_a_morph,
@@ -351,6 +372,7 @@ impl OrganPresetDecoded {
             392,
             &OrganLayerRaw {
                 model: self.model_b,
+                b3_bass: self.b3_bass_b,
                 octave: self.layer_b_octave,
                 drawbars: self.drawbars_b,
                 drawbar_morphs: self.drawbars_b_morph,
@@ -371,6 +393,29 @@ impl OrganPresetDecoded {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn b3_bass_model_decodes_to_b3_with_the_bass_flag_and_round_trips() {
+        let original = OrganPresetDecoded {
+            b3_bass_a: true,
+            ..Default::default()
+        };
+        let packed = original.pack().expect("pack organ");
+        let back = OrganPresetDecoded::unpack(&packed).expect("unpack organ");
+        assert_eq!(back.model, OrganModel::B3);
+        assert!(back.b3_bass_a && !back.b3_bass_b);
+        assert_eq!(decode_organ_model(5), OrganModel::B3);
+        assert_eq!(encode_organ_model(OrganModel::B3, true), 5);
+        assert_eq!(encode_organ_model(OrganModel::Pipe2, true), 4);
+        // Raw 4 stays Pipe2 and does not set the flag.
+        let pipe = OrganPresetDecoded {
+            model_b: OrganModel::Pipe2,
+            ..Default::default()
+        };
+        let back = OrganPresetDecoded::unpack(&pipe.pack().unwrap()).unwrap();
+        assert_eq!(back.model_b, OrganModel::Pipe2);
+        assert!(!back.b3_bass_b);
+    }
 
     #[test]
     fn test_organ_preset_bitstream_pack_and_unpack() {

@@ -3,9 +3,12 @@
 //! Spec: `docs/specs/visual-style-and-panel.md`
 
 pub mod audio;
+pub mod firmware_panel;
 pub mod library;
 pub mod panel;
+pub mod screenshot;
 pub mod style;
+pub mod telemetry;
 pub mod widgets;
 
 #[cfg(test)]

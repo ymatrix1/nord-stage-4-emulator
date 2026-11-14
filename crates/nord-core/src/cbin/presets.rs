@@ -277,6 +277,11 @@ pub struct GlobalProgramDecoded {
     pub section_enable_ii: u8,
     pub scene_1_mask: u8,
     pub scene_2_mask: u8,
+    /// Raw `Edt_*_kKbZone` code (4 bits) of the 7 layers in dispatcher order: Organ A, B, Piano A,
+    /// B, Synth A, B, C (see [`super::kb_zone`]). Filled by [`ProgramDecoded::from_cbin_file`];
+    /// read-only (`pack` keeps the stored bits).
+    #[serde(default = "super::kb_zone::default_codes")]
+    pub kb_zone: [u8; 7],
     #[serde(skip)]
     raw_payload: Vec<u8>,
 }
@@ -299,6 +304,7 @@ impl Default for GlobalProgramDecoded {
             section_enable_ii: 0b111,
             scene_1_mask: 0b0001_0101,
             scene_2_mask: 0b0111_1111,
+            kb_zone: super::kb_zone::default_codes(),
             raw_payload: Vec::new(),
         }
     }
@@ -317,6 +323,7 @@ impl PartialEq for GlobalProgramDecoded {
             && self.section_enable_ii == other.section_enable_ii
             && self.scene_1_mask == other.scene_1_mask
             && self.scene_2_mask == other.scene_2_mask
+            && self.kb_zone == other.kb_zone
     }
 }
 
@@ -376,6 +383,7 @@ impl GlobalProgramDecoded {
             section_enable_ii,
             scene_1_mask,
             scene_2_mask,
+            kb_zone: super::kb_zone::default_codes(),
             raw_payload: slice[..Self::PAYLOAD_LEN].to_vec(),
         })
     }
@@ -490,6 +498,8 @@ impl ProgramDecoded {
             piano.enable_ii_mask,
             synth.enable_ii_mask,
         );
+
+        global.kb_zone = super::kb_zone::read_codes(&cbin.payload)?;
 
         let bank_letter = (b'A' + (cbin.header.bank_index as u8).min(7)) as char;
         let prog_num = (cbin.header.location_index % 48) + 1;

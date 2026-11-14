@@ -327,3 +327,15 @@ fn test_amp_mode_mapping_from_program() {
         assert_eq!(engine.fx_chains[0].amp_variation, var, "raw {raw}");
     }
 }
+
+#[test]
+fn b3_bass_program_sets_the_bass_mode_and_exports_it_back() {
+    let mut prog = crate::cbin::ProgramDecoded::default();
+    prog.organ.b3_bass_a = true;
+    let mut engine = Stage4Engine::new(48_000.0);
+    engine.apply_program(&prog);
+    assert!(engine.organ_a.b3_bass_mode && !engine.organ_b.b3_bass_mode);
+    assert_eq!(engine.organ_a.model, crate::organ::OrganModel::B3);
+    let out = engine.export_program(&prog);
+    assert!(out.organ.b3_bass_a && !out.organ.b3_bass_b);
+}

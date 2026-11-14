@@ -1,0 +1,284 @@
+//! Program naming for STORE AS (manual p.42): ABC / Cat / Ins / Del soft buttons and the dial.
+
+/// Longest program name.
+///
+/// ASSUMED: 16 characters, the usual Clavia name length; the manual shows no limit.
+pub const MAX_NAME: usize = 16;
+
+/// Characters the ABC soft button offers, in dial order.
+///
+/// VERIFIED (order up to `-`): STORE PROGRAM AS strip in the DSoundman piano-pad video
+/// (`hR31DQrxfT4`, 5:45-6:00) reads blank, `a..z`, `A..Z`, `0..9`, `-` left to right.
+/// ASSUMED: the tail `_.!&` after `-` (the strip was cut off at the display edge).
+pub const CHARSET: &str = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.!&";
+
+/// Program categories offered by the Cat soft button, full names in firmware order.
+///
+/// VERIFIED: the 26 `(full, short)` pairs of the category pointer table at `bank0_CODE.bin@0x2BF3C8`
+/// (`0xC02BF3C8`, 8 bytes per category: full pointer, short pointer; a second list of the full names
+/// sits at `@0x53E014`), checked by
+/// `python tools/ns4_oled_strings.py pointers` (`tools/tests/test_ns4_oled_strings.py`); the getter
+/// `0xC017B4C8(this, i, short)` indexes it as `table[2 i + short]`.
+/// VERIFIED: the table is the name getter of the firmware's category list model (vtable
+/// `0xC02D4238`, slot `0x30`), read by the LIST screen; the STORE `Cat:` caption is
+/// `0xC014D4EC`. ASSUMED: that the STORE value shows this list (the value comes from a model
+/// object `[this+8]` that was not resolved) and that a program's header `category_id` indexes it:
+/// factory ids run `1..52`, so it does not (`docs/research/synth-wave-categories.md` s5, OQ26).
+pub const CATEGORIES: [&str; 26] = [
+    "Accordion/Harm",
+    "Bass",
+    "Brass Ensemble",
+    "Brass Solo",
+    "Choir",
+    "Drums",
+    "Effects",
+    "Guitar/Plucked",
+    "Mellotron",
+    "Misc",
+    "Orchestral",
+    "Organ",
+    "Percussion Tuned",
+    "Piano",
+    "Rhythmic",
+    "Strings Analog",
+    "Strings Ensemble",
+    "Strings Solo",
+    "Synth Bass",
+    "Synth Classic",
+    "Synth Lead",
+    "Synth Pad",
+    "Wind Ensemble",
+    "Wind Solo",
+    "User",
+    "Undefined",
+];
+
+/// Category of a program that was never given one: the last entry, `Undefined`.
+pub const UNDEFINED_CATEGORY: usize = CATEGORIES.len() - 1;
+
+/// Name proposed by STORE AS: `name` itself while `taken` says it is free, else the name with a
+/// number suffix (`NS4 Palette` -> `NS4 Palette 2` -> `NS4 Palette 3`).
+///
+/// EMPIRICAL: the DSoundman piano-pad video (`hR31DQrxfT4`, 5:40) shows STORE PROGRAM AS proposing
+/// `NS4 Palette 2` for the program `NS4 Palette`. ASSUMED: the counter starts at 2, an existing
+/// ` N` suffix is replaced rather than stacked, the base is cut so the whole name fits
+/// [`MAX_NAME`], and only exact names count as taken; the video shows one case only.
+pub fn suggest_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
+    let name = name.trim_end();
+    if name.is_empty() || !taken(name) {
+        return name.to_string();
+    }
+    let base = match name.rsplit_once(' ') {
+        Some((b, n)) if !b.is_empty() && !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => {
+            b
+        }
+        _ => name,
+    };
+    (2u32..1000)
+        .map(|n| {
+            let suffix = format!(" {n}");
+            let room = MAX_NAME.saturating_sub(suffix.chars().count());
+            let head: String = base.chars().take(room).collect();
+            format!("{}{suffix}", head.trim_end())
+        })
+        .find(|cand| !taken(cand))
+        .unwrap_or_else(|| name.to_string())
+}
+
+/// Cursor-based name editor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NameEditor {
+    chars: Vec<char>,
+    cursor: usize,
+    /// ABC soft button is held: the dial picks the character at the cursor.
+    pub abc_held: bool,
+    /// Cat soft button is held: the dial picks the category.
+    pub cat_held: bool,
+    /// Index into [`CATEGORIES`].
+    pub category: usize,
+}
+
+impl Default for NameEditor {
+    fn default() -> Self {
+        Self::new("")
+    }
+}
+
+impl NameEditor {
+    /// Editor for `name` (cut to [`MAX_NAME`]); the cursor starts on the first character.
+    pub fn new(name: &str) -> Self {
+        Self {
+            chars: name.chars().take(MAX_NAME).collect(),
+            cursor: 0,
+            abc_held: false,
+            cat_held: false,
+            category: UNDEFINED_CATEGORY,
+        }
+    }
+
+    /// The name without trailing spaces.
+    pub fn name(&self) -> String {
+        self.chars.iter().collect::<String>().trim_end().to_string()
+    }
+
+    /// Cursor position (`0..MAX_NAME`).
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    /// The raw text including blanks (for drawing).
+    pub fn display(&self) -> String {
+        self.chars.iter().collect()
+    }
+
+    /// ABC pressed: the cursor position gets a blank to edit when it lies past the end.
+    pub fn press_abc(&mut self) {
+        self.abc_held = true;
+        while self.chars.len() <= self.cursor && self.chars.len() < MAX_NAME {
+            self.chars.push(' ');
+        }
+    }
+
+    /// ABC released: the cursor moves to the next position.
+    pub fn release_abc(&mut self) {
+        if self.abc_held {
+            self.abc_held = false;
+            self.cursor = (self.cursor + 1).min(MAX_NAME - 1);
+        }
+    }
+
+    /// Turn the dial by `delta` steps: character (ABC held), category (Cat held) or cursor.
+    pub fn dial(&mut self, delta: i32) {
+        if self.abc_held {
+            let set: Vec<char> = CHARSET.chars().collect();
+            if let Some(c) = self.chars.get_mut(self.cursor) {
+                let i = set.iter().position(|x| x == c).unwrap_or(0) as i32;
+                *c = set[(i + delta).rem_euclid(set.len() as i32) as usize];
+            }
+        } else if self.cat_held {
+            let n = CATEGORIES.len() as i32;
+            self.category = (self.category as i32 + delta).rem_euclid(n) as usize;
+        } else {
+            self.cursor = (self.cursor as i32 + delta).clamp(0, MAX_NAME as i32 - 1) as usize;
+        }
+    }
+
+    /// Ins: insert a blank at the cursor.
+    pub fn insert(&mut self) {
+        if self.cursor <= self.chars.len() {
+            self.chars.insert(self.cursor, ' ');
+            self.chars.truncate(MAX_NAME);
+        }
+    }
+
+    /// Del: delete the character at the cursor.
+    pub fn delete(&mut self) {
+        if self.cursor < self.chars.len() {
+            self.chars.remove(self.cursor);
+        }
+    }
+
+    /// Category label.
+    pub fn category_label(&self) -> &'static str {
+        CATEGORIES[self.category.min(CATEGORIES.len() - 1)]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn abc_hold_edits_the_character_and_release_advances() {
+        let mut e = NameEditor::new("Rusty");
+        e.press_abc();
+        e.dial(1); // R -> S
+        e.release_abc();
+        assert_eq!(e.name(), "Susty");
+        assert_eq!(e.cursor(), 1);
+        assert!(!e.abc_held);
+    }
+
+    #[test]
+    fn dial_without_a_button_moves_the_cursor_within_bounds() {
+        let mut e = NameEditor::new("ab");
+        e.dial(-5);
+        assert_eq!(e.cursor(), 0);
+        e.dial(100);
+        assert_eq!(e.cursor(), MAX_NAME - 1);
+    }
+
+    #[test]
+    fn insert_and_delete_shift_the_text() {
+        let mut e = NameEditor::new("abc");
+        e.dial(1);
+        e.insert();
+        assert_eq!(e.display(), "a bc");
+        e.delete();
+        assert_eq!(e.display(), "abc");
+        e.dial(10);
+        e.delete(); // past the end: nothing to delete
+        assert_eq!(e.display(), "abc");
+    }
+
+    #[test]
+    fn cat_hold_selects_a_category_and_wraps() {
+        let mut e = NameEditor::new("x");
+        e.cat_held = true;
+        assert_eq!(
+            e.category_label(),
+            "Undefined",
+            "a new program is Undefined"
+        );
+        e.dial(-1);
+        assert_eq!(e.category_label(), "User");
+        e.dial(2);
+        assert_eq!(e.category, 0, "wraps past the last category");
+        assert_eq!(e.category_label(), "Accordion/Harm");
+        e.dial(-2);
+        assert_eq!(e.category_label(), "User");
+    }
+
+    #[test]
+    fn name_is_cut_to_the_maximum_and_trailing_blanks_are_trimmed() {
+        let e = NameEditor::new("0123456789ABCDEFGHIJ");
+        assert_eq!(e.display().chars().count(), MAX_NAME);
+        let mut e = NameEditor::new("hi");
+        e.dial(2);
+        e.press_abc(); // pads a blank past the end
+        e.release_abc();
+        assert_eq!(e.name(), "hi");
+    }
+
+    #[test]
+    fn suggest_name_keeps_a_free_name_and_numbers_a_taken_one() {
+        let taken = |n: &str| ["NS4 Palette", "NS4 Palette 2", "Solo"].contains(&n);
+        assert_eq!(suggest_name("Fresh", taken), "Fresh");
+        assert_eq!(suggest_name("", taken), "");
+        assert_eq!(suggest_name("Solo", taken), "Solo 2");
+        assert_eq!(suggest_name("NS4 Palette", taken), "NS4 Palette 3");
+        assert_eq!(suggest_name("NS4 Palette 2", taken), "NS4 Palette 3");
+        assert_eq!(
+            suggest_name("Solo  ", taken),
+            "Solo 2",
+            "trailing blanks ignored"
+        );
+    }
+
+    #[test]
+    fn suggest_name_cuts_the_base_to_fit_the_maximum() {
+        let long = "0123456789ABCDEF";
+        let s = suggest_name(long, |n| n == long);
+        assert_eq!(s, "0123456789ABCD 2");
+        assert_eq!(s.chars().count(), MAX_NAME);
+        assert_eq!(suggest_name("7", |n| n == "7"), "7 2");
+        assert_eq!(suggest_name("1 2", |_| true), "1 2", "all taken: keep it");
+    }
+
+    #[test]
+    fn category_table_ends_with_user_and_undefined() {
+        assert_eq!(CATEGORIES.len(), 26);
+        assert_eq!(&CATEGORIES[24..], ["User", "Undefined"]);
+        assert_eq!(CATEGORIES[UNDEFINED_CATEGORY], "Undefined");
+    }
+}

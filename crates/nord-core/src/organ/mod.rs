@@ -5,24 +5,86 @@
 //! `vibrato_bank` (12-TET ladder, detune table, group gains), `tonewheel` (91-wheel
 //! generator), `keyclick`, `scanner`, `rotary`.
 
+mod b3_keys;
+mod b3_tail;
+mod b3_weights;
+mod b3_wheels;
 mod drawbar;
+mod drawbar_sum;
+mod farfisa_keys;
+mod farfisa_proc_gain;
+mod farfisa_wheels;
 mod firmware_bank;
+mod globals;
 mod keyclick;
+mod lane_mix;
+mod output_level;
+mod percussion_poly;
+mod preset_live;
 mod rotary;
+mod rotor_stop;
 mod scanner;
+#[cfg(test)]
+mod stereo_lanes;
 mod tonewheel;
 mod types;
 mod vibrato_bank;
+mod vibrato_link;
+mod vox_bank;
+#[cfg(test)]
+mod vox_bank_tests;
+mod vox_image;
+mod vox_keys;
+mod vox_layer;
+mod vox_output;
+mod vox_shaper;
+mod vox_sines;
+mod vox_source;
+mod vox_timeline;
+mod weight_state;
+mod weights;
 
+#[cfg(test)]
+mod b3_source_tests;
 #[cfg(test)]
 mod bank_golden;
 #[cfg(test)]
 mod bank_mix_golden;
+#[cfg(test)]
+mod farfisa_golden;
+#[cfg(test)]
+mod farfisa_source_tests;
+#[cfg(test)]
+mod leslie_tests;
+#[cfg(test)]
+mod pipe_lines;
+#[cfg(test)]
+mod vox_golden;
+#[cfg(test)]
+mod weight_tests;
 
+pub use b3_keys::{A_CAPTURED_WHEELS as B3_A_CAPTURED_WHEELS, WHEEL_GAIN as B3_WHEEL_GAIN};
+pub use b3_wheels::{
+    base_step as b3_base_step, firmware_note_hz as b3_firmware_note_hz, note_hz as b3_note_hz,
+    note_step as b3_note_step, B3Wheels, ARM_FINE_WORD as B3_ARM_FINE_WORD,
+};
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
+pub use farfisa_proc_gain::farfisa_proc_gain;
+pub use farfisa_wheels::{
+    FarfisaWheels, DSP_FRAME_RATE as FARFISA_DSP_FRAME_RATE, OSCILLATORS as FARFISA_OSCILLATORS,
+    ROWS as FARFISA_ROWS,
+};
 pub use firmware_bank::{
-    build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate, phase_step,
-    ToneBank, DEFAULT_TUNE_WORD,
+    build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate,
+    implied_frame_rate_at, phase_step, ToneBank, ARM_DEFAULT_TUNE_WORD, DEFAULT_TUNE_WORD,
+};
+pub use globals::OrganGlobals;
+pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
+pub use output_level::{
+    layer_level_gain, swell_word, OutputLevel, LEGACY_BUS_OVER_UNIT, ORGAN_BUS_GAIN, SWELL_DEFAULT,
+};
+pub use rotor_stop::{
+    clamp_stop_angle, stop_angle_label, STOP_ANGLE_COUNT, STOP_ANGLE_LABELS, STOP_ANGLE_RAD,
 };
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
@@ -33,9 +95,15 @@ pub use vibrato_bank::{
     GAINS_EXACT,
 };
 
-use drawbar::{foldback_tonewheel, DRAWBAR_OFFSETS};
+pub use vibrato_link::{level_for_scanner, VibratoLevel, VibratoLink};
+pub use weights::{
+    a_key_down, a_update, targets as weight_targets, weight_sum, WeightMode, UNIT_WEIGHT,
+    WEIGHT_SCALE,
+};
+
 use std::f32::consts::TAU;
 use types::{ROTARY_BUFFER_SIZE, SCANNER_BUFFER_SIZE};
+use weight_state::{velocity_for_gain, WeightState};
 
 /// Physical modeling B3 & Transistor/Pipe Organ layer with integrated Model 122 Rotary Speaker.
 #[derive(Debug, Clone)]
@@ -44,6 +112,9 @@ pub struct OrganLayer {
     pub model: OrganModel,
     /// When `true` on `OrganModel::B3`, engages Nord's B3 Bass pickup calibration curve.
     pub b3_bass_mode: bool,
+    /// Opt-in Farfisa processor stage (key-down weights and measured line gain, `farfisa_keys.rs`):
+    /// applies to `OrganModel::Farfisa` with `ToneWheelSource::FarfisaWheels` only.
+    pub farfisa_processor: bool,
     /// Keyboard octave transposition (`-2..=+2`).
     pub octave_shift: i8,
     /// 9 drawbar settings (`0..=8`). Default `88 8000 000`.
@@ -52,17 +123,40 @@ pub struct OrganLayer {
     pub percussion_third_harmonic: bool,
     pub percussion_fast_decay: bool,
     pub percussion_soft: bool,
+    /// POLY percussion (manual p.20, Shift+Volume): every new key stroke gets its own percussion
+    /// attack regardless of held keys. Default `false` = single-trigger (unchanged behaviour).
+    pub percussion_poly: bool,
+    /// Drawbar Live mode (manual p.21, Preset off): the physical drawbar positions
+    /// (`live_drawbars`) drive the sound instead of the stored `drawbars`. Default `false`.
+    pub drawbar_live: bool,
+    /// Physical drawbar positions (`0..=8`), used while `drawbar_live`; `88 8000 000` by default.
+    pub live_drawbars: [u8; 9],
     /// Transformer compartment crosstalk intensity (`1.0` = nominal -42 dB B3 bleed).
     pub crosstalk_level: f32,
     pub rotary_enabled: bool,
     pub rotary_speed: RotarySpeed,
     pub rotary_drive: f32,
+    /// Opt-in rotary drive law `tanh(g x) / g`, `g = 1 + 3 drive` (unity small signal gain, so the
+    /// drive no longer adds +18.4 dB at drive 2.44); default `false` keeps `tanh(g x)`.
+    pub rotary_drive_unity: bool,
+    /// Opt-in: reads `rotary_drive` as the preset unit 0..10 and rescales it to the engine unit
+    /// 0..1 at use (EMPIRICAL, `docs/research/b3-rotary.md`); the stored value is untouched.
+    pub rotary_drive_scaled: bool,
+    /// Opt-in firmware Leslie (`--leslie firmware`): the instruction-level port of the PNO core 1
+    /// processor `0x1256AD` ([`crate::fx::FwLeslie`], `docs/research/fx-leslie.md`) replaces the
+    /// engine rotary; `None` keeps the engine model. Allocated by `apply_leslie_firmware`, never
+    /// in the audio path.
+    pub leslie_fw: Option<Box<crate::fx::FwLeslie>>,
+    /// Linear gain after the firmware Leslie (`1.0` = the booted firmware level, about -50 dB).
+    pub leslie_gain: f32,
     /// Rotary microphone placement (`false` = Normal distance with cabinet reflections, `true` = Close mic).
     pub rotary_close_mic: bool,
     /// Stereo virtual microphone separation angle in degrees (`0.0..=180.0`, default `120.0`).
     pub rotary_mic_angle_deg: f32,
     /// When `true`, engages brake/stop mode regardless of `rotary_speed`.
     pub rotary_stop_mode: bool,
+    /// Rest position of horn and rotor in STOP MODE: `0` = Free, `1..=6` = `STOP_ANGLE_LABELS`.
+    pub rotary_stop_angle: u8,
     pub scanner_mode: ScannerMode,
     /// `B3` tonewheel waveform and phase arithmetic (default `Firmware`, role ASSUMED, about 70 %;
     /// `Legacy` stays selectable).
@@ -71,14 +165,48 @@ pub struct OrganLayer {
     /// (`DETUNE_CENTS`, +-1.9 cent rms ensemble copies) instead of the exact 12-TET one. VERIFIED
     /// table selection, default off.
     pub detuned_copies: bool,
+    /// Whether the bank table and lane gains follow `scanner_mode` with the firmware smoother and
+    /// stereo lanes (`Firmware`, default) or only `detuned_copies` with instant mono mixing
+    /// (`Manual`, the previous behaviour).
+    pub vibrato_link: VibratoLink,
     /// Fine Tune in cents applied to the firmware bank (clamped to -400..+381, default 0).
     pub fine_tune_cents: f32,
     /// Drawbar level law (default: firmware curve; `Linear` is the old `level / 8`).
     pub drawbar_law: DrawbarLaw,
+    /// How the per-wheel drawbar weights are formed (default `Legacy`: instant gains, ASSUMED
+    /// bus scale and pickup calibration; `Firmware`: the ARM weights, smoothed, absolute scale).
+    pub weight_mode: WeightMode,
+    /// Output level `L` of the mix stage (`0x95B42`) applied in `WeightMode::Firmware`.
+    /// ASSUMED 1.0: no ARM message sets it.
+    pub weight_level: f32,
+    /// Output level law of the firmware paths (`Firmware` weights, `B3Wheels`, Vox): `Legacy`
+    /// keeps their built-in levels, `Firmware` applies [`ORGAN_BUS_GAIN`] ([`OutputLevel`]).
+    pub output_level: OutputLevel,
+    /// Key-click transient on key-down / key-up (default on; off for oracle comparisons).
+    pub key_click_enabled: bool,
+    /// Global Sound/System menu settings (defaults are exact no-ops).
+    pub globals: OrganGlobals,
+    /// Pitch stick bend in cents (manual p.18 PSTICK), set with [`Self::set_bend_cents`]. Default
+    /// `0.0` and ratio `1.0` are exact no-ops.
+    bend_cents: f32,
+    /// `2^(bend_cents / 1200)`, the Legacy wheel phase step factor.
+    bend_ratio: f32,
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
     synced_fine_cents: f32,
     tone_bank: ToneBank,
+    vox: vox_source::VoxSource,
+    vox_timeline: vox_timeline::VoxTimeline,
+    b3_wheels: B3Wheels,
+    b3_weights: b3_weights::B3Weights,
+    b3_synced: (f32, f32),
+    /// Whether `b3_wheels` was built with the processor tail (see `set_b3_tail`).
+    b3_tail: bool,
+    farfisa_wheels: FarfisaWheels,
+    farfisa_synced: (f32, f32),
+    farfisa_keys: farfisa_keys::FarfisaKeys,
+    lane_mixer: LaneMixer,
+    weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
     pickup_b3: [f32; NUM_TONEWHEELS],
     pickup_b3_bass: [f32; NUM_TONEWHEELS],
@@ -86,6 +214,7 @@ pub struct OrganLayer {
     note_gains: [f32; 128],
     active_key_count: usize,
     percussion_env: f32,
+    poly_perc: percussion_poly::PolyPercussion,
     click_env: f32,
     click_bp_state: [f32; 2],
     rng_state: u32,
@@ -128,22 +257,50 @@ impl OrganLayer {
             percussion_third_harmonic: false,
             percussion_fast_decay: true,
             percussion_soft: false,
+            percussion_poly: false,
+            drawbar_live: false,
+            live_drawbars: [8, 8, 8, 0, 0, 0, 0, 0, 0],
             crosstalk_level: 1.0,
             rotary_enabled: true,
             rotary_speed: RotarySpeed::Slow,
             rotary_drive: 0.2,
+            rotary_drive_unity: false,
+            rotary_drive_scaled: false,
+            leslie_fw: None,
+            leslie_gain: 1.0,
             rotary_close_mic: false,
             rotary_mic_angle_deg: 120.0,
             rotary_stop_mode: false,
+            rotary_stop_angle: 0,
             scanner_mode: ScannerMode::Off,
             tonewheel_source: ToneWheelSource::default(),
             detuned_copies: false,
+            vibrato_link: VibratoLink::default(),
             fine_tune_cents: 0.0,
             drawbar_law: DrawbarLaw::default(),
+            weight_mode: WeightMode::default(),
+            weight_level: 1.0,
+            output_level: OutputLevel::default(),
+            key_click_enabled: true,
+            globals: OrganGlobals::default(),
+            bend_cents: 0.0,
+            bend_ratio: 1.0,
             tonewheel_freqs: freqs,
             tonewheel_freqs_hz: freqs_hz,
             synced_fine_cents: 0.0,
             tone_bank,
+            vox: vox_source::VoxSource::new(sample_rate),
+            vox_timeline: vox_timeline::VoxTimeline::default(),
+            b3_wheels: B3Wheels::new(),
+            b3_weights: b3_weights::B3Weights::new(sample_rate),
+            b3_synced: (0.0, f32::NAN),
+            b3_tail: true,
+            farfisa_wheels: FarfisaWheels::new(),
+            farfisa_synced: (0.0, f32::NAN),
+            farfisa_keys: farfisa_keys::FarfisaKeys::new(),
+            farfisa_processor: false,
+            lane_mixer: LaneMixer::new(sample_rate),
+            weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
             pickup_b3,
             pickup_b3_bass,
@@ -151,6 +308,7 @@ impl OrganLayer {
             note_gains: [1.0; 128],
             active_key_count: 0,
             percussion_env: 0.0,
+            poly_perc: percussion_poly::PolyPercussion::new(),
             click_env: 0.0,
             click_bp_state: [0.0; 2],
             rng_state: 0x6D2B_79F5,
@@ -170,6 +328,21 @@ impl OrganLayer {
         }
     }
 
+    /// Selects the B3 generator tables with (default) or without the processor tail's frequency
+    /// response ([`b3_tail`](self)); setup-time only (rebuilds the wheel tables and phases).
+    pub fn set_b3_tail(&mut self, on: bool) {
+        if self.b3_tail == on {
+            return; // live A/B re-sends the options often: rebuild (and reset the phases) only on a change
+        }
+        self.b3_tail = on;
+        self.b3_wheels = if on {
+            B3Wheels::new()
+        } else {
+            B3Wheels::without_tail()
+        };
+        self.b3_synced = (0.0, f32::NAN);
+    }
+
     /// Triggers a key-down event with single-trigger B3 percussion and key-click transient.
     pub fn note_on(&mut self, note: u8) {
         self.note_on_with_gain(note, 1.0);
@@ -181,15 +354,29 @@ impl OrganLayer {
             if self.active_key_count == 0 && self.percussion_enabled {
                 self.percussion_env = 1.0;
             }
+            if self.percussion_poly && self.percussion_enabled {
+                self.percussion_env = 1.0;
+                self.poly_perc.trigger(idx);
+            }
             self.held_notes[idx] = true;
             self.note_gains[idx] = gain.clamp(0.0, 1.0);
+            self.b3_weights.mark();
+            let drawbars = *self.active_drawbars();
+            self.weight_state.key_down(
+                idx as u8,
+                velocity_for_gain(gain),
+                &drawbars,
+                self.octave_shift.clamp(-2, 2),
+            );
             self.active_key_count += 1;
             let click_scale = match self.model {
                 OrganModel::B3 | OrganModel::Vox => 0.45,
                 OrganModel::Farfisa => 0.18,
                 OrganModel::Pipe1 | OrganModel::Pipe2 => 0.25,
             };
-            self.click_env = click_scale * self.note_gains[idx].max(0.25);
+            if self.key_click_enabled {
+                self.click_env = click_scale * self.note_gains[idx].max(0.25);
+            }
         }
     }
 
@@ -198,77 +385,60 @@ impl OrganLayer {
         let idx = (note as usize).min(127);
         if self.held_notes[idx] {
             self.held_notes[idx] = false;
+            self.b3_weights.mark();
+            self.weight_state.key_up(idx as u8);
             self.active_key_count = self.active_key_count.saturating_sub(1);
             let click_scale = match self.model {
                 OrganModel::B3 | OrganModel::Vox => 0.16,
                 OrganModel::Farfisa => 0.06,
                 OrganModel::Pipe1 | OrganModel::Pipe2 => 0.05,
             };
-            self.click_env = self.click_env.max(click_scale);
+            if self.key_click_enabled {
+                self.click_env = self.click_env.max(click_scale);
+            }
         }
     }
 
     /// Renders a single stereo frame `[left, right]` with zero heap allocations.
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        if self.vox_active() {
+            return self.render_vox_frame(inv_fs);
+        }
 
-        // 1. Advance all 91 spinning tonewheels continuously
-        let tw_signals = self.render_tonewheels(inv_fs);
+        // 1. Advance all 91 spinning tonewheels continuously (two lanes while the detuned
+        //    ensemble's stereo blend is active, otherwise one)
+        let (tw_buses, lanes) = self.render_tonewheel_lanes(inv_fs);
 
         if self.active_key_count == 0
+            && !(self.firmware_weights() && self.weight_state.active())
+            && !(self.b3_weights_active() && self.b3_weights.active())
+            && !(self.farfisa_keys_active() && self.farfisa_keys.active())
             && self.click_env < 1e-6
             && self.click_bp_state[0].abs() < 1e-6
         {
             return [0.0, 0.0];
         }
 
-        // 2. Sum active drawbars across held notes (with B3 Normal percussion -3 dB drawbar dip)
-        let oct_semis = i32::from(self.octave_shift.clamp(-2, 2)) * 12;
-        let db_bus_scale = if self.model == OrganModel::B3
-            && self.percussion_enabled
-            && !self.percussion_soft
-            && self.percussion_env > 1e-4
-        {
-            0.708
+        // 2. Sum active drawbars across held notes (with B3 Normal percussion -3 dB drawbar dip).
+        //    Two lanes split into mid (through scanner and rotary, so the mono sum is the
+        //    previous path) and side (added to L and subtracted from R after the rotary).
+        let sums = self.sum_drawbars(&tw_buses, lanes);
+        let (mut dry, side) = if lanes == 2 {
+            (0.5 * (sums[0] + sums[1]), Some(0.5 * (sums[0] - sums[1])))
         } else {
-            1.0
+            (sums[0], None)
         };
-
-        let mut dry = 0.0f32;
-        for note in 0u8..=127u8 {
-            if !self.held_notes[note as usize] {
-                continue;
-            }
-            let base_midi = i32::from(note) + oct_semis;
-            let key_gain = self.note_gains[note as usize];
-            for (db_idx, &level) in self.drawbars.iter().enumerate() {
-                if level == 0 {
-                    continue;
-                }
-                let gain = drawbar_gain_law(level, self.drawbar_law);
-                let tw = foldback_tonewheel(base_midi + DRAWBAR_OFFSETS[db_idx]);
-                dry += gain * tw_signals[tw] * key_gain * db_bus_scale * 0.08;
-            }
-            if self.percussion_env > 1e-4 {
-                let perc_offset = if self.percussion_third_harmonic {
-                    19
-                } else {
-                    12
-                };
-                let tw = foldback_tonewheel(base_midi + perc_offset);
-                let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
-                dry += self.percussion_env * tw_signals[tw] * perc_gain * key_gain;
-            }
-        }
 
         // 3. Model filter shaping (Vox Continental Tone, Farfisa Formants, Pipe Chiff)
         match self.model {
             OrganModel::B3 => {}
             OrganModel::Vox => {
                 // Vox drawbar 9 acts as Wave/Tone control morphing between flute and reed
-                let tone = f32::from(self.drawbars[8].min(8)) / 8.0;
+                let tone = f32::from(self.active_drawbars()[8].min(8)) / 8.0;
                 dry = (1.0 - 0.5 * tone) * dry + tone * dry.signum() * dry.abs().powf(0.8);
             }
+            OrganModel::Farfisa if self.farfisa_keys_active() => {}
             OrganModel::Farfisa => {
                 // Farfisa dual resonant bandpass formant peaks (750 Hz and 2.5 kHz)
                 let w1 = (TAU * 750.0 * inv_fs).clamp(0.01, 0.45);
@@ -282,7 +452,10 @@ impl OrganLayer {
                 dry = 0.6 * dry + 0.3 * self.farf_bp1_state[0] + 0.25 * self.farf_bp2_state[0];
             }
             OrganModel::Pipe1 | OrganModel::Pipe2 => {
-                // Pipe gentle high-frequency damping
+                // ASSUMED: flat output gain 0.92 (a textbook trim, no firmware source). It shapes
+                // no frequency: the bank + mix path matches the oracle to 0.00 dB per line on three
+                // chords (`pipe_lines.rs`), so it is not the cause of the darkness against the video
+                // (`docs/research/pipe-video-gap.md`).
                 dry *= 0.92;
             }
         }
@@ -294,17 +467,26 @@ impl OrganLayer {
         } else {
             0.55
         };
-        self.percussion_env *= (-inv_fs / perc_tau).exp();
+        let perc_decay = (-inv_fs / perc_tau).exp();
+        self.percussion_env *= perc_decay;
+        let poly_peak = self.poly_perc.decay(perc_decay);
+        if self.percussion_poly {
+            self.percussion_env = poly_peak;
+        }
 
         // 5. Hammond Scanner Vibrato & Chorus (V1-V3, C1-C3)
         let scanner_out = self.process_scanner(dry, inv_fs);
 
-        if !self.rotary_enabled {
-            return [scanner_out, scanner_out];
+        // 6. Model 122 Rotary Speaker (skipped when disabled)
+        let [l, r] = if self.rotary_enabled {
+            self.process_rotary(scanner_out, inv_fs)
+        } else {
+            [scanner_out, scanner_out]
+        };
+        match side {
+            Some(s) => [l + s, r - s],
+            None => [l, r],
         }
-
-        // 6. Model 122 Rotary Speaker
-        self.process_rotary(scanner_out, inv_fs)
     }
 }
 
@@ -349,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn firmware_source_is_default_and_all_sources_render_bounded_audio() {
+    fn model_default_source_and_all_sources_render_bounded_audio() {
         for (source, copies) in [
             (ToneWheelSource::Firmware, false),
             (ToneWheelSource::Firmware, true),
@@ -373,7 +555,7 @@ mod tests {
         }
         assert_eq!(
             OrganLayer::new(48_000.0).tonewheel_source,
-            ToneWheelSource::Firmware
+            ToneWheelSource::ModelDefault
         );
     }
 

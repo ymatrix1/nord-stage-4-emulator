@@ -1,0 +1,184 @@
+id,name,kind,value,calls,ticks,destinations,dm_min,dm_max,distinct_dm,nonzero_values
+0xad,Edt_OrgCom_kLayerFocusOrg_I_private,organ,0,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xad,Edt_OrgCom_kLayerFocusOrg_I_private,organ,1,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xae,Edt_OrgCom_kLayerEnableOrg_I_private,organ,0,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xae,Edt_OrgCom_kLayerEnableOrg_I_private,organ,1,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xae,Edt_OrgCom_kLayerEnableOrg_I_private,organ,2,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xae,Edt_OrgCom_kLayerEnableOrg_I_private,organ,3,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xaf,Edt_OrgCom_kLayerFocusOrg_II_private,organ,0,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xaf,Edt_OrgCom_kLayerFocusOrg_II_private,organ,1,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xb0,Edt_OrgCom_kLayerEnableOrg_II_private,organ,0,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xb0,Edt_OrgCom_kLayerEnableOrg_II_private,organ,1,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xb0,Edt_OrgCom_kLayerEnableOrg_II_private,organ,2,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xb0,Edt_OrgCom_kLayerEnableOrg_II_private,organ,3,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0xe1,Edt_OrgCom_kPolyPercEnable_revB,organ,0,158,0,PNO/1/2,0x95241,0x953cf,158,0
+0xe1,Edt_OrgCom_kPolyPercEnable_revB,organ,1,158,0,PNO/1/2,0x95241,0x953cf,158,0
+0x163,Edt_OrgCom_kOrgPStickEnable,organ,0,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x163,Edt_OrgCom_kOrgPStickEnable,organ,1,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x164,Edt_Org_kSustainEnable,organ,0,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x164,Edt_Org_kSustainEnable,organ,1,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x165,Edt_OrgCom_kAuxKbdControl,organ,0,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x165,Edt_OrgCom_kAuxKbdControl,organ,1,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x165,Edt_OrgCom_kAuxKbdControl,organ,2,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x165,Edt_OrgCom_kAuxKbdControl,organ,3,12,0,PNO/1/2,0xb33b8,0xe20e0,4,12
+0x166,Edt_Org_kModel,organ,0,190,160,PNO/1/2,0x951f1,0xb4540,251,30
+0x166,Edt_Org_kModel,organ,2,6,0,PNO/1/2,0xc27d6,0xc27d7,2,2
+0x166,Edt_Org_kModel,organ,3,1504,0,PNO/1/2,0x955b6,0x95c6b,200,1484
+0x166,Edt_Org_kModel,organ,4,1504,0,PNO/1/2,0x955b6,0x95c6b,200,1484
+0x166,Edt_Org_kModel,organ,5,4,0,PNO/1/2,0xb44ae,0xb4530,4,0
+0x168,Edt_OrgCom_kVibratoTypeB3,organ,0,4,0,PNO/1/2,0xb44ae,0xb4530,4,0
+0x168,Edt_OrgCom_kVibratoTypeB3,organ,1,4,0,PNO/1/2,0xb44ae,0xb4530,4,0
+0x168,Edt_OrgCom_kVibratoTypeB3,organ,2,4,0,PNO/1/2,0xb44ae,0xb4530,4,0
+0x168,Edt_OrgCom_kVibratoTypeB3,organ,3,4,0,PNO/1/2,0xb44ae,0xb4530,4,0
+0x168,Edt_OrgCom_kVibratoTypeB3,organ,4,4,0,PNO/1/2,0xb44ae,0xb4530,4,0
+0x168,Edt_OrgCom_kVibratoTypeB3,organ,5,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x169,Edt_OrgCom_kVibratoTypeVox,organ,0,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x169,Edt_OrgCom_kVibratoTypeVox,organ,1,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x169,Edt_OrgCom_kVibratoTypeVox,organ,2,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x16a,Edt_OrgCom_kVibratoTypeFarfisa,organ,0,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x16a,Edt_OrgCom_kVibratoTypeFarfisa,organ,1,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x16a,Edt_OrgCom_kVibratoTypeFarfisa,organ,2,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x16a,Edt_OrgCom_kVibratoTypeFarfisa,organ,3,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x16b,Edt_Org_Preset_kB3PercEnable,organ,0,188,160,PNO/1/2,0x951f1,0xb4540,249,30
+0x16b,Edt_Org_Preset_kB3PercEnable,organ,1,42,160,PNO/1/2,0x951f1,0xb456b,174,36
+0x16c,Edt_Org_Preset_kVibratoEnable,organ,0,2,160,PNO/1/2,0x95331,0xb454b,162,0
+0x16c,Edt_Org_Preset_kVibratoEnable,organ,1,2,0,PNO/1/2,0xb44ae,0xb452e,2,0
+0x16d,Edt_Org_Preset_kDb1,organ,0,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16d,Edt_Org_Preset_kDb1,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16d,Edt_Org_Preset_kDb1,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16d,Edt_Org_Preset_kDb1,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16d,Edt_Org_Preset_kDb1,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16d,Edt_Org_Preset_kDb1,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16d,Edt_Org_Preset_kDb1,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16d,Edt_Org_Preset_kDb1,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16d,Edt_Org_Preset_kDb1,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16e,Edt_Org_Preset_kDb2,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x16e,Edt_Org_Preset_kDb2,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16e,Edt_Org_Preset_kDb2,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16e,Edt_Org_Preset_kDb2,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16e,Edt_Org_Preset_kDb2,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16e,Edt_Org_Preset_kDb2,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16e,Edt_Org_Preset_kDb2,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16e,Edt_Org_Preset_kDb2,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16e,Edt_Org_Preset_kDb2,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16f,Edt_Org_Preset_kDb3,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x16f,Edt_Org_Preset_kDb3,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16f,Edt_Org_Preset_kDb3,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16f,Edt_Org_Preset_kDb3,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16f,Edt_Org_Preset_kDb3,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16f,Edt_Org_Preset_kDb3,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16f,Edt_Org_Preset_kDb3,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x16f,Edt_Org_Preset_kDb3,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x16f,Edt_Org_Preset_kDb3,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x170,Edt_Org_Preset_kDb4,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x170,Edt_Org_Preset_kDb4,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x170,Edt_Org_Preset_kDb4,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x170,Edt_Org_Preset_kDb4,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x170,Edt_Org_Preset_kDb4,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x170,Edt_Org_Preset_kDb4,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x170,Edt_Org_Preset_kDb4,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x170,Edt_Org_Preset_kDb4,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x170,Edt_Org_Preset_kDb4,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x171,Edt_Org_Preset_kDb5,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x171,Edt_Org_Preset_kDb5,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x171,Edt_Org_Preset_kDb5,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x171,Edt_Org_Preset_kDb5,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x171,Edt_Org_Preset_kDb5,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x171,Edt_Org_Preset_kDb5,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x171,Edt_Org_Preset_kDb5,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x171,Edt_Org_Preset_kDb5,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x171,Edt_Org_Preset_kDb5,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x172,Edt_Org_Preset_kDb6,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x172,Edt_Org_Preset_kDb6,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x172,Edt_Org_Preset_kDb6,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x172,Edt_Org_Preset_kDb6,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x172,Edt_Org_Preset_kDb6,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x172,Edt_Org_Preset_kDb6,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x172,Edt_Org_Preset_kDb6,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x172,Edt_Org_Preset_kDb6,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x172,Edt_Org_Preset_kDb6,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x173,Edt_Org_Preset_kDb7,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x173,Edt_Org_Preset_kDb7,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x173,Edt_Org_Preset_kDb7,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x173,Edt_Org_Preset_kDb7,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x173,Edt_Org_Preset_kDb7,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x173,Edt_Org_Preset_kDb7,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x173,Edt_Org_Preset_kDb7,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x173,Edt_Org_Preset_kDb7,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x173,Edt_Org_Preset_kDb7,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x174,Edt_Org_Preset_kDb8,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x174,Edt_Org_Preset_kDb8,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x174,Edt_Org_Preset_kDb8,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x174,Edt_Org_Preset_kDb8,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x174,Edt_Org_Preset_kDb8,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x174,Edt_Org_Preset_kDb8,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x174,Edt_Org_Preset_kDb8,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x174,Edt_Org_Preset_kDb8,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x174,Edt_Org_Preset_kDb8,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x175,Edt_Org_Preset_kDb9,organ,0,0,160,PNO/1/2,0x95331,0xb454b,160,0
+0x175,Edt_Org_Preset_kDb9,organ,1,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x175,Edt_Org_Preset_kDb9,organ,2,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x175,Edt_Org_Preset_kDb9,organ,3,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x175,Edt_Org_Preset_kDb9,organ,4,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x175,Edt_Org_Preset_kDb9,organ,5,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x175,Edt_Org_Preset_kDb9,organ,6,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x175,Edt_Org_Preset_kDb9,organ,7,0,320,PNO/1/2,0x951f1,0xb454b,320,0
+0x175,Edt_Org_Preset_kDb9,organ,8,0,160,PNO/1/2,0x951f1,0xb44cb,160,0
+0x177,Edt_Org_Preset_kB3PercHarmonic,organ,0,188,160,PNO/1/2,0x951f1,0xb4540,249,30
+0x177,Edt_Org_Preset_kB3PercHarmonic,organ,1,188,160,PNO/1/2,0x951f1,0xb4540,249,30
+0x178,Edt_Org_Preset_kB3PercSpeed,organ,0,188,160,PNO/1/2,0x951f1,0xb4540,249,30
+0x178,Edt_Org_Preset_kB3PercSpeed,organ,1,188,160,PNO/1/2,0x951f1,0xb4540,249,30
+0x179,Edt_Org_Preset_kB3PercLevel,organ,0,188,160,PNO/1/2,0x951f1,0xb4540,249,30
+0x179,Edt_Org_Preset_kB3PercLevel,organ,1,188,160,PNO/1/2,0x951f1,0xb4540,249,30
+0x152,Edt_Pno_kPosStatus,piano,0,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x152,Edt_Pno_kPosStatus,piano,1,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x152,Edt_Pno_kPosStatus,piano,2,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x153,Edt_Pno_kBank,piano,0,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x153,Edt_Pno_kBank,piano,1,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x153,Edt_Pno_kBank,piano,2,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x153,Edt_Pno_kBank,piano,3,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x153,Edt_Pno_kBank,piano,4,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x153,Edt_Pno_kBank,piano,5,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x154,Edt_Pno_kEntry,piano,0,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x154,Edt_Pno_kEntry,piano,4,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x154,Edt_Pno_kEntry,piano,9,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x154,Edt_Pno_kEntry,piano,15,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x154,Edt_Pno_kEntry,piano,19,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x155,Edt_Pno_kVariation,piano,0,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x155,Edt_Pno_kVariation,piano,1,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x155,Edt_Pno_kVariation,piano,2,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x155,Edt_Pno_kVariation,piano,3,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x158,Edt_Pno_kPedalNoise,piano,0,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x158,Edt_Pno_kPedalNoise,piano,1,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,0,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,1,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,2,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,3,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,4,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,5,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,6,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x15c,Edt_Pno_kEq,piano,7,2,0,SMP/0/1,0x9403e,0x94046,2,2
+0x19e,Edt_Effects_kAmpEnable,piano,0,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x19e,Edt_Effects_kAmpEnable,piano,1,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,0,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,1,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,2,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,3,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,4,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,5,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,6,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,7,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,8,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x1a7,Edt_Effects_kAmpTypeNew,piano,9,3104,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,3032
+0x19e,Edt_Effects_kAmpEnable,synth,0,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x19e,Edt_Effects_kAmpEnable,synth,1,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,0,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,1,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,2,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,3,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,4,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,5,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,6,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,7,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,8,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548
+0x1a7,Edt_Effects_kAmpTypeNew,synth,9,4656,0,PNO/1/2 SMP/0/1,0x94086,0xc2cb7,224,4548

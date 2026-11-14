@@ -9,11 +9,19 @@ use std::f32::consts::TAU;
 use std::path::Path;
 use std::sync::Arc;
 
+pub mod category;
+pub mod downstream;
+pub mod level_q23;
+pub mod npno_level;
 pub mod q31_kernel;
 pub mod smp_page;
 pub mod smp_unpack;
 pub mod smp_voice;
+pub mod step_q32;
+pub mod velocity_curve;
+pub mod velocity_level;
 
+mod extra_voice;
 #[cfg(test)]
 mod interp_switch;
 
@@ -76,6 +84,9 @@ pub struct LoadedPianoStroke {
     pub pcm_right: Option<Arc<[f32]>>,
     pub loop_start: Option<usize>,
     pub loop_end: Option<usize>,
+    /// `true` when `pcm` holds the integer samples of a CNSP decode (`y / 8192`), so the hardware
+    /// integer MAC applies (`SampleInterp::SmpQ31Hw`); `false` for float WAV / SFZ material.
+    pub integer_pcm: bool,
 }
 
 /// Multi-velocity and key-off release zone descriptor for `.npno` and SFZ/WAV multisample instruments.
@@ -102,9 +113,25 @@ pub struct NpnoSound {
     pub strokes: Vec<LoadedPianoStroke>,
     /// Optional multi-velocity and `trigger=release` zone list (used by SFZ multisamples).
     pub zones: Vec<PianoSampleZone>,
+    /// Hardware level model parsed from the `.npno` header and stroke records (`None` for
+    /// synthetic and SFZ sounds); used only when `PianoLayer::firmware_velocity_level` is set.
+    pub firmware_level: Option<Arc<npno_level::NpnoLevel>>,
+    /// Piano type from the `.npno` CBIN header (`PianoCategory::from_npno_header`); `None` for
+    /// synthetic and SFZ sounds.
+    pub category: Option<PianoCategory>,
 }
 
 impl NpnoSound {
+    /// Voice gain of `note` at `velocity` from the firmware's level law: the ARM writes the
+    /// float `level_q23 / 2^23` of the main voice to the SMP voice record (DM `0x9252A`, VERIFIED
+    /// by run for two velocities), and the SMP scales the decoded stroke (`y / 8192`) by it.
+    /// `None` when the sound has no model or the note is unmapped.
+    pub fn firmware_velocity_gain(&self, note: u8, velocity: u8) -> Option<f32> {
+        let model = self.firmware_level.as_ref()?;
+        let level = model.main_voice_q23(note, velocity.clamp(1, 127))?;
+        Some((level as f32 / 8_388_608.0).min(1.0))
+    }
+
     /// Creates a playable `NpnoSound` from parsed `NpnoInstrument` and raw file bytes.
     pub fn from_npno_bytes(bytes: &[u8]) -> Result<Self, String> {
         let inst = NpnoInstrument::parse(bytes)?;
@@ -120,6 +147,7 @@ impl NpnoSound {
                 pcm_right: right.map(Into::into),
                 loop_start: s.loop_start.map(|x| x as usize),
                 loop_end: s.loop_end.map(|x| x as usize),
+                integer_pcm: true,
             });
             meta.push((idx, s.root_key, s.stroke_kind, s.vel_low));
         }
@@ -181,6 +209,8 @@ impl NpnoSound {
             stroke_by_key,
             strokes,
             zones,
+            firmware_level: npno_level::NpnoLevel::parse(bytes).map(Arc::new),
+            category: PianoCategory::from_npno_header(bytes),
         })
     }
 
@@ -248,6 +278,7 @@ impl NpnoSound {
             pcm_right: None,
             loop_start: None,
             loop_end: None,
+            integer_pcm: false,
         };
         let strokes = vec![stroke];
         let stroke_by_key = [Some(0); 128];
@@ -258,6 +289,8 @@ impl NpnoSound {
             stroke_by_key,
             strokes,
             zones: Vec::new(),
+            firmware_level: None,
+            category: None,
         }
     }
 
@@ -310,6 +343,7 @@ impl NpnoSound {
                     pcm_right: None,
                     loop_start: reg.loop_start,
                     loop_end: reg.loop_end,
+                    integer_pcm: false,
                 });
                 cache.insert(cache_key, idx);
                 idx
@@ -349,6 +383,8 @@ impl NpnoSound {
             stroke_by_key,
             strokes,
             zones,
+            firmware_level: None,
+            category: None,
         })
     }
 
@@ -754,6 +790,8 @@ struct PianoVoice {
     sample_pos_detune: f64,
     sample_step: f64,
     sample_step_detune: f64,
+    /// Extra first voice of a firmware note-on (released with its note, no release sample of its own).
+    extra: bool,
 }
 
 /// 2-pole modal harmonic string resonator for Advanced String Resonance.
@@ -794,6 +832,17 @@ pub struct PianoLayer {
     pub timbre: PianoTimbre,
     pub string_resonance_enabled: bool,
     pub pedal_noise_enabled: bool,
+    /// Sound menu "Piano Pedal Noise Level" as a linear gain (`1.0` = 0 dB, the default).
+    pub pedal_noise_gain: f32,
+    /// Sound menu "Piano String Res Level" as a linear gain (`1.0` = 0 dB, the default).
+    pub string_res_gain: f32,
+    /// System menu Fine Tune in cents, applied to voices started afterwards (default `0.0`).
+    pub master_tune_cents: f32,
+    /// Pitch stick bend in cents (manual p.18 PSTICK), applied live to every sounding voice; set
+    /// with [`Self::set_bend_cents`]. Default `0.0` leaves the render bit-identical.
+    bend_cents: f32,
+    /// `2^(bend_cents / 1200)`; exactly `1.0` at the default.
+    bend_ratio: f64,
     pub soft_release: bool,
     /// Piano Unison hammer/string detune spread (`0` = Off, `1..=3`).
     pub unison: u8,
@@ -802,9 +851,21 @@ pub struct PianoLayer {
     /// Keyboard octave transposition (`-2..=+2`).
     pub octave_shift: i8,
     pub damper_pedal_down: bool,
+    /// Half-pedal state: dampers half-raised (pedal depth in `0.2..0.5`), so keys released now fall
+    /// back on the slower soft-release decay. Set by the engine pedal router.
+    /// ASSUMED: slow decay stands in for partial damping, see `docs/specs/midi-and-control.md`.
+    pub damper_half: bool,
     pub sostenuto_pedal_down: bool,
     pub soft_pedal_down: bool,
     pub sound: Option<Arc<NpnoSound>>,
+    /// Firmware level law (default `true`): `.npno` sounds with a parsed level model start the
+    /// voices the firmware starts, each with the gain `level_q23 / 2^23`
+    /// (`piano/extra_voice.rs`). SFZ/WAV and synthetic sounds have no model and always use the
+    /// legacy touch curve; set `false` to force the legacy path for `.npno` sounds too.
+    pub firmware_velocity_level: bool,
+    /// Scale the sample path by the SMP bus convention (`downstream::FIRMWARE_SAMPLE_SCALE`,
+    /// 0.5) instead of the legacy 0.55. Default `false`: the Q31 receiver convention is ASSUMED.
+    pub firmware_bus_scale: bool,
     /// Sample interpolation: hardware-parity SMP kernel (default) or the older cubic.
     pub sample_interp: SampleInterp,
     kernel: &'static SmpKernel,
@@ -873,14 +934,22 @@ impl PianoLayer {
             timbre: PianoTimbre::Off,
             string_resonance_enabled: true,
             pedal_noise_enabled: true,
+            pedal_noise_gain: 1.0,
+            string_res_gain: 1.0,
+            master_tune_cents: 0.0,
+            bend_cents: 0.0,
+            bend_ratio: 1.0,
             soft_release: false,
             unison: 0,
             dyn_comp: 0,
             octave_shift: 0,
             damper_pedal_down: false,
+            damper_half: false,
             sostenuto_pedal_down: false,
             soft_pedal_down: false,
             sound,
+            firmware_velocity_level: true,
+            firmware_bus_scale: false,
             sample_interp: SampleInterp::default(),
             kernel: SmpKernel::shared(),
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
@@ -952,6 +1021,11 @@ impl PianoLayer {
             _ => 0.0,
         };
         let detune_ratio = 2.0f64.powf(unison_cents / 1200.0);
+        if self.firmware_velocity_level
+            && self.start_firmware_voices(note, velocity, effective_note, freq, detune_ratio, gain)
+        {
+            return;
+        }
 
         let damper_down = self.damper_pedal_down;
         let (stroke_idx, sample_step, has_multi_vel) = if let Some(snd) = &self.sound {
@@ -960,8 +1034,9 @@ impl PianoLayer {
             {
                 if let Some(st) = snd.strokes.get(idx) {
                     let root = st.root_key;
-                    let semitones =
-                        (f32::from(effective_note) - f32::from(root)) + (f32::from(cents) / 100.0);
+                    let semitones = (f32::from(effective_note) - f32::from(root))
+                        + (f32::from(cents) / 100.0)
+                        + self.master_tune_cents / 100.0;
                     let pitch_ratio = 2.0f32.powf(semitones / 12.0);
                     let step = (pitch_ratio as f64)
                         * ((st.sample_rate as f64) / (self.sample_rate as f64));
@@ -986,7 +1061,14 @@ impl PianoLayer {
             }
         }
 
-        let base_amp = self.touch.map_velocity(velocity);
+        let firmware_gain = if self.firmware_velocity_level {
+            self.sound
+                .as_ref()
+                .and_then(|snd| snd.firmware_velocity_gain(effective_note, velocity))
+        } else {
+            None
+        };
+        let base_amp = firmware_gain.unwrap_or_else(|| self.touch.map_velocity(velocity));
         let compressed_amp = match self.dyn_comp {
             1 => base_amp.powf(0.82),
             2 => base_amp.powf(0.68),
@@ -994,7 +1076,10 @@ impl PianoLayer {
             _ => base_amp,
         };
         // Multisample .npno strokes already encode ~6 dB of hammer dynamics; add natural acoustic expression on top.
-        let shaped_amp = if has_multi_vel {
+        let shaped_amp = if firmware_gain.is_some() {
+            // The firmware level law already includes the hammer dynamics of the strokes.
+            compressed_amp
+        } else if has_multi_vel {
             0.22 + 0.78 * compressed_amp.powf(0.9)
         } else {
             compressed_amp
@@ -1023,6 +1108,7 @@ impl PianoLayer {
             sample_pos_detune: 0.0,
             sample_step,
             sample_step_detune: sample_step * detune_ratio,
+            extra: false,
         };
     }
 
@@ -1037,7 +1123,9 @@ impl PianoLayer {
             return;
         };
 
-        let semitones = (f32::from(effective_note) - f32::from(root)) + (f32::from(cents) / 100.0);
+        let semitones = (f32::from(effective_note) - f32::from(root))
+            + (f32::from(cents) / 100.0)
+            + self.master_tune_cents / 100.0;
         let pitch_ratio = 2.0f32.powf(semitones / 12.0);
         let step = (pitch_ratio as f64) * ((st_sr as f64) / (self.sample_rate as f64));
         let slot = self.allocate_voice_slot(None);
@@ -1062,6 +1150,7 @@ impl PianoLayer {
             sample_pos_detune: 0.0,
             sample_step: step,
             sample_step_detune: step,
+            extra: false,
         };
     }
 
@@ -1077,8 +1166,10 @@ impl PianoLayer {
                     // Sostenuto holds the note until CC66 lifts.
                 } else if !v.releasing {
                     v.releasing = true;
-                    v.soft_release = self.soft_release;
-                    release_trigger = Some((v.last_velocity, v.amp, v.gain));
+                    v.soft_release = self.soft_release || self.damper_half;
+                    if !v.extra {
+                        release_trigger = Some((v.last_velocity, v.amp, v.gain));
+                    }
                 }
             }
         }
@@ -1115,7 +1206,7 @@ impl PianoLayer {
                     if !v.sostenuto_held && !v.releasing {
                         v.releasing = true;
                         v.soft_release = self.soft_release;
-                        if rel_count < MAX_PIANO_VOICES {
+                        if rel_count < MAX_PIANO_VOICES && !v.extra {
                             released_notes[rel_count] = (v.note, v.last_velocity, v.amp, v.gain);
                             rel_count += 1;
                         }
@@ -1222,6 +1313,8 @@ impl PianoLayer {
         let at = |pcm: &[f32]| match interp {
             SampleInterp::Cubic => Self::sample_pcm_at(pcm, p),
             SampleInterp::SmpQ31 => kernel.interpolate(pcm, p),
+            SampleInterp::SmpQ31Hw if stroke.integer_pcm => kernel.interpolate_hw(pcm, p),
+            SampleInterp::SmpQ31Hw => kernel.interpolate(pcm, p),
         };
         let l = at(&stroke.pcm)?;
         let r = stroke.pcm_right.as_deref().and_then(at).unwrap_or(l);
@@ -1254,9 +1347,15 @@ impl PianoLayer {
         let low_a = (TAU * 120.0 * inv_fs).clamp(0.005, 0.25);
         self.timbre_low_lp += low_a * (mono - self.timbre_low_lp);
 
-        // Resonant midrange presence bell (1.2 kHz for Mid, 800 Hz scoop for Dyno2)
+        // Resonant midrange presence bell (1.2 kHz for Mid, 800 Hz scoop for Dyno2). On the
+        // Electric type SOFT/MID/BRIGHT are tailored (manual p.26): the bell sits in the upper
+        // mid-range (ASSUMED 2.2 kHz: tine "bell"/presence band; confirm by a sweep of the
+        // hardware TIMBRE steps on an EP model).
+        let electric = self.category == PianoCategory::Electric;
         let bell_hz = if self.timbre == PianoTimbre::Dyno2 {
             800.0
+        } else if electric {
+            2200.0
         } else {
             1200.0
         };
@@ -1268,6 +1367,12 @@ impl PianoLayer {
 
         let delta = match self.timbre {
             PianoTimbre::Off => 0.0,
+            // Electric SOFT: less treble and bell, ASSUMED gains (manual p.26 wording only).
+            PianoTimbre::Soft if electric => -0.55 * high - 0.30 * mid_bell,
+            // Electric MID: upper-mid presence boost, ASSUMED gain.
+            PianoTimbre::Mid if electric => 0.60 * mid_bell,
+            // Electric BRIGHT: presence plus treble, ASSUMED gains.
+            PianoTimbre::Bright if electric => 0.50 * mid_bell + 0.65 * high,
             PianoTimbre::Soft => -0.50 * high,
             PianoTimbre::Mid => 0.50 * mid_bell,
             PianoTimbre::Bright => 0.65 * high,
@@ -1277,8 +1382,26 @@ impl PianoLayer {
         [sum_l + delta, sum_r + delta]
     }
 
+    /// Sets the pitch stick bend in cents (non-finite counts as 0); voices follow it live.
+    pub fn set_bend_cents(&mut self, cents: f32) {
+        let cents = if cents.is_finite() { cents } else { 0.0 };
+        self.bend_cents = cents;
+        self.bend_ratio = if cents == 0.0 {
+            1.0
+        } else {
+            (f64::from(cents) / 1200.0).exp2()
+        };
+    }
+
+    /// The pitch stick bend in cents.
+    pub fn bend_cents(&self) -> f32 {
+        self.bend_cents
+    }
+
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        let bend = self.bend_ratio;
+        let bend32 = bend as f32;
         let mut sum_l = 0.0f32;
         let mut sum_r = 0.0f32;
         let unison_on = self.unison > 0;
@@ -1298,7 +1421,7 @@ impl PianoLayer {
                     if let Some((ml, mr)) = Self::sample_stroke_stereo_at(
                         stroke,
                         &mut v.sample_pos,
-                        v.sample_step,
+                        v.sample_step * bend,
                         self.sample_interp,
                         self.kernel,
                     ) {
@@ -1306,7 +1429,7 @@ impl PianoLayer {
                             let (dl, dr) = Self::sample_stroke_stereo_at(
                                 stroke,
                                 &mut v.sample_pos_detune,
-                                v.sample_step_detune,
+                                v.sample_step_detune * bend,
                                 self.sample_interp,
                                 self.kernel,
                             )
@@ -1321,7 +1444,7 @@ impl PianoLayer {
                     }
                 } else {
                     let p = v.phase;
-                    v.phase = (p + TAU * v.freq * inv_fs) % TAU;
+                    v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
                     let m = p.sin()
                         + 0.45 * v.amp * (2.0 * p).sin()
                         + 0.20 * v.amp * v.amp * (3.0 * p).sin();
@@ -1330,13 +1453,14 @@ impl PianoLayer {
             } else {
                 // Harmonic piano wave model (fundamental + 2nd + 3rd partials with velocity brightness)
                 let p = v.phase;
-                v.phase = (p + TAU * v.freq * inv_fs) % TAU;
+                v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
                 let m = p.sin()
                     + 0.45 * v.amp * (2.0 * p).sin()
                     + 0.20 * v.amp * v.amp * (3.0 * p).sin();
                 if unison_on && !v.is_release_sample {
                     let pd = v.phase_detune;
-                    v.phase_detune = (pd + TAU * v.freq * unison_detune_ratio * inv_fs) % TAU;
+                    v.phase_detune =
+                        (pd + TAU * v.freq * bend32 * unison_detune_ratio * inv_fs) % TAU;
                     let d = pd.sin() + 0.45 * v.amp * (2.0 * pd).sin();
                     (0.75 * m + 0.25 * d, 0.25 * m + 0.75 * d)
                 } else {
@@ -1344,7 +1468,8 @@ impl PianoLayer {
                 }
             };
 
-            let sample_scale = if v.stroke_idx.is_some() { 0.55 } else { 0.2 };
+            let sample_scale =
+                downstream::sample_scale(v.stroke_idx.is_some(), self.firmware_bus_scale);
             let voice_gain = v.amp * v.env * v.gain * sample_scale;
             sum_l += sig_l * voice_gain;
             sum_r += sig_r * voice_gain;
@@ -1372,8 +1497,8 @@ impl PianoLayer {
                 + noise * self.pedal_brush_env * 0.25;
             let lp_a = (TAU * self.pedal_cutoff_hz * inv_fs).clamp(0.005, 0.35);
             self.pedal_lp_state += lp_a * (raw_thump - self.pedal_lp_state);
-            sum_l += self.pedal_lp_state;
-            sum_r += self.pedal_lp_state;
+            sum_l += self.pedal_lp_state * self.pedal_noise_gain;
+            sum_r += self.pedal_lp_state * self.pedal_noise_gain;
             brush_excite = self.pedal_brush_env * 0.18 * noise;
             self.pedal_noise_env *= (-inv_fs / 0.045).exp();
             self.pedal_brush_env *= (-inv_fs / 0.030).exp();
@@ -1448,7 +1573,10 @@ impl PianoLayer {
             }
         }
 
-        [shaped_l + res_l, shaped_r + res_r]
+        [
+            shaped_l + res_l * self.string_res_gain,
+            shaped_r + res_r * self.string_res_gain,
+        ]
     }
 }
 
@@ -1479,6 +1607,54 @@ mod tests {
             out.extend_from_slice(&q.to_le_bytes());
         }
         out
+    }
+
+    /// Firmware level law is the default for `.npno` sounds with a level model; the voice
+    /// amplitude is the firmware gain, `false` restores the touch curve, and sounds without a
+    /// model (synthetic, SFZ) always use the legacy path.
+    #[test]
+    fn firmware_velocity_level_is_the_default_for_npno_sounds_only() {
+        let image = npno_level::test_image(60, &[(0, 66, 0), (0, 56, 16), (0, 36, 46)], 40);
+        let model = Arc::new(npno_level::NpnoLevel::parse(&image).unwrap());
+        let mut sound = NpnoSound::new_synthetic("fw", 60, &[0.1; 64], 48_000.0);
+        let stroke = sound.strokes[0].clone();
+        sound.strokes = vec![stroke; 3];
+        sound.firmware_level = Some(model.clone());
+        let sound = Arc::new(sound);
+
+        let mut fw = PianoLayer::new(48_000.0);
+        fw.set_sound(Some(sound.clone()));
+        assert!(fw.firmware_velocity_level, "default is on");
+        fw.note_on(60, 40);
+        let want = model.main_voice_q23(60, 40).unwrap() as f32 / 8_388_608.0;
+        assert!(
+            (fw.voices[0].amp - want).abs() < 1e-6,
+            "{} vs {want}",
+            fw.voices[0].amp
+        );
+        assert!(fw.voices[0].amp < 1.0);
+        fw.note_on(61, 40);
+        let fallback = fw
+            .voices
+            .iter()
+            .filter(|v| v.active && v.note == 61)
+            .map(|v| v.amp)
+            .next()
+            .unwrap();
+        assert!(
+            (fallback - fw.touch.map_velocity(40)).abs() < 0.3,
+            "unmapped note falls back"
+        );
+
+        let mut legacy = PianoLayer::new(48_000.0);
+        legacy.set_sound(Some(sound));
+        legacy.firmware_velocity_level = false;
+        legacy.note_on(60, 40);
+        assert!((legacy.voices[0].amp - legacy.touch.map_velocity(40)).abs() < 1e-6);
+
+        let mut synthetic = PianoLayer::new(48_000.0);
+        synthetic.note_on(60, 40);
+        assert!((synthetic.voices[0].amp - synthetic.touch.map_velocity(40)).abs() < 1e-6);
     }
 
     #[test]
@@ -1867,5 +2043,47 @@ mod tests {
             "held sampled stroke env must remain 1.0, got {}",
             hold.voices[0].env
         );
+    }
+
+    /// Mean frequency estimate from rising zero crossings of the left channel.
+    fn crossings(piano: &mut PianoLayer, frames: usize) -> usize {
+        let mut prev = 0.0f32;
+        let mut n = 0;
+        for _ in 0..frames {
+            let l = piano.render_frame()[0];
+            if prev < 0.0 && l >= 0.0 {
+                n += 1;
+            }
+            prev = l;
+        }
+        n
+    }
+
+    #[test]
+    fn pitch_stick_bend_defaults_to_a_bit_identical_render() {
+        let render = |bend: Option<f32>| {
+            let mut p = PianoLayer::new(48_000.0);
+            if let Some(c) = bend {
+                p.set_bend_cents(c);
+            }
+            p.note_on(60, 100);
+            (0..2048).map(|_| p.render_frame()).collect::<Vec<_>>()
+        };
+        assert_eq!(render(None), render(Some(0.0)));
+        assert_eq!(render(Some(f32::NAN)), render(None), "non-finite is 0");
+    }
+
+    #[test]
+    fn pitch_stick_bend_shifts_a_sounding_voice_live() {
+        let mut flat = PianoLayer::new(48_000.0);
+        flat.note_on(60, 100);
+        let mut up = PianoLayer::new(48_000.0);
+        up.note_on(60, 100);
+        up.set_bend_cents(1200.0); // one octave
+        let (a, b) = (crossings(&mut flat, 24_000), crossings(&mut up, 24_000));
+        assert!(a > 50, "{a}");
+        let ratio = b as f32 / a as f32;
+        assert!((ratio - 2.0).abs() < 0.1, "octave bend ratio {ratio}");
+        assert_eq!(up.bend_cents(), 1200.0);
     }
 }
