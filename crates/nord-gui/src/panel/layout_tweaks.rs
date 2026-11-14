@@ -40,6 +40,29 @@ pub const TWEAKS: &[(&str, f32, f32)] = &[
     ("piano.zone_leds", 0.0, 3.0),
     // The SPLIT name touched the L M H LED strip above its button.
     ("split.leds", 0.0, -2.0),
+    // The Mod 1 numerals need the room the LAYER FX button legend used (round 4).
+    ("fx.layer_effects_on", 0.0, -10.0),
+    // The "VAR" legend under the amp model button printed into the TREBLE numeral `0`.
+    ("amp.model", 0.0, -12.0),
+    ("amp.variation", 0.0, -12.0),
+    ("amp.filter", 0.0, -12.0),
+    ("amp.to_rotary", 0.0, -12.0),
+    // The variation lists need the width between the AMOUNT numerals and the ON button.
+    ("mod1.selector", 8.0, 0.0),
+    ("mod1.variation", 8.0, 0.0),
+    ("mod2.selector", 9.0, 0.0),
+    ("mod2.variation", 9.0, 0.0),
+    // The FAST / CHOR / PING PONG legends of the knob columns touched the ON LEDs below them.
+    ("comp.on", 0.0, 8.0),
+    ("comp.global", 0.0, 8.0),
+    ("reverb.on", 0.0, 6.0),
+    ("reverb.global", 0.0, 6.0),
+    ("delay.on", 0.0, 6.0),
+    ("delay.global", 0.0, 6.0),
+    // The ARP/POLY/GATE legend printed into the RATE `8` and RANGE `2` numerals.
+    ("synth.arp.range", 5.0, 0.0),
+    // The Rotary DRIVE knob moves up so its name fits between the numerals and the ORGAN legend.
+    ("rotary.drive", 0.0, -4.0),
     // "DECAY FAST" and "HARMONIC 3RD" touched; the third button moves right.
     ("organ.perc_third", 12.0, 0.0),
 ];
@@ -69,10 +92,10 @@ pub const GROUP_TWEAKS: &[(&str, f32, f32)] = &[
     ("synth.unison", 0.0, 16.0),
     // Piano: the PIANO SELECT box (type names, dial) moves under the KB TOUCH / DYN COMP LEDs; the
     // TIMBRE button moves left so its two name columns end before the box.
-    ("piano.type", 0.0, 34.0),
-    ("piano.select_dial", 0.0, 34.0),
-    ("piano.info", 0.0, 34.0),
-    ("piano.list", 0.0, 34.0),
+    ("piano.type", 0.0, 45.0),
+    ("piano.select_dial", 0.0, 45.0),
+    ("piano.info", 0.0, 45.0),
+    ("piano.list", 0.0, 45.0),
     ("piano.timbre", -9.0, 0.0),
     // Layer Effects: Mod 1 clear of the header's ON button legend, Mod 2 and Amp Sim/EQ down,
     // Comp and Reverb down under the Delay box.
@@ -99,7 +122,7 @@ pub const GROUP_TWEAKS: &[(&str, f32, f32)] = &[
     ("piano.dyn_comp", 0.0, 20.0),
     ("comp.", 0.0, 14.0),
     ("reverb.dry_wet", 6.0, 0.0),
-    ("reverb.", 0.0, 14.0),
+    ("reverb.", 8.0, 14.0),
 ];
 
 /// Nudge of control `id` (zero when it has none).
