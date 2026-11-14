@@ -246,23 +246,6 @@ Why no response table: the model needs `c[0]`, `c[1]`, `c[-24 .. -13]`, `c[-6]`,
 
 Next steps (unchanged in order): (1) drive the part's command consumer (`[part + 0xC8]` list, node `{-1, counter}`) in the harness after `kRvbEnable` and capture the DSP messages of `0xC02BB44C` (hook `0xC006CA48`, `0xC001C6A0`); (2) model `0x120D8A`, `0x120FDB`, `0x120F7E` with `FPACK`/`FUNPACK`/`FDEP`/`FEXT` in `tools/fx_rvbcore_gen.py` and check word for word against `sharc-fx --trace`; (3) golden vectors, E40 port, response table, UI names, video check; D22 only after those.
 
-## 13. Types 2..11: step model of the wrapper and core, verified on a built instance (sixth pass, 2026-11-14)
-
-**Done.** `tools/fx_rvb2_lift.py` lifts the `sharc-disasm` listing of `0x120D8A` (core, 200+ instructions, one 7-pass loop) and `0x120FDB` (4-frame wrapper) to step models `tools/fx_model_rvb2.py`, `tools/fx_model_rvb2_wrap.py` (same `Machine.step` semantics as the s6 model; new forms `FPACK`, `FUNPACK`, `FEXT`, `FDEP`, `TRUNC`, `BTGL`, `MODIFY`, `PM` loads, conditional register moves with `AZ` / `SZ` flags). `tools/fx_rvb2_check.py check` runs the wrapper in `sharc-fx --trace` and compares **every register and DAG register before every instruction** plus the 8 output words per call: types 2, 5, 9, 11, 30 to 60 carried calls each, 0 differences (for example type 5, 30 calls: 240 of 240 words; type 9, 40 calls: 320 of 320). The model is therefore VERIFIED as a transliteration of the routines on the instance below. The Rust generator output (`--rust`) exists but is not committed: the machine it targets (`fw_rvb2_core.rs`) is not written.
-
-**Instance built from the best evidence (`fx_rvb2_check.instance`).** The per-type words of `fx-type-words.csv`; `c[0] = 0xB0F74`, `c[1] = 0xB0F84` (the two table pointers, from the position of the LFO words `0xB0F59` / `0xB0F69` = `I4 - 27`, EMPIRICAL); `I10` of the two tables = `0x95013`, `0x95024` (the two PM lists, EMPIRICAL: the model consumes 18 words per call from them); FIR pointer `0xB1C26` (EMPIRICAL, the seven words); smoothing pole `c[-32]` = the type 0, 1 value `0x3F7DC91D`, send / dry `c[-31..-28]`, output scales `c[42]`, `c[43]` = 1.0 (ASSUMED); lines of 5000 words in SDRAM (ASSUMED); write advance `M5 = M6 = 2` (ASSUMED).
-
-**Result: this instance is not the hardware's, the wet path is silent.** With the words above the oracle returns `out = dry * in` exactly (`kRvbAmt` 0.7 / 0.4: max wet 7e-9), for every type. The trace shows why: the PM list words are consumed as address modifiers (`M3 = PM(I10, M9)` then `DM(I2, M3)`), and the list holds `262, 0xBFFFFFF0, 0, 0x40000012, 0xBFFFFFEE, 56, 0xFFFFFFC8, ...` (a float-looking `+-2.0` word between small integers); a modifier of `0xBFFFFFF0` sends the line pointer to `0xC80400F8`, so the taps read zeros. Either the list is not read through `I10 = 0x95013` (the true `DM(-28, I4)` is unsent), or the high bits are masked by the hardware, or the lengths `c[-14]`, `c[-23]` make the walk wrap in a way that the oracle's one-wrap `dag_next` does not model for such values. The second line reads its list through `I11 = c[-20]` (unsent, zero PM), so all its modifiers are 0. These words are all in the part of the instance that only the ARM activation path writes; no T60, EDT, echo density or band table is quoted because the response is identically the dry path, and no Rust port or video comparison was done.
-
-| Item | State |
-|---|---|
-| Listing to step lifter for the 40 instruction forms of the core and wrapper | done, 6 unit tests (`tools/tests/test_fx_rvb2.py`) |
-| Model against `sharc-fx --trace`, instruction by instruction | done on the built instance (types 2, 5, 9, 11) |
-| Instance words `c[-24 .. -13]`, `c[-20]`, `c[-6]`, `c[-4]`, table words `DM(-32 .. -28, I4)`, `DM(-23 .. -21, I4)`, lengths | **unknown**: ARM activation path not driven (the part command consumer, fx-contexts s7) |
-| Response table, Rust port, video comparison, D22 | blocked on the line above; the engine FDN stays for types 2..11 |
-
-Next step: capture the instance with the ARM harness by running the part's command consumer after `kRvbEnable` (the unsent words are the whole difference between a silent and a working reverb), then re-run `tools/fx_rvb2_check.py check` / `responses` and generate the Rust steps with `tools/fx_rvb2_lift.py --rust`.
-
 ## Implications
 
 - The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are not.

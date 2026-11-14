@@ -3,16 +3,17 @@
 //!
 //! Usage: `cargo run --release -p nord-core --example ag_synth -- out.wav key=value ...`
 //!
-//! Keys (panel units where the panel has them): `note` (MIDI, 67), `vel` (100), `hold` (seconds
+//! Keys (panel units where the panel has them): `note` (MIDI, 67), `notes` (comma list, overrides note), `vel` (100), `hold` (seconds
 //! the key is down, 2.0), `len` (total seconds, hold + 1.0), `wf` (saw|supersaw|triangle|sine),
 //! `cutoff` (Hz), `res` (0..1), `filter` (lp12|lp24|ladder|bp|hp), `fenv_amt` (panel 0..10),
 //! `fenv_atk`/`fenv_dec`/`fenv_rel` (seconds, displayed values), `detune` (panel 0..10),
 //! `unison` (0..3), `oenv_amt` (-1..1), `oenv_dec` (s), `to_pitch` (0|1), `vib`
 //! (off|on|delay|wheel|aftertouch), `vib_rate` (Hz), `vib_amt` (panel 0..10), `vib_delay` (s),
-//! `vib_ctrl` (0..1), `chain` (legacy|strip), `engine` (zdf|firmware), `measured` (0|1), `amp_dec` (s, 45 = hold).
+//! `vib_ctrl` (0..1), `lfo` (tri|saw|sawdown|square|sh), `lfo_dest` (filter|pitch|ctrl), `lfo_rate` (Hz), `lfo_amt` (panel 0..10), `chain` (legacy|strip), `engine` (zdf|firmware), `measured` (0|1), `amp_dec` (s, 45 = hold).
 
 use nord_core::synth::{
-    FilterEngine, FilterModel, SynthChain, SynthLayer, VaWaveform, VibratoMode,
+    FilterEngine, FilterModel, LfoDestination, LfoShape, SynthChain, SynthLayer, VaWaveform,
+    VibratoMode,
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -29,6 +30,7 @@ fn configure(kv: &HashMap<String, String>) -> SynthLayer {
         Some("supersaw") => VaWaveform::SuperSaw,
         Some("triangle") => VaWaveform::Triangle,
         Some("sine") => VaWaveform::Sine,
+        Some("pulse") => VaWaveform::Pulse,
         _ => VaWaveform::Saw,
     };
     s.filter_model = match kv.get("filter").map(String::as_str) {
@@ -70,6 +72,20 @@ fn configure(kv: &HashMap<String, String>) -> SynthLayer {
     s.vibrato_depth_cents = num(kv, "vib_amt", 5.0) / 10.0 * 92.0;
     s.vibrato_delay_sec = num(kv, "vib_delay", 0.7);
     s.vibrato_ctrl = num(kv, "vib_ctrl", 0.0);
+    s.lfo_shape = match kv.get("lfo").map(String::as_str) {
+        Some("saw") => LfoShape::Saw,
+        Some("sawdown") => LfoShape::SawDown,
+        Some("square") => LfoShape::Square,
+        Some("sh") => LfoShape::SampleAndHold,
+        _ => LfoShape::Triangle,
+    };
+    s.lfo_dest = match kv.get("lfo_dest").map(String::as_str) {
+        Some("pitch") => LfoDestination::OscPitch,
+        Some("ctrl") => LfoDestination::OscCtrl,
+        _ => LfoDestination::FilterCutoff,
+    };
+    s.lfo_rate_hz = num(kv, "lfo_rate", 3.5);
+    s.lfo_amount = num(kv, "lfo_amt", 0.0) / 10.0;
     s.measured_laws = num(kv, "measured", 0.0) > 0.5;
     s.chain = if kv.get("chain").map(String::as_str) == Some("strip") {
         SynthChain::FirmwareStrip
@@ -118,11 +134,19 @@ fn main() {
     let note = num(&kv, "note", 67.0) as u8;
     let hold = (num(&kv, "hold", 2.0) * SR) as usize;
     let total = (num(&kv, "len", num(&kv, "hold", 2.0) + 1.0) * SR) as usize;
-    s.note_on(note, num(&kv, "vel", 100.0) as u8);
+    let notes: Vec<u8> = kv
+        .get("notes")
+        .map(|v| v.split(',').filter_map(|n| n.parse().ok()).collect())
+        .unwrap_or_else(|| vec![note]);
+    for &n in &notes {
+        s.note_on(n, num(&kv, "vel", 100.0) as u8);
+    }
     let mut frames = Vec::with_capacity(total);
     for i in 0..total {
         if i == hold {
-            s.note_off(note);
+            for &n in &notes {
+                s.note_off(n);
+            }
         }
         frames.push(s.render_frame());
     }
