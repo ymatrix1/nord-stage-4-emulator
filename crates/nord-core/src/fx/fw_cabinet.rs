@@ -156,35 +156,43 @@ impl FwCabinet {
         let high = (split0 + 4).min(LEN);
         // sums[chain a / b][channel][lane]
         let mut sums = [[[SUM_START; 4]; 2]; 2];
-        for ch in 0..2 {
-            let h = &self.hist[ch];
-            let [chain_a, chain_b] = &mut sums;
-            let (a, b) = (&mut chain_a[ch], &mut chain_b[ch]);
-            // taps below every split: all lanes extend their `a` chain
-            for k in 0..split0 {
-                let x: &[f32; 4] = h[first - k..first - k + 4].try_into().unwrap();
-                for j in 0..4 {
-                    a[j] += x[j] * t[k];
-                }
+        let [h0, h1] = &self.hist;
+        // The two channels advance together so that their dependent add chains overlap.
+        let lanes = |k: usize| -> [&[f32; 4]; 2] {
+            [
+                h0[first - k..first - k + 4].try_into().unwrap(),
+                h1[first - k..first - k + 4].try_into().unwrap(),
+            ]
+        };
+        let [chain_a, chain_b] = &mut sums;
+        // taps below every split: all lanes extend their `a` chain
+        for k in 0..split0 {
+            let x = lanes(k);
+            for j in 0..4 {
+                chain_a[0][j] += x[0][j] * t[k];
+                chain_a[1][j] += x[1][j] * t[k];
             }
-            // the taps around the splits: each lane switches from `a` to `b` at its own tap
-            for k in split0..high {
-                let x: &[f32; 4] = h[first - k..first - k + 4].try_into().unwrap();
-                for j in 0..4 {
-                    let p = x[j] * t[k];
+        }
+        // the taps around the splits: each lane switches from `a` to `b` at its own tap
+        for k in split0..high {
+            let x = lanes(k);
+            for j in 0..4 {
+                for ch in 0..2 {
+                    let p = x[ch][j] * t[k];
                     if k < split0 + j {
-                        a[j] += p;
+                        chain_a[ch][j] += p;
                     } else {
-                        b[j] += p;
+                        chain_b[ch][j] += p;
                     }
                 }
             }
-            // taps above every split: all lanes extend their `b` chain
-            for k in high..LEN {
-                let x: &[f32; 4] = h[first - k..first - k + 4].try_into().unwrap();
-                for j in 0..4 {
-                    b[j] += x[j] * t[k];
-                }
+        }
+        // taps above every split: all lanes extend their `b` chain
+        for k in high..LEN {
+            let x = lanes(k);
+            for j in 0..4 {
+                chain_b[0][j] += x[0][j] * t[k];
+                chain_b[1][j] += x[1][j] * t[k];
             }
         }
         std::array::from_fn(|j| std::array::from_fn(|ch| sums[0][ch][j] + sums[1][ch][j]))
