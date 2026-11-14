@@ -158,6 +158,10 @@ Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant belo
 | Still dimmed | TO ROTARY on the Organ slot (inert), Mod 1 MST CLK on RM and A-WAH (the Amp VARIATION is no longer dimmed: it has its own voicing, section 2.3) |
 | UI-only | Per-unit ON state, LAYER EFFECTS ON, focus, GROUP / GLOBAL sources and tap tempo live in `FxUi`; after a program load the legacy `mod1_type`, `delay_on`, `reverb_model` and knob fields are adopted into the focused chain (`StateEcho`), the other five slots keep their last panel view |
 
+### 2.10 Output buses and the plugin audio ports (`ns4-ux21`)
+
+`OutputRouting` (`engine/output_routing.rs`) sends each source to one of the four physical outputs. `Stage4Engine::render_frame_multi` returns all four; `render_frame` is its first two channels, so the main pair is the same in every host layout. The plugin (`nord-plugin/src/audio_out.rs`) exposes outputs 1-2 as the main stereo port and outputs 3-4 as one stereo aux output port; a source routed to 3-4 leaves the main port and appears on the aux port, and the aux port is exact zeros when nothing is routed there. The single-output choices `1` and `2` go to one channel of the main port, `3` and `4` to one channel of the aux port. Spec: [daw-plugin.md](daw-plugin.md) section Audio ports.
+
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
 After summing all 7 active layers:
