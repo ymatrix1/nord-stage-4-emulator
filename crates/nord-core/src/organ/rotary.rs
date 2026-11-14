@@ -32,27 +32,39 @@ impl OrganLayer {
     }
 
     /// The firmware Leslie processor on one organ sample: the engine's ramped rotor rates become
-    /// the three speed words (`0xB2F25` drum, `0xB2F26` horn, `0xB2FA1` drum ratio), the organ signal
-    /// goes in the left lane (the right lane of the organ bus is silent, `docs/research/fx-leslie.md`).
+    /// the three speed words by the ARM's own law (`tools/arm_leslie_speeds.py`: `0xB2F25` rotor,
+    /// `0xB2F26` horn, `0xB2FA1` follows the horn), the organ signal goes in the left lane (the
+    /// right lane of the organ bus is silent, `docs/research/fx-leslie.md`).
     ///
-    /// ASSUMED: the fast words are the slow words times the engine's horn / drum rate ratio (the ARM
-    /// words for the fast speed were not found); the phase period is `2^32` (`0.72 Hz` at the slow
-    /// word, VERIFIED in the model: the phase passes `0x80000000` without clamping).
+    /// VERIFIED (ARM state block, `docs/research/arm-part-activation.md`): the firmware speeds are
+    /// horn 0.80 Hz slow / 7.0 Hz fast and rotor 0.73 / 6.4 Hz, `word = int(hz * 8388607 /
+    /// 11025) << 8`. The engine's ramp (its own time constants) supplies the speed in between:
+    /// the fraction of the engine's slow to fast range is mapped onto the firmware range.
     fn process_leslie_firmware(&mut self, x: f32) -> [f32; 2] {
         const FS_DSP: f64 = 44_444_000.0 / 1024.0;
-        const SLOW_HORN_HZ: f64 = 0.80;
-        const SLOW_DRUM_HZ: f64 = 0.67;
-        let scale = FS_DSP / f64::from(self.sample_rate);
-        let word =
-            |slow: u32, ratio: f64| (f64::from(slow) * scale * ratio).round().max(0.0) as u32;
-        let horn = f64::from(self.horn_rate_hz) / SLOW_HORN_HZ;
-        let drum = f64::from(self.drum_rate_hz) / SLOW_DRUM_HZ;
+        const SCALE: f64 = 8_388_607.0 / 11_025.0;
+        const HORN_FOLLOW: f64 = 0.5748; // EMPIRICAL, fits 0xB2FA1 at 0.80 and 0.86 Hz
+                                         // (engine slow, engine fast, firmware slow, firmware fast) in Hz
+        const HORN: (f64, f64, f64, f64) = (0.80, 6.85, 0.80, 7.0);
+        const ROTOR: (f64, f64, f64, f64) = (0.67, 5.70, 0.73, 6.4);
+        let arm_hz = |r: f64, (es, ef, fs, ff): (f64, f64, f64, f64)| {
+            if r <= es {
+                r * fs / es
+            } else {
+                fs + (r - es) / (ef - es) * (ff - fs)
+            }
+        };
+        // the firmware words mean Hz at its own frame rate; at the engine rate they scale
+        let k = FS_DSP / f64::from(self.sample_rate);
+        let word = |hz: f64| (((hz * SCALE).trunc().max(0.0) as u32) << 8) as f64 * k;
+        let horn = arm_hz(f64::from(self.horn_rate_hz), HORN);
+        let rotor = arm_hz(f64::from(self.drum_rate_hz), ROTOR);
         let gain = self.leslie_gain;
         if let Some(l) = self.leslie_fw.as_mut() {
             l.set_speed_words([
-                word(0x22b00, drum),
-                word(0x26000, horn),
-                word(0x15d00, drum),
+                word(rotor).round() as u32,
+                word(horn).round() as u32,
+                word(horn * HORN_FOLLOW).round() as u32,
             ]);
             let y = l.process(x, 0.0);
             return [y[0] * gain, y[1] * gain];
