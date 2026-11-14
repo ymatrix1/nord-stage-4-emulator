@@ -23,3 +23,10 @@ def test_build_args_calls_the_leslie_routine_with_the_row_state(tmp_path):
     assert args[args.index("--call") + 1] == "0x1256ad"
     assert "I1=0xb2f2a" in args and "--poke" in args
     assert args[-2:] == ["--dump", "0xb6000:4"]
+
+
+def test_sine_pokes_follow_the_frame_index_two_frames_per_call():
+    a = lr.sine_pokes(2, 1000.0)
+    vals = [float(x.split("=f")[1]) for x in a[1::2]]
+    assert vals[0] == vals[1] == 0.0 and vals[2] == vals[3] != 0.0
+    assert all(abs(v) <= 0.3 for v in vals) and len(vals) == 8
