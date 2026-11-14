@@ -1,6 +1,6 @@
 # Hardware Control Inventory Specification
 
-Status: B2 delivered (Phase 6b, `ns4-xc5n`, `ns4-3n0d`) · 274 controls checked against the OS v1.6x manual text (2026-11-13); panel-photo check limited to headline counts
+Status: B2 delivered (Phase 6b, `ns4-xc5n`, `ns4-3n0d`) · 275 controls checked against the OS v1.6x manual text (2026-11-13); panel-photo check limited to headline counts
 
 ## 1. Scope
 
@@ -59,16 +59,16 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 
 | Section | Knobs/encoders | Faders/drawbars | Buttons/selectors | LEDs/ladders | Displays, wheel, stick, keys | Total |
 |---|---|---|---|---|---|---|
-| Master & Rotary | 2 | - | 5 | 1 | 2 (wheel, stick) | 10 |
+| Master & Rotary | 2 | - | 6 | 1 | 2 (wheel, stick) | 11 |
 | Organ | - | 11 (2 faders + 9 drawbars) | 21 | 18 (7 LEDs + 11 ladders) | - | 50 |
 | Piano | 2 | 2 | 19 | 9 (7 LEDs + 2 ladders) | - | 32 |
 | Program & Morph | 2 | - | 50 | 3 | 1 (OLED) | 56 |
 | Synth | 17 (12 knobs + 5 encoders) | 3 | 41 | 11 (8 LEDs + 3 ladders) | 1 (OLED) | 73 |
 | Layer Effects | 17 | - | 33 | 1 | - | 51 |
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
-| **Total** | | | | | | **274** |
+| **Total** | | | | | | **275** |
 
-By binding: `Bound` 141, `UiOnly` 58, `Unsupported` 75. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
+By binding: `Bound` 142, `UiOnly` 58, `Unsupported` 75. By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
 
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
@@ -148,6 +148,7 @@ Since poly percussion, Drawbar Live, Aux KB, pedals and system settings landed i
 | `{organ,piano}.kb_zone_down/up`, `zone_leds` | `engine:split_router.layer_zone_masks` | Shift + OCTAVE steps the focused layer through 5 positions (all zones, zone 1..4); `Stage4Engine::set_layer_zone_leds` writes the legacy router mask and the firmware `kKbZone` code (`engine/zone_assign.rs`). Zones act once a Split is on; with no split any non-empty set spans the keyboard. Default = all zones (bit-identical) | stepping `ASSUMED` (`panel/kb_zone.rs`); code table as `routing.rs` |
 | `{organ,piano}.aux_led.a/b` | `auxkb_organ` / `auxkb_piano` | LED click sends `AuxKb { layer, on }` -> `Stage4Engine::set_layer_aux` (also sets Aux KB Enable when switching on). The LED shows the UI flag through `aux_flag_from_telemetry`, to be replaced by the engine read-back | enable-on-switch `ASSUMED` |
 | `rotary.organ` | `organy_rotary_on_{n}` | `OrganEdit::RotaryOrgan` sets `rotary_enabled` on both layers | engine default on |
-| `rotary.angle` | `organy_mic_angle_{n}` | `OrganEdit::RotaryAngle`: wide 120 deg (engine default), narrow 60 deg | both degrees `ASSUMED` |
+| `rotary.stop_angle` | `organy_stop_angle_{n}` | Shift + STOP MODE opens the ANGLE popup (`panel/rotor_angle.rs`: `Free`, `1: Front Center` .. `6: Back Center`); a pick sends `OrganEdit::RotaryStopAngle(0..=6)` -> `rotary_stop_angle` on both layers (manual p.53, course video ORG 10:08-10:22) | list text `VERIFIED` for 5 of 7 entries, rest phases `ASSUMED` |
+| `rotary.angle` | `organy_mic_angle_{n}` | Last row of the ANGLE popup: `OrganEdit::RotaryAngle`, wide 120 deg (engine default), narrow 60 deg. The manual does not describe a mic separation control, so this entry is `Assumed` | both degrees `ASSUMED` |
 
 Still dimmed in these bays: `piano.select_dial` (`ns4-h7he`; the dial still cycles the loaded library models, the inventory keeps it `Unsupported` until the model list is a host parameter). The Synth strip's `synth.on`, `synth.kb_zone_*`, `synth.zone_leds` and `synth.aux_led.*` keep their `Unsupported` bindings (synth bay is another change).

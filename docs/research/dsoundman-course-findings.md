@@ -28,7 +28,7 @@
 | LFO destination taps: Off, OSC CTRL, OSC PITCH, FILTER (both LEDs), then wraps | LFO 0:30-0:35 | cycled Filter, Pitch, Ctrl, Off | differed | fixed, test |
 | Synth OLED top row shows hints (`LFO Rate 0.08 Hz`, `LFO Destination OscPitch`, `LFO Amount 7.1`) | LFO 0:27-0:45 | `panel/param_hint` (header row of the Synth OLED, lower half of the Program OLED) | matches (labels VERIFIED, hold time ASSUMED) | done, bean ns4-wxly |
 | LFO waveform: button opens page, first dial picks shape | LFO 1:05 narration | `SynthPage::LfoWave` | matches (text only) | none |
-| Rotor stop ANGLE screen: `Free`, `1: Front Center`, `2: Front Left`, `4: Back Left`, `6: Back Center` | ORG 10:08-10:22 | none | differs | bean ns4-uo53 |
+| Rotor stop ANGLE screen: `Free`, `1: Front Center`, `2: Front Left`, `4: Back Left`, `6: Back Center` | ORG 10:08-10:22 | `panel/rotor_angle.rs`, `organ/rotor_stop.rs` | matches (Front Right / Back Right text assumed) | bean ns4-uo53 done |
 | STOP MODE stops rotors, SLOW/FAST switches speed when active | ORG 9:32-9:55 | `bay_master.rs`, `organ/rotary.rs` | matches | none |
 | Percussion single-triggered, non-legato | ORG 6:50-7:03 | `organ/mod.rs` | matches | none |
 | Preset LED on by default; Live turns ladders off; Shift+Preset syncs | ORG 7:52-9:15 | spec section 9 | matches | none |

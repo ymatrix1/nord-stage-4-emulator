@@ -145,7 +145,7 @@ fn home(ui: &ProgramUi, sum: &Summary) -> OledText {
         }
     };
     if let Some((m, _)) = &ui.message {
-        t.rows.push(m.clone());
+        t.rows.extend(m.lines().map(str::to_string));
     }
     t
 }
