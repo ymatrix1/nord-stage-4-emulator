@@ -37,7 +37,7 @@ pub struct PedalLayerParams {
     /// SUSTPED: the layer follows the sustain pedal (Pianos default On, others Off).
     #[id = "sustped"]
     pub sustped: BoolParam,
-    /// PSTICK: the layer follows the pitch stick (Synth and Extern layers only).
+    /// PSTICK: the layer follows the pitch stick (every layer; Extern layers forward it).
     #[id = "pstick"]
     pub pstick: BoolParam,
     /// Pitch stick range in semitones (default 2; the 12 ceiling is `ASSUMED`).

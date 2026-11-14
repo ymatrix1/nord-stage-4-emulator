@@ -49,9 +49,27 @@ impl Default for OrganGlobals {
 }
 
 impl super::OrganLayer {
-    /// Layer Fine Tune plus the global master tune (`+ 0.0` at the default, an exact no-op).
+    /// Sets the pitch stick bend in cents (non-finite counts as 0). Wheel sources that honour Fine
+    /// Tune retune by it; the Legacy source scales its phase steps by `2^(cents / 1200)`.
+    pub fn set_bend_cents(&mut self, cents: f32) {
+        let cents = if cents.is_finite() { cents } else { 0.0 };
+        self.bend_cents = cents;
+        self.bend_ratio = if cents == 0.0 {
+            1.0
+        } else {
+            (cents / 1200.0).exp2()
+        };
+    }
+
+    /// The pitch stick bend in cents.
+    pub fn bend_cents(&self) -> f32 {
+        self.bend_cents
+    }
+
+    /// Layer Fine Tune plus the global master tune and the pitch stick bend (`+ 0.0` at the
+    /// default, an exact no-op).
     pub(super) fn effective_fine_cents(&self) -> f32 {
-        self.fine_tune_cents + self.globals.master_tune_cents
+        self.fine_tune_cents + self.globals.master_tune_cents + self.bend_cents
     }
 }
 
@@ -130,6 +148,8 @@ mod tests {
         assert_eq!(o.effective_fine_cents(), 10.0);
         o.globals.master_tune_cents = -4.0;
         assert_eq!(o.effective_fine_cents(), 6.0);
+        o.set_bend_cents(200.0);
+        assert_eq!(o.effective_fine_cents(), 206.0, "pitch stick bend adds");
     }
 
     #[test]
@@ -146,5 +166,25 @@ mod tests {
         assert_eq!(4.2f32 * g.rotor_tau_scale, 4.2);
         assert_eq!(6.85f32 * g.horn_speed_scale, 6.85);
         assert_eq!(5.70f32 * g.rotor_speed_scale, 5.70);
+    }
+
+    fn bend_render(cents: Option<f32>) -> Vec<[f32; 2]> {
+        let mut o = OrganLayer::new(48_000.0);
+        o.drawbars = [0, 0, 8, 8, 0, 0, 0, 0, 0];
+        if let Some(c) = cents {
+            o.set_bend_cents(c);
+        }
+        o.note_on(60);
+        (0..4096).map(|_| o.render_frame()).collect()
+    }
+
+    #[test]
+    fn pitch_stick_bend_is_a_no_op_at_zero_and_shifts_the_legacy_wheels() {
+        assert_eq!(bend_render(None), bend_render(Some(0.0)));
+        assert_eq!(bend_render(Some(f32::NAN)), bend_render(None));
+        assert_ne!(bend_render(Some(200.0)), bend_render(None));
+        let mut o = OrganLayer::new(48_000.0);
+        o.set_bend_cents(200.0);
+        assert_eq!(o.bend_cents(), 200.0);
     }
 }

@@ -37,6 +37,11 @@ pub(super) fn cmd(e: ProgramEdit) -> AudioCommand {
     AudioCommand::Program(e)
 }
 
+/// Name the display shows for an unused program location.
+///
+/// VERIFIED: `G:82` shows `<empty>` in the DSoundman beginners video (`9OQdETpuIE8`, 19:35).
+pub const EMPTY_NAME: &str = "<empty>";
+
 impl ProgramUi {
     /// Load the program at `loc`: a stored user program, else the backup-library entry at the
     /// same position (ASSUMED mapping: location index = position in the sorted archive list).
@@ -49,12 +54,21 @@ impl ProgramUi {
             self.title = p.name.clone();
             return vec![cmd(ProgramEdit::Recall(p.state.clone()))];
         }
-        match self.catalog.programs.get(usize::from(loc.index())) {
+        // The archive layout (header locations, moved by Organize) wins over the sorted catalog.
+        let entry = if self.library.has_factory_layout() {
+            self.library.factory_at(loc)
+        } else {
+            self.catalog
+                .programs
+                .get(usize::from(loc.index()))
+                .map(String::as_str)
+        };
+        match entry {
             Some(entry) => {
                 self.title = display_name(entry);
-                self.requests.push(LoadRequest::Program(entry.clone()));
+                self.requests.push(LoadRequest::Program(entry.to_string()));
             }
-            None => self.title = "(empty)".to_string(),
+            None => self.title = EMPTY_NAME.to_string(),
         }
         Vec::new()
     }
@@ -244,7 +258,8 @@ mod tests {
         u.dial(1, false);
         assert_eq!(u.loc.label(), "A:12");
         u.dial(1, false);
-        assert_eq!(u.title, "(empty)");
+        assert_eq!(u.title, EMPTY_NAME);
+        assert_eq!(u.title, "<empty>");
         assert!(u.requests.len() == 1);
     }
 }

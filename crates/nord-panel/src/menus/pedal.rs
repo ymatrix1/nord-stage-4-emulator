@@ -3,8 +3,8 @@
 //! Pedal "Type" entries describe the electrical behaviour of a physical jack; a plugin receives
 //! normalised CC values, so they are `UiOnly`.
 
-use super::{Menu, MenuItem as I, MenuPage, GAP};
-use crate::types::Binding::{Bound, UiOnly, Unsupported as U};
+use super::{Menu, MenuItem as I, MenuPage};
+use crate::types::Binding::{Bound, UiOnly};
 
 const EXPR: &[&str] = &["Nord EP", "Roland EV7", "Yamaha FC7", "Korg", "Fatar SL"];
 const CTRL_TYPE: &[&str] = &[
@@ -182,8 +182,17 @@ pub(super) const PAGES: &[MenuPage] = &[
             I::choice("pedal.6.fs_a", "Sw A", FS_FUNC, 0, 61, Bound("ped_foot_func")).assumed(
                 "default not stated; ped_foot_func acts on 4 of the 10 choices (Layer Scene Hold/Toggle, Rotor Hold/Toggle)",
             ),
-            I::choice("pedal.6.fs_b", "Sw B", FS_FUNC, 0, 61, U(GAP))
-                .assumed("default not stated; the engine has a single foot switch input"),
+            I::choice(
+                "pedal.6.fs_b",
+                "Sw B",
+                FS_FUNC,
+                0,
+                61,
+                Bound("engine:pedals.foot_switch_b"),
+            )
+            .assumed(
+                "default not stated; User Assigned assumed. All ten choices act (engine/foot_switch.rs), SW B only matters with a dual pedal",
+            ),
         ],
     },
     MenuPage {

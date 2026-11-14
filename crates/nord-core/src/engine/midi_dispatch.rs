@@ -20,7 +20,8 @@ impl Stage4Engine {
         match event {
             MidiEvent::NoteOn { note, velocity, .. } => {
                 let channel_idx = channel as usize;
-                let Some(sounding) = self.transposed_note(note) else {
+                let shift = self.incoming_transpose(channel);
+                let Some(sounding) = self.transposed_note_by(note, shift) else {
                     return;
                 };
                 let mut recipients = 0u8;
@@ -36,7 +37,7 @@ impl Stage4Engine {
                     } else {
                         1.0
                     };
-                    if split_gain <= 0.0 {
+                    if split_gain <= 0.0 || self.echo_blocks(layer, route) {
                         continue;
                     }
                     let velocity = if route == NoteRoute::Aux {
@@ -49,7 +50,7 @@ impl Stage4Engine {
                     self.layer_note_on(layer, sounding, velocity, split_gain);
                 }
                 if recipients != 0 {
-                    self.held_transpose[channel_idx][note as usize] = self.effective_transpose();
+                    self.held_transpose[channel_idx][note as usize] = shift;
                 }
                 for layer in LayerId::ALL {
                     if recipients & (1 << (layer as u8)) != 0 {
@@ -87,11 +88,28 @@ impl Stage4Engine {
                 if self.global_midi_channel != Some(channel) {
                     return;
                 }
+                if !self.accept_global_cc(controller, value) {
+                    return;
+                }
                 let norm = f32::from(value.min(127)) / 127.0;
                 match controller {
-                    cc::MOD_WHEEL => self.morph_controllers.mod_wheel = norm,
-                    cc::CONTROL_PEDAL => self.set_control_pedal(norm),
-                    cc::ORGAN_SWELL => self.set_swell_pedal(norm),
+                    cc::MOD_WHEEL => {
+                        self.morph_controllers.mod_wheel = norm;
+                        self.extern_forward_device(ExternDevice::ModWheel, value);
+                    }
+                    cc::CONTROL_PEDAL => {
+                        self.set_control_pedal(norm);
+                        self.extern_forward_device(ExternDevice::ControlPedal, value);
+                    }
+                    cc::ORGAN_SWELL => {
+                        self.set_swell_pedal(norm);
+                        let device = if self.pedals.swell_func == SwellFunc::Volume {
+                            ExternDevice::VolumePedal
+                        } else {
+                            ExternDevice::SwellPedal
+                        };
+                        self.extern_forward_device(device, value);
+                    }
                     cc::DRAWBAR_1_16..=cc::DRAWBAR_9_1 => {
                         let idx = (controller - cc::DRAWBAR_1_16) as usize;
                         let step = ((norm * 8.0).round() as u8).min(8);
@@ -132,16 +150,21 @@ impl Stage4Engine {
                 }
             }
             MidiEvent::ChannelAftertouch { pressure, .. } => {
-                if self.global_midi_channel == Some(channel) {
+                if self.global_midi_channel == Some(channel) && self.midi_menu.dev.receives() {
                     self.morph_controllers.aftertouch = f32::from(pressure.min(127)) / 127.0;
+                    self.extern_forward_device(ExternDevice::Aftertouch, pressure.min(127));
                 }
             }
-            MidiEvent::ProgramChange { .. } => {}
+            MidiEvent::ProgramChange { program, .. } => {
+                if self.global_midi_channel == Some(channel) {
+                    self.receive_program_change(program);
+                }
+            }
             MidiEvent::PitchBend { value, .. } => {
                 if self.aux_kb.listens_on(channel) {
                     self.set_pitch_bend(PedalSource::Aux, value);
                 }
-                if self.global_midi_channel == Some(channel) {
+                if self.global_midi_channel == Some(channel) && self.midi_menu.dev.receives() {
                     self.set_pitch_bend(PedalSource::Global, value);
                 }
             }
@@ -156,6 +179,7 @@ impl Stage4Engine {
             return;
         }
         match layer {
+            LayerId::OrganA | LayerId::OrganB if self.defer_organ_note(layer, note, gain) => {}
             LayerId::OrganA => self.organ_a.note_on_with_gain(note, gain),
             LayerId::OrganB => self.organ_b.note_on_with_gain(note, gain),
             LayerId::PianoA => self.piano_a.note_on_with_gain(note, velocity, gain),

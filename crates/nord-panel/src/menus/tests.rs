@@ -12,13 +12,18 @@ const HOST_SOURCES: [&str; 3] = [
 ];
 const PARAMS_SRC: &str = include_str!("../../../nord-plugin/src/params.rs");
 /// Engine sources an `engine:` binding must be found in.
-const ENGINE_SOURCES: [&str; 6] = [
+const ENGINE_SOURCES: [&str; 11] = [
     include_str!("../../../nord-core/src/engine/mod.rs"),
     include_str!("../../../nord-core/src/engine/extern_out.rs"),
     include_str!("../../../nord-core/src/engine/aux_kb.rs"),
     include_str!("../../../nord-core/src/engine/pedals.rs"),
     include_str!("../../../nord-core/src/engine/pedal_assign.rs"),
     include_str!("../../../nord-core/src/engine/settings.rs"),
+    include_str!("../../../nord-core/src/engine/midi_menu.rs"),
+    include_str!("../../../nord-core/src/engine/extern_menu.rs"),
+    include_str!("../../../nord-core/src/engine/output_routing.rs"),
+    include_str!("../../../nord-core/src/engine/organ_trigger.rs"),
+    include_str!("../../../nord-core/src/engine/foot_switch.rs"),
 ];
 
 fn host_id_exists(id: &str) -> bool {
@@ -228,7 +233,7 @@ fn binding_totals_are_pinned() {
             Binding::Unsupported(_) => un += 1,
         }
     }
-    assert_eq!((bound, ui, un), (61, 11, 57));
+    assert_eq!((bound, ui, un), (111, 16, 2));
 }
 
 /// Wording taken from the OS v1.66 string pool (`docs/research/oled-strings-vs-firmware.md`).

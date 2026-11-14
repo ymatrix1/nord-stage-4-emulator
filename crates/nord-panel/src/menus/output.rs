@@ -1,10 +1,11 @@
 //! Output menu, 6 pages (manual OS v1.6x p.59). SHIFT + Program 5.
 //!
-//! Routing is not modelled in the engine (single stereo pair); the one honoured setting is the
-//! mono downmix (`sys_mono`), the emulator's form of "Mono Output" (a bus on a single output).
+//! Routing is modelled by the engine's `OutputRouting` (`engine/output_routing.rs`): the mode, the
+//! four bus outputs and the per section / layer output or bus. `Mono Output` stays the mono
+//! downmix (`sys_mono`) of the Main pair, the emulator's form of "a bus on a single output".
 
-use super::{Menu, MenuItem as I, MenuPage, GAP};
-use crate::types::Binding::{Bound, UiOnly, Unsupported as U};
+use super::{Menu, MenuItem as I, MenuPage};
+use crate::types::Binding::{Bound, UiOnly};
 
 const MODE: &[&str] = &["Global", "Per Program"];
 /// Output choices of Global mode.
@@ -30,7 +31,7 @@ pub(super) const PAGES: &[MenuPage] = &[
             MODE,
             0,
             59,
-            U(GAP),
+            Bound("engine:output_routing.mode"),
         )],
     },
     MenuPage {
@@ -38,10 +39,10 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 2,
         title: "Output Bus Channels (Per Program)",
         items: &[
-            I::choice("output.2.bus_main", "Main", OUT, 0, 59, U(GAP)),
-            I::choice("output.2.bus_sub1", "Sub I", OUT, 1, 59, U(GAP)),
-            I::choice("output.2.bus_sub2", "Sub II", OUT, 4, 59, U(GAP)),
-            I::choice("output.2.bus_sub3", "Sub III", OUT, 5, 59, U(GAP)),
+            I::choice("output.2.bus_main", "Main", OUT, 0, 59, Bound("engine:output_routing.bus_outputs")),
+            I::choice("output.2.bus_sub1", "Sub I", OUT, 1, 59, Bound("engine:output_routing.bus_outputs")),
+            I::choice("output.2.bus_sub2", "Sub II", OUT, 4, 59, Bound("engine:output_routing.bus_outputs")),
+            I::choice("output.2.bus_sub3", "Sub III", OUT, 5, 59, Bound("engine:output_routing.bus_outputs")),
             I::toggle("output.2.mono", "Mono Output", false, 59, Bound("sys_mono")).assumed(
                 "manual p.59 describes Mono Output as a bus on a single output; this switch is the emulator's stereo-pair equivalent",
             ),
@@ -52,16 +53,16 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 3,
         title: "Organ/Rotary Output Channel/Bus",
         items: &[
-            I::choice("output.3.organ_out", "Organ output (Global)", OUT, 0, 59, U(GAP))
+            I::choice("output.3.organ_out", "Organ output (Global)", OUT, 0, 59, Bound("engine:output_routing.global_out"))
                 .assumed("Global-mode default not stated; 1-2 assumed"),
-            I::choice("output.3.organ_bus", "Organ bus (Per Program)", BUS, 0, 59, U(GAP)),
+            I::choice("output.3.organ_bus", "Organ bus (Per Program)", BUS, 0, 59, Bound("engine:output_routing.bus")),
             I::choice(
                 "output.3.rotary_out",
                 "Rotary output (Global)",
                 OUT_AUTO,
                 7,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.global_out"),
             ),
             I::choice(
                 "output.3.rotary_bus",
@@ -69,7 +70,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 BUS_AUTO,
                 4,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.bus"),
             ),
         ],
     },
@@ -78,16 +79,16 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 4,
         title: "Piano Output Channel/Bus",
         items: &[
-            I::choice("output.4.piano_a_out", "Piano A output (Global)", OUT, 0, 59, U(GAP))
+            I::choice("output.4.piano_a_out", "Piano A output (Global)", OUT, 0, 59, Bound("engine:output_routing.global_out"))
                 .assumed("Global-mode default not stated; 1-2 assumed"),
-            I::choice("output.4.piano_a_bus", "Piano A bus (Per Program)", BUS, 0, 59, U(GAP)),
+            I::choice("output.4.piano_a_bus", "Piano A bus (Per Program)", BUS, 0, 59, Bound("engine:output_routing.bus")),
             I::choice(
                 "output.4.piano_b_out",
                 "Piano B output (Global)",
                 OUT_ARROW,
                 7,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.global_out"),
             )
             .note(ARROW),
             I::choice(
@@ -96,7 +97,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 BUS_ARROW,
                 4,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.bus"),
             )
             .note(ARROW),
         ],
@@ -106,16 +107,16 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 5,
         title: "Synth Output Channel/Bus",
         items: &[
-            I::choice("output.5.synth_a_out", "Synth A output (Global)", OUT, 0, 59, U(GAP))
+            I::choice("output.5.synth_a_out", "Synth A output (Global)", OUT, 0, 59, Bound("engine:output_routing.global_out"))
                 .assumed("Global-mode default not stated; 1-2 assumed"),
-            I::choice("output.5.synth_a_bus", "Synth A bus (Per Program)", BUS, 0, 59, U(GAP)),
+            I::choice("output.5.synth_a_bus", "Synth A bus (Per Program)", BUS, 0, 59, Bound("engine:output_routing.bus")),
             I::choice(
                 "output.5.synth_b_out",
                 "Synth B output (Global)",
                 OUT_ARROW,
                 7,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.global_out"),
             )
             .note(ARROW),
             I::choice(
@@ -124,7 +125,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 BUS_ARROW,
                 4,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.bus"),
             )
             .note(ARROW),
             I::choice(
@@ -133,7 +134,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 OUT_ARROW,
                 7,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.global_out"),
             )
             .note(ARROW),
             I::choice(
@@ -142,7 +143,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 BUS_ARROW,
                 4,
                 59,
-                U(GAP),
+                Bound("engine:output_routing.bus"),
             )
             .note(ARROW),
         ],

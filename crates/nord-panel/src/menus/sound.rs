@@ -4,8 +4,8 @@
 //! same tonewheel, click and rotary entries, <https://manualshive.com/en/manual/nord/stage-3/1701214?page=20>;
 //! a Stage 4 user forum post shows the same B3 menu labels, <https://www.norduserforum.com/viewtopic.php?p=183703>.
 
-use super::{Menu, MenuItem as I, MenuPage, GAP};
-use crate::types::Binding::{Bound, Unsupported};
+use super::{Menu, MenuItem as I, MenuPage};
+use crate::types::Binding::Bound;
 
 const LNH: &[&str] = &["Low", "Normal", "High"];
 const TRIGGER: &[&str] = &["High", "Low"];
@@ -70,7 +70,7 @@ pub(super) const PAGES: &[MenuPage] = &[
             TRIGGER,
             0,
             58,
-            Unsupported(GAP),
+            Bound("engine:organ_trigger.point"),
         )],
     },
     MenuPage {

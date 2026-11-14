@@ -146,6 +146,18 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fxy", group = "Layer FX Sharing")]
     pub layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank,
 
+    /// MIDI menu (Sect On, Ctrl / Dev, PC, Transpose MIDI At) and Extern menu filters.
+    #[nested(id_prefix = "midix", group = "MIDI Menu")]
+    pub midi_menu: crate::midi_menu_params::MidiMenuParams,
+
+    /// Output menu routing, buses and output trims.
+    #[nested(id_prefix = "outx", group = "Output Routing")]
+    pub output: crate::output_params::OutputParams,
+
+    /// Organ Keyboard Trigger Point and Foot Switch SW B.
+    #[nested(id_prefix = "menx", group = "Menu Extras")]
+    pub menu_extra: crate::menu_extra_params::MenuExtraParams,
+
     /// Editor window size, persisted with the plugin state (not a host parameter).
     #[persist = "editor-state"]
     pub editor_state: std::sync::Arc<nih_plug_egui::EguiState>,
@@ -376,6 +388,9 @@ impl Default for Stage4Params {
             pedal_assign: crate::pedal_assign_params::PedalAssignParams::default(),
             aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
             settings: crate::settings_params::SettingsParams::default(),
+            midi_menu: crate::midi_menu_params::MidiMenuParams::default(),
+            output: crate::output_params::OutputParams::default(),
+            menu_extra: crate::menu_extra_params::MenuExtraParams::default(),
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
             synth_pattern: crate::synth_pattern_params::SynthPatternBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
@@ -652,6 +667,9 @@ impl Stage4Params {
         self.program.sync_to_engine(engine);
         self.synth_mod.sync_to_engine(engine);
         self.settings.sync_to_engine(engine);
+        self.midi_menu.sync_to_engine(engine);
+        self.output.sync_to_engine(engine);
+        self.menu_extra.sync_to_engine(engine);
         self.aux_kb.sync_to_engine(engine);
         self.pedals.sync_to_engine(engine);
         self.pedal_assign.sync_to_engine(engine);
