@@ -140,6 +140,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
   - [ ] **Bay 6 — Layer Effects Section (`#323D47`):** Crimson `FX FOCUS` layer selector (`ORGAN A/B`, `PIANO A/B`, `SYNTH A/B/C`, `GROUP`), `MOD 1`, `MOD 2`, `AMP SIM / EQ`, `DELAY`, `COMP`, and `REVERB` boxes
   - [x] **Bottom 88-Key Interactive Keybed:** Triple-sensor velocity click/drag, 3 red Split-Point LEDs with visual crossfade shading, and live MIDI note-on highlights
 - [x] Update `.github/workflows/ci.yml` and `.github/workflows/release.yml` to build and package Standalone executables + `.clap` + `.vst3` bundles for Windows, Linux, and macOS (`crates/xtask` `nih_plug_xtask`)
+- [x] Release pipeline hardened and dry-runnable: `tools/release_package.py` / `release_verify.py`, tag-vs-`Cargo.toml` check, per-OS install README, SHA256 files, no repeated test suite ([RELEASING.md](RELEASING.md))
+- [ ] First tagged release published (`v0.1.0`); needs a maintainer-run dry run, then the tag
 
 ---
 
