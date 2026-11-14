@@ -12,6 +12,7 @@ use super::presets::{
 };
 use super::synth_osc::map_osc_mode_and_wave;
 use super::synth_osc::wave_from_flat_index;
+use super::synth_pattern::SynthPatternDecoded;
 use crate::synth::{FilterModel, SynthOscMode, VaWaveform};
 use serde::{Deserialize, Serialize};
 
@@ -76,6 +77,9 @@ pub struct SynthLayerDecoded {
     pub lfo_mst_clk: bool,
     pub arp_enabled: bool,
     pub arp_bpm: f32,
+    /// Arpeggiator / Gate pattern words (`cbin::synth_pattern`); the engine imports them as the
+    /// layer's custom pattern.
+    pub pattern: SynthPatternDecoded,
     /// `false` = filter envelope mirrors the amp envelope decay (programmatic default).
     pub filter_env_dedicated: bool,
     pub filter_env_attack_ms: f32,
@@ -149,6 +153,7 @@ impl Default for SynthLayerDecoded {
             lfo_mst_clk: false,
             arp_enabled: false,
             arp_bpm: 120.0,
+            pattern: SynthPatternDecoded::default(),
             filter_env_dedicated: false,
             filter_env_attack_ms: 10.0,
             filter_env_decay_ms: 300.0,
@@ -289,6 +294,7 @@ fn unpack_synth_layer_pair(
     let arp_enabled = r.read_bool()?;
     let (arp_rate_raw, _) = read_morph(r, layer_base + 175, 7, 127)?;
     let arp_bpm = 30.0 + (arp_rate_raw as f32 / 127.0) * 270.0;
+    let pattern = SynthPatternDecoded::read(r, layer_base)?;
     r.set_bit_pos(layer_base + 306)?;
     let unison = r.read_bits(2)? as u8;
     r.set_bit_pos(layer_base + 372)?;
@@ -403,6 +409,7 @@ fn unpack_synth_layer_pair(
         lfo_mst_clk,
         arp_enabled,
         arp_bpm,
+        pattern,
         filter_env_dedicated: true,
         filter_env_attack_ms: ENV_ATTACK_MS_TABLE[fenv_atk.min(127)],
         filter_env_decay_ms: ENV_DECAY_MS_TABLE[fenv_dcy.min(127)],
@@ -474,6 +481,7 @@ fn pack_synth_layer_pair(
         7,
         127,
     )?;
+    layer.pattern.write(w, layer_base)?;
     w.set_bit_pos(layer_base + 306)?;
     w.write_bits(u32::from(layer.unison.min(3)), 2)?;
     w.set_bit_pos(layer_base + 372)?;

@@ -32,6 +32,7 @@ mod fw_stages;
 mod fw_strip_cutoff;
 mod fw_super1;
 mod fw_sync;
+mod fw_sync3;
 mod fw_sync_table;
 mod gain_dezip;
 mod hw_saw;
@@ -104,11 +105,15 @@ mod tests_fw_stage_golden4;
 #[cfg(test)]
 mod tests_fw_stage_golden5;
 #[cfg(test)]
+mod tests_fw_stage_golden6;
+#[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
 mod tests_osc_lfo;
 #[cfg(test)]
 mod tests_pattern_edit;
+#[cfg(test)]
+mod tests_pattern_tie;
 #[cfg(test)]
 mod tests_perf;
 #[cfg(test)]

@@ -1,7 +1,7 @@
 # Factory arpeggiator / gate pattern presets of the Nord Stage 4 (OS v1.66), recovered by running the
 # firmware routine at 0xC010FF50 on the ARM emulator: python tools/ns4_arp_presets.py table <bank0_CODE.bin>.
 # Gate chars: E q Q . (2-bit codes 0..3), pan chars: C L R (codes 0..2); the accent word is 0 for every preset.
-# preset 0 is not a table entry (ASSUMED default pattern, see docs/research/synth-arp-patterns.md).
+# preset 0 is not a table entry: the firmware plays the saved custom pattern for it (VERIFIED, docs/research/synth-arp-patterns.md section 7.1); this row is the hardware default of that pattern.
 preset,steps,gate,pan
 0,8,EEEEEEEE,CCCCCCCC
 1,16,EEEEEEQEEQEEEEEE,CCRCLRCCCCCCLRCC
