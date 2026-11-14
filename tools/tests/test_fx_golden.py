@@ -9,6 +9,7 @@ FX_DIR = Path(__file__).resolve().parents[2] / "crates" / "nord-core" / "src" / 
 FILES = {
     "tests_resonant_golden.rs": ["resonant", "resonant4"],
     "tests_allpass_golden.rs": ["allpass"],
+    "tests_apan_golden.rs": ["apan"],
     "tests_lfo_golden.rs": ["lfo"],
     "tests_delay_golden.rs": ["delay"],
 }

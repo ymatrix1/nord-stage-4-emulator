@@ -76,12 +76,13 @@ impl Default for CustomPattern {
 }
 
 impl CustomPattern {
-    /// Starts from a preset grid (no accent, centred), as the menu does when a preset is selected
-    /// and then customised.
+    /// Starts from a preset (its gate and pan, no accent), as the menu does when a preset is
+    /// selected and then customised.
     pub fn from_preset(p: &GatePattern) -> Self {
         Self {
             len: p.len,
             gate: p.steps,
+            pan: p.pan,
             ..Self::default()
         }
     }

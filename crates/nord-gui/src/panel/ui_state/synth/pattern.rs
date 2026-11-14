@@ -36,7 +36,11 @@ impl SynthLayerUi {
         self.pattern_len = pat.len;
         self.step_gate = pat.steps;
         self.step_accent = [false; 16];
-        self.step_pan = [1; 16];
+        self.step_pan = pat.pan.map(|p| match p {
+            PatternPan::Left => 0,
+            PatternPan::Center => 1,
+            PatternPan::Right => 2,
+        });
         self.pattern_cursor = self.pattern_cursor.min(pat.len - 1);
     }
 
@@ -212,15 +216,29 @@ mod tests {
             SynthParam::Pattern(PatternParam::Customize(2)),
             "grid is copied first"
         );
+        let want = (PATTERN_PRESETS[2].steps[1] + 3).min(8);
         assert!(p.contains(&SynthParam::Pattern(PatternParam::Gate {
             step: 1,
-            eighths: 5
+            eighths: want
         })));
         assert!(s.layer().pattern_custom);
-        assert_eq!(s.layer().step_gate[1], 5, "preset 3 has gate 2 on step 2");
+        assert_eq!(s.layer().step_gate[1], want, "preset 2 step 1 plus 3");
         s.step_gate(1);
         let again = params(&mut s);
         assert_eq!(again.len(), 1, "already custom: only the step is sent");
+    }
+
+    #[test]
+    fn selecting_a_preset_mirrors_its_gate_and_pan() {
+        let mut s = SynthUi::new();
+        s.choose_preset(13);
+        let l = s.layer();
+        assert_eq!(l.pattern_len, 16);
+        assert_eq!(l.step_gate, PATTERN_PRESETS[13].steps);
+        // Preset 13 pan LLRLLRLLRRLRRLRR: Left = 0, Right = 2.
+        assert_eq!(&l.step_pan[..4], &[0, 0, 2, 0]);
+        s.choose_preset(3);
+        assert_eq!(s.layer().step_pan, [1; 16], "preset 3 is centred");
     }
 
     #[test]

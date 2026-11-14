@@ -22,6 +22,7 @@ mod pots;
 mod press;
 mod samples;
 mod tables;
+mod waves;
 
 pub use buttons::Btn;
 pub use knobs::Knob;

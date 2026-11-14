@@ -13,7 +13,10 @@ use super::synth_preset::SynthPresetDecoded;
 use crate::morph::CrossfadeWidth;
 use serde::{Deserialize, Serialize};
 
-const SPLIT_NOTE_TABLE: [u8; 10] = [41, 48, 53, 60, 65, 72, 77, 84, 89, 96];
+/// VERIFIED: split key per position setting `0..=10` (ARM data `0xC02D8370`, 11 words, read back by
+/// `tools/arm_zone_map.py --check`; `docs/research/zone-key-ranges.md`). The earlier 10-entry table
+/// missed the first key (36) and shifted every setting by one.
+const SPLIT_NOTE_TABLE: [u8; 11] = [36, 41, 48, 53, 60, 65, 72, 77, 84, 89, 96];
 
 /// Normalized (`-1.0..=1.0`) Morph deltas for `[ModWheel, Aftertouch, CtrlPedal]`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]

@@ -163,6 +163,18 @@ Mechanism: `ProgramUi::set_message` / `show(FwMessage)` store `(text, end_ms)` a
 To keep every label legible on standard 1080p/1440p/4K monitors and inside DAW plugin windows:
 1. **Full Panorama View (`1600×520` aspect, scalable `0.75x..2.0x`):** Shows the entire Nord Stage 4 top panel + 88-key interactive keyboard with split-zone color overlays and pitch/mod wheels.
 2. **Focused Rack View (`1100×640` compact DAW mode):** Keeps the Top Master/Program/Morph/Scene bar + 88-key Split bar permanently visible while allowing large, zoomed-in inspection of `[ORGAN + PIANO]` or `[SYNTH + LAYER EFFECTS]` at full 1:1 readability.
+   **Implemented (B12):** the overview scale-to-fits the window; the panorama is the `P` mode below, not a separate fixed-size layout. The rack view is the focus view (`Z`, `1`-`5`).
+
+   | Key / gesture | Effect |
+   |---|---|
+   | `P` | Panorama on (viewport opens on the focused section, else a centred 2x window) / off |
+   | strip drag or click | Centre the viewport on the pointer (`panel/panorama.rs`) |
+   | wheel over the strip, `+` / `-` | Zoom the viewport about its centre (scale 0.25..1 of the panel; the egui zoom caps at 4x) |
+   | arrows | Pan by 15 % of the viewport |
+   | `Esc` | Leave the panorama (then focus, as before) |
+   | `Z`, `1`-`5`, section header | Focus a section; clears the panorama |
+
+   The strip (56 logical px high, panel aspect) sits under the detailed view and draws section outlines only. State is `ViewState::panorama: Option<Rect>` in logical panel px; the default view is unchanged. Not persisted: the app persists no view settings (no eframe storage), so a new session starts in the overview with the drawer closed. The library drawer slides in and out (`SidePanel::show_animated`), `L` toggles it; library logic is unchanged.
 3. **Docked `.ns4b` Archive Browser & Knob Recall Mode:** The `.ns4b` library drawer docks as a resizable left `SidePanel` before the front-panel `CentralPanel` (never overlapping hardware controls), with an `Auto-close` toggle (enabled by default) that dismisses the browser upon selecting a Program, Piano, or Sample so the full top panel remains unobstructed. `Sync Knobs on Preset` defaults to `false` to match authentic non-motorized Nord Stage 4 hardware behavior (where OLEDs, `A:11..H:88` location, LED button rings, `fx_focus`, and layer/drawbar LED meters update while potentiometer caps keep their physical angle).
 
 ---
@@ -179,3 +191,23 @@ First measured output of the D15 baker: one knob filmstrip and one fader cap wit
 | Camera | orthographic, 14 deg tilt toward player | `ASSUMED` |
 | Size, one of each asset | 420 KB (1x), 1.28 MB (2x) PNG | measured |
 | Full-panel estimate (4 knob styles, 3 fader styles) | 1.56 MB (1x), 4.62 MB (2x) PNG | counts `ASSUMED` until B2 |
+
+## Label legibility rules (B8)
+
+Printed text never goes below 7.5 px (`widgets::MIN_FONT_PX`) and must not touch anything it does
+not describe. The headless audit in `crates/nord-gui/src/panel/legibility_*.rs` enforces it per
+rule (overlap and 0.9 px gap, control bezel, clipping, section edge, group frame, knob ring; table
+in [GUI testing](../gui-testing.md)). Layout decisions it led to:
+
+- Rotary Speaker box: the frame extends 52 px left of the button column (the Master area is empty
+  there) and 30 px right, capped 3 px inside the Master section. Wide legends (`SLOW/STOP - FAST`,
+  title) are centred on the frame, narrow ones on their button. The `rotary.speed_leds` rectangle
+  (`ESTIMATED`) is widened from 20 to 33 photo px so the row holds `LED SLOW   LED FAST`.
+- Shift legends place their state LED after the measured text, not at a character-count guess.
+- Effects captions start 6.5 px below the control (clear of knob shadow and button bezel) with
+  8.5 px between stacked lines.
+- The Synth ON button prints SOLO to its right (the OLED sits right below it); the OLED soft
+  labels use two 9.5 px lines and are kept inside the glass; the vibrato selector no longer repeats
+  the VIBRATO heading (SELECT).
+- Two-word percussion names (`VOLUME SOFT`, `HARMONIC 3RD`) stack when the neighbour is closer
+  than the full name.

@@ -23,11 +23,11 @@ Every control the manual documents does something, or its gap is written down wi
 - [x] Inventory pins (Bound 153, UiOnly 58, Unsupported 64), menu pins and specs updated from test output; no host parameter id changed
 
 ## Out of Scope
-The preset id (`1:05`) in the section rows (no data source, open question OQ26, stays in `ns4-bjvn`), storing a new preset into the Preset Library, loading `.ns4o` / `.ns4n` / `.ns4y` into the engine, the SAMPLE OPT dial (needs sample preset data), hardware validation of an edited backup.
+The preset id (`1:05`) in the section rows (no data source, open question OQ27, stays in `ns4-bjvn`), storing a new preset into the Preset Library, loading `.ns4o` / `.ns4n` / `.ns4y` into the engine, the SAMPLE OPT dial (needs sample preset data), hardware validation of an edited backup.
 
 ## Summary of Changes
 - `nord-core`: `cbin/backup_presets.rs` (`PresetSection`, `PresetIndex`, `PresetPut`, `preset_edits`), `piano/label.rs` (`PianoLabel`, `PianoSize`).
 - `nord-panel`: `menus/organize.rs` page 2 (six `UiOnly` items), `inventory/synth_dials.rs` (45 dial cells: 34 edit, 10 UI navigation, 1 documented gap), dial bindings in `inventory/synth.rs`.
 - `nord-gui`: `bay_program/organize_presets.rs` (+ tests), Shift + dial section step, `library/export.rs` `plan_presets`, `SynthPage::dial_key` and `dials_table_tests.rs`, `oled_home.rs` section rows.
 - `tools/preset_slots.py` and the size check in `tools/npno_types.py` with tests.
-- Specs: `control-inventory.md` 9b.1, `midi-and-control.md` 5.3, `cbin-and-presets.md` 5.5, `visual-style-and-panel.md` 4.5, `piano-types.md`, OQ26.
+- Specs: `control-inventory.md` 9b.1, `midi-and-control.md` 5.3, `cbin-and-presets.md` 5.5, `visual-style-and-panel.md` 4.5, `piano-types.md`, OQ27.
