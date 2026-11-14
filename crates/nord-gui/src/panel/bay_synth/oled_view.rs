@@ -121,7 +121,7 @@ pub fn view_of(sui: &SynthUi, sample_name: Option<&str>) -> OledView {
         SynthPage::FilterType => {
             let ty = &FILTER_TYPES[usize::from(l.filter_type) % FILTER_TYPES.len()];
             (
-                "FILTER",
+                "Filter",
                 Graphic::Filter {
                     ty: l.filter_type,
                     cutoff: (l.cutoff_hz / 40.0).max(1.0).ln() / (15_000.0_f32 / 40.0).ln(),
@@ -161,7 +161,7 @@ pub fn view_of(sui: &SynthUi, sample_name: Option<&str>) -> OledView {
         ),
         SynthPage::Arp(n) => super::oled_arp::arp_page(sui, n),
         SynthPage::Vibrato => (
-            "VIBRATO",
+            "Vibrato",
             Graphic::Vibrato {
                 rate: l.vib_rate,
                 amount: l.vib_amount,
@@ -173,7 +173,7 @@ pub fn view_of(sui: &SynthUi, sample_name: Option<&str>) -> OledView {
             ],
         ),
         SynthPage::PitchSmp => (
-            "OSC PITCH",
+            "Osc Pitch",
             Graphic::Big(format!("{:+} st {:+} ct", l.pitch_semi, l.fine_cents)),
             [
                 format!("{:+} st", l.pitch_semi),
@@ -310,7 +310,7 @@ mod tests {
         s.open(SynthPage::FilterType);
         s.turn_dial(1, 2, false);
         let v = view_of(&s, None);
-        assert_eq!(v.title, "FILTER");
+        assert_eq!(v.title, "Filter");
         assert_eq!(v.soft[0].as_ref().unwrap().value, "LP M");
         assert_eq!(v.soft[1].as_ref().unwrap().value, "2/3");
         assert_eq!(soft_labels(&v), ["TYPE", "KBD TRK", "DRIVE"]);
@@ -320,9 +320,9 @@ mod tests {
     fn envelope_pages_show_attack_decay_release_times() {
         let mut s = SynthUi::new();
         for (p, t) in [
-            (SynthPage::EnvOsc, "OSC ENVELOPE"),
-            (SynthPage::EnvFilter, "FILTER ENVELOPE"),
-            (SynthPage::EnvAmp, "AMP ENVELOPE"),
+            (SynthPage::EnvOsc, "Osc Envelope"),
+            (SynthPage::EnvFilter, "Filter Envelope"),
+            (SynthPage::EnvAmp, "Amp Envelope"),
         ] {
             s.page = p;
             let v = view_of(&s, None);

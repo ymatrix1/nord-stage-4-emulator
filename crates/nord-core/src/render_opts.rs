@@ -21,14 +21,15 @@ pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
     }
 }
 
-/// Parses an `--organ-level` value: `default | legacy | firmware`.
+/// Parses an `--organ-level` value: `default | legacy | firmware | chain`.
 pub fn parse_organ_level(v: &str) -> Result<OutputLevel, String> {
     match v.to_ascii_lowercase().as_str() {
         "default" | "model" => Ok(OutputLevel::ModelDefault),
         "legacy" => Ok(OutputLevel::Legacy),
         "firmware" => Ok(OutputLevel::Firmware),
+        "chain" => Ok(OutputLevel::Chain),
         _ => Err(format!(
-            "invalid --organ-level '{v}' (expected default|legacy|firmware)"
+            "invalid --organ-level '{v}' (expected default|legacy|firmware|chain)"
         )),
     }
 }
@@ -94,6 +95,14 @@ pub fn apply_farfisa_processor(engine: &mut Stage4Engine, on: Option<bool>) {
     if let Some(on) = on {
         engine.organ_a.farfisa_processor = on;
         engine.organ_b.farfisa_processor = on;
+    }
+}
+
+/// Switches the B3 Bass processor stage of both organ layers (`None` leaves the engine untouched).
+pub fn apply_b3_bass_processor(engine: &mut Stage4Engine, on: Option<bool>) {
+    if let Some(on) = on {
+        engine.organ_a.set_b3_bass_processor(on);
+        engine.organ_b.set_b3_bass_processor(on);
     }
 }
 
@@ -259,6 +268,10 @@ pub struct FirmwareOptions {
     /// `--farfisa-processor on|off` (`None` = off): the Farfisa key-down weights and measured line
     /// gain of the processor `0x122B85` on `--tone-source farfisa`-style `FarfisaWheels` layers.
     pub farfisa_processor: Option<bool>,
+    /// `--b3-bass-processor on|off` (`None` = off): the B3 Bass key stage (generator weights,
+    /// window words and measured line gain of the processor `0x122296`); needs `--tone-source
+    /// b3wheels` on a B3 Bass layer.
+    pub b3_bass_processor: Option<bool>,
     /// `--firmware-fx`: every `FirmwareFx` port on every FX chain.
     pub firmware_fx: bool,
     /// `--firmware-reverb`: only the firmware Spring reverb (`FirmwareFx::reverb`) on every chain,
@@ -268,6 +281,9 @@ pub struct FirmwareOptions {
     pub piano_firmware_level: bool,
     /// `--firmware-piano-bus`: `PianoLayer::firmware_bus_scale` (opt-in, ASSUMED receiver scale).
     pub piano_bus_scale: bool,
+    /// `--firmware-piano-chain`: `PianoLayer::receiver_chain_scale` (verified FX path 0.7464 per
+    /// `y / 8192`; opt-in, engine unit = DAC fraction ASSUMED).
+    pub piano_chain_scale: bool,
     /// `--firmware-piano-layer-law`: the piano layer fader follows `(v / 127)^2` (opt-in).
     pub piano_layer_law: bool,
     /// `--measured-laws`: `SynthLayer::measured_laws` (EMPIRICAL, Audible Genius clips).
@@ -320,10 +336,12 @@ impl Default for FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             farfisa_processor: None,
+            b3_bass_processor: None,
             firmware_fx: false,
             firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
+            piano_chain_scale: false,
             piano_layer_law: false,
             measured_laws: false,
             synth_shape_milli: None,
@@ -364,10 +382,12 @@ impl FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             farfisa_processor: None,
+            b3_bass_processor: None,
             firmware_fx: true,
             firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
+            piano_chain_scale: false,
             piano_layer_law: false,
             measured_laws: false,
             synth_shape_milli: None,
@@ -418,6 +438,9 @@ impl FirmwareOptions {
         if let Some(v) = value("--farfisa-processor") {
             o.farfisa_processor = Some(parse_on_off("--farfisa-processor", v)?);
         }
+        if let Some(v) = value("--b3-bass-processor") {
+            o.b3_bass_processor = Some(parse_on_off("--b3-bass-processor", v)?);
+        }
         o.firmware_fx |= has("--firmware-fx");
         o.firmware_reverb |= has("--firmware-reverb");
         o.piano_firmware_level |= has("--firmware-piano-level");
@@ -425,6 +448,7 @@ impl FirmwareOptions {
             o.piano_firmware_level = false;
         }
         o.piano_bus_scale |= has("--firmware-piano-bus");
+        o.piano_chain_scale |= has("--firmware-piano-chain");
         o.piano_layer_law |= has("--firmware-piano-layer-law");
         o.measured_laws |= has("--measured-laws");
         o.synth_stages |= has("--synth-stages");
@@ -494,10 +518,13 @@ impl FirmwareOptions {
         apply_piano_level(engine, self.piano_firmware_level);
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_a.receiver_chain_scale = self.piano_chain_scale;
+        engine.piano_b.receiver_chain_scale = self.piano_chain_scale;
         engine.piano_a.firmware_layer_law = self.piano_layer_law;
         engine.piano_b.firmware_layer_law = self.piano_layer_law;
         apply_b3_tail(engine, self.b3_tail);
         apply_farfisa_processor(engine, self.farfisa_processor);
+        apply_b3_bass_processor(engine, self.b3_bass_processor);
         apply_leslie_firmware_ring(
             engine,
             self.leslie_firmware,
@@ -565,6 +592,8 @@ impl FirmwareOptions {
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_a.receiver_chain_scale = self.piano_chain_scale;
+        engine.piano_b.receiver_chain_scale = self.piano_chain_scale;
         engine.piano_a.firmware_layer_law = self.piano_layer_law;
         engine.piano_b.firmware_layer_law = self.piano_layer_law;
         self.set_rotary(engine);
@@ -656,6 +685,12 @@ impl FirmwareOptions {
                 if b { "on" } else { "off" }
             ));
         }
+        if let Some(b) = self.b3_bass_processor {
+            parts.push(format!(
+                "b3-bass-processor={}",
+                if b { "on" } else { "off" }
+            ));
+        }
         if self.firmware_fx {
             parts.push("fx".into());
         }
@@ -673,6 +708,9 @@ impl FirmwareOptions {
         }
         if self.piano_bus_scale {
             parts.push("piano-bus".into());
+        }
+        if self.piano_chain_scale {
+            parts.push("piano-chain".into());
         }
         if self.piano_layer_law {
             parts.push("piano-layer-law".into());
@@ -753,6 +791,14 @@ mod tests {
         assert!(!o.piano_bus_scale, "the bus scale is opt-in");
         let bus = FirmwareOptions::from_args(&args(&["--firmware-piano-bus"])).unwrap();
         assert!(bus.piano_bus_scale);
+        assert!(!o.piano_chain_scale, "the receiver chain scale is opt-in");
+        let chain = FirmwareOptions::from_args(&args(&["--firmware-piano-chain"])).unwrap();
+        assert!(chain.piano_chain_scale && chain.summary().contains("piano-chain"));
+        let mut e = Stage4Engine::new(48_000.0);
+        chain.apply_to(&mut e);
+        assert!(e.piano_a.receiver_chain_scale && e.piano_b.receiver_chain_scale);
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert!(!e.piano_a.receiver_chain_scale);
         assert!(!o.piano_layer_law, "the layer law is opt-in");
         let law = FirmwareOptions::from_args(&args(&["--firmware-piano-layer-law"])).unwrap();
         assert!(law.piano_layer_law && law.summary().contains("piano-layer-law"));
@@ -913,6 +959,7 @@ mod tests {
             measured_laws: true,
             b3_tail: Some(false),
             farfisa_processor: None,
+            b3_bass_processor: None,
             ..FirmwareOptions::firmware_all()
         };
         on.apply_exact(&mut e);
@@ -953,6 +1000,8 @@ mod tests {
     fn organ_level_flag_selects_the_output_level_law() {
         let o = FirmwareOptions::from_args(&args(&["--organ-level", "firmware"])).unwrap();
         assert_eq!(o.organ_level, OutputLevel::Firmware);
+        let c = FirmwareOptions::from_args(&args(&["--organ-level", "chain"])).unwrap();
+        assert_eq!(c.organ_level, OutputLevel::Chain);
         assert_eq!(
             FirmwareOptions::default().organ_level,
             OutputLevel::ModelDefault
@@ -1025,6 +1074,7 @@ mod tests {
             tone_source: Some(ToneWheelSource::B3Wheels),
             b3_tail: Some(false),
             farfisa_processor: None,
+            b3_bass_processor: None,
             ..Default::default()
         };
         let mut e = Stage4Engine::new(48_000.0);
@@ -1058,6 +1108,28 @@ mod tests {
         assert!(FirmwareOptions::legacy_all()
             .summary()
             .contains("legacy-piano"));
+    }
+
+    #[test]
+    fn b3_bass_processor_switch_parses_applies_and_describes() {
+        let o = FirmwareOptions::from_args(&args(&["--b3-bass-processor", "on"])).unwrap();
+        assert_eq!(o.b3_bass_processor, Some(true));
+        assert!(o.summary().contains("b3-bass-processor=on"));
+        let render = |on: Option<bool>| {
+            let mut e = Stage4Engine::new(48_000.0);
+            apply_b3_bass_processor(&mut e, on);
+            e.organ_a.b3_bass_mode = true;
+            e.organ_a.tonewheel_source = crate::organ::ToneWheelSource::B3Wheels;
+            e.organ_a.rotary_enabled = false;
+            e.organ_a.note_on(48);
+            (0..6_000)
+                .map(|_| e.organ_a.render_frame()[0])
+                .collect::<Vec<f32>>()
+        };
+        let (off, on) = (render(None), render(Some(true)));
+        assert!(on.iter().all(|v| v.is_finite()) && on.iter().any(|v| v.abs() > 1e-5));
+        assert_ne!(off, on);
+        assert!(parse_on_off("--b3-bass-processor", "x").is_err());
     }
 
     #[test]

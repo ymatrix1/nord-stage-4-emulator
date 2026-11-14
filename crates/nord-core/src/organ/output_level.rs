@@ -27,6 +27,11 @@ pub enum OutputLevel {
     /// `K` times the swell word of the engine's pedal (neutral = full) on the oracle-faithful
     /// bank output, and the layer level squared by the engine.
     Firmware,
+    /// The same structure as `Firmware` with the **verified chain** in place of the empirical `K`:
+    /// the organ chain gain word [`ORGAN_CHAIN_GAIN_WORD`] (1.6) times the FX output path
+    /// ([`organ_chain_bus_gain`]), the engine unit read as the DAC fraction (ASSUMED). Opt-in
+    /// (`--organ-level chain`): it lands the organ clips 13 dB under the hardware (OQ24).
+    Chain,
 }
 
 /// Default swell value of the boot (`Fnc_Swell`, `arm-edit-params.csv` default 100).
@@ -82,6 +87,27 @@ pub const ORGAN_BUS_GAIN: f32 = 2.8;
 /// ASSUMED: the Legacy `0.08` has no firmware source (`pipe-video-gap.md` section 1).
 pub const LEGACY_BUS_OVER_UNIT: f32 = 0.08 / super::weights::UNIT_WEIGHT;
 
+/// Organ chain gain word the layer sender `0xC023195C` writes to PNO core 1 (`DM 0xB2ECF`, `0xB2EDE`,
+/// ...) for a layer level of 127 in every program whose Reverb GLOBAL is off: the layer word
+/// `(v / 127)^2 = 1.0` times the scale cell `[mixer + 0x150]`.
+///
+/// VERIFIED (run): `tools/arm_master_level.py layer` in the settled ARM emulator reads
+/// `1.6, 1.3, 1.0, ...` at the cells and sends `1.6` to `0xB2ECF`/`0xB2ED0` (organ slots 0 and 1
+/// take cell 0 for both values of the mode flag `[mixer + layer + 0x5B8]`, the Reverb GLOBAL
+/// state, `docs/research/piano-receiver-scale.md` s6). The DSP output is linear in the word
+/// (`arm-boot-rederive.md` s1), so the oracle lanes at the image default 1.0 are 1.6 times low.
+pub const ORGAN_CHAIN_GAIN_WORD: f32 = 1.6;
+
+/// Engine gain on an oracle-faithful organ bank output (swell and level 1) that follows the
+/// verified chain: [`ORGAN_CHAIN_GAIN_WORD`] times the FX output path `2 * 0.1866 = 0.3732`
+/// (VERIFIED run, `piano::downstream::fx_dac_fraction`), 0.597 (-4.5 dB).
+///
+/// ASSUMED: that the engine unit 1.0 is the DAC full scale (the piano peaks support it within
+/// 2.7 dB; the organ clips need 13.4 dB more, OQ24).
+pub fn organ_chain_bus_gain() -> f32 {
+    ORGAN_CHAIN_GAIN_WORD * crate::piano::downstream::fx_dac_fraction(1.0)
+}
+
 impl super::OrganLayer {
     /// `true` when the drawbar weights are the smoothed firmware weights: `WeightMode::Firmware`,
     /// or a Pipe layer on the firmware bank under the [`OutputLevel::Firmware`] law (the bank and
@@ -90,7 +116,7 @@ impl super::OrganLayer {
     pub(super) fn firmware_weights(&self) -> bool {
         use super::{OrganModel, ToneWheelSource, WeightMode};
         self.weight_mode == WeightMode::Firmware
-            || (self.level_law() == OutputLevel::Firmware
+            || (self.level_law().is_firmware_law()
                 && matches!(self.model, OrganModel::Pipe1 | OrganModel::Pipe2)
                 && self.effective_tone_source() == ToneWheelSource::Firmware)
     }
@@ -121,7 +147,13 @@ impl OutputLevel {
         match self {
             Self::Legacy | Self::ModelDefault => 1.0,
             Self::Firmware => ORGAN_BUS_GAIN,
+            Self::Chain => organ_chain_bus_gain(),
         }
+    }
+
+    /// `true` for the laws that use the firmware weights and the squared layer level.
+    pub fn is_firmware_law(self) -> bool {
+        matches!(self, Self::Firmware | Self::Chain)
     }
 
     /// Multiplier on the Vox output, which already carries the boot swell word.
@@ -129,6 +161,7 @@ impl OutputLevel {
         match self {
             Self::Legacy | Self::ModelDefault => 1.0,
             Self::Firmware => ORGAN_BUS_GAIN / VOX_BAKED_SWELL,
+            Self::Chain => organ_chain_bus_gain() / VOX_BAKED_SWELL,
         }
     }
 
@@ -136,7 +169,7 @@ impl OutputLevel {
     pub fn layer_gain(self, level: f32) -> f32 {
         match self {
             Self::Legacy | Self::ModelDefault => level,
-            Self::Firmware => layer_level_gain(level),
+            Self::Firmware | Self::Chain => layer_level_gain(level),
         }
     }
 }
@@ -193,6 +226,23 @@ mod tests {
             "swell word removed"
         );
         assert!((OutputLevel::Firmware.layer_gain(0.5) - 0.25).abs() < 1e-7);
+    }
+
+    #[test]
+    fn chain_law_is_the_verified_word_times_the_fx_path() {
+        // 1.6 (run of 0xC023195C) * 2 * 0.1866 (DM 0xB651A) = 0.5971
+        let g = OutputLevel::Chain.bus_gain();
+        assert!((g - 1.6 * 0.373_2).abs() < 2e-4, "{g}");
+        assert!((g - organ_chain_bus_gain()).abs() < 1e-9);
+        assert!(g < OutputLevel::Firmware.bus_gain() / 4.0, "13 dB under K");
+        let vox = OutputLevel::Chain.vox_gain();
+        assert!(
+            (vox * VOX_BAKED_SWELL - g).abs() < 1e-6,
+            "swell word removed"
+        );
+        assert!((OutputLevel::Chain.layer_gain(0.5) - 0.25).abs() < 1e-7);
+        assert!(OutputLevel::Chain.is_firmware_law() && OutputLevel::Firmware.is_firmware_law());
+        assert!(!OutputLevel::Legacy.is_firmware_law());
     }
 
     #[test]

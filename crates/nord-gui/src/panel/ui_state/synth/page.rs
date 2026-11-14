@@ -52,21 +52,27 @@ impl SynthPage {
     }
 
     /// Header line of the page.
+    ///
+    /// VERIFIED (frames of the Synth OLED, `tools/arm_screens.py`, research note s14): `Filter`,
+    /// `Filter Envelope`, `Amp Envelope`, `Osc Envelope`, `Osc Pitch`, `Vibrato` and `Arpeggiator`
+    /// are drawn in mixed case (the
+    /// widget's upper-case flag is clear) and `OSC WAVEFORM` in literal capitals. ASSUMED: the
+    /// other titles (the real LFO page reads `LFO`; no frame shows the rest).
     pub fn title(self) -> &'static str {
         match self {
             Self::Waveform => "OSC WAVEFORM",
-            Self::FilterType => "FILTER",
-            Self::EnvOsc => "OSC ENVELOPE",
-            Self::EnvFilter => "FILTER ENVELOPE",
-            Self::EnvAmp => "AMP ENVELOPE",
+            Self::FilterType => "Filter",
+            Self::EnvOsc => "Osc Envelope",
+            Self::EnvFilter => "Filter Envelope",
+            Self::EnvAmp => "Amp Envelope",
             Self::LfoWave => "LFO WAVEFORM",
-            Self::Arp(1) => "ARPEGGIATOR",
+            Self::Arp(1) => "Arpeggiator",
             Self::Arp(2) => "PATTERN",
             Self::Arp(3) => "PATTERN EDIT",
             Self::Arp(4) => "PATTERN ACCENT",
             Self::Arp(_) => "PATTERN PAN",
-            Self::Vibrato => "VIBRATO",
-            Self::PitchSmp => "OSC PITCH",
+            Self::Vibrato => "Vibrato",
+            Self::PitchSmp => "Osc Pitch",
             Self::Extern => "EXTERN",
         }
     }
