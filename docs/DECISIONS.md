@@ -530,3 +530,13 @@ unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
 - **Why:** The stage equals the oracle word for word (1840 of 1840), so the DSP is verified; only the strip word to position law is not (the stage reads a log-frequency position, the other stages the tangent coefficient `R`), hence ASSUMED and opt-in per D22.
 - **Alternatives:** Keep `Lp4` for `Ladder24` (rejected: different shape and resonance); feed `R` straight to the position word (rejected: the table runs 8 Hz to 28 kHz over `0..0.95`, so 6 kHz would play near 400 Hz); make the stage the default outside `--synth-stages` (rejected until the ARM cutoff word for type 2 is traced).
 - **Impact:** Ladder24 layers change sound under the firmware strip chain with stage oscillators (the default of `SynthLayer::new`, off in `legacy_all`); the test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
+
+### D50. The Ladder24 stage position is the strip table value `R`; the host keeps the pole-frequency law
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-10`; evidence [synth-stage-models-10](research/synth-stage-models-10.md) s1)
+- **Context:** D48 left the strip word to position law of `0x12549D` ASSUMED because the ARM cutoff word for `kFltType = 2` was not traced.
+- **Decision:** Record that the stage reads the same `R` as every filter stage (`LadderCoefs::from_strip_r`) and that the ARM cutoff sender `0xC01C56CC` is type independent with the knob law `i = knob - 52` (Q16.16 values, `tools/arm_synth_freq_law.py`). Keep `LadderCoefs::from_r` (host Hz = pole frequency) in the voice chain.
+- **Why:** The coefficient words equal the oracle for 14 of 14 lane sets with the real pass control block; the pole frequency is exponential in the knob (74 Hz to 7.8 kHz), which is what a Hz fed engine expects, while feeding the tangent `R` of a host cutoff would play the ladder two decades low (ten synth tests broke in the experiment).
+- **Alternatives:** Feed `R` of the host cutoff into the position (rejected: pole near 20 Hz for 2 kHz); wait for a knob driven strip chain (rejected: the finding is useful now).
+- **Impact:** No rendering change (`from_strip_r` is not wired). OQ22 narrows; the `R = tan` reading of the other filter types is flagged for a hardware sweep.
