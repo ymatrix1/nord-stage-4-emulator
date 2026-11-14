@@ -6,8 +6,6 @@
 //! row `fold(key - 36 + SLOT_OFFSETS[s])` and sends `DM(0x95E46 + row) = sum of the level slots of
 //! the flagged slots`; there is no velocity (VERIFIED negative, `keydown-zones.md` section 4).
 
-use super::vox_bank::NOTES;
-
 /// Semitone offset of each of the 20 footage slots (slot 2, the 8', lands on row `key - 24`).
 ///
 /// VERIFIED: all 20 flags of each of 24 captured keys match (`keydown-vox-flags.csv`,
@@ -30,8 +28,17 @@ pub(super) const DEFAULT_SLOTS: [usize; 4] = [0, 2, 5, 10];
 /// (`keydown-organ-keys.csv`, model 1, 24 notes); two folded slots send `0x3EFD70A0` (twice).
 pub(super) const SLOT_LEVEL: f32 = 2_076_180.0 / 8_388_608.0;
 
-/// Rows of the key tables: 84 note oscillators plus the 12 buckets of the unported 36-sine bank.
-const ROWS: i32 = 96;
+/// Rows of the 96-word block: 84 note oscillators plus the 12 buckets of the 36-sine bank.
+pub const ROWS: usize = 96;
+
+/// Level of every footage slot in the default program: `SLOT_LEVEL` on [`DEFAULT_SLOTS`], else 0.
+pub(super) fn default_levels() -> [f32; 20] {
+    let mut l = [0.0; 20];
+    for &s in &DEFAULT_SLOTS {
+        l[s] = SLOT_LEVEL;
+    }
+    l
+}
 
 /// Row of footage slot `slot` for `key`: `fold(key - 36 + SLOT_OFFSETS[slot])`, folding by octaves
 /// into `0..96`.
@@ -40,19 +47,17 @@ pub(super) fn slot_row(key: i32, slot: usize) -> usize {
     while r < 0 {
         r += 12;
     }
-    while r >= ROWS {
+    while r >= ROWS as i32 {
         r -= 12;
     }
     r as usize
 }
 
-/// Adds the default-slot weights of `key` to `targets`; rows 84..95 (the unported sine bank) get
-/// no oscillator and are dropped.
-pub(super) fn add_key(targets: &mut [f32; NOTES], key: i32) {
-    for &s in &DEFAULT_SLOTS {
-        if let Some(t) = targets.get_mut(slot_row(key, s)) {
-            *t += SLOT_LEVEL;
-        }
+/// Adds the weights of `key` to `targets`: every slot with a non-zero level adds its level to its
+/// row (rows 84..95 are the sine buckets).
+pub(super) fn add_key(targets: &mut [f32; ROWS], key: i32, levels: &[f32; 20]) {
+    for (slot, &level) in levels.iter().enumerate().filter(|(_, &l)| l != 0.0) {
+        targets[slot_row(key, slot)] += level;
     }
 }
 
@@ -80,28 +85,38 @@ mod tests {
 
     #[test]
     fn the_8_foot_slot_lands_on_note_minus_24_and_levels_add_when_rows_fold() {
+        let levels = default_levels();
         assert_eq!(slot_row(60, 2), 36);
-        let mut t = [0.0f32; NOTES];
-        add_key(&mut t, 60); // rows 24, 36, 48, 60
+        let mut t = [0.0f32; ROWS];
+        add_key(&mut t, 60, &levels); // rows 24, 36, 48, 60
         assert_eq!(t.iter().filter(|&&x| x != 0.0).count(), 4);
         assert_eq!(t[36], SLOT_LEVEL);
-        // note 21: slots 0 and 2 fold onto rows 9 and 21? (rows 9, 21, 33, 45): all distinct here
-        let mut u = [0.0f32; NOTES];
-        add_key(&mut u, 21);
+        let mut u = [0.0f32; ROWS];
+        add_key(&mut u, 21, &levels);
         assert!((u.iter().sum::<f32>() - 4.0 * SLOT_LEVEL).abs() < 1e-6);
         // C4 and its octave share rows: 16' of C5 is 8' of C4 (row 36)
-        let mut c = [0.0f32; NOTES];
-        add_key(&mut c, 60);
-        add_key(&mut c, 72);
+        let mut c = [0.0f32; ROWS];
+        add_key(&mut c, 60, &levels);
+        add_key(&mut c, 72, &levels);
         assert!((c[36] - 2.0 * SLOT_LEVEL).abs() < 1e-7);
         assert!((SLOT_LEVEL - 0.247_499_94).abs() < 1e-7);
     }
 
     #[test]
-    fn high_rows_belong_to_the_unported_sine_bank() {
-        let mut t = [0.0f32; NOTES];
-        add_key(&mut t, 108); // rows 72, 84 (dropped), 96 -> 84 (dropped), 108 -> 72 ...
-        assert!(slot_row(108, 2) >= 84);
-        assert!(t.iter().sum::<f32>() < 4.0 * SLOT_LEVEL);
+    fn high_keys_reach_the_sine_bucket_rows_and_every_slot_adds_its_level() {
+        let levels = default_levels();
+        let mut t = [0.0f32; ROWS];
+        add_key(&mut t, 90, &levels); // 2' lands on row 90, 4' on 78, 8' on 66, 16' on 54
+        assert_eq!(slot_row(90, 10), 90);
+        assert_eq!(t[90], SLOT_LEVEL);
+        assert!(
+            (t.iter().sum::<f32>() - 4.0 * SLOT_LEVEL).abs() < 1e-6,
+            "no row is dropped"
+        );
+        let mut one = [0.0f32; 20];
+        one[19] = 0.5; // the 1/2' slot (offset 60)
+        let mut u = [0.0f32; ROWS];
+        add_key(&mut u, 60, &one);
+        assert_eq!(u[84], 0.5);
     }
 }
