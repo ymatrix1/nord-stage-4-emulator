@@ -18,6 +18,7 @@ mod page;
 mod pattern;
 mod pots;
 mod press;
+mod samples;
 mod tables;
 
 pub use buttons::Btn;
@@ -27,6 +28,7 @@ pub use layer_btn::LayerAction;
 pub use legacy::Legacy;
 pub use page::{dial_defs, DialDef, SynthPage, ARP_PAGES, EXTERN_WHY};
 pub use pots::Pots;
+pub use samples::SampleBrowser;
 pub use tables::*;
 
 use crate::audio::{SynthEdit, SynthGroup, SynthParam, SynthTarget};
@@ -75,6 +77,8 @@ pub struct SynthUi {
     /// Extern page values (CC, value, channel); no engine effect.
     pub extern_vals: [u8; 3],
     pub pots: Pots,
+    /// Sample Library browser behind the CAT / SAMPLE dials of the Sample mode.
+    pub samples: SampleBrowser,
     /// Fractional dial clicks, kept between frames.
     pub dial_acc: [f32; 3],
     pub(crate) trackers: HashMap<&'static str, ButtonTracker>,
@@ -110,6 +114,7 @@ impl SynthUi {
             group_arp: Latch::default(),
             extern_vals: [1, 64, 1],
             pots,
+            samples: SampleBrowser::default(),
             dial_acc: [0.0; 3],
             trackers: HashMap::new(),
             out: Vec::new(),

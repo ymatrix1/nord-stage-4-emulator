@@ -251,3 +251,65 @@ fn shift_clicking_layer_a_and_b_toggles_sustped_and_pstick_in_the_engine() {
     assert_eq!(engine.pedals.pstick[4..7], [true; 3]);
     assert!(state.synth_ui.sustped && state.synth_ui.pstick);
 }
+
+/// Scroll `ticks` clicks over dial `id` (the dial turns one click per 24 scroll points).
+fn scroll_dial(
+    ctx: &egui::Context,
+    state: &mut Stage4PanelState,
+    audio: &AudioHandle,
+    id: &str,
+    ticks: f32,
+) {
+    let c = rect_or_empty(id, pos2(0.0, 0.0)).center();
+    run_frame(
+        ctx,
+        state,
+        audio,
+        plain(vec![egui::Event::PointerMoved(c)], egui::Modifiers::NONE),
+    );
+    let wheel = egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, ticks * 24.0),
+        modifiers: egui::Modifiers::NONE,
+    };
+    run_frame(ctx, state, audio, plain(vec![wheel], egui::Modifiers::NONE));
+}
+
+#[test]
+fn cat_and_sample_dials_queue_a_sample_load_for_the_focused_layer() {
+    use crate::panel::LoadRequest;
+    let (ctx, mut state, audio, _rx) = fresh();
+    state.program_ui.catalog.samples = vec![
+        "Samp Lib/Bass/Fretless.nsmp4".into(),
+        "Samp Lib/Bass/Slap.nsmp4".into(),
+        "Samp Lib/Choir/Aahs.nsmp4".into(),
+    ];
+    click(
+        &ctx,
+        &mut state,
+        &audio,
+        "synth.layer.b",
+        egui::Modifiers::NONE,
+    );
+    state.synth_ui.layer_mut().sample_mode = true;
+    scroll_dial(&ctx, &mut state, &audio, "synth.dial.right", 2.0);
+    let requests = state.program_ui.take_requests();
+    assert!(
+        requests.contains(&LoadRequest::Sample {
+            entry: "Samp Lib/Bass/Slap.nsmp4".into(),
+            layer: 1,
+        }),
+        "got {requests:?}"
+    );
+    scroll_dial(&ctx, &mut state, &audio, "synth.dial.middle", 1.0);
+    let requests = state.program_ui.take_requests();
+    assert_eq!(
+        requests,
+        vec![LoadRequest::Sample {
+            entry: "Samp Lib/Choir/Aahs.nsmp4".into(),
+            layer: 1,
+        }]
+    );
+    let v = super::oled_view::view_of(&state.synth_ui, None);
+    assert_eq!(v.soft[1].as_ref().unwrap().value, "Choir");
+}
