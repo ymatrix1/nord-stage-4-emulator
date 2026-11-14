@@ -22,6 +22,7 @@
 
 use super::fw_filter_table_d::TABLE_D_BITS;
 use super::fw_filter_tables::{TABLE_A_BITS, TABLE_B_BITS, TABLE_C_BITS};
+use super::fw_ladder::{FwLadder, LadderCoefs};
 use crate::synth_types::FilterModel;
 
 /// Which filter the synth voices run.
@@ -46,6 +47,9 @@ pub enum FwFilterType {
     Bp4,
     /// Stage `0x125A50`, four-pole high pass, table A.
     Hp4,
+    /// Stage `0x12549D` (`kFltType` 2), four one-pole sections with a shaped feedback
+    /// (`fw_ladder.rs`); only selected by [`FwFilterType::from_model_stages`].
+    Ladder,
 }
 
 impl FwFilterType {
@@ -60,6 +64,15 @@ impl FwFilterType {
             FilterModel::HighPass => Self::Hp4,
             FilterModel::Lp12 => Self::Lp2,
             _ => Self::Lp4,
+        }
+    }
+
+    /// Like [`Self::from_model`], with the modelled Ladder24 stage `0x12549D` for `Ladder24`
+    /// (opt-in `--synth-stages`; the default keeps the ASSUMED `Lp4`).
+    pub fn from_model_stages(model: FilterModel) -> Self {
+        match model {
+            FilterModel::Ladder24 => Self::Ladder,
+            _ => Self::from_model(model),
         }
     }
 }
@@ -166,6 +179,8 @@ pub struct FwCoefs {
     pub k: f32,
     /// High-pass scale `h = 1 - g^2/4 - g k / 2`.
     pub h: f32,
+    /// Coefficients of the `Ladder` stage (zero for the other kinds).
+    pub ladder: LadderCoefs,
 }
 
 impl FwCoefs {
@@ -178,6 +193,16 @@ impl FwCoefs {
     #[inline]
     pub fn new(kind: FwFilterType, r: f32, pos: TablePos) -> Self {
         let r = if r.is_finite() { r.max(0.0) } else { 0.0 };
+        if kind == FwFilterType::Ladder {
+            // ASSUMED: the position is chosen so the section pole follows the cutoff (`from_r`)
+            return Self {
+                cin: 1.0,
+                g: 0.0,
+                k: 0.0,
+                h: 1.0,
+                ladder: LadderCoefs::from_r(r, pos),
+            };
+        }
         let table = if kind == FwFilterType::Bp4 {
             &TABLE_C_BITS
         } else {
@@ -198,6 +223,7 @@ impl FwCoefs {
             g,
             k,
             h: 1.0 - 0.25 * g * g - 0.5 * g * k,
+            ladder: LadderCoefs::default(),
         }
     }
 
@@ -232,6 +258,8 @@ fn flush(x: f32) -> f32 {
 pub struct FwFilter {
     /// `[a, b, c]` per section: clipped band state, previous input, low state.
     s: [[f32; 3]; 2],
+    /// State of the `Ladder` stage.
+    ladder: FwLadder,
 }
 
 impl FwFilter {
@@ -268,6 +296,9 @@ impl FwFilter {
     /// Filters one sample. A non-finite input is treated as silence.
     #[inline]
     pub fn process(&mut self, x: f32, co: &FwCoefs, kind: FwFilterType) -> f32 {
+        if kind == FwFilterType::Ladder {
+            return self.ladder.process(x, &co.ladder);
+        }
         let x = if x.is_finite() { x } else { 0.0 };
         let y1 = Self::section(&mut self.s[0], co.cin * x, co, kind);
         if kind == FwFilterType::Lp2 {

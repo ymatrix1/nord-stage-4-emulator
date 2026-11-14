@@ -3,7 +3,7 @@
 
 use super::controls::{Fed, BUTTONS, PROGRAM_BUTTONS};
 use super::interact::press;
-use super::menu_screen::DIM;
+use super::menu_screen::{bar_title, DIM};
 use super::model::{MenuId, Screen};
 use super::oled::{compose, Summary};
 use crate::audio::{apply_audio_command, AudioCommand};
@@ -159,8 +159,9 @@ fn every_page_of_every_menu_renders_all_its_items() {
             let blocks = model.items.len().div_ceil(p.ui.menu.block_size());
             for _ in 0..blocks {
                 let t = p.text();
-                assert_eq!(t.big, m.title());
-                assert_eq!(t.sub, format!("{}/{n} {}", page + 1, model.title), "{m:?}");
+                assert_eq!(t.big, bar_title(m, page, model.title), "{m:?}");
+                assert_eq!(t.sub, model.title, "{m:?}");
+                assert_eq!(t.bar, Some(format!("{}/{n}", page + 1)), "{m:?}");
                 assert!(!t.rows.is_empty() && t.rows.iter().any(|r| r.contains('>')));
                 rows += t.rows.len();
                 if p.ui.menu.paged() {

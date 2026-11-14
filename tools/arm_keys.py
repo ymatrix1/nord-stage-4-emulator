@@ -55,6 +55,34 @@ USABLE_BITS: dict[tuple[int, int], int] = {
 }
 
 
+# ASSUMED: the ten encoder bits of strobe `0x80` (mask `0x000F003F`) are five A / B pairs that the
+# firmware decodes as quadrature; a pair is `(port, bit of A)` and B is the next bit. Which pair
+# is which dial is found by turning it and reading the screen (`docs/research/arm-oled-render.md`).
+ENCODER_PAIRS: tuple[tuple[int, int], ...] = ((0, 0), (0, 2), (1, 0), (1, 2), (1, 4))
+# Gray cycle of `(A, B)` levels for one detent, positive direction (the other runs it backwards).
+# EMPIRICAL: with this order the step decoder `0xC0082A9C` adds +1 three times per cycle; each
+# state has to be held about 30 ticks because the scan reads column `0x80` only once per ~10 ticks.
+GRAY_CYCLE: tuple[tuple[int, int], ...] = ((1, 1), (1, 0), (0, 0), (0, 1))
+
+
+def encoder_steps(pair: int, detents: int) -> list[set[tuple[int, int, int]]]:
+    """Held-key sets (low bits) that turn encoder `pair` by `detents` (negative: backwards)."""
+    port, bit = ENCODER_PAIRS[pair]
+    cycle = GRAY_CYCLE[1:] + GRAY_CYCLE[:1]  # from idle (1, 1) and back to it
+    if detents < 0:
+        cycle = cycle[2::-1] + cycle[3:]
+    steps: list[set[tuple[int, int, int]]] = []
+    for _ in range(abs(detents)):
+        for a, b in cycle:
+            held: set[tuple[int, int, int]] = set()
+            if not a:
+                held.add((ENCODER_STROBE, port, bit))
+            if not b:
+                held.add((ENCODER_STROBE, port, bit + 1))
+            steps.append(held)
+    return steps
+
+
 def all_keys() -> list[tuple[int, int, int]]:
     """Every `(strobe, port, bit)` the scan can see on a key column, in scan order."""
     return [

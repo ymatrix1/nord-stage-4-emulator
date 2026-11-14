@@ -867,6 +867,10 @@ pub struct PianoLayer {
     /// Scale the sample path by the SMP bus convention (`downstream::FIRMWARE_SAMPLE_SCALE`,
     /// 0.5) instead of the legacy 0.55. Default `false`: the Q31 receiver convention is ASSUMED.
     pub firmware_bus_scale: bool,
+    /// Scale the sample path by the verified FX receiver path `4 G = 0.7464`
+    /// (`downstream::receiver_path_sample_scale`, engine unit read as the DAC fraction, ASSUMED)
+    /// instead of the legacy 0.55; wins over `firmware_bus_scale`. Default `false` (OQ20, D22).
+    pub receiver_chain_scale: bool,
     /// Layer level fader follows the firmware law `(v / 127)^2` (handler `0xC011A7A4`, run live
     /// in `tools/arm_layer_level.py`) instead of the linear engine fader. Default `false`: the
     /// path from the stored word to the SMP voice gains is not traced (D22).
@@ -955,6 +959,7 @@ impl PianoLayer {
             sound,
             firmware_velocity_level: true,
             firmware_bus_scale: false,
+            receiver_chain_scale: false,
             firmware_layer_law: false,
             sample_interp: SampleInterp::default(),
             kernel: SmpKernel::shared(),
@@ -1474,8 +1479,11 @@ impl PianoLayer {
                 }
             };
 
-            let sample_scale =
-                downstream::sample_scale(v.stroke_idx.is_some(), self.firmware_bus_scale);
+            let sample_scale = downstream::voice_scale(
+                v.stroke_idx.is_some(),
+                self.firmware_bus_scale,
+                self.receiver_chain_scale,
+            );
             let voice_gain = v.amp * v.env * v.gain * sample_scale;
             sum_l += sig_l * voice_gain;
             sum_r += sig_r * voice_gain;

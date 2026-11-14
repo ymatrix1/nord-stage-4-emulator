@@ -22,6 +22,7 @@
 //! this path as far as captured), the vibrato.
 
 use super::farfisa_proc_gain::farfisa_proc_gain;
+use super::gain_fir;
 use super::types::NUM_TONEWHEELS;
 use super::{OrganLayer, OrganModel, ToneWheelSource};
 
@@ -71,23 +72,8 @@ impl FarfisaKeys {
 
     /// Redesigns both FIRs in place (frequency sampling of the measured magnitude, Hann window).
     fn design(&mut self, sample_rate: f32) {
-        let c = (TAPS - 1) / 2;
-        let half = (TAPS - 1) / 2;
         for (sum, fir) in self.fir.iter_mut().enumerate() {
-            let mut amp = [0.0f32; TAPS / 2 + 1];
-            for (m, a) in amp.iter_mut().enumerate() {
-                *a = farfisa_proc_gain(sum, m as f32 * sample_rate / TAPS as f32);
-            }
-            for (n, tap) in fir.iter_mut().enumerate() {
-                let t = n as f32 - c as f32;
-                let mut acc = amp[0];
-                for (m, a) in amp.iter().enumerate().skip(1).take(half) {
-                    let ang = std::f32::consts::TAU * m as f32 * t / TAPS as f32;
-                    acc += 2.0 * a * ang.cos();
-                }
-                let win = 0.5 + 0.5 * (std::f32::consts::PI * t / (c as f32 + 1.0)).cos();
-                *tap = acc / TAPS as f32 * win;
-            }
+            gain_fir::design(fir, sample_rate, |hz| farfisa_proc_gain(sum, hz));
         }
         self.coef = 1.0 - (-1.0 / (RAMP_TAU * sample_rate)).exp();
         self.designed_for = sample_rate;

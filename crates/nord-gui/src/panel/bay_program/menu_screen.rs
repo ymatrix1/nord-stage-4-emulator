@@ -54,6 +54,23 @@ fn row(ui: &ProgramUi, item: &MenuItem, focused: bool) -> String {
     }
 }
 
+/// Title shown in the bar of page `page_index` (titled `page_title`) of menu `m`.
+///
+/// VERIFIED (ARM frames, `tools/arm_screens.py`, research note s12): the first page of the Sound
+/// menu is titled `PROGRAM LEVELS`, not `SOUND SETTINGS`; the last page of the Output, Pedal and
+/// MIDI menus is titled `OUTPUT OVERVIEW`, `PEDAL OVERVIEW` and `MIDI OVERVIEW`; every other
+/// page prints `<NAME> SETTINGS`. ASSUMED: later pages of the Sound menu keep the menu title
+/// (frames of all 11 pages show `SOUND SETTINGS`).
+pub fn bar_title(m: MenuId, page_index: usize, page_title: &str) -> String {
+    if m == MenuId::Sound && page_index == 0 {
+        "PROGRAM LEVELS".into()
+    } else if page_title.ends_with("OVERVIEW") {
+        page_title.into()
+    } else {
+        m.title().into()
+    }
+}
+
 /// Text of the menu screen of `m` (the state is `ui.menu`).
 pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
     let menu = &ui.menu;
@@ -90,18 +107,21 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
     }
     let sub = match &ui.message {
         Some((msg, _)) => msg.clone(),
-        None => format!(
-            "{}/{} {}",
-            menu.page_index() + 1,
-            menu.page_count(),
-            page.title
-        ),
+        None => page.title.to_string(),
     };
+    // VERIFIED: the title bar carries `n/N` right-aligned (`SYSTEM SETTINGS  1/6`); the lit soft
+    // button is the focused item (`Type` / `Func` / `Gain` on the Pedal page).
+    let counter = format!("{}/{}", menu.page_index() + 1, menu.page_count());
     OledText {
-        big: m.title().into(),
+        big: bar_title(m, menu.page_index(), page.title),
         sub,
         rows,
         soft,
+        bar: Some(counter),
+        soft_on: focus
+            .checked_sub(start)
+            .filter(|&i| i < visible.len().min(4)),
+        ..Default::default()
     }
 }
 
@@ -123,6 +143,39 @@ mod tests {
         assert_eq!(f("sound.2.piano_pedal_noise", Value::Float(-1.5)), "-1.5");
         assert_eq!(f("pedal.1.ctrl_gain", Value::Float(2.0)), "2.0");
         assert_eq!(f("system.5.reset_all", Value::None), "");
+    }
+
+    #[test]
+    fn the_first_sound_and_the_overview_pages_have_their_own_bar_titles() {
+        assert_eq!(
+            bar_title(MenuId::Sound, 0, "Program Levels"),
+            "PROGRAM LEVELS"
+        );
+        assert_eq!(bar_title(MenuId::Sound, 1, "Piano"), "SOUND SETTINGS");
+        assert_eq!(
+            bar_title(MenuId::Pedal, 0, "Control Pedal"),
+            "PEDAL SETTINGS"
+        );
+        assert_eq!(
+            bar_title(MenuId::Pedal, 6, "PEDAL OVERVIEW"),
+            "PEDAL OVERVIEW"
+        );
+        let mut ui = ProgramUi::default();
+        ui.open_menu(MenuId::Sound);
+        let t = compose(&ui, MenuId::Sound);
+        assert_eq!(t.big, "PROGRAM LEVELS");
+        assert_eq!(t.bar.as_deref(), Some("1/11"));
+        // The last Pedal page is the overview, titled as such in the bar.
+        let mut ui = ProgramUi::default();
+        ui.open_menu(MenuId::Pedal);
+        for _ in 0..6 {
+            ui.menu.step_page(1);
+        }
+        let t = compose(&ui, MenuId::Pedal);
+        assert_eq!(
+            (t.big.as_str(), t.bar.as_deref()),
+            ("PEDAL OVERVIEW", Some("7/7"))
+        );
     }
 
     #[test]
