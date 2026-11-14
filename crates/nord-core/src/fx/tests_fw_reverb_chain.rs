@@ -50,10 +50,14 @@ fn the_variation_flag_selects_firmware_type_1() {
 
 #[test]
 fn other_models_and_the_default_keep_the_engine_fdn() {
-    let mut fdn = chain(on(), ReverbModel::Hall, false, 0.5);
-    let mut base = chain(FirmwareFx::OFF, ReverbModel::Hall, false, 0.5);
+    // Stage without the variation flag is type 6: no captured block, so the engine FDN stays
+    let mut fdn = chain(on(), ReverbModel::Stage, false, 0.5);
+    let mut base = chain(FirmwareFx::OFF, ReverbModel::Stage, false, 0.5);
     assert_eq!(impulse_tail(&mut fdn, 64), impulse_tail(&mut base, 64));
-    assert!(fdn.fw_reverb.is_none());
+    assert!(fdn.fw_reverb.is_none() && fdn.fw_reverb_multi.is_none());
+    let mut hall_off = chain(FirmwareFx::OFF, ReverbModel::Hall, false, 0.5);
+    impulse_tail(&mut hall_off, 8);
+    assert!(hall_off.fw_reverb_multi.is_none(), "opt-in");
     let mut spring_off = chain(FirmwareFx::OFF, ReverbModel::Spring, false, 0.5);
     impulse_tail(&mut spring_off, 8);
     assert!(
@@ -75,6 +79,57 @@ fn zero_amount_bypasses_and_the_tail_is_finite() {
         .all(|v| v.is_finite() && v.abs() < 4.0));
     assert!(
         tail[8_000..].iter().flatten().any(|v| v.abs() > 1e-6),
+        "a tail after the taps"
+    );
+}
+
+#[test]
+fn the_other_models_run_the_multi_tap_routine_four_frames_late() {
+    let mut fx = chain(on(), ReverbModel::Hall, false, 0.5);
+    let out = impulse_tail(&mut fx, 16);
+    assert!(out[..4].iter().all(|f| *f == [0.0; 2]), "latency 4 frames");
+    assert_eq!(fx.fw_reverb_multi.as_ref().map(|r| r.rvb_type()), Some(8));
+    assert!(fx.fw_reverb.is_none(), "not the Spring routine");
+    for (model, var, t) in [
+        (ReverbModel::Booth, false, 2),
+        (ReverbModel::Room, true, 5),
+        (ReverbModel::Stage, true, 7),
+        (ReverbModel::Cathedral, true, 11),
+    ] {
+        assert_eq!(LayerFxChain::fw_multi_type(model, var), Some(t));
+    }
+    assert_eq!(LayerFxChain::fw_multi_type(ReverbModel::Stage, false), None);
+    assert_eq!(LayerFxChain::fw_multi_type(ReverbModel::Spring, true), None);
+}
+
+#[test]
+fn a_variation_change_retypes_the_instance_without_a_new_allocation() {
+    let mut fx = chain(on(), ReverbModel::Hall, false, 0.5);
+    impulse_tail(&mut fx, 8);
+    let before = fx
+        .fw_reverb_multi
+        .as_deref()
+        .map(|r| r as *const FwReverbMulti);
+    fx.reverb_variation = true;
+    impulse_tail(&mut fx, 8);
+    let after = fx
+        .fw_reverb_multi
+        .as_deref()
+        .map(|r| r as *const FwReverbMulti);
+    assert_eq!(before, after);
+    assert_eq!(fx.fw_reverb_multi.as_ref().map(|r| r.rvb_type()), Some(9));
+}
+
+#[test]
+fn the_multi_tap_tail_is_finite_and_follows_the_taps() {
+    let mut fx = chain(on(), ReverbModel::Cathedral, true, 1.0);
+    let tail = impulse_tail(&mut fx, 30_000);
+    assert!(tail
+        .iter()
+        .flatten()
+        .all(|v| v.is_finite() && v.abs() < 4.0));
+    assert!(
+        tail[3_000..].iter().flatten().any(|v| v.abs() > 1e-6),
         "a tail after the taps"
     );
 }

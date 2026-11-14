@@ -64,11 +64,11 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Piano | 2 | 2 | 19 | 9 (7 LEDs + 2 ladders) | - | 32 |
 | Program & Morph | 2 | - | 50 | 3 | 1 (OLED) | 56 |
 | Synth | 17 (12 knobs + 5 encoders) | 3 | 41 | 11 (8 LEDs + 3 ladders) | 1 (OLED) | 73 |
-| Layer Effects | 17 | - | 33 | 1 | - | 51 |
+| Layer Effects | 17 | - | 34 | 1 | - | 51 |
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
 | **Total** | | | | | | **275** |
 
-By binding: `Bound` 150, `UiOnly` 58, `Unsupported` 67. By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
+By binding: `Bound` 153, `UiOnly` 58, `Unsupported` 64. By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
 
 PSTICK range (`ns4-dsjv`): there is no separate range control. The Synth strip's `synth.pstick` entry is the printed `PSTICK/RNG` (manual p.28: hold the button and pick a semitone value) and its host binding `ped_pstick_{n}` pairs with `ped_range_{n}` (`1..=12`, default 2). Only the Synth layers honour the range; Organ and Piano `pstick` entries bend a fixed 2 semitones (p.18, p.23). `master.pitch_stick` stays `UiOnly` (the stick is MIDI pitch bend, no host parameter). The totals above did not change.
 
@@ -76,7 +76,7 @@ Modelling choices: a button with its own LED is one entry; standalone LEDs, LED 
 
 ## Gap list
 
-The old code-review gap list is replaced by the 67 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial, `ns4-ymci` program/menus, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the 64 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial, `ns4-ymci` program/menus, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 5b. Behaviour layer
 
@@ -117,7 +117,7 @@ What would confirm or replace the table: a higher-resolution front photo (at lea
 
 ## 7b. Engine bindings (`engine:<path>`)
 
-A control that has no host parameter but acts on the engine through the panel is `Bound("engine:<path>")`, as in `menus/` (the menu model's own totals, 111 bound / 11 `UiOnly` / 7 `Unsupported`, are in `midi-and-control.md` section 5; the inventory counts above are panel controls only and do not change with the menu bindings). `inventory/tests.rs` accepts the id when each dot-separated segment is a public field (`pub seg:`) or method (`pub fn seg(`) in the engine sources it lists (`engine/mod.rs`, `engine/zone_assign.rs`, `morph.rs`, `synth/sound_init.rs`). Used by `synth.sound_init` (`engine:synth_a.sound_init`). Rewired by the Synth / Effects bays: `synth.sound_init`, `reverb.variation` (`fxz_rev_var_{n}`) and the new `mod1.mst_clk` (`fxz_mod1_beats_{n}`, a Shift function of the Mod 1 RATE knob, shared rectangle). The three Synth OLED dials stay `Unsupported` in the inventory although the pages now work: one dial maps to many host ids, so it has no single binding.
+A control that has no host parameter but acts on the engine through the panel is `Bound("engine:<path>")`, as in `menus/` (the menu model's own totals, 133 items: 111 bound / 22 `UiOnly` / 0 `Unsupported`, are in `midi-and-control.md` section 5; the inventory counts above are panel controls only and do not change with the menu bindings). `inventory/tests.rs` accepts the id when each dot-separated segment is a public field (`pub seg:`) or method (`pub fn seg(`) in the engine sources it lists (`engine/mod.rs`, `engine/zone_assign.rs`, `morph.rs`, `synth/sound_init.rs`). Used by `synth.sound_init` (`engine:synth_a.sound_init`). Rewired by the Synth / Effects bays: `synth.sound_init`, `reverb.variation` (`fxz_rev_var_{n}`) and the new `mod1.mst_clk` (`fxz_mod1_beats_{n}`, a Shift function of the Mod 1 RATE knob, shared rectangle). The three Synth OLED dials are `Bound("dial:<left|middle|right>")`: one dial maps to many parameters, so the binding is a per-page table (section 9b), checked by `inventory/tests.rs` (`dial:` ids resolve to non-empty columns whose host ids exist).
 
 ## 8. Standalone Program area and keybed (`crates/nord-gui`, B8d / B8g)
 
@@ -167,4 +167,18 @@ The Synth strip now matches Organ and Piano: `synth.on`, `synth.kb_zone_down/up`
 | `synth.aux_led.a/b/c` | `auxkb_synth` | LED click sends `SynthEdit::AuxKb` -> `Stage4Engine::set_layer_aux` (enable-on-switch `ASSUMED`, same as Organ / Piano); the LED shows the engine read-back when telemetry is live | `ASSUMED` |
 | `synth.extern` | `engine:set_layer_extern` | Shift+Mode toggles Extern on the focused layer: `SynthEdit::Extern` -> `Stage4Engine::set_layer_extern` (internal voices released on entry, Extern notes released on exit) and opens the EXTERN page. The page dials are CC VAL 1, CC VAL 2, PROGRAM (manual p.47) and send `ExternCc` / `ExternProgram` -> `extern_set_cc_value` / `extern_set_program` | manual p.46-47 |
 
-Still `Unsupported` in the Synth section: the three OLED dials (one dial maps to many parameters), WAVEFORM, PITCH/SMP, OSC / FILTER / AMP ENVELOPE pages and their VELOCITY shifts, FILTER TYPE, the GROUP shifts, ARP RUN / MENU, VIBRATO MENU, OSC CTRL and the Synth octave buttons: all are page selectors or multi-parameter controls whose parameters are already host-bound individually, or (octave) have no host parameter yet. They stay tied to `ns4-4w9l`.
+Still `Unsupported` in the Synth section: WAVEFORM, PITCH/SMP, OSC / FILTER / AMP ENVELOPE pages and their VELOCITY shifts, FILTER TYPE, the GROUP shifts, ARP RUN / MENU, VIBRATO MENU, OSC CTRL and the Synth octave buttons: all are page selectors or multi-parameter controls whose parameters are already host-bound individually, or (octave) have no host parameter yet. They stay tied to `ns4-4w9l`.
+
+### 9b.1 The three Synth OLED dials (`ns4-4w9l`)
+
+`synth.dial.left/middle/right` are `Bound("dial:left")` / `"dial:middle"` / `"dial:right"` (`Bound` 150 to 153, `Unsupported` 67 to 64). The binding is the table [`inventory/synth_dials.rs`](../../crates/nord-panel/src/inventory/synth_dials.rs): one `DialCell { page, dial, label, target }` per dial of each of the 16 display pages (Waveform and PITCH/SMP once per oscillator mode, ARP MENU 1..5, Filter type, three envelopes, LFO wave, Vibrato, Extern). `target` is one of:
+
+| Target | Meaning | Cells |
+|---|---|---|
+| `Edit { edits, host }` | the dial emits that `SynthParam` / `SynthEdit` variant (`|` separates alternatives, such as the waveform pick sending `Waveform(`, `FmRatio(` or `WavetableIndex(`); `host` is the host parameter of the same setting when one exists | 33 |
+| `Ui(reason)` | navigation or browsing that the dial does itself (ARP page number, pattern step cursor, sample list browse); no layer edit | 10 |
+| `Gap(reason)` | engine cannot honour it | 1 (`pitch_smp.sample` right dial, SAMPLE OPT: Natural / No Dyn / Fast Atk need the sample preset data) |
+
+Tests: `synth_dials.rs` checks every named edit exists in the audio edit enums (`audio/edits/synth/{param,pattern,mod}.rs`) and the inventory test checks every `host` id in `nord-plugin`; the GUI test `ui_state/synth/dials_table_tests.rs` turns every dial of every page (`SynthPage::dial_key(mode)`), compares the edit it emits with the cell (`Edit` cells emit one of the listed variants, `Ui` and `Gap` cells emit no audio edit) and checks the labels and the gap flag against `dial_defs`. Provenance: page and dial names `VERIFIED` against the manual (p.28-37, p.46-47); the table is the behaviour (the test proves it).
+
+What stays unsupported on the dials: only the SAMPLE OPT dial (one `Gap` cell, same as the dimmed dial on the display). The right dial's `Bound` tag therefore covers 15 of its 16 page cells; the entry is not marked `Unsupported` because the dimming of that single dial is already drawn per page by `dial_defs`.

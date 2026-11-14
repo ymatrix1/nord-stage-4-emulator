@@ -112,6 +112,8 @@ pub struct UserLibrary {
     /// Archive entry that sits at each location of the opened `.ns4b` (flat index -> entry path),
     /// read from the entry headers; Organize moves these along with the user programs.
     pub(super) factory: BTreeMap<u16, String>,
+    /// Preset Library entries of the opened backup, rearranged by Preset Organize.
+    pub presets: super::organize_presets::PresetLibrary,
 }
 
 impl UserLibrary {
