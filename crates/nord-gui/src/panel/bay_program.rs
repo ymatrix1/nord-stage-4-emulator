@@ -23,6 +23,7 @@ pub mod fw_messages;
 pub mod interact;
 pub mod list;
 pub mod menu_actions;
+pub mod menu_labels;
 pub mod menu_screen;
 #[cfg(test)]
 mod menu_tests;
@@ -35,6 +36,7 @@ pub mod oled_grid;
 pub mod oled_hint;
 pub mod oled_home;
 pub mod oled_icons;
+pub mod oled_lists;
 pub mod oled_paint;
 pub mod oled_store;
 pub mod organize;

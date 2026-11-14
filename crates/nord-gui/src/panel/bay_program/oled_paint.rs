@@ -46,6 +46,15 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
             None => (s, fg),
         };
         let font = FontId::monospace(size.max(MIN_FONT_PX));
+        // A two-part value (`440.8Hz<TAB>+3 cent`) puts its second part at the right edge.
+        let (s, right) = match s.split_once('\t') {
+            Some((l, r)) => (l, Some(r)),
+            None => (s, None),
+        };
+        if let Some(r) = right {
+            let at = pos2(rect.right() - 2.0, y);
+            painter.text(at, Align2::RIGHT_TOP, r, font.clone(), color);
+        }
         let mut x = rect.left() + 2.0;
         // A section row starts with an icon in the 8 px column; its text begins at x = 12.
         let (icon, s) = match s.chars().next() {
@@ -76,10 +85,22 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
         let strip = Rect::from_min_size(rect.min, vec2(rect.width(), b.bar_h));
         painter.rect_filled(strip, 1.5, fg);
         let font = FontId::monospace(f_row.max(MIN_FONT_PX));
+        // A list bar starts with the list icon in the 8 px column; the title begins at x = 12.
+        let (icon, title) = match text.big.chars().next() {
+            Some(c) if is_icon(c) => (Some(c), &text.big[c.len_utf8()..]),
+            _ => (None, text.big.as_str()),
+        };
+        let mut title_x = rect.left() + 2.0;
+        if let Some(c) = icon {
+            let side = h * 8.0 / 64.0;
+            let cell = Rect::from_min_size(pos2(rect.left() + 0.5, top + 1.0), vec2(side, side));
+            oled_icons::paint(painter, cell, c, OLED_BG);
+            title_x = rect.left() + rect.width() * oled_icons::TEXT_X;
+        }
         painter.text(
-            pos2(rect.left() + 2.0, top + 1.0),
+            pos2(title_x, top + 1.0),
             Align2::LEFT_TOP,
-            &text.big,
+            title,
             font.clone(),
             OLED_BG,
         );
@@ -95,10 +116,34 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
             let size = if l.big { f_big } else { f_row };
             free_line(painter, rect, l, k, size, fg);
         }
-        if text.lines.is_empty() {
+        if text.lines.is_empty() && (text.sel.is_none() || text.rows.is_empty()) {
             line(top + b.label_y, &text.sub, f_row);
         }
-        for (i, r) in text.rows.iter().enumerate() {
+        if let Some(sel) = text.sel {
+            // Program list: rows at y = 13 + 10 i, the selected one a lit block with unlit text.
+            let font = FontId::monospace(f_row.max(MIN_FONT_PX));
+            for (i, r) in text.rows.iter().enumerate() {
+                let y = top + b.list_y + i as f32 * g.row_pitch;
+                let color = if i == sel {
+                    let block = Rect::from_min_size(
+                        pos2(rect.left(), y - k),
+                        vec2(rect.width(), g.row_pitch),
+                    );
+                    painter.rect_filled(block, 0.0, fg);
+                    OLED_BG
+                } else {
+                    fg
+                };
+                painter.text(
+                    pos2(rect.left() + 2.0, y),
+                    Align2::LEFT_TOP,
+                    r,
+                    font.clone(),
+                    color,
+                );
+            }
+        }
+        for (i, r) in text.rows.iter().enumerate().filter(|_| text.sel.is_none()) {
             let y = top + b.value_y + i as f32 * g.row_pitch;
             if y + f_row > rect.bottom() - b.bar_h {
                 break;
@@ -215,6 +260,39 @@ mod unit {
                 false,
             );
         })
+    }
+
+    #[test]
+    fn a_program_list_lights_one_row_and_a_two_part_value_adds_a_right_text() {
+        let rows: Vec<String> = ["A:11 a", "A:12 b", "A:13 c", "A:14 d"]
+            .map(String::from)
+            .to_vec();
+        let lit = OledText {
+            bar: Some(String::new()),
+            big: "Program".into(),
+            rows,
+            sel: Some(0),
+            ..Default::default()
+        };
+        let unlit = OledText {
+            sel: None,
+            ..lit.clone()
+        };
+        assert!(painted(&lit) >= painted(&unlit));
+        let one = OledText {
+            bar: Some(String::new()),
+            big: "SYSTEM SETTINGS".into(),
+            rows: vec!["440.0Hz".into()],
+            ..Default::default()
+        };
+        let two = OledText {
+            rows: vec!["440.0Hz\t  0 cent".into()],
+            ..one.clone()
+        };
+        assert!(
+            painted(&two) > painted(&one),
+            "the second part is its own text"
+        );
     }
 
     #[test]

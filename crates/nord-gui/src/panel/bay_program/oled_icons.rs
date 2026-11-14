@@ -17,9 +17,15 @@ pub const ICON_SYNTH: char = '\u{E0E4}';
 /// Warning glyph of a missing sound.
 pub const ICON_WARN: char = '\u{E0E5}';
 
+/// List icon at the left of the title bar of the program lists.
+pub const ICON_LIST: char = '\u{E0E6}';
+
 /// Whether `c` is one of the icon markers.
 pub fn is_icon(c: char) -> bool {
-    matches!(c, ICON_ORGAN | ICON_PIANO | ICON_SYNTH | ICON_WARN)
+    matches!(
+        c,
+        ICON_ORGAN | ICON_PIANO | ICON_SYNTH | ICON_WARN | ICON_LIST
+    )
 }
 
 /// Left edge of the row text when the row starts with an icon, as a fraction of the display
@@ -66,6 +72,13 @@ pub fn paint(painter: &Painter, cell: Rect, icon: char, color: Color32) {
             ));
             painter.line_segment([at(0.5, 0.35), at(0.5, 0.65)], stroke);
         }
+        ICON_LIST => {
+            // Three rows: a dot and a line each.
+            for y in [0.15_f32, 0.5, 0.85] {
+                painter.circle_filled(at(0.1, y), 0.07 * w, color);
+                painter.line_segment([at(0.35, y), at(1.0, y)], stroke);
+            }
+        }
         _ => {}
     }
 }
@@ -77,7 +90,7 @@ mod tests {
 
     #[test]
     fn every_icon_is_a_marker_and_paints_shapes_only() {
-        for icon in [ICON_ORGAN, ICON_PIANO, ICON_SYNTH, ICON_WARN] {
+        for icon in [ICON_ORGAN, ICON_PIANO, ICON_SYNTH, ICON_WARN, ICON_LIST] {
             assert!(is_icon(icon));
             let n = shapes_painted(|_ui, p, rect, _s, _a| {
                 paint(

@@ -141,7 +141,7 @@ fn every_page_of_every_menu_renders_all_its_items() {
                 let t = p.text();
                 assert_eq!(t.sub, "1/2 Program Organize");
                 assert_eq!(t.soft, ["Swap", "Move", "Ok", "Undo"]);
-                assert!(t.rows[0].starts_with(">A:11"), "{:?}", t.rows);
+                assert!(t.rows[0].starts_with("A:11"), "{:?}", t.rows);
                 p.page_up(1);
                 continue;
             }
@@ -160,7 +160,9 @@ fn every_page_of_every_menu_renders_all_its_items() {
             for _ in 0..blocks {
                 let t = p.text();
                 assert_eq!(t.big, bar_title(m, page, model.title), "{m:?}");
-                assert_eq!(t.sub, model.title, "{m:?}");
+                let label =
+                    super::menu_labels::page_label(model.menu, model.page).unwrap_or(model.title);
+                assert_eq!(t.sub, label, "{m:?}");
                 assert_eq!(t.bar, Some(format!("{}/{n}", page + 1)), "{m:?}");
                 // One-item pages show the bare value (13 px); several items keep the focus marker.
                 assert!(

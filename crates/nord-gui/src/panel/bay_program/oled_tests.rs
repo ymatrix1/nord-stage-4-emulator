@@ -1,6 +1,6 @@
 //! More unit tests of `oled`.
 
-use super::super::model::MenuId;
+use super::super::model::{MenuId, PresetKind};
 use super::super::store::ProgLoc;
 use super::*;
 use crate::panel::bay_program::morph::SOURCES;
@@ -36,7 +36,7 @@ fn menus_list_and_preset_screens_have_their_titles() {
     u.open_menu(MenuId::Pedal);
     let t = compose(&u, &sum());
     assert_eq!(t.big, "PEDAL SETTINGS");
-    assert_eq!(t.sub, "Control Pedal");
+    assert_eq!(t.sub, "Control Pedal Type");
     // VERIFIED (ARM frame): the counter is right-aligned in the inverted title bar and the lit
     // soft button is the focused item.
     assert_eq!(t.bar.as_deref(), Some("1/7"));
@@ -62,8 +62,8 @@ fn menus_list_and_preset_screens_have_their_titles() {
     u.screen = Screen::List;
     u.list_cursor = 1;
     let t = compose(&u, &sum());
-    assert_eq!(t.sub, "b");
-    assert!(t.rows[1].starts_with('>'));
+    assert!(t.rows[1].ends_with(" b"), "{:?}", t.rows);
+    assert_eq!(t.sel, Some(1));
     u.screen = Screen::Preset {
         kind: PresetKind::Piano,
         single: true,
