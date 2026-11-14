@@ -3,10 +3,12 @@
 //! `AudioCommand::Program` carries them. Every variant holds plain values (enums, numbers) except
 //! [`ProgramEdit::Snapshot`] / [`ProgramEdit::Recall`], which move a boxed program state.
 //!
-//! Real-time note (TECH_DEBT): in the standalone the engine is owned by the audio callback, so the
+//! Real-time rule (TD-12, resolved): the standalone engine is owned by the audio callback, so the
 //! allocating operations of `nord_core::engine` (layer init, copy/paste/swap, undo, snapshot,
-//! recall) run inside [`ProgramEdit::apply`] on that thread. They are rare button presses, not
-//! per-sample work; a control-thread engine would remove the allocation from the callback.
+//! recall; see [`ProgramEdit::is_control_op`]) never run there. `AudioHandle::send_command` hands
+//! them to `audio::control::ProgramControl`, which runs them on a shadow engine and sends the audio
+//! thread one allocation-free `SwapState`. [`ProgramEdit::apply`] still implements them for a
+//! control-thread engine (tests, offline hosts); the audio callback drops any that reach it.
 
 use crossbeam_channel::Sender;
 use nord_core::engine::{LayerInitTarget, ProgramState, Stage4Engine};
@@ -83,6 +85,8 @@ pub enum ProgramEdit {
     LayerInit(LayerInitTarget),
     /// UNDO (Shift+Solo): single level.
     Undo,
+    /// Re-apply the edit the last UNDO reverted.
+    Redo,
     /// MON/COPY.
     Copy(CopyItem),
     /// PASTE (Shift+Mon/Copy).
@@ -126,7 +130,25 @@ fn set_delta(p: &mut MorphParameter, source: MorphSource, depth: f32) {
 }
 
 impl ProgramEdit {
-    /// Apply the edit to the engine on the DSP thread (see the module note on allocation).
+    /// `true` for the edits that allocate or free layer-sized state (layer init, undo / redo,
+    /// clipboard, clear morph, snapshot, recall). The standalone runs them on the control thread.
+    pub fn is_control_op(&self) -> bool {
+        matches!(
+            self,
+            Self::LayerInit(_)
+                | Self::Undo
+                | Self::Redo
+                | Self::Copy(_)
+                | Self::Paste(_)
+                | Self::Swap(..)
+                | Self::ClearMorph(_)
+                | Self::Snapshot { .. }
+                | Self::Recall(_)
+        )
+    }
+
+    /// Apply the edit to a control-thread engine (the control operations allocate, see the module
+    /// note); never call it for those from the audio callback.
     pub fn apply(&self, engine: &mut Stage4Engine) {
         match self {
             Self::Transpose(s) => engine.set_transpose(*s),
@@ -134,6 +156,9 @@ impl ProgramEdit {
             Self::LayerInit(t) => engine.layer_init(*t),
             Self::Undo => {
                 engine.undo();
+            }
+            Self::Redo => {
+                engine.redo();
             }
             Self::Copy(item) => match *item {
                 CopyItem::Layer(id) => engine.copy_layer(id),

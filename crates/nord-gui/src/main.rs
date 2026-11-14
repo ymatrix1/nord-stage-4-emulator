@@ -135,10 +135,10 @@ impl Stage4App {
                     prog.name, prog.category_id
                 );
                 self.state.apply_program(&prog);
+                // Through `send_command` so the control thread's shadow engine sees it too.
                 let _ = self
                     .audio_handle
-                    .cmd_sender
-                    .send(nord_gui::audio::AudioCommand::LoadProgram(Box::new(prog)));
+                    .send_command(nord_gui::audio::AudioCommand::LoadProgram(Box::new(prog)));
                 true
             }
             Err(e) => {

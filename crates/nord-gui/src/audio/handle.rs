@@ -1,13 +1,19 @@
 //! `AudioHandle`: UI-side sender for audio commands and MIDI events.
 
+use super::control::ControlLink;
 use super::AudioCommand;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use nord_core::midi::MidiEvent;
+use std::sync::Arc;
 
 /// Handle to communicate with the running audio background thread.
 #[derive(Clone)]
 pub struct AudioHandle {
     pub cmd_sender: Sender<AudioCommand>,
+    /// Control-thread door (standalone only): runs the allocating program edits off the audio
+    /// thread and keeps their shadow engine in step. `None`: every command goes straight to the
+    /// queue (tests, headless use).
+    control: Option<Arc<ControlLink>>,
 }
 
 impl AudioHandle {
@@ -17,7 +23,26 @@ impl AudioHandle {
 
     pub fn with_capacity(capacity: usize) -> (Self, Receiver<AudioCommand>) {
         let (tx, rx) = bounded(capacity);
-        (Self { cmd_sender: tx }, rx)
+        (
+            Self {
+                cmd_sender: tx,
+                control: None,
+            },
+            rx,
+        )
+    }
+
+    /// Handle of the real standalone: allocating program edits go through the control thread
+    /// (`audio::control`) until the audio thread attaches the shadow engine.
+    pub fn standalone() -> (Self, Receiver<AudioCommand>) {
+        let (mut handle, rx) = Self::new();
+        handle.control = Some(Arc::new(ControlLink::new()));
+        (handle, rx)
+    }
+
+    /// The control link, when this handle has one.
+    pub fn control(&self) -> Option<&Arc<ControlLink>> {
+        self.control.as_ref()
     }
 
     /// Dispatches a MIDI event to the real-time audio thread.
@@ -38,6 +63,9 @@ impl AudioHandle {
             }
             _ => false,
         };
+        if let Some(link) = &self.control {
+            link.observe_midi(event);
+        }
         let cmd = AudioCommand::Midi(event);
         match self.cmd_sender.try_send(cmd) {
             Ok(()) => true,
@@ -55,7 +83,10 @@ impl AudioHandle {
     }
 
     pub fn send_command(&self, cmd: AudioCommand) -> bool {
-        self.cmd_sender.try_send(cmd).is_ok()
+        match &self.control {
+            Some(link) => link.send(cmd, &self.cmd_sender),
+            None => self.cmd_sender.try_send(cmd).is_ok(),
+        }
     }
 }
 

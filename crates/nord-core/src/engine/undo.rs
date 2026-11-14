@@ -51,9 +51,13 @@ impl Stage4Engine {
         self.undo.1 = None; // a new operation invalidates the redo branch
     }
 
-    /// The operation Undo would revert, if any.
+    /// The operation Undo would revert, if any (or the control thread's [`UndoHint`] in the standalone).
     pub fn undo_available(&self) -> Option<UndoOp> {
-        self.undo.0.as_ref().map(|(op, _)| *op)
+        self.undo
+            .0
+            .as_ref()
+            .map(|(op, _)| *op)
+            .or(self.undo_hint.undo)
     }
 
     /// Reverts to the state before the last undoable operation; returns it. Single level; the
@@ -68,7 +72,11 @@ impl Stage4Engine {
 
     /// The operation Redo would re-apply, if an Undo just happened.
     pub fn redo_available(&self) -> Option<UndoOp> {
-        self.undo.1.as_ref().map(|(op, _)| *op)
+        self.undo
+            .1
+            .as_ref()
+            .map(|(op, _)| *op)
+            .or(self.undo_hint.redo)
     }
 
     /// Re-applies the state an Undo replaced and makes the operation undoable again.

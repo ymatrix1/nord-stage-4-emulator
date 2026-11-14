@@ -1,24 +1,26 @@
 //! CPAL audio output stream and MIDIR MIDI input listener.
 
 use super::frame::{render_frame_to_f32, render_frame_to_i16};
-use super::{apply_audio_command, AudioCommand, AudioHandle};
+use super::{apply_audio_command, standalone_engine, AudioCommand, AudioHandle};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use crossbeam_channel::Receiver;
+use super::control::ControlLink;
+use crossbeam_channel::{Receiver, Sender};
 use midir::{Ignore, MidiInput};
 use nord_core::engine::Stage4Engine;
 use nord_core::midi::MidiEvent;
-use nord_core::synth::VaWaveform;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// Spawns the audio output stream (CPAL) and MIDI input listener (MIDIR).
 pub fn start_audio_and_midi(active_keys: Arc<[AtomicBool; 128]>) -> AudioHandle {
-    let (handle, rx) = AudioHandle::new();
+    let (handle, rx) = AudioHandle::standalone();
 
     // 1. Spawn Audio Output Thread
     let audio_rx = rx;
+    let control = handle.control().cloned();
+    let to_audio = handle.cmd_sender.clone();
     std::thread::spawn(move || {
-        run_cpal_audio(audio_rx);
+        run_cpal_audio(audio_rx, control, to_audio);
     });
 
     // 2. Spawn MIDI In Listener
@@ -31,7 +33,11 @@ pub fn start_audio_and_midi(active_keys: Arc<[AtomicBool; 128]>) -> AudioHandle 
     handle
 }
 
-fn run_cpal_audio(rx: Receiver<AudioCommand>) {
+fn run_cpal_audio(
+    rx: Receiver<AudioCommand>,
+    control: Option<Arc<ControlLink>>,
+    to_audio: Sender<AudioCommand>,
+) {
     let host = cpal::default_host();
     let device = match host.default_output_device() {
         Some(d) => d,
@@ -52,16 +58,12 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
     let sample_rate = config.sample_rate().0 as f32;
     let channels = config.channels() as usize;
 
-    let mut engine = Stage4Engine::new(sample_rate);
-    // Initialize default levels matching UI state: Organ A + Piano A active, Synth A muted until enabled
-    engine.layer_levels[0].base = 0.85;
-    engine.layer_levels[1].base = 0.0;
-    engine.layer_levels[2].base = 0.90;
-    engine.layer_levels[3].base = 0.0;
-    engine.layer_levels[4].base = 0.0;
-    engine.layer_levels[5].base = 0.0;
-    engine.layer_levels[6].base = 0.0;
-    engine.synth_a.waveform = VaWaveform::SuperSaw;
+    let mut engine = standalone_engine(sample_rate);
+    // From here on the control thread keeps a shadow of this engine and runs every allocating
+    // program edit itself (TD-12); the callback below only swaps prepared state in.
+    if let Some(link) = &control {
+        link.attach(sample_rate, to_audio);
+    }
 
     let mut master_vol: f32 = 0.85;
 
@@ -72,7 +74,7 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
             &config.into(),
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                 while let Ok(cmd) = rx.try_recv() {
-                    apply_audio_command(cmd, &mut engine, &mut master_vol);
+                    apply_realtime(cmd, &mut engine, &mut master_vol);
                 }
 
                 for frame in data.chunks_mut(channels) {
@@ -87,7 +89,7 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
             &config.into(),
             move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
                 while let Ok(cmd) = rx.try_recv() {
-                    apply_audio_command(cmd, &mut engine, &mut master_vol);
+                    apply_realtime(cmd, &mut engine, &mut master_vol);
                 }
 
                 for frame in data.chunks_mut(channels) {
@@ -116,6 +118,17 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
             }
         }
     }
+}
+
+/// Applies one command inside the audio callback. A control operation (allocating) that reached
+/// this thread despite the control link is dropped and counted, never executed here.
+fn apply_realtime(cmd: AudioCommand, engine: &mut Stage4Engine, master_vol: &mut f32) {
+    if matches!(&cmd, AudioCommand::Program(e) if e.is_control_op()) {
+        engine.note_retire_overflow();
+        std::mem::forget(cmd);
+        return;
+    }
+    apply_audio_command(cmd, engine, master_vol);
 }
 
 fn run_midi_input(handle: AudioHandle, active_keys: Arc<[AtomicBool; 128]>) {
