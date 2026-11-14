@@ -57,10 +57,10 @@ impl ProgramUi {
             }
             Screen::Undo => {
                 self.screen = Screen::Home;
-                if n == 1 {
-                    vec![cmd(ProgramEdit::Undo)]
-                } else {
-                    Vec::new()
+                match n {
+                    1 if !self.undo_blocked => vec![cmd(ProgramEdit::Undo)],
+                    2 if self.redo_available => vec![cmd(ProgramEdit::Redo)],
+                    _ => Vec::new(),
                 }
             }
             Screen::LayerInit => self.layer_init_choice(n),

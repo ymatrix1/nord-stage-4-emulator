@@ -201,16 +201,19 @@ pub(super) fn render_strip(
             ui,
             rc(ladder_id),
             ladder_id,
-            lvl,
-            state.organ_layer_active(l),
+            // The engine's level after fader and Morph (UI value without an engine).
+            state
+                .telemetry
+                .ladder_level(l, lvl, state.organ_layer_active(l)),
+            true,
         );
         led_row(
             ui,
             rc(aux_id),
             aux_id,
-            &[false],
+            &[state.telemetry.aux(l)],
             (LED_GREEN, LED_GREEN_DIM),
-            Some(&aux_dim),
+            state.telemetry.get().is_none().then_some(&aux_dim),
         );
     }
 

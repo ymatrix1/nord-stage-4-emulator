@@ -219,19 +219,26 @@ fn draw_strip(
             name.to_uppercase()
         ));
         state.piano_ui.mark(fader);
-        let shown = if active { level } else { 0.0 };
+        // Engine level after fader and Morph (UI value without an engine); Piano A/B are 2 / 3.
+        let shown = state.telemetry.ladder_level(2 + l, level, active);
         w::ladder(p, r(ladder), 11, (shown * 11.0).round() as usize);
         state.piano_ui.mark(ladder);
 
         // Aux KB LED: the engine has no Aux keyboard routing.
         let ar = r(aux);
-        w::mini_led(p, ar.center(), false, LED_GREEN, LED_GREEN_DIM, 2.4, true);
+        let live = state.telemetry.get().is_some();
+        let aux_on = state.telemetry.aux(2 + l);
+        w::mini_led(p, ar.center(), aux_on, LED_GREEN, LED_GREEN_DIM, 2.4, !live);
         let resp = ui.interact(ar.expand(2.0), ui.id().with(aux), Sense::hover());
-        resp.on_hover_text("AUX KB: Aux keyboard routing is not emulated yet (bean ns4-ymci)");
-        state.piano_ui.mark_dim(
-            aux,
-            "AUX KB: no Aux keyboard routing in the engine (ns4-ymci)",
-        );
+        resp.on_hover_text("AUX KB: lit while the Aux keyboard plays this layer (engine state)");
+        if live {
+            state.piano_ui.mark(aux);
+        } else {
+            state.piano_ui.mark_dim(
+                aux,
+                "AUX KB: no Aux keyboard routing in the engine (ns4-ymci)",
+            );
+        }
     }
 
     draw_octave_and_zone(ui, p, o, state, shift, out);

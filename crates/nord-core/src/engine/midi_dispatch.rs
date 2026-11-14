@@ -5,6 +5,7 @@ use super::*;
 impl Stage4Engine {
     /// Handles a real-time MIDI event across the 4-zone split router, Morph matrix, and 7 layers.
     pub fn handle_midi(&mut self, event: MidiEvent) {
+        self.midi_in_count = self.midi_in_count.wrapping_add(1);
         let channel = match event {
             MidiEvent::NoteOn { channel, .. }
             | MidiEvent::NoteOff { channel, .. }

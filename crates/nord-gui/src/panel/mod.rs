@@ -29,6 +29,8 @@ mod state;
 #[cfg(test)]
 mod support;
 #[cfg(test)]
+mod telemetry_wiring_tests;
+#[cfg(test)]
 mod tests;
 pub mod ui_state;
 
@@ -61,6 +63,15 @@ use keybed::render_keybed;
 use prelude::*;
 
 pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
+    // One lock-free read of the engine per frame; the bays take what they show from it.
+    let now_ms = (ui.input(|i| i.time) * 1000.0) as u32;
+    state.telemetry = audio_handle.telemetry().latest();
+    state.leds.update(&state.telemetry, now_ms);
+    if state.telemetry.get().is_some() {
+        // LED ladders and activity LEDs follow the engine, not only mouse input.
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(33));
+    }
     let panel_size = vec2(1560.0, 420.0);
     let (panel_rect, _) = ui.allocate_exact_size(panel_size, Sense::hover());
     let painter = ui.painter().clone();

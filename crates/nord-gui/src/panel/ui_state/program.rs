@@ -75,6 +75,9 @@ pub struct ProgramUi {
     /// MIDI / EXTERN LED blink end times (ms).
     pub midi_led_until: u32,
     pub extern_led_until: u32,
+    /// Engine telemetry: nothing to undo (UNDO soft button disabled) / an undone edit to redo.
+    pub undo_blocked: bool,
+    pub redo_available: bool,
     /// Keys seen last frame (MIDI activity detection).
     pub prev_keys: [bool; 128],
     /// Transient OLED message and its end time (ms).
@@ -135,6 +138,8 @@ impl Default for ProgramUi {
             organ_request: None,
             midi_led_until: 0,
             extern_led_until: 0,
+            undo_blocked: false,
+            redo_available: false,
             prev_keys: [false; 128],
             message: None,
             trackers: BTreeMap::new(),

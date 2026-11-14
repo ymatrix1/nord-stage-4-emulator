@@ -1,6 +1,7 @@
 //! `AudioHandle`: UI-side sender for audio commands and MIDI events.
 
 use super::AudioCommand;
+use crate::telemetry::TelemetryHandle;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use nord_core::midi::MidiEvent;
 
@@ -8,6 +9,8 @@ use nord_core::midi::MidiEvent;
 #[derive(Clone)]
 pub struct AudioHandle {
     pub cmd_sender: Sender<AudioCommand>,
+    /// Lock-free engine to GUI telemetry; the audio thread publishes into it.
+    pub telemetry: TelemetryHandle,
 }
 
 impl AudioHandle {
@@ -17,7 +20,13 @@ impl AudioHandle {
 
     pub fn with_capacity(capacity: usize) -> (Self, Receiver<AudioCommand>) {
         let (tx, rx) = bounded(capacity);
-        (Self { cmd_sender: tx }, rx)
+        (
+            Self {
+                cmd_sender: tx,
+                telemetry: TelemetryHandle::new(),
+            },
+            rx,
+        )
     }
 
     /// Dispatches a MIDI event to the real-time audio thread.
@@ -57,11 +66,26 @@ impl AudioHandle {
     pub fn send_command(&self, cmd: AudioCommand) -> bool {
         self.cmd_sender.try_send(cmd).is_ok()
     }
+
+    /// The telemetry reader the panel polls once per frame.
+    pub fn telemetry(&self) -> &TelemetryHandle {
+        &self.telemetry
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn handles_share_one_telemetry_cell() {
+        let (handle, _rx) = AudioHandle::new();
+        let copy = handle.clone();
+        let mut e = nord_core::engine::Stage4Engine::new(48_000.0);
+        e.attach_telemetry(handle.telemetry().cell());
+        e.publish_telemetry();
+        assert!(copy.telemetry().latest().get().is_some());
+    }
 
     #[test]
     fn test_audio_handle_channel() {

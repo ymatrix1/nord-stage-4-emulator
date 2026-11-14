@@ -294,7 +294,17 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
             Vec::new(),
         ),
         Screen::Preset { kind, single } => preset(ui, kind, single),
-        Screen::Undo => t("UNDO", "Revert the last edit?".into(), Vec::new()),
+        Screen::Undo => t(
+            "UNDO",
+            match (ui.undo_blocked, ui.redo_available) {
+                (true, true) => "Nothing to undo. Redo?",
+                (true, false) => "Nothing to undo",
+                (false, true) => "Revert the last edit? (Redo ready)",
+                (false, false) => "Revert the last edit?",
+            }
+            .into(),
+            Vec::new(),
+        ),
         Screen::LayerInit => t(
             "LAYER INIT",
             format!("Layer: {}", layer_label(ui.focus)),

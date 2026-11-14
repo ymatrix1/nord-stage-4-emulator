@@ -128,6 +128,8 @@ pub(super) fn render_bay_program(
     state
         .program_ui
         .begin_frame(now, &keys, &state.prog_id, &state.prog_title);
+    state.program_ui.undo_blocked = state.telemetry.undo_blocked();
+    state.program_ui.redo_available = state.telemetry.redo_available();
 
     let area = to_px(layout::section_rect(Section::Program), origin);
     painter.rect_filled(area, 5.0, Color32::from_rgb(115, 18, 22));
@@ -187,21 +189,26 @@ pub(super) fn render_bay_program(
     led_dot(
         painter,
         rect_or_empty("program.midi_led", origin),
-        pu.midi_led_on(),
+        pu.midi_led_on() || state.leds.midi_on(),
         LED_GREEN,
         LED_GREEN_DIM,
     );
     led_dot(
         painter,
         rect_or_empty("program.extern_led", origin),
-        pu.extern_led_on(),
+        pu.extern_led_on() || state.leds.extern_on(),
         LED_AMBER,
         LED_AMBER_DIM,
     );
     pu.mark("program.midi_led");
     pu.mark("program.extern_led");
     let strip = rect_or_empty("split.leds", origin);
-    for (i, on) in pu.split.leds().into_iter().enumerate() {
+    for (i, on) in state
+        .telemetry
+        .split_leds(pu.split.leds())
+        .into_iter()
+        .enumerate()
+    {
         let cx = strip.left() + strip.width() * (i as f32 + 0.5) / 3.0;
         led_dot(
             painter,
@@ -221,7 +228,7 @@ pub(super) fn render_bay_program(
     }
     pu.mark("split.leds");
 
-    if pu.needs_repaint() {
+    if pu.needs_repaint() || state.leds.needs_repaint() {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(40));
     }
