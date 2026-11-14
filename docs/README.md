@@ -117,7 +117,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 | [research/sy-smp-audio.md](research/sy-smp-audio.md) | SY1SY2 and SMP voices and audio through the oracle |
 | [research/oracle-vs-engine.md](research/oracle-vs-engine.md) | SY1SY2 resampler: oracle against the Rust engine |
 | [research/synth-voice-control.md](research/synth-voice-control.md) | Where oscillators, filters and envelopes run; saw and gain smoother |
-| [research/synth-arp-patterns.md](research/synth-arp-patterns.md) | Synth arp / gate pattern storage in `.ns4y`, the 29 firmware presets (table recovered, [arp-preset-table.csv](research/arp-preset-table.csv)) |
+| [research/synth-arp-patterns.md](research/synth-arp-patterns.md) | Synth arp / gate pattern storage in `.ns4y`, the 29 firmware presets (table recovered, [arp-preset-table.csv](research/arp-preset-table.csv)), gate lengths and tie, dial value 0, program import (`tools/ns4_arp_gate.py`) |
 | [research/synth-stage-equations.md](research/synth-stage-equations.md) | Core2 filter stage `0x12566E` |
 | [research/synth-0x2f-ns4decode-crosscheck.md](research/synth-0x2f-ns4decode-crosscheck.md) | `0x32` / `0x2F` bit map cross-check |
 | [research/synth-0x2f-filter-env-adr.md](research/synth-0x2f-filter-env-adr.md) | Filter envelope ADR location |

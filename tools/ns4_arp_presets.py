@@ -14,7 +14,8 @@ and derives three 32-bit words (16 x 2 bit) that it writes to the pattern fields
 Strings use `S` (short), `L` (long), anything else (`_`) = rest, one character per step. The
 firmware turns them into the gate code of each step (`E q Q .`) and, with a B string, a pan word,
 so this tool runs the real routine on the ARM emulator (`tools/arm_emu.py`, `unicorn`) instead of
-re-implementing the merge. Value 0 is not a table entry: it is the default pattern (8 steps `E`).
+re-implementing the merge. Value 0 is not a table entry: the firmware restores the saved custom
+pattern for it (`tools/ns4_arp_gate.py dial`).
 
     uv run --with unicorn python tools/ns4_arp_presets.py table target/fw_unpacked/bank0_CODE.bin
     uv run --with unicorn python tools/ns4_arp_presets.py rust  target/fw_unpacked/bank0_CODE.bin
