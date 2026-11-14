@@ -169,7 +169,7 @@ impl Default for SynthLayerUi {
             arp_div: 4,
             pattern_on: false,
             pattern_preset: 0,
-            pattern_len: 4,
+            pattern_len: PATTERN_PRESETS[0].len,
             pattern_cursor: 0,
             pattern_custom: false,
             step_gate: PATTERN_PRESETS[0].steps,

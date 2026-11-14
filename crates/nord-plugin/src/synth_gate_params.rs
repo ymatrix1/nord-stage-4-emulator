@@ -8,7 +8,7 @@
 
 use nih_plug::prelude::*;
 use nord_core::engine::Stage4Engine;
-use nord_core::synth::ClockDivision;
+use nord_core::synth::{ClockDivision, PATTERN_PRESET_MAX};
 use nord_core::synth_types::ArpMode;
 
 use crate::synth_params::SYNTH_LAYERS;
@@ -57,7 +57,7 @@ impl Default for SynthGateParams {
             gate_env: FloatParam::new("Gate Env", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_step_size(0.01),
             pattern_on: BoolParam::new("Pattern", false),
-            pattern_preset: int("Pattern Preset", 0, 7),
+            pattern_preset: int("Pattern Preset", 0, i32::from(PATTERN_PRESET_MAX)),
             hold_exclude: BoolParam::new("KB Hold Exclude", false),
             kb_sync: BoolParam::new("KB Sync", false),
             arp_sync: BoolParam::new("Arp Clock Sync", false),
@@ -157,6 +157,19 @@ mod tests {
             assert_eq!(a.perf.lfo_clock_sync, b.perf.lfo_clock_sync);
             assert_eq!(a.perf.lfo_division, b.perf.lfo_division);
         }
+    }
+
+    #[test]
+    fn pattern_preset_spans_the_29_hardware_presets() {
+        let mut bank = SynthGateBank::default();
+        let p = &bank.layers[2].pattern_preset;
+        assert_eq!(p.preview_plain(1.0), 28);
+        assert_eq!(p.preview_plain(0.0), 0);
+        bank.layers[2].pattern_preset =
+            IntParam::new("p", 28, IntRange::Linear { min: 0, max: 28 });
+        let mut e = Stage4Engine::new(44100.0);
+        bank.sync_to_engine(&mut e);
+        assert_eq!(e.synth_c.perf.pattern_preset, 28);
     }
 
     #[test]

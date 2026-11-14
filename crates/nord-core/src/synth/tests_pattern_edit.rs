@@ -139,9 +139,9 @@ fn centre_pan_matches_an_unpanned_render_exactly() {
         let mut s = layer();
         s.arp_mode = ArpMode::Up;
         s.perf.pattern_on = true;
-        s.perf.pattern_preset = 2;
+        s.perf.pattern_preset = 3; // all steps centred
         if custom {
-            s.customize_preset(2);
+            s.customize_preset(3);
         }
         s.note_on(60, 100);
         render_n(&mut s, STEP * 6)
