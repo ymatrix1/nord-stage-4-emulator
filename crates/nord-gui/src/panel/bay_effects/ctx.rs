@@ -24,6 +24,9 @@ pub(super) struct Fx<'a> {
 
 /// Distance from the bottom of a control to the centre of its first caption line (px).
 pub(super) const CAPTION_DROP: f32 = 6.5;
+/// Same for a knob that prints a numeral scale: the numerals `0` and `10` sit at the lower left
+/// and right of the tick ring, so the name moves below their ink (audit rule `L`).
+pub(super) const KNOB_CAPTION_DROP: f32 = 10.8;
 /// Pitch of stacked caption lines (px): the 7.5 px minimum font plus a 2 px gap (audit rule `V`).
 pub(super) const CAPTION_LINE: f32 = 9.5;
 /// Colour of a dimmed (unsupported) control overlay.
@@ -35,6 +38,16 @@ fn legend() -> Color32 {
     dim_legend(Color32::WHITE)
 }
 const LEGEND_ON: Color32 = Color32::from_rgb(0xFF, 0xB0, 0x20);
+
+/// Distance from the bottom of control `id` to its first caption line: knobs with a printed scale
+/// ([`crate::widgets::scale::numerals`]) keep their captions below the numerals.
+pub(super) fn caption_drop(id: &str) -> f32 {
+    if crate::widgets::scale::numerals(id).is_empty() {
+        CAPTION_DROP
+    } else {
+        KNOB_CAPTION_DROP
+    }
+}
 
 /// Maps `v` in `min..=max` to `0..=1` on a log scale (rates, delay time).
 pub(super) fn to_log(v: f32, min: f32, max: f32) -> f32 {
@@ -106,16 +119,21 @@ impl Fx<'_> {
     /// Small silkscreen caption `line` rows below `rect`, clear of the knob shadow and the
     /// button bezel (`CAPTION_DROP`).
     pub fn caption(&self, rect: Rect, line: usize, text: &str, col: Color32) {
+        self.caption_at(rect, CAPTION_DROP, line, text, col);
+    }
+
+    /// Caption `line` rows below `rect`, the first one `drop` px under its bottom edge.
+    pub fn caption_at(&self, rect: Rect, drop: f32, line: usize, text: &str, col: Color32) {
         let c = pos2(
             rect.center().x,
-            rect.bottom() + CAPTION_DROP + CAPTION_LINE * line as f32,
+            rect.bottom() + drop + CAPTION_LINE * line as f32,
         );
         label(self.p, c, text, 6.5, col, Align2::CENTER_CENTER);
     }
 
     /// Caption of a knob or button (line 0).
     pub fn name(&self, id: &str, text: &str) {
-        self.caption(self.rect(id), 0, text, CAPTION);
+        self.caption_at(self.rect(id), caption_drop(id), 0, text, CAPTION);
     }
 
     /// Legend of a shifted function at its own rect; `active` lights it, `dim` explains why the
@@ -210,32 +228,6 @@ impl Fx<'_> {
             self.shift,
             has_shift_fn,
         )
-    }
-
-    /// Row of mini LEDs centred above `rect`: `(name, lit, missing)` per LED. An LED whose type
-    /// the engine lacks stays dark amber-grey and its tooltip names what is missing.
-    pub fn led_row(&mut self, id: &'static str, rect: Rect, leds: &[(&str, bool, &str)]) {
-        let n = leds.len() as f32;
-        let step = 5.0_f32;
-        let x0 = rect.center().x - step * (n - 1.0) * 0.5;
-        let y = rect.top() - 4.0;
-        for (i, (name, lit, missing)) in leds.iter().enumerate() {
-            let c = pos2(x0 + step * i as f32, y);
-            let supported = missing.is_empty();
-            let (col, off) = if supported {
-                (LED_RED, LED_RED_DIM)
-            } else {
-                (LED_AMBER, Color32::from_gray(52))
-            };
-            mini_led(self.p, c, *lit && supported, col, off);
-            let hit = Rect::from_center_size(c, vec2(step, 6.0));
-            let text = if supported {
-                (*name).to_string()
-            } else {
-                format!("{name}: not available, {missing}")
-            };
-            self.hover(hit, &format!("{id}{i}"), &text);
-        }
     }
 
     /// Single LED just above the top edge of `rect`.

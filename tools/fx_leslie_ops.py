@@ -122,6 +122,14 @@ def comp(a, b):
     return _comp(a, b)
 
 
+def icomp(a, b):
+    """`COMP(Rx, Ry)` of fixed-point registers: per element `(AN, AZ)`, signed."""
+    return (
+        [signed32(wd(a[c])) < signed32(wd(b[c])) for c in (0, 1)],
+        [wd(a[c]) == wd(b[c]) for c in (0, 1)],
+    )
+
+
 def astat_bit(_m, _bit):
     """`BIT TST ASTATx`: the invalid-operation flag is assumed clear (checked by the trace)."""
     return [False, False]
@@ -142,6 +150,35 @@ def cond_eq(m, old, new):
     return [new[c] if m.az[c] else old[c] for c in (0, 1)]
 
 
+def _ashift(a: int, s: int) -> int:
+    n, v = signed32(s), signed32(a)
+    if n >= 0:
+        return (v << n) & M32 if n < 32 else 0
+    return (v >> min(-n, 63)) & M32
+
+
+#: `Rn = ASHIFT Rx BY Ry`: left when the amount is non-negative, else an arithmetic right shift.
+iashift = lift(lambda a, s: _ashift(wd(a), wd(s)))
+#: `Rn = Rx * Ry (UUI)`: the low 32 bits of the unsigned product (`crates/nord-sharc` multiplier).
+imul = lift(lambda a, b: (wd(a) * wd(b)) & M32)
+
+
+def cond_gt(m, old, new):
+    """`IF GT` after a float compute: the new value where the result was neither negative nor zero
+    (VERIFIED: `crates/nord-sharc/src/core/mod.rs`, LE negated)."""
+    return [old[c] if (m.an[c] or m.az[c]) else new[c] for c in (0, 1)]
+
+
+def cond_lt(m, old, new):
+    """`IF LT` after a float compute: negative and not zero (`core/mod.rs`, AF set)."""
+    return [new[c] if (m.an[c] and not m.az[c]) else old[c] for c in (0, 1)]
+
+
+def cond_le(m, old, new):
+    """`IF LE` after a float compute: negative or zero (`core/mod.rs`, AF set)."""
+    return [new[c] if (m.an[c] or m.az[c]) else old[c] for c in (0, 1)]
+
+
 def cond_av(m, old, new):
     return [new[c] if m.av[c] else old[c] for c in (0, 1)]
 
@@ -160,6 +197,9 @@ def cond_of(_m, kind):
         "ne": cond_ne,
         "eq": cond_eq,
         "ge": cond_ge,
+        "gt": cond_gt,
+        "lt": cond_lt,
+        "le": cond_le,
         "tf": cond_tf,
         "av": cond_av,
         "ac": cond_ac,

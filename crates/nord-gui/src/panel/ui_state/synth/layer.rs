@@ -107,6 +107,8 @@ pub struct SynthLayerUi {
     pub pattern_custom: bool,
     /// Gate length per step in eighths of a step, `0` = rest.
     pub step_gate: [u8; 16],
+    /// Step is tied into the next one (gate code `Q`; only a full-step gate can tie).
+    pub step_tie: [bool; 16],
     pub step_accent: [bool; 16],
     /// Pan per step: 0 Left, 1 Center, 2 Right.
     pub step_pan: [u8; 16],
@@ -180,6 +182,7 @@ impl Default for SynthLayerUi {
             pattern_cursor: 0,
             pattern_custom: false,
             step_gate: PATTERN_PRESETS[0].steps,
+            step_tie: PATTERN_PRESETS[0].tie,
             step_accent: [false; 16],
             step_pan: [1; 16],
             kb_sync: false,
@@ -336,6 +339,7 @@ impl SynthLayerUi {
                 self.pattern_len = src.pattern_len;
                 self.pattern_custom = src.pattern_custom;
                 self.step_gate = src.step_gate;
+                self.step_tie = src.step_tie;
                 self.step_accent = src.step_accent;
                 self.step_pan = src.step_pan;
             }

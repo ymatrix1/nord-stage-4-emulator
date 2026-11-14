@@ -147,3 +147,42 @@ fn a_cleared_location_removes_its_entry() {
     assert!(plan.puts.is_empty());
     assert_eq!(plan.cleared, [(PresetSection::Organ, 0, 1)]);
 }
+
+#[test]
+fn a_stored_preset_is_exported_as_a_file_at_its_location() {
+    use crate::panel::bay_program::preset_user::UserPreset;
+    use nord_core::cbin::SectionPreset;
+    use nord_core::engine::Stage4Engine;
+    let (mut state, dir, mut lib) = open();
+    let mut e = Stage4Engine::new(48_000.0);
+    e.organ_a.drawbars = [8, 8, 0, 0, 0, 0, 0, 0, 1];
+    let user = UserPreset {
+        name: "Mine".into(),
+        section: PresetSection::Organ,
+        state: e.capture_state(),
+        base: None,
+    };
+    lib.presets.store_user(70, user).expect("location 2:07"); // bank 2 is a new folder
+    state.export_path = dir.join("stored.ns4b").display().to_string();
+    let msg = state.export_backup(&lib).unwrap();
+    assert!(msg.contains("1 added"), "{msg}");
+
+    let out = dir.join("stored.ns4b");
+    let a = Ns4BackupArchive::open(&out).unwrap();
+    let name = "Organ Preset/Bank 2/Mine.ns4o";
+    let bytes = a.read_entry_from_file(&out, name).unwrap();
+    let f = CbinFile::parse(&bytes).unwrap();
+    assert_eq!((f.header.bank_index, f.header.location_index), (1, 6));
+    assert!(f.checksum_ok());
+    let SectionPreset::Organ(o) = SectionPreset::from_file(&f).unwrap() else {
+        panic!("organ expected")
+    };
+    assert_eq!(o.drawbars_a, [8, 8, 0, 0, 0, 0, 0, 0, 1]);
+    // the archive's own presets are untouched
+    let src = dir.join("in.ns4b");
+    let before = Ns4BackupArchive::open(&src).unwrap();
+    assert_eq!(
+        before.read_entry_from_file(&src, OA).unwrap(),
+        a.read_entry_from_file(&out, OA).unwrap()
+    );
+}

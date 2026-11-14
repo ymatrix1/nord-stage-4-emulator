@@ -219,6 +219,9 @@ fn store(ui: &ProgramUi) -> OledText {
             ..Default::default()
         };
     }
+    if let Some(t) = ui.preset_store_text() {
+        return t;
+    }
     let (target, existing) = match ui.store.target {
         Some(StoreTarget::Live(s)) => (format!("Live {}", s + 1), String::new()),
         Some(StoreTarget::Bank(l)) => (l.label(), name_at(ui, l)),
@@ -277,6 +280,7 @@ fn preset(ui: &ProgramUi, kind: PresetKind, single: bool) -> OledText {
         PresetKind::Piano => ui.catalog.pianos.iter().map(|e| display_name(e)).collect(),
         PresetKind::Synth => ui.catalog.samples.iter().map(|e| display_name(e)).collect(),
     };
+    let names = ui.preset_browser_names(kind).unwrap_or(names);
     let mut rows = window(&names, ui.preset_cursor, 4);
     if single {
         rows.insert(0, format!("Layer: {}", layer_label(ui.focus)));

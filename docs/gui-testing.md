@@ -119,6 +119,8 @@ on the instrument.
 
 Round 3 adds frames (`panel/frames.rs`, `widgets/scale.rs`) and needs no new rule: boxes record themselves with the widget probe, so rule `G` keeps every label inside or clear of a box, rule `E` keeps LEDs 4 px from its edge, rule `C` keeps scale numerals off control rectangles and rule `N` off tick rings. Unit tests cover the frame table (`nord-panel`: members exist, frames inside sections; `nord-gui`: boxes do not overlap after nudges), the numerals, the type and timbre names, the keybed LED letters and the contrast floor (`style::dim_legend`, 4.5:1 against slate and red).
 
+Round 4 adds knob numerals (`widgets/scale.rs`) and the Effects variation lists (`bay_effects/lists.rs`) with no new rule. Rule `C` exempts a numeral printed around the tick ring of its own knob (`is_own_numeral`: the text is one of the knob's numerals and lies within 16 px of its probe rectangle). First run with the numerals on 116 collisions (61 C, 44 L, 10 G, 1 V), 0 after names moved below the `0` / `10`, knob bodies shrank, frame pads grew and a few nudges; the lists and piano numerals gave 12 C, 2 E, 2 L, 2 T and 6 G / 4 V respectively, all fixed.
+
 `legibility_allow.txt` lists tolerated violations (empty now; the test also fails on stale
 entries). Run with `NS4_WRITE_COLLISIONS=<file> cargo test -p nord-gui collisions_match` to dump
 the current list. Fixes go into the shared helpers first: `widgets::label_fit` / `fit_size`
@@ -140,6 +142,8 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | After round 2 (drawbar numbers below the cap travel, LEDs before legend text, 9.5 px line pitch, nudges) | yes | 0 |
 | Round 3 content added (29 frames, type / timbre names first run: 28; then scale numerals, dial names, drawbar names and numerals: 64 and 43 on the next runs; rules unchanged) | yes | 28 |
 | After round 3 (frame pads, group nudges, scale placement, title positions) | yes | 0 |
+| Round 4 content added (ring numerals, variation lists, piano LED names) | yes | 116 first run |
+| After round 4 (names below numerals, 3 px smaller knobs, frame pads, nudges) | yes | 0 |
 
 ## What each switch changes
 
@@ -148,7 +152,7 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | `--tone-source` (Organ: Source) | `firmware` pipe bank VERIFIED vs SHARC oracle; `b3wheels` ladder VERIFIED 2.5e-11, per-key weights not modelled; `vox`, `farfisa` partial; `legacy` ASSUMED | MIXED per choice |
 | `--b3-tail on\|off` (Organ: B3 tail) | B3 processor-tail response (`docs/research/b3-vox-video-gap.md`) | EMPIRICAL |
 | `--rotary-drive engine\|unity\|scaled` (Organ: Rotary drive) | `tanh(g x)`, `tanh(g x)/g`, or drive/10 (`docs/research/b3-rotary.md`) | EMPIRICAL |
-| `--organ-level default\|legacy\|firmware` (Organ: Level) | Organ output level law: legacy bus scale, or firmware swell word and squared layer level (`docs/research/organ-output-law.md`) | MIXED per choice |
+| `--organ-level default\|legacy\|firmware\|chain` (Organ: Level) | Organ output level law: legacy bus scale, firmware swell word and squared layer level, or `chain` (verified word 1.6 x FX path 0.3732 in place of K, 14 dB under the B3 / Vox clips) (`docs/research/organ-output-law.md`) | MIXED per choice |
 | `--synth-chain legacy\|strip` (Synth: Chain) | Per-voice chain: firmware strip (default since D22, `docs/research/synth-validation.md`) or the classic engine chain; `--legacy-all` selects the classic chain | MIXED (partly VERIFIED) |
 | `--synth-stages` / `--no-synth-stages` (Synth: Stage oscillators) | Bit-exact firmware oscillator stages on the strip chain (noise, Shape Square, SUPER, MULTI, SHAPE SINE); on by default | MIXED (stages VERIFIED, voice weights ASSUMED) |
 | `--synth-p table\|fitted\|off\|g,w2,r2,shape,cutoff` (Synth: P table) | Per-wave oscillator level, cutoff factor and SHAPE word law fitted to hardware clips (`synth/p_table.rs`) | EMPIRICAL |
@@ -157,6 +161,7 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | `--synth-shape <0..1>` (Synth: Shape) | Shape word of the firmware SHAPE oscillator (strip chain); off keeps the saw placeholder | ASSUMED |
 | `--firmware-piano-level` / `--legacy-piano-level` (Piano: Level) | Firmware velocity level law for `.npno` (default on); legacy is the touch curve (`piano-engine.md`) | VERIFIED |
 | `--firmware-piano-bus` (Piano: SMP bus scale) | Sample path scaled 0.5 instead of 0.55 (Q31 receiver convention) | ASSUMED |
+| `--firmware-piano-chain` (Piano: FX path scale) | Sample path scaled 0.7464, the verified FX receiver path (engine unit = DAC fraction ASSUMED; Velvet Grand clip +10 to +12 dB over) | MIXED |
 | `--amp-path engine\|firmware` (FX: Amp path) | Firmware drive stage (engine default) or engine tanh drive and RBJ cabinet; 4 frames latency | VERIFIED (`tests_amp_golden.rs`) |
 | `--firmware-fx` (FX: Firmware FX) | Every `FirmwareFx` port (delay laws, delay time, reverb mix, compressor), see `effects-and-routing.md` | MIXED per port |
 | `--firmware-reverb` (FX: Firmware reverb) | Firmware Spring reverb routine on every chain, Spring types only, 4 frames latency | MIXED (see `fx-reverb-leslie.md`) |

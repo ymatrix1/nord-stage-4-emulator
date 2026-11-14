@@ -18,6 +18,12 @@ pub(super) enum Cond {
     Eq,
     Av,
     Ac,
+    /// After a float compute: result positive (not negative, not zero).
+    Gt,
+    /// After a float compute: result negative and not zero.
+    Lt,
+    /// After a float compute: result negative or zero.
+    Le,
 }
 
 /// `Ii += step` honouring the circular buffer `(len, base)`.
@@ -57,6 +63,9 @@ impl<M: Mem> Pe<M> {
             Cond::Eq => self.az[c],
             Cond::Av => self.av[c],
             Cond::Ac => self.ac[c],
+            Cond::Gt => !(self.an[c] || self.az[c]),
+            Cond::Lt => self.an[c] && !self.az[c],
+            Cond::Le => self.an[c] || self.az[c],
         }
     }
 
@@ -84,6 +93,39 @@ pub(super) fn fl_float(p: P) -> Eff {
 /// `Fl2` of a fixed result pair.
 pub(super) fn fl_int(p: P) -> Eff {
     Eff::Fl2(p.map(|w| (w as i32) < 0), p.map(|w| w == 0))
+}
+
+/// `Fl2` of `COMP(Fx, Fy)`: AN when `a < b`, AZ when equal (denormals flushed).
+pub(super) fn fl_comp(a: P, b: P) -> Eff {
+    Eff::Fl2(
+        [0, 1].map(|c| val(a[c]) < val(b[c])),
+        [0, 1].map(|c| val(a[c]) == val(b[c])),
+    )
+}
+
+/// `Fl2` of `COMP(Rx, Ry)` of fixed-point registers: signed.
+pub(super) fn fl_icomp(a: P, b: P) -> Eff {
+    Eff::Fl2(
+        [0, 1].map(|c| (a[c] as i32) < (b[c] as i32)),
+        [0, 1].map(|c| a[c] == b[c]),
+    )
+}
+
+/// `Rn = Rx * Ry (UUI)`: the low 32 bits of the unsigned product.
+pub(super) fn imul(a: P, b: P) -> P {
+    [0, 1].map(|c| a[c].wrapping_mul(b[c]))
+}
+
+/// `Rn = ASHIFT Rx BY Ry`: left when the amount is non-negative, else an arithmetic right shift.
+pub(super) fn iashift(a: P, s: P) -> P {
+    [0, 1].map(|c| {
+        let n = s[c] as i32;
+        if n >= 0 {
+            a[c].checked_shl(n as u32).unwrap_or(0)
+        } else {
+            ((a[c] as i32) >> n.unsigned_abs().min(31)) as u32
+        }
+    })
 }
 
 /// `Fl4` of `a + b` (`sub = false`) or `a - b` per element: AN, AZ, AV (signed overflow) and AC

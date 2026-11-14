@@ -24,6 +24,8 @@ mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_table_d;
 mod fw_filter_tables;
+mod fw_ladder;
+mod fw_ladder_tables;
 mod fw_misc;
 mod fw_shape;
 mod fw_sine3;
@@ -96,6 +98,10 @@ pub use voice::SynthVoice;
 mod tests_envelope;
 #[cfg(test)]
 mod tests_fw_filter_golden;
+#[cfg(test)]
+mod tests_fw_ladder_golden;
+#[cfg(test)]
+mod tests_fw_ladder_strip;
 #[cfg(test)]
 mod tests_fw_shape_golden;
 #[cfg(test)]

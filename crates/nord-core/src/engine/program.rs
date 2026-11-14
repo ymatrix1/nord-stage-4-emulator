@@ -115,72 +115,11 @@ impl Stage4Engine {
     /// Applies a decoded Nord Stage 4 Program to the DSP engine.
     /// Applies all decoded CBIN program settings (layers, scenes, splits, morphs, and 7 FX chains).
     pub fn apply_program(&mut self, prog: &crate::cbin::ProgramDecoded) {
-        // Organ (Layers A & B + shared Organ FX)
-        self.organ_a.model = prog.organ.model;
-        self.organ_b.model = prog.organ.model_b;
-        self.organ_a.b3_bass_mode = prog.organ.b3_bass_a;
-        self.organ_b.b3_bass_mode = prog.organ.b3_bass_b;
-        self.organ_a.drawbars = prog.organ.drawbars_a;
-        self.organ_b.drawbars = prog.organ.drawbars_b;
-        self.organ_a.octave_shift = prog.organ.layer_a_octave.clamp(-2, 2);
-        self.organ_b.octave_shift = prog.organ.layer_b_octave.clamp(-2, 2);
-        for (organ, vib_on) in [
-            (&mut self.organ_a, prog.organ.vibrato_on),
-            (&mut self.organ_b, prog.organ.vibrato_on_b),
-        ] {
-            organ.percussion_enabled = prog.organ.percussion_on;
-            organ.percussion_soft = prog.organ.percussion_soft;
-            organ.percussion_fast_decay = prog.organ.percussion_fast;
-            organ.percussion_third_harmonic = prog.organ.percussion_third;
-            organ.scanner_mode = prog.organ.scanner_mode(vib_on);
-            organ.rotary_enabled = prog.organ.rotary_enabled;
-            organ.rotary_speed = prog.organ.rotary_speed;
-            // preset unit 0..10 (`(v / 127) * 10`) to the engine unit 0..1 = the firmware `v / 127`
-            // (VERIFIED, docs/research/fx-type-map.md section 9); `rotary.rs` takes the fraction.
-            organ.rotary_drive = (prog.organ.rotary_drive / 10.0).clamp(0.0, 1.0);
-        }
-
-        // Piano (Layers A & B)
-        for (piano, dec) in [
-            (&mut self.piano_a, &prog.piano.layer_a),
-            (&mut self.piano_b, &prog.piano.layer_b),
-        ] {
-            piano.category = dec.category;
-            piano.timbre = dec.timbre;
-            piano.touch = dec.touch;
-            piano.string_resonance_enabled = dec.string_res;
-            piano.pedal_noise_enabled = dec.pedal_noise;
-            piano.soft_release = dec.soft_release;
-            piano.unison = dec.unison.min(3);
-            piano.dyn_comp = dec.dyn_comp.min(3);
-            piano.octave_shift = dec.octave.clamp(-2, 2);
-        }
-
-        // Synth (Layers A, B & C + cutoff morph matrix)
-        crate::synth_params::apply_decoded_layer(
-            &mut self.synth_a,
-            &mut self.synth_cutoff_morph[0],
-            &prog.synth.layer_a,
-        );
-        crate::synth_params::apply_decoded_layer(
-            &mut self.synth_b,
-            &mut self.synth_cutoff_morph[1],
-            &prog.synth.layer_b,
-        );
-        crate::synth_params::apply_decoded_layer(
-            &mut self.synth_c,
-            &mut self.synth_cutoff_morph[2],
-            &prog.synth.layer_c,
-        );
-
-        // Per-layer 0x36 FX chains
-        Self::apply_fx_chain(&mut self.fx_chains[0], &prog.organ.fx);
-        Self::apply_fx_chain(&mut self.fx_chains[1], &prog.organ.fx);
-        Self::apply_fx_chain(&mut self.fx_chains[2], &prog.piano.fx_a);
-        Self::apply_fx_chain(&mut self.fx_chains[3], &prog.piano.fx_b);
-        Self::apply_fx_chain(&mut self.fx_chains[4], &prog.synth.fx_a);
-        Self::apply_fx_chain(&mut self.fx_chains[5], &prog.synth.fx_b);
-        Self::apply_fx_chain(&mut self.fx_chains[6], &prog.synth.fx_c);
+        // Sections (layers, per-layer 0x36 FX chains, levels + morph deltas): the same functions
+        // load a Preset Library entry, see `preset_load.rs`.
+        self.apply_organ_section(&prog.organ);
+        self.apply_piano_section(&prog.piano);
+        self.apply_synth_section(&prog.synth);
 
         // Global
         self.master_clock.bpm = prog.global.tempo_bpm;
@@ -224,23 +163,6 @@ impl Stage4Engine {
             self.split_router.splits[i].crossfade = prog.global.split_crossfades[i];
             self.split_router.splits[i].enabled =
                 prog.global.split_enabled && (!any_zone_flag || prog.global.split_zone_enabled[i]);
-        }
-
-        // Layer levels + morph deltas
-        let level_specs = [
-            (prog.organ.layer_a_level, prog.organ.layer_a_level_morph),
-            (prog.organ.layer_b_level, prog.organ.layer_b_level_morph),
-            (prog.piano.layer_a.level, prog.piano.layer_a.level_morph),
-            (prog.piano.layer_b.level, prog.piano.layer_b.level_morph),
-            (prog.synth.layer_a.level, prog.synth.layer_a.level_morph),
-            (prog.synth.layer_b.level, prog.synth.layer_b.level_morph),
-            (prog.synth.layer_c.level, prog.synth.layer_c.level_morph),
-        ];
-        for (slot, (lvl, morph)) in self.layer_levels.iter_mut().zip(level_specs) {
-            slot.base = lvl.clamp(0.0, 1.0);
-            slot.delta_wheel = morph.wheel;
-            slot.delta_aftertouch = morph.aftertouch;
-            slot.delta_pedal = morph.ctrl_pedal;
         }
 
         self.record_program_routing(prog);
