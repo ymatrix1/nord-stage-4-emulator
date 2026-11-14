@@ -5,9 +5,14 @@ use egui::{
     pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Ui,
 };
 
-/// Draws a text label.
+/// Smallest font height (px at zoom 1) any panel text is drawn with; enforced in [`label`].
+/// EMPIRICAL: smallest size that stays readable in the 1:1 overview screenshots
+/// (`docs/gui-testing.md`), judged by eye.
+pub const MIN_FONT_PX: f32 = 7.5;
+
+/// Draws a text label (never smaller than [`MIN_FONT_PX`]).
 pub fn label(p: &Painter, pos: Pos2, s: &str, size: f32, col: Color32, al: Align2) {
-    p.text(pos, al, s, FontId::proportional(size), col);
+    p.text(pos, al, s, FontId::proportional(size.max(MIN_FONT_PX)), col);
 }
 
 /// Draws a round indicator LED with a dark bezel, 3D glint, and realistic bloom.

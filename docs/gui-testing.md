@@ -37,6 +37,44 @@ nord-stage4 --measured-laws --dump-options       # prints the active set
 The self-test prints peak, RMS and the RMS difference to the default engine (0 for defaults) and
 exits non-zero on non-finite samples.
 
+## Screenshots, focus view and the legibility check
+
+```bash
+# One PNG per section at 2x (builds once, writes target/shots/<section>.png)
+python tools/gui_shots.py [--out DIR] [--scale 2] [--sections organ,synth] [--no-build]
+# One shot by hand; sections: organ piano program synth effects master keybed (default: whole panel)
+nord-stage4 --screenshot out.png --screenshot-section synth --screenshot-scale 2
+```
+
+`--screenshot-scale N` is physical px per logical panel px. The window opens off-screen without
+taking focus or a taskbar entry, is resized to the region, the frame is cropped to it, and the
+process exits 0 after saving (`std::process::exit`; the normal close path ends with
+`0xcfffffff` on Windows). A 20 s watchdog exits 3 when no PNG arrives; `gui_shots.py` also kills
+a child that runs over 30 s. A whole-panel shot is limited by the OS window size (the keybed
+is capped at 1x for that reason). F12 still saves the live window to `screenshot.png`. Code:
+`crates/nord-gui/src/screenshot.rs`.
+
+Focus view (B12): click a section header or press `Z` (section under the pointer, else the last
+one) to zoom that section to fill the window (up to 4x, crisp text: the egui zoom factor, not a
+bitmap scale); `Esc` returns, `1`-`5` jump to Organ, Piano, Program, Synth, Layer Effects. In the
+overview the window scale-to-fits the panel. Code: `crates/nord-gui/src/panel/view.rs`.
+
+Scale: the panel is drawn at `LAYOUT_SCALE` = 2 (3120 x 840 logical px, `panel/layout_px.rs`) so
+that 7.5 px labels fit between neighbours. A 1900 px window therefore shows the overview at about
+0.6x: read labels in the focus view or in `gui_shots.py` output.
+
+`panel/legibility_tests.rs` renders the real panel headless and fails on: any text under
+`MIN_FONT_PX` (7.5), two overlapping labels, or a label overlapping a control rectangle it
+does not belong to. `legibility_allow.txt` lists tolerated collisions (empty now; the test also
+fails on stale entries). Nudges for tight neighbours live in `panel/layout_tweaks.rs`, never in
+the `ASSUMED` photo tables. Before/after: `docs/img/gui/`.
+
+| State | Labels >= 7.5 px | Collisions |
+|---|---|---|
+| Before (original fonts 4.5-7 px, 1560 px panel) | no (smallest 4.5) | 33 |
+| 7.5 px minimum at 1560 px | yes | 98 (with the stricter 1 px-gap rule: more) |
+| 7.5 px minimum at 3120 px plus 6 nudges | yes | 0 |
+
 ## What each switch changes
 
 | Switch (flag / dropdown) | Changes | Status |

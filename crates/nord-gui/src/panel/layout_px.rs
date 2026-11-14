@@ -6,8 +6,15 @@
 use egui::{pos2, vec2, Pos2, Rect};
 use nord_panel::layout;
 
+/// Logical px of one panel pixel at the old 1560 px layout (the label sizes are tuned in
+/// px, so a larger scale gives labels more room; the view zooms the result back to fit).
+pub const LAYOUT_SCALE: f32 = 2.0;
+
 /// Panel width in px for the 1290 mm instrument body.
-pub const PANEL_WIDTH_PX: f32 = 1560.0;
+pub const PANEL_WIDTH_PX: f32 = 1560.0 * LAYOUT_SCALE;
+
+/// Panel height in px (control area plus keybed).
+pub const PANEL_HEIGHT_PX: f32 = 420.0 * LAYOUT_SCALE;
 
 /// Screen pixels per panel millimetre.
 pub const PX_PER_MM: f32 = PANEL_WIDTH_PX / layout::INSTRUMENT_WIDTH_MM;
@@ -22,7 +29,7 @@ pub fn to_px(r: layout::Rect, origin: Pos2) -> Rect {
 
 /// Pixel rectangle of an inventory control, or `None` for an unknown id.
 pub fn rect_of(id: &str, origin: Pos2) -> Option<Rect> {
-    layout::rect_for(id).map(|r| to_px(r, origin))
+    layout::rect_for(id).map(|r| to_px(r, origin).translate(super::layout_tweaks::nudge(id)))
 }
 
 /// Pixel rectangle of an inventory control; a zero-size rect at `origin` for unknown ids
