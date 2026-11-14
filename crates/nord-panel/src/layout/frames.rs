@@ -78,6 +78,7 @@ pub fn frame_rect(def: &FrameDef) -> Option<Rect> {
 mod tests {
     use super::*;
     use crate::layout::section_rect;
+    use crate::types::Section::Synth;
 
     #[test]
     fn every_member_has_a_layout_rect_and_every_frame_a_title() {

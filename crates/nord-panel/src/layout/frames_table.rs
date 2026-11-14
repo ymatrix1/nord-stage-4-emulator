@@ -335,7 +335,7 @@ mod tests {
         ] {
             assert!(FRAMES.iter().any(|f| f.section == s), "{s:?}");
         }
-        assert_eq!(FRAMES.len(), 31);
+        assert_eq!(FRAMES.len(), 29);
     }
 
     #[test]

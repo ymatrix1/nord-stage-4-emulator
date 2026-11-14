@@ -58,7 +58,7 @@ A user cannot find or understand a control whose name, frame or scale the real p
 Every control can be identified from what is printed on it, as on the instrument, without hovering; the legibility audit still passes with an empty allow-list.
 
 ### Acceptance Criteria
-- [x] Frame table in `nord-panel` (`layout/frames.rs`, 31 frames: members plus pad, tests, control inventory section 7) and a painter in `nord-gui` (`panel/frames.rs`) that records boxes for rule `G`
+- [x] Frame table in `nord-panel` (`layout/frames.rs`, 29 frames: members plus pad, tests, control inventory section 7) and a painter in `nord-gui` (`panel/frames.rs`) that records boxes for rule `G`
 - [x] Piano: four titles, always-visible PIANO SELECT box with type names, TIMBRE order BRIGHT, MID, SOFT (+ DYNO1/2)
 - [x] Organ: ORGAN MODEL, VIB/CHORUS, B3 PERCUSSION frames, drawbar register names and 1-8 numerals
 - [x] Synth: nine boxes, 0-10 scale ends (`widgets/scale.rs`), INFO / LIST / LIST under the dials; Effects: six boxes and scale ends
