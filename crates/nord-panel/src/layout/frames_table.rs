@@ -116,7 +116,7 @@ pub const FRAMES: &[FrameDef] = &[
         Synth,
         "MODE",
         &["synth.mode"],
-        [4.0, 14.0, 4.0, 12.0],
+        [4.0, 26.0, 4.0, 12.0],
     ),
     boxed(
         "synth.frame.arp",

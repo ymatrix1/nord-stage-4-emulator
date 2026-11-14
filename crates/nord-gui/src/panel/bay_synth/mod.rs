@@ -11,6 +11,7 @@ mod coverage;
 mod graphics;
 #[cfg(test)]
 mod hint_tests;
+mod names;
 mod oled;
 mod oled_arp;
 mod oled_types;
