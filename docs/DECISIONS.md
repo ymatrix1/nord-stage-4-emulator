@@ -620,3 +620,12 @@ Two new switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defau
 - **Alternatives:** Load the tables at runtime from a user-provided firmware path (rejected for now: needs the firmware at run time and a loader for the boot capture, the 73 kB text file is the smaller risk); a synthetic band-limited table (rejected, D53).
 - **Impact:** SUPER waves 2..4 change sound under `--synth-stages`; defaults and `render_hash` unchanged. ANALOG coverage 312 of 312. The sign extension of the short-word samples (the oracle zero-extends) and the P block stay ASSUMED; if the licence review of the 985-word table is negative, the file can be replaced by a runtime loader without touching the model.
 
+### D57. The CHOR hardware clip keeps `FirmwareFx::mod2` opt-in
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/chorus-hw-clip`; evidence [fx-chorus-hw-clip](research/fx-chorus-hw-clip.md))
+- **Context:** The first hardware recording of a Mod 2 effect (Nord Stage 4 chorus against the Kontakt Ultimate Pianos 2 chorus) shows a decaying sawtooth on a DAW oscilloscope with a delayed copy before each edge. D22 asks for modulation metrics with no side worse than about 3 dB before a default flips.
+- **Decision:** Measure the edge separation of the clip (`tools/fx_chorus_clip.py scope`) and of the emulator on the same sawtooth (`examples/fx_chorus_probe.rs`, `grid`): LFO 0.336 Hz (type 4 word `v = 30` gives 0.343 Hz), copy delay 0.62 to 1.78 ms (firmware 0.87 to 3.28 ms, engine 4.5 to 13.5 ms), wet over dry 0.86. `FirmwareFx::mod2` stays out of `DEFAULT`; the engine chorus stays the default; `render_hash` and the GUI default are unchanged.
+- **Why:** The rate and the one-copy structure agree with type 4, but the delay is off by 1.7 (swing 2.1) if the scope saw is the 87.31 Hz note, the scope signal is not the audio of the clip, the knob positions of the Nord are unknown, and no dry reference or audio comb exists, so the D22 bar cannot be evaluated.
+- **Alternatives:** Flip CHOR to default because the firmware is closer than the engine (rejected: the engine is far off, but the firmware miss is not explained and the default would move 93 programs on one clip); rescale the firmware delays by 0.55 (rejected: the scale rests on the unverified scope frequency).
+- **Impact:** OQ21 gains the clip result and the questions for the user (Nord knob positions, scope source and frequency); TD-10 records the opt-in; no audio change.
