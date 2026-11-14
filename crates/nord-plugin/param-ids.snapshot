@@ -581,9 +581,9 @@ synthg_lfo_sync_3|1|0.000000
 synthg_pat_on_1|1|0.000000
 synthg_pat_on_2|1|0.000000
 synthg_pat_on_3|1|0.000000
-synthg_pat_preset_1|7|0.000000
-synthg_pat_preset_2|7|0.000000
-synthg_pat_preset_3|7|0.000000
+synthg_pat_preset_1|28|0.000000
+synthg_pat_preset_2|28|0.000000
+synthg_pat_preset_3|28|0.000000
 synthm_arp_mode_1|5|0.000000
 synthm_arp_mode_2|5|0.000000
 synthm_arp_mode_3|5|0.000000

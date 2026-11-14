@@ -11,22 +11,19 @@ use super::*;
 
 /// `kKbZone` code whose LED zone set is exactly `leds` (inverse of [`zone_leds`]), if there is one.
 ///
-/// EMPIRICAL / ASSUMED: same table as [`zone_leds`] (the 12-value enumeration is not decoded in
-/// the firmware); `0b1111` maps to the firmware default `5`. A set with no code (for example
-/// `0b0101`) is still honoured by the legacy router.
+/// VERIFIED: searches the firmware case table (`zone_leds`); the first code of a duplicate wins
+/// (codes 3 and 7 both cover zones 2-3, codes 10 and 11 both zone 4). A set with no code (for
+/// example `0b0101`) is still honoured by the legacy router.
 pub const fn zone_code(leds: u8) -> Option<u8> {
-    match leds & 0b1111 {
-        0b0001 => Some(0),
-        0b0010 => Some(1),
-        0b0100 => Some(2),
-        0b1000 => Some(3),
-        0b0011 => Some(4),
-        0b1111 => Some(5),
-        0b1100 => Some(6),
-        0b0111 => Some(7),
-        0b1110 => Some(8),
-        _ => None,
+    let leds = leds & 0b1111;
+    let mut code = 0;
+    while code < 12 {
+        if zone_leds(code) == leds && leds != 0 {
+            return Some(code);
+        }
+        code += 1;
     }
+    None
 }
 
 impl Stage4Engine {
@@ -70,9 +67,11 @@ mod tests {
 
     #[test]
     fn zone_code_inverts_zone_leds() {
-        for code in [0u8, 1, 2, 3, 4, 6, 7, 8] {
+        for code in [0u8, 1, 2, 3, 4, 5, 6, 8, 9, 10] {
             assert_eq!(zone_code(zone_leds(code)), Some(code));
         }
+        assert_eq!(zone_code(zone_leds(7)), Some(3), "duplicate of code 3");
+        assert_eq!(zone_code(zone_leds(11)), Some(10), "duplicate of code 10");
         assert_eq!(zone_code(0b1111), Some(5));
         assert_eq!(zone_code(0b0101), None);
         assert_eq!(zone_code(0), None);
@@ -93,13 +92,17 @@ mod tests {
         let mut e = Stage4Engine::new(48_000.0);
         e.set_layer_zone_leds(LayerId::PianoB, 0b0100);
         assert_eq!(e.layer_zone_leds(LayerId::PianoB), 0b0100);
-        assert_eq!(e.routing.kb_zone[LayerId::PianoB as usize], 2);
+        assert_eq!(
+            e.routing.kb_zone[LayerId::PianoB as usize],
+            9,
+            "zone 3 = code 9"
+        );
         assert_eq!(e.layer_zone_leds(LayerId::PianoA), 0b1111, "other layer");
         e.set_layer_zone_leds(LayerId::PianoB, 0);
         assert_eq!(e.layer_zone_leds(LayerId::PianoB), 0b0100);
         e.set_layer_zone_leds(LayerId::PianoB, 0b0101);
         assert_eq!(e.layer_zone_leds(LayerId::PianoB), 0b0101);
-        assert_eq!(e.routing.kb_zone[LayerId::PianoB as usize], 2, "no code");
+        assert_eq!(e.routing.kb_zone[LayerId::PianoB as usize], 9, "no code");
     }
 
     #[test]
