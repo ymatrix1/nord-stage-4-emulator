@@ -10,7 +10,7 @@ pub use fx::{chain_of_slot, FxEdit, FxFlag, FxFloat, FX_SLOTS};
 pub use organ::OrganEdit;
 pub use piano::PianoEdit;
 pub use program::ProgramEdit;
-pub use synth::SynthEdit;
+pub use synth::{SynthEdit, SynthGroup, SynthParam, SynthTarget};
 
 #[cfg(test)]
 mod tests {
