@@ -258,6 +258,46 @@ Reading: for the Legacy source the unity law removes the +16.9 dB and the 24 % c
 
 **Stop point.** Done: cabinet response, oracle chain check, level staging explained, default switched, rotary flag. Not done: transliteration of the biquad bank, routine B, the organ unit EQ routines (`0x124344 / 0x1239D0`, `0x124270 / 0x1238FC`), a recording of JC or Small.
 
+## 12. Amp parity re-check against the B3 / Vox clips (2026-11-14)
+
+```bash
+cargo build --release -p nord-core --bin ns4
+uv run python tools/emu_vs_hw.py --video <Part A .webm> --backup <factory .ns4b> --ns4 target/release/ns4     --spec docs/research/data/emu_vs_hw_amp_presence.json --workdir <scratch> --confirmed-only
+cargo test -p nord-core --lib fx::fw_cabinet
+```
+
+**Question** ([organ-presence-gap](organ-presence-gap.md)): after the Twin amp, B3 and Vox read presence / brilliance 7.5 to 20 dB under the hardware. Is a missing amp / cabinet routine the cause?
+
+**What is already ported (main, D22).** The type 289 = `0x121` Twin chain is `FwAmpDrive` (`0x1228CF`, six types) followed by `FwCabinet` (`0x122A1D`, measured impulse response), default on. The presence-gap table (`vox` + firmware level) was **measured with this amp**; the "amp off" row is the ablation, not a missing port. Cabinet response of the committed taps (new fingerprint test in `fw_cabinet.rs`, FNV-1a of the 400 words per cabinet and the response at 1 / 3 / 6 kHz): Twin -9.4 / -2.2 / -11.2 dB (a +7 dB presence lift at 3 kHz), JC -10.4 / -12.6 / -10.8 (flat), Small -5.1 / -1.4 / -1.7 (bright). This explains the +7.5 / +15 dB the amp adds at presence / brilliance over the dry bank; it cannot explain more because the cabinet words are oracle words.
+
+**Re-run** (`docs/research/data/emu_vs_hw_amp_presence_results.json`, dB re RMS, emulator minus hardware; `--confirmed-only`, `--organ-level firmware`):
+
+| Clip | Variant | pres | brill | RMS | score |
+|---|---|---|---|---|---|
+| Vox | default (Legacy tone, engine rotary path) | -1.3 | +2.3 | +8.9 | 3.03 |
+| Vox | `vox`, firmware amp (drive + cabinet) | **-7.5** | **-9.7** | -0.6 | 6.13 |
+| Vox | `vox`, engine amp (`--amp-path engine`) | -12.8 | -19.9 | +1.3 | 9.52 |
+| Vox | `vox`, amp off | -15.0 | -24.9 | -0.2 | 11.17 |
+| Vox | `vox`, firmware amp, drive 5 | -6.1 | -7.6 | +3.5 | 5.21 |
+| B3 | default | -7.7 | -1.9 | +6.1 | 5.54 |
+| B3 | `b3wheels`, firmware amp | -9.0 | -5.6 | +1.7 | 6.74 |
+| B3 | `b3wheels`, engine amp | -9.0 | -5.6 | +1.7 | 6.74 |
+
+The firmware amp is worth +5.3 / +10.2 dB over the engine amp and +7.5 / +15.2 dB over no amp on Vox. B3 is **bit identical** with either amp path: `B3 Chords n Solo` has the amp off, so no amp or cabinet routine can touch its presence gap (its cause is the replayed note set, [organ-presence-gap](organ-presence-gap.md) s4).
+
+**Ablations on the Vox residual (-7.5 / -9.7 dB), none closes it:**
+
+| Test | pres / brill | Reading |
+|---|---|---|
+| amp input gain +6 / +12 / +18 / +24 dB (temporary env switch, output compensated, not committed) | -7.6 / -9.7, -7.4 / -9.3, -6.7 / -8.3, -5.5 / -6.4 | the drive stage saturates but the residual shrinks by only 2 to 3 dB at +24 dB: the organ level into the amp is not the lever |
+| all `FirmwareFx` switches (`--firmware-fx`) | -8.0 / -8.4 | the other ports move presence by 0.5 dB and brilliance by 1.3 dB at most |
+| amp type 0..9 of the program word `256 + k` | Twin (1) -7.5 / -9.7, Twin II -8.9 / -14.4, JC -9.2 / -10.1, JC II -6.9 / -12.9, Small -8.4 / -14.9, Small II -6.7 / -14.5; type 7 (To Rotary) equals amp off; LP24 -31 / -65, HP24 -2.5 / -13.4 with the low bands gone | the program's decode (289 = Twin) has the best composite score (6.13 against 7.1 to 24); JC II and Small II are 0.6 to 0.8 dB closer on presence alone but 3 to 5 dB worse on brilliance, so no other cabinet closes the gap |
+| EQ | Vox program has treble 0, mid 0, bass -3 dB | no tone stack word to port: the organ unit's `0x124344 / 0x124270` routines are the Fx1 / Fx2 (Mod) pair of [fx-contexts](fx-contexts.md) s6 (owned by the FX Mod lane), not a tone control |
+
+**Conclusion.** The amp / cabinet half of the Vox path is complete for Twin, Twin II, JC, JC II, Small and Small II (oracle words, drive stage 1.4e-6 to 1.7e-4 of peak, chain 9e-4 of peak); the 7.5 / 9.7 dB residual is **not an amp or cabinet error**. What is left is on the organ side (the Vox bank at 2 to 6 kHz is 25 dB under the hardware before the amp; whether the hardware amp is driven harder than `kAmpDrive 14` is not recoverable from the clip) and the unported Mod 2 (type 6) of the program. No default changed (`render_hash` `c7f06ca7...` unchanged, no program sweep needed); D22 is not re-opened. Note the s11 Vox row (-1.3 / +0.9) was measured with the earlier Vox source and level; with the current oracle-exact bank and firmware level the same amp reads -7.5 / -9.7.
+
+**Not done:** cabinet biquad bank transliteration (the impulse response is equivalent, s10), routine `0x122B1D`, JC / Small recordings (the clips have Twin only), amp types 7..9 (To Rotary, LP24, HP24: their words are not in the drive stage context, the organ unit instance of the tone stack `0x1243F4` is unknown), the Mod 2 type 6 of the Vox program.
+
 ## Implications
 
 * The effect library is fully partitioned into 28 modules; each routine has an owner in the ARM (section 2). A Rust parity effort can name its blocks by module instead of by pc.

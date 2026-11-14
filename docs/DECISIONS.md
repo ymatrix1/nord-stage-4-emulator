@@ -343,12 +343,12 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Keep manual names (wrong category set and an invented `SUPER`); name the entries `<Category> <name>` for every category (the manual figure shows it only for MULTI, the rule for the others is unverified); map the header id by program names (guesswork, kept out of code).
 - **Impact:** CAT dial of ANALOG has 8 stops (MULTI is the sixth, SUPER the seventh); the WAVE page shows firmware names instead of `Table n`; the flat wavetable index of a panel pick now equals the one of a loaded program (`cat * 8 + i` before). `render_hash` unchanged.
 
-### D29. The piano layer level law is opt-in; the bus convention stays ASSUMED
+### D28. The firmware amp stays the default; the Vox presence residual is not assigned to the amp
 
 - **Status:** accepted 2026-11-14
-- **Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))
-- **Context:** OQ20 listed the SMP bus receiver convention and the piano layer level handler `0xC011A7A4` (law read from the listing, never run) as open. D22 requires end-to-end verification before a default changes.
-- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and the bus convention stays ASSUMED.
-- **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
-- **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 on an untraced path); flip the bus scale (0.83 dB on an assumption, and the true receiver scale is unknown by up to 12 dB).
-- **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
+- **Decided by:** Yuri Olive (PR for `feat/fx-amp-twin-port`; evidence [fx-type-map](research/fx-type-map.md) s12)
+- **Context:** [organ-presence-gap](research/organ-presence-gap.md) left the Vox presence / brilliance 7.5 / 9.7 dB under the clip and pointed at a missing amp / cabinet port.
+- **Decision:** No amp or default change. The drive stage and cabinet (D22) already cover Twin, Twin II, JC, JC II, Small, Small II with oracle words; the residual is attributed to the organ bank and Mod 2, not the amp.
+- **Why:** With the amp on, presence / brilliance are -7.5 / -9.7 dB; amp input level up to +24 dB, every other amp type and all `FirmwareFx` ports leave 5.5 / 6.4 dB at best; B3 is bit identical for both amp paths (amp off in its program).
+- **Alternatives:** Fit a presence shelf after the cabinet (rejected: the cabinet words are oracle exact, and the fit would hide the organ bank gap); flip `vox` on the clip score (rejected: D22 and D25 bars).
+- **Impact:** None on renders or `render_hash`; the cabinet taps gain a fingerprint and response test.
