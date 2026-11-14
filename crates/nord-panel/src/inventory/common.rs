@@ -132,12 +132,12 @@ pub fn layer_block(b: &BlockSpec) -> Vec<ControlEntry> {
     v.push(
         ControlEntry::new(&id("sustped"), s, K::Button, "SUSTPED", b.ped_page)
             .shift()
-            .todo(b.bean),
+            .bound("ped_sustped_{n}"),
     );
     v.push(
         ControlEntry::new(&id("pstick"), s, K::Button, b.pstick_label, b.ped_page)
             .shift()
-            .todo(b.bean),
+            .bound("ped_pstick_{n}"),
     );
     v
 }
