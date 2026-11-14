@@ -218,6 +218,34 @@ fn morph() -> Vec<&'static str> {
     vec!["morph.wheel", "morph.at", "morph.ctrlped", "morph.clear"]
 }
 
+/// SECTION EDIT: held while down, sticky on a double tap, left by a tap. The bays' fan-out is
+/// proven by `panel/section_edit_tests.rs` (every layer of each section changes in a real engine).
+fn section_edit() -> Vec<&'static str> {
+    let mut u = ProgramUi::default();
+    let spec = PROGRAM_BUTTONS
+        .iter()
+        .find(|s| s.id == "program.section_edit")
+        .copied()
+        .expect("SECTION EDIT button");
+    let feed = |u: &mut ProgramUi, gesture, went_down, went_up| {
+        let fed = Fed {
+            gesture,
+            went_down,
+            went_up,
+        };
+        press(u, &spec, &fed, false, &mut Vec::new());
+    };
+    feed(&mut u, None, true, false);
+    assert!(u.section_edit_active(), "held while the button is down");
+    feed(&mut u, None, false, true);
+    assert!(!u.section_edit_active());
+    feed(&mut u, Some(Gesture::DoubleTap), false, true);
+    assert!(u.section_edit_active(), "a double tap makes it sticky");
+    feed(&mut u, Some(Gesture::Tap), false, true);
+    assert!(!u.section_edit_active(), "a tap leaves sticky mode");
+    vec!["program.section_edit"]
+}
+
 fn split_key_pedal_panic() -> Vec<&'static str> {
     let mut e = Stage4Engine::new(48_000.0);
     let mut u = ProgramUi::default();
@@ -298,6 +326,7 @@ fn every_program_ui_binding_is_performed_by_the_gui() {
         store_flow(),
         init_undo_copy_paste(),
         morph(),
+        section_edit(),
         split_key_pedal_panic(),
         preset_library(),
     ] {
