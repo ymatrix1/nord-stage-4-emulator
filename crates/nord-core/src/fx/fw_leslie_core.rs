@@ -197,6 +197,11 @@ impl<F: Fp> Core<F> {
         self.ring = ring;
     }
 
+    /// The history ring behaviour in use.
+    pub(super) fn ring(&self) -> RingAdvance {
+        self.ring
+    }
+
     /// One call: the signal pair `io = [L0, R0, L1, R1]` is processed in place; returns the pair.
     pub(super) fn call(&mut self, io: [f32; 4]) -> [f32; 4] {
         for (k, v) in io.iter().enumerate() {

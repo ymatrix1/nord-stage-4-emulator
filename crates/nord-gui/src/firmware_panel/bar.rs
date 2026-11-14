@@ -1,101 +1,22 @@
 //! egui widgets of the firmware engine-path bar: one row of dropdowns / checkboxes per engine.
 
+use super::choices::*;
 use super::info::{self, SwitchInfo};
-use nord_core::organ::{OutputLevel, ToneWheelSource};
-use nord_core::render_opts::{FirmwareOptions, RotaryDrive};
-use nord_core::synth::{FilterEngine, PSpec, PTableSpec, SynthChain};
+use super::presets::{self, Engine};
+use nord_core::fx::FirmwareFx;
+use nord_core::organ::ToneWheelSource;
+use nord_core::render_opts::FirmwareOptions;
 
-/// Dropdown entry: value, name, per-choice status hint shown when hovering the entry.
-type Choice<T> = (T, &'static str, &'static str);
-
-const TONES: [Choice<Option<ToneWheelSource>>; 6] = [
-    (None, "Model default", "Per-model default source"),
-    (Some(ToneWheelSource::Legacy), "Legacy", "ASSUMED"),
-    (
-        Some(ToneWheelSource::Firmware),
-        "Pipe (firmware)",
-        "VERIFIED",
-    ),
-    (
-        Some(ToneWheelSource::B3Wheels),
-        "B3 wheels (firmware)",
-        "VERIFIED ladder, per-key weights not modelled",
-    ),
-    (
-        Some(ToneWheelSource::Vox),
-        "Vox bank (firmware)",
-        "partial, processors not modelled",
-    ),
-    (
-        Some(ToneWheelSource::FarfisaWheels),
-        "Farfisa (firmware)",
-        "partial, processors not modelled",
-    ),
-];
-const TAILS: [Choice<Option<bool>>; 2] = [
-    (None, "On (default)", "EMPIRICAL"),
-    (Some(false), "Off", "EMPIRICAL"),
-];
-const ROTARIES: [Choice<RotaryDrive>; 3] = [
-    (
-        RotaryDrive::Engine,
-        "Engine",
-        "tanh(g x), program drive as stored",
-    ),
-    (RotaryDrive::Unity, "Unity", "tanh(g x) / g, EMPIRICAL"),
-    (RotaryDrive::Scaled, "Scaled /10", "drive / 10, EMPIRICAL"),
-];
-const ORGAN_LEVELS: [Choice<OutputLevel>; 4] = [
-    (
-        OutputLevel::ModelDefault,
-        "Model default",
-        "firmware for Pipe, legacy otherwise",
-    ),
-    (OutputLevel::Legacy, "Legacy", "bus scale 0.08"),
-    (
-        OutputLevel::Firmware,
-        "Firmware",
-        "swell word, EMPIRICAL gain K",
-    ),
-    (
-        OutputLevel::Chain,
-        "Verified chain",
-        "word 1.6 x FX path 0.3732, VERIFIED (13 dB under the clips)",
-    ),
-];
-const CHAINS: [Choice<Option<SynthChain>>; 2] = [
-    (Some(SynthChain::Legacy), "Classic", "engine chain"),
-    (
-        Some(SynthChain::FirmwareStrip),
-        "Firmware strip (default)",
-        "partly VERIFIED, P table EMPIRICAL",
-    ),
-];
-const P_TABLES: [Choice<Option<PSpec>>; 3] = [
-    (
-        Some(PSpec::Table(PTableSpec::BUILTIN)),
-        "Per-wave table (default)",
-        "EMPIRICAL, docs/research/synth-validation.md",
-    ),
-    (
-        Some(PSpec::Fitted),
-        "Smooth Lead fit",
-        "EMPIRICAL, one program",
-    ),
-    (None, "Off (unit P)", "no level or cutoff correction"),
-];
-const FILTERS: [Choice<Option<FilterEngine>>; 2] = [
-    (None, "ZDF (default)", "engine filter"),
-    (Some(FilterEngine::Firmware), "Firmware", "VERIFIED"),
-];
-const LEVELS: [Choice<bool>; 2] = [
-    (false, "Legacy", "touch curve"),
-    (true, "Firmware", "VERIFIED level model for .npno"),
-];
-const AMPS: [Choice<Option<bool>>; 3] = [
-    (None, "Default (firmware)", "VERIFIED drive stage"),
-    (Some(false), "Engine", "tanh drive and RBJ cabinet"),
-    (Some(true), "Firmware", "VERIFIED drive stage"),
+/// The optional FX ports in bar order: `FirmwareFx` port name and its switch description.
+pub(super) const FX_PORTS: [(&str, SwitchInfo); 8] = [
+    ("delay-laws", info::FX_DELAY_LAWS),
+    ("delay-time", info::FX_DELAY_TIME),
+    ("reverb-mix", info::FX_REVERB_MIX),
+    ("reverb", info::REVERB),
+    ("compressor", info::FX_COMPRESSOR),
+    ("mod1", info::FX_MOD1),
+    ("mod2", info::FX_MOD2),
+    ("eq", info::FX_EQ),
 ];
 
 /// Labelled combo box over `choices`, with the switch tooltip on the label and the box.
@@ -125,13 +46,48 @@ fn checkbox(ui: &mut egui::Ui, sw: &SwitchInfo, value: &mut bool) {
     ui.checkbox(value, sw.label).on_hover_text(sw.tooltip());
 }
 
-/// Group heading followed by its widgets; `first` suppresses the leading separator.
-fn group(ui: &mut egui::Ui, name: &str, first: bool, add: impl FnOnce(&mut egui::Ui)) {
+/// Group heading with its Classic / Firmware buttons (when `engine` is given), then the widgets;
+/// `first` suppresses the leading separator. Returns the preset button clicked, if any.
+fn group(
+    ui: &mut egui::Ui,
+    name: &str,
+    first: bool,
+    engine: bool,
+    add: impl FnOnce(&mut egui::Ui),
+) -> Option<bool> {
     if !first {
         ui.separator();
     }
     ui.label(egui::RichText::new(name).strong());
+    let mut clicked = None;
+    if engine {
+        for (label, fw, tip) in [
+            ("C", false, "Classic: this group's pre-firmware paths"),
+            ("F", true, "Firmware: this group's verified firmware paths"),
+        ] {
+            if ui.small_button(label).on_hover_text(tip).clicked() {
+                clicked = Some(fw);
+            }
+        }
+    }
     add(ui);
+    clicked
+}
+
+/// Runs one group over a copy of the options and applies its engine preset click afterwards.
+fn engine_group(
+    ui: &mut egui::Ui,
+    o: &mut FirmwareOptions,
+    (name, engine): (&str, Engine),
+    first: bool,
+    add: impl FnOnce(&mut egui::Ui, &mut FirmwareOptions),
+) {
+    let mut next = *o;
+    let clicked = group(ui, name, first, true, |ui| add(ui, &mut next));
+    if let Some(fw) = clicked {
+        presets::apply_engine(&mut next, engine, fw);
+    }
+    *o = next;
 }
 
 /// Shape: checkbox (off = saw placeholder) plus a 0..1 slider stored in thousandths.
@@ -148,10 +104,41 @@ fn shape(ui: &mut egui::Ui, value: &mut Option<u16>) {
     }
 }
 
+/// Leslie gain slider in dB, stored in millidecibel.
+fn leslie_gain(ui: &mut egui::Ui, mdb: &mut i32) {
+    ui.label(info::LESLIE_GAIN.label)
+        .on_hover_text(info::LESLIE_GAIN.tooltip());
+    let mut db = *mdb as f32 / 1000.0;
+    ui.add(egui::Slider::new(&mut db, -24.0..=24.0).fixed_decimals(1));
+    *mdb = (db * 1000.0).round() as i32;
+}
+
+/// One checkbox per optional FX port plus the all / none shortcut for them.
+fn fx_ports(ui: &mut egui::Ui, fx: &mut FirmwareFx) {
+    let all = fx.ports_on().len() == FX_PORTS.len();
+    let mut on = all;
+    if ui
+        .checkbox(&mut on, info::FX_ALL.label)
+        .on_hover_text(info::FX_ALL.tooltip())
+        .changed()
+    {
+        for (name, _) in FX_PORTS {
+            if let Some(p) = fx.port_mut(name) {
+                *p = on;
+            }
+        }
+    }
+    for (name, sw) in &FX_PORTS {
+        if let Some(p) = fx.port_mut(name) {
+            checkbox(ui, sw, p);
+        }
+    }
+}
+
 /// The presets, the active set and the grouped switch rows. Mutates `o` in place.
 ///
-/// Three compact rows inside a horizontal scroll area: wrapped layouts clip combo boxes at the
-/// right edge, and a narrow window then scrolls the bar instead of hiding switches.
+/// Rows inside a horizontal scroll area: wrapped layouts clip combo boxes at the right edge, and
+/// a narrow window then scrolls the bar instead of hiding switches.
 pub fn show(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
     egui::ScrollArea::horizontal()
         .id_salt("fw_bar_scroll")
@@ -166,41 +153,84 @@ pub fn show(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
             style.spacing.item_spacing.y = 3.0;
             style.spacing.interact_size.y = 18.0;
             ui.horizontal(|ui| presets_and_status(ui, o));
-            ui.horizontal(|ui| {
-                group(ui, "Organ", true, |ui| {
-                    dropdown(ui, &info::TONE, &mut o.tone_source, &TONES);
-                    let b3 = o.tone_source == Some(ToneWheelSource::B3Wheels);
-                    ui.add_enabled_ui(b3, |ui| {
-                        dropdown(ui, &info::B3_TAIL, &mut o.b3_tail, &TAILS);
-                    });
-                    dropdown(ui, &info::ROTARY, &mut o.rotary_drive, &ROTARIES);
-                    dropdown(ui, &info::ORGAN_LEVEL, &mut o.organ_level, &ORGAN_LEVELS);
-                });
-                group(ui, "Piano", false, |ui| {
-                    dropdown(ui, &info::PIANO_LEVEL, &mut o.piano_firmware_level, &LEVELS);
-                    checkbox(ui, &info::PIANO_BUS, &mut o.piano_bus_scale);
-                    checkbox(ui, &info::PIANO_CHAIN, &mut o.piano_chain_scale);
-                });
-                group(ui, "FX", false, |ui| {
-                    dropdown(ui, &info::AMP, &mut o.amp_path, &AMPS);
-                    checkbox(ui, &info::FX_PORTS, &mut o.firmware_fx);
-                    checkbox(ui, &info::REVERB, &mut o.firmware_reverb);
-                });
+            organ_row(ui, o);
+            piano_row(ui, o);
+            synth_row(ui, o);
+            fx_row(ui, o);
+        });
+}
+
+fn organ_row(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
+    ui.horizontal(|ui| {
+        engine_group(ui, o, ("Organ", Engine::Organ), true, |ui, next| {
+            dropdown(ui, &info::TONE, &mut next.tone_source, &TONES);
+            let b3 = next.tone_source == Some(ToneWheelSource::B3Wheels);
+            ui.add_enabled_ui(b3, |ui| {
+                dropdown(ui, &info::B3_TAIL, &mut next.b3_tail, &TAILS);
             });
-            ui.horizontal(|ui| {
-                group(ui, "Synth", true, |ui| {
-                    dropdown(ui, &info::CHAIN, &mut o.synth_chain, &CHAINS);
-                    checkbox(ui, &info::STAGES, &mut o.synth_stages);
-                    dropdown(ui, &info::P_TABLE, &mut o.synth_p, &P_TABLES);
-                    dropdown(ui, &info::FILTER, &mut o.filter_engine, &FILTERS);
-                    checkbox(ui, &info::MEASURED, &mut o.measured_laws);
-                    shape(ui, &mut o.synth_shape_milli);
-                });
-                group(ui, "Global", false, |ui| {
-                    checkbox(ui, &info::ROUTING, &mut o.firmware_routing);
-                });
+            let mut bass = next.b3_bass_processor == Some(true);
+            checkbox(ui, &info::B3_BASS, &mut bass);
+            next.b3_bass_processor = bass.then_some(true);
+            let mut far = next.farfisa_processor == Some(true);
+            checkbox(ui, &info::FARFISA, &mut far);
+            next.farfisa_processor = far.then_some(true);
+            dropdown(ui, &info::ROTARY, &mut next.rotary_drive, &ROTARIES);
+            dropdown(ui, &info::ORGAN_LEVEL, &mut next.organ_level, &ORGAN_LEVELS);
+            dropdown(ui, &info::LESLIE, &mut next.leslie_firmware, &LESLIES);
+            ui.add_enabled_ui(next.leslie_firmware, |ui| {
+                dropdown(ui, &info::LESLIE_RING, &mut next.leslie_ring, &RINGS);
+                leslie_gain(ui, &mut next.leslie_gain_mdb);
             });
         });
+    });
+}
+
+fn piano_row(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
+    ui.horizontal(|ui| {
+        engine_group(ui, o, ("Piano", Engine::Piano), true, |ui, next| {
+            dropdown(
+                ui,
+                &info::PIANO_LEVEL,
+                &mut next.piano_firmware_level,
+                &LEVELS,
+            );
+            checkbox(ui, &info::PIANO_BUS, &mut next.piano_bus_scale);
+            checkbox(ui, &info::PIANO_CHAIN, &mut next.piano_chain_scale);
+            checkbox(ui, &info::PIANO_LAYER_LAW, &mut next.piano_layer_law);
+        });
+        group(ui, "Global", false, false, |ui| {
+            checkbox(ui, &info::ROUTING, &mut o.firmware_routing);
+        });
+    });
+}
+
+fn synth_row(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
+    ui.horizontal(|ui| {
+        engine_group(ui, o, ("Synth", Engine::Synth), true, |ui, next| {
+            dropdown(ui, &info::CHAIN, &mut next.synth_chain, &CHAINS);
+            checkbox(ui, &info::STAGES, &mut next.synth_stages);
+            dropdown(ui, &info::P_TABLE, &mut next.synth_p, &P_TABLES);
+            dropdown(ui, &info::FILTER, &mut next.filter_engine, &FILTERS);
+            checkbox(ui, &info::MEASURED, &mut next.measured_laws);
+            shape(ui, &mut next.synth_shape_milli);
+            dropdown(
+                ui,
+                &info::SAMPLE_KERNEL,
+                &mut next.sample_kernel_key,
+                &KERNELS,
+            );
+            dropdown(ui, &info::SAMPLE_PITCH, &mut next.sample_pitch_fw, &PITCHES);
+        });
+    });
+}
+
+fn fx_row(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
+    ui.horizontal(|ui| {
+        engine_group(ui, o, ("FX", Engine::Fx), true, |ui, next| {
+            dropdown(ui, &info::AMP, &mut next.amp_path, &AMPS);
+            fx_ports(ui, &mut next.fx);
+        });
+    });
 }
 
 fn presets_and_status(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
@@ -209,14 +239,14 @@ fn presets_and_status(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
         .on_hover_text("--firmware-all: every verified path on (not measured laws, routing)")
         .clicked()
     {
-        *o = FirmwareOptions::firmware_all();
+        *o = presets::firmware();
     }
     if ui
-        .button("Legacy preset")
+        .button("Classic preset")
         .on_hover_text("--legacy-all plus the engine amp path: the pre-firmware engine")
         .clicked()
     {
-        *o = legacy_preset();
+        *o = presets::classic();
     }
     if ui
         .button("Defaults")
@@ -226,14 +256,6 @@ fn presets_and_status(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
         *o = FirmwareOptions::default();
     }
     ui.add(egui::Label::new(format!("Engine: {}", o.summary())).truncate());
-}
-
-/// Pre-firmware engine: `--legacy-all` plus the engine amp path.
-pub fn legacy_preset() -> FirmwareOptions {
-    FirmwareOptions {
-        amp_path: Some(false),
-        ..FirmwareOptions::legacy_all()
-    }
 }
 
 #[cfg(test)]
@@ -251,13 +273,27 @@ mod tests {
     fn dropdown_names_are_unique_and_cover_every_variant() {
         assert!(unique(&TONES) && unique(&TAILS) && unique(&ROTARIES) && unique(&ORGAN_LEVELS));
         assert!(unique(&CHAINS) && unique(&FILTERS) && unique(&LEVELS) && unique(&AMPS));
+        assert!(unique(&LESLIES) && unique(&RINGS) && unique(&KERNELS) && unique(&PITCHES));
         assert_eq!(ROTARIES.len(), 3);
         assert_eq!(TONES.len(), 6);
+        assert_eq!(RINGS.len(), 3);
     }
 
     #[test]
-    fn legacy_preset_is_the_engine_amp_with_legacy_piano() {
-        let p = legacy_preset();
+    fn fx_port_rows_match_the_firmware_fx_port_names() {
+        let names: Vec<&str> = FX_PORTS.iter().map(|(n, _)| *n).collect();
+        assert_eq!(names, nord_core::fx::FX_PORT_NAMES);
+        let mut fx = FirmwareFx::OFF;
+        for (n, _) in FX_PORTS {
+            assert!(fx.port_mut(n).is_some(), "{n}");
+        }
+        fx = FirmwareFx::DEFAULT;
+        assert_eq!(fx.ports_on().len(), 0);
+    }
+
+    #[test]
+    fn classic_preset_is_the_engine_amp_with_legacy_piano() {
+        let p = presets::classic();
         assert_eq!(p.amp_path, Some(false));
         assert!(!p.piano_firmware_level && p.tone_source.is_none());
     }
@@ -275,5 +311,27 @@ mod tests {
             egui::CentralPanel::default().show(ctx, |ui| shape(ui, &mut off));
         });
         assert_eq!(off, None);
+    }
+
+    #[test]
+    fn leslie_gain_slider_round_trips_millidecibels() {
+        let ctx = egui::Context::default();
+        let mut v = -3500i32;
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| leslie_gain(ui, &mut v));
+        });
+        assert_eq!(v, -3500);
+    }
+
+    #[test]
+    fn fx_all_checkbox_state_follows_the_ports() {
+        let ctx = egui::Context::default();
+        for start in [FirmwareFx::ALL, FirmwareFx::DEFAULT] {
+            let mut fx = start;
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| fx_ports(ui, &mut fx));
+            });
+            assert_eq!(fx, start, "no input leaves the ports unchanged");
+        }
     }
 }

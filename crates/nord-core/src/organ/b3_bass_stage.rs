@@ -173,6 +173,11 @@ impl OrganLayer {
         }
     }
 
+    /// Whether the Bass processor stage is switched on (`--b3-bass-processor on`).
+    pub fn b3_bass_processor_on(&self) -> bool {
+        self.b3_bass_processor
+    }
+
     /// `true` when the Bass stage replaces the drawbar sum of this layer.
     pub(super) fn b3_bass_active(&self) -> bool {
         self.b3_bass_processor
