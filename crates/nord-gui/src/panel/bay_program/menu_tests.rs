@@ -271,7 +271,7 @@ fn memory_protect_blocks_a_bank_store_but_not_live_and_can_be_switched_off() {
     p.click("program.store", false);
     p.click("program.store", false); // confirm to the offered bank location
     assert!(p.ui.library.get(p.ui.loc).is_none(), "nothing stored");
-    assert_eq!(p.ui.message.as_ref().unwrap().0, "Memory Protect is on");
+    assert_eq!(p.ui.message.as_ref().unwrap().0, "Memory Protected");
     assert_eq!(p.ui.screen, Screen::Home);
     assert!(!p.ui.store.is_active());
 

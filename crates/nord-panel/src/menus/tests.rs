@@ -230,3 +230,61 @@ fn binding_totals_are_pinned() {
     }
     assert_eq!((bound, ui, un), (61, 11, 57));
 }
+
+/// Wording taken from the OS v1.66 string pool (`docs/research/oled-strings-vs-firmware.md`).
+/// VERIFIED: every string below occurs in `bank0_CODE.bin` (checked by
+/// `tools/tests/test_ns4_oled_strings.py::test_fixed_wording_is_in_the_firmware`).
+#[test]
+fn page_titles_and_labels_use_the_firmware_wording() {
+    let titles: Vec<&str> = all_pages().iter().map(|p| p.title).collect();
+    for want in [
+        "OUTPUT OVERVIEW",
+        "PEDAL OVERVIEW",
+        "MIDI OVERVIEW",
+        "Reset all settings",
+        "Transpose MIDI at",
+        "Echo Global to Extern Ch",
+        "ModWheel MIDI",
+        "Ctrl Pedal MIDI",
+        "Volume Pedal MIDI",
+    ] {
+        assert!(titles.contains(&want), "missing page title {want:?}");
+    }
+    let labels: Vec<&str> = all_items().iter().map(|(_, i)| i.label).collect();
+    for want in [
+        "Fine Tune",
+        "Program Levels",
+        "Organ Keyboard Trig",
+        "B3 Organ Tone-Wheel",
+        "Rotary Bass/Horn level",
+        "Rotary Rotor Acc.",
+        "Sw A",
+    ] {
+        assert!(labels.contains(&want), "missing item label {want:?}");
+    }
+    assert!(!labels
+        .iter()
+        .any(|l| l.contains("(dB)") || l.contains("(cents)")));
+}
+
+#[test]
+fn pedal_choices_use_the_firmware_names() {
+    let choices: Vec<&str> = all_items()
+        .iter()
+        .filter_map(|(_, i)| match i.kind {
+            ItemKind::Enum(c) => Some(c),
+            _ => None,
+        })
+        .flat_map(|c| c.iter().copied())
+        .collect();
+    for want in [
+        "Roland EV7",
+        "Yamaha FC7",
+        "Fatar SL",
+        "Control+Swell",
+        "Sustain+Rotor Hold",
+        "MstClock Tap",
+    ] {
+        assert!(choices.contains(&want), "missing choice {want:?}");
+    }
+}

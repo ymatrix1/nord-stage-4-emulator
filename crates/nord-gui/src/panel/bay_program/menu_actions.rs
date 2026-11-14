@@ -62,7 +62,7 @@ impl ProgramUi {
         if !self.menu.memory_protect() {
             return false;
         }
-        self.set_message("Memory Protect is on");
+        self.set_message("Memory Protected");
         true
     }
 }
@@ -138,7 +138,7 @@ mod tests {
     fn memory_protect_gate_names_itself_and_follows_the_menu_value() {
         let mut u = ProgramUi::default();
         assert!(u.store_blocked(), "factory default is protected");
-        assert_eq!(u.message.as_ref().unwrap().0, "Memory Protect is on");
+        assert_eq!(u.message.as_ref().unwrap().0, "Memory Protected");
         u.open_menu(MenuId::System);
         u.dial(-1, false);
         u.message = None;

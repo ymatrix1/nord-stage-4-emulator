@@ -123,7 +123,7 @@ A control that has no host parameter but acts on the engine through the panel is
 |---|---|---|
 | Programs | 8 banks x 8 pages x 8 programs; location index = position in the sorted `.ns4b` program list | `ASSUMED` (bank count, mapping) |
 | LIST | Num = archive order, Abc = by name, Cat = by archive folder (the real category is inside the program) | `ASSUMED` (Cat) |
-| Store / Store As | in-memory user library (no disk); name 16 chars; ABC / Cat / Ins / Del; categories list | `ASSUMED` (length, categories); flow per manual p.41-42 |
+| Store / Store As | in-memory user library (no disk); name 16 chars; ABC / Cat / Ins / Del; category list = the 26 firmware categories (`bay_program/name.rs`, pointer table `0xC02BF3C8`) | `ASSUMED` (length; that this table is the store `Cat:` list, [oled-strings-vs-firmware](../research/oled-strings-vs-firmware.md) s4); names `VERIFIED`; flow per manual p.41-42 |
 | Split | 11 positions C2..C7 = MIDI 36..96 step 6; xFade Off / 3 / 6 notes (engine `half_semitones`); pressing the selected point's soft button again switches it off | `ASSUMED` (step, deactivation) |
 | Mst Clk | tap tempo from 4 taps (manual p.40), reset after 2 s; KBS is UI-only | `ASSUMED` (2 s) |
 | Morph | hold or latch a source, dial = depth, PAGE = target (7 layer levels, 3 synth cutoffs); knob-move assign needs bay hooks | step 0.05 `ASSUMED` |

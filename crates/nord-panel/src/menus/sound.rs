@@ -22,7 +22,7 @@ pub(super) const PAGES: &[MenuPage] = &[
         title: "Program Levels",
         items: &[I::float(
             "sound.1.program_levels",
-            "Program Levels (dB)",
+            "Program Levels",
             (-12.0, 12.0, 0.1),
             0.0,
             58,
@@ -38,7 +38,7 @@ pub(super) const PAGES: &[MenuPage] = &[
         title: "Piano Pedal Noise Level",
         items: &[I::float(
             "sound.2.piano_pedal_noise",
-            "Piano Pedal Noise Level (dB)",
+            "Piano Pedal Noise Level",
             (-6.0, 6.0, 0.5),
             0.0,
             58,
@@ -52,7 +52,7 @@ pub(super) const PAGES: &[MenuPage] = &[
         title: "Piano String Res Level",
         items: &[I::float(
             "sound.3.piano_string_res",
-            "Piano String Res Level (dB)",
+            "Piano String Res Level",
             (-6.0, 6.0, 0.5),
             0.0,
             58,
@@ -63,10 +63,10 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Sound,
         page: 4,
-        title: "Organ Keyboard Trigger Point",
+        title: "Organ Keyboard Trig",
         items: &[I::choice(
             "sound.4.organ_trigger_point",
-            "Organ Keyboard Trigger Point",
+            "Organ Keyboard Trig",
             TRIGGER,
             0,
             58,
@@ -76,10 +76,10 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Sound,
         page: 5,
-        title: "B3 Organ Tonewheel Mode",
+        title: "B3 Organ Tone-Wheel",
         items: &[I::choice(
             "sound.5.b3_tonewheel_mode",
-            "B3 Organ Tonewheel Mode",
+            "B3 Organ Tone-Wheel",
             TONEWHEEL,
             1,
             58,
@@ -106,10 +106,10 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Sound,
         page: 7,
-        title: "Rotary Bass/Horn Level",
+        title: "Rotary Bass/Horn level",
         items: &[I::choice(
             "sound.7.rotary_bass_horn",
-            "Rotary Bass/Horn Level",
+            "Rotary Bass/Horn level",
             BALANCE,
             2,
             58,
@@ -132,10 +132,10 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Sound,
         page: 9,
-        title: "Rotary Rotor Acceleration",
+        title: "Rotary Rotor Acc.",
         items: &[I::choice(
             "sound.9.rotary_rotor_acc",
-            "Rotary Rotor Acceleration",
+            "Rotary Rotor Acc.",
             LNH,
             1,
             58,
@@ -158,10 +158,10 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Sound,
         page: 11,
-        title: "Rotary Horn Acceleration",
+        title: "Rotary Horn Acc.",
         items: &[I::choice(
             "sound.11.rotary_horn_acc",
-            "Rotary Horn Acceleration",
+            "Rotary Horn Acc.",
             LNH,
             1,
             58,

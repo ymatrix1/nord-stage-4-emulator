@@ -54,9 +54,9 @@ pub const ANALOG: [WaveCat; 7] = [
     WaveCat {
         name: "SUB OSC",
         waves: &[
-            w("Square Sub Saw", Saw, None, false),
-            w("Pulse Sub Saw", Saw, None, false),
-            w("Sine Sub Saw", Saw, None, false),
+            w("Sub Square Saw", Saw, None, false),
+            w("Sub Pulse Saw", Saw, None, false),
+            w("Sub Sine Saw", Saw, None, false),
         ],
     },
     WaveCat {
@@ -306,5 +306,14 @@ mod tests {
         assert_eq!(VIBRATO_MODES.len(), 6);
         assert_eq!(LFO_SHAPES[1].1, LfoShape::SawDown);
         assert_eq!(DIVISIONS.len(), 10);
+    }
+
+    /// VERIFIED: the three SUB OSC names occur in `bank0_CODE.bin@0x2D7DEC..0x2D7E1C` (OS v1.66),
+    /// checked by `tools/tests/test_ns4_oled_strings.py::test_fixed_wording_is_in_the_firmware`.
+    #[test]
+    fn sub_osc_names_use_the_firmware_word_order() {
+        let sub = ANALOG.iter().find(|c| c.name == "SUB OSC").unwrap();
+        let names: Vec<_> = sub.waves.iter().map(|w| w.name).collect();
+        assert_eq!(names, ["Sub Square Saw", "Sub Pulse Saw", "Sub Sine Saw"]);
     }
 }

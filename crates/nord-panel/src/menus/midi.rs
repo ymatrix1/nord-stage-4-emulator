@@ -190,10 +190,10 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Midi,
         page: 9,
-        title: "Transpose MIDI At",
+        title: "Transpose MIDI at",
         items: &[I::choice(
             "midi.9.transpose_at",
-            "Transpose MIDI At",
+            "Transpose MIDI at",
             TRANSPOSE_AT,
             0,
             63,
@@ -203,7 +203,7 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Midi,
         page: 10,
-        title: "MIDI Overview",
+        title: "MIDI OVERVIEW",
         items: &[I::action(
             "midi.10.focus",
             "Focus a MIDI setting",

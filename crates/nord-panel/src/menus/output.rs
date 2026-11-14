@@ -150,7 +150,7 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Output,
         page: 6,
-        title: "Output Overview",
+        title: "OUTPUT OVERVIEW",
         items: &[I::action(
             "output.6.show_outputs",
             "Out (show physical outputs)",

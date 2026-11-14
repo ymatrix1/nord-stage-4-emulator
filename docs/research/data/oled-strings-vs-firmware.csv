@@ -1,0 +1,731 @@
+surface,status,weak,ours,firmware,fw_offset,file,line
+menu,exact,1,A-,A-,0x2c217c,crates/nord-panel/src/menus/aux_kb.rs,7
+menu,exact,1,-B,-B,0x2c2180,crates/nord-panel/src/menus/aux_kb.rs,7
+menu,exact,1,AB,AB,0x2a1aed,crates/nord-panel/src/menus/aux_kb.rs,7
+menu,exact,1,A--,A--,0x2c2198,crates/nord-panel/src/menus/aux_kb.rs,8
+menu,exact,1,-B-,-B-,0x2c219c,crates/nord-panel/src/menus/aux_kb.rs,8
+menu,exact,1,--C,--C,0x2c21a0,crates/nord-panel/src/menus/aux_kb.rs,8
+menu,exact,1,AB-,AB-,0x2c21a4,crates/nord-panel/src/menus/aux_kb.rs,8
+menu,exact,1,A-C,A-C,0x2c21a8,crates/nord-panel/src/menus/aux_kb.rs,8
+menu,exact,1,-BC,-BC,0x2c21ac,crates/nord-panel/src/menus/aux_kb.rs,8
+menu,exact,1,ABC,ABC,0x283728,crates/nord-panel/src/menus/aux_kb.rs,8
+menu,affix,0,Soft,Soft+Brill,0x2cd928,crates/nord-panel/src/menus/aux_kb.rs,9
+menu,exact,0,Medium,Medium,0x2bbe5c,crates/nord-panel/src/menus/aux_kb.rs,9
+menu,affix,0,Hard,Tremolo Hard,0x2cc514,crates/nord-panel/src/menus/aux_kb.rs,9
+menu,exact,0,Aux Keyboard Enable,Aux Keyboard Enable,0x2c2168,crates/nord-panel/src/menus/aux_kb.rs,15
+menu,exact,0,Aux Keyboard Enable,Aux Keyboard Enable,0x2c2168,crates/nord-panel/src/menus/aux_kb.rs,18
+menu,exact,0,Aux Keyboard Layers,Aux Keyboard Layers,0x2c2184,crates/nord-panel/src/menus/aux_kb.rs,27
+menu,affix,0,Organ,Full Organ,0x2d8020,crates/nord-panel/src/menus/aux_kb.rs,31
+menu,exact,0,Piano,Piano,0x283698,crates/nord-panel/src/menus/aux_kb.rs,39
+menu,exact,0,Synth,Synth,0x2836a0,crates/nord-panel/src/menus/aux_kb.rs,47
+menu,exact,0,Keyboard Curve,Keyboard Curve,0x2c21b0,crates/nord-panel/src/menus/aux_kb.rs,58
+menu,exact,0,Keyboard Curve,Keyboard Curve,0x2c21b0,crates/nord-panel/src/menus/aux_kb.rs,61
+menu,affix,0,Soft,Soft+Brill,0x2cd928,crates/nord-panel/src/menus/extern_menu.rs,10
+menu,missing,1,Mid,,,crates/nord-panel/src/menus/extern_menu.rs,10
+menu,affix,0,Hard,Tremolo Hard,0x2cc514,crates/nord-panel/src/menus/extern_menu.rs,10
+menu,norm,1, A,<A-,0x0c17a0,crates/nord-panel/src/menus/extern_menu.rs,25
+menu,norm,1, B,B+,0x073d00,crates/nord-panel/src/menus/extern_menu.rs,33
+menu,norm,1, C,C ,0x05897c,crates/nord-panel/src/menus/extern_menu.rs,41
+menu,norm,1, A,<A-,0x0c17a0,crates/nord-panel/src/menus/extern_menu.rs,56
+menu,norm,1, B,B+,0x073d00,crates/nord-panel/src/menus/extern_menu.rs,64
+menu,norm,1, C,C ,0x05897c,crates/nord-panel/src/menus/extern_menu.rs,72
+menu,norm,1, A,<A-,0x0c17a0,crates/nord-panel/src/menus/extern_menu.rs,87
+menu,norm,1, B,B+,0x073d00,crates/nord-panel/src/menus/extern_menu.rs,96
+menu,norm,1, C,C ,0x05897c,crates/nord-panel/src/menus/extern_menu.rs,105
+menu,exact,0,Echo Global to Extern Ch,Echo Global to Extern Ch,0x2c27cc,crates/nord-panel/src/menus/extern_menu.rs,118
+menu,exact,0,Keyboard Velocity,Keyboard Velocity,0x2c27e8,crates/nord-panel/src/menus/extern_menu.rs,123
+menu,exact,0,Program Change MSB,Program Change MSB,0x2c27fc,crates/nord-panel/src/menus/extern_menu.rs,127
+menu,exact,0,Program Change LSB,Program Change LSB,0x2c2810,crates/nord-panel/src/menus/extern_menu.rs,136
+menu,exact,1,PC,PC,0x08220d,crates/nord-panel/src/menus/extern_menu.rs,145
+menu,exact,0,MIDI CC #1,MIDI CC #1,0x2c2838,crates/nord-panel/src/menus/extern_menu.rs,154
+menu,exact,0,MIDI CC #2,MIDI CC #2,0x2c2844,crates/nord-panel/src/menus/extern_menu.rs,163
+menu,norm,0,Mod Wheel,ModWheel,0x29f654,crates/nord-panel/src/menus/extern_menu.rs,169
+menu,case,0,Aftertouch,AfterTouch,0x29f648,crates/nord-panel/src/menus/extern_menu.rs,170
+menu,affix,0,Control Pedal,Control Pedal Type,0x2c2328,crates/nord-panel/src/menus/extern_menu.rs,171
+menu,affix,0,Swell Pedal,Swell Pedal Type,0x2c2384,crates/nord-panel/src/menus/extern_menu.rs,172
+menu,affix,0,Volume Pedal,Volume Pedal MIDI,0x2c2894,crates/nord-panel/src/menus/extern_menu.rs,173
+menu,affix,0,Send On Load A,Send,0x2b5fac,crates/nord-panel/src/menus/extern_menu.rs,177
+menu,affix,0,Send On Load B,Send,0x2b5fac,crates/nord-panel/src/menus/extern_menu.rs,184
+menu,affix,0,Send On Load C,Send,0x2b5fac,crates/nord-panel/src/menus/extern_menu.rs,191
+menu,exact,0,Echo Global to Extern Ch,Echo Global to Extern Ch,0x2c27cc,crates/nord-panel/src/menus/extern_menu.rs,208
+menu,affix,0,Keyboard Velocity A/B/C,Keyboard Velocity,0x2c27e8,crates/nord-panel/src/menus/extern_menu.rs,209
+menu,affix,0,Program Change MSB A/B/C,Program Change MSB,0x2c27fc,crates/nord-panel/src/menus/extern_menu.rs,210
+menu,affix,0,Program Change LSB A/B/C,Program Change LSB,0x2c2810,crates/nord-panel/src/menus/extern_menu.rs,211
+menu,missing,0,Program Change A/B/C,,,crates/nord-panel/src/menus/extern_menu.rs,212
+menu,affix,0,MIDI CC #1 A/B/C,MIDI CC #1,0x2c2838,crates/nord-panel/src/menus/extern_menu.rs,213
+menu,affix,0,MIDI CC #2 A/B/C,MIDI CC #2,0x2c2844,crates/nord-panel/src/menus/extern_menu.rs,214
+menu,exact,0,ModWheel MIDI,ModWheel MIDI,0x2c2850,crates/nord-panel/src/menus/extern_menu.rs,215
+menu,exact,0,Aftertouch MIDI,Aftertouch MIDI,0x2c2860,crates/nord-panel/src/menus/extern_menu.rs,216
+menu,exact,0,Ctrl Pedal MIDI,Ctrl Pedal MIDI,0x2c2870,crates/nord-panel/src/menus/extern_menu.rs,217
+menu,exact,0,Swell Pedal MIDI,Swell Pedal MIDI,0x2c2880,crates/nord-panel/src/menus/extern_menu.rs,218
+menu,exact,0,Volume Pedal MIDI,Volume Pedal MIDI,0x2c2894,crates/nord-panel/src/menus/extern_menu.rs,219
+menu,affix,0,Send On Load A/B/C,Send,0x2b5fac,crates/nord-panel/src/menus/extern_menu.rs,220
+menu,missing,0,0 = Off,,,crates/nord-panel/src/menus/midi.rs,9
+menu,missing,1,Off,,,crates/nord-panel/src/menus/midi.rs,10
+menu,exact,0,Send,Send,0x2b5fac,crates/nord-panel/src/menus/midi.rs,10
+menu,exact,0,Receive,Receive,0x2b5fb4,crates/nord-panel/src/menus/midi.rs,10
+menu,exact,0,Send & Receive,Send & Receive,0x2b5fbc,crates/nord-panel/src/menus/midi.rs,10
+menu,exact,1,CC,CC,0x2c2724,crates/nord-panel/src/menus/midi.rs,11
+menu,exact,0,CC & NRPN,CC & NRPN,0x2c2728,crates/nord-panel/src/menus/midi.rs,11
+menu,exact,1,In,In,0x2c27a4,crates/nord-panel/src/menus/midi.rs,12
+menu,exact,1,Out,Out,0x2c22e4,crates/nord-panel/src/menus/midi.rs,12
+menu,exact,0,Local Control,Local Control,0x2c2690,crates/nord-panel/src/menus/midi.rs,19
+menu,exact,0,Local Control,Local Control,0x2c2690,crates/nord-panel/src/menus/midi.rs,21
+menu,affix,0,Global Channel / Aux KB,Global,0x2bfad8,crates/nord-panel/src/menus/midi.rs,28
+menu,exact,0,Global Channel,Global Channel,0x2c26a0,crates/nord-panel/src/menus/midi.rs,32
+menu,exact,0,Aux Keyboard Channel,Aux Keyboard Channel,0x2c26b0,crates/nord-panel/src/menus/midi.rs,41
+menu,exact,0,Organ Channel,Organ Channel,0x2c26d0,crates/nord-panel/src/menus/midi.rs,53
+menu,affix,0,Organ A,Level Organ A,0x2ca1c4,crates/nord-panel/src/menus/midi.rs,57
+menu,affix,0,Organ B,Level Organ B,0x2ca1b4,crates/nord-panel/src/menus/midi.rs,66
+menu,affix,0,Sect On,Sect,0x2c26ec,crates/nord-panel/src/menus/midi.rs,73
+menu,exact,0,Piano Channel,Piano Channel,0x2c26f4,crates/nord-panel/src/menus/midi.rs,79
+menu,affix,0,Piano A,Piano,0x283698,crates/nord-panel/src/menus/midi.rs,83
+menu,affix,0,Piano B,Piano,0x283698,crates/nord-panel/src/menus/midi.rs,92
+menu,affix,0,Sect On,Sect,0x2c26ec,crates/nord-panel/src/menus/midi.rs,99
+menu,exact,0,Synth Channel,Synth Channel,0x2c2704,crates/nord-panel/src/menus/midi.rs,105
+menu,affix,0,Synth A,Synth,0x2836a0,crates/nord-panel/src/menus/midi.rs,109
+menu,affix,0,Synth B,Synth,0x2836a0,crates/nord-panel/src/menus/midi.rs,118
+menu,affix,0,Synth C,Synth,0x2836a0,crates/nord-panel/src/menus/midi.rs,127
+menu,affix,0,Sect On,Sect,0x2c26ec,crates/nord-panel/src/menus/midi.rs,134
+menu,exact,0,Extern Channel,Extern Channel,0x2c2714,crates/nord-panel/src/menus/midi.rs,140
+menu,affix,0,Extern A,EXTERN,0x2be9ac,crates/nord-panel/src/menus/midi.rs,144
+menu,affix,0,Extern B,EXTERN,0x2be9ac,crates/nord-panel/src/menus/midi.rs,153
+menu,affix,0,Extern C,EXTERN,0x2be9ac,crates/nord-panel/src/menus/midi.rs,162
+menu,affix,0,Type,Amp Type,0x2cc740,crates/nord-panel/src/menus/midi.rs,176
+menu,case,0,Ctrl,ctrl,0x444ae0,crates/nord-panel/src/menus/midi.rs,177
+menu,exact,1,Dev,Dev,0x2bfae8,crates/nord-panel/src/menus/midi.rs,178
+menu,exact,0,Program Change Mode,Program Change Mode,0x2c2770,crates/nord-panel/src/menus/midi.rs,184
+menu,exact,1,PC,PC,0x08220d,crates/nord-panel/src/menus/midi.rs,186
+menu,exact,0,PC Ext,PC Ext,0x2c279c,crates/nord-panel/src/menus/midi.rs,187
+menu,exact,0,Transpose MIDI at,Transpose MIDI at,0x2c27a8,crates/nord-panel/src/menus/midi.rs,193
+menu,exact,0,Transpose MIDI at,Transpose MIDI at,0x2c27a8,crates/nord-panel/src/menus/midi.rs,196
+menu,exact,0,MIDI OVERVIEW,MIDI OVERVIEW,0x2c27bc,crates/nord-panel/src/menus/midi.rs,206
+menu,missing,0,Focus a MIDI setting,,,crates/nord-panel/src/menus/midi.rs,209
+menu,exact,0,Program Organize,Program Organize,0x2d3514,crates/nord-panel/src/menus/organize.rs,11
+menu,missing,0,Program location,,,crates/nord-panel/src/menus/organize.rs,16
+menu,exact,0,Swap,Swap,0x283768,crates/nord-panel/src/menus/organize.rs,22
+menu,exact,0,Move,Move,0x2d3528,crates/nord-panel/src/menus/organize.rs,23
+menu,exact,1,Ok,Ok,0x2bfb4c,crates/nord-panel/src/menus/organize.rs,24
+menu,exact,0,Undo,Undo,0x2b74f4,crates/nord-panel/src/menus/organize.rs,25
+menu,missing,0,Preset Organize,,,crates/nord-panel/src/menus/organize.rs,31
+menu,exact,0,Swap,Swap,0x283768,crates/nord-panel/src/menus/organize.rs,33
+menu,exact,0,Move,Move,0x2d3528,crates/nord-panel/src/menus/organize.rs,36
+menu,affix,0,same as organize.2.swap,Swap,0x283768,crates/nord-panel/src/menus/organize.rs,36
+menu,missing,0,Mono Output,,,crates/nord-panel/src/menus/output.rs,4
+menu,exact,0,Global,Global,0x2bfad8,crates/nord-panel/src/menus/output.rs,9
+menu,exact,0,Per Program,Per Program,0x2c21c0,crates/nord-panel/src/menus/output.rs,9
+menu,exact,0,Auto,Auto,0x2c2240,crates/nord-panel/src/menus/output.rs,14
+menu,exact,0,Main,Main,0x2c21f4,crates/nord-panel/src/menus/output.rs,16
+menu,missing,0,Sub I,,,crates/nord-panel/src/menus/output.rs,16
+menu,missing,0,Sub II,,,crates/nord-panel/src/menus/output.rs,16
+menu,missing,0,Sub III,,,crates/nord-panel/src/menus/output.rs,16
+menu,exact,0,Main,Main,0x2c21f4,crates/nord-panel/src/menus/output.rs,17
+menu,missing,0,Sub I,,,crates/nord-panel/src/menus/output.rs,17
+menu,missing,0,Sub II,,,crates/nord-panel/src/menus/output.rs,17
+menu,missing,0,Sub III,,,crates/nord-panel/src/menus/output.rs,17
+menu,exact,0,Main,Main,0x2c21f4,crates/nord-panel/src/menus/output.rs,18
+menu,missing,0,Sub I,,,crates/nord-panel/src/menus/output.rs,18
+menu,missing,0,Sub II,,,crates/nord-panel/src/menus/output.rs,18
+menu,missing,0,Sub III,,,crates/nord-panel/src/menus/output.rs,18
+menu,exact,0,Auto,Auto,0x2c2240,crates/nord-panel/src/menus/output.rs,18
+menu,exact,0,Output Routing Mode,Output Routing Mode,0x2c21cc,crates/nord-panel/src/menus/output.rs,26
+menu,exact,0,Output Routing Mode,Output Routing Mode,0x2c21cc,crates/nord-panel/src/menus/output.rs,29
+menu,affix,0,Output Bus Channels (Per Program),Per Program,0x2c21c0,crates/nord-panel/src/menus/output.rs,39
+menu,exact,0,Main,Main,0x2c21f4,crates/nord-panel/src/menus/output.rs,41
+menu,missing,0,Sub I,,,crates/nord-panel/src/menus/output.rs,42
+menu,missing,0,Sub II,,,crates/nord-panel/src/menus/output.rs,43
+menu,missing,0,Sub III,,,crates/nord-panel/src/menus/output.rs,44
+menu,missing,0,Mono Output,,,crates/nord-panel/src/menus/output.rs,45
+menu,missing,0,Organ/Rotary Output Channel/Bus,,,crates/nord-panel/src/menus/output.rs,53
+menu,affix,0,Organ output (Global),Global,0x2bfad8,crates/nord-panel/src/menus/output.rs,55
+menu,affix,0,Organ bus (Per Program),Per Program,0x2c21c0,crates/nord-panel/src/menus/output.rs,57
+menu,affix,0,Rotary output (Global),Global,0x2bfad8,crates/nord-panel/src/menus/output.rs,60
+menu,affix,0,Rotary bus (Per Program),Rotary,0x2c2274,crates/nord-panel/src/menus/output.rs,68
+menu,affix,0,Piano Output Channel/Bus,Piano,0x283698,crates/nord-panel/src/menus/output.rs,79
+menu,affix,0,Piano A output (Global),Piano,0x283698,crates/nord-panel/src/menus/output.rs,81
+menu,affix,0,Piano A bus (Per Program),Piano,0x283698,crates/nord-panel/src/menus/output.rs,83
+menu,affix,0,Piano B output (Global),Piano,0x283698,crates/nord-panel/src/menus/output.rs,86
+menu,affix,0,Piano B bus (Per Program),Piano,0x283698,crates/nord-panel/src/menus/output.rs,95
+menu,affix,0,Synth Output Channel/Bus,Synth,0x2836a0,crates/nord-panel/src/menus/output.rs,107
+menu,affix,0,Synth A output (Global),Synth,0x2836a0,crates/nord-panel/src/menus/output.rs,109
+menu,affix,0,Synth A bus (Per Program),Synth,0x2836a0,crates/nord-panel/src/menus/output.rs,111
+menu,affix,0,Synth B output (Global),Synth,0x2836a0,crates/nord-panel/src/menus/output.rs,114
+menu,affix,0,Synth B bus (Per Program),Synth,0x2836a0,crates/nord-panel/src/menus/output.rs,123
+menu,affix,0,Synth C output (Global),Synth,0x2836a0,crates/nord-panel/src/menus/output.rs,132
+menu,affix,0,Synth C bus (Per Program),Synth,0x2836a0,crates/nord-panel/src/menus/output.rs,141
+menu,exact,0,OUTPUT OVERVIEW,OUTPUT OVERVIEW,0x2c22d4,crates/nord-panel/src/menus/output.rs,153
+menu,missing,0,Out (show physical outputs),,,crates/nord-panel/src/menus/output.rs,156
+menu,affix,0,Type,Amp Type,0x2cc740,crates/nord-panel/src/menus/pedal.rs,3
+menu,exact,0,Nord EP,Nord EP,0x2c22e8,crates/nord-panel/src/menus/pedal.rs,9
+menu,exact,0,Roland EV7,Roland EV7,0x2c22f0,crates/nord-panel/src/menus/pedal.rs,9
+menu,exact,0,Yamaha FC7,Yamaha FC7,0x2c22fc,crates/nord-panel/src/menus/pedal.rs,9
+menu,exact,0,Korg,Korg,0x2c2308,crates/nord-panel/src/menus/pedal.rs,9
+menu,exact,0,Fatar SL,Fatar SL,0x2c2310,crates/nord-panel/src/menus/pedal.rs,9
+menu,exact,0,Nord EP,Nord EP,0x2c22e8,crates/nord-panel/src/menus/pedal.rs,11
+menu,exact,0,Roland EV7,Roland EV7,0x2c22f0,crates/nord-panel/src/menus/pedal.rs,12
+menu,exact,0,Yamaha FC7,Yamaha FC7,0x2c22fc,crates/nord-panel/src/menus/pedal.rs,13
+menu,exact,0,Korg,Korg,0x2c2308,crates/nord-panel/src/menus/pedal.rs,14
+menu,exact,0,Fatar SL,Fatar SL,0x2c2310,crates/nord-panel/src/menus/pedal.rs,15
+menu,exact,0,Nord SP-2,Nord SP-2,0x2c231c,crates/nord-panel/src/menus/pedal.rs,16
+menu,affix,0,Control,Control+Swell,0x2c2350,crates/nord-panel/src/menus/pedal.rs,18
+menu,exact,0,Control+Swell,Control+Swell,0x2c2350,crates/nord-panel/src/menus/pedal.rs,18
+menu,case,0,Swell,swell,0x444ae8,crates/nord-panel/src/menus/pedal.rs,19
+menu,affix,0,Volume,Volume Pedal MIDI,0x2c2894,crates/nord-panel/src/menus/pedal.rs,19
+menu,exact,0,Wheel Morph,Wheel Morph,0x2c23ac,crates/nord-panel/src/menus/pedal.rs,19
+menu,exact,0,Nord SP-1,Nord SP-1,0x2c23dc,crates/nord-panel/src/menus/pedal.rs,21
+menu,exact,0,Nord SP-2,Nord SP-2,0x2c231c,crates/nord-panel/src/menus/pedal.rs,22
+menu,exact,0,Nord TP-1,Nord TP-1,0x2c23e8,crates/nord-panel/src/menus/pedal.rs,23
+menu,exact,0,Normally Open,Normally Open,0x2c23f4,crates/nord-panel/src/menus/pedal.rs,24
+menu,exact,0,Normally Closed,Normally Closed,0x2c2404,crates/nord-panel/src/menus/pedal.rs,25
+menu,case,0,Sustain,sustain,0x29f5d8,crates/nord-panel/src/menus/pedal.rs,27
+menu,exact,0,Sustain+Rotor Hold,Sustain+Rotor Hold,0x2c2530,crates/nord-panel/src/menus/pedal.rs,27
+menu,exact,0,Sustain+Rotor Toggle,Sustain+Rotor Toggle,0x2c2544,crates/nord-panel/src/menus/pedal.rs,27
+menu,exact,0,Una Corda,Una Corda,0x2c2428,crates/nord-panel/src/menus/pedal.rs,29
+menu,exact,0,Panel Assigned,Panel Assigned,0x2c2434,crates/nord-panel/src/menus/pedal.rs,30
+menu,exact,0,Layer Scene Hold,Layer Scene Hold,0x2c2444,crates/nord-panel/src/menus/pedal.rs,31
+menu,exact,0,Layer Scene Toggle,Layer Scene Toggle,0x2c2458,crates/nord-panel/src/menus/pedal.rs,32
+menu,exact,0,Pump,Pump,0x2c246c,crates/nord-panel/src/menus/pedal.rs,33
+menu,exact,0,MstClock Tap,MstClock Tap,0x2c2474,crates/nord-panel/src/menus/pedal.rs,34
+menu,exact,0,Synth Vibrato,Synth Vibrato,0x2c2484,crates/nord-panel/src/menus/pedal.rs,35
+menu,exact,0,Program Up,Program Up,0x2c2494,crates/nord-panel/src/menus/pedal.rs,36
+menu,exact,0,Program Down,Program Down,0x2c24a0,crates/nord-panel/src/menus/pedal.rs,37
+menu,affix,0,Rotor Hold,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,38
+menu,affix,0,Rotor Toggle,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,39
+menu,affix,0,Control,Control+Swell,0x2c2350,crates/nord-panel/src/menus/pedal.rs,40
+menu,case,0,Sostenuto,sostenuto,0x29f5e0,crates/nord-panel/src/menus/pedal.rs,43
+menu,affix,0,User Assigned,User,0x2838d4,crates/nord-panel/src/menus/pedal.rs,44
+menu,exact,0,Layer Scene Hold,Layer Scene Hold,0x2c2444,crates/nord-panel/src/menus/pedal.rs,45
+menu,exact,0,Layer Scene Toggle,Layer Scene Toggle,0x2c2458,crates/nord-panel/src/menus/pedal.rs,46
+menu,exact,0,Pump,Pump,0x2c246c,crates/nord-panel/src/menus/pedal.rs,47
+menu,exact,0,MstClock Tap,MstClock Tap,0x2c2474,crates/nord-panel/src/menus/pedal.rs,48
+menu,exact,0,Synth Vibrato,Synth Vibrato,0x2c2484,crates/nord-panel/src/menus/pedal.rs,49
+menu,exact,0,Program Up,Program Up,0x2c2494,crates/nord-panel/src/menus/pedal.rs,50
+menu,exact,0,Program Down,Program Down,0x2c24a0,crates/nord-panel/src/menus/pedal.rs,51
+menu,affix,0,Rotor Hold,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,52
+menu,affix,0,Rotor Toggle,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,53
+menu,affix,0,Control,Control+Swell,0x2c2350,crates/nord-panel/src/menus/pedal.rs,54
+menu,exact,0,Nord SP-1,Nord SP-1,0x2c23dc,crates/nord-panel/src/menus/pedal.rs,57
+menu,exact,0,Normally Open,Normally Open,0x2c23f4,crates/nord-panel/src/menus/pedal.rs,58
+menu,exact,0,Normally Closed,Normally Closed,0x2c2404,crates/nord-panel/src/menus/pedal.rs,59
+menu,affix,0,Half Moon Switch,Half Moon,0x2c259c,crates/nord-panel/src/menus/pedal.rs,60
+menu,affix,0,Rotor Toggle,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,62
+menu,affix,0,Rotor Hold,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,62
+menu,exact,0,Single Open,Single Open,0x2c25dc,crates/nord-panel/src/menus/pedal.rs,63
+menu,exact,0,Single Closed,Single Closed,0x2c25e8,crates/nord-panel/src/menus/pedal.rs,63
+menu,exact,0,Dual Open,Dual Open,0x2c25f8,crates/nord-panel/src/menus/pedal.rs,63
+menu,exact,0,Dual Closed,Dual Closed,0x2c2604,crates/nord-panel/src/menus/pedal.rs,63
+menu,affix,0,User Assigned,User,0x2838d4,crates/nord-panel/src/menus/pedal.rs,65
+menu,exact,0,Layer Scene Hold,Layer Scene Hold,0x2c2444,crates/nord-panel/src/menus/pedal.rs,66
+menu,exact,0,Layer Scene Toggle,Layer Scene Toggle,0x2c2458,crates/nord-panel/src/menus/pedal.rs,67
+menu,exact,0,Pump,Pump,0x2c246c,crates/nord-panel/src/menus/pedal.rs,68
+menu,exact,0,MstClock Tap,MstClock Tap,0x2c2474,crates/nord-panel/src/menus/pedal.rs,69
+menu,exact,0,Synth Vibrato,Synth Vibrato,0x2c2484,crates/nord-panel/src/menus/pedal.rs,70
+menu,exact,0,Program Up,Program Up,0x2c2494,crates/nord-panel/src/menus/pedal.rs,71
+menu,exact,0,Program Down,Program Down,0x2c24a0,crates/nord-panel/src/menus/pedal.rs,72
+menu,affix,0,Rotor Hold,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,73
+menu,affix,0,Rotor Toggle,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,74
+menu,affix,0,Control Pedal,Control Pedal Type,0x2c2328,crates/nord-panel/src/menus/pedal.rs,89
+menu,affix,0,Type,Amp Type,0x2cc740,crates/nord-panel/src/menus/pedal.rs,91
+menu,missing,0,Func,,,crates/nord-panel/src/menus/pedal.rs,94
+menu,affix,0,Gain,Swell Pedal Gain,0x2c2398,crates/nord-panel/src/menus/pedal.rs,100
+menu,affix,0,Swell Pedal,Swell Pedal Type,0x2c2384,crates/nord-panel/src/menus/pedal.rs,107
+menu,affix,0,Type,Amp Type,0x2cc740,crates/nord-panel/src/menus/pedal.rs,109
+menu,missing,0,Func,,,crates/nord-panel/src/menus/pedal.rs,112
+menu,affix,0,Gain,Swell Pedal Gain,0x2c2398,crates/nord-panel/src/menus/pedal.rs,118
+menu,exact,0,Sustain Pedal,Sustain Pedal,0x2cd4a4,crates/nord-panel/src/menus/pedal.rs,125
+menu,affix,0,Type,Amp Type,0x2cc740,crates/nord-panel/src/menus/pedal.rs,129
+menu,exact,0,Left,Left,0x2c2574,crates/nord-panel/src/menus/pedal.rs,136
+menu,missing,1,Mid,,,crates/nord-panel/src/menus/pedal.rs,137
+menu,exact,0,Right,Right,0x2bfb04,crates/nord-panel/src/menus/pedal.rs,140
+menu,exact,0,Triple Pedal Function,Triple Pedal Function,0x2c257c,crates/nord-panel/src/menus/pedal.rs,151
+menu,exact,0,Left,Left,0x2c2574,crates/nord-panel/src/menus/pedal.rs,153
+menu,affix,0,Middle,EQ Middle,0x2cc6b4,crates/nord-panel/src/menus/pedal.rs,154
+menu,exact,0,Right,Right,0x2bfb04,crates/nord-panel/src/menus/pedal.rs,155
+menu,affix,0,Rotor Pedal,Rotor,0x2c25d4,crates/nord-panel/src/menus/pedal.rs,162
+menu,affix,0,Type,Amp Type,0x2cc740,crates/nord-panel/src/menus/pedal.rs,164
+menu,missing,0,Func,,,crates/nord-panel/src/menus/pedal.rs,167
+menu,affix,0,Foot Switch,Foot Switch Type,0x2c2610,crates/nord-panel/src/menus/pedal.rs,178
+menu,affix,0,Type,Amp Type,0x2cc740,crates/nord-panel/src/menus/pedal.rs,180
+menu,exact,1,Sw A,Sw A,0x2c2670,crates/nord-panel/src/menus/pedal.rs,182
+menu,exact,1,Sw B,Sw B,0x2c2678,crates/nord-panel/src/menus/pedal.rs,185
+menu,exact,0,PEDAL OVERVIEW,PEDAL OVERVIEW,0x2c2680,crates/nord-panel/src/menus/pedal.rs,192
+menu,missing,0,Focus a pedal setting,,,crates/nord-panel/src/menus/pedal.rs,195
+menu,exact,1,Low,Low,0x2c07f4,crates/nord-panel/src/menus/sound.rs,10
+menu,exact,0,Normal,Normal,0x2c2094,crates/nord-panel/src/menus/sound.rs,10
+menu,exact,0,High,High,0x2c07f8,crates/nord-panel/src/menus/sound.rs,10
+menu,exact,0,High,High,0x2c07f8,crates/nord-panel/src/menus/sound.rs,11
+menu,exact,1,Low,Low,0x2c07f4,crates/nord-panel/src/menus/sound.rs,11
+menu,exact,0,Clean,Clean,0x2c2060,crates/nord-panel/src/menus/sound.rs,12
+menu,exact,0,Vintage 1,Vintage 1,0x2c2068,crates/nord-panel/src/menus/sound.rs,12
+menu,exact,0,Vintage 2,Vintage 2,0x2c2074,crates/nord-panel/src/menus/sound.rs,12
+menu,exact,0,Normal,Normal,0x2c2094,crates/nord-panel/src/menus/sound.rs,13
+menu,exact,0,High,High,0x2c07f8,crates/nord-panel/src/menus/sound.rs,13
+menu,exact,0,Program Levels,Program Levels,0x2c200c,crates/nord-panel/src/menus/sound.rs,22
+menu,exact,0,Program Levels,Program Levels,0x2c200c,crates/nord-panel/src/menus/sound.rs,25
+menu,exact,0,Piano Pedal Noise Level,Piano Pedal Noise Level,0x2c201c,crates/nord-panel/src/menus/sound.rs,38
+menu,exact,0,Piano Pedal Noise Level,Piano Pedal Noise Level,0x2c201c,crates/nord-panel/src/menus/sound.rs,41
+menu,exact,0,Piano String Res Level,Piano String Res Level,0x2c2034,crates/nord-panel/src/menus/sound.rs,52
+menu,exact,0,Piano String Res Level,Piano String Res Level,0x2c2034,crates/nord-panel/src/menus/sound.rs,55
+menu,exact,0,Organ Keyboard Trig,Organ Keyboard Trig,0x2c204c,crates/nord-panel/src/menus/sound.rs,66
+menu,exact,0,Organ Keyboard Trig,Organ Keyboard Trig,0x2c204c,crates/nord-panel/src/menus/sound.rs,69
+menu,exact,0,B3 Organ Tone-Wheel,B3 Organ Tone-Wheel,0x2c2080,crates/nord-panel/src/menus/sound.rs,79
+menu,exact,0,B3 Organ Tone-Wheel,B3 Organ Tone-Wheel,0x2c2080,crates/nord-panel/src/menus/sound.rs,82
+menu,exact,0,B3 Organ Click Level,B3 Organ Click Level,0x2c209c,crates/nord-panel/src/menus/sound.rs,95
+menu,exact,0,B3 Organ Click Level,B3 Organ Click Level,0x2c209c,crates/nord-panel/src/menus/sound.rs,98
+menu,exact,0,Rotary Bass/Horn level,Rotary Bass/Horn level,0x2c2100,crates/nord-panel/src/menus/sound.rs,109
+menu,exact,0,Rotary Bass/Horn level,Rotary Bass/Horn level,0x2c2100,crates/nord-panel/src/menus/sound.rs,112
+menu,exact,0,Rotary Rotor Speed,Rotary Rotor Speed,0x2c2118,crates/nord-panel/src/menus/sound.rs,122
+menu,exact,0,Rotary Rotor Speed,Rotary Rotor Speed,0x2c2118,crates/nord-panel/src/menus/sound.rs,125
+menu,exact,0,Rotary Rotor Acc.,Rotary Rotor Acc.,0x2c212c,crates/nord-panel/src/menus/sound.rs,135
+menu,exact,0,Rotary Rotor Acc.,Rotary Rotor Acc.,0x2c212c,crates/nord-panel/src/menus/sound.rs,138
+menu,exact,0,Rotary Horn Speed,Rotary Horn Speed,0x2c2140,crates/nord-panel/src/menus/sound.rs,148
+menu,exact,0,Rotary Horn Speed,Rotary Horn Speed,0x2c2140,crates/nord-panel/src/menus/sound.rs,151
+menu,exact,0,Rotary Horn Acc.,Rotary Horn Acc.,0x2c2154,crates/nord-panel/src/menus/sound.rs,161
+menu,exact,0,Rotary Horn Acc.,Rotary Horn Acc.,0x2c2154,crates/nord-panel/src/menus/sound.rs,164
+menu,exact,1,Low,Low,0x2c07f4,crates/nord-panel/src/menus/system.rs,6
+menu,exact,0,High,High,0x2c07f8,crates/nord-panel/src/menus/system.rs,6
+menu,exact,0,Version,Version,0x2c00e0,crates/nord-panel/src/menus/system.rs,7
+menu,missing,1,HW,,,crates/nord-panel/src/menus/system.rs,7
+menu,exact,0,Memory Protect,Memory Protect,0x2c1fa4,crates/nord-panel/src/menus/system.rs,13
+menu,exact,0,Memory Protect,Memory Protect,0x2c1fa4,crates/nord-panel/src/menus/system.rs,16
+menu,exact,0,Global Transpose,Global Transpose,0x2c1fbc,crates/nord-panel/src/menus/system.rs,25
+menu,exact,0,Global Transpose,Global Transpose,0x2c1fbc,crates/nord-panel/src/menus/system.rs,28
+menu,exact,0,Fine Tune,Fine Tune,0x2c1fd0,crates/nord-panel/src/menus/system.rs,38
+menu,exact,0,Fine Tune,Fine Tune,0x2c1fd0,crates/nord-panel/src/menus/system.rs,41
+menu,exact,0,LED Intensity,LED Intensity,0x2c1fdc,crates/nord-panel/src/menus/system.rs,51
+menu,exact,0,LED Intensity,LED Intensity,0x2c1fdc,crates/nord-panel/src/menus/system.rs,54
+menu,affix,0,panel lighting only,Panel,0x2d33bc,crates/nord-panel/src/menus/system.rs,58
+menu,exact,0,Reset all settings,Reset all settings,0x2c0e08,crates/nord-panel/src/menus/system.rs,64
+menu,exact,0,Reset,Reset,0x2c0e30,crates/nord-panel/src/menus/system.rs,67
+menu,affix,0,Version and Model Info,Version,0x2c00e0,crates/nord-panel/src/menus/system.rs,75
+menu,affix,0,Version / HW,Version,0x2c00e0,crates/nord-panel/src/menus/system.rs,78
+menu,missing,0,read-only information,,,crates/nord-panel/src/menus/system.rs,82
+oled,missing,0,SET KEY: press a key,,,crates/nord-gui/src/panel/bay_program/actions.rs,80
+oled,missing,0,Preset store: not supported yet,,,crates/nord-gui/src/panel/bay_program/actions.rs,132
+oled,affix,0,Morph cleared,Morph,0x2836ec,crates/nord-gui/src/panel/bay_program/actions.rs,186
+oled,missing,0,Stored {},,,crates/nord-gui/src/panel/bay_program/actions.rs,236
+oled,missing,0,Stored Live {},,,crates/nord-gui/src/panel/bay_program/actions.rs,244
+oled,missing,0,a minimum of four times,,,crates/nord-gui/src/panel/bay_program/clock.rs,9
+oled,missing,0,No backup library open,,,crates/nord-gui/src/panel/bay_program/list.rs,21
+oled,missing,0,No backup library open,,,crates/nord-gui/src/panel/bay_program/list.rs,68
+oled,case,0,Reset All Settings,Reset all settings,0x2c0e08,crates/nord-gui/src/panel/bay_program/menu_actions.rs,14
+oled,missing,0,Not supported yet,,,crates/nord-gui/src/panel/bay_program/menu_actions.rs,34
+oled,affix,0,All settings reset,Reset,0x2c0e30,crates/nord-gui/src/panel/bay_program/menu_actions.rs,51
+oled,missing,0,Memory Protected,,,crates/nord-gui/src/panel/bay_program/menu_actions.rs,65
+oled,exact,1,On,On,0x2b5fcc,crates/nord-gui/src/panel/bay_program/menu_screen.rs,20
+oled,missing,1,Off,,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,20
+oled,missing,1,Off,,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,30
+oled,missing,1,{i:+},,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,33
+oled,missing,1,{f:+.1},,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,36
+oled,missing,1,{f:.1},,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,38
+oled,missing,0,{DIM}{mark}{} -- {bean},,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,47
+oled,missing,0,{mark}[{}],,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,48
+oled,missing,0,{mark}{}: {},,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,50
+oled,frag,0,manual p.{},,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,64
+oled,missing,0,More,,,crates/nord-gui/src/panel/bay_program/menu_screen.rs,83
+oled,missing,1,Off,,,crates/nord-gui/src/panel/bay_program/model.rs,64
+oled,exact,1,On,On,0x2b5fcc,crates/nord-gui/src/panel/bay_program/model.rs,65
+oled,affix,0,Soft,Soft+Brill,0x2cd928,crates/nord-gui/src/panel/bay_program/model.rs,66
+oled,case,0,ORGAN PRESET,Organ Preset,0x2d3448,crates/nord-gui/src/panel/bay_program/model.rs,83
+oled,case,0,PIANO PRESET,Piano Preset,0x2d342c,crates/nord-gui/src/panel/bay_program/model.rs,84
+oled,case,0,SYNTH PRESET,Synth Preset,0x2d3410,crates/nord-gui/src/panel/bay_program/model.rs,85
+oled,affix,0,SYSTEM MENU,Menu,0x2c1f04,crates/nord-gui/src/panel/bay_program/model.rs,139
+oled,affix,0,SOUND MENU,Menu,0x2c1f04,crates/nord-gui/src/panel/bay_program/model.rs,140
+oled,case,0,PROGRAM ORGANIZE,Program Organize,0x2d3514,crates/nord-gui/src/panel/bay_program/model.rs,141
+oled,case,0,AUX KB,Aux KB,0x2bfae0,crates/nord-gui/src/panel/bay_program/model.rs,142
+oled,affix,0,OUTPUT MENU,Menu,0x2c1f04,crates/nord-gui/src/panel/bay_program/model.rs,143
+oled,affix,0,PEDAL MENU,Menu,0x2c1f04,crates/nord-gui/src/panel/bay_program/model.rs,144
+oled,affix,0,MIDI MENU,Menu,0x2c1f04,crates/nord-gui/src/panel/bay_program/model.rs,145
+oled,affix,0,EXTERN MENU,Menu,0x2c1f04,crates/nord-gui/src/panel/bay_program/model.rs,146
+oled,exact,1,Num,Num,0x2c75e8,crates/nord-gui/src/panel/bay_program/model.rs,205
+oled,exact,1,Abc,Abc,0x2c0eac,crates/nord-gui/src/panel/bay_program/model.rs,205
+oled,norm,1,Cat,Cat:,0x2c0e7c,crates/nord-gui/src/panel/bay_program/model.rs,205
+oled,exact,1,ABC,ABC,0x283728,crates/nord-gui/src/panel/bay_program/model.rs,206
+oled,norm,1,Cat,Cat:,0x2c0e7c,crates/nord-gui/src/panel/bay_program/model.rs,206
+oled,exact,1,Del,Del,0x2c0eb0,crates/nord-gui/src/panel/bay_program/model.rs,206
+oled,exact,1,Ins,Ins,0x2c0eb4,crates/nord-gui/src/panel/bay_program/model.rs,206
+oled,exact,0,Note,Note,0x2c0710,crates/nord-gui/src/panel/bay_program/model.rs,207
+oled,exact,1,Low,Low,0x2c07f4,crates/nord-gui/src/panel/bay_program/model.rs,207
+oled,missing,1,Mid,,,crates/nord-gui/src/panel/bay_program/model.rs,207
+oled,exact,0,High,High,0x2c07f8,crates/nord-gui/src/panel/bay_program/model.rs,207
+oled,exact,1,KBS,KBS,0x2c1fa0,crates/nord-gui/src/panel/bay_program/model.rs,208
+oled,exact,1,Num,Num,0x2c75e8,crates/nord-gui/src/panel/bay_program/model.rs,209
+oled,norm,1,Cat,Cat:,0x2c0e7c,crates/nord-gui/src/panel/bay_program/model.rs,209
+oled,exact,0,Cancel,Cancel,0x2c75e0,crates/nord-gui/src/panel/bay_program/model.rs,209
+oled,case,0,UNDO,Undo,0x2b74f4,crates/nord-gui/src/panel/bay_program/model.rs,210
+oled,case,0,REDO,Redo,0x2bfb50,crates/nord-gui/src/panel/bay_program/model.rs,210
+oled,exact,1,All,All,0x2c01a0,crates/nord-gui/src/panel/bay_program/model.rs,211
+oled,missing,0,Org AB,,,crates/nord-gui/src/panel/bay_program/model.rs,211
+oled,missing,1,Pno,,,crates/nord-gui/src/panel/bay_program/model.rs,211
+oled,case,1,Syn,syn,0x2d3324,crates/nord-gui/src/panel/bay_program/model.rs,211
+oled,affix,0,Layer,LAYER INIT,0x2c0040,crates/nord-gui/src/panel/bay_program/model.rs,212
+oled,exact,1,Fx,Fx,0x522b96,crates/nord-gui/src/panel/bay_program/model.rs,212
+oled,exact,0,Morph,Morph,0x2836ec,crates/nord-gui/src/panel/bay_program/model.rs,212
+oled,affix,0,Prog,Prog Up,0x2c2504,crates/nord-gui/src/panel/bay_program/model.rs,212
+oled,affix,0,Paste,Nothing to Paste,0x28377d,crates/nord-gui/src/panel/bay_program/model.rs,213
+oled,exact,0,Swap,Swap,0x283768,crates/nord-gui/src/panel/bay_program/model.rs,213
+oled,affix,0,WHEEL,Wheel Mrp,0x2c23d0,crates/nord-gui/src/panel/bay_program/morph.rs,31
+oled,missing,1,A.T.,,,crates/nord-gui/src/panel/bay_program/morph.rs,32
+oled,missing,0,CTRLPED,,,crates/nord-gui/src/panel/bay_program/morph.rs,33
+oled,exact,0,Accordion/Harm,Accordion/Harm,0x283848,crates/nord-gui/src/panel/bay_program/name.rs,24
+oled,affix,0,Bass,B3 Bass,0x2c7614,crates/nord-gui/src/panel/bay_program/name.rs,25
+oled,exact,0,Brass Ensemble,Brass Ensemble,0x2bf1e8,crates/nord-gui/src/panel/bay_program/name.rs,26
+oled,exact,0,Brass Solo,Brass Solo,0x2bf204,crates/nord-gui/src/panel/bay_program/name.rs,27
+oled,exact,0,Choir,Choir,0x2838a8,crates/nord-gui/src/panel/bay_program/name.rs,28
+oled,exact,0,Drums,Drums,0x283840,crates/nord-gui/src/panel/bay_program/name.rs,29
+oled,exact,0,Effects,Effects,0x283864,crates/nord-gui/src/panel/bay_program/name.rs,30
+oled,exact,0,Guitar/Plucked,Guitar/Plucked,0x283870,crates/nord-gui/src/panel/bay_program/name.rs,31
+oled,exact,0,Mellotron,Mellotron,0x2838dc,crates/nord-gui/src/panel/bay_program/name.rs,32
+oled,exact,0,Misc,Misc,0x2838cc,crates/nord-gui/src/panel/bay_program/name.rs,33
+oled,exact,0,Orchestral,Orchestral,0x2838b8,crates/nord-gui/src/panel/bay_program/name.rs,34
+oled,affix,0,Organ,Full Organ,0x2d8020,crates/nord-gui/src/panel/bay_program/name.rs,35
+oled,exact,0,Percussion Tuned,Percussion Tuned,0x2bf210,crates/nord-gui/src/panel/bay_program/name.rs,36
+oled,exact,0,Piano,Piano,0x283698,crates/nord-gui/src/panel/bay_program/name.rs,37
+oled,exact,0,Rhythmic,Rhythmic,0x2838f0,crates/nord-gui/src/panel/bay_program/name.rs,38
+oled,exact,0,Strings Analog,Strings Analog,0x2bf230,crates/nord-gui/src/panel/bay_program/name.rs,39
+oled,exact,0,Strings Ensemble,Strings Ensemble,0x2bf24c,crates/nord-gui/src/panel/bay_program/name.rs,40
+oled,exact,0,Strings Solo,Strings Solo,0x2bf26c,crates/nord-gui/src/panel/bay_program/name.rs,41
+oled,exact,0,Synth Bass,Synth Bass,0x2bf27c,crates/nord-gui/src/panel/bay_program/name.rs,42
+oled,exact,0,Synth Classic,Synth Classic,0x2bf288,crates/nord-gui/src/panel/bay_program/name.rs,43
+oled,exact,0,Synth Lead,Synth Lead,0x2bf298,crates/nord-gui/src/panel/bay_program/name.rs,44
+oled,exact,0,Synth Pad,Synth Pad,0x2bf2a4,crates/nord-gui/src/panel/bay_program/name.rs,45
+oled,exact,0,Wind Ensemble,Wind Ensemble,0x2bf2b0,crates/nord-gui/src/panel/bay_program/name.rs,46
+oled,exact,0,Wind Solo,Wind Solo,0x2bf2cc,crates/nord-gui/src/panel/bay_program/name.rs,47
+oled,exact,0,User,User,0x2838d4,crates/nord-gui/src/panel/bay_program/name.rs,48
+oled,exact,0,Undefined,Undefined,0x28382c,crates/nord-gui/src/panel/bay_program/name.rs,49
+oled,exact,0,Accord/Harm,Accord/Harm,0x283858,crates/nord-gui/src/panel/bay_program/name.rs,55
+oled,affix,0,Bass,B3 Bass,0x2c7614,crates/nord-gui/src/panel/bay_program/name.rs,56
+oled,exact,0,Brass Ens,Brass Ens,0x2bf1f8,crates/nord-gui/src/panel/bay_program/name.rs,57
+oled,exact,0,Brass Solo,Brass Solo,0x2bf204,crates/nord-gui/src/panel/bay_program/name.rs,58
+oled,exact,0,Choir,Choir,0x2838a8,crates/nord-gui/src/panel/bay_program/name.rs,59
+oled,exact,0,Drums,Drums,0x283840,crates/nord-gui/src/panel/bay_program/name.rs,60
+oled,exact,0,Effects,Effects,0x283864,crates/nord-gui/src/panel/bay_program/name.rs,61
+oled,exact,0,Gtr/Pluck,Gtr/Pluck,0x283880,crates/nord-gui/src/panel/bay_program/name.rs,62
+oled,exact,0,Mellotron,Mellotron,0x2838dc,crates/nord-gui/src/panel/bay_program/name.rs,63
+oled,exact,0,Misc,Misc,0x2838cc,crates/nord-gui/src/panel/bay_program/name.rs,64
+oled,exact,0,Orchestral,Orchestral,0x2838b8,crates/nord-gui/src/panel/bay_program/name.rs,65
+oled,affix,0,Organ,Full Organ,0x2d8020,crates/nord-gui/src/panel/bay_program/name.rs,66
+oled,exact,0,Perc Tuned,Perc Tuned,0x2bf224,crates/nord-gui/src/panel/bay_program/name.rs,67
+oled,exact,0,Piano,Piano,0x283698,crates/nord-gui/src/panel/bay_program/name.rs,68
+oled,exact,0,Rhythm,Rhythm,0x2838fc,crates/nord-gui/src/panel/bay_program/name.rs,69
+oled,exact,0,Strings Ana,Strings Ana,0x2bf240,crates/nord-gui/src/panel/bay_program/name.rs,70
+oled,exact,0,Strings Ens,Strings Ens,0x2bf260,crates/nord-gui/src/panel/bay_program/name.rs,71
+oled,exact,0,Strings Solo,Strings Solo,0x2bf26c,crates/nord-gui/src/panel/bay_program/name.rs,72
+oled,exact,0,Synth Bass,Synth Bass,0x2bf27c,crates/nord-gui/src/panel/bay_program/name.rs,73
+oled,exact,0,Synth Classic,Synth Classic,0x2bf288,crates/nord-gui/src/panel/bay_program/name.rs,74
+oled,exact,0,Synth Lead,Synth Lead,0x2bf298,crates/nord-gui/src/panel/bay_program/name.rs,75
+oled,exact,0,Synth Pad,Synth Pad,0x2bf2a4,crates/nord-gui/src/panel/bay_program/name.rs,76
+oled,exact,0,Wind Ens,Wind Ens,0x2bf2c0,crates/nord-gui/src/panel/bay_program/name.rs,77
+oled,exact,0,Wind Solo,Wind Solo,0x2bf2cc,crates/nord-gui/src/panel/bay_program/name.rs,78
+oled,exact,0,User,User,0x2838d4,crates/nord-gui/src/panel/bay_program/name.rs,79
+oled,exact,0,Undef,Undef,0x283838,crates/nord-gui/src/panel/bay_program/name.rs,80
+oled,frag,0,Live {n},,,crates/nord-gui/src/panel/bay_program/nav.rs,180
+oled,missing,0,Org A,,,crates/nord-gui/src/panel/bay_program/oled.rs,49
+oled,missing,0,Org B,,,crates/nord-gui/src/panel/bay_program/oled.rs,49
+oled,norm,0,Pno A,pnoA,0x2d7bc8,crates/nord-gui/src/panel/bay_program/oled.rs,49
+oled,norm,0,Pno B,pnoB,0x2d7bd0,crates/nord-gui/src/panel/bay_program/oled.rs,49
+oled,missing,0,Syn A,,,crates/nord-gui/src/panel/bay_program/oled.rs,49
+oled,missing,0,Syn B,,,crates/nord-gui/src/panel/bay_program/oled.rs,49
+oled,missing,0,Syn C,,,crates/nord-gui/src/panel/bay_program/oled.rs,49
+oled,missing,1,{}{t},,,crates/nord-gui/src/panel/bay_program/oled.rs,74
+oled,missing,0,{label} {},,,crates/nord-gui/src/panel/bay_program/oled.rs,92
+oled,missing,1,Org: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,95
+oled,missing,1,Pno: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,96
+oled,frag,1,Syn: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,97
+oled,missing,0,{label} {},,,crates/nord-gui/src/panel/bay_program/oled.rs,108
+oled,frag,0,Scene {},,,crates/nord-gui/src/panel/bay_program/oled.rs,109
+oled,case,1,II,iI,0x27e699,crates/nord-gui/src/panel/bay_program/oled.rs,109
+oled,norm,1,I,<i,0x08b734,crates/nord-gui/src/panel/bay_program/oled.rs,109
+oled,missing,1,On: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,111
+oled,missing,0,Split {} Tr {:+} {:.0}bpm,,,crates/nord-gui/src/panel/bay_program/oled.rs,114
+oled,missing,0,Page {},,,crates/nord-gui/src/panel/bay_program/oled.rs,139
+oled,exact,1,Num,Num,0x2c75e8,crates/nord-gui/src/panel/bay_program/oled.rs,159
+oled,exact,1,Abc,Abc,0x2c0eac,crates/nord-gui/src/panel/bay_program/oled.rs,160
+oled,norm,1,Cat,Cat:,0x2c0e7c,crates/nord-gui/src/panel/bay_program/oled.rs,161
+oled,missing,0,LIST {mode},,,crates/nord-gui/src/panel/bay_program/oled.rs,164
+oled,missing,0,No backup open,,,crates/nord-gui/src/panel/bay_program/oled.rs,168
+oled,missing,1,[{c}],,,crates/nord-gui/src/panel/bay_program/oled.rs,183
+oled,missing,0,STORE PROGRAM AS,,,crates/nord-gui/src/panel/bay_program/oled.rs,190
+oled,frag,0,Category: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,192
+oled,frag,0,Live {},,,crates/nord-gui/src/panel/bay_program/oled.rs,197
+oled,missing,0,STORE PROGRAM TO,,,crates/nord-gui/src/panel/bay_program/oled.rs,202
+oled,missing,0,Replaces: {existing},,,crates/nord-gui/src/panel/bay_program/oled.rs,204
+oled,norm,1,L,L?,0x02cc82,crates/nord-gui/src/panel/bay_program/oled.rs,212
+oled,norm,1,M,(M,0x06ce6c,crates/nord-gui/src/panel/bay_program/oled.rs,212
+oled,norm,1,H,H(,0x00038a,crates/nord-gui/src/panel/bay_program/oled.rs,212
+oled,missing,1,{}{n}:{},,,crates/nord-gui/src/panel/bay_program/oled.rs,215
+oled,missing,1,Off,,,crates/nord-gui/src/panel/bay_program/oled.rs,223
+oled,frag,0,KEYBOARD SPLIT {},,,crates/nord-gui/src/panel/bay_program/oled.rs,233
+oled,exact,1,ON,ON,0x249c28,crates/nord-gui/src/panel/bay_program/oled.rs,233
+oled,missing,1,OFF,,,crates/nord-gui/src/panel/bay_program/oled.rs,233
+oled,frag,0,{a}Note {note},,,crates/nord-gui/src/panel/bay_program/oled.rs,235
+oled,frag,0,{b}xFade {xf},,,crates/nord-gui/src/panel/bay_program/oled.rs,235
+oled,missing,1,{m:?},,,crates/nord-gui/src/panel/bay_program/oled.rs,242
+oled,frag,0,Layer: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,248
+oled,missing,0,No backup open,,,crates/nord-gui/src/panel/bay_program/oled.rs,255
+oled,norm,0,MST CLK,MstClk,0x444af0,crates/nord-gui/src/panel/bay_program/oled.rs,276
+oled,missing,0,{:.0} BPM,,,crates/nord-gui/src/panel/bay_program/oled.rs,277
+oled,frag,1,KBS: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,279
+oled,affix,0,External clock: none,None,0x2c1fb4,crates/nord-gui/src/panel/bay_program/oled.rs,280
+oled,case,0,TRANSPOSE,Transpose,0x2c1f6c,crates/nord-gui/src/panel/bay_program/oled.rs,284
+oled,missing,1,{:+} st {},,,crates/nord-gui/src/panel/bay_program/oled.rs,286
+oled,case,0,UNDO,Undo,0x2b74f4,crates/nord-gui/src/panel/bay_program/oled.rs,294
+oled,exact,0,Nothing to Undo,Nothing to Undo,0x2bfb3c,crates/nord-gui/src/panel/bay_program/oled.rs,297
+oled,missing,0,Revert the last edit?,,,crates/nord-gui/src/panel/bay_program/oled.rs,299
+oled,exact,0,LAYER INIT,LAYER INIT,0x2c0040,crates/nord-gui/src/panel/bay_program/oled.rs,305
+oled,frag,0,Layer: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,306
+oled,missing,0,PAGE picks the layer,,,crates/nord-gui/src/panel/bay_program/oled.rs,307
+oled,missing,0,MON/COPY,,,crates/nord-gui/src/panel/bay_program/oled.rs,310
+oled,frag,0,Layer: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,311
+oled,missing,0,PAGE picks the layer,,,crates/nord-gui/src/panel/bay_program/oled.rs,312
+oled,affix,0,PASTE,Nothing to Paste,0x28377d,crates/nord-gui/src/panel/bay_program/oled.rs,315
+oled,frag,0,Layer: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,316
+oled,missing,0,Clip: {},,,crates/nord-gui/src/panel/bay_program/oled.rs,318
+oled,missing,1,{c:?},,,crates/nord-gui/src/panel/bay_program/oled.rs,319
+oled,frag,0,MORPH {},,,crates/nord-gui/src/panel/bay_program/oled.rs,334
+oled,missing,0,NUM PAD,,,crates/nord-gui/src/panel/bay_program/oled.rs,344
+oled,missing,0,Press page 1-8,,,crates/nord-gui/src/panel/bay_program/oled.rs,347
+oled,case,0,Layer Init,LAYER INIT,0x2c0040,crates/nord-gui/src/panel/bay_program/soft.rs,98
+oled,missing,0,Copied,,,crates/nord-gui/src/panel/bay_program/soft.rs,111
+oled,exact,0,Nothing to Paste,Nothing to Paste,0x28377d,crates/nord-gui/src/panel/bay_program/soft.rs,117
+oled,exact,0,Pasted,Pasted,0x283758,crates/nord-gui/src/panel/bay_program/soft.rs,129
+oled,exact,0,Swapped,Swapped,0x283760,crates/nord-gui/src/panel/bay_program/soft.rs,133
+oled,norm,1,C,C ,0x05897c,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,C#,C ,0x05897c,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,D,D),0x04e9c0,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,D#,D),0x04e9c0,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,E,E*,0x04e8f0,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,F,F+,0x1a1288,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,exact,1,F#,F#,0x29f900,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,G,g;,0x27997e,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,case,1,G#,g#,0x4a4d3d,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,A,<A-,0x0c17a0,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,exact,1,A#,A#,0x2ba38d,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,norm,1,B,B+,0x073d00,crates/nord-gui/src/panel/bay_program/split.rs,24
+oled,missing,1,{n}/5,,,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,20
+oled,exact,1,ON,ON,0x249c28,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,37
+oled,missing,1,OFF,,,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,37
+oled,exact,1,ON,ON,0x249c28,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,47
+oled,missing,1,OFF,,,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,49
+oled,case,0,LEFT,Left,0x2c2574,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,55
+oled,affix,0,CENTER,Back Center,0x2c0194,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,55
+oled,case,0,RIGHT,Right,0x2bfb04,crates/nord-gui/src/panel/bay_synth/oled_arp.rs,55
+oled,missing,1,{:.0} ms,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,14
+oled,missing,1,{s:.1} s,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,16
+oled,missing,1,{s:.0} s,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,18
+oled,missing,0,No .nsmp4 loaded,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,78
+oled,missing,1,{p}({n}),,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,82
+oled,exact,1,ON,ON,0x249c28,crates/nord-gui/src/panel/bay_synth/oled_view.rs,83
+oled,missing,1,OFF,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,83
+oled,affix,0,SAMPLE INFO,Sample,0x2ca1ac,crates/nord-gui/src/panel/bay_synth/oled_view.rs,86
+oled,frag,0,Category: {cat},,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,89
+oled,missing,0,Nord Sample Library 4,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,90
+oled,case,0,SAMPLE LIBRARY,Sample Library,0x2bfb94,crates/nord-gui/src/panel/bay_synth/oled_view.rs,95
+oled,case,0,SAMPLE LIBRARY,Sample Library,0x2bfb94,crates/nord-gui/src/panel/bay_synth/oled_view.rs,100
+oled,exact,0,OSC WAVEFORM,OSC WAVEFORM,0x2be9b4,crates/nord-gui/src/panel/bay_synth/oled_view.rs,109
+oled,exact,0,OSC WAVEFORM,OSC WAVEFORM,0x2be9b4,crates/nord-gui/src/panel/bay_synth/oled_view.rs,118
+oled,frag,0,OSC CTRL: {:.1},,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,121
+oled,case,0,FILTER,Filter,0x2cd6a8,crates/nord-gui/src/panel/bay_synth/oled_view.rs,133
+oled,missing,1,OFF,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,141
+oled,missing,1,OFF,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,142
+oled,missing,0,LFO WAVEFORM,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,163
+oled,case,0,VIBRATO,Vibrato,0x2cacdc,crates/nord-gui/src/panel/bay_synth/oled_view.rs,173
+oled,missing,1,{:.1} Hz,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,179
+oled,case,0,OSC PITCH,Osc Pitch,0x2cd704,crates/nord-gui/src/panel/bay_synth/oled_view.rs,185
+oled,missing,0,{:+} st {:+} ct,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,186
+oled,missing,1,{:+} st,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,188
+oled,missing,1,{:+} ct,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,189
+oled,missing,0,Natural,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,190
+oled,missing,0,No Dyn,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,190
+oled,affix,0,Fast Atk,Fast,0x2cc854,crates/nord-gui/src/panel/bay_synth/oled_view.rs,190
+oled,exact,0,EXTERN,EXTERN,0x2be9ac,crates/nord-gui/src/panel/bay_synth/oled_view.rs,194
+oled,missing,0,MIDI out to external gear,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,196
+oled,missing,0,not implemented,,,crates/nord-gui/src/panel/bay_synth/oled_view.rs,197
+oled,missing,0,No piano library,,,crates/nord-gui/src/panel/piano_overlay.rs,13
+oled,frag,0,Piano {cat}   {pos_in_type}/{n},,,crates/nord-gui/src/panel/piano_overlay.rs,54
+oled,missing,0,No model of this type,,,crates/nord-gui/src/panel/piano_overlay.rs,68
+oled,norm,0,Piano info,PianoInfo,0x2c28b8,crates/nord-gui/src/panel/piano_overlay.rs,107
+oled,missing,0,(no model loaded),,,crates/nord-gui/src/panel/piano_overlay.rs,113
+oled,frag,0,Model: {},,,crates/nord-gui/src/panel/piano_overlay.rs,115
+oled,frag,0,Type: {cat}   {pos_in_type}/{n},,,crates/nord-gui/src/panel/piano_overlay.rs,116
+table,missing,0,A-PAN,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,35
+table,missing,0,TREM,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,36
+table,case,1,RM,rm,0x2aaf7d,crates/nord-gui/src/panel/ui_state/fx/tables.rs,37
+table,affix,0,A-WAH,A-Wah Cry,0x2cc540,crates/nord-gui/src/panel/ui_state/fx/tables.rs,38
+table,missing,1,WAH,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,39
+table,case,0,PUMP,Pump,0x2c246c,crates/nord-gui/src/panel/ui_state/fx/tables.rs,40
+table,missing,0,PHAS,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,46
+table,missing,0,FLANG,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,47
+table,missing,0,CHOR,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,48
+table,case,0,VIBE,Vibe,0x2cc7a0,crates/nord-gui/src/panel/ui_state/fx/tables.rs,49
+table,missing,1,ENS,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,50
+table,affix,0,SPIN,Spin Bass,0x2cc668,crates/nord-gui/src/panel/ui_state/fx/tables.rs,51
+table,missing,1,BYP,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,56
+table,missing,1,ENS,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,57
+table,case,0,VIBE,Vibe,0x2cc7a0,crates/nord-gui/src/panel/ui_state/fx/tables.rs,58
+table,missing,0,CHOR,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,59
+table,affix,0,FLAM,Flam 20 ms,0x2cc7a8,crates/nord-gui/src/panel/ui_state/fx/tables.rs,60
+table,affix,0,SPACE,Space 50 Wet,0x2cc7c0,crates/nord-gui/src/panel/ui_state/fx/tables.rs,61
+table,case,0,SPRING,Spring,0x2cc89c,crates/nord-gui/src/panel/ui_state/fx/tables.rs,67
+table,case,0,BOOTH,Booth,0x2cc8ac,crates/nord-gui/src/panel/ui_state/fx/tables.rs,68
+table,case,0,ROOM,Room,0x2cc8c4,crates/nord-gui/src/panel/ui_state/fx/tables.rs,69
+table,case,0,STAGE,Stage,0x2cc8dc,crates/nord-gui/src/panel/ui_state/fx/tables.rs,70
+table,case,0,HALL,Hall,0x2cc8f4,crates/nord-gui/src/panel/ui_state/fx/tables.rs,71
+table,missing,0,CATH,,,crates/nord-gui/src/panel/ui_state/fx/tables.rs,72
+table,case,0,FREE,Free,0x2c006c,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,1,1/4D,1/4D,0x2c084c,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,1,1/2T,1/2T,0x2c0854,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,1,1/4S,1/4S,0x2c085c,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,1,1/8D,1/8D,0x2c0868,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,1,1/4T,1/4T,0x2c0870,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,1,1/8S,1/8S,0x2c0878,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,0,1/16D,1/16D,0x2c0884,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,1,1/8T,1/8T,0x2c088c,crates/nord-gui/src/panel/ui_state/fx/tables.rs,83
+table,exact,0,1/16S,1/16S,0x2c0894,crates/nord-gui/src/panel/ui_state/fx/tables.rs,84
+table,exact,0,1/16T,1/16T,0x2c08a4,crates/nord-gui/src/panel/ui_state/fx/tables.rs,84
+table,exact,0,1/32T,1/32T,0x2c08b4,crates/nord-gui/src/panel/ui_state/fx/tables.rs,84
+table,case,0,PURE,Pure,0x2d7d44,crates/nord-gui/src/panel/ui_state/synth/tables.rs,43
+table,exact,0,Sine,Sine,0x2d7d4c,crates/nord-gui/src/panel/ui_state/synth/tables.rs,45
+table,exact,0,Triangle,Triangle,0x2d7d54,crates/nord-gui/src/panel/ui_state/synth/tables.rs,46
+table,exact,1,Saw,Saw,0x2d7d60,crates/nord-gui/src/panel/ui_state/synth/tables.rs,47
+table,exact,0,Square,Square,0x2d7d64,crates/nord-gui/src/panel/ui_state/synth/tables.rs,48
+table,exact,0,Pulse 33,Pulse 33,0x2d7d6c,crates/nord-gui/src/panel/ui_state/synth/tables.rs,49
+table,exact,0,Pulse 10,Pulse 10,0x2d7d78,crates/nord-gui/src/panel/ui_state/synth/tables.rs,50
+table,exact,0,White Noise,White Noise,0x2d7d84,crates/nord-gui/src/panel/ui_state/synth/tables.rs,51
+table,case,0,SUB OSC,Sub Osc,0x2d7de4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,55
+table,exact,0,Sub Square Saw,Sub Square Saw,0x2d7dec,crates/nord-gui/src/panel/ui_state/synth/tables.rs,57
+table,exact,0,Sub Pulse Saw,Sub Pulse Saw,0x2d7dfc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,58
+table,exact,0,Sub Sine Saw,Sub Sine Saw,0x2d7e0c,crates/nord-gui/src/panel/ui_state/synth/tables.rs,59
+table,case,0,SHAPE,Shape,0x2d7d90,crates/nord-gui/src/panel/ui_state/synth/tables.rs,63
+table,exact,0,Triangle,Triangle,0x2d7d54,crates/nord-gui/src/panel/ui_state/synth/tables.rs,65
+table,exact,1,Saw,Saw,0x2d7d60,crates/nord-gui/src/panel/ui_state/synth/tables.rs,66
+table,exact,0,Square,Square,0x2d7d64,crates/nord-gui/src/panel/ui_state/synth/tables.rs,67
+table,exact,0,Half Sine,Half Sine,0x2d7d98,crates/nord-gui/src/panel/ui_state/synth/tables.rs,68
+table,exact,0,Parabolic,Parabolic,0x2d7da4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,69
+table,case,0,SHAPE SINE,Shape Sine,0x2d7db0,crates/nord-gui/src/panel/ui_state/synth/tables.rs,73
+table,exact,0,Pulse,Pulse,0x2d7dbc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,75
+table,exact,1,Saw,Saw,0x2d7d60,crates/nord-gui/src/panel/ui_state/synth/tables.rs,76
+table,exact,0,Square,Square,0x2d7d64,crates/nord-gui/src/panel/ui_state/synth/tables.rs,77
+table,exact,0,Squeeze,Squeeze,0x2d7dd4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,78
+table,exact,0,Fold,Fold,0x2d7ddc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,79
+table,exact,0,ESaw,ESaw,0x2d7dc4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,80
+table,exact,0,ESquare,ESquare,0x2d7dcc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,81
+table,case,0,MULTI,Multi,0x2b7de8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,85
+table,affix,0,Multi Saw,Multi,0x2b7de8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,87
+table,affix,0,Multi Saw 8ve,Multi,0x2b7de8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,88
+table,affix,0,Multi Saw 5th,Multi,0x2b7de8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,89
+table,affix,0,Multi Saw 5th+,Multi,0x2b7de8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,90
+table,affix,0,Multi Saw 8ve 8ve+,Multi,0x2b7de8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,91
+table,affix,0,Multi Saw 8ve 5th+,Multi,0x2b7de8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,92
+table,case,0,SUPER,Super,0x2d7e58,crates/nord-gui/src/panel/ui_state/synth/tables.rs,96
+table,affix,0,Super Saw,Super,0x2d7e58,crates/nord-gui/src/panel/ui_state/synth/tables.rs,98
+table,affix,0,Super Square,Super,0x2d7e58,crates/nord-gui/src/panel/ui_state/synth/tables.rs,99
+table,affix,0,Super Bright,Super,0x2d7e58,crates/nord-gui/src/panel/ui_state/synth/tables.rs,100
+table,affix,0,Super Organ,Super,0x2d7e58,crates/nord-gui/src/panel/ui_state/synth/tables.rs,101
+table,case,0,MISC,Misc,0x2838cc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,105
+table,exact,0,Pink Noise,Pink Noise,0x2d7ea0,crates/nord-gui/src/panel/ui_state/synth/tables.rs,107
+table,exact,0,Red Noise,Red Noise,0x2d7eac,crates/nord-gui/src/panel/ui_state/synth/tables.rs,108
+table,exact,0,Bell,Bell,0x2d7eb8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,109
+table,affix,0,ANALOG,Chorus Analog,0x2cc614,crates/nord-gui/src/panel/ui_state/synth/tables.rs,115
+table,exact,1,FM-H,FM-H,0x2d7ecc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,115
+table,exact,1,FM-I,FM-I,0x2d7ee4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,115
+table,affix,0,WAVE,Osc Waveform Wave,0x2bfbbc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,115
+table,missing,0,ALGO A,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,118
+table,missing,0,ALGO B,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,118
+table,missing,0,ALGO C,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,118
+table,missing,0,ALGO D,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,118
+table,missing,0,ALGO E,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,118
+table,missing,1,LP M,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,158
+table,norm,0,LP 24,LP24,0x2cc730,crates/nord-gui/src/panel/ui_state/synth/tables.rs,162
+table,missing,0,LP 12,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,166
+table,missing,0,LP+HP,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,170
+table,case,1,HP,Hp,0x19929c,crates/nord-gui/src/panel/ui_state/synth/tables.rs,174
+table,case,1,BP,Bp,0x078bec,crates/nord-gui/src/panel/ui_state/synth/tables.rs,178
+table,exact,0,Triangle,Triangle,0x2d7d54,crates/nord-gui/src/panel/ui_state/synth/tables.rs,193
+table,missing,0,Sawtooth 1,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,194
+table,missing,0,Sawtooth 2,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,195
+table,exact,0,Square,Square,0x2d7d64,crates/nord-gui/src/panel/ui_state/synth/tables.rs,196
+table,affix,0,Sample&Hold,Sample,0x2ca1ac,crates/nord-gui/src/panel/ui_state/synth/tables.rs,197
+table,case,0,FILTER,Filter,0x2cd6a8,crates/nord-gui/src/panel/ui_state/synth/tables.rs,202
+table,affix,0,PITCH,Osc Pitch,0x2cd704,crates/nord-gui/src/panel/ui_state/synth/tables.rs,203
+table,norm,0,OSC CTRL,OscCtrl,0x2cd6fc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,204
+table,missing,1,OFF,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,205
+table,missing,1,OFF,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,210
+table,exact,1,ON,ON,0x249c28,crates/nord-gui/src/panel/ui_state/synth/tables.rs,211
+table,missing,1,DLY,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,212
+table,missing,1,WHL,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,213
+table,missing,1,A.T.,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,214
+table,missing,1,PED,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,215
+table,missing,0,LAST,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,223
+table,exact,1,LO,LO,0x27e945,crates/nord-gui/src/panel/ui_state/synth/tables.rs,224
+table,case,1,HI,hi,0x27b0d4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,225
+table,exact,1,1/2T,1/2T,0x2c0854,crates/nord-gui/src/panel/ui_state/synth/tables.rs,230
+table,exact,1,1/4T,1/4T,0x2c0870,crates/nord-gui/src/panel/ui_state/synth/tables.rs,230
+table,exact,1,1/8T,1/8T,0x2c088c,crates/nord-gui/src/panel/ui_state/synth/tables.rs,230
+table,exact,0,1/16T,1/16T,0x2c08a4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,230
+table,exact,0,1/32T,1/32T,0x2c08b4,crates/nord-gui/src/panel/ui_state/synth/tables.rs,230
+table,norm,1,UP,u%p,0x2ab224,crates/nord-gui/src/panel/ui_state/synth/tables.rs,234
+table,affix,0,DOWN,Prog Down,0x2c250c,crates/nord-gui/src/panel/ui_state/synth/tables.rs,234
+table,missing,0,UP/DOWN,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,234
+table,affix,0,RANDOM,Saw Random,0x2d7fbc,crates/nord-gui/src/panel/ui_state/synth/tables.rs,234
+table,missing,1,ARP,,,crates/nord-gui/src/panel/ui_state/synth/tables.rs,237
+table,case,0,POLY,Poly,0x2cd540,crates/nord-gui/src/panel/ui_state/synth/tables.rs,237
+table,affix,0,GATE,Arpeggiator/Gate,0x2cd584,crates/nord-gui/src/panel/ui_state/synth/tables.rs,237
+table,missing,1,Off,,,crates/nord-plugin/src/fx_selectors.rs,35
+table,affix,0,Tremolo,Tremolo Soft,0x2cc504,crates/nord-plugin/src/fx_selectors.rs,35
+table,affix,0,Auto Pan,Auto,0x2c2240,crates/nord-plugin/src/fx_selectors.rs,35
+table,exact,0,Ring Mod,Ring Mod,0x2cc524,crates/nord-plugin/src/fx_selectors.rs,35
+table,missing,1,Wah,,,crates/nord-plugin/src/fx_selectors.rs,35
+table,affix,0,Auto Wah,Auto,0x2c2240,crates/nord-plugin/src/fx_selectors.rs,35
+table,exact,0,Pump,Pump,0x2c246c,crates/nord-plugin/src/fx_selectors.rs,35
+table,missing,1,Off,,,crates/nord-plugin/src/fx_selectors.rs,39
+table,exact,0,Chorus,Chorus,0x2cacd4,crates/nord-plugin/src/fx_selectors.rs,39
+table,affix,0,Flanger,Flanger Mono,0x2cc604,crates/nord-plugin/src/fx_selectors.rs,39
+table,affix,0,Phaser,Phaser Type I,0x2cc5d4,crates/nord-plugin/src/fx_selectors.rs,39
+table,exact,0,Vibe,Vibe,0x2cc7a0,crates/nord-plugin/src/fx_selectors.rs,39
+table,affix,0,Spin,Spin Bass,0x2cc668,crates/nord-plugin/src/fx_selectors.rs,39
+table,affix,0,Ensemble,Wind Ensemble,0x2bf2b0,crates/nord-plugin/src/fx_selectors.rs,39
+table,missing,1,Off,,,crates/nord-plugin/src/fx_selectors.rs,43
+table,exact,0,Small Speaker,Small Speaker,0x2cc700,crates/nord-plugin/src/fx_selectors.rs,43
+table,case,1,JC,jC,0x218ef2,crates/nord-plugin/src/fx_selectors.rs,43
+table,affix,0,Twin,Twin Type I,0x2cc6cc,crates/nord-plugin/src/fx_selectors.rs,43
+table,exact,0,To Rotary,To Rotary,0x2cc724,crates/nord-plugin/src/fx_selectors.rs,43
+table,exact,0,LP24,LP24,0x2cc730,crates/nord-plugin/src/fx_selectors.rs,43
+table,exact,0,HP24,HP24,0x2cc738,crates/nord-plugin/src/fx_selectors.rs,43
+table,missing,0,Dotted 1/8,,,crates/nord-plugin/src/fx_selectors.rs,47
+table,missing,1,Off,,,crates/nord-plugin/src/fx_selectors.rs,51
+table,case,1,HP,Hp,0x19929c,crates/nord-plugin/src/fx_selectors.rs,51
+table,exact,1,LP,LP,0x2f9b62,crates/nord-plugin/src/fx_selectors.rs,51
+table,case,1,BP,Bp,0x078bec,crates/nord-plugin/src/fx_selectors.rs,51
+table,exact,0,Bypass,Bypass,0x2cc7f8,crates/nord-plugin/src/fx_selectors.rs,55
+table,affix,0,Ensemble,Wind Ensemble,0x2bf2b0,crates/nord-plugin/src/fx_selectors.rs,55
+table,exact,0,Vibe,Vibe,0x2cc7a0,crates/nord-plugin/src/fx_selectors.rs,55
+table,exact,0,Chorus,Chorus,0x2cacd4,crates/nord-plugin/src/fx_selectors.rs,55
+table,affix,0,Flam,Flam 20 ms,0x2cc7a8,crates/nord-plugin/src/fx_selectors.rs,55
+table,affix,0,Space,Space 50 Wet,0x2cc7c0,crates/nord-plugin/src/fx_selectors.rs,55
+table,missing,1,Off,,,crates/nord-plugin/src/fx_selectors.rs,59
+table,exact,0,Booth,Booth,0x2cc8ac,crates/nord-plugin/src/fx_selectors.rs,59
+table,exact,0,Room,Room,0x2cc8c4,crates/nord-plugin/src/fx_selectors.rs,59
+table,exact,0,Stage,Stage,0x2cc8dc,crates/nord-plugin/src/fx_selectors.rs,59
+table,exact,0,Spring,Spring,0x2cc89c,crates/nord-plugin/src/fx_selectors.rs,59
+table,exact,0,Hall,Hall,0x2cc8f4,crates/nord-plugin/src/fx_selectors.rs,59
+table,exact,0,Cathedral,Cathedral,0x2cc90c,crates/nord-plugin/src/fx_selectors.rs,59
+table,exact,0,Normal,Normal,0x2c2094,crates/nord-plugin/src/fx_selectors.rs,63
+table,affix,0,Bright,Saw Bright,0x2d7e60,crates/nord-plugin/src/fx_selectors.rs,63
+table,exact,0,Dark,Dark,0x2cc938,crates/nord-plugin/src/fx_selectors.rs,63
+table,affix,0,Chorale,Hall Chorale,0x2cc8fc,crates/nord-plugin/src/fx_selectors.rs,63
+table,missing,1, Hz,,,crates/nord-plugin/src/fx_selectors.rs,107
+table,exact,0,Mod 1 Type,Mod 1 Type,0x2cc598,crates/nord-plugin/src/fx_selectors.rs,113
+table,exact,0,Mod 1 Rate,Mod 1 Rate,0x2cc4b4,crates/nord-plugin/src/fx_selectors.rs,114
+table,exact,0,Mod 2 Type,Mod 2 Type,0x2cc674,crates/nord-plugin/src/fx_selectors.rs,115
+table,exact,0,Mod 2 Rate,Mod 2 Rate,0x2cc5b8,crates/nord-plugin/src/fx_selectors.rs,116
+table,missing,0,Amp Cabinet,,,crates/nord-plugin/src/fx_selectors.rs,117
+table,affix,0,Comp Fast,Fast,0x2cc854,crates/nord-plugin/src/fx_selectors.rs,118
+table,missing,0,Delay Sync,,,crates/nord-plugin/src/fx_selectors.rs,119
+table,missing,0,Delay Division,,,crates/nord-plugin/src/fx_selectors.rs,120
+table,norm,0,Delay Ping-Pong,Delay Ping Pong,0x2cc838,crates/nord-plugin/src/fx_selectors.rs,121
+table,affix,0,Delay Filter,Filter,0x2cd6a8,crates/nord-plugin/src/fx_selectors.rs,122
+table,missing,0,Delay FX,,,crates/nord-plugin/src/fx_selectors.rs,123
+table,affix,0,Reverb Model,Model,0x2cd9b0,crates/nord-plugin/src/fx_selectors.rs,124
+table,exact,0,Reverb Color,Reverb Color,0x2cc940,crates/nord-plugin/src/fx_selectors.rs,125
+table,missing,0,Layer FX Selectors,,,crates/nord-plugin/src/fx_selectors.rs,152

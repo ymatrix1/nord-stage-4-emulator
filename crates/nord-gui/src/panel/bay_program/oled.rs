@@ -293,8 +293,8 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         Screen::Undo => t(
             "UNDO",
             match (ui.undo_blocked, ui.redo_available) {
-                (true, true) => "Nothing to undo. Redo?",
-                (true, false) => "Nothing to undo",
+                (true, true) => "Nothing to Undo. Redo?",
+                (true, false) => "Nothing to Undo",
                 (false, true) => "Revert the last edit? (Redo ready)",
                 (false, false) => "Revert the last edit?",
             }
