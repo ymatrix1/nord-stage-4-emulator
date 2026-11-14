@@ -223,6 +223,7 @@ impl eframe::App for Stage4App {
                 .render_drawer(ctx, &mut self.state, &self.audio_handle);
         }
 
+        self.library.sync_piano_ui(&mut self.state);
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(nord_gui::style::CHASSIS_RED))
             .show(ctx, |ui| {

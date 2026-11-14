@@ -152,9 +152,10 @@ impl OrganLayer {
     pub(super) fn sum_b3_weights(&mut self, bus: &[f32; NUM_TONEWHEELS]) -> f32 {
         let shift = i32::from(self.octave_shift.clamp(-2, 2)) * 12;
         self.b3_weights.set_rate(self.sample_rate);
+        let drawbars = *self.active_drawbars();
         let w = *self
             .b3_weights
-            .step(&self.held_notes, &self.drawbars, shift, self.drawbar_law);
+            .step(&self.held_notes, &drawbars, shift, self.drawbar_law);
         let mut sum: f32 = w.iter().zip(bus.iter()).map(|(w, x)| w * x).sum();
         if self.percussion_env > 1e-4 {
             let off = if self.percussion_third_harmonic {
@@ -167,7 +168,7 @@ impl OrganLayer {
                 let key = note as i32 + shift;
                 let wheel = fold_wheel(key - 24 + off);
                 let a = WHEEL_GAIN[wheel - 12] * key_footage_weights(key)[3];
-                sum += self.percussion_env * gain * a * bus[wheel];
+                sum += self.perc_env_for(note) * gain * a * bus[wheel];
             }
         }
         let dip = if self.percussion_enabled && !self.percussion_soft && self.percussion_env > 1e-4

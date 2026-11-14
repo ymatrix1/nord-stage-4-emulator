@@ -30,6 +30,8 @@ mod fw_tone_stack;
 mod fw_words;
 mod master;
 mod master_iir;
+mod mod1_dynamic;
+mod mod2_spin;
 mod modulation;
 mod reverb;
 mod sharing;
@@ -139,6 +141,9 @@ pub struct LayerFxChain {
     pub mod1_ped: bool,
     /// Wah PED position `0..=1` (pedal / Rate knob; ASSUMED 0.5 centre default).
     pub mod1_ped_pos: f32,
+    /// Master Clock sync of the Mod 1 rate (A-Pan / Trem / Wah / Pump, manual p.50): beats per cycle; `Some` overrides
+    /// `mod1_rate_hz` with `bpm / 60 / beats` Hz. Not used by Ring Mod (pitch). Default `None`.
+    pub mod1_sync_beats: Option<f32>,
     pub mod2_type: Mod2Type,
     pub mod2_rate_hz: f32,
     pub mod2_amount: f32,
@@ -188,6 +193,9 @@ pub struct LayerFxChain {
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
     fw_comp_amount: f32,
+    clock_bpm: f32,
+    dyn1: mod1_dynamic::Mod1Dyn,
+    spin: mod2_spin::SpinState,
     mod1_phase: f32,
     wah_state_l: [f32; 2],
     wah_state_r: [f32; 2],
@@ -245,6 +253,7 @@ impl LayerFxChain {
             mod1_variation: false,
             mod1_ped: false,
             mod1_ped_pos: 0.5,
+            mod1_sync_beats: None,
             mod2_type: Mod2Type::Off,
             mod2_rate_hz: 0.8,
             mod2_amount: 0.35,
@@ -283,6 +292,9 @@ impl LayerFxChain {
             fw_comp: None,
             fw_amp: None,
             fw_comp_amount: 0.0,
+            clock_bpm: 120.0,
+            dyn1: mod1_dynamic::Mod1Dyn::new(),
+            spin: mod2_spin::SpinState::new(),
             mod1_phase: 0.0,
             wah_state_l: [0.0; 2],
             wah_state_r: [0.0; 2],
@@ -364,6 +376,7 @@ impl LayerFxChain {
     /// Processes a single stereo frame `[left, right]` through all 5 layer FX stages at `bpm`.
     pub fn process_frame_with_bpm(&mut self, frame: [f32; 2], bpm: f32) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        self.clock_bpm = bpm;
         let [l1, r1] = self.process_mod1(frame[0], frame[1], inv_fs);
         let [l2, r2] = self.process_mod2(l1, r1, inv_fs);
         let [l3, r3] = self.process_amp_eq_comp(l2, r2, inv_fs);
