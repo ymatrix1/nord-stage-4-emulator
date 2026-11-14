@@ -53,7 +53,7 @@ c01e17a0  bl 0xc006ca48 ; str sl, [port] ; str r5, [port]       ; message (addre
 
 ## 5. Program sweep coverage (SAMPLE layers)
 
-`examples/program_sweep.rs` now lists per synth layer the kernels the key rule reaches over the key spans of the loaded zones (`synth_a_kernels` ..), and `tools/program_sweep.py` tags each as `synth.sample.kernel=K` (sweep status `assumed`; since section 12 the rule and the key field are VERIFIED and the rule is the default). Numbers of the 2026-11-14 sweep are in [program-coverage](program-coverage.md) section 5.
+`crates/nord-tools/src/bin/program_sweep.rs` now lists per synth layer the kernels the key rule reaches over the key spans of the loaded zones (`synth_a_kernels` ..), and `tools/program_sweep.py` tags each as `synth.sample.kernel=K` (sweep status `assumed`; since section 12 the rule and the key field are VERIFIED and the rule is the default). Numbers of the 2026-11-14 sweep are in [program-coverage](program-coverage.md) section 5.
 
 ## 6. Reproduce
 

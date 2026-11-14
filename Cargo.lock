@@ -2330,6 +2330,14 @@ name = "nord-sharc"
 version = "0.1.0"
 
 [[package]]
+name = "nord-tools"
+version = "0.1.0"
+dependencies = [
+ "nord-core",
+ "serde_json",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

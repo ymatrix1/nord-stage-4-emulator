@@ -1,4 +1,4 @@
-//! Output-health statistics for the factory program sweep (`examples/program_sweep.rs`,
+//! Output-health statistics for the factory program sweep (`crates/nord-tools/src/bin/program_sweep.rs`,
 //! `tools/program_sweep.py`, `docs/research/program-coverage.md`).
 //!
 //! Pure functions over rendered stereo buffers; they allocate nothing on the audio path and are

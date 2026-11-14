@@ -252,7 +252,7 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
-    /// Strip chain only, opt-in (default off): the envelope rate indices come straight from the
+    /// Strip chain only, on by default since D57: the envelope rate indices come straight from the
     /// stored knobs (`strip_knobs`, `fw_knob_laws.rs`: index = knob - 64, VERIFIED run) instead of
     /// the ASSUMED displayed-time search of `strip_map.rs`. Layers without knobs keep the search.
     pub knob_laws: bool,
@@ -414,7 +414,7 @@ impl SynthLayer {
             p_wave: PWave::Other,
             strip_stage: None,
             strip_stages: true,
-            knob_laws: false,
+            knob_laws: true,
             strip_knobs: None,
             sample_kernel_by_key: true,
             sample_pitch_fw: false,

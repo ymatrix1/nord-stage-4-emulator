@@ -113,8 +113,8 @@ Percussion enable (`Edt_Org_Preset_kB3PercEnable`) writes DM `0xB44B6 .. 0xB44C0
 Checked 2026-11-13. `organ_ref --weights firmware` (`OrganLayer`, percussion, crosstalk, rotary, scanner, key click off; 43,156.4 Hz so that frames equal the DSP frames) against `sharc-organ` driven with the ARM messages of this note: key-down at call 0 (`wB` target, `a = 0x3C1DF380`, `b = 0x3F7D8832` on the held wheels), key-off at frame 8192 (all 92 wheels `wB = 0`, `a = 0x3B8BF800`, `b = 0x3F7EE810`), level `L = 1` (ASSUMED), `wA` starting at 0, the mix-stage smoother states (`0x959B1..B2`, `0x95B40..41`, `0x95B44..45`) poked onto their targets (the harness boots them at 0, which gives an extra startup ramp of the oracle that the running firmware does not have).
 
 ```bash
-cargo build --release -p nord-sharc --bins -p nord-core --example organ_ref
-python tools/organ_weight_compare.py SRAM/core1_sram.bin --oracle target/release/sharc-organ     --rust target/release/examples/organ_ref [--notes ..] [--drawbars ..] [--velocity ..] [--detuned]
+cargo build --release -p nord-sharc --bins -p nord-tools --bin organ_ref
+python tools/organ_weight_compare.py SRAM/core1_sram.bin --oracle target/release/sharc-organ     --rust target/release/organ_ref [--notes ..] [--drawbars ..] [--velocity ..] [--detuned]
 ```
 
 | Scenario | Level rust/oracle | SNR steady (per lane) | Attack envelope (max / rms, % of peak) | Release envelope |

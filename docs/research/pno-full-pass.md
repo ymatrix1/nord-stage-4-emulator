@@ -1,7 +1,7 @@
 # Research: the complete PNO core 1 pass in the oracle (`sharc-pass`), Vox and Pipe end to end
 
 - **Checked:** 2026-11-13
-- **Sources (local, never committed):** the PNO image `SRAM/core1_sram.bin` (OS v1.66, `tools/ns4_dsp_images.py` + `tools/ns4_dsp_ldr.py --sram`), the settled ARM state (`tools/arm_steady.py` snapshot), `capstone` listing of `bank0_CODE.bin`, `unicorn` ARM runs, `crates/nord-sharc` (`sharc-pass`, new), `crates/nord-core/examples/organ_ref.rs`. Builds on [pno-dsp-map](pno-dsp-map.md) s3, [sharc-sequencer](sharc-sequencer.md) s3, [pno-module-chain](pno-module-chain.md), [organ-oracle-audio](organ-oracle-audio.md), [organ-weights](organ-weights.md), [organ-post-stage](organ-post-stage.md) and the organ model map of PR #116 (`organ-model-paths.md`, not yet on `main`: model 1 Vox installs `0x12272D` + `0x1229B3`, models 3/4 Pipe install `0x122620` + `0x12268F`).
+- **Sources (local, never committed):** the PNO image `SRAM/core1_sram.bin` (OS v1.66, `tools/ns4_dsp_images.py` + `tools/ns4_dsp_ldr.py --sram`), the settled ARM state (`tools/arm_steady.py` snapshot), `capstone` listing of `bank0_CODE.bin`, `unicorn` ARM runs, `crates/nord-sharc` (`sharc-pass`, new), `crates/nord-tools/src/bin/organ_ref.rs`. Builds on [pno-dsp-map](pno-dsp-map.md) s3, [sharc-sequencer](sharc-sequencer.md) s3, [pno-module-chain](pno-module-chain.md), [organ-oracle-audio](organ-oracle-audio.md), [organ-weights](organ-weights.md), [organ-post-stage](organ-post-stage.md) and the organ model map of PR #116 (`organ-model-paths.md`, not yet on `main`: model 1 Vox installs `0x12272D` + `0x1229B3`, models 3/4 Pipe install `0x122620` + `0x12268F`).
 - **Question:** Can the oracle run the complete PNO core 1 pass (call table, 18-module chain with ramped gains, ping-pong buffers, P4I start) with the ARM-built state, so that a Vox chord and a Pipe chord come out end to end, and what writes the 96 `0x1229B3` weights?
 
 Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by a command below, **EMPIRICAL** = reading of data, **ASSUMED** = reading of a purpose.
@@ -60,7 +60,7 @@ State after the install (VERIFIED, `--dump 0xC01D6:32`):
 python tools/pno_full_pass.py compare SRAM/core1_sram.bin --script docs/research/data/pno-pass-install-pipe1.script \
     --script docs/research/data/arm-replay-organ-model3.script --script docs/research/data/pno-pass-keys-c4e4g4.script --passes 4000
 # full pass vs bank+mix: lag 0 frames, gain 0.99987, SNR 72.3 dB
-target/release/examples/organ_ref --weights firmware --level 1.0 --notes 60,64,67 --drawbars 888000000 --frames 8000 --out rust_fw
+target/release/organ_ref --weights firmware --level 1.0 --notes 60,64,67 --drawbars 888000000 --frames 8000 --out rust_fw
 python tools/pno_full_pass.py rust SRAM/core1_sram.bin rust_fw.csv --script <the same three scripts> --passes 4000
 # rust vs full pass (lane L): lag 2 frames, gain 1.00014, SNR 45.3 dB
 ```

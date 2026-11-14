@@ -9,7 +9,7 @@ dry gain, the amplitudes and the output stage are all in the error.
 
     python tools/pno_full_pass.py run SRAM/core1_sram.bin --exe target/release/sharc-pass \
         --script b3_fb_m0.script --script b3_dry_gain.script --passes 12000 --out b3
-    cargo run --release -p nord-core --example organ_ref -- --mode b3 --drawbars 888800000 \
+    cargo run --release -p nord-tools --bin organ_ref -- --mode b3 --drawbars 888800000 \
         --rate 43402.34375 --frames 12000 --notes 60,64,67 --out rust_b3
     python tools/organ_partials.py b3 b3.f32.npy rust_b3.csv --keys 60,64,67 --drawbars 888800000
 

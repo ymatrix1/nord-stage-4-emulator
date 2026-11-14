@@ -34,7 +34,7 @@ All three chords are within 1 dB on every line, including the rows 43 and 55 of 
 ```bash
 python tools/organ_vox_chord.py 45,52,57,61 > chordB.script
 python tools/pno_full_pass.py run SRAM/core1_sram.bin --exe target/release/sharc-pass --script chordB.script --passes 12000 --out chordB
-cargo run --release -p nord-core --example organ_ref -- --mode vox --rate 43402.34375 --frames 12000 --notes 45,52,57,61 --out rust_B
+cargo run --release -p nord-tools --bin organ_ref -- --mode vox --rate 43402.34375 --frames 12000 --notes 45,52,57,61 --out rust_B
 python tools/organ_partials.py vox chordB.f32.npy rust_B.csv --keys 45,52,57,61 --skip 3000
 python tools/organ_vox_image.py check SRAM/core1_sram.bin --exe target/release/sharc-chain
 ```

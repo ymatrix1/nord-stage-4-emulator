@@ -27,7 +27,7 @@ python tools/organ_fb_pass.py script CODE SRAM fb_m0.script --model 0 --keys 60,
 echo "0 0xb44c0 0x3f800000" > dry_gain.script
 python tools/pno_full_pass.py run SRAM/core1_sram.bin --exe target/release/sharc-pass \
     --script fb_m0.script --script dry_gain.script --passes 12000 --out b3
-cargo run --release -p nord-core --example organ_ref -- --mode b3 --drawbars 888000000 \
+cargo run --release -p nord-tools --bin organ_ref -- --mode b3 --drawbars 888000000 \
     --rate 43402.34375 --frames 12000 --notes 60,64,67 --out rust_b3
 python tools/organ_partials.py b3 b3.f32.npy rust_b3.csv --keys 60,64,67 --drawbars 888000000 --skip 3000
 ```
@@ -61,7 +61,7 @@ Oracle: `pno-pass-install-vox.script` + the 12 weight writes of `keydown-vox-c4e
 ```bash
 python tools/pno_full_pass.py run SRAM/core1_sram.bin --exe target/release/sharc-pass \
     --script docs/research/data/pno-pass-install-vox.script --script vox_keyon.script --passes 12000 --out vox
-cargo run --release -p nord-core --example organ_ref -- --mode vox --rate 43402.34375 --frames 12000 --out rust_vox
+cargo run --release -p nord-tools --bin organ_ref -- --mode vox --rate 43402.34375 --frames 12000 --out rust_vox
 python tools/organ_partials.py vox vox.f32.npy rust_vox.csv --skip 3000
 ```
 

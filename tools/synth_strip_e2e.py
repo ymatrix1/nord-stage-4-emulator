@@ -15,7 +15,7 @@ firmware image and compares:
 
 Usage (see `docs/research/synth-strip-path.md`, needs the local ORG image and `sharc-org`):
 
-    cargo run --release -p nord-core --example synth_strip_e2e > strip.json
+    cargo run --release -p nord-tools --bin synth_strip_e2e > strip.json
     python tools/synth_strip_e2e.py strip.json
 """
 

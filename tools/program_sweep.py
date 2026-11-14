@@ -2,7 +2,7 @@
 # ruff: noqa: E501
 """Factory program sweep: engine-path coverage and render health of every `.ns4p` program.
 
-Drives `crates/nord-core/examples/program_sweep.rs` (release build; one JSON line per program:
+Drives `crates/nord-tools/src/bin/program_sweep.rs` (release build; one JSON line per program:
 decoded program, resolved sounds, routing facts, render statistics for the engine defaults and
 for `--firmware-all --firmware-routing`), then derives
 
@@ -15,7 +15,7 @@ Only derived numbers are written (`docs/research/data/program-sweep.json`,
 `docs/research/program-coverage.md`): no audio, no firmware, no sample content.
 
 Usage:
-    cargo build --release -p nord-core --example program_sweep
+    cargo build --release -p nord-tools --bin program_sweep
     uv run python tools/program_sweep.py --ns4b ".reference/<backup>.ns4b"
     uv run python tools/program_sweep.py --jsonl sweep.jsonl      # reuse a previous run
 """
@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DOC_PATH = ROOT / "docs" / "research" / "program-coverage.md"
 JSON_PATH = ROOT / "docs" / "research" / "data" / "program-sweep.json"
-EXAMPLE = ROOT / "target" / "release" / "examples" / "program_sweep"
+SWEEP_BIN = ROOT / "target" / "release" / "program_sweep"
 
 LAYERS = ["organ_a", "organ_b", "piano_a", "piano_b", "synth_a", "synth_b", "synth_c"]
 ANALOG_CATEGORIES = ["PURE", "SUB OSC", "SYNC", "SHAPE", "SHAPE SINE", "MULTI", "SUPER", "MISC"]
@@ -122,7 +122,7 @@ STATUS: dict[str, tuple[str, str, str]] = {
             A,
             A,
             "synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key"
-            " field (D40, default); zone pitch key and tune of the sample map ASSUMED",
+            " field (D46, default); zone pitch key and tune of the sample map ASSUMED",
         )
         for k in range(6)
     },
@@ -509,7 +509,7 @@ def markdown(result: dict, meta: dict) -> str:
         f"- **Checked:** {meta['checked']}",
         f"- **Sources (local, never committed):** the factory restore backup `{meta['backup']}` "
         f"({n} `.ns4p` programs, its `.npno` and `.nsmp4` entries), `{meta['tool']}` driving "
-        "`crates/nord-core/examples/program_sweep.rs` (release build), the classification of "
+        "`crates/nord-tools/src/bin/program_sweep.rs` (release build), the classification of "
         "paths from `docs/specs/*.md` and `docs/research/*.md` cited per row.",
         f"- **Question:** how much of the factory program space does the emulator cover, which "
         f"engine paths do the {n} programs rely on, and which of them are firmware-verified, "
@@ -699,7 +699,7 @@ def markdown(result: dict, meta: dict) -> str:
     lines += [
         "",
         "Data: [data/program-sweep.json](data/program-sweep.json). Reproduce: "
-        "`cargo build --release -p nord-core --example program_sweep` then "
+        "`cargo build --release -p nord-tools --bin program_sweep` then "
         '`uv run python tools/program_sweep.py --ns4b ".reference/<backup>.ns4b"`.',
         "",
     ]
@@ -711,13 +711,11 @@ def load_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-def run_example(ns4b: Path, extra: list[str]) -> list[dict]:
-    """Runs the release example on `ns4b` and parses its output."""
-    exe = EXAMPLE.with_suffix(".exe") if sys.platform == "win32" else EXAMPLE
+def run_sweep_bin(ns4b: Path, extra: list[str]) -> list[dict]:
+    """Runs the release binary on `ns4b` and parses its output."""
+    exe = SWEEP_BIN.with_suffix(".exe") if sys.platform == "win32" else SWEEP_BIN
     if not exe.exists():
-        raise SystemExit(
-            f"missing {exe}: cargo build --release -p nord-core --example program_sweep"
-        )
+        raise SystemExit(f"missing {exe}: cargo build --release -p nord-tools --bin program_sweep")
     proc = subprocess.run(
         [str(exe), str(ns4b), *extra], capture_output=True, text=True, check=False
     )
@@ -736,7 +734,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.jsonl:
         records = load_jsonl(args.jsonl)
     elif args.ns4b:
-        records = run_example(args.ns4b, [])
+        records = run_sweep_bin(args.ns4b, [])
     else:
         ap.error("give --ns4b or --jsonl")
     result = analyze(records)
