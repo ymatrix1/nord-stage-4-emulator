@@ -35,6 +35,25 @@ fn is_hold(decay_ms: f32) -> bool {
     decay_ms >= HOLD_DECAY_MS || !decay_ms.is_finite()
 }
 
+/// ASSUMED: PURE Pulse 33 / Pulse 10 fix the duty cycle; Osc Ctrl narrows other pulses.
+pub(crate) fn pulse_base_width(dec: &SynthLayerDecoded) -> f32 {
+    match (dec.osc_mode, dec.waveform, dec.osc_category, dec.osc_wave) {
+        (SynthOscMode::Analog, VaWaveform::Pulse, 0, 4) => 0.33,
+        (SynthOscMode::Analog, VaWaveform::Pulse, 0, 5) => 0.10,
+        _ => 0.5,
+    }
+}
+
+/// The Glide knob `0..10` that gives `sec` seconds per octave (inverse of `apply_voice_mode`).
+pub(crate) fn glide_knob(sec: f32) -> f32 {
+    (sec / GLIDE_MAX_SEC_PER_OCTAVE).clamp(0.0, 1.0).sqrt() * 10.0
+}
+
+/// The Vibrato Amount `0..10` that gives `cents` of depth (inverse of `apply_modulation`).
+pub(crate) fn vibrato_amount_from_cents(cents: f32) -> f32 {
+    (cents / VIBRATO_MAX_CENTS).clamp(0.0, 1.0) * 10.0
+}
+
 fn apply_oscillator(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
     let ctrl_norm = (dec.detune / 10.0).clamp(0.0, 1.0);
     synth.osc_mode = dec.osc_mode;
@@ -55,12 +74,7 @@ fn apply_oscillator(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
     synth.fm_feedback = if (dec.wave_id & 1) != 0 { 0.25 } else { 0.0 };
     synth.fm_sub_amount = if dec.osc_category > 0 { 0.35 } else { 0.0 };
     synth.supersaw_detune = ctrl_norm;
-    // ASSUMED: PURE Pulse 33 / Pulse 10 fix the duty cycle; Osc Ctrl narrows other pulses.
-    let base_pw = match (dec.osc_mode, dec.waveform, dec.osc_category, dec.osc_wave) {
-        (SynthOscMode::Analog, VaWaveform::Pulse, 0, 4) => 0.33,
-        (SynthOscMode::Analog, VaWaveform::Pulse, 0, 5) => 0.10,
-        _ => 0.5,
-    };
+    let base_pw = pulse_base_width(dec);
     synth.pulse_width = (base_pw - ctrl_norm * 0.45 * base_pw / 0.5).max(0.02);
     synth.wavetable_index = dec.wave_id % (NUM_WAVETABLES as u8);
     synth.wavetable_position = ctrl_norm;

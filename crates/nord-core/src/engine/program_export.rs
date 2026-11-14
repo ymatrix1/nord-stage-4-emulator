@@ -132,6 +132,11 @@ impl ProgramState {
         ];
         for (dec, synth, idx) in layers {
             keep(&mut dec.octave, |v| v.clamp(-3, 3), synth.octave_offset);
+            crate::synth_params_export::export_decoded_layer(
+                synth,
+                &self.synth_cutoff_morph[idx - 4],
+                dec,
+            );
             level(
                 &mut dec.level,
                 &mut dec.level_morph,

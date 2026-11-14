@@ -50,6 +50,22 @@ impl ClockDivision {
         }
     }
 
+    /// The host index `0..=9` of this division (inverse of [`Self::from_index`]).
+    pub fn index(self) -> u8 {
+        match self {
+            Self::Half => 0,
+            Self::HalfT => 1,
+            Self::Quarter => 2,
+            Self::QuarterT => 3,
+            Self::Eighth => 4,
+            Self::EighthT => 5,
+            Self::Sixteenth => 6,
+            Self::SixteenthT => 7,
+            Self::ThirtySecond => 8,
+            Self::ThirtySecondT => 9,
+        }
+    }
+
     /// Length in quarter-note beats (a triplet is 2/3 of the straight value).
     pub fn beats(self) -> f32 {
         match self {
@@ -364,6 +380,9 @@ mod tests {
         assert!((ClockDivision::ThirtySecondT.beats() - 1.0 / 12.0).abs() < 1e-6);
         assert_eq!(ClockDivision::from_index(0), ClockDivision::Half);
         assert_eq!(ClockDivision::from_index(99), ClockDivision::ThirtySecondT);
+        for i in 0..=9 {
+            assert_eq!(ClockDivision::from_index(i32::from(i)).index(), i);
+        }
     }
 
     #[test]
