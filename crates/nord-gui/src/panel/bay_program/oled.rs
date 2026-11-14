@@ -312,8 +312,8 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         Screen::Undo => t(
             "UNDO",
             match (ui.undo_blocked, ui.redo_available) {
-                (true, true) => "Nothing to undo. Redo?",
-                (true, false) => "Nothing to undo",
+                (true, true) => "Nothing to Undo. Redo?",
+                (true, false) => "Nothing to Undo",
                 (false, true) => "Revert the last edit? (Redo ready)",
                 (false, false) => "Revert the last edit?",
             }
@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(t.big, "STORE PROGRAM AS");
         assert!(t.sub.starts_with("[R]usty"), "{}", t.sub);
         assert_eq!(t.soft, ["Abc", "Cat", "Del", "Ins"]);
-        assert_eq!(t.rows[0], "Cat: None");
+        assert_eq!(t.rows[0], "Cat: Undefined");
         u.store_press();
         let t = compose(&u, &sum());
         assert_eq!(t.big, "STORE PROGRAM TO");

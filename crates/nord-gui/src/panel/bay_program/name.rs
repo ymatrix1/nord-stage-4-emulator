@@ -12,27 +12,47 @@ pub const MAX_NAME: usize = 16;
 /// ASSUMED: the tail `_.!&` after `-` (the strip was cut off at the display edge).
 pub const CHARSET: &str = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.!&";
 
-/// Program categories offered by the Cat soft button.
+/// Program categories offered by the Cat soft button, full names in firmware order.
 ///
-/// ASSUMED: names modelled on the Nord Sound Manager categories; the manual does not list them.
-pub const CATEGORIES: [&str; 16] = [
-    "None",
-    "Acoustic",
+/// VERIFIED: the 26 `(full, short)` pairs of the category pointer table at `bank0_CODE.bin@0x2BF3C8`
+/// (`0xC02BF3C8`, 8 bytes per category: full pointer, short pointer; a second list of the full names
+/// sits at `@0x53E014`), checked by
+/// `python tools/ns4_oled_strings.py pointers` (`tools/tests/test_ns4_oled_strings.py`); the getter
+/// `0xC017B4C8(this, i, short)` indexes it as `table[2 i + short]`.
+/// ASSUMED: this table is the one the STORE `Cat:` field and the LIST Cat view show (the getter is
+/// a list-model virtual method that was not traced to the store screen); confirm with the OLED
+/// render of `docs/research/oled-strings-vs-firmware.md` section 4.
+pub const CATEGORIES: [&str; 26] = [
+    "Accordion/Harm",
     "Bass",
-    "Clav",
-    "Digital",
-    "E.Piano",
-    "FX",
-    "Guitar",
-    "Layers",
+    "Brass Ensemble",
+    "Brass Solo",
+    "Choir",
+    "Drums",
+    "Effects",
+    "Guitar/Plucked",
+    "Mellotron",
+    "Misc",
+    "Orchestral",
     "Organ",
-    "Pad",
+    "Percussion Tuned",
     "Piano",
-    "Strings",
+    "Rhythmic",
+    "Strings Analog",
+    "Strings Ensemble",
+    "Strings Solo",
+    "Synth Bass",
+    "Synth Classic",
     "Synth Lead",
     "Synth Pad",
-    "Vocal",
+    "Wind Ensemble",
+    "Wind Solo",
+    "User",
+    "Undefined",
 ];
+
+/// Category of a program that was never given one: the last entry, `Undefined`.
+pub const UNDEFINED_CATEGORY: usize = CATEGORIES.len() - 1;
 
 /// Cursor-based name editor.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +81,7 @@ impl NameEditor {
             cursor: 0,
             abc_held: false,
             cat_held: false,
-            category: 0,
+            category: UNDEFINED_CATEGORY,
         }
     }
 
@@ -174,10 +194,18 @@ mod tests {
     fn cat_hold_selects_a_category_and_wraps() {
         let mut e = NameEditor::new("x");
         e.cat_held = true;
+        assert_eq!(
+            e.category_label(),
+            "Undefined",
+            "a new program is Undefined"
+        );
         e.dial(-1);
-        assert_eq!(e.category, CATEGORIES.len() - 1);
-        e.dial(1);
-        assert_eq!(e.category_label(), "None");
+        assert_eq!(e.category_label(), "User");
+        e.dial(2);
+        assert_eq!(e.category, 0, "wraps past the last category");
+        assert_eq!(e.category_label(), "Accordion/Harm");
+        e.dial(-2);
+        assert_eq!(e.category_label(), "User");
     }
 
     #[test]
@@ -189,5 +217,12 @@ mod tests {
         e.press_abc(); // pads a blank past the end
         e.release_abc();
         assert_eq!(e.name(), "hi");
+    }
+
+    #[test]
+    fn category_table_ends_with_user_and_undefined() {
+        assert_eq!(CATEGORIES.len(), 26);
+        assert_eq!(&CATEGORIES[24..], ["User", "Undefined"]);
+        assert_eq!(CATEGORIES[UNDEFINED_CATEGORY], "Undefined");
     }
 }

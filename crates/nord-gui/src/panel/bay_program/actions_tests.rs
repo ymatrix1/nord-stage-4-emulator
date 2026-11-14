@@ -33,13 +33,13 @@ fn store_as_names_with_abc_cat_ins_del_then_stores() {
     u.dial(2, false);
     u.soft_up(2);
     assert_eq!(u.store.editor.name(), "Susty");
-    assert_eq!(u.store.editor.category, 2);
+    assert_eq!(u.store.editor.category, 1);
     u.store_press(); // naming done -> choose location
     assert_eq!(u.screen, Screen::StoreTo);
     let out = u.store_press();
     run(&mut u, &mut e, out);
     let p = u.library.get(u.loc).unwrap();
-    assert_eq!((p.name.as_str(), p.category), ("Susty", 2));
+    assert_eq!((p.name.as_str(), p.category), ("Susty", 1));
     assert_eq!(u.title, "Susty");
 }
 

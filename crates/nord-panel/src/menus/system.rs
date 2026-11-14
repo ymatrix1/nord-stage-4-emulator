@@ -38,7 +38,7 @@ pub(super) const PAGES: &[MenuPage] = &[
         title: "Fine Tune",
         items: &[I::int(
             "system.3.fine_tune",
-            "Fine Tune (cents)",
+            "Fine Tune",
             (-50, 50, 1),
             0,
             57,
@@ -61,7 +61,7 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::System,
         page: 5,
-        title: "Reset All Settings",
+        title: "Reset all settings",
         items: &[I::action(
             "system.5.reset_all",
             "Reset",

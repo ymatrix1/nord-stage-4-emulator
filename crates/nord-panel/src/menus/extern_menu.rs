@@ -115,7 +115,7 @@ macro_rules! per_layer_int {
 
 static ECHO: [I; 1] = [I::toggle(
     "extern.1.echo_global",
-    "Echo Global To Extern Ch",
+    "Echo Global to Extern Ch",
     true,
     63,
     Bound("engine:extern_menu.echo_global"),
@@ -161,7 +161,7 @@ static PCH: [I; 3] = per_layer_int!(
 static CC1: [I; 3] = per_layer_int!(
     "6",
     "cc1",
-    "MIDI CC#1",
+    "MIDI CC #1",
     CC,
     2,
     Bound("engine:extern_out.layers.cc_numbers"),
@@ -170,7 +170,7 @@ static CC1: [I; 3] = per_layer_int!(
 static CC2: [I; 3] = per_layer_int!(
     "7",
     "cc2",
-    "MIDI CC#2",
+    "MIDI CC #2",
     CC,
     2,
     Bound("engine:extern_out.layers.cc_numbers"),
@@ -215,18 +215,18 @@ const fn page(n: u8, title: &'static str, items: &'static [I]) -> MenuPage {
 }
 
 pub(super) const PAGES: &[MenuPage] = &[
-    page(1, "Echo Global To Extern Ch", &ECHO),
+    page(1, "Echo Global to Extern Ch", &ECHO),
     page(2, "Keyboard Velocity A/B/C", &VEL),
     page(3, "Program Change MSB A/B/C", &MSB),
     page(4, "Program Change LSB A/B/C", &LSB),
     page(5, "Program Change A/B/C", &PCH),
-    page(6, "MIDI CC#1 A/B/C", &CC1),
-    page(7, "MIDI CC#2 A/B/C", &CC2),
-    page(8, "Device MIDI: Mod Wheel", &MOD),
-    page(9, "Device MIDI: Aftertouch", &AFT),
-    page(10, "Device MIDI: Control Pedal", &CTL),
-    page(11, "Device MIDI: Swell Pedal", &SWL),
-    page(12, "Device MIDI: Volume Pedal", &VOL),
+    page(6, "MIDI CC #1 A/B/C", &CC1),
+    page(7, "MIDI CC #2 A/B/C", &CC2),
+    page(8, "ModWheel MIDI", &MOD),
+    page(9, "Aftertouch MIDI", &AFT),
+    page(10, "Ctrl Pedal MIDI", &CTL),
+    page(11, "Swell Pedal MIDI", &SWL),
+    page(12, "Volume Pedal MIDI", &VOL),
     page(13, "Send On Load A/B/C", &SOL),
 ];
 
