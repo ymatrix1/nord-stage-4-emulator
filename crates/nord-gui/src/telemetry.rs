@@ -110,6 +110,11 @@ impl PanelTelemetry {
         self.0.as_ref().map_or(ui, Telemetry::split_leds)
     }
 
+    /// Sixteenth `0..=3` inside the current Master Clock beat; `None` without an engine.
+    pub fn arp_step(&self) -> Option<u8> {
+        self.0.as_ref().map(|t| t.arp_step)
+    }
+
     /// `true` only when the engine is running and reports nothing to undo.
     pub fn undo_blocked(&self) -> bool {
         self.0.as_ref().is_some_and(|t| t.undo.is_none())
@@ -184,6 +189,16 @@ mod tests {
 
     fn live(e: &Stage4Engine) -> PanelTelemetry {
         PanelTelemetry(Some(e.telemetry()))
+    }
+
+    #[test]
+    fn the_clock_step_is_none_without_an_engine_and_follows_the_engine() {
+        assert_eq!(PanelTelemetry(None).arp_step(), None);
+        let t = nord_core::engine::Telemetry {
+            arp_step: 2,
+            ..Default::default()
+        };
+        assert_eq!(PanelTelemetry(Some(t)).arp_step(), Some(2));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! The Program OLED: text of every screen (pure, testable) and its painter.
 
 use super::catalog::display_name;
-use super::model::{ProgView, Screen};
+use super::model::{KbsMode, ProgView, Screen};
 use super::morph::source_label;
 pub use super::oled_grid::Line;
 use super::oled_home::{location_title, name_line, section_rows};
@@ -50,6 +50,8 @@ pub struct OledText {
     /// Program-list screens: index within `rows` of the lit (selected) row; the rows then sit at
     /// y = 13, 23, 33, 43 and carry no focus marker.
     pub sel: Option<usize>,
+    /// Graphic at the right edge of the popup (beat boxes, octave slider).
+    pub graphic: Option<super::oled_popup::Graphic>,
 }
 
 impl OledText {
@@ -191,7 +193,16 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         ..Default::default()
     };
     match ui.screen {
-        Screen::Home => home(ui, sum),
+        Screen::Home => {
+            let mut t = home(ui, sum);
+            // VERIFIED (research note s17.4): the Octave Shift popup, `-1` and a slider.
+            if let Some((label, octave)) = ui.octave_popup() {
+                t.popup = Some((label, octave.to_string()));
+                t.graphic = Some(super::oled_popup::Graphic::Slider(octave));
+            }
+            t
+        }
+        Screen::Import => super::import::compose(ui),
         Screen::List => super::oled_lists::list(ui),
         Screen::Menu(m) => super::menu_screen::compose(ui, m),
         Screen::StoreTo | Screen::StoreAs => super::oled_store::compose(ui),
@@ -200,11 +211,17 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         // home screen, label `Master Clock Tempo` (row y = 45, four beat boxes at the right, the
         // first lit) and `120 bpm` (y = 55). ASSUMED: the Keyboard Sync state is appended to the
         // value (the real popup has no room for the KBS soft button, which stays functional).
+        // VERIFIED: the first of the four beat boxes lit at the right of the label; the box of
+        // the engine's current beat is lit here (`ClockUi::beat`, fed from the telemetry).
         Screen::Clock => OledText {
             popup: Some((
                 "Master Clock Tempo".into(),
-                format!("{:.0} bpm\tKBS {}", ui.clock.bpm, ui.clock.kbs.label()),
+                match ui.clock.kbs {
+                    KbsMode::Off => format!("{:.0} bpm", ui.clock.bpm),
+                    k => format!("{:.0} bpm\tKBS {}", ui.clock.bpm, k.label()),
+                },
             )),
+            graphic: Some(super::oled_popup::Graphic::Beats(ui.clock.beat)),
             ..home(ui, sum)
         },
         // VERIFIED: Transpose is a popup in the lower half of the home screen, label and value

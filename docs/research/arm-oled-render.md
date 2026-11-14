@@ -515,7 +515,8 @@ Turning the Program dial while the Master Clock popup is open opened the same li
 - Menu labels of s14 (`menu_labels.rs`): `Volume Level Offset`, `Bus Output Channels`, `Organ / Piano / Synth Output Channel`, `Control / Swell / Sustain / Rotor Pedal Type`, `Foot Switch Type`, `Control Change Type`, `Version`; values `None` / `+3 semi`, `+0.0 dB`, ` 0 dB`, and the two-part Fine Tune `440.8Hz<TAB>+3 cent` (hertz = `440 * 2^(cents / 1200)` reproduces all six measured pairs; the second part is right-aligned).
 - Synth `OSC WAVEFORM`: wave index `1 (6)` with a space, caption `SHAPE: 0.0` for a Shape wave, the TYPE / CAT / WAVE labels as small inverted tabs.
 - Undo dialog (bar `UNDO`, `Nothing to Undo`, `Ok` in the fourth slot; `Redo` third, ASSUMED) and the Master Clock popup (`Master Clock Tempo` / `120 bpm`, KBS state appended, ASSUMED).
-- Not done: the display 1 blank while a list is open, the beat boxes and the octave slider graphics, the `Undo to before <name>?` wording with a real item name, the category focus frame of Store As.
+- Seventh pass (GUI only, no new measurement): `Import into A:11` (`import.rs`, `Screen::Import`, `Ok` / `Cancel`), display 1 blank while LIST / Import / Program Organize is open, Master Clock beat boxes (lit box from the clock step of the telemetry, value `120 bpm` without the appended KBS text while KBS is Off), Octave Shift popup with slider (`popups.rs`, `oled_popup.rs`, opened when the focused Synth layer's octave changes). Reproduce the layout checks with `cargo test -p nord-gui bay_program`.
+- Not done: the `Undo to before <name>?` wording with a real item name, the category focus frame of Store As, the beat count of a bar from the engine.
 
 ## Implications
 
@@ -537,5 +538,5 @@ Turning the Program dial while the Master Clock popup is open opened the same li
 5. Find Undo (Shift + Solo) and the remaining Synth / Arp pages to settle `UNDO`, `LEFT` / `RIGHT` and the real `LFO` title.
 6. Fifth pass (done): menu values edited (the Program dial with the modifier word cleared, s16.2), Store As frame measured (s16.3), the three Synth dials identified (s16.4).
 7. Undo (Shift + Solo): find the Undo screen id for the manager's slot 13 or the Solo key id for a posted key event (s16.6); drive name entry in Store As (dial = character); find what clears bit 0 of the modifier word `0xC05846AC` after a Shift release.
-8. GUI: the program list `Import into A:11` (s16.5), the Synth `OSC WAVEFORM` page with the TYPE / CAT / WAVE columns (s16.4), two-part menu values (`440.8Hz` / `+3 cent`), the Master Clock / Octave Shift popup graphics.
+8. GUI (done, seventh pass): the program list `Import into A:11` (s16.5), the Synth `OSC WAVEFORM` page (s16.4), two-part menu values, the Master Clock / Octave Shift popup graphics. Open: capture whether the Program dial opens the import list on a unit with the modifier word in its normal state (s17.3), what `Ok` does, the popup timeout, the beat counter.
 7. Sixth pass (done, s17): Undo found (router id 21 with flags 1), Master Clock / Octave Shift frames, Store As cursor and category focus, GUI program list / menu labels / two-part values. Open: the scan source of Solo, the `Undo to before <name>?` frame (needs an edit history), typing a character in Store As, the display 1 blank during lists.

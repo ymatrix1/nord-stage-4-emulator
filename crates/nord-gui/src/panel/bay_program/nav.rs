@@ -85,10 +85,13 @@ impl ProgramUi {
         if shift && self.screen == Screen::Home {
             self.screen = Screen::List;
             self.sync_list_cursor();
+        } else if self.screen == Screen::Home && self.import.on_dial {
+            self.open_import();
         }
         match self.screen {
             Screen::Home | Screen::NumPad => self.select_loc(self.loc.step(delta)),
             Screen::List => self.list_dial(delta),
+            Screen::Import => self.import_dial(delta),
             Screen::StoreTo if self.store.preset.is_some() => {
                 self.preset_store_step(delta);
                 Vec::new()

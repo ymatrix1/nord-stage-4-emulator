@@ -52,6 +52,11 @@ fn store_legacy(s: &mut Stage4PanelState, l: Legacy) {
     s.synth_octave = l.octave;
 }
 
+/// Rectangle of display 1 (the Program area blanks it while a program list is open).
+pub(super) fn display_rect(o: egui::Pos2) -> Rect {
+    oled::glass_rect(o)
+}
+
 /// Draw this bay and apply its input to `state` / the audio thread.
 pub(super) fn render_bay_synth(
     ui: &mut Ui,
@@ -146,6 +151,14 @@ pub(super) fn render_bay_synth(
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    #[test]
+    fn the_display_rect_covers_the_layout_rectangle_of_display_1() {
+        let o = pos2(0.0, 0.0);
+        assert!(
+            display_rect(o).contains_rect(crate::panel::layout_px::rect_or_empty("synth.oled", o))
+        );
+    }
 
     #[test]
     fn render_bay_synth_paints_shapes() {

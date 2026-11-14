@@ -53,6 +53,10 @@ pub struct ProgramUi {
     pub library: UserLibrary,
     /// Swap / Move progress of the Organize menu.
     pub organize: OrganizeFlow,
+    /// The program list `Import into A:11`.
+    pub import: crate::panel::bay_program::import::ImportFlow,
+    /// Octave Shift popup.
+    pub popups: crate::panel::bay_program::popups::Popups,
     pub live: LiveMode,
     /// LIVE MODE pressed: the next Program button picks the Live slot.
     pub live_armed: bool,
@@ -136,6 +140,8 @@ impl Default for ProgramUi {
             store: StoreFlow::default(),
             library: UserLibrary::default(),
             organize: OrganizeFlow::default(),
+            import: Default::default(),
+            popups: Default::default(),
             live: LiveMode::default(),
             live_armed: false,
             num_pad: false,
