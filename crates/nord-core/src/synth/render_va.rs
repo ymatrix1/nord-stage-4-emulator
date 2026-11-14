@@ -2,6 +2,7 @@
 
 use super::fw_shape::fw_shape_wave;
 use super::hw_saw::saw_wave;
+use super::p_block::PBlock;
 use super::*;
 
 impl SynthLayer {
@@ -11,6 +12,7 @@ impl SynthLayer {
         waveform: VaWaveform,
         saw_model: SawModel,
         shape_stage: Option<f32>,
+        p_block: Option<PBlock>,
         supersaw_detune: f32,
         measured: bool,
         pulse_width: f32,
@@ -24,7 +26,18 @@ impl SynthLayer {
         supersaw_phases: &mut [f32; SUPERSAW_VOICES],
     ) -> f32 {
         match waveform {
-            VaWaveform::Saw => saw_wave(saw_model, t, dt, inv_fs),
+            VaWaveform::Saw => {
+                let first = saw_wave(saw_model, t, dt, inv_fs);
+                match p_block {
+                    Some(pb) => {
+                        pb.single()
+                            .mix(first, dt, eff_freq, supersaw_phases, |t2, d2, _| {
+                                saw_wave(saw_model, t2, d2, inv_fs)
+                            })
+                    }
+                    None => first,
+                }
+            }
             VaWaveform::SuperSaw if measured => {
                 let d = supersaw_detune.clamp(0.0, 1.0) * 10.0;
                 let mut sum = 0.0f32;
@@ -58,7 +71,15 @@ impl SynthLayer {
                 base + poly_blep(t, dt) - poly_blep((t + 1.0 - pw) % 1.0, dt)
             }
             VaWaveform::Triangle => match shape_stage {
-                Some(shape) => fw_shape_wave(t, dt, eff_freq, shape),
+                Some(shape) => {
+                    let first = fw_shape_wave(t, dt, eff_freq, shape);
+                    match p_block {
+                        Some(pb) => pb.mix(first, dt, eff_freq, supersaw_phases, |t2, d2, f2| {
+                            fw_shape_wave(t2, d2, f2, shape)
+                        }),
+                        None => first,
+                    }
+                }
                 None => 1.0 - 4.0 * (t - 0.5).abs(),
             },
             VaWaveform::Sine => (TAU * t).sin(),
@@ -75,6 +96,7 @@ mod tests {
         SynthLayer::render_va(
             w,
             model,
+            None,
             None,
             0.3,
             false,

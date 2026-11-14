@@ -119,11 +119,14 @@ impl SynthLayer {
 
         // ASSUMED (strip chain only): the ANALOG SHAPE category is built from the saw helper
         // `0x12501F`, so a decoded `Triangle` of that category plays as the firmware saw.
+        // Opt-in `p_block` (empirical fit, `p_block.rs`): its shape word stands in for an unset
+        // `strip_shape`, its gain and second oscillator apply to the saw / shape stages.
+        let p_block = if strip.is_some() { self.p_block } else { None };
         let shape_stage = if strip.is_some()
             && self.osc_shape_category
             && self.waveform == VaWaveform::Triangle
         {
-            self.strip_shape
+            self.strip_shape.or(p_block.map(|p| p.shape))
         } else {
             None
         };
@@ -292,6 +295,7 @@ impl SynthLayer {
                                 waveform,
                                 saw_model,
                                 shape_stage,
+                                p_block,
                                 self.supersaw_detune,
                                 self.measured_laws,
                                 self.pulse_width,
@@ -316,6 +320,7 @@ impl SynthLayer {
                                 waveform,
                                 saw_model,
                                 shape_stage,
+                                p_block,
                                 self.supersaw_detune,
                                 self.measured_laws,
                                 self.pulse_width,
@@ -402,6 +407,7 @@ impl SynthLayer {
                             waveform,
                             saw_model,
                             shape_stage,
+                            p_block,
                             self.supersaw_detune,
                             self.measured_laws,
                             self.pulse_width,
@@ -443,7 +449,7 @@ impl SynthLayer {
             let fw_co =
                 (strip.is_some() || self.filter_engine == FilterEngine::Firmware).then(|| {
                     let fc = if strip.is_some() {
-                        strip_cutoff_hz(voice_cutoff)
+                        strip_cutoff_hz(voice_cutoff * p_block.map_or(1.0, |p| p.cutoff_scale))
                     } else {
                         voice_cutoff
                     };
