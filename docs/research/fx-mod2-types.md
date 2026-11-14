@@ -170,19 +170,23 @@ Two harness findings. (1) A pre-modify address `dm(m6, i6)` wraps in a circular 
 
 PHAS 0 reads a 129 entry gain table through `c[0x1A]` (`0xE3D81`; two tables of 129 values, `fx-mod2-tables.csv`); the stage copies it into the ring array and points `c[0x1A]` there. The self pointers (`c[-0x1F]`, `c[-0x11]`) are set by the stage.
 
-**Engine-rate rescale.** `scale = FIRMWARE_FRAME_RATE_HZ / fs`: the phase increment words are multiplied by `scale`, the FLANG swing and centre (delays in DSP frames) by `1 / scale`, the VIBE tap word (`-600` words, now even and rescaled) by `1 / scale`, so a delay keeps its duration in seconds and an LFO its frequency (tests `phase_increments_scale_with_the_rate_and_delays_with_the_inverse`, `the_tap_keeps_its_duration_when_the_engine_rate_changes`). The coefficients of the biquads and all-passes stay those of 43.4 kHz (**ASSUMED**: a 10 % shift in cutoff at 48 kHz, no resampling). The CHOR stage keeps its DSP frame delays (not rescaled in this change: its ring is 256 frames and the ARM written delays of the soft type are the verified words).
+**Engine-rate rescale.** `scale = FIRMWARE_FRAME_RATE_HZ / fs`: the phase increment words are multiplied by `scale`, the FLANG swing and centre (delays in DSP frames) by `1 / scale`, the VIBE tap word (`-600` words, now even and rescaled) by `1 / scale`, so a delay keeps its duration in seconds and an LFO its frequency (tests `phase_increments_scale_with_the_rate_and_delays_with_the_inverse`, `the_tap_keeps_its_duration_when_the_engine_rate_changes`). The coefficients of the biquads and all-passes stay those of 43.4 kHz (**ASSUMED**: a 10 % shift in cutoff at 48 kHz, no resampling). The CHOR delays are rescaled in s8.3 (the ring stays 256 frames).
 
 **VIBE type 7.** The type switch to 7 writes 3 words (`c[-2]`, `c[-23]`, `c[3]`) because the capture switched from type 6 inside the same module `0xC0279128` (`fx-type-modules.csv`: 12 words for type 6, 3 for type 7); the other nine (`c[-3]`, the biquad coefficients) are the type 6 words, which the stage uses for both. EMPIRICAL (module-delta reading); a capture of a direct load of type 7 from another module would close it.
 
-### 8.3 Not wired, and why
+### 8.3 PHAS 1 and SPIN wired from the boot words; ENS not (update of the same day)
 
-| Type | State | Blocker |
+The blockers of the first version were instance words that no capture lists. The boot log of the ARM (`python tools/arm_bulk_tables.py capture ...`, [fx-mod-types](fx-mod-types.md) s7) lists them: `docs/research/data/fx-mod1-rows.csv` rows `ens`, `spin`, `phas1` are the image under the boot words, and `fx/fw_mod1_data.rs` carries them.
+
+| Type | State | Evidence |
 |---|---|---|
-| 1 PHAS 1 | routine verified and ported | the instance row holds only the sine polynomial; the all-pass gains `c[-26..-16]` are not written by the type switch or by `kFx2Amt` / `kFx2Rate` (2 words), and the module `0xC02BB2C4` is shared with Amp types 1 to 9, so it is not established that the words come from the Fx2 path. With the words zero the output is silent. |
-| 8, 9 ENS | routine verified and ported | with the image row and the type words the stage output is exactly 0 at every amount: the gain state words (`c[12]` is a smoothed copy of `c[-3]`, but the taps read the ring that the ARM sizes, and the wet path needs words that no capture lists). Not wired rather than guessed. |
-| 10, 11 SPIN | routine verified and ported | the rotor phase word is read through `c[-8]` but never written by the routine; the driver that advances it and the speed ramp (`c[-15] = 42` steps, `c[-17]` / `c[-16]` clamp) are outside it. A stage that advances the phase by `c[-16]` itself diverges (`1e26` at rate 64, bounded only at rate 1): the instance words are incomplete. |
+| 1 PHAS 1 | **wired** (`FwLawStage`, `ROW_PHAS1`) | the all-pass gains `c[-26] = 0.3125`, `c[-25] = 0.5`, `c[-23] = 0.7383`, `c[-17] = -0.7`, `c[-16] = -0.7299`, the phase pointer `c[-29]` (the address of `c[-31]`) and the block count come from the boot; output non-zero, bounded, rate and amount move it. The module `0xC02BB2C4` is shared with Amp types but the instance row is the Phaser's (0xB0432), so the words are the Fx2 ones. |
+| 10, 11 SPIN | **wired** (`ROW_SPIN`) | the earlier "rotor phase driver outside the routine" was wrong: the routine itself clamps the speed `c[-12] = clamp(c[-12] + c[-15], c[-17], c[-16])` and advances `c[-10]` (the type words carry `c[-17]`, `c[-16]`, `c[-15] = -22`); what was missing is the phase pointer `c[-8]` (boot: the address of `c[-10]`), `c[0x21] = 1` and the ring 2 pointers. 200,000 frames at rate 100 and amount 127 stay below 8 (`the_rotor_stays_bounded_over_long_runs`). |
+| 8, 9 ENS | **not wired** | with the boot row the stage is no longer silent, but only the right output element is non-zero (left exactly 0 at every rate and amount, type 9 as well): the words of the left voice are still missing (`c[6]`, `c[7]`, `c[10]` = -167.0, the ring pointers `c[0x12..0x17]` are all mapped to one ring). The boot gives `c[-5]` (phase pointer, the address of `c[-8]`) and `c[0x11] = 1`. Not wired rather than guessed. |
 
-The 11 PHAS programs, 9 FLANG programs and (with 4 to 7) the CHOR / VIBE programs run the firmware stage under `FirmwareFx::mod2`; ENS (3 programs), SPIN (11) and PHAS 1 stay on the engine. Counts from [program-coverage](program-coverage.md) s6: `fx.mod2=PHAS` 12 programs (PHAS 0 is the share with `kFx2Type` 0), `FLANG` 10, `CHOR` 93, `VIBE` 45, `ENS` 3, `SPIN` 11.
+The 11 PHAS programs, 9 FLANG, SPIN (11) and with 4 to 7 the CHOR / VIBE programs run the firmware stage under `FirmwareFx::mod2`; ENS (3 programs) stays on the engine. Counts from [program-coverage](program-coverage.md) s6: `fx.mod2=PHAS` 12 programs, `FLANG` 10, `CHOR` 93, `VIBE` 45, `ENS` 3, `SPIN` 11.
+
+**CHOR rescale.** `FwMod2Stage` scales the six delay and swing words (soft `c[-0x1F]`, `c[-0x19]`, `c[-0x1E]`, `c[-0x1D]`, variation `c[-0x1C]`, `c[-0x1B]`) by `fs / F`, capped at 250 frames (the ring holds 256): at 48 kHz the soft chorus centre is 172.5 frames for the same 3.6 ms (test `delays_keep_their_duration_when_the_engine_rate_changes`). ASSUMED: those words are the delays (the doc range 117 .. 180 frames) and the swings; the biquads and smoothing poles stay.
 
 ### 8.4 Hardware clips
 
@@ -191,11 +195,11 @@ The 11 PHAS programs, 9 FLANG programs and (with 4 to 7) the CHOR / VIBE program
 ## Implications
 
 * The engine's chorus (`9 ms`, `4.5 ms` depth, assumed) is not the firmware's: the firmware delays of the soft type are about `2.7 .. 4.2 ms` (`117 .. 180` DSP frames) and its LFO runs at `0.03 .. 1.35 Hz`.
-* CHOR needs a 256-frame ring at the DSP frame rate; a sample-rate independent port would need a rescaled ring (not done).
+* CHOR needs a 256-frame ring at the DSP frame rate; its delays are now rescaled to the engine rate (s8.3), the ring is not.
 
 ## Follow-ups
 
-1. Wire ENS, SPIN and PHAS 1 (s8.3: the instance words that no capture lists); the Mod 1 routines RM (`0xC02BB10C`, `0x1239D0`), A-WAH (`0x123E9B`), PUMP (`0x124374` / `0x122D2C`) are not started.
+1. ENS: find the left voice words (s8.3). SPIN, PHAS 1 and the Mod 1 routines are done ([fx-mod-types](fx-mod-types.md) s7).
 2. Capture the missing amounts `v = 64 .. 78` and the organ / synth type-switch words.
 3. Compare a hardware recording of a chorus program against `ns4 render-patch --firmware-fx`.
 
