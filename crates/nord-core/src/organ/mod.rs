@@ -129,6 +129,9 @@ pub struct OrganLayer {
     /// Opt-in rotary drive law `tanh(g x) / g`, `g = 1 + 3 drive` (unity small signal gain, so the
     /// drive no longer adds +18.4 dB at drive 2.44); default `false` keeps `tanh(g x)`.
     pub rotary_drive_unity: bool,
+    /// Opt-in: reads `rotary_drive` as the preset unit 0..10 and rescales it to the engine unit
+    /// 0..1 at use (EMPIRICAL, `docs/research/b3-rotary.md`); the stored value is untouched.
+    pub rotary_drive_scaled: bool,
     /// Rotary microphone placement (`false` = Normal distance with cabinet reflections, `true` = Close mic).
     pub rotary_close_mic: bool,
     /// Stereo virtual microphone separation angle in degrees (`0.0..=180.0`, default `120.0`).
@@ -173,6 +176,8 @@ pub struct OrganLayer {
     b3_wheels: B3Wheels,
     b3_weights: b3_weights::B3Weights,
     b3_synced: (f32, f32),
+    /// Whether `b3_wheels` was built with the processor tail (see `set_b3_tail`).
+    b3_tail: bool,
     farfisa_wheels: FarfisaWheels,
     farfisa_synced: (f32, f32),
     lane_mixer: LaneMixer,
@@ -235,6 +240,7 @@ impl OrganLayer {
             rotary_speed: RotarySpeed::Slow,
             rotary_drive: 0.2,
             rotary_drive_unity: false,
+            rotary_drive_scaled: false,
             rotary_close_mic: false,
             rotary_mic_angle_deg: 120.0,
             rotary_stop_mode: false,
@@ -258,6 +264,7 @@ impl OrganLayer {
             b3_wheels: B3Wheels::new(),
             b3_weights: b3_weights::B3Weights::new(sample_rate),
             b3_synced: (0.0, f32::NAN),
+            b3_tail: true,
             farfisa_wheels: FarfisaWheels::new(),
             farfisa_synced: (0.0, f32::NAN),
             lane_mixer: LaneMixer::new(sample_rate),
@@ -292,6 +299,10 @@ impl OrganLayer {
     /// Selects the B3 generator tables with (default) or without the processor tail's frequency
     /// response ([`b3_tail`](self)); setup-time only (rebuilds the wheel tables and phases).
     pub fn set_b3_tail(&mut self, on: bool) {
+        if self.b3_tail == on {
+            return; // live A/B re-sends the options often: rebuild (and reset the phases) only on a change
+        }
+        self.b3_tail = on;
         self.b3_wheels = if on {
             B3Wheels::new()
         } else {

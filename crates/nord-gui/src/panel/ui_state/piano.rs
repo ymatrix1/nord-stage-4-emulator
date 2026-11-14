@@ -3,6 +3,7 @@
 //! Engine-visible values (category, timbre, touch, string res, pedal noise, layer level and
 //! active flags) stay in `Stage4PanelState`; per-layer extras and interaction state live here.
 
+use nord_core::piano::PianoCategory;
 use nord_panel::behaviour::ButtonTracker;
 use std::sync::OnceLock;
 
@@ -85,8 +86,15 @@ pub struct PianoUi {
     pub shift_latch: bool,
     /// Model names of the loaded library (kept in sync by `library/piano_bridge.rs`).
     pub models: Vec<String>,
+    /// Piano type of each entry of `models` (parallel). Empty or shorter than `models` for a flat
+    /// list (dropped files): then the TYPE button does not filter the models.
+    pub model_types: Vec<PianoCategory>,
     /// Index into `models` of the selected model.
     pub model_idx: usize,
+    /// Last model used per type (index into `models`), for TYPE to come back to it.
+    pub last_model: [Option<usize>; 6],
+    /// Loaded Piano A name the dial last followed (so a pending load does not snap it back).
+    pub followed: Option<String>,
     /// Model the dial asked for; the library takes it each frame.
     pub model_request: Option<String>,
     /// Open overlay.
@@ -118,7 +126,10 @@ impl Default for PianoUi {
             solo_saved: None,
             shift_latch: false,
             models: Vec::new(),
+            model_types: Vec::new(),
             model_idx: 0,
+            last_model: [None; 6],
+            followed: None,
             model_request: None,
             overlay: PianoOverlay::None,
             trackers: Default::default(),

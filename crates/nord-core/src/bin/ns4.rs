@@ -271,24 +271,6 @@ fn run_cli(args: &[String]) -> Result<String, String> {
             }
 
             nord_core::render_opts::FirmwareOptions::from_args(args)?.apply_to(&mut engine);
-            nord_core::render_opts::apply_amp_path(
-                &mut engine,
-                match flag("--amp-path").map(String::as_str) {
-                    None => None,
-                    Some("firmware") => Some(true),
-                    Some("engine") => Some(false),
-                    Some(v) => return Err(format!("invalid --amp-path '{v}' (expected engine|firmware)")),
-                },
-            );
-            match flag("--rotary-drive").map(String::as_str) {
-                None | Some("engine") => {}
-                Some("unity") => nord_core::render_opts::apply_rotary_unity(&mut engine, true),
-                Some("scaled") => nord_core::render_opts::apply_rotary_scaled(&mut engine),
-                Some(v) => {
-                    return Err(format!("invalid --rotary-drive '{v}' (expected engine|unity|scaled)"))
-                }
-            }
-
 
             let events_path = flag("--events");
             let notes = match flag("--notes") {
