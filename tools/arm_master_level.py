@@ -112,6 +112,55 @@ def run(
 
 LAYER_SENDER = 0xC023195C
 
+# VERIFIED (disassembly 0xC023195C..0xC0231B0C, run of `modes`): the sender maps the slot (0, 1
+# organ layers A and B, 2, 3 piano, 4..6 synth) and the layer mode flag `[mixer + scene + 0x5B8]`
+# (the Reverb GLOBAL state: the unit store writer at 0xC010E36C sets it to `value(0x1B9) == 1`) to a
+# row index `r8` (id `[mixer + 8 + 4 (25 scene + r8)]`) and a scale cell index `k` (the cell is
+# `[mixer + 0x150 + 4 k]`).
+ROW_FLAG0 = (7, 8, 12, 13, 14)  # byte table 0xC02B8B40, slots 2..6 with Reverb GLOBAL off
+CELL_OF_INDEX = (
+    1,
+    2,
+    3,
+    4,
+    4,
+    6,
+    6,
+    8,
+    8,
+    8,
+    10,
+    10,
+    10,
+    5,
+    5,
+    9,
+    9,
+    9,
+    7,
+    7,
+    11,
+    11,
+    11,
+)  # 0xC02B8B54
+# VERIFIED (run): scale cells of the constructor at 0xC0249F00.
+SCALE_CELLS = (1.6, 1.3, 1.0, 1.0, 1.14, 2.5, 1.0, 1.0, 0.25, 3.25, 1.0, 1.0)
+
+
+def layer_scale_cell(slot: int, reverb_global: bool) -> tuple[int, int]:
+    """`(row r8, scale cell k)` the layer sender picks for `slot` 0..6 and the mode flag."""
+    if slot < 2:  # organ slots: the index is -2 / -1, out of the cell table, so cell 0
+        return slot, 0
+    if reverb_global:
+        return slot + 13, CELL_OF_INDEX[slot + 11]
+    row = ROW_FLAG0[slot - 2]
+    return row, CELL_OF_INDEX[row - 2]
+
+
+def layer_scale(slot: int, reverb_global: bool) -> float:
+    """Scale the sender applies to a layer level word of 1.0 for the slot (float32 cell)."""
+    return f32(SCALE_CELLS[layer_scale_cell(slot, reverb_global)[1]])
+
 
 def layer(code: Path, sram: Path | None, cache: Path | None) -> int:  # pragma: no cover
     import arm_edit_capture as cap
@@ -138,6 +187,35 @@ def layer(code: Path, sram: Path | None, cache: Path | None) -> int:  # pragma: 
     return 0
 
 
+def modes(code: Path, sram: Path | None, cache: Path | None) -> int:  # pragma: no cover
+    """Run the layer sender for both values of the mode flag and compare with `layer_scale`."""
+    import arm_edit_capture as cap
+
+    emu, _blob = cap.settled_emulator(code, sram, cache)
+    mixer = emu.read32(MIXER_GLOBAL)
+    bad = 0
+    # the "active" bytes `[mixer + 7 scene + slot + 0x140]` select the product of the two level
+    # cells (layer A 1.0 in the settled state) instead of the mute sentinel -0.05
+    emu.uc.mem_write(mixer + 0x140, bytes([1] * 7))
+    for flag in (0, 1):
+        emu.uc.mem_write(mixer + 0x5B8, bytes([flag]))  # scene 0 flag byte
+        for slot in range(7):
+            row, _cell = layer_scale_cell(slot, bool(flag))
+            for off in (0x344, 0x40C):
+                emu.write32(mixer + off + 4 * row, 0x12345678)
+            emu.clear_messages()
+            emu.call(LAYER_SENDER, mixer, 0, slot)
+            got = sorted({round(bits_f32(m.word2), 4) for m in emu.messages})
+            want = layer_scale(slot, bool(flag))
+            ok = got == [round(want, 4)]
+            bad += not ok
+            print(
+                f"reverb_global {flag} slot {slot} row {row}: sent {got} model {want:.4f} "
+                f"{'ok' if ok else 'MISMATCH'}"
+            )
+    return 1 if bad else 0
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -152,7 +230,13 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ly.add_argument("image", type=Path)
     ly.add_argument("sram", type=Path, nargs="?")
     ly.add_argument("--cache", type=Path)
+    md = sub.add_parser("modes", help="layer sender for both mode flag values")
+    md.add_argument("image", type=Path)
+    md.add_argument("sram", type=Path, nargs="?")
+    md.add_argument("--cache", type=Path)
     ns = ap.parse_args(argv)
+    if ns.cmd == "modes":
+        return modes(ns.image, ns.sram, ns.cache)
     if ns.cmd == "layer":
         return layer(ns.image, ns.sram, ns.cache)
     if ns.cmd == "word":

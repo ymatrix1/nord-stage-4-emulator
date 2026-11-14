@@ -89,9 +89,51 @@ The scale cells `[T + 0x150 + 4 k]`, k = 0..11, are `1.6, 1.3, 1.0, 1.0, 1.14, 2
 
 The organ `K = 2.8` therefore **cannot be replaced by a VERIFIED number yet**. Relative to an oracle state with the 1.6 word applied the engine constant would be `2.8 / 1.6 = 1.75` (not applied: the oracle lanes in the engine are rendered at word 1.0 and no hardware clip was re-run). No default changed: `firmware_bus_scale`, `firmware_layer_law`, `piano_firmware_level` and the organ `K` stay as in D22, D25 and D39.
 
+## 6. The layer mode flag, the scale cells per engine, and the clips under the verified chain (follow-up of s5)
+
+Commands: `uv run --with unicorn python tools/arm_master_level.py modes target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin --cache target/settled.snap` (sender run for both flag values, compared with `layer_scale`), `tools/emu_vs_hw.py` with the variants below (confirmed notes, `--confirmed-only`, Part A video).
+
+### 6.1 The mode flag is Reverb GLOBAL (VERIFIED disassembly, run for both values)
+
+`[mixer + scene + 0x5B8]` is written by the unit event handler at `0xC010E36C` (`strb r2, [mixer + part + 0x5B8]`) with `r2 = (value(edit id 0x1B9) == 1)`, and `0x1B9` is `Edt_Com_kEffectsRvbGlobal` (range 0..1, default 0, `arm-edit-params.csv`, [fx-contexts](fx-contexts.md)). So the flag is the **Reverb GLOBAL** state of the part (manual p.48-49: one shared reverb after the level faders): 0 in the settled snapshot because the default program has it off. The run through the part dispatcher did not reach the writer (the layer stores do not hold id `0x1B9`, it lives in the FX unit stores), so the link flag = Reverb GLOBAL is read from the listing, and both flag values were run directly on the sender.
+
+### 6.2 Slot, row and scale cell (VERIFIED run; code `tools/arm_master_level.py::layer_scale_cell`)
+
+The sender's slots are organ layers A, B (0, 1), piano layers A, B (2, 3) and synth layers A, B, C (4, 5, 6) (handlers `0xC011AB8C` ids `0xB1`, `0xB2`; `0xC011A7A4` ids `0xB7`, `0xB8`; the synth handler at `0xC011BB48`). Word sent at layer level 127 (level cell 1.0, active byte set), scene I:
+
+| Slot | Reverb GLOBAL off (default) | Reverb GLOBAL on |
+|---|---|---|
+| organ A, B | PNO core 1 chain words `0xB2ECF/D0`, `0xB2EDE/DF`: **1.6** (cell 0; the table index is -2 / -1, outside the cell table) | 1.6 (same) |
+| piano A, B | FX core 1 rows 15, 16 (records `0xC2892`, `0xC28A1`, pointer `0xC0470` / `0xC0478` = the **SMP stream words**): **1.0** (cell 6) | rows 5, 6 (pointer `0xC0470` / `0xC0478`): **2.5** (cell 5) |
+| synth A, B, C | FX core 1 rows 17..19 (pointer `0xC0458 / 60 / 68` = the PNO buses): **1.0** (cell 10) | rows 7..9: **3.25** (cell 9) |
+
+Level 0 sends the sentinel times the cell (`-0.05 * 1.6 = -0.08`, `-0.05 * 3.25 = -0.1625`, seen in the run), so the cells multiply the sentinel too. The scale cells 1.3, 1.14, 0.25 and cell 1 are not reachable from slots 0..6 (slot 7 and above, ext layers, write other rows). Rows 0..4 of FX core 1 (the first set, pointer `0xC0470 .. 0xC0468`) and the second organ family `0xB2FF0 .. 0xB301D` (rows 44..47) are **not** written by this sender: no layer word reaches them (their writer is the boot call at `0xC022EDD0` and whatever the ARM sends later; not found in the edit capture).
+
+**Result.** In every program with Reverb GLOBAL off the layer chain is: organ 1.6, piano 1.0, synth 1.0. The 2.5 and 3.25 cells exist only with a global reverb (they put the layer into the reverb-after-fader path) and cannot explain the 13.4 dB of s5.3. The piano needs no scale in the oracle states (SMP stream gain 1.0 = the state of the FX measurement); the organ needs the 1.6 (the DSP output is linear in the word, [arm-boot-rederive](arm-boot-rederive.md) s1).
+
+### 6.3 Clips under the verified chain (EMPIRICAL, one video, notes `--confirmed-only`)
+
+Engine switches: `--organ-level chain` (`OutputLevel::Chain`, bus gain `1.6 * 0.3732 = 0.597`, swell word and squared layer level as `Firmware`) and `--firmware-piano-chain` (`PianoLayer::receiver_chain_scale`, sample scale `4 G = 0.7464`); the engine unit is the DAC fraction (ASSUMED). RMS is emulator minus hardware in dB:
+
+| Clip | Default | `--organ-level firmware` (K 2.8) | chain (verified words) |
+|---|---|---|---|
+| B3 Chords n Solo (b3wheels + routing) | +6.1 (legacy) | -2.6 | **-15.4** |
+| Vintage Vox J3 (vox) | +8.9 (legacy) | -0.6 | **-14.0** |
+| Space Drama II (Pipe2 + synth; default is the firmware law) | +2.4 | +2.4 (same path) | +0.3 (the clip is mostly the synth) |
+| Velvet Grand, velocity 100 (default 0.55 / `--firmware-piano-bus` 0.5) | +9.7 / +8.9 | | piano chain **+12.3** |
+| Velvet Grand, velocity 88 | +7.3 | | piano chain **+10.0** |
+
+The organ chain lands the B3 and Vox 14 to 15 dB under the clips (13.4 dB predicted from `2.8 / 0.597 = 4.7`, the rest is the rotary drive and the clip), the piano under the same chain lands 10 to 12 dB **over** the Velvet Grand clip (the earlier peak reading of s2, 2.7 dB under the DAC reading, does not survive an RMS comparison on this clip; White Grand and the DSoundman / Audible Genius clips were not re-run in this pass). The two engines then sit 25 dB apart on one video under one common path, so **the verified chain is not end to end**: some per-engine factor that the oracle states and the FX measurement lack differs by about 25 dB between the piano (down) and the organ (up), or the hardware loudness of the clips (velocity, pedal, recording level per segment) dominates. This is outside what the firmware words explain, and no default flips (D22).
+
+### 6.4 The volume sender feed (partial)
+
+`0xC01897A4` is slot 10 of the vtable at `0xC02D3ED4` (the only reference is the constructor literal at `0xC019F13C`, inside the function that starts before `0xC019E47C`): it is the **application event handler** (`this + 0x18C`, `+ 0x284` are the part objects) and takes the event `{kind, flags, id = [event + 8], value = [event + 0xC]}`; the volume branch is the event with id 0 and value 0..127, i.e. the master volume event that the panel knob (`Fnc_Volume`) and MIDI volume produce, delivered by the application event queue. Whether the hardware queues one at start-up (the DSP image word is 0 = muted until then) is not traced; the keyboard is audible at power-on, so the event or the knob scan must exist (ASSUMED). The harness runs the sender directly.
+
 ## Decision
 
-D39: the receiver and the common FX path are recorded; `firmware_bus_scale`, `firmware_layer_law` and `piano_firmware_level` defaults stay. D46: the master level writer and the layer word targets are recorded (s5); defaults stay because the organ chain word (1.6) leaves 13.4 dB unexplained and no hardware clip was re-run.
+D39: the receiver and the common FX path are recorded; `firmware_bus_scale`, `firmware_layer_law` and `piano_firmware_level` defaults stay. D48: the master level writer and the layer word targets are recorded (s5); defaults stay because the organ chain word (1.6) leaves 13.4 dB unexplained and no hardware clip was re-run.
+
+D49: the mode flag and the scale cells per engine are recorded (s6); the verified chain is exposed as the opt-in `--organ-level chain` and `--firmware-piano-chain`; no default flips because the clips do not agree end to end.
 
 ## Implications
 
@@ -101,6 +143,6 @@ D39: the receiver and the common FX path are recorded; `firmware_bus_scale`, `fi
 ## Follow-ups
 
 1. Done in s5: the writer of `DM(0xB6518)` and the chip of the `0xC023195C` ids. Open: which controller feeds sender A (`0xC01897A4`), and that the hardware fires the default volume event.
-2. Resolve the layer mode flag `[T + layer + 0x5B8]` (which scale cell takes the SMP stream and the PNO buses), read the FX bus gains in an ARM state with the flag set, apply the organ chain word 1.6 in an oracle chord and re-measure `K` (same clip, same recording chain).
-3. Re-run the hardware clips (White Grand, Velvet Grand, B3, Pipe) only after 2.
+2. Done in s6: the flag is Reverb GLOBAL and the cells per slot are known (organ 1.6, piano 1.0, synth 1.0 with the reverb off). Open: the factor of about 25 dB between the piano and the organ clips under the common path (s6.3): candidates are the FX rows 0..4 and the `0xB2FF0` family (no layer-word writer), per-segment clip loudness, and the organ lane read-out of the oracle states (not the PNO output block).
+3. Re-run White Grand and the DSoundman / Audible Genius references with `--organ-level chain` and `--firmware-piano-chain` (done only for the Part A video in s6.3).
 4. Why the descriptor ring alternates Core1 and Core2 destinations (every other frame to each core, or an address trick) and which frames the Core2 pass copies.
