@@ -37,6 +37,10 @@ pub enum PianoEdit {
     DynComp { layer: u8, amount: u8 },
     /// OCTAVE SHIFT -2..=2 of one layer.
     OctaveShift { layer: u8, octaves: i8 },
+    /// SUSTPED of the Piano section (both layers follow the sustain pedal).
+    Sustped(bool),
+    /// PSTICK of the Piano section (both layers follow the pitch stick).
+    Pstick(bool),
 }
 
 fn layer_mut(engine: &mut Stage4Engine, layer: u8) -> &mut PianoLayer {
@@ -100,6 +104,18 @@ impl PianoEdit {
             Self::DynComp { layer, amount } => layer_mut(engine, layer).dyn_comp = amount.min(3),
             Self::OctaveShift { layer, octaves } => {
                 layer_mut(engine, layer).octave_shift = octaves.clamp(-2, 2);
+            }
+            Self::Sustped(on) => {
+                let a = usize::from(PIANO_FIRST_LAYER);
+                engine.pedals.sustped[a] = on;
+                engine.pedals.sustped[a + 1] = on;
+                engine.refresh_pedal_routing();
+            }
+            Self::Pstick(on) => {
+                let a = usize::from(PIANO_FIRST_LAYER);
+                engine.pedals.pstick[a] = on;
+                engine.pedals.pstick[a + 1] = on;
+                engine.refresh_pedal_routing();
             }
         }
     }
@@ -197,6 +213,16 @@ mod tests {
         assert_eq!((e.piano_b.unison, e.piano_a.unison), (2, 0));
         assert_eq!((e.piano_a.dyn_comp, e.piano_b.dyn_comp), (3, 0));
         assert_eq!((e.piano_a.octave_shift, e.piano_b.octave_shift), (-1, 0));
+    }
+
+    #[test]
+    fn sustped_and_pstick_set_both_piano_layers_only() {
+        let mut e = eng();
+        PianoEdit::Sustped(false).apply(&mut e);
+        PianoEdit::Pstick(true).apply(&mut e);
+        assert_eq!(&e.pedals.sustped[2..4], &[false, false]);
+        assert_eq!(&e.pedals.pstick[2..4], &[true, true]);
+        assert!(!e.pedals.pstick[0] && !e.pedals.pstick[4]);
     }
 
     #[test]

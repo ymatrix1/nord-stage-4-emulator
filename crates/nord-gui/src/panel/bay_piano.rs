@@ -10,6 +10,7 @@ use super::layout_px::{rect_or_empty, to_px};
 use super::piano_logic as logic;
 use super::piano_widgets as w;
 use super::prelude::*;
+use super::ui_state;
 use crate::audio::PianoEdit;
 use nord_panel::behaviour::Trigger;
 use nord_panel::{section_rect, Section};
@@ -91,13 +92,17 @@ fn draw_strip(
     if !pr.down {
         logic::solo_end(state, out);
     }
-    w::face(p, on, pr.down, false);
-    w::inside(p, on, "ON", false);
-    w::legend(p, on, "SOLO", false);
+    let on_dim = ui_state::inventory_unsupported("piano.on");
+    w::face(p, on, pr.down, on_dim);
+    w::inside(p, on, "ON", on_dim);
+    w::legend(p, on, "SOLO", on_dim);
     pr.resp.on_hover_text(
         "Piano ON/OFF. Hold roughly half a second for SOLO (only the Piano sounds while held).",
     );
-    state.piano_ui.mark("piano.on");
+    state.piano_ui.mark_inv(
+        "piano.on",
+        "ON: the inventory lists section ON/OFF as unsupported (ns4-h7he); the layer switches below still act",
+    );
     state.piano_ui.mark("piano.solo");
 
     // FX focus LED mirrors the focused section.
@@ -142,8 +147,10 @@ fn draw_strip(
                 Trigger::Shifted => {
                     if l == 0 {
                         state.piano_ui.sustped = !state.piano_ui.sustped;
+                        out.push(PianoEdit::Sustped(state.piano_ui.sustped));
                     } else {
                         state.piano_ui.pstick = !state.piano_ui.pstick;
+                        out.push(PianoEdit::Pstick(state.piano_ui.pstick));
                     }
                     state.piano_ui.shift_latch = false;
                 }
@@ -161,25 +168,18 @@ fn draw_strip(
         } else {
             ("PSTICK", state.piano_ui.pstick)
         };
-        w::legend(p, rect, legend, true);
+        w::legend(p, rect, legend, false);
         pr.resp.on_hover_text(format!(
-            "Layer {}: tap = select, tap the other layer to switch (Ctrl+tap adds it), hold = off. Shift+tap = {legend} (state {}, engine has no pedal/pitch-stick routing yet).",
+            "Layer {}: tap = select, tap the other layer to switch (Ctrl+tap adds it), hold = off. Shift+tap = {legend} (now {}; both piano layers, via the engine pedal routing).",
             name.to_uppercase(),
             if ped_on { "on" } else { "off" }
         ));
         state.piano_ui.mark(btn);
-        let (ped_id, ped_why) = if l == 0 {
-            (
-                "piano.sustped",
-                "SUSTPED: engine has no per-section sustain-pedal switch (ns4-h7he)",
-            )
+        state.piano_ui.mark(if l == 0 {
+            "piano.sustped"
         } else {
-            (
-                "piano.pstick",
-                "PSTICK: engine has no per-section pitch-stick switch (ns4-h7he)",
-            )
-        };
-        state.piano_ui.mark_dim(ped_id, ped_why);
+            "piano.pstick"
+        });
 
         // Focus LED: steady when it is the only active layer, blinking when both are active.
         let active = if l == 0 {
@@ -282,7 +282,7 @@ fn draw_octave_and_zone(
             "OCTAVE SHIFT {sign} of the focused layer. Shift+tap = KB ZONE {sign} (zone LED moves; the engine has no keyboard-zone split yet, bean ns4-h7he)."
         ));
         state.piano_ui.mark(oct_id);
-        state.piano_ui.mark_dim(
+        state.piano_ui.mark_inv(
             zone_id,
             "KB ZONE: engine has no keyboard-zone assignment (ns4-h7he)",
         );
@@ -306,7 +306,7 @@ fn draw_octave_and_zone(
         Sense::hover(),
     );
     resp.on_hover_text("KB ZONE LEDs: zone assignment is kept in the UI only (no keyboard-zone split in the engine, ns4-h7he)");
-    state.piano_ui.mark_dim(
+    state.piano_ui.mark_inv(
         "piano.zone_leds",
         "KB ZONE LEDs: engine has no keyboard-zone assignment (ns4-h7he)",
     );
@@ -365,19 +365,22 @@ mod tests {
             dimmed = s.piano_ui.dimmed.clone();
         });
         let ids: Vec<_> = dimmed.iter().map(|d| d.0).collect();
-        for id in [
-            "piano.sustped",
-            "piano.pstick",
-            "piano.kb_zone_down",
-            "piano.kb_zone_up",
-            "piano.zone_leds",
-            "piano.aux_led.a",
-            "piano.aux_led.b",
-        ] {
-            assert!(ids.contains(&id), "{id} should be dimmed");
-        }
+        // The dimmed set is exactly the inventory's remaining `Unsupported` piano ids.
+        let mut want: Vec<String> = nord_panel::all_controls()
+            .iter()
+            .filter(|c| {
+                c.section == Section::Piano
+                    && matches!(c.binding, nord_panel::Binding::Unsupported(_))
+            })
+            .map(|c| c.id.clone())
+            .collect();
+        want.sort();
+        let mut got: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
+        got.sort();
+        assert_eq!(got, want);
+        assert!(!got.contains(&"piano.sustped".to_string()));
         assert!(dimmed
             .iter()
-            .all(|d| d.1.contains("engine") || d.1.contains("no ")));
+            .all(|d| d.1.contains("unsupported") || d.1.contains("engine") || d.1.contains("no ")));
     }
 }

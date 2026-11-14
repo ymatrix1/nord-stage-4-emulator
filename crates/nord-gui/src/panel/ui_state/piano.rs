@@ -4,6 +4,23 @@
 //! active flags) stay in `Stage4PanelState`; per-layer extras and interaction state live here.
 
 use nord_panel::behaviour::ButtonTracker;
+use std::sync::OnceLock;
+
+static UNSUPPORTED: OnceLock<Vec<String>> = OnceLock::new();
+
+/// The inventory still lists `id` as `Unsupported` (no engine feature behind it).
+pub fn inventory_unsupported(id: &str) -> bool {
+    UNSUPPORTED
+        .get_or_init(|| {
+            nord_panel::all_controls()
+                .iter()
+                .filter(|c| matches!(c.binding, nord_panel::Binding::Unsupported(_)))
+                .map(|c| c.id.clone())
+                .collect()
+        })
+        .iter()
+        .any(|x| x == id)
+}
 
 /// Number of piano layers (A, B).
 pub const LAYERS: usize = 2;
@@ -52,9 +69,9 @@ pub struct PianoUi {
     pub octave: [i8; LAYERS],
     /// KB ZONE assignment (0..4, one of the four green LEDs) per layer. UI only.
     pub kb_zone: [u8; LAYERS],
-    /// SUSTPED (Shift + Layer A). UI only.
+    /// SUSTPED (Shift + Layer A); engine default is on for the pianos.
     pub sustped: bool,
-    /// PSTICK (Shift + Layer B). UI only.
+    /// PSTICK (Shift + Layer B); engine default is off.
     pub pstick: bool,
     /// Clav TIMBRE rocker bits (1 soft, 2 treble, 4 brilliant; 0 off). UI only.
     pub clav_timbre: u8,
@@ -91,7 +108,7 @@ impl Default for PianoUi {
             dyn_comp: [0; LAYERS],
             octave: [0; LAYERS],
             kb_zone: [0; LAYERS],
-            sustped: false,
+            sustped: true,
             pstick: false,
             clav_timbre: 0,
             restore_layers: 0b01,
@@ -127,6 +144,18 @@ impl PianoUi {
         self.dimmed.push((id, reason));
     }
 
+    /// Like [`mark`](Self::mark), but dims the id when the inventory still lists it as
+    /// `Unsupported`; returns whether it is dimmed.
+    pub fn mark_inv(&mut self, id: &'static str, reason: &'static str) -> bool {
+        if inventory_unsupported(id) {
+            self.mark_dim(id, reason);
+            true
+        } else {
+            self.mark(id);
+            false
+        }
+    }
+
     /// The layer index (0 or 1) the per-layer buttons act on.
     pub fn layer(&self) -> usize {
         self.focus.min(LAYERS - 1)
@@ -156,6 +185,16 @@ mod tests {
         assert_eq!(u.dimmed.len(), 1);
         u.begin_frame();
         assert!(u.drawn.is_empty() && u.dimmed.is_empty());
+    }
+
+    #[test]
+    fn inventory_lookup_matches_the_binding() {
+        assert!(inventory_unsupported("piano.kb_zone_up"));
+        assert!(!inventory_unsupported("piano.sustped"));
+        assert!(!inventory_unsupported("piano.unison"));
+        let mut u = PianoUi::default();
+        assert!(u.mark_inv("piano.zone_leds", "r"));
+        assert!(!u.mark_inv("piano.unison", "r"));
     }
 
     #[test]

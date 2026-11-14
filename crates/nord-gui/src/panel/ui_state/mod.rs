@@ -8,7 +8,7 @@ mod synth;
 
 pub use fx::FxUi;
 pub use organ::OrganUi;
-pub use piano::{slot, PianoOverlay, PianoUi};
+pub use piano::{inventory_unsupported, slot, PianoOverlay, PianoUi};
 pub use program::ProgramUi;
 pub use synth::SynthUi;
 

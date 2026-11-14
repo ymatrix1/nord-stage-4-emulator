@@ -158,13 +158,17 @@ fn layer_hold_turns_a_layer_off_when_both_are_on() {
 }
 
 #[test]
-fn shift_tap_on_layer_a_toggles_sustped_ui_state() {
+fn shift_tap_on_layer_buttons_toggles_sustped_and_pstick_in_the_engine() {
     let mut s = Stage4PanelState::default();
     let mut rig = Rig::new(&mut s);
-    let at = rig.centre("piano.layer.a");
-    let edits = rig.press(&mut s, at, 0.05, true);
-    assert!(s.piano_ui.sustped);
-    assert!(edits.is_empty(), "SUSTPED has no engine effect");
+    let a = rig.centre("piano.layer.a");
+    assert_eq!(
+        rig.press(&mut s, a, 0.05, true),
+        [PianoEdit::Sustped(false)]
+    );
+    let b = rig.centre("piano.layer.b");
+    assert_eq!(rig.press(&mut s, b, 0.05, true), [PianoEdit::Pstick(true)]);
+    assert!(!s.piano_ui.sustped && s.piano_ui.pstick);
 }
 
 #[test]

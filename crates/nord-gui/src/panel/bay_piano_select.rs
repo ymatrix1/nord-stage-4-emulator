@@ -101,7 +101,12 @@ fn draw_type_and_dial(
         "PIANO SELECT: turn (scroll or drag) or click to cycle the library models; Shift+turn = LIST."
     };
     resp.on_hover_text(tip);
-    state.piano_ui.mark("piano.select_dial");
+    if state.piano_ui.mark_inv(
+        "piano.select_dial",
+        "PIANO SELECT: the inventory lists the dial as unsupported (ns4-h7he); it still cycles the loaded library models",
+    ) {
+        p.circle_filled(dial.center(), dial.width().min(dial.height()) * 0.5 + 1.0, Color32::from_black_alpha(140));
+    }
     state.piano_ui.mark("piano.list");
 }
 
@@ -360,9 +365,11 @@ mod tests {
         ] {
             assert!(ids.contains(&id), "{id}");
         }
-        assert!(
-            dims.is_empty(),
-            "nothing dimmed for the Grand type: {dims:?}"
+        let d: Vec<_> = dims.iter().map(|d| d.0).collect();
+        assert_eq!(
+            d,
+            ["piano.select_dial"],
+            "only the inventory-unsupported dial"
         );
     }
 
@@ -371,8 +378,11 @@ mod tests {
         let (_, ids, dims) = render(|s| s.piano_cat = PianoCategory::Clav);
         assert_eq!(ids.len(), 12);
         let d: Vec<_> = dims.iter().map(|d| d.0).collect();
-        assert_eq!(d, ["piano.soft_release", "piano.timbre"]);
-        assert!(dims[1].1.contains("Clav"));
+        assert_eq!(
+            d,
+            ["piano.select_dial", "piano.soft_release", "piano.timbre"]
+        );
+        assert!(dims[2].1.contains("Clav"));
     }
 
     #[test]
