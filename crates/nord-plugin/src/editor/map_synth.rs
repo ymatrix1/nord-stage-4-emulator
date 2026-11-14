@@ -79,8 +79,23 @@ pub(super) fn map_synth(e: &SynthEdit, out: &mut Vec<W>) {
             }
             return;
         }
+        // PSTICK/RNG: the host `ped_range` bank, same three layers (Synth only).
+        SynthEdit::PstickRange(semitones) => {
+            for n in 5..=7 {
+                out.push(W::layer("ped_range", n, f32::from(semitones)));
+            }
+            return;
+        }
         // GROUP copies and SOUND INIT have no host parameter; per-layer values stay independent.
         SynthEdit::Group { .. } | SynthEdit::SoundInit(_) => return,
+        // KB ZONE, Aux KB and Extern act on the engine only, like the Organ / Piano `Zone` and
+        // `AuxKb` edits: the host has no per-layer parameter for them (`auxkb_synth` is the Aux KB
+        // menu mask), so they are not mirrored.
+        SynthEdit::Zone { .. }
+        | SynthEdit::AuxKb { .. }
+        | SynthEdit::Extern { .. }
+        | SynthEdit::ExternCc { .. }
+        | SynthEdit::ExternProgram { .. } => return,
     };
     let per_layer = |out: &mut Vec<W>, family: &'static str, plain: f32| {
         for n in synth_layers(target) {
@@ -166,6 +181,45 @@ mod tests {
         for i in 0..4 {
             assert_eq!(lfo_dest_index(dest(i)), i as f32);
         }
+    }
+
+    #[test]
+    fn engine_only_synth_edits_write_no_host_parameter() {
+        let mut v = Vec::new();
+        for e in [
+            SynthEdit::Zone {
+                layer: 0,
+                leds: 0b0011,
+            },
+            SynthEdit::AuxKb { layer: 1, on: true },
+            SynthEdit::Extern { layer: 2, on: true },
+            SynthEdit::ExternCc {
+                layer: 0,
+                slot: 1,
+                value: 9,
+            },
+            SynthEdit::ExternProgram {
+                layer: 0,
+                program: 3,
+            },
+        ] {
+            map_synth(&e, &mut v);
+        }
+        assert!(v.is_empty());
+    }
+
+    #[test]
+    fn pstick_range_writes_the_three_synth_ped_range_params() {
+        let mut v = Vec::new();
+        map_synth(&SynthEdit::PstickRange(7), &mut v);
+        assert_eq!(
+            v,
+            vec![
+                W::layer("ped_range", 5, 7.0),
+                W::layer("ped_range", 6, 7.0),
+                W::layer("ped_range", 7, 7.0)
+            ]
+        );
     }
 
     #[test]

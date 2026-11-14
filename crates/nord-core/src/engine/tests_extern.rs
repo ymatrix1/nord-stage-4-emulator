@@ -163,3 +163,29 @@ fn extern_note_off_matches_sent_pitch_after_transpose_changes() {
     );
     assert_eq!(out[1], MidiOut::note_off(12, 74));
 }
+
+#[test]
+fn set_layer_extern_switches_audio_for_midi_out_and_back() {
+    let mut e = Stage4Engine::new(48_000.0);
+    e.set_layer_extern(0, true);
+    assert!(e.extern_out.layers[0].enabled);
+    note(&mut e, true, 60);
+    assert_eq!(drain(&mut e), vec![MidiOut::note_on(12, 60, 90)]);
+    assert!((0..256).all(|_| e.synth_a.render_frame() == [0.0, 0.0]));
+    // Leaving Extern releases the note that is still sounding on the external gear.
+    e.set_layer_extern(0, false);
+    assert_eq!(drain(&mut e), vec![MidiOut::note_off(12, 60)]);
+    assert!(!e.extern_out.layers[0].enabled);
+    note(&mut e, true, 61);
+    assert!(drain(&mut e).is_empty(), "back to internal sound");
+}
+
+#[test]
+fn set_layer_extern_ignores_bad_layers_and_repeats() {
+    let mut e = Stage4Engine::new(48_000.0);
+    e.set_layer_extern(3, true);
+    e.set_layer_extern(1, true);
+    e.set_layer_extern(1, true);
+    assert!(!e.extern_out.layers[0].enabled && e.extern_out.layers[1].enabled);
+    assert!(!e.extern_out.layers[2].enabled);
+}

@@ -4,7 +4,7 @@
 //! of the control values. `emit_all` / `emit_osc` turn a copy into [`SynthParam`] writes; the
 //! defaults equal `SynthLayer::new` (see the test), so an untouched panel leaves sounds alone.
 
-use super::tables::{self, ANALOG, FM_ALGOS};
+use super::tables::{self, ANALOG, WAVE_TABLES};
 use crate::audio::SynthGroup;
 use nord_core::synth::{SynthOscMode, VaWaveform, PATTERN_PRESETS};
 use nord_core::synth_types::ArpMode;
@@ -114,7 +114,14 @@ pub struct SynthLayerUi {
     pub kb_hold_exclude: bool,
     // Strip
     pub octave: i8,
+    /// KB ZONE position (`kb_zone::POSITIONS`, `0` = every zone, the engine default).
     pub kb_zone: u8,
+    /// Aux KB LED: the layer is played by the aux keyboard (UI value until telemetry reads back).
+    pub aux: bool,
+    /// EXTERN (Shift+Mode): the layer sends MIDI out instead of rendering audio (manual p.46).
+    pub extern_on: bool,
+    /// Extern dial values: CC VAL 1, CC VAL 2, PROGRAM (engine defaults 0, 0, 0).
+    pub extern_vals: [u8; 3],
 }
 
 impl Default for SynthLayerUi {
@@ -179,6 +186,9 @@ impl Default for SynthLayerUi {
             kb_hold_exclude: false,
             octave: 0,
             kb_zone: 0,
+            aux: false,
+            extern_on: false,
+            extern_vals: [0; 3],
         }
     }
 }
@@ -199,8 +209,8 @@ impl SynthLayerUi {
     /// Number of categories of the current TYPE.
     pub fn cat_count(&self) -> u8 {
         match self.wave_type {
-            1 | 2 => FM_ALGOS.len() as u8,
-            3 => tables::WAVE_CATS,
+            1 | 2 => tables::FM_GROUPS,
+            3 => WAVE_TABLES.len() as u8,
             _ => ANALOG.len() as u8,
         }
     }
@@ -210,7 +220,9 @@ impl SynthLayerUi {
         match self.wave_type {
             1 => tables::HARMONIC_COUNT,
             2 => tables::INHARMONIC_COUNT,
-            3 => tables::TABLES_PER_CAT,
+            3 => WAVE_TABLES[usize::from(self.wave_cat) % WAVE_TABLES.len()]
+                .waves
+                .len() as u8,
             _ => ANALOG[usize::from(self.wave_cat) % ANALOG.len()]
                 .waves
                 .len() as u8,
@@ -234,8 +246,10 @@ impl SynthLayerUi {
     /// Category name shown on the middle dial.
     pub fn cat_name(&self) -> String {
         match self.wave_type {
-            1 | 2 => FM_ALGOS[usize::from(self.fm_algo) % FM_ALGOS.len()].to_string(),
-            3 => format!("TABLES {}", self.wave_cat + 1),
+            1 | 2 => tables::fm_cat_name(self.wave_type, self.fm_algo),
+            3 => WAVE_TABLES[usize::from(self.wave_cat) % WAVE_TABLES.len()]
+                .name
+                .to_string(),
             _ => ANALOG[usize::from(self.wave_cat) % ANALOG.len()]
                 .name
                 .to_string(),
@@ -247,16 +261,20 @@ impl SynthLayerUi {
         match self.wave_type {
             1 => format!("P {}", tables::harmonic_partial(self.wave_idx)),
             2 => format!("{:+} st", tables::inharmonic_semitones(self.wave_idx)),
-            3 => format!("Table {}", self.table_index() + 1),
+            3 => WAVE_TABLES[usize::from(self.wave_cat) % WAVE_TABLES.len()]
+                .waves
+                .get(usize::from(self.wave_idx))
+                .map_or(String::new(), |e| e.name.to_string()),
             _ => self.analog_entry().map_or(String::new(), |e| {
-                format!("{}{}", e.name, if e.exact { "" } else { " ~" })
+                let prefix = ANALOG[usize::from(self.wave_cat) % ANALOG.len()].prefix;
+                format!("{prefix}{}{}", e.name, if e.exact { "" } else { " ~" })
             }),
         }
     }
 
     /// Wavetable index of the WAVE type selection.
     pub fn table_index(&self) -> u8 {
-        (self.wave_cat * tables::TABLES_PER_CAT + self.wave_idx).min(63)
+        tables::table_flat_index(self.wave_cat, self.wave_idx)
     }
 
     /// Pitch plus fine tune in cents.
@@ -371,7 +389,7 @@ mod tests {
     #[test]
     fn names_mark_standins_and_report_fm_values() {
         let mut u = SynthLayerUi {
-            wave_cat: 6,
+            wave_cat: 7,
             wave_idx: 0,
             ..SynthLayerUi::default()
         };
@@ -385,6 +403,15 @@ mod tests {
         u.wave_type = 3;
         u.wave_cat = 2;
         u.wave_idx = 3;
-        assert_eq!(u.table_index(), 19);
+        assert_eq!(
+            u.table_index(),
+            15,
+            "6 + 6 waves before DIGITAL, then wave 3"
+        );
+        assert_eq!(u.wave_name(), "5th Spectra");
+        assert_eq!(u.cat_name(), "DIGITAL");
+        u.wave_type = 2;
+        u.fm_algo = 1;
+        assert_eq!(u.cat_name(), "INHARMONIC B");
     }
 }

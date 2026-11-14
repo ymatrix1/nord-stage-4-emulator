@@ -68,13 +68,15 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
 | **Total** | | | | | | **275** |
 
-By binding: `Bound` 142, `UiOnly` 58, `Unsupported` 75. By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
+By binding: `Bound` 150, `UiOnly` 58, `Unsupported` 67. By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
+
+PSTICK range (`ns4-dsjv`): there is no separate range control. The Synth strip's `synth.pstick` entry is the printed `PSTICK/RNG` (manual p.28: hold the button and pick a semitone value) and its host binding `ped_pstick_{n}` pairs with `ped_range_{n}` (`1..=12`, default 2). Only the Synth layers honour the range; Organ and Piano `pstick` entries bend a fixed 2 semitones (p.18, p.23). `master.pitch_stick` stays `UiOnly` (the stick is MIDI pitch bend, no host parameter). The totals above did not change.
 
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
 ## Gap list
 
-The old code-review gap list is replaced by the 75 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the 67 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial, `ns4-ymci` program/menus, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 5b. Behaviour layer
 
@@ -123,7 +125,7 @@ A control that has no host parameter but acts on the engine through the panel is
 |---|---|---|
 | Programs | 8 banks x 8 pages x 8 programs; location index = position in the sorted `.ns4b` program list | bank count `VERIFIED` (manual p.12, banks A-H; `G:82`, `H:13` seen on hardware, [dsoundman-course-findings](../research/dsoundman-course-findings.md)); mapping `ASSUMED` |
 | LIST | Num = archive order, Abc = by name, Cat = by archive folder (the real category is inside the program) | `ASSUMED` (Cat) |
-| Store / Store As | in-memory user library (no disk); name 16 chars; Abc / Cat / Ins / Del; category list = the 26 firmware categories (`bay_program/name.rs`, pointer table `0xC02BF3C8`); `STORE PROGRAM TO` shows the target name or `<empty>` then `As: name`; ABC strip runs blank, a-z, A-Z, 0-9, `-` | screen texts and strip order `VERIFIED` (hardware video, see findings note); `ASSUMED` (length, strip tail, and that the 26-entry firmware table is the store `Cat:` list, [oled-strings-vs-firmware](../research/oled-strings-vs-firmware.md) s4); category names `VERIFIED` |
+| Store / Store As | in-memory user library (no disk); name 16 chars; Abc / Cat / Ins / Del; category list = the 26 firmware categories (`bay_program/name.rs`, pointer table `0xC02BF3C8`, the name getter of the firmware's category list model; the `Cat:` caption `0xC014D4EC` VERIFIED, the value source open: [synth-wave-categories](../research/synth-wave-categories.md) s5); `STORE PROGRAM TO` shows the target name or `<empty>` then `As: name`; ABC strip runs blank, a-z, A-Z, 0-9, `-` | screen texts and strip order `VERIFIED` (hardware video, see findings note); `ASSUMED` (length, strip tail, and that the 26-entry firmware table is the store `Cat:` list, [oled-strings-vs-firmware](../research/oled-strings-vs-firmware.md) s4); category names `VERIFIED` |
 | Split | 11 positions C2..C7 = MIDI 36..96 step 6; xFade Off / 3 / 6 notes (engine `half_semitones`); pressing the selected point's soft button again switches it off | `ASSUMED` (step, deactivation) |
 | Mst Clk | tap tempo from 4 taps (manual p.40), reset after 2 s; KBS is UI-only | `ASSUMED` (2 s) |
 | Morph | hold or latch a source, dial = depth, PAGE = target (7 layer levels, 3 synth cutoffs); knob-move assign needs bay hooks | step 0.05 `ASSUMED` |
@@ -151,4 +153,16 @@ Since poly percussion, Drawbar Live, Aux KB, pedals and system settings landed i
 | `rotary.stop_angle` | `organy_stop_angle_{n}` | Shift + STOP MODE opens the ANGLE popup (`panel/rotor_angle.rs`: `Free`, `1: Front Center` .. `6: Back Center`); a pick sends `OrganEdit::RotaryStopAngle(0..=6)` -> `rotary_stop_angle` on both layers (manual p.53, course video ORG 10:08-10:22) | list text `VERIFIED` for 5 of 7 entries, rest phases `ASSUMED` |
 | `rotary.angle` | `organy_mic_angle_{n}` | Last row of the ANGLE popup: `OrganEdit::RotaryAngle`, wide 120 deg (engine default), narrow 60 deg. The manual does not describe a mic separation control, so this entry is `Assumed` | both degrees `ASSUMED` |
 
-Still dimmed in these bays: `piano.select_dial` (`ns4-h7he`; the dial still cycles the loaded library models, the inventory keeps it `Unsupported` until the model list is a host parameter). The Synth strip's `synth.on`, `synth.kb_zone_*`, `synth.zone_leds` and `synth.aux_led.*` keep their `Unsupported` bindings (synth bay is another change).
+Still dimmed in these bays: `piano.select_dial` (`ns4-h7he`; the dial still cycles the loaded library models, the inventory keeps it `Unsupported` until the model list is a host parameter). 
+## 9b. Synth strip and Extern rewire (`ns4-4w9l`)
+
+The Synth strip now matches Organ and Piano: `synth.on`, `synth.kb_zone_down/up`, `synth.zone_leds`, `synth.aux_led.a/b/c` and `synth.extern` are `Bound`, so 8 entries leave `Unsupported` (`Bound` 142 to 150, `Unsupported` 75 to 67). The inventory totals per section do not change.
+
+| Control | Binding | Engine effect | Status |
+|---|---|---|---|
+| `synth.on` | `synth_a_enabled` | tap switches the three Synth layers off or back on (`SetLayerActive`, existing behaviour) | `ASSUMED` as `organ.on` |
+| `synth.kb_zone_down/up`, `synth.zone_leds` | `engine:split_router.layer_zone_masks` | Shift + OCTAVE steps the focused layer through the shared 5 positions of `panel/kb_zone.rs` and sends `SynthEdit::Zone` -> `Stage4Engine::set_layer_zone_leds`; the LEDs show the position (before: one LED per position 0..3, no engine edit) | stepping order `ASSUMED` |
+| `synth.aux_led.a/b/c` | `auxkb_synth` | LED click sends `SynthEdit::AuxKb` -> `Stage4Engine::set_layer_aux` (enable-on-switch `ASSUMED`, same as Organ / Piano); the LED shows the engine read-back when telemetry is live | `ASSUMED` |
+| `synth.extern` | `engine:set_layer_extern` | Shift+Mode toggles Extern on the focused layer: `SynthEdit::Extern` -> `Stage4Engine::set_layer_extern` (internal voices released on entry, Extern notes released on exit) and opens the EXTERN page. The page dials are CC VAL 1, CC VAL 2, PROGRAM (manual p.47) and send `ExternCc` / `ExternProgram` -> `extern_set_cc_value` / `extern_set_program` | manual p.46-47 |
+
+Still `Unsupported` in the Synth section: the three OLED dials (one dial maps to many parameters), WAVEFORM, PITCH/SMP, OSC / FILTER / AMP ENVELOPE pages and their VELOCITY shifts, FILTER TYPE, the GROUP shifts, ARP RUN / MENU, VIBRATO MENU, OSC CTRL and the Synth octave buttons: all are page selectors or multi-parameter controls whose parameters are already host-bound individually, or (octave) have no host parameter yet. They stay tied to `ns4-4w9l`.

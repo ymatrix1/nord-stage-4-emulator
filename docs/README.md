@@ -11,6 +11,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) | Open technical and design questions (`OQ1`–`OQ22`, answered ones removed) |
 | [TECH_DEBT.md](TECH_DEBT.md) | Technical debt register (`TD-01`..`TD-11`) |
 | [HOST_COMPATIBILITY.md](HOST_COMPATIBILITY.md) | DAW host compatibility status |
+| [RELEASING.md](RELEASING.md) | How to cut `vX.Y.Z`: version bump, dry run, tag, checksums, pipeline checks |
 | [GLOSSARY.md](GLOSSARY.md) | Hardware, DSP, and Clavia binary format terminology |
 
 ## Technical Specifications (`docs/specs/`)
