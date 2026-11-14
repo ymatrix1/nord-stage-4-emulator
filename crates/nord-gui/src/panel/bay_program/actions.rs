@@ -105,7 +105,7 @@ impl ProgramUi {
                     .strip_prefix("program.menu.")
                     .and_then(|_| menu_button(id))
                 {
-                    self.screen = Screen::Menu(m);
+                    self.open_menu(m);
                 } else if let Some(n) = id
                     .strip_prefix("program.button.")
                     .and_then(|n| n.parse::<u8>().ok())
@@ -221,7 +221,14 @@ impl ProgramUi {
             }
         };
         let category = self.store.editor.category;
-        let out = match self.store.target {
+        let target = self.store.target;
+        if matches!(target, Some(StoreTarget::Bank(_))) && self.store_blocked() {
+            // Memory Protect (System menu page 1): nothing is written, the screen closes.
+            self.store.cancel();
+            self.screen = Screen::Home;
+            return Vec::new();
+        }
+        let out = match target {
             Some(StoreTarget::Bank(loc)) => {
                 self.loc = loc;
                 self.browse = loc;
@@ -304,6 +311,7 @@ mod tests {
         let mut e = Stage4Engine::new(48_000.0);
         e.layer_levels[2].base = 0.42;
         let mut u = ProgramUi::default();
+        u.menu.set_memory_protect(false);
         u.title = "Rusty PWM".into();
         assert!(u.store_press().is_empty());
         assert_eq!(u.screen, Screen::StoreTo);
@@ -332,6 +340,7 @@ mod tests {
     fn selecting_the_stored_location_recalls_it() {
         let mut e = Stage4Engine::new(48_000.0);
         let mut u = ProgramUi::default();
+        u.menu.set_memory_protect(false);
         e.layer_levels[0].base = 0.11;
         u.store_press();
         let target = u.store.bank_target().unwrap();

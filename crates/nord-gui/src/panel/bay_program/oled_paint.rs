@@ -1,5 +1,6 @@
 //! Painter of the Program OLED text (scaled to the layout rectangle).
 
+use super::menu_screen::DIM;
 use super::oled::OledText;
 use crate::panel::prelude::*;
 use egui::FontId;
@@ -21,12 +22,17 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
     );
     let mut y = rect.top() + 1.0;
     let line = |y: &mut f32, s: &str, size: f32| {
+        // A row that starts with the DIM mark is an unsupported menu item: drawn faded.
+        let (s, color) = match s.strip_prefix(DIM) {
+            Some(rest) => (rest, fg.gamma_multiply(0.45)),
+            None => (s, fg),
+        };
         painter.text(
             pos2(rect.left() + 2.0, *y),
             Align2::LEFT_TOP,
             s,
             FontId::monospace(size),
-            fg,
+            color,
         );
         *y += size * 1.15;
     };
