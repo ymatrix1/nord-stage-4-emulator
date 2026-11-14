@@ -196,6 +196,18 @@ def _compute(rhs: str, dst: str, stp: Step) -> bool:
         else:
             stp.w[n] = f"ishl({read_reg(m.group(1))},{read_reg(amount)})"
         return True
+    m = re.match(r"^ashift (\w+) by (\w+)$", rhs)
+    if m:
+        amount = m.group(2)
+        if re.match(r"^(0x[0-9a-f]+|\d+)$", amount):
+            stp.w[n] = f"iashift({read_reg(m.group(1))},imm({num(amount)}))"
+        else:
+            stp.w[n] = f"iashift({read_reg(m.group(1))},{read_reg(amount)})"
+        return True
+    m = re.match(r"^(\w+)\*(\w+)\(uui\)$", rhs)
+    if m:
+        stp.w[n] = f"imul({read_reg(m.group(1))},{read_reg(m.group(2))})"
+        return True
     m = re.match(r"^float (\w+) by (\w+)$", rhs)
     if m:
         stp.w[n] = f"ffloat({read_reg(m.group(1))},{read_reg(m.group(2))})"
@@ -231,7 +243,7 @@ def _compute(rhs: str, dst: str, stp: Step) -> bool:
 def parse_part(part: str, stp: Step) -> None:
     """One `dst = src` or special part of an instruction."""
     if part.startswith("if "):
-        m = re.match(r"^if (ne|ge|tf|eq|av|ac) (.*)$", part)
+        m = re.match(r"^if (ne|ge|gt|lt|le|tf|eq|av|ac) (.*)$", part)
         sub = Step()
         parse_part(m.group(2), sub)
         # a conditional register move / pass: keep the old value where the condition fails
@@ -250,7 +262,8 @@ def parse_part(part: str, stp: Step) -> None:
         return
     m = re.match(r"^comp\((\w+),(\w+)\)$", part)
     if m:
-        stp.fl = f"comp({read_reg(m.group(1))},{read_reg(m.group(2))})"
+        fn = "comp" if is_float(m.group(1)) else "icomp"
+        stp.fl = f"{fn}({read_reg(m.group(1))},{read_reg(m.group(2))})"
         return
     m = re.match(r"^(\w+)<->(\w+)$", part)
     if m:

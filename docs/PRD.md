@@ -51,7 +51,7 @@ Unlike generic virtual instruments that only mimic the visual front panel (such 
 | Metric | Target | Verification |
 |---|---|---|
 | Audio sample rate | 44.1 kHz / 48 kHz / 96 kHz (default 48 kHz) | Unit & offline render tests |
-| Block render budget (128 samples @ 48 kHz = 2.67 ms) | ≤ 0.8 ms CPU time with all 7 layers + 7 FX chains active | Criterion / benchmark harness |
+| Block render budget (128 samples @ 48 kHz = 2.67 ms) | ≤ 0.8 ms CPU time with all 7 layers + 7 FX chains active | `ns4 bench` (`nord-core/src/bench.rs`); measured 2026-11-14: **not met**, worst case 3.6 to 4.5 ms, typical 0.95 to 1.2 ms ([HOST_COMPATIBILITY](HOST_COMPATIBILITY.md) 7.1, TD-14) |
 | Organ polyphony | Full 61/88-key polyphony (all 91 tonewheels active continuously) | `organ.rs` unit tests |
 | Piano polyphony | Up to 120 voices with priority voice stealing + modal string resonance | `piano.rs` unit tests |
 | Synth polyphony | Up to 46 voices across 3 layers (`Synth A/B/C`) | `synth.rs` unit tests |

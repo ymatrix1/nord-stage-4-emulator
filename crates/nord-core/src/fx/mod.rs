@@ -15,6 +15,7 @@ mod fw_amp_drive;
 mod fw_amp_stage;
 mod fw_amp_types;
 mod fw_autopan;
+mod fw_awah;
 mod fw_cabinet;
 mod fw_cabinet_taps;
 mod fw_chorus;
@@ -46,6 +47,8 @@ mod fw_leslie_ops;
 mod fw_leslie_ring;
 pub mod fw_map;
 mod fw_mod1;
+mod fw_mod1_data;
+mod fw_mod1_rest;
 mod fw_mod2;
 mod fw_mod2_data;
 mod fw_mod2_law_stage;
@@ -56,7 +59,9 @@ mod fw_pe;
 mod fw_pe_ops;
 mod fw_phas0;
 mod fw_phas1;
+mod fw_pump;
 mod fw_reverb;
+mod fw_rm;
 mod fw_rvb_core;
 mod fw_rvb_steps;
 mod fw_rvb_words;
@@ -72,6 +77,7 @@ mod fw_stage;
 mod fw_tone_stack;
 mod fw_vibe;
 mod fw_vibe_stage;
+mod fw_wah;
 mod fw_words;
 mod master;
 mod master_iir;
@@ -142,6 +148,8 @@ mod tests_fw_series;
 mod tests_lfo_golden;
 #[cfg(test)]
 mod tests_master_golden;
+#[cfg(test)]
+mod tests_mod1_golden;
 #[cfg(test)]
 mod tests_mod2_golden;
 #[cfg(test)]
@@ -286,6 +294,9 @@ pub struct LayerFxChain {
     /// Raw `kFx2Type` (`0..=11`) of the program; the firmware Mod 2 runs for every type 0 to 11.
     pub mod2_type_raw: Option<u8>,
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
+    /// The firmware RM / A-WAH / WAH / PUMP stages (`firmware_fx.mod1`, types 4 to 11), boxed:
+    /// the context, ring and scratch arrays are several KB.
+    fw_mod1_rest: Option<Box<fw_mod1_rest::FwMod1Rest>>,
     /// The firmware chorus (`firmware_fx.mod2`), boxed: the ring is 4 KB.
     fw_mod2: Option<Box<fw_mod2::FwMod2Stage>>,
     fw_vibe: Option<Box<fw_vibe_stage::FwVibeStage>>,
@@ -404,6 +415,7 @@ impl LayerFxChain {
             mod2_rate_raw: None,
             mod2_type_raw: None,
             fw_mod1: None,
+            fw_mod1_rest: None,
             fw_mod2: None,
             fw_vibe: None,
             fw_law: None,

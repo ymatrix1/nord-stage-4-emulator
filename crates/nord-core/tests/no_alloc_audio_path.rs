@@ -148,3 +148,55 @@ fn publishing_alone_is_allocation_free() {
     assert_eq!(calls, 0);
     assert_eq!(cell.publishes(), 1001);
 }
+
+/// B13: the worst-case benchmark workload (7 layers, 88 keys held, every FX rack on, four-output
+/// routing) over a long run with key churn, a sustain pedal, tempo changes and both block entry
+/// points. Any allocator call (alloc, free or realloc) on the audio thread fails the test.
+#[test]
+fn worst_case_polyphony_with_fx_and_multi_out_never_touches_the_heap() {
+    use nord_core::bench::{press_all_keys, worst_case_engine, BLOCK_FRAMES, KEY_RANGE};
+    let mut e = worst_case_engine(48_000.0);
+    press_all_keys(&mut e);
+    let mut bufs = [[0.0f32; BLOCK_FRAMES]; 4];
+    // Warm-up (unarmed): lazy tables and one-time initialisation may allocate here.
+    for _ in 0..50 {
+        let [a, b, c, d] = &mut bufs;
+        e.process_block_multi([&mut a[..], &mut b[..], &mut c[..], &mut d[..]]);
+    }
+    let keys: Vec<u8> = KEY_RANGE.collect();
+    // 1500 blocks in release; debug builds are about 50x slower, so a shorter run there.
+    let blocks = if cfg!(debug_assertions) {
+        150usize
+    } else {
+        1500
+    };
+    let calls = count_allocator_calls(|| {
+        for block in 0..blocks {
+            let n = keys[block % keys.len()];
+            // Retrigger: release and press again so voice stealing and note-off paths run too.
+            e.handle_midi(note(false, n));
+            e.handle_midi(note(true, n));
+            e.handle_midi(MidiEvent::ControlChange {
+                channel: 0,
+                controller: nord_core::midi::cc::SUSTAIN_PEDAL,
+                value: if block % 200 < 100 { 127 } else { 0 },
+            });
+            e.master_clock.bpm = 90.0 + (block % 60) as f32;
+            let [a, b, c, d] = &mut bufs;
+            if block % 2 == 0 {
+                e.process_block_multi([&mut a[..], &mut b[..], &mut c[..], &mut d[..]]);
+            } else {
+                e.process_block(&mut a[..], &mut b[..]);
+            }
+        }
+    });
+    assert_eq!(
+        calls, 0,
+        "worst-case audio path made {calls} allocator calls"
+    );
+    assert!(bufs.iter().flatten().all(|s| s.is_finite()));
+    assert!(
+        bufs[0].iter().any(|s| s.abs() > 0.0),
+        "the block was silent"
+    );
+}

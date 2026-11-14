@@ -15,7 +15,9 @@
 use super::fw_chorus::{CTX_I1, CTX_LO, MAX_BLOCKS, RING_BASE, RING_N};
 use super::fw_mod2_tables::ENS_TABLE;
 use super::fw_pe::{Mem, Pe};
-use super::{fw_ens, fw_flang, fw_phas0, fw_phas1, fw_spin, fw_vibe};
+use super::{
+    fw_awah, fw_ens, fw_flang, fw_phas0, fw_phas1, fw_pump, fw_rm, fw_spin, fw_vibe, fw_wah,
+};
 
 /// Context words `c[-0x20] ..= c[0x2A]` (`SPIN` reads up to `c[0x29]`).
 pub(super) const CTX_N: usize = 0x4B;
@@ -30,11 +32,9 @@ const ENS_BASE: u32 = 0xC0BD4;
 /// Frame block (`I0`).
 const IO_BASE: u32 = 0xB1000;
 
-/// Which routine runs (`kFx2Type`: PHAS 0, 1, FLANG 2, 3, VIBE 6, 7, ENS 8, 9, SPIN 10, 11).
-/// `Phas1`, `Ens` and `Spin` are verified ports without a wired stage (the words of their
-/// instances are not all known, `docs/research/fx-mod2-types.md` s8.3).
+/// Which routine runs (`kFx2Type`: PHAS 0, 1, FLANG 2, 3, VIBE 6, 7, ENS 8, 9, SPIN 10, 11; and
+/// the Mod 1 routines `kFx1Type` RM 4, 5, A-WAH 6, 7, WAH 8, 9, PUMP 10, 11).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(super) enum Routine {
     /// `kFx2Type` 6, 7: `0x123C84`.
     Vibe,
@@ -48,6 +48,14 @@ pub(super) enum Routine {
     Ens,
     /// `kFx2Type` 10, 11: `0x123557`.
     Spin,
+    /// `kFx1Type` 4, 5 (`RM`): `0x1239D0`.
+    Rm,
+    /// `kFx1Type` 8, 9 (`WAH`): `0x123DD2`.
+    Wah,
+    /// `kFx1Type` 6, 7 (`A-WAH`): `0x123E9B`.
+    Awah,
+    /// `kFx1Type` 10, 11 (`PUMP`): `0x122D2C`.
+    Pump,
 }
 
 impl Routine {
@@ -60,6 +68,10 @@ impl Routine {
             Self::Phas1 => 4,
             Self::Ens => 0x11,
             Self::Spin => 0x21,
+            Self::Rm => -0x10,
+            Self::Wah => 7,
+            Self::Awah => 4,
+            Self::Pump => -8,
         }
     }
 }
@@ -147,6 +159,10 @@ pub(super) fn process(routine: Routine, st: &mut Mod2State, frames: &mut [f32]) 
         Routine::Phas1 => fw_phas1::run(&mut pe),
         Routine::Ens => fw_ens::run(&mut pe),
         Routine::Spin => fw_spin::run(&mut pe),
+        Routine::Rm => fw_rm::run(&mut pe),
+        Routine::Wah => fw_wah::run(&mut pe),
+        Routine::Awah => fw_awah::run(&mut pe),
+        Routine::Pump => fw_pump::run(&mut pe),
     }
     for (f, w) in frames.iter_mut().zip(pe.mem.io).take(4 * n) {
         *f = f32::from_bits(w);
@@ -156,6 +172,7 @@ pub(super) fn process(routine: Routine, st: &mut Mod2State, frames: &mut [f32]) 
 #[cfg(test)]
 mod tests {
     use super::super::fw_words::assert_close;
+    use super::super::tests_mod1_golden as g1;
     use super::super::tests_mod2_golden as g;
     use super::*;
 
@@ -252,6 +269,26 @@ mod tests {
     #[test]
     fn the_spin_routine_matches_the_firmware_model() {
         check(Routine::Spin, &g::SPIN, LOOSE);
+    }
+
+    #[test]
+    fn the_ring_modulator_routine_matches_the_firmware_model() {
+        check(Routine::Rm, &g1::RM, 5.0e-6);
+    }
+
+    #[test]
+    fn the_wah_routine_matches_the_firmware_model() {
+        check(Routine::Wah, &g1::WAH, LOOSE);
+    }
+
+    #[test]
+    fn the_auto_wah_routine_matches_the_firmware_model() {
+        check(Routine::Awah, &g1::AWAH, LOOSE);
+    }
+
+    #[test]
+    fn the_pump_routine_matches_the_firmware_model() {
+        check(Routine::Pump, &g1::PUMP, 5.0e-6);
     }
 
     #[test]
