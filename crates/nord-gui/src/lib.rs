@@ -7,6 +7,7 @@ pub mod firmware_panel;
 pub mod library;
 pub mod panel;
 pub mod style;
+pub mod telemetry;
 pub mod widgets;
 
 #[cfg(test)]

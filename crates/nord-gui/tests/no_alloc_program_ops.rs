@@ -80,7 +80,7 @@ fn audio_callback(
     rx: &crossbeam_channel::Receiver<AudioCommand>,
     engine: &mut Stage4Engine,
 ) -> usize {
-    let mut vol = 0.85;
+    let mut vol = 0.85_f32;
     count_allocator_calls(|| {
         while let Ok(cmd) = rx.try_recv() {
             apply_audio_command(cmd, engine, &mut vol);
@@ -125,7 +125,7 @@ fn every_control_op_is_allocation_free_on_the_audio_thread() {
         ProgramEdit::Undo,
     ];
     // Warm-up: first use of lazily built tables happens outside the measured region.
-    engine.process_block(&mut [0.0; 64], &mut [0.0; 64]);
+    engine.process_block(&mut [0.0_f32; 64], &mut [0.0_f32; 64]);
     let mut swaps = 0;
     for op in ops {
         assert!(handle.send_command(AudioCommand::Program(op.clone())));
@@ -145,8 +145,8 @@ fn every_control_op_is_allocation_free_on_the_audio_thread() {
 #[test]
 fn recall_and_snapshot_are_allocation_free_on_the_audio_thread() {
     let (handle, rx, mut engine) = rig();
-    engine.process_block(&mut [0.0; 64], &mut [0.0; 64]);
-    handle.send_command(AudioCommand::SetPianoLevel(0.42));
+    engine.process_block(&mut [0.0_f32; 64], &mut [0.0_f32; 64]);
+    handle.send_command(AudioCommand::SetPianoLevel(0.42_f32));
     let (tx, reply) = crossbeam_channel::unbounded();
     handle.send_command(AudioCommand::Program(ProgramEdit::Snapshot {
         ticket: 1,
@@ -155,12 +155,12 @@ fn recall_and_snapshot_are_allocation_free_on_the_audio_thread() {
     let (_, state) = reply
         .try_recv()
         .expect("snapshot answered by the control thread");
-    handle.send_command(AudioCommand::SetPianoLevel(0.9));
+    handle.send_command(AudioCommand::SetPianoLevel(0.9_f32));
     handle.send_command(AudioCommand::Program(ProgramEdit::Recall(state)));
     let calls = audio_callback(&rx, &mut engine);
     assert_eq!(calls, 0, "recall made {calls} allocator calls");
     assert_eq!(
-        engine.layer_levels[2].base, 0.42,
+        engine.layer_levels[2].base, 0.42_f32,
         "the recalled level is live"
     );
     assert!(

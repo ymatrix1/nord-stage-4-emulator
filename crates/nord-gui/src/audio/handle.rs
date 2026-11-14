@@ -2,6 +2,7 @@
 
 use super::control::ControlLink;
 use super::AudioCommand;
+use crate::telemetry::TelemetryHandle;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use nord_core::midi::MidiEvent;
 use std::sync::Arc;
@@ -14,6 +15,8 @@ pub struct AudioHandle {
     /// thread and keeps their shadow engine in step. `None`: every command goes straight to the
     /// queue (tests, headless use).
     control: Option<Arc<ControlLink>>,
+    /// Lock-free engine to GUI telemetry; the audio thread publishes into it.
+    pub telemetry: TelemetryHandle,
 }
 
 impl AudioHandle {
@@ -27,6 +30,7 @@ impl AudioHandle {
             Self {
                 cmd_sender: tx,
                 control: None,
+                telemetry: TelemetryHandle::new(),
             },
             rx,
         )
@@ -88,11 +92,26 @@ impl AudioHandle {
             None => self.cmd_sender.try_send(cmd).is_ok(),
         }
     }
+
+    /// The telemetry reader the panel polls once per frame.
+    pub fn telemetry(&self) -> &TelemetryHandle {
+        &self.telemetry
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn handles_share_one_telemetry_cell() {
+        let (handle, _rx) = AudioHandle::new();
+        let copy = handle.clone();
+        let mut e = nord_core::engine::Stage4Engine::new(48_000.0);
+        e.attach_telemetry(handle.telemetry().cell());
+        e.publish_telemetry();
+        assert!(copy.telemetry().latest().get().is_some());
+    }
 
     #[test]
     fn test_audio_handle_channel() {

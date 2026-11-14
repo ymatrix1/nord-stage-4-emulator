@@ -6,7 +6,7 @@ use super::{apply_audio_command, standalone_engine, AudioCommand, AudioHandle};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam_channel::{Receiver, Sender};
 use midir::{Ignore, MidiInput};
-use nord_core::engine::Stage4Engine;
+use nord_core::engine::{Stage4Engine, TelemetryCell};
 use nord_core::midi::MidiEvent;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -19,8 +19,9 @@ pub fn start_audio_and_midi(active_keys: Arc<[AtomicBool; 128]>) -> AudioHandle 
     let audio_rx = rx;
     let control = handle.control().cloned();
     let to_audio = handle.cmd_sender.clone();
+    let telemetry = handle.telemetry().cell();
     std::thread::spawn(move || {
-        run_cpal_audio(audio_rx, control, to_audio);
+        run_cpal_audio(audio_rx, control, to_audio, telemetry);
     });
 
     // 2. Spawn MIDI In Listener
@@ -37,6 +38,7 @@ fn run_cpal_audio(
     rx: Receiver<AudioCommand>,
     control: Option<Arc<ControlLink>>,
     to_audio: Sender<AudioCommand>,
+    telemetry: Arc<TelemetryCell>,
 ) {
     let host = cpal::default_host();
     let device = match host.default_output_device() {
@@ -61,6 +63,7 @@ fn run_cpal_audio(
     let mut engine = standalone_engine(sample_rate);
     // From here on the control thread keeps a shadow of this engine and runs every allocating
     // program edit itself (TD-12); the callback below only swaps prepared state in.
+    engine.attach_telemetry(telemetry);
     if let Some(link) = &control {
         link.attach(sample_rate, to_audio);
     }
@@ -81,6 +84,7 @@ fn run_cpal_audio(
                     let [l, r] = engine.render_frame();
                     render_frame_to_f32(channels, l * master_vol, r * master_vol, frame);
                 }
+                engine.publish_telemetry();
             },
             err_fn,
             None,
@@ -96,6 +100,7 @@ fn run_cpal_audio(
                     let [l, r] = engine.render_frame();
                     render_frame_to_i16(channels, l * master_vol, r * master_vol, frame);
                 }
+                engine.publish_telemetry();
             },
             err_fn,
             None,

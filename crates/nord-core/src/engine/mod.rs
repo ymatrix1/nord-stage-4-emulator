@@ -45,6 +45,8 @@ mod settings;
 mod sharing;
 mod snapshot;
 mod sound_init;
+mod telemetry;
+mod telemetry_cell;
 #[cfg(test)]
 mod tests_extern;
 #[cfg(test)]
@@ -73,10 +75,14 @@ pub use settings::{
     PIANO_LEVEL_DB_RANGE,
 };
 pub use snapshot::ProgramState;
+pub use telemetry::{Telemetry, TelemetrySink, WORDS as TELEMETRY_WORDS};
+pub use telemetry_cell::TelemetryCell;
 pub use undo::UndoOp;
 pub use zone_assign::zone_code;
 #[cfg(test)]
 mod tests_sharing;
+#[cfg(test)]
+mod tests_telemetry;
 
 pub use organ_modes::model_shares_vibrato;
 pub use sharing::FxSharing;
@@ -140,6 +146,10 @@ pub struct Stage4Engine {
     undo_hint: UndoHint,
     /// Boxes leaked because the control thread's return queue was full (see `handoff.rs`).
     retire_overflow: u32,
+    /// MIDI events handled since start (wraps); published as telemetry.
+    midi_in_count: u32,
+    /// Where [`Self::publish_telemetry`] stores the snapshot (see `telemetry.rs`).
+    telemetry_out: TelemetrySink,
 }
 
 impl Stage4Engine {
@@ -184,6 +194,8 @@ impl Stage4Engine {
             undo: undo::UndoSlot::default(),
             undo_hint: UndoHint::default(),
             retire_overflow: 0,
+            midi_in_count: 0,
+            telemetry_out: TelemetrySink::default(),
         }
     }
 
@@ -300,6 +312,7 @@ impl Stage4Engine {
             left[i] = l;
             right[i] = r;
         }
+        self.publish_telemetry();
     }
 }
 

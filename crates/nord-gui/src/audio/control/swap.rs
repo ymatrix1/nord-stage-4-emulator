@@ -73,9 +73,9 @@ mod tests {
     #[test]
     fn apply_swaps_returns_the_old_state_and_sets_the_hint() {
         let mut e = Stage4Engine::new(48_000.0);
-        e.layer_levels[2].base = 0.3;
+        e.layer_levels[2].base = 0.3_f32;
         let incoming = e.capture_state();
-        e.layer_levels[2].base = 0.9;
+        e.layer_levels[2].base = 0.9_f32;
         let (tx, rx) = crossbeam_channel::bounded(4);
         let hint = UndoHint {
             undo: Some(nord_core::engine::UndoOp::LayerInit),
@@ -90,14 +90,14 @@ mod tests {
             ret: tx,
         }
         .apply(&mut e);
-        assert_eq!(e.layer_levels[2].base, 0.3);
+        assert_eq!(e.layer_levels[2].base, 0.3_f32);
         assert_eq!(e.undo_hint(), hint);
         let back = rx.try_recv().expect("old state returned");
         assert_eq!((back.to, back.ticket), (Retire::Undo, 7));
         // The returned box holds what the engine had (0.9): swapping it back restores it.
         let mut old = back.state;
         e.swap_state(&mut old, StateMask::ALL);
-        assert_eq!(e.layer_levels[2].base, 0.9);
+        assert_eq!(e.layer_levels[2].base, 0.9_f32);
     }
 
     #[test]

@@ -8,11 +8,11 @@ use nord_core::synth::VaWaveform;
 /// enabled, SuperSaw on the synth.
 pub fn standalone_engine(sample_rate: f32) -> Stage4Engine {
     let mut engine = Stage4Engine::new(sample_rate);
-    engine.layer_levels[0].base = 0.85;
-    engine.layer_levels[1].base = 0.0;
-    engine.layer_levels[2].base = 0.90;
+    engine.layer_levels[0].base = 0.85_f32;
+    engine.layer_levels[1].base = 0.0_f32;
+    engine.layer_levels[2].base = 0.90_f32;
     for level in &mut engine.layer_levels[3..] {
-        level.base = 0.0;
+        level.base = 0.0_f32;
     }
     engine.synth_a.waveform = VaWaveform::SuperSaw;
     engine
@@ -26,7 +26,10 @@ mod tests {
     fn start_up_levels_match_the_panel_defaults() {
         let e = standalone_engine(48_000.0);
         let base: Vec<f32> = e.layer_levels.iter().map(|l| l.base).collect();
-        assert_eq!(base, [0.85, 0.0, 0.90, 0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            base,
+            [0.85_f32, 0.0_f32, 0.90_f32, 0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32]
+        );
         assert_eq!(e.synth_a.waveform, VaWaveform::SuperSaw);
     }
 }

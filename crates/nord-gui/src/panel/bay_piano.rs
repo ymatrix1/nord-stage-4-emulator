@@ -218,12 +218,13 @@ fn draw_strip(
             name.to_uppercase()
         ));
         state.piano_ui.mark(fader);
-        let shown = if active { level } else { 0.0 };
+        // Engine level after fader and Morph (UI value without an engine); Piano A/B are 2 / 3.
+        let shown = state.telemetry.ladder_level(2 + l, level, active);
         w::ladder(p, r(ladder), 11, (shown * 11.0).round() as usize);
         state.piano_ui.mark(ladder);
 
         // Aux KB LED: the layer is played by the aux keyboard (click toggles the flag).
-        let lit = aux_flag_from_telemetry(state.piano_ui.aux[l]);
+        let lit = aux_flag_from_telemetry(&state.telemetry, 2 + l, state.piano_ui.aux[l]);
         let tip = "AUX KB: this layer is played by the aux keyboard (click to switch)";
         if aux_led(ui, r(aux), aux, lit, tip) {
             state.piano_ui.aux[l] = !state.piano_ui.aux[l];

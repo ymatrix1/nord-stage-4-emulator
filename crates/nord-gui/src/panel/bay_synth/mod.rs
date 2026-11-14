@@ -88,6 +88,7 @@ pub(super) fn render_bay_synth(
         &mut active,
         state.fx_focus,
         audio_handle,
+        &state.telemetry,
     );
     [
         state.synth_a_level,

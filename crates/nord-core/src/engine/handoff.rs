@@ -216,77 +216,77 @@ mod tests {
     fn full_swap_matches_apply_state_and_hands_the_old_state_back() {
         let mut e = engine();
         e.organ_a.drawbars[0] = 3;
-        e.layer_levels[2].base = 0.33;
-        e.fx_chains[4].delay_mix = 0.9;
+        e.layer_levels[2].base = 0.33_f32;
+        e.fx_chains[4].delay_mix = 0.9_f32;
         e.set_transpose(-4);
-        e.set_program_level_db(-3.5);
-        e.master_clock.bpm = 97.0;
+        e.set_program_level_db(-3.5_f32);
+        e.master_clock.bpm = 97.0_f32;
         let mut stored = e.capture_state();
 
         e.organ_a.drawbars[0] = 8;
-        e.layer_levels[2].base = 0.9;
-        e.fx_chains[4].delay_mix = 0.1;
+        e.layer_levels[2].base = 0.9_f32;
+        e.fx_chains[4].delay_mix = 0.1_f32;
         e.set_transpose(2);
-        e.set_program_level_db(0.0);
-        e.master_clock.bpm = 120.0;
+        e.set_program_level_db(0.0_f32);
+        e.master_clock.bpm = 120.0_f32;
         e.swap_state(&mut stored, StateMask::ALL);
 
         assert_eq!(e.organ_a.drawbars[0], 3);
-        assert_eq!(e.layer_levels[2].base, 0.33);
-        assert_eq!(e.fx_chains[4].delay_mix, 0.9);
+        assert_eq!(e.layer_levels[2].base, 0.33_f32);
+        assert_eq!(e.fx_chains[4].delay_mix, 0.9_f32);
         assert_eq!(e.transpose(), -4);
-        assert_eq!(e.program_level_db(), -3.5);
-        assert_eq!(e.master_clock.bpm, 97.0);
+        assert_eq!(e.program_level_db(), -3.5_f32);
+        assert_eq!(e.master_clock.bpm, 97.0_f32);
         // The box now holds the state the engine had before the swap.
         assert_eq!(stored.organ_a.drawbars[0], 8);
-        assert_eq!(stored.layer_levels[2].base, 0.9);
+        assert_eq!(stored.layer_levels[2].base, 0.9_f32);
         assert_eq!(stored.transpose, 2);
-        assert_eq!(stored.tempo_bpm, 120.0);
+        assert_eq!(stored.tempo_bpm, 120.0_f32);
 
         e.swap_state(&mut stored, StateMask::ALL);
         assert_eq!(e.organ_a.drawbars[0], 8, "a second swap is the inverse");
         assert_eq!(e.transpose(), 2);
-        assert_eq!(e.master_clock.bpm, 120.0);
+        assert_eq!(e.master_clock.bpm, 120.0_f32);
     }
 
     #[test]
     fn a_layer_mask_leaves_every_other_part_alone() {
         let mut e = engine();
         e.piano_a.timbre = crate::piano::PianoTimbre::Soft;
-        e.layer_levels[2].base = 0.2;
-        e.fx_chains[2].reverb_mix = 0.7;
+        e.layer_levels[2].base = 0.2_f32;
+        e.fx_chains[2].reverb_mix = 0.7_f32;
         let mut incoming = e.capture_state();
         e.piano_a.timbre = crate::piano::PianoTimbre::Off;
-        e.layer_levels[2].base = 0.6;
-        e.fx_chains[2].reverb_mix = 0.1;
+        e.layer_levels[2].base = 0.6_f32;
+        e.fx_chains[2].reverb_mix = 0.1_f32;
         e.organ_a.rotary_speed = RotarySpeed::Fast;
-        e.layer_levels[0].base = 0.5;
+        e.layer_levels[0].base = 0.5_f32;
         e.set_transpose(3);
         e.swap_state(&mut incoming, StateMask::layer(LayerId::PianoA));
         assert_eq!(e.piano_a.timbre, crate::piano::PianoTimbre::Soft);
-        assert_eq!(e.layer_levels[2].base, 0.2);
-        assert_eq!(e.fx_chains[2].reverb_mix, 0.7);
+        assert_eq!(e.layer_levels[2].base, 0.2_f32);
+        assert_eq!(e.fx_chains[2].reverb_mix, 0.7_f32);
         assert_eq!(e.organ_a.rotary_speed, RotarySpeed::Fast, "organ untouched");
-        assert_eq!(e.layer_levels[0].base, 0.5);
+        assert_eq!(e.layer_levels[0].base, 0.5_f32);
         assert_eq!(e.transpose(), 3, "program part untouched");
-        assert_eq!(incoming.layer_levels[2].base, 0.6);
+        assert_eq!(incoming.layer_levels[2].base, 0.6_f32);
     }
 
     #[test]
     fn morph_mask_swaps_depths_everywhere_but_no_panel_layer() {
         let mut e = engine();
-        e.layer_levels[1].delta_wheel = 0.4;
-        e.synth_cutoff_morph[2].delta_pedal = -0.3;
-        e.fx_chains[3].morph.reverb_amount.delta_wheel = 0.25;
+        e.layer_levels[1].delta_wheel = 0.4_f32;
+        e.synth_cutoff_morph[2].delta_pedal = -0.3_f32;
+        e.fx_chains[3].morph.reverb_amount.delta_wheel = 0.25_f32;
         let mut incoming = e.capture_state();
         e.clear_morph(crate::morph::MorphSource::ModWheel);
         e.clear_morph(crate::morph::MorphSource::ControlPedal);
         e.organ_a.drawbars[1] = 1;
-        assert_eq!(e.layer_levels[1].delta_wheel, 0.0);
+        assert_eq!(e.layer_levels[1].delta_wheel, 0.0_f32);
         e.swap_state(&mut incoming, StateMask::MORPH);
-        assert_eq!(e.layer_levels[1].delta_wheel, 0.4);
-        assert_eq!(e.synth_cutoff_morph[2].delta_pedal, -0.3);
-        assert_eq!(e.fx_chains[3].morph.reverb_amount.delta_wheel, 0.25);
+        assert_eq!(e.layer_levels[1].delta_wheel, 0.4_f32);
+        assert_eq!(e.synth_cutoff_morph[2].delta_pedal, -0.3_f32);
+        assert_eq!(e.fx_chains[3].morph.reverb_amount.delta_wheel, 0.25_f32);
         assert_eq!(e.organ_a.drawbars[1], 1, "panel layers keep their state");
     }
 

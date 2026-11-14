@@ -19,6 +19,25 @@ pub enum UndoOp {
 }
 
 impl UndoOp {
+    /// Every operation, in declaration order (`index` is the position here).
+    pub const ALL: [UndoOp; 10] = [
+        Self::LoadPreset,
+        Self::SynthGroup,
+        Self::FxFocusGroup,
+        Self::GlobalFx,
+        Self::AllFxOff,
+        Self::ClearMorph,
+        Self::CopyPaste,
+        Self::SynthInit,
+        Self::LayerInit,
+        Self::ProgramChange,
+    ];
+
+    /// Position in [`Self::ALL`] (the telemetry wire code is `index + 1`, `0` = none).
+    pub fn index(self) -> u8 {
+        Self::ALL.iter().position(|o| *o == self).unwrap_or(0) as u8
+    }
+
     /// Text for the display ("Undo ...").
     pub fn label(self) -> &'static str {
         match self {
@@ -137,6 +156,13 @@ mod tests {
         e.undo();
         e.discard_undo();
         assert_eq!(e.redo_available(), None);
+    }
+
+    #[test]
+    fn index_round_trips_through_all() {
+        for (i, op) in UndoOp::ALL.iter().enumerate() {
+            assert_eq!(op.index() as usize, i);
+        }
     }
 
     #[test]

@@ -23,7 +23,7 @@ impl Rig {
             control: ProgramControl::new(48_000.0, tx),
             live: standalone_engine(48_000.0),
             rx,
-            vol: 0.85,
+            vol: 0.85_f32,
             delivered: Vec::new(),
         }
     }
@@ -78,18 +78,18 @@ fn control_ops_never_reach_the_audio_queue() {
 #[test]
 fn shadow_follows_plain_commands_and_layer_init_undo_redo_round_trips() {
     let mut r = Rig::new();
-    r.send(AudioCommand::SetPianoLevel(0.33));
-    assert_eq!(r.level(2), 0.33);
+    r.send(AudioCommand::SetPianoLevel(0.33_f32));
+    assert_eq!(r.level(2), 0.33_f32);
     assert_eq!(
         r.control.shadow().layer_levels[2].base,
-        0.33,
+        0.33_f32,
         "shadow mirrors"
     );
 
     r.edit(ProgramEdit::LayerInit(LayerInitTarget::PianoA));
     assert_ne!(
         r.level(2),
-        0.33,
+        0.33_f32,
         "layer init reset the level on the live engine"
     );
     assert_eq!(r.control.undo_status(), (Some(UndoOp::LayerInit), None));
@@ -103,7 +103,7 @@ fn shadow_follows_plain_commands_and_layer_init_undo_redo_round_trips() {
     assert_eq!(r.level(2), 0.33, "undo restored the old level");
     assert_eq!(
         r.control.shadow().layer_levels[2].base,
-        0.33,
+        0.33_f32,
         "shadow follows undo"
     );
     assert_eq!(r.control.undo_status(), (None, Some(UndoOp::LayerInit)));
@@ -124,7 +124,7 @@ fn shadow_follows_plain_commands_and_layer_init_undo_redo_round_trips() {
 #[test]
 fn layer_init_leaves_other_layers_running_untouched() {
     let mut r = Rig::new();
-    r.send(AudioCommand::SetOrganLevel(0.5));
+    r.send(AudioCommand::SetOrganLevel(0.5_f32));
     r.send(AudioCommand::Midi(MidiEvent::NoteOn {
         channel: 0,
         note: 64,
@@ -144,14 +144,14 @@ fn layer_init_leaves_other_layers_running_untouched() {
 #[test]
 fn copy_paste_swap_and_clear_morph_go_through_the_shadow() {
     let mut r = Rig::new();
-    r.send(AudioCommand::SetOrganLevel(0.1));
-    r.send(AudioCommand::SetOrganBLevel(0.9));
+    r.send(AudioCommand::SetOrganLevel(0.1_f32));
+    r.send(AudioCommand::SetOrganBLevel(0.9_f32));
     r.edit(ProgramEdit::Swap(LayerId::OrganA, LayerId::OrganB));
-    assert_eq!((r.level(0), r.level(1)), (0.9, 0.1));
+    assert_eq!((r.level(0), r.level(1)), (0.9_f32, 0.1_f32));
     assert_eq!(r.control.undo_status().0, Some(UndoOp::CopyPaste));
 
     r.edit(ProgramEdit::Copy(CopyItem::Layer(LayerId::OrganA)));
-    r.send(AudioCommand::SetOrganBLevel(0.4));
+    r.send(AudioCommand::SetOrganBLevel(0.4_f32));
     r.edit(ProgramEdit::Paste(CopyItem::Layer(LayerId::OrganB)));
     assert_eq!(r.level(1), 0.9, "clipboard layer pasted");
     r.edit(ProgramEdit::Undo);
@@ -167,14 +167,14 @@ fn copy_paste_swap_and_clear_morph_go_through_the_shadow() {
     r.edit(ProgramEdit::MorphDepth {
         source: MorphSource::ModWheel,
         target: crate::audio::MorphTarget::LayerLevel(3),
-        depth: 0.7,
+        depth: 0.7_f32,
     });
-    assert_eq!(r.live.layer_levels[3].delta_wheel, 0.7);
+    assert_eq!(r.live.layer_levels[3].delta_wheel, 0.7_f32);
     r.edit(ProgramEdit::ClearMorph(MorphSource::ModWheel));
-    assert_eq!(r.live.layer_levels[3].delta_wheel, 0.0);
+    assert_eq!(r.live.layer_levels[3].delta_wheel, 0.0_f32);
     r.edit(ProgramEdit::Undo);
     assert_eq!(
-        r.live.layer_levels[3].delta_wheel, 0.7,
+        r.live.layer_levels[3].delta_wheel, 0.7_f32,
         "undo of clear morph"
     );
 }
@@ -182,7 +182,7 @@ fn copy_paste_swap_and_clear_morph_go_through_the_shadow() {
 #[test]
 fn snapshot_replies_from_the_shadow_and_recall_swaps_the_program_in() {
     let mut r = Rig::new();
-    r.send(AudioCommand::SetPianoLevel(0.42));
+    r.send(AudioCommand::SetPianoLevel(0.42_f32));
     r.edit(ProgramEdit::Transpose(3));
     let (tx, rx) = unbounded();
     r.edit(ProgramEdit::Snapshot {
@@ -196,22 +196,22 @@ fn snapshot_replies_from_the_shadow_and_recall_swaps_the_program_in() {
         "no audio round trip"
     );
 
-    r.send(AudioCommand::SetPianoLevel(0.9));
+    r.send(AudioCommand::SetPianoLevel(0.9_f32));
     r.edit(ProgramEdit::Transpose(-2));
     r.edit(ProgramEdit::Recall(state));
-    assert_eq!(r.level(2), 0.42);
+    assert_eq!(r.level(2), 0.42_f32);
     assert_eq!(r.live.transpose(), 3);
     assert_eq!(r.control.shadow().transpose(), 3);
     assert_eq!(r.control.undo_status().0, Some(UndoOp::ProgramChange));
     r.edit(ProgramEdit::Undo);
-    assert_eq!(r.level(2), 0.9);
+    assert_eq!(r.level(2), 0.9_f32);
     assert_eq!(r.live.transpose(), -2);
 }
 
 #[test]
 fn a_stale_answer_is_dropped_and_a_new_operation_clears_redo() {
     let mut r = Rig::new();
-    r.send(AudioCommand::SetPianoLevel(0.3));
+    r.send(AudioCommand::SetPianoLevel(0.3_f32));
     r.edit(ProgramEdit::LayerInit(LayerInitTarget::PianoA));
     r.edit(ProgramEdit::Undo);
     assert!(r.control.undo_status().1.is_some());
@@ -259,7 +259,7 @@ fn midi_controllers_reach_the_shadow_but_notes_do_not() {
             controller: nord_core::midi::cc::MOD_WHEEL,
             value: 127,
         }));
-    assert!(r.control.shadow().morph_controllers.mod_wheel > 0.9);
+    assert!(r.control.shadow().morph_controllers.mod_wheel > 0.9_f32);
     r.control.observe(&AudioCommand::Midi(MidiEvent::NoteOn {
         channel: 0,
         note: 60,
@@ -268,7 +268,7 @@ fn midi_controllers_reach_the_shadow_but_notes_do_not() {
     let mut shadow = r.control.shadow().clone();
     let energy: f32 = (0..512).map(|_| shadow.render_frame()[0].abs()).sum();
     assert_eq!(
-        energy, 0.0,
+        energy, 0.0_f32,
         "a note-on is not replayed, the shadow stays silent"
     );
 }
@@ -279,7 +279,7 @@ fn link_records_before_attach_then_replays_in_order() {
     let (tx, rx) = bounded(64);
     assert!(!link.is_active());
     assert!(
-        link.send(AudioCommand::SetPianoLevel(0.25), &tx),
+        link.send(AudioCommand::SetPianoLevel(0.25_f32), &tx),
         "forwarded while waiting"
     );
     assert!(link.send(
