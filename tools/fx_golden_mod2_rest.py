@@ -73,6 +73,8 @@ def run_golden(name: str, seed: int) -> str:
     ctx_out = [mem.get(a, 0) for a in range(CTX_LO, CTX_LO + CTX_N)]
     if any(abs(fb.from_bits(w)) > 1e6 for w in frames_out if (w >> 23) & 0xFF != 0xFF):
         raise OverflowError(name)
+    if frames_out == frames_in:  # a vector that leaves the audio alone checks nothing
+        raise ValueError(name)
     diff = [
         (k, mem[mm.BUF + k]) for k in range(mm.RING_WORDS) if mem[mm.BUF + k] != g2.ring_word(k)
     ]

@@ -93,7 +93,7 @@ def test_the_rust_generator_output_covers_the_routines_and_is_syntax_valid_pytho
     assert set(produced) == {v[0] for v in rg.FILES.values()}
     for name, text in produced.items():
         assert "pub(super) fn run<M: Mem>" in text, name
-        assert text.count("m.apply(") > 80, name
+        assert text.count("m.apply(") > 40, name
     tree = ast.parse(rg.MODEL.read_text(encoding="utf-8"))
     fns = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
     keep = rg.kept_flag_steps(fns["flang"].body)

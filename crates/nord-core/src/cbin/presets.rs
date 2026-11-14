@@ -530,11 +530,7 @@ impl ProgramDecoded {
         payload.extend_from_slice(&self.piano.pack()?);
         payload.extend_from_slice(&self.synth.pack()?);
 
-        let checksum = payload
-            .iter()
-            .fold(0u32, |acc, &b| acc.wrapping_add(u32::from(b)));
-
-        Ok(CbinFile {
+        let mut file = CbinFile {
             header: CbinHeader {
                 format_version: 1,
                 kind: CbinKind::Program,
@@ -542,11 +538,13 @@ impl ProgramDecoded {
                 location_index: loc,
                 category_id: self.category_id,
                 schema_id: 0x0139,
-                checksum,
+                checksum: 0,
                 reserved: [0u8; 18],
             },
             payload,
-        })
+        };
+        file.refresh_checksum();
+        Ok(file)
     }
 
     /// Serializes this program to human-readable pretty JSON.

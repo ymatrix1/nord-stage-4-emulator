@@ -28,12 +28,15 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import synth_stage_misc as misc
 import synth_stage_noise as noise
+import synth_stage_shape3 as shape3
+import synth_stage_shape4 as shape4
 import synth_stage_shape_sine as shape_sine
 import synth_stage_shape_sine2 as shape_sine2
 import synth_stage_shape_sine3 as shape_sine3
 import synth_stage_shapes as shapes
 import synth_stage_sub as sub_osc
 import synth_stage_super1 as super1
+import synth_stage_super2 as super2
 import synth_stage_sync as sync
 import synth_stage_sync1 as sync1
 import synth_stage_sync3 as sync3
@@ -73,7 +76,10 @@ STAGE_MISC2 = 0x122417
 STAGE_SUB_OSC = 0x12179A
 STAGE_MULTI = 0x121C54
 STAGE_SUPER1 = 0x121E9D
-UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1)
+STAGE_SHAPE3 = 0x120F55
+STAGE_SHAPE4 = 0x12145E
+STAGE_SUPER24 = 0x124985
+UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1, STAGE_SUPER24)
 PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
 NOISE_STATE = 0xB2EF9  # DM state word of lane x (lane y one above)
 PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not duplicated in SIMD)
@@ -91,6 +97,9 @@ S5_STAGES = (
     STAGE_SYNC6,
     STAGE_SYNC7,
     STAGE_SYNC8,
+    STAGE_SHAPE3,
+    STAGE_SHAPE4,
+    STAGE_SUPER24,
     STAGE_SHAPE_SINE0,
     STAGE_SHAPE_SINE1,
     STAGE_SHAPE_SINE2,
@@ -113,6 +122,9 @@ PITCH_STAGES = (
     STAGE_SYNC6,
     STAGE_SYNC7,
     STAGE_SYNC8,
+    STAGE_SHAPE3,
+    STAGE_SHAPE4,
+    STAGE_SUPER24,
 )
 PITCH_SEMITONES = (-24.0, 48.0)
 IDLE_PITCH = 0.006028  # pitch word with `DM(0xC2716) = 0`
@@ -164,6 +176,9 @@ MODELS = {
     STAGE_SUB_OSC: sub_osc.stage_sub_osc,
     STAGE_MULTI: unison.stage_multi,
     STAGE_SUPER1: super1.stage_super1,
+    STAGE_SHAPE3: shape3.stage_shape3,
+    STAGE_SHAPE4: shape4.stage_shape4,
+    STAGE_SUPER24: lambda lanes: super2.stage_super24(lanes, super2.load_tables()),
 }
 
 
@@ -196,6 +211,10 @@ def pokes(lanes: list[m.Lane]) -> dict[int, int]:
         for j, (rho, ph) in enumerate(zip(ln.ratios, ln.phases, strict=False)):
             d[PARAM - 32 + 2 * j + i] = rho
             d[PHASE_TABLE + 2 * j + i] = ph
+    for i, ln in enumerate(lanes):
+        for n in range(len(ln.lat) // 2):
+            d[RECORD - 3 + 4 * n + i] = ln.lat[2 * n]
+            d[RECORD - 1 + 4 * n + i] = ln.lat[2 * n + 1]
     for k, c in enumerate(lanes[0].octaves):
         d[unison.MULTI_OCTAVES_ADDR + k] = c
     for j, grp in enumerate(lanes[0].groups):
@@ -283,7 +302,9 @@ def run_pass(
     sharc_org: str, image: str, lanes: list[m.Lane], stage: int = STAGE
 ) -> dict[int, int]:  # pragma: no cover
     """One pass in the oracle; returns every DM word of the frame region after the pass."""
-    lines = [f"0 {A_ENTRY:#x} {stage:#x}"] + [f"0 {a:#x} {v:#x}" for a, v in pokes(lanes).items()]
+    allp = super2.table_pokes() if stage == STAGE_SUPER24 else {}
+    allp.update(pokes(lanes))
+    lines = [f"0 {A_ENTRY:#x} {stage:#x}"] + [f"0 {a:#x} {v:#x}" for a, v in allp.items()]
     with tempfile.TemporaryDirectory() as tmp:
         sp, cp = Path(tmp, "m.txt"), Path(tmp, "o.csv")
         sp.write_text("\n".join(lines) + "\n")
@@ -311,6 +332,8 @@ def compare(
     for seed in range(1, trials + 1):
         rng = random.Random(seed)
         lanes = random_lanes(rng, stage in UNISON_STAGES)
+        if stage == STAGE_SUPER24:
+            super2.random_state(seed, lanes)
         random_hp(rng, lanes, stage)
         random_misc(seed, lanes, stage)
         random_s5(seed, lanes, stage)

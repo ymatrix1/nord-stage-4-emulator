@@ -9,10 +9,13 @@ fn chain(on: bool, ty: u8) -> LayerFxChain {
         mod1: on,
         ..FirmwareFx::OFF
     };
-    fx.mod1_type = if ty < 2 {
-        Mod1Type::AutoPan
-    } else {
-        Mod1Type::Tremolo
+    fx.mod1_type = match ty {
+        0 | 1 => Mod1Type::AutoPan,
+        2 | 3 => Mod1Type::Tremolo,
+        4 | 5 => Mod1Type::RingMod,
+        6 | 7 => Mod1Type::AutoWah,
+        8 | 9 => Mod1Type::Wah,
+        _ => Mod1Type::Pump,
     };
     fx.mod1_type_raw = Some(ty);
     fx.mod1_rate_raw = Some(100);
@@ -45,14 +48,47 @@ fn the_engine_path_is_used_when_the_switch_is_off_or_the_type_is_not_a_firmware_
         [0.0, 0.0],
         "engine path has no latency"
     );
-    for ty in [4, 10, 11] {
-        let mut fx = chain(true, ty);
+    for ty in [4, 8, 10] {
+        let mut fx = chain(false, ty);
         assert_ne!(
-            run(&mut fx, 8)[0],
+            run(&mut fx, 16)[8],
             [0.0, 0.0],
-            "type {ty} stays on the engine"
+            "type {ty} stays on the engine with the switch off"
         );
     }
+}
+
+#[test]
+fn the_rest_of_the_mod1_types_run_the_firmware_stages_with_a_two_frame_delay() {
+    for ty in 4..=11 {
+        let mut fx = chain(true, ty);
+        let y = run(&mut fx, 6_000);
+        assert!(y[..2].iter().all(|f| *f == [0.0, 0.0]), "type {ty}");
+        assert!(y[2..].iter().any(|f| f[0] != 0.0), "type {ty} is silent");
+        assert!(
+            y.iter()
+                .all(|f| f.iter().all(|x| x.is_finite() && x.abs() < 16.0)),
+            "type {ty}"
+        );
+    }
+}
+
+#[test]
+fn the_rest_stages_fall_back_in_sync_and_the_ped_wah_follows_the_pedal() {
+    let mut sync = chain(true, 5);
+    sync.mod1_sync_beats = Some(1.0);
+    assert_ne!(
+        run(&mut sync, 16)[8],
+        [0.0, 0.0],
+        "Master Clock stays on the engine"
+    );
+    let at = |pos: f32| {
+        let mut fx = chain(true, 9);
+        fx.mod1_ped = true;
+        fx.mod1_ped_pos = pos;
+        run(&mut fx, 4_000)
+    };
+    assert_ne!(at(0.1), at(0.9), "the pedal position moves the wah");
 }
 
 #[test]

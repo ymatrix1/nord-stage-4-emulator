@@ -114,6 +114,19 @@ def test_value_set_covers_a_small_range_and_samples_a_large_one() -> None:
     assert cap.value_set(0, 127) == [0, 31, 63, 96, 127]
 
 
+def test_value_set_dense_and_cell_word_encodings() -> None:
+    assert cap.value_set(0, 127, dense=True) == list(range(128))
+    assert cap.value_set(0, 4095, dense=True) == list(range(4096))
+    assert cap.value_set(0, 100000, dense=True) == cap.value_set(0, 100000)
+    knob = cap.Param(0x134, "Edt_Syn_kFltFreq", 0, 127)
+    enum = cap.Param(0x133, "Edt_Syn_kFltType", 0, 5)
+    assert cap.cell_word(knob, 64) == 64 << 16  # auto: Q16.16 for ranges of 12 steps or more
+    assert cap.cell_word(enum, 3) == 3  # auto: plain integer for a small range
+    assert cap.cell_word(enum, 3, "q16") == 3 << 16
+    assert cap.cell_word(knob, 64, "raw") == 64
+    assert cap.cell_word(cap.Param(0x1, "x", -60, 60), -1) == 0xFFFF0000  # negative stays 32 bit
+
+
 def test_load_params_filters_by_name(tmp_path) -> None:
     f = tmp_path / "p.csv"
     f.write_text(

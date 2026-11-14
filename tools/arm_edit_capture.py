@@ -15,6 +15,10 @@ the tick), and logs every message the fake DSP ports see.
         target/fw_unpacked/bank0_SRAM.bin --cache target/settled.snap --csv out.csv
 
 Evidence and limits: `docs/research/arm-organ-messages.md` section 10.
+
+Value cells are Q16.16 for most ids (`docs/research/synth-knob-laws.md`): `--cell auto` writes
+`value << 16` for ranges of 12 steps or more, `--cell q16` for every id, `--cell raw` reproduces the
+legacy plain-integer capture; `tools/arm_edit_knobs.py` runs both encodings value by value.
 """
 
 from __future__ import annotations
@@ -128,11 +132,27 @@ def load_params(csv_path: Path, pattern: str = DEFAULT_FILTER) -> list[Param]:
         ]
 
 
-def value_set(lo: int, hi: int, full: int = 12) -> list[int]:
-    """Every value of a small range, else minimum, quartiles and maximum."""
-    if hi - lo < full:
+def value_set(lo: int, hi: int, full: int = 12, dense: bool = False) -> list[int]:
+    """Every value of a small range (or of any range when `dense`), else minimum, quartiles and
+    maximum."""
+    if hi - lo < full or (dense and hi - lo < 4096):
         return list(range(lo, hi + 1))
     return sorted({lo, lo + (hi - lo) // 4, (lo + hi) // 2, hi - (hi - lo) // 4, hi})
+
+
+# VERIFIED (run, `docs/research/synth-stage-models-10.md` s1; the FX ids `fx_clients.cell_word`):
+# the value cells of the continuous ids are Q16.16 numbers (`knob << 16`); the original capture
+# wrote plain integers, so every integer-knob id saw position 0 and looked value independent.
+Q16_SHIFT = 16
+Q16_MIN_SPAN = 12
+Q16_MODES = ("raw", "auto", "q16")
+
+
+def cell_word(p: Param, value: int, mode: str = "auto") -> int:
+    """32-bit cell word of the UI value `value`: Q16.16 (`value << 16`) when `mode` is `q16`, or
+    `auto` and the range spans at least `Q16_MIN_SPAN` steps; the plain integer otherwise."""
+    q16 = mode == "q16" or (mode == "auto" and p.maximum - p.minimum >= Q16_MIN_SPAN)
+    return (value << Q16_SHIFT if q16 else value) & 0xFFFFFFFF
 
 
 def value_cell(emu: ae.ArmEmu, store: int, edit_id: int, index: int = 0) -> int | None:
@@ -185,9 +205,12 @@ def sweep(
     params: list[Param],
     window: int = WINDOW,
     noise: set[tuple] | None = None,
+    mode: str = "raw",
+    dense: bool = False,
 ) -> list[CaptureRow]:
     """Dispatch every value of every param to every store that owns it, each from the settled
-    state (restore after a value that spoke). Messages whose key is in `noise` are dropped."""
+    state (restore after a value that spoke). Messages whose key is in `noise` are dropped. `mode`
+    is the cell encoding of `cell_word` (the committed legacy captures are `raw`)."""
     if not any(b <= SCRATCH <= e for b, e, _ in emu.uc.mem_regions()):
         emu.uc.mem_map(SCRATCH, ae.PAGE)
     rows: list[CaptureRow] = []
@@ -197,9 +220,9 @@ def sweep(
             if cell is None:
                 continue
             original = emu.read32(cell)
-            for v in value_set(p.minimum, p.maximum):
+            for v in value_set(p.minimum, p.maximum, dense=dense):
                 during, later, err = apply_value(
-                    emu, store.address, p.edit_id, v & 0xFFFFFFFF, window
+                    emu, store.address, p.edit_id, cell_word(p, v, mode), window
                 )
                 during = [m for m in during if _key(m) not in (noise or ())]
                 later = [m for m in later if _key(m) not in (noise or ())]
@@ -302,6 +325,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap.add_argument("--filter", default=DEFAULT_FILTER)
     ap.add_argument("--window", type=int, default=WINDOW)
     ap.add_argument("--layers", help="comma separated client indices to sweep (default: all)")
+    ap.add_argument("--cell", choices=Q16_MODES, default="auto", help="value cell encoding")
+    ap.add_argument("--dense", action="store_true", help="every value of ranges below 4096")
     ap.add_argument("--csv", type=Path)
     ap.add_argument("--summary", type=Path, help="per (id, kind, value) summary table")
     ns = ap.parse_args(argv)
@@ -315,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     noise = baseline_keys(emu)
     ast.restore(emu, blob)
     emu.install_dsp_ports()
-    rows = sweep(emu, blob, stores, params, ns.window, noise)
+    rows = sweep(emu, blob, stores, params, ns.window, noise, ns.cell, ns.dense)
     if ns.csv:
         ns.csv.write_text(rows_csv(rows), encoding="utf-8")
     if ns.summary:

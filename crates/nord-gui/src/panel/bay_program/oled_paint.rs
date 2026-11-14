@@ -162,7 +162,16 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
             if y + f_row > rect.bottom() - b.bar_h {
                 break;
             }
-            line(y, r, f_row);
+            // A lone value (menu page with one item) is drawn in the 13 px font.
+            line(
+                y,
+                r,
+                if text.body_big && i == 0 {
+                    f_big
+                } else {
+                    f_row
+                },
+            );
         }
     } else {
         line(top + g.title_y, &text.big, f_big);
@@ -287,6 +296,31 @@ mod tests {
         let two = paint_with(["a", "", "c", ""]);
         assert!(none >= 5, "painted {none}");
         assert!(two > none, "soft buttons add shapes");
+    }
+
+    #[test]
+    fn a_lone_menu_value_paints_like_any_body_row() {
+        let paint_with = |body_big: bool| {
+            shapes_painted(|_ui, p, rect, _s, _a| {
+                let t = OledText {
+                    big: "SYSTEM SETTINGS".into(),
+                    sub: "Memory Protect".into(),
+                    rows: vec!["On".into()],
+                    bar: Some("1/6".into()),
+                    body_big,
+                    ..Default::default()
+                };
+                paint(
+                    p,
+                    Rect::from_min_size(rect.min, vec2(80.0, 40.0)),
+                    &t,
+                    false,
+                );
+            })
+        };
+        // The same shapes either way: only the type size of the value row differs.
+        assert_eq!(paint_with(true), paint_with(false));
+        assert!(paint_with(true) >= 5);
     }
 
     #[test]

@@ -25,10 +25,12 @@ mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_table_d;
 mod fw_filter_tables;
+mod fw_knob_laws;
 mod fw_ladder;
 mod fw_ladder_tables;
 mod fw_misc;
 mod fw_shape;
+mod fw_shape34;
 mod fw_sine3;
 mod fw_sine_hp;
 mod fw_sine_warps;
@@ -36,6 +38,7 @@ mod fw_stages;
 mod fw_strip_cutoff;
 mod fw_sub;
 mod fw_super1;
+mod fw_super2;
 mod fw_sync;
 mod fw_sync1;
 mod fw_sync3;
@@ -67,6 +70,10 @@ pub use fw_filter::{
     cutoff_to_r, FilterEngine, FwCoefs, FwFilter, FwFilterType, TablePos, FW_CLIP_LIMIT,
     FW_CUTOFF_MAX_FRACTION, FW_CUTOFF_MIN_HZ,
 };
+pub use fw_knob_laws::{
+    cutoff_word_for_knob, rate_index_for_knob, rate_word_for_knob, unit_word_for_knob, EnvKnobs,
+    StripKnobs, DECAY_DISPLAY_TAU,
+};
 pub use fw_shape::{fw_shape_wave, fw_shape_width};
 pub use fw_stages::{noise_sample, noise_step, saw_diff, spread_u, FwStage, FwStageState};
 pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
@@ -92,6 +99,7 @@ pub use strip_map::{
     attack_index, attack_seconds, cutoff_hz_from_word, decay_index, decay_seconds,
     strip_word_for_cutoff, STRIP_PASS_FRAMES,
 };
+use strip_path::StripKey;
 pub use strip_path::{StripEnvRecords, StripParams, StripVoice, SynthChain};
 pub use voice::SynthVoice;
 #[cfg(test)]
@@ -101,9 +109,13 @@ mod tests_fw_filter_golden;
 #[cfg(test)]
 mod tests_fw_ladder_golden;
 #[cfg(test)]
+mod tests_fw_ladder_strip;
+#[cfg(test)]
 mod tests_fw_shape_golden;
 #[cfg(test)]
 mod tests_fw_stage_golden;
+#[cfg(test)]
+mod tests_fw_stage_golden10;
 #[cfg(test)]
 mod tests_fw_stage_golden2;
 #[cfg(test)]
@@ -118,6 +130,8 @@ mod tests_fw_stage_golden6;
 mod tests_fw_stage_golden7;
 #[cfg(test)]
 mod tests_fw_stage_golden8;
+#[cfg(test)]
+mod tests_fw_stage_golden9;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
@@ -241,6 +255,12 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
+    /// Strip chain only, opt-in (default off): the envelope rate indices come straight from the
+    /// stored knobs (`strip_knobs`, `fw_knob_laws.rs`: index = knob - 64, VERIFIED run) instead of
+    /// the ASSUMED displayed-time search of `strip_map.rs`. Layers without knobs keep the search.
+    pub knob_laws: bool,
+    /// Raw envelope knobs of the loaded program (set by the decoded-layer import).
+    pub strip_knobs: Option<StripKnobs>,
     /// `SAMPLES` oscillator only (default on, D40): pick the 12-tap kernel with the firmware key
     /// rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
     /// VERIFIED: the voice update stores the played key (`[voice + 8]`) and sends the kernel base
@@ -249,7 +269,7 @@ pub struct SynthLayer {
     /// `SAMPLES` oscillator only, opt-in (default off): the note-to-step ratio follows the firmware
     /// exponent tables (`sinc::pitch_law::key_ratio`) instead of exact `2^(n/12)`.
     pub sample_pitch_fw: bool,
-    strip_cache: Option<([f32; 8], StripParams)>,
+    strip_cache: Option<(StripKey, StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
     pub fm_amount: f32,
@@ -397,6 +417,8 @@ impl SynthLayer {
             p_wave: PWave::Other,
             strip_stage: None,
             strip_stages: true,
+            knob_laws: false,
+            strip_knobs: None,
             sample_kernel_by_key: true,
             sample_pitch_fw: false,
             osc_shape_category: false,

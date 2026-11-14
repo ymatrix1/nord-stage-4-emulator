@@ -92,11 +92,26 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
     let focus = menu.focus();
     let start = menu.block_start();
     let visible = menu.visible();
-    let rows = visible
-        .iter()
-        .enumerate()
-        .map(|(i, item)| row(ui, item, start + i == focus))
-        .collect();
+    // VERIFIED (ARM frames, research note s9 / s12.3): a page with one item shows its label in the
+    // 8 px font under the bar and its value alone in the 13 px font; blocks with several items
+    // (Pedal Type / Func / Gain) keep one row per item.
+    let single = match visible {
+        [item]
+            if item.kind != ItemKind::Action
+                && !matches!(item.binding, Binding::Unsupported(_)) =>
+        {
+            Some(item)
+        }
+        _ => None,
+    };
+    let rows: Vec<String> = match single {
+        Some(item) => vec![format_value(item, ui.menu.value(item))],
+        None => visible
+            .iter()
+            .enumerate()
+            .map(|(i, item)| row(ui, item, start + i == focus))
+            .collect(),
+    };
     let labels = ui.screen.soft_labels();
     let mut soft = [""; 4];
     for (s, l) in soft.iter_mut().zip(labels).take(visible.len()) {
@@ -105,6 +120,8 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
     if menu.paged() {
         soft[3] = "More";
     }
+    // The page title stands in for the label: the model's page titles match the real labels
+    // nearly everywhere (research note s12.3 / s14 list the exceptions, still open).
     let sub = match &ui.message {
         Some((msg, _)) => msg.clone(),
         None => page.title.to_string(),
@@ -118,6 +135,7 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
         rows,
         soft,
         bar: Some(counter),
+        body_big: single.is_some(),
         soft_on: focus
             .checked_sub(start)
             .filter(|&i| i < visible.len().min(4)),
@@ -175,6 +193,28 @@ mod tests {
         assert_eq!(
             (t.big.as_str(), t.bar.as_deref()),
             ("PEDAL OVERVIEW", Some("7/7"))
+        );
+    }
+
+    #[test]
+    fn a_one_item_page_shows_its_title_and_a_lone_value() {
+        // Research note s12.3: label 8 px under the bar, value alone in 13 px.
+        let mut ui = ProgramUi::default();
+        ui.open_menu(MenuId::System);
+        let t = compose(&ui, MenuId::System);
+        assert_eq!(
+            (t.sub.as_str(), t.rows.as_slice()),
+            ("Memory Protect", &["On".to_string()][..])
+        );
+        assert!(t.body_big);
+        // A several-item block keeps one row per item with the focus marker, in 8 px.
+        let mut ui = ProgramUi::default();
+        ui.open_menu(MenuId::Pedal);
+        let t = compose(&ui, MenuId::Pedal);
+        assert!(
+            !t.body_big && t.rows[0].starts_with(">Type"),
+            "{:?}",
+            t.rows
         );
     }
 

@@ -38,6 +38,9 @@ pub struct OledText {
     /// Title-bar screens: `Some(counter)` paints `big` in an inverted bar with the (possibly
     /// empty) page counter right-aligned; `sub` is then the label and `rows` the body.
     pub bar: Option<String>,
+    /// Title-bar screens: the first body row is a lone value drawn in the 13 px font (menu pages
+    /// with one item); `false` keeps every body row in the 8 px font.
+    pub body_big: bool,
     /// Index of the lit soft button.
     pub soft_on: Option<usize>,
     /// Parameter popup `(label, value)` in the lower half of the home screen.
@@ -216,6 +219,9 @@ fn store(ui: &ProgramUi) -> OledText {
             ..Default::default()
         };
     }
+    if let Some(t) = ui.preset_store_text() {
+        return t;
+    }
     let (target, existing) = match ui.store.target {
         Some(StoreTarget::Live(s)) => (format!("Live {}", s + 1), String::new()),
         Some(StoreTarget::Bank(l)) => (l.label(), name_at(ui, l)),
@@ -274,6 +280,7 @@ fn preset(ui: &ProgramUi, kind: PresetKind, single: bool) -> OledText {
         PresetKind::Piano => ui.catalog.pianos.iter().map(|e| display_name(e)).collect(),
         PresetKind::Synth => ui.catalog.samples.iter().map(|e| display_name(e)).collect(),
     };
+    let names = ui.preset_browser_names(kind).unwrap_or(names);
     let mut rows = window(&names, ui.preset_cursor, 4);
     if single {
         rows.insert(0, format!("Layer: {}", layer_label(ui.focus)));

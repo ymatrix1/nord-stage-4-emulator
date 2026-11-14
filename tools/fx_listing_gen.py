@@ -32,6 +32,10 @@ ROUTINES = {
     "phas0": (0x12379B, 0x1238FB),
     "phas1": (0x1238FC, 0x1239CF),
     "ens": (0x123A7B, 0x123BCF),
+    "rm": (0x1239D0, 0x123A7A),
+    "wah": (0x123DD2, 0x123E9A),
+    "awah": (0x123E9B, 0x123F60),
+    "pump": (0x122D2C, 0x122D92),
 }
 HEADER = '''# ruff: noqa: E741, F403, F405, E501
 # fmt: off

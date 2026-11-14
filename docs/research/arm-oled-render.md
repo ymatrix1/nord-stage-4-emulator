@@ -208,7 +208,7 @@ The **fonts are proportional bitmaps** (glyph advance = width incl. the gap colu
 ## 11. Remaining blockers (exact, after the third pass)
 
 1. **Program store beyond one program.** One record (the default program, location `A:11`) is stored and renamed in the image. Not done: other locations (the directory entry layout at device 3 `0xFE98` is not decoded), the 824-byte body, a name typed through the Store As screen (Shift + Store stays on the home screen with Memory Protect forced off: the Store As handler has its own gate, not traced) and editing Memory Protect through the System menu instead of the hook at `0xC0150540`.
-2. **Encoders and dials.** The five A / B pairs of strobe `0x80` decode to +1 / -1 counters (`0xC0082A9C`, entries `[obj + 0x14] + index * 24`, indices 7, 6, 15, 14, 13), but nothing reads them within 60 ticks, so no menu value, dial value or name character can be edited. The consumer behind `0xC007AEBC` (thresholds `[obj + 0x5C / 0x60 / 0x64]`) and the SPI / ADC dial inputs are not reached.
+2. **Encoders and dials (answered in section 15: the consumer is the UI event loop; pair 1 is the Program dial).** The five A / B pairs of strobe `0x80` decode to +1 / -1 counters (`0xC0082A9C`, entries `[obj + 0x14] + index * 24`, indices 7, 6, 15, 14, 13), but nothing reads them within 60 ticks, so no menu value, dial value or name character can be edited. The consumer behind `0xC007AEBC` (thresholds `[obj + 0x5C / 0x60 / 0x64]`) and the SPI / ADC dial inputs are not reached.
 3. **Undo and Page previous.** Undo is Shift + Solo (manual p.42), but none of the 97 matrix keys reaches the `Nothing to Undo` handler (`0xC0132868`), alone or with Shift staged; the 42 silent keys are probably LED-only buttons. Page previous is silent in every state.
 4. **Not captured:** the `Store Disabled` multi-line message (shown through `0xC0080314`, not the text widget), the Arpeggiator page values (glyph codes), Master Clock / Octave Shift popup graphics, the real `LFO` page variants.
 5. **Row texts `B3` and `Pure Saw`** of the home screen are set (and drawn in the unit) but absent from the final frame here: ASSUMED to need a loaded sound (no DSP).
@@ -319,6 +319,55 @@ Layout measurements are in section 9; strings below are the widget texts (`arm_s
 | `LFO WAVEFORM` | the real LFO page is titled `LFO`; not changed (the page may be another LFO page): open |
 | `UNDO` / `REDO`, `LEFT` / `RIGHT` (arp), `G#`, `II` | still open: Undo key not found; the Arpeggiator page values are glyph codes of the 7 px font, not words |
 
+## 15. Fourth pass: the encoder event chain, the Program dial, Undo and Store As (VERIFIED unless marked)
+
+Bean `ns4-2gdc`. Hooks on a restored `Session`; reproduce with `uv run --with unicorn python tools/arm_events.py turn <CODE> <SRAM> --state target/oled/state.bin --pair 1 --detents 3` (`tools/arm_events.py`).
+
+### 15.1 Answer to blocker 2 (section 11): the encoders are read
+
+Section 12.4 concluded that nothing reads the counters. That was wrong: the consumer is the UI event loop, reached through an event queue, not through a memory read of the counter.
+
+| Step | Address | What happens |
+|---|---|---|
+| decode | `0xC0082A9C` | Gray step: counter `[entry + 4]` +-1, then `0xC007AEBC(obj, index, entry, ..)` |
+| limiter | `0xC007AEBC` | time check against `0x80001DC0` (thresholds `[obj + 0x5C / 0x60 / 0x64]`), then the listener `[obj + 8]`, vtable slot 0 |
+| post | `0xC007B0BC` | writes a 64-byte entry `{tag 0xC053F9CC, source id, encoder index, delta}` to the ring `table[0xC05613F4 + [0x8000C000] * 16]` (task index 3 = UI: ring `0x90022840`, 256 entries, mask `0xFF`); an entry with the same `{tag, source, index}` is merged by adding the deltas (`0xC007B170`) |
+| dispatch | `0xC00A0240..0xC00A03FC` | polls head / tail, calls every subscriber of the tag (`blx` at `0xC00A035C`); key events use tag `0xC053F9D0` (`{tag, 0, key id, 1 / 0}`) |
+| route | `0xC018933C` | focused screen: widget tree first, then the screen's key table |
+| value widget | `0xC0137CC4` | compares the encoder index with `[widget + 0x44]` and `[widget + 0x48]` (`7`, `6` on the menu pages), then calls the bound parameter's step method (vtable slot 6, `0xC00EEEB0`) with the delta |
+
+The five event ids are 7, 6, 15, 14, 13 for pairs 0 to 4 (`arm_events.ENCODER_PAIR_OF_ID`). One detent produces no event unless the next scan sees the following Gray state, so `Session.turn` with 3 detents delivers merged deltas such as `+1, +2`.
+
+### 15.2 What each pair does (VERIFIED by frames and widget strings, 3 / 6 / 8 detents)
+
+| Pair (id) | Screen | Result |
+|---|---|---|
+| 1 (6) | System menu | pages `1/6` -> `2/6` -> `3/6` (`Global Transpose` / `None`, `Fine Tune` / `440.0Hz` / `  0 cent`): **the Program dial pages the menus** |
+| 1 (6) | Organ Preset | the row steps `1:01` -> `1:02` ... (`ORGAN PRESET`, `1:04`); the list wraps |
+| 1 (6) | Program home | opens the program list **`Import into A:11`** (see 15.3) and scrolls it: `A:11`, `A:12` ... `A:18`, `A:21` ... |
+| 3 (14) | Organ Preset | re-sets the title only (`ORGAN PRESET`); no visible change |
+| 0 (7) | System menu | reaches the value widget (ids `7` / `6` bound) but the step method returns 0 at `0xC00EEF58`: the container `[param + 0x34]` (begin == end, capacity `0x1E0`, built once at boot by `0xC00ED984`) is empty, so the current value is "not found". No menu value changes. ASSUMED cause: the parameter store behind the value (System settings) is filled by the DSP / SPI side that the harness does not run |
+| 2, 4 (15, 13) | every screen tried | dispatched, no widget matches: no effect |
+
+Not reached: dial pages of the Synth section (the knobs are ADC inputs, not encoders), name entry (Store As), menu value editing. The Store As name entry and the Memory Protect value therefore remain unedited; `arm_store` still forces Memory Protect off.
+
+### 15.3 New screen: the program list (VERIFIED, `Session.turn(1, 3)` on the home screen)
+
+Widget strings (font index `0xC029E07C` for the title and the location, `0xC029E5F0` for `<empty>`): `Import into A:11`, then one `A:nn` + `<empty>` pair per row. Frame of the last position (rows measured on the 128 x 64 grid): a list icon and the title `Import into A:11` in the top row (not an inverted bar), four rows of `A:38 <empty>` ... with the selected row inverted (full width, 10 px pitch), soft buttons `Ok` (left) and `Cancel` (right) as outlined boxes in rows 53 to 63. Display 1 is blank (all pixels off) while the list is open. (Program Organize, section 9, uses a different bar: list icon, `Program` left / `Organize` right.)
+
+### 15.4 Undo (blocker 3): the dialog is found, its trigger is not
+
+`Nothing to Undo` belongs to a dialog class whose pool strings are `Undo to before` / `%s?` / `Nothing to Undo` / `Ok` / `Redo` (`0xC02BFB28..0xC02BFB5C`). Its refresh method is `0xC01327BC` (vtable `0xC02D49B4`, slot 1): it tests the byte `[[this + 0x60] + 0x120]` (history present) and sets the three widgets to `Nothing to Undo` / `Ok` or the `Undo to before <item>?` form. No literal pool word, `add pc` form or data word of the 5.4 MB code image points at the vtable region `0xC02D4940..0xC02D49C0` (also not for the vtable of the encoder parameter class `0xC02D41F4`, which is live), so the objects are built through a path that does not name the vtable by address (a copy of the class tables, not traced). The earlier sweep with a hook on the literal load (section 12.1, 97 keys alone and with Shift) did not reach it. A sweep from the Store screen in this pass is **inconclusive** (every key was silent, see 15.6), and no sweep from Program Organize was completed. **Undo remains unreached**; the next step is a watch on writes of `0xC02D49B4 + 4` into the heap while the Program page is open, or tracing the constructor from the soft button `Undo` of Program Organize (`Swap` `Move` `Ok` `Undo`).
+
+### 15.5 Store As (blocker 3 / follow-up 1): the gate is two flags, not Memory Protect
+
+`0xC01504FC` (Store handler) after the Memory Protect test (`0xC0150540`, `cmp r0, #1`; `0xC0150660` shows `Store Disabled` / `Memory Protected` / `in System menu` through `0xC0080314`, `strd r6, r7 = 3, 0x11`) works on the object `[this + 0x120]`: byte `[+5]` ("first press seen") is set and the object is queued on the list `0xC0541CDC` (count word, entries from `+4`); a second press finds `[+5] = 1`, sets `[+6]` and queues it again (ASSUMED: the commit). The `STORE PROGRAM AS` name screen is not behind this handler (no Shift test in it); it belongs to the screen object that handles `As:` (the third row of `STORE PROGRAM TO`) and needs the name encoder, which is not wired (15.2). Not captured.
+
+### 15.6 Display and timing notes
+
+- A frame right after a turn can be a partial update (the controller model shows only the rectangle written, for example a small keyboard icon in the top left): wait about 100 ticks and read `link.frames(d)[-1]`.
+- A key sweep that replays the opening keys costs about 25 s per key; a snapshot of an already opened screen (`state_bytes` then `load_state`) did not keep the screen interactive in the Store sweep (every key silent), so scripted sweeps must replay the opening keys.
+
 ## Implications
 
 - The GUI's Program home uses the measured grid (`oled_paint::grid`): title y = 3, name y = 18 at the same 13 px size, rule y = 33, rows from y = 36 every 10 px in the 8 px font; section rows now start with an icon column and use the source name (`oled_icons`, `section_rows`).
@@ -327,6 +376,9 @@ Layout measurements are in section 9; strings below are the widget texts (`arm_s
 - The program memory is a write-back cache over 256 KB of I2C EEPROM with a cluster-chain file layer; a populated image (`arm_store.py`) is the way to get real names for the Program view, Organize and Store screens.
 - The menu pages of `nord-panel/src/menus` match the real labels except the cases listed in section 14; the order of the five Device MIDI entries of the Extern menu (pages 8 to 12) is now VERIFIED.
 
+- Fourth pass (section 15): encoder events are queued and dispatched to the screens; pair 1 is the Program dial (pages menus, steps presets, opens the program list `Import into A:11`).
+- GUI: a single-item menu page shows its value alone in the 13 px font (`OledText::body_big`), as the frames of section 12.3 show.
+
 ## Follow-ups
 
 1. Decode the directory entry (device 3 `0xFE98`) and the program body so that several named programs can be stored, and trace the Store As gate for a typed name.
@@ -334,3 +386,4 @@ Layout measurements are in section 9; strings below are the widget texts (`arm_s
 3. GUI: menu body as one item per page (8 px label, 13 px value, optional 8 px hint) with the real labels of section 14 (`Volume Level Offset`, `Bus Output Channels`, `Control Pedal Type`, ...); Program Organize list with the inverted row; Master Clock and Octave Shift popups with their graphics (beans `ns4-9nj8`, `ns4-aivy`).
 4. GUI: a proportional bitmap font with the metrics of `arm_oled.font_table` (derived metrics only, never the bitmaps).
 5. Find Undo (Shift + Solo) and the remaining Synth / Arp pages to settle `UNDO`, `LEFT` / `RIGHT` and the real `LFO` title.
+6. Fourth pass: make the parameter step (`0xC00EEEB0`) succeed (populate the value container of the System settings, or call the settings setter directly) to edit menu values; find the constructor of the Undo dialog (15.4); wire the name encoder for Store As; GUI: the program list `Import into A:11` screen and the Master Clock / Octave Shift popup graphics.
