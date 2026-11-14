@@ -72,23 +72,25 @@ def rust() -> str:
     parts = [
         "//! Firmware parity of the twelfth stage batch (`fw_super2.rs`).\n"
         "//!\n"
-        "//! Derived values only, made by `python tools/synth_stage_golden10.py > <file>` from the\n"
-        "//! bit-exact model (`docs/research/synth-stage-models-12.md`).\n",
+        "//! Derived values only, made by `python tools/synth_stage_golden10.py > <file>`\n"
+        "//! from the bit-exact model (`docs/research/synth-stage-models-12.md`).\n",
         g.words_rust("PITCH", [p[0] for p in pitches]),
-        "pub(super) const BAND: [u8; 40] = [" + ", ".join(str(p[1]) for p in pitches) + "];\n",
+        g.words_rust("BAND", [p[1] for p in pitches]),
         g.words_rust("FIR_WORDS", [w for row in ins for w in row[0]]),
-        "pub(super) const FIR_REL: [u8; 48] = [" + ", ".join(str(r[1]) for r in ins) + "];\n",
-        "pub(super) const FIR_PHASE: [u16; 48] = [" + ", ".join(str(r[2]) for r in ins) + "];\n",
-        "pub(super) const FIR_ZERO: [i32; 48] = ["
-        + ", ".join(str(v) for _, v in fir_rows(False))
-        + "];\n",
-        "pub(super) const FIR_SIGNED: [i32; 48] = ["
-        + ", ".join(str(v) for _, v in fir_rows(True))
-        + "];\n",
+        g.words_rust("FIR_REL", [r[1] for r in ins]),
+        g.words_rust("FIR_PHASE", [r[2] for r in ins]),
+        g.words_rust("FIR_ZERO", [v & 0xFFFFFFFF for _, v in fir_rows(False)]),
+        g.words_rust("FIR_SIGNED", [v & 0xFFFFFFFF for _, v in fir_rows(True)]),
     ]
     for name in ("rows", "wave", "fir", "lattice"):
         parts.append(f"pub(super) const FNV_{name.upper()}: u64 = {fnv1a(tab[name]):#018x};\n")
-    return "\n".join(parts)
+    tail = (
+        "\n#[test]\nfn golden_tables_have_the_documented_shape() {\n"
+        "    assert_eq!(PITCH.len(), BAND.len());\n"
+        "    assert_eq!(FIR_WORDS.len(), 6 * FIR_REL.len());\n"
+        "    assert!(FIR_ZERO != FIR_SIGNED);\n}\n"
+    )
+    return "\n".join(parts) + tail
 
 
 if __name__ == "__main__":

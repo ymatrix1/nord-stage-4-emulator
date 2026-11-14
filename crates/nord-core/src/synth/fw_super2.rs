@@ -219,10 +219,10 @@ mod tests {
 
     #[test]
     fn band_index_matches_the_python_model() {
-        for (bits, want) in gold::PITCH.iter().zip(gold::BAND) {
+        for (bits, want) in gold::PITCH.iter().zip(gold::BAND.iter()) {
             assert_eq!(
                 band_index(f32::from_bits(*bits)),
-                want as usize,
+                *want as usize,
                 "{bits:#x}"
             );
         }
@@ -235,8 +235,9 @@ mod tests {
             let mut words = [0u32; 6];
             words.copy_from_slice(&gold::FIR_WORDS[6 * n..6 * n + 6]);
             let (rel, c0) = (gold::FIR_REL[n] as usize, 8 * gold::FIR_PHASE[n] as usize);
-            assert_eq!(fir_lane(&words, rel, c0, &t.fir, false), gold::FIR_ZERO[n]);
-            assert_eq!(fir_lane(&words, rel, c0, &t.fir, true), gold::FIR_SIGNED[n]);
+            let (zero, signed) = (gold::FIR_ZERO[n] as i32, gold::FIR_SIGNED[n] as i32);
+            assert_eq!(fir_lane(&words, rel, c0, &t.fir, false), zero);
+            assert_eq!(fir_lane(&words, rel, c0, &t.fir, true), signed);
         }
     }
 
