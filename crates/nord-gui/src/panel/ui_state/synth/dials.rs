@@ -4,7 +4,7 @@ use super::layer::step_time;
 use super::page::{dial_defs, SynthPage};
 use super::tables::FILTER_TYPES;
 use super::{Scope, SynthUi};
-use crate::audio::SynthParam;
+use crate::audio::{SynthEdit, SynthParam};
 use nord_core::synth::SampleTimbre;
 
 fn bump(v: u8, steps: i32, max: u8) -> u8 {
@@ -49,11 +49,25 @@ impl SynthUi {
             SynthPage::Arp(n) => self.dial_arp(n, dial, steps),
             SynthPage::Vibrato => self.dial_vibrato(dial, steps),
             SynthPage::PitchSmp => self.dial_pitch(dial, steps),
-            SynthPage::Extern => {
-                let v = i32::from(self.extern_vals[dial]) + steps;
-                self.extern_vals[dial] = v.clamp(0, 127) as u8;
-            }
+            SynthPage::Extern => self.dial_extern(dial, steps),
         }
+    }
+
+    /// Extern page: CC VAL 1, CC VAL 2 and PROGRAM dials of the focused Extern layer. The value is
+    /// stored and sent as it changes, like the hardware dial (manual p.47).
+    fn dial_extern(&mut self, dial: usize, steps: i32) {
+        let v = bump(self.layer().extern_vals[dial], steps, 127);
+        self.layer_mut().extern_vals[dial] = v;
+        let layer = self.focus.min(2) as u8;
+        self.out.push(if dial == 2 {
+            SynthEdit::ExternProgram { layer, program: v }
+        } else {
+            SynthEdit::ExternCc {
+                layer,
+                slot: dial as u8,
+                value: v,
+            }
+        });
     }
 
     fn dial_waveform(&mut self, dial: usize, steps: i32, shift: bool) {
@@ -373,13 +387,35 @@ mod tests {
     }
 
     #[test]
-    fn extern_page_keeps_values_without_engine_effect() {
+    fn extern_page_dials_send_cc_values_and_program() {
         let mut s = SynthUi::new();
+        s.focus_layer(2);
         s.open(SynthPage::Extern);
         s.turn_dial(1, 10, false);
-        assert_eq!(s.extern_vals[1], 74);
-        assert!(s.take_edits().is_empty());
-        assert!(s.dial_unsupported(0).is_some());
+        s.turn_dial(2, 3, false);
+        s.turn_dial(0, -4, false);
+        assert_eq!(s.layer().extern_vals, [0, 10, 3]);
+        assert_eq!(
+            s.take_edits(),
+            vec![
+                SynthEdit::ExternCc {
+                    layer: 2,
+                    slot: 1,
+                    value: 10
+                },
+                SynthEdit::ExternProgram {
+                    layer: 2,
+                    program: 3
+                },
+                SynthEdit::ExternCc {
+                    layer: 2,
+                    slot: 0,
+                    value: 0
+                },
+            ]
+        );
+        assert!((0..3).all(|d| s.dial_unsupported(d).is_none()));
+        assert_eq!(s.layers[0].extern_vals, [0; 3], "values are per layer");
     }
 
     #[test]

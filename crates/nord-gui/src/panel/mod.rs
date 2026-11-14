@@ -26,6 +26,9 @@ mod organ_preset;
 mod organ_rewire_tests;
 mod organ_strip;
 mod organ_widgets;
+pub mod panorama;
+#[cfg(test)]
+mod panorama_tests;
 pub mod param_hint;
 #[cfg(test)]
 mod piano_click_tests;
@@ -88,18 +91,23 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     }
     let ctx = ui.ctx().clone();
     let cursor = ui.cursor().min;
-    state
-        .view
-        .handle_keys(&ctx, view::panel_origin(state.view.focus, cursor));
+    state.view.handle_keys(&ctx, state.view.origin(cursor));
     view::apply_zoom(&ctx, &state.view);
-    let focus = state.view.focus;
-    let (visible, _) = ui.allocate_exact_size(view::content_size(focus), Sense::hover());
-    let panel_rect = Rect::from_min_size(view::panel_origin(focus, visible.min), view::PANEL_SIZE);
-    if focus.is_some() {
-        ui.set_clip_rect(visible.intersect(ui.clip_rect()));
+    let region = state.view.region();
+    let (visible, _) = ui.allocate_exact_size(view::region_size(region), Sense::hover());
+    let panel_rect =
+        Rect::from_min_size(view::region_origin(region, visible.min), view::PANEL_SIZE);
+    let outer_clip = ui.clip_rect();
+    if region.is_some() {
+        ui.set_clip_rect(visible.intersect(outer_clip));
     }
     let painter = ui.painter().clone();
     render_panel_at(ui, &painter, panel_rect, state, audio_handle);
+    if state.view.panorama.is_some() {
+        ui.set_clip_rect(outer_clip);
+        ui.allocate_space(vec2(0.0, panorama::strip_extra_h()));
+        panorama::show_strip(ui, panorama::strip_rect(visible), &mut state.view);
+    }
 }
 
 /// Draw every bay and the keybed into `panel_rect` (logical size [`view::PANEL_SIZE`]).

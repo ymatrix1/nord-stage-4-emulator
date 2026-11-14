@@ -54,6 +54,7 @@ impl ShotPlan {
             focus: self.section,
             last: None,
             fixed_zoom: Some(self.scale),
+            panorama: None,
         }
     }
 

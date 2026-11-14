@@ -34,7 +34,7 @@ const RES_DAMP: f32 = 0.85;
 
 /// The sine polynomial of the helper `0x12522E` on `v = 2 y` (`y` = warped phase, -1..1).
 #[inline]
-fn sine_poly(v: f32) -> f32 {
+pub(super) fn sine_poly(v: f32) -> f32 {
     let t = v.abs() - 1.0;
     let q = t * t;
     t * (SINE_C12 + q * (SINE_C14 + q * (SINE_C16 + q * SINE_C18)))
