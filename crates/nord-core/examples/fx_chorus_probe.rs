@@ -17,8 +17,10 @@ fn main() {
     }
     let raw = std::fs::read(&a[1]).expect("read input");
     let x: Vec<f32> = raw
-        .chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
         .collect();
     let (rate, amount): (u8, u32) = (a[4].parse().unwrap(), a[5].parse().unwrap());
     let fs: f32 = a[6].parse().unwrap();
