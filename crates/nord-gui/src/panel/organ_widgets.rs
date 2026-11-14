@@ -100,7 +100,8 @@ pub(super) fn level_ladder(ui: &Ui, rect: Rect, id: &str, level: f32, active: bo
 pub(super) fn drawbar_ladder(ui: &Ui, rect: Rect, id: &str, lit: u8) {
     let p = ui.painter();
     let pitch = rect.height() / 8.0;
-    let r = (rect.width() * 0.5).min(pitch * 0.5) - 1.0;
+    // 2 px smaller than the pitch allows: room for the numerals 1-8 beside the column.
+    let r = (rect.width() * 0.5).min(pitch * 0.5) - 2.0;
     for i in 0..8 {
         let c = pos2(rect.center().x, rect.top() + (i as f32 + 0.5) * pitch);
         led_small(p, c, (i as u8) < lit, LED_RED, LED_RED_DIM, r.max(1.2));

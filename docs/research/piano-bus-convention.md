@@ -71,6 +71,6 @@ D29 (opt-in layer law; defaults unchanged), D30 (post stage measured unity; `fir
 ## Follow-ups
 
 1. Done (section 2b): the post stage is unity, `ring = bus * 2^-29`.
-2. Find the SPORT receive buffer of the FX or PNO core that carries the SMP stream and the first float multiply on it (the input trim), then the output stage to the codec.
+2. Find the SPORT receive buffer of the FX or PNO core that carries the SMP stream and the first float multiply on it (the input trim), then the output stage to the codec. Done in [piano-receiver-scale](piano-receiver-scale.md) (D39): FX SPORT3B, no multiply, DAC `fix(clip(2 x, 0.999)) * 2^31`.
 3. Trace `0xC023195C` to the SMP record gain writes to prove (or refute) that the layer level word scales the piano voice gains; then flip `firmware_layer_law` by default (D22).
 4. SMP slew time constant, stream start/end history, damper-down strokes (section 4).

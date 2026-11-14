@@ -10,6 +10,7 @@ mod faders;
 mod knob;
 #[cfg(test)]
 pub(crate) mod probe;
+pub mod scale;
 #[cfg(test)]
 mod support;
 mod wheels;

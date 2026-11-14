@@ -7,10 +7,12 @@ mod bay_effects;
 mod bay_master;
 mod bay_organ;
 mod bay_piano;
+mod bay_piano_names;
 mod bay_piano_select;
 pub(crate) mod bay_program;
 mod bay_synth;
 mod ctl;
+mod frames;
 mod kb_zone;
 mod keybed;
 pub mod layout_px;
@@ -41,6 +43,9 @@ pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
 mod rotor_angle;
+mod section_edit;
+#[cfg(test)]
+mod section_edit_tests;
 #[cfg(test)]
 mod sim;
 mod state;

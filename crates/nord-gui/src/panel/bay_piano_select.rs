@@ -27,7 +27,7 @@ pub(super) fn render_select(
     draw_type_and_dial(ui, p, o, state, shift, out);
     draw_acoustics(ui, p, o, state, shift, out);
     draw_option_buttons(ui, p, o, state, out);
-    draw_timbre(ui, p, o, state, out);
+    super::bay_piano_names::draw_timbre(ui, p, o, state, out);
     super::piano_overlay::draw_overlay(ui, p, o, state);
 }
 
@@ -73,7 +73,7 @@ fn draw_type_and_dial(
     state.piano_ui.mark("piano.info");
 
     let cat = logic::category_index(state);
-    w::led_strip(p, r("piano.type_leds"), 6, |i| i == cat, RED, false);
+    super::bay_piano_names::type_grid(p, r("piano.type_leds"), cat);
     state.piano_ui.mark("piano.type_leds");
 
     let dial = r("piano.select_dial");
@@ -259,72 +259,6 @@ fn draw_option_buttons(
         w::led_strip(p, row, 3, |i| i == lit, RED, false);
         pr.resp.on_hover_text(tip);
         state.piano_ui.mark(id);
-    }
-}
-
-fn draw_timbre(
-    ui: &mut Ui,
-    p: &Painter,
-    o: egui::Pos2,
-    state: &mut Stage4PanelState,
-    out: &mut Vec<PianoEdit>,
-) {
-    let clav = state.piano_cat == PianoCategory::Clav;
-    let rect = rect_or_empty("piano.timbre", o);
-    let pr = w::press(
-        ui,
-        rect,
-        "piano_timbre",
-        &mut state.piano_ui.trackers[slot::TIMBRE],
-    );
-    if pr.gesture.is_some() {
-        logic::timbre_cycle(state, out);
-    }
-    w::face(p, rect, pr.down, clav);
-    w::inside(p, rect, "TIMB", clav);
-
-    let (names, lit): (&[&str], u8) = if clav {
-        (&["SOFT", "TREBLE", "BRIL"], state.piano_ui.clav_timbre)
-    } else {
-        let idx = logic::timbre_index(state);
-        let electric = state.piano_cat == PianoCategory::Electric;
-        (
-            if electric {
-                &["SOFT", "MID", "BRIGHT", "DYNO1", "DYNO2"][..]
-            } else {
-                &["SOFT", "MID", "BRIGHT"][..]
-            },
-            if idx == 0 { 0 } else { 1 << (idx - 1) },
-        )
-    };
-    let step = 9.5; // 7.5 px minimum font plus the 2 px gap of audit rule `V`
-    let top = rect.center().y - step * 2.0;
-    for (i, name) in names.iter().enumerate() {
-        let c = pos2(rect.right() + 7.0, top + i as f32 * step);
-        let on = lit & (1 << i) != 0;
-        w::mini_led(p, c, on, LED_RED, LED_RED_DIM, 2.2, clav);
-        label(
-            p,
-            c + vec2(5.0, 0.0),
-            name,
-            5.5,
-            Color32::from_gray(if clav { 110 } else { 225 }),
-            Align2::LEFT_CENTER,
-        );
-    }
-    if clav {
-        pr.resp.on_hover_text(
-            "TIMBRE on Clav: the seven pick-up EQ combinations (Soft, Treble, Brilliant and their mixes, manual p.26) are kept in the UI; the engine has no Clav timbre yet.",
-        );
-        state.piano_ui.mark_dim(
-            "piano.timbre",
-            "TIMBRE (Clav): engine has no Clav pick-up EQ timbres",
-        );
-    } else {
-        pr.resp.on_hover_text(
-            "TIMBRE: off, Soft, Mid, Bright; Dyno 1 and 2 on the Electric type only (applies to both layers).",
-        );
-        state.piano_ui.mark("piano.timbre");
     }
 }
 

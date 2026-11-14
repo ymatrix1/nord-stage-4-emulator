@@ -172,29 +172,33 @@ pub fn layer_hold(s: &mut Stage4PanelState, layer: usize, out: &mut Vec<PianoEdi
 /// Fader move of one layer.
 pub fn set_level(s: &mut Stage4PanelState, layer: usize, level: f32, out: &mut Vec<PianoEdit>) {
     let level = level.clamp(0.0, 1.0);
-    if layer == 0 {
-        s.piano_a_level = level;
-    } else {
-        s.piano_b_level = level;
+    for l in s.edit_layers(layer, 2) {
+        if l == 0 {
+            s.piano_a_level = level;
+        } else {
+            s.piano_b_level = level;
+        }
+        out.push(PianoEdit::Level {
+            layer: l as u8,
+            level,
+        });
     }
-    out.push(PianoEdit::Level {
-        layer: layer.min(1) as u8,
-        level,
-    });
 }
 
 /// OCTAVE SHIFT +-1 of the focused layer, clamped to -2..=2.
 pub fn octave_step(s: &mut Stage4PanelState, delta: i8, out: &mut Vec<PianoEdit>) {
     let l = s.piano_ui.layer();
     let v = (s.piano_ui.octave[l] + delta).clamp(-2, 2);
-    s.piano_ui.octave[l] = v;
-    if l == 0 {
-        s.piano_octave = v;
+    for t in s.edit_layers(l, 2) {
+        s.piano_ui.octave[t] = v;
+        if t == 0 {
+            s.piano_octave = v;
+        }
+        out.push(PianoEdit::OctaveShift {
+            layer: t as u8,
+            octaves: v,
+        });
     }
-    out.push(PianoEdit::OctaveShift {
-        layer: l as u8,
-        octaves: v,
-    });
 }
 
 /// KB ZONE +-1 (Shift + octave buttons): moves the focused layer's zone assignment and sends it
@@ -202,19 +206,23 @@ pub fn octave_step(s: &mut Stage4PanelState, delta: i8, out: &mut Vec<PianoEdit>
 pub fn zone_step(s: &mut Stage4PanelState, forward: bool, out: &mut Vec<PianoEdit>) {
     let l = s.piano_ui.layer();
     let pos = super::kb_zone::step(s.piano_ui.kb_zone[l], forward);
-    s.piano_ui.kb_zone[l] = pos;
-    out.push(PianoEdit::Zone {
-        layer: l as u8,
-        leds: super::kb_zone::leds(pos),
-    });
+    for t in s.edit_layers(l, 2) {
+        s.piano_ui.kb_zone[t] = pos;
+        out.push(PianoEdit::Zone {
+            layer: t as u8,
+            leds: super::kb_zone::leds(pos),
+        });
+    }
 }
 
 /// SOFT RELEASE of the focused layer.
 pub fn soft_release_toggle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
     let l = s.piano_ui.layer();
     let on = !s.piano_ui.soft_release[l];
-    s.piano_ui.soft_release[l] = on;
-    out.push(PianoEdit::SoftRelease { layer: l as u8, on });
+    for t in s.edit_layers(l, 2) {
+        s.piano_ui.soft_release[t] = on;
+        out.push(PianoEdit::SoftRelease { layer: t as u8, on });
+    }
 }
 
 /// STRING RES toggle.
@@ -239,22 +247,26 @@ pub fn touch_cycle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
 pub fn dyn_comp_cycle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
     let l = s.piano_ui.layer();
     let v = cycle(usize::from(s.piano_ui.dyn_comp[l]), 4, true) as u8;
-    s.piano_ui.dyn_comp[l] = v;
-    out.push(PianoEdit::DynComp {
-        layer: l as u8,
-        amount: v,
-    });
+    for t in s.edit_layers(l, 2) {
+        s.piano_ui.dyn_comp[t] = v;
+        out.push(PianoEdit::DynComp {
+            layer: t as u8,
+            amount: v,
+        });
+    }
 }
 
 /// UNISON: off, 1, 2, 3 for the focused layer.
 pub fn unison_cycle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
     let l = s.piano_ui.layer();
     let v = cycle(usize::from(s.piano_ui.unison[l]), 4, true) as u8;
-    s.piano_ui.unison[l] = v;
-    out.push(PianoEdit::Unison {
-        layer: l as u8,
-        amount: v,
-    });
+    for t in s.edit_layers(l, 2) {
+        s.piano_ui.unison[t] = v;
+        out.push(PianoEdit::Unison {
+            layer: t as u8,
+            amount: v,
+        });
+    }
 }
 
 /// Number of TIMBRE steps (incl. Off) of a type: the acoustic types have Soft, Mid, Bright; DYNO 1

@@ -50,7 +50,7 @@ enum Binding {
 | Unique ids | Lowercase ASCII, no duplicates | implemented |
 | Provenance | Every entry has page 11-53, a label and a source; `Assumed` entries state why | implemented |
 | Bindings | Every binding is non-empty; every `Bound` id appears as a quoted literal in the `nord-plugin` sources, or as `<prefix>_<name>[_{n}]` where `<prefix>` is a nested `id_prefix` in `params.rs` and `<name>` a literal `#[id]` (per-layer ids such as `pianox_unison_{n}`), or is `engine:<path>` whose dot-separated fields are `pub` fields of `nord-core` (`engine:split_router.layer_zone_masks`), or is `ui:<area>.<name>` with `<area>` in `program`, `synth`, `fx`; every `Unsupported` bean exists in `.beans/`; the set of remaining `Unsupported` controls is pinned (`the_unsupported_set_is_pinned`) | implemented |
-| GUI proof of `ui:` | every `ui:` control is pressed through the painted button path, the commands are applied to a real `Stage4Engine` and its state asserted; each area test fails when a `ui:` id has no proof: `nord-gui` `panel/bay_program/binding_tests.rs` (Program, 29 ids), `panel/ui_state/synth/binding_tests.rs` (Synth, 18), `panel/bay_effects/tests/binding.rs` (Effects, 5) | implemented (`ns4-lu50`) |
+| GUI proof of `ui:` | every `ui:` control is pressed through the painted button path, the commands are applied to a real `Stage4Engine` and its state asserted; each area test fails when a `ui:` id has no proof: `nord-gui` `panel/bay_program/binding_tests.rs` (Program, 30 ids), `panel/ui_state/synth/binding_tests.rs` (Synth, 18), `panel/bay_effects/tests/binding.rs` (Effects, 5) | implemented (`ns4-lu50`) |
 | Counts | Per-section, per-kind, per-binding, `Assumed` and `morphable` totals pinned (§5) | implemented |
 | Layout completeness | Every inventory id has a layout rect (`layout/tests.rs`) | implemented |
 | Geometry | Rects have positive size; each lies inside its section rect and the panel; section rects do not overlap; two rects overlap only when both share a base (`layout::SHARED`) | implemented |
@@ -71,7 +71,7 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
 | **Total** | | | | | | **275** |
 
-By binding: `Bound` 207, `UiOnly` 67, `Unsupported` 1 (from the pins in `inventory/tests.rs`; section 10 lists how the last 64 `Unsupported` were decided). By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
+By binding: `Bound` 208, `UiOnly` 67, `Unsupported` 0 (from the pins in `inventory/tests.rs`; section 10 lists how the last 65 `Unsupported` were decided). By provenance: `Verified` 250, `Assumed` 24, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
 
 PSTICK range (`ns4-dsjv`): there is no separate range control. The Synth strip's `synth.pstick` entry is the printed `PSTICK/RNG` (manual p.28: hold the button and pick a semitone value) and its host binding `ped_pstick_{n}` pairs with `ped_range_{n}` (`1..=12`, default 2). Only the Synth layers honour the range; Organ and Piano `pstick` entries bend a fixed 2 semitones (p.18, p.23). `master.pitch_stick` stays `UiOnly` (the stick is MIDI pitch bend, no host parameter). The totals above did not change.
 
@@ -79,7 +79,7 @@ Modelling choices: a button with its own LED is one entry; standalone LEDs, LED 
 
 ## Gap list
 
-The old code-review gap list is replaced by the `Unsupported` entries, each tied to a bean. After the classification pass of section 10 one remains (`program.section_edit`, `ns4-fqym`). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the `Unsupported` entries, each tied to a bean. After the classification pass of section 10 and SECTION EDIT (`ns4-fqym`, section 10a) none remains. Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 5b. Behaviour layer
 
@@ -113,6 +113,8 @@ Answered: trademark and art, parity scope, keybed variant, per-layer IDs and Pha
 | Estimated | **36** ids listed in `layout::ESTIMATED`: layer/zone/focus LEDs a few pixels wide, LED groups drawn as one rect (`fx.focus.leds`, `split.leds`, `keybed.split_leds`), halves of one button (`organ.vibrato_on.a/b`), and unclear function mapping (`amp.res`, `amp.filter`, `amp.to_rotary`, `synth.voice.priority`, `synth.filter.res`, `synth.dial_list`) | `ASSUMED` |
 
 Conventions: a drawbar rect is its slot (8 px wide) and its LED ladder the 15 px column to its right; the three `keybed.split_leds` are one strip along the top of the keys; `program.shift.right` (the SHIFT rocker next to Layer Effects) is the only rect that lies outside its inventory section (listed in `OUTSIDE_OWN_SECTION` in the tests).
+
+Frames (`layout/frames.rs`, `layout::FRAMES`, `frames_of`, `frame_rect`): the printed boxes and bare titles of the panel (`ORGAN MODEL`, `VIB/CHORUS`, `B3 PERCUSSION`, `ACOUSTICS`, `UNISON`, `KB TOUCH`, `DYN COMP`, `PIANO SELECT`, the nine Synth boxes, the six Layer Effects boxes, `MORPH ASSIGN`, `SPLIT`, `MST CLK`, `TRANSP`, `PRESET LIBRARY`, `PROGRAM`; 29 in all). A frame is not a free rectangle: it is the union of the rectangles of its member controls grown by a pad `[left, top, right, bottom]` in photo px, so a nudged member carries its frame along. Tests: every member has a rect, ids are unique, no title names the manufacturer, every frame lies inside its section. The GUI adds that boxes of one section do not overlap (after nudges). `ASSUMED`: membership and pads read from the photos in `.reference/crops` and tuned until the legibility audit (rule `G`) passes; `piano.type_leds` was widened from 12 to 58 photo px so it holds the six type names.
 
 What would confirm or replace the table: a higher-resolution front photo (at least 4000 px wide) or a tape measure on the instrument for the 36 estimated entries and the overall scale. The B8 renderers must not hard-code positions; they read these rects. The GUI draws them at `LAYOUT_SCALE` 2 (3120 px wide) and applies per-id nudges from `crates/nord-gui/src/panel/layout_tweaks.rs` (see `docs/gui-testing.md`); the tables themselves stay as measured.
 
@@ -187,7 +189,7 @@ What stays unsupported on the dials: only the SAMPLE OPT dial (one `Gap` cell, s
 
 ## 10. Classification of the former `Unsupported` controls (`ns4-lu50`)
 
-After the Organ, Piano, Synth-strip, dial and Effects rewires, 64 controls were still `Unsupported`. Each was decided one by one against the code: does a behaviour exist, does it need a host parameter, or is it missing? Totals now: `Bound` 207, `UiOnly` 67, `Unsupported` 1 (275 controls).
+After the Organ, Piano, Synth-strip, dial and Effects rewires, 65 controls were still `Unsupported`. Each was decided one by one against the code: does a behaviour exist, does it need a host parameter, or is it missing? Totals now: `Bound` 208, `UiOnly` 67, `Unsupported` 0 (275 controls).
 
 | Class | Controls | Binding | Proof |
 |---|---|---|---|
@@ -197,7 +199,7 @@ After the Organ, Piano, Synth-strip, dial and Effects rewires, 64 controls were 
 | a. host id | DELAY TAP/SET (writes the delay time), AMP FILTER LP24/HP24 (a `CabinetSel` value, as TO ROTARY) | `delay_ms`, `fxsel_cabinet_{n}` | `bay_effects/tests/flows.rs` `tap_tempo_sets_the_delay_time`, `amp_filter_and_to_rotary_are_exclusive_cabinet_choices` |
 | b. UiOnly | PAGE -/+ and BANK -/+ (move the browse cursor, no program changes until a Program button picks a slot), PROG VIEW (cycles the OLED view), PRESET NAME (name display latch), FX FOCUS ORGAN / PIANO / SYNTH (select the addressed chain) (9) | `UiOnly(reason)` | `binding_tests.rs` `page_bank_view_and_name_are_pure_display_state`, `bay_effects/tests/binding.rs` `fx_focus_buttons_only_change_which_chain_the_bay_addresses` |
 | c. implemented now | PEDAL TAP (Shift+Mst Clk): engine function existed (`TripleFunc::MstClkTap`, `PanelFunc`), the panel control did not reach it. Manual p.40 states the behaviour exactly | `ui:program.pedal_tap` | `audio/edits/program.rs` `pedal_tap_makes_a_panel_assigned_pedal_tap_the_master_clock` |
-| d. still `Unsupported` | SECTION EDIT (1): the panel latches and lights it (hold or double tap, `ProgramUi::section_edit_active()`) and the engine has the `section_edit_*` helpers, but no bay applies it to its edits. Manual p.43 is exact (edits go to all Layers of the Section); wiring it touches the Organ, Piano, Synth and Effects edit paths, which `ns4-fqym` tracks | `Unsupported("ns4-fqym")` | pinned by `the_unsupported_set_is_pinned` |
+| d. implemented now (`ns4-fqym`) | SECTION EDIT (1): held or sticky (double tap), manual p.43: an edit reaches every Layer of the Section. The panel reads `ProgramUi::section_edit_active()` once per frame in each bay and fans the edit out (section 10a) | `ui:program.section_edit` | `bay_program/binding_tests.rs` `section_edit` (latch), `panel/section_edit_tests.rs` (every layer of Organ, Piano, Synth and Effects in a real engine, plus the latch-off negative per bay) |
 
 Honest limits of the `Bound` count:
 
@@ -206,3 +208,16 @@ Honest limits of the `Bound` count:
 - Program loading (PROGRAM DIAL, Program buttons, NUM PAD) is a `LoadRequest` the app serves from the open `.ns4b`; without a backup the display shows `<empty>`. The Preset Library for Piano and Synth needs an open backup too (`Support::Partial` in `bay_program/controls.rs`); the Organ models need none.
 - STORE writes the in-memory user library, not the backup file.
 - PEDAL TAP: that the panel-assigned pedal function becomes Master Clock tap while the button is on, and returns to Layer Scene II when off, is `ASSUMED` (the manual describes the effect, not the internal state); the tap interval window is `ASSUMED` as before.
+
+## 10a. SECTION EDIT fan-out (`ns4-fqym`)
+
+Manual p.43: "While SECTION EDIT is pressed, edits done to a parameter are performed on all Layers of that Section"; a double tap makes it sticky, a tap or Shift/Exit leaves. The panel does the fan-out, not the engine: the commands it sends already name each layer, so the standalone queue, the control thread and the plugin editor (same panel code, host writes per layer) need no change. The engine helpers `Stage4Engine::section_edit_*` stay as the tested copy primitives.
+
+| Bay | Where | Reaches |
+|---|---|---|
+| Organ | `organ_strip.rs`, `bay_organ.rs` loop over `Stage4PanelState::edit_layers(focus, 2)` | OCTAVE SHIFT, KB ZONE, SUSTPED / PSTICK, the two level faders, VIB/CHORUS type and ON (A and B) |
+| Piano | `piano_logic.rs`, same helper | level faders, OCTAVE SHIFT, KB ZONE, SOFT RELEASE, UNISON, DYN COMP |
+| Synth | `SynthUi::section_edit` folded into `SynthUi::grouped`, so every `SynthUi::edit` (all knobs, dials and buttons that carry a `Scope`) writes `SynthTarget::All`; `ui_state/synth/section.rs` for the waveform selection and KB ZONE; `bay_synth/strip.rs` for the faders | every per-layer parameter, the oscillator selection (type, category, index, FM algorithm, OSC CTRL; each layer keeps its own Sample / Synth mode), KB ZONE (manual p.37, "all Synth Layers at once"), the three faders |
+| Effects | `FxUi::section_edits`, called by `FxUi::after_edit` | the edited unit (Mod 1, Mod 2, Amp, Comp, Delay or Reverb, with the LAYER EFFECTS ON gate that scales it) copied to the other chains of the section, UI mirror and engine; Organ has one shared chain; with GROUP on the whole chain is already shared, so nothing is added |
+
+Not fanned out (left per layer): the Layer buttons and ON (layer and scene enable), Aux KB LEDs (a routing flag of one layer, not a parameter), SOUND INIT and LAYER INIT (their own functions), EXTERN and its dials, sample and piano-model loads (`LoadSynthSample`, Piano model dial), and Morph Assign (a control moved while a Morph button is held assigns a morph and is not an edit). Controls that are already section-wide (organ drawbars, model, percussion, rotary; Piano type / timbre / touch; SUSTPED / PSTICK of Piano and Synth; KB HOLD; the Synth PSTICK range) need nothing. `ASSUMED`: faders count as "parameters" (the bean lists faders); a hardware check of a Section Edit fader move would confirm. Plugin editor: `nord-plugin/src/editor/section_edit_tests.rs` (the editor draws the same panel, so it writes each layer's host parameter).

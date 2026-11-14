@@ -28,6 +28,7 @@ pub(super) fn render_bay_organ(
         origin,
     );
     section_frame(painter, frame, "ORGAN");
+    super::frames::paint_frames(painter, origin, nord_panel::Section::Organ);
     render_strip(ui, origin, state, audio_handle);
     render_model(ui, painter, origin, state, audio_handle);
     render_preset(ui, painter, origin, state, audio_handle);
@@ -64,7 +65,6 @@ fn render_model(
     }
     // Above the model LEDs and their names, not over them.
     let leds = rect_or_empty("organ.model_leds", origin);
-    tag(painter, btn, "ORGAN MODEL", btn.top() - leds.top() + 6.0);
     // Six LEDs, two columns of three, with the model names beside them.
     let names = [("B3", "BASS"), ("VOX", "FARF"), ("PIPE1", "PIPE2")];
     for i in 0..MODELS.len() {
@@ -120,8 +120,15 @@ fn render_vibrato(
     ) {
         let next = VIB_TYPES[cycle(vib_index(ty), VIB_TYPES.len(), true)];
         let on = state.organ_vib_of(focus).1;
-        state.set_organ_vib(focus, next, on);
-        send_scanner(state, audio, focus);
+        for l in state.edit_layers(focus, 2) {
+            let own_on = if l == focus {
+                on
+            } else {
+                state.organ_vib_of(l).1
+            };
+            state.set_organ_vib(l, next, own_on);
+            send_scanner(state, audio, l);
+        }
     }
     let cur = vib_index(ty);
     for i in 0..6 {
@@ -131,7 +138,6 @@ fn render_vibrato(
         );
         led_small(painter, c, i == cur, LED_RED, LED_RED_DIM, 1.5);
     }
-    tag(painter, sel, "VIB/CHORUS", 16.0);
     for (l, id, text) in [
         (0, "organ.vibrato_on.a", "A"),
         (1, "organ.vibrato_on.b", "B"),
@@ -147,8 +153,11 @@ fn render_vibrato(
             gesture_button(ui, &mut state.organ_ui.trackers, rect, id, false, face)
         {
             let ty = state.organ_vib_of(l).0;
-            state.set_organ_vib(l, ty, !on);
-            send_scanner(state, audio, l);
+            for t in state.edit_layers(l, 2) {
+                let own_ty = if t == l { ty } else { state.organ_vib_of(t).0 };
+                state.set_organ_vib(t, own_ty, !on);
+                send_scanner(state, audio, t);
+            }
         }
         tag(painter, rect, text, 6.5);
     }

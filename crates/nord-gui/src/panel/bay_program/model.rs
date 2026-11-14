@@ -133,17 +133,24 @@ impl MenuId {
         }
     }
 
-    /// Page title as printed in the manual.
+    /// Page title as the OLED shows it.
+    ///
+    /// VERIFIED (frames of the ARM emulator, `docs/research/arm-oled-render.md` section 8): the
+    /// settings menus draw `AUX KB SETTINGS`, `MIDI SETTINGS` and `EXTERN SETTINGS` in the
+    /// inverted title bar (the firmware strings are `Aux Kb Settings` ...; the bar's upper-case
+    /// flag capitalises them), and Program Organize draws `Program` left and `Organize` right in
+    /// mixed case. ASSUMED: `SYSTEM`, `SOUND`, `OUTPUT` and `PEDAL SETTINGS` follow the same table
+    /// (`0xC02D3584..0xC02D35E4`), not captured because their Shift+Program key is not identified.
     pub fn title(self) -> &'static str {
         match self {
-            Self::System => "SYSTEM MENU",
-            Self::Sound => "SOUND MENU",
-            Self::Organize => "PROGRAM ORGANIZE",
-            Self::AuxKb => "AUX KB",
-            Self::Output => "OUTPUT MENU",
-            Self::Pedal => "PEDAL MENU",
-            Self::Midi => "MIDI MENU",
-            Self::Extern => "EXTERN MENU",
+            Self::System => "SYSTEM SETTINGS",
+            Self::Sound => "SOUND SETTINGS",
+            Self::Organize => "Program Organize",
+            Self::AuxKb => "AUX KB SETTINGS",
+            Self::Output => "OUTPUT SETTINGS",
+            Self::Pedal => "PEDAL SETTINGS",
+            Self::Midi => "MIDI SETTINGS",
+            Self::Extern => "EXTERN SETTINGS",
         }
     }
 
