@@ -74,6 +74,8 @@ impl ProgramState {
         let (a, b) = (&self.organ_a, &self.organ_b);
         o.model = a.model;
         o.model_b = b.model;
+        o.b3_bass_a = a.b3_bass_mode && a.model == crate::organ::OrganModel::B3;
+        o.b3_bass_b = b.b3_bass_mode && b.model == crate::organ::OrganModel::B3;
         o.drawbars_a = a.drawbars;
         o.drawbars_b = b.drawbars;
         keep(&mut o.layer_a_octave, |v| v.clamp(-2, 2), a.octave_shift);

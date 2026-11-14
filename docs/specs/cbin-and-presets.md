@@ -112,7 +112,7 @@ Morphable parameters of bit width `W` occupy `4W + 3` bits:
 - `0..8`: `0x11`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`.
 - `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
 - `80`: `rotary_enabled` (1b); `81..83`: `leslie_speed` (`0|2=Stop, 1=Slow, 3=Fast`); `92..99`: `rotary_drive` (7b); `130..133`: `VibratoTypeB3` (`0..5 -> V1, C1, V2, C2, V3, C3`).
-- `0x03` Layers at bit `144` (A) and `392` (B): `+8..+12` `kb_zone` (4b, `Edt_Org_kKbZone`, 12 values, default 5; read-only, [morph-and-zones](morph-and-zones.md) section 6); `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2`); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
+- `0x03` Layers at bit `144` (A) and `392` (B): `+8..+12` `kb_zone` (4b, `Edt_Org_kKbZone`, 12 values, default 5; read-only, [morph-and-zones](morph-and-zones.md) section 6); `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2, 5=B3 Bass`; 5 decodes to `B3` with `b3_bass_a` / `b3_bass_b` set and is written back as 5; before the sweep it fell into Pipe2, 4 factory programs use it, [program-coverage](../research/program-coverage.md)); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
 - Bytes `80..135`: `0x36` Organ FX chain.
 
 #### Piano Block (`0x0C`, `147` Bytes = 2×`0x0B` + 2×`0x36`)
