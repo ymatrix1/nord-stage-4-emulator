@@ -25,6 +25,7 @@ mod fw_filter;
 mod fw_filter_table_d;
 mod fw_filter_tables;
 mod fw_shape;
+mod fw_sine_warps;
 mod fw_stages;
 mod fw_strip_cutoff;
 mod gain_dezip;
@@ -85,6 +86,8 @@ mod tests_fw_shape_golden;
 mod tests_fw_stage_golden;
 #[cfg(test)]
 mod tests_fw_stage_golden2;
+#[cfg(test)]
+mod tests_fw_stage_golden3;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]

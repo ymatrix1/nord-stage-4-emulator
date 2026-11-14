@@ -166,6 +166,10 @@ The firmware filter engine also runs `FwFilterType::Lp2` (stage `0x1253BD`, one 
 | `0x121C54` | MULTI (6 waves) | three octave voices (`c = 1, 2, 0.5` idle image words), per-voice fade folded into the weights | `FwStageState::sample` | stage VERIFIED, per-wave constants ASSUMED |
 | `0x123427` | SHAPE SINE 0 | sine of a phase warped around the knee `-w`, `w = (1 - (1 - s5)^2)(1 - min(1, 5.5 a))` | `shape_sine_wave` (< 2e-6) | VERIFIED (idle shape word) |
 
+| `0x1235C9` | SHAPE SINE 1 | half-cycle magnitude stretched by `1 / (1 - w)`, clipped at 1 | `shape_sine_fold` (< 2e-6) | VERIFIED (idle shape word) |
+| `0x1232A5` | SHAPE SINE 2 | phase amplified by `rho` and clipped, offset `1 - 1/rho`, level `-g` | `shape_sine_gain` (< 2e-6) | VERIFIED (idle shape word) |
+| `0x122F1F` | SHAPE SINE 5 | `cos / (1 + k^2 + 2 k sin)` | `shape_sine_res` (< 2e-5) | VERIFIED (idle shape word) |
+
 `FwStage::from_category_wave` maps the decoded category / wave; `synth_params.rs` sets `SynthLayer::strip_stage`; the strip chain plays it only with `strip_stages` (`--synth-stages`), otherwise the legacy waveform stays (default renders and `render_hash` unchanged). One lane per voice with the mix weights folded into one level; the real ratios and weights are P-block words of the unknown writer (OQ22). Evidence and the oracle method: [synth-stage-models](../research/synth-stage-models.md). The `kFltType` to filter stage map is partial: [synth-filter-type-map](../research/synth-filter-type-map.md).
 
 ---

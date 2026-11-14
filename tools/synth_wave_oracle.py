@@ -45,6 +45,9 @@ STAGE_NOISE = 0x121FD8
 STAGE_SHAPE_SQUARE = 0x121AB5
 STAGE_SUPER = 0x121D6D
 STAGE_SHAPE_SINE0 = 0x123427
+STAGE_SHAPE_SINE5 = 0x122F1F
+STAGE_SHAPE_SINE2 = 0x1232A5
+STAGE_SHAPE_SINE1 = 0x1235C9
 STAGE_MULTI = 0x121C54
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI)
 PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
@@ -68,6 +71,9 @@ MODELS = {
     STAGE_SHAPE_SQUARE: shapes.stage_shape_square,
     STAGE_SUPER: unison.stage_super,
     STAGE_SHAPE_SINE0: shape_sine.stage_shape_sine,
+    STAGE_SHAPE_SINE5: shape_sine.stage_shape_sine_5,
+    STAGE_SHAPE_SINE2: shape_sine.stage_shape_sine_2,
+    STAGE_SHAPE_SINE1: shape_sine.stage_shape_sine_1,
     STAGE_MULTI: unison.stage_multi,
 }
 
