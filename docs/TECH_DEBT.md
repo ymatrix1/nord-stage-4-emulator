@@ -89,6 +89,11 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 - **Remediation Plan:** Decode the `osc_wave` to stage selection and the key-down gain series (research section 9), capture real strip words for a loaded preset to replace the ASSUMED mappings, re-run `tools/emu_vs_hw.py` with `--synth-chain strip` on more synth programs, then flip the defaults and re-baseline the synth segments of `render_hash` (list the changed segments in the PR).
 - **Evidence:** `render_hash` SHA-256 `25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a` before and after this change (defaults only; the opt-in paths are covered by unit tests; unchanged by the strip chain, `render_hash` re-run). Lesson-clip laws (`SynthLayer::measured_laws`, [audible-genius-synth-lessons](research/audible-genius-synth-lessons.md)) are a second opt-in and change no default.
 
+### TD-12: Standalone Program Edits Allocate on the Audio Thread
+- **Context:** The standalone engine is owned by the audio callback, so `AudioCommand::Program(ProgramEdit)` (`crates/nord-gui/src/audio/edits/program.rs`) runs the allocating `nord_core::engine` operations (layer init, copy / paste / swap, undo snapshots, `capture_state`, `apply_state`) inside the callback. `nord-core` documents them as control-thread only.
+- **Debt:** Each is a rare button press, not per-sample work, but a block can miss its deadline while it allocates. Stored programs travel back to the UI as `Box<ProgramState>` over an unbounded channel (`ProgramEdit::Snapshot`), which also allocates on the audio thread.
+- **Remediation Plan:** Give the standalone a control-thread engine mirror (or a double-buffered state swap) so snapshots, clipboard and undo run off the audio thread and only plain values cross the queue; then drop the allocation from `ProgramEdit::apply`.
+
 ---
 
 ## 3. Maintenance Policy
