@@ -1,10 +1,11 @@
 ---
 # ns4-obvf
 title: 'Factory program sweep: coverage and render health'
-status: in-progress
+status: completed
 type: task
+priority: normal
 created_at: 2026-11-14T02:52:23Z
-updated_at: 2026-11-14T02:52:23Z
+updated_at: 2026-11-14T03:07:29Z
 ---
 
 ## Context
