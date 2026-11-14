@@ -29,3 +29,20 @@ def test_law_is_the_squared_ratio_and_the_taper_multiplies():
 def test_address_is_the_fx_core1_word():
     # system byte address = 0x28000000 + 4 * DM word (core 1)
     assert t.MASTER_LEVEL_ADDRESS == 0x28000000 + 4 * t.MASTER_LEVEL_DM
+
+
+def test_organ_slots_take_cell_zero_whatever_the_mode_flag():
+    # run: layer A organ slots send 1.6 for both flag values
+    for flag in (False, True):
+        assert t.layer_scale_cell(0, flag) == (0, 0)
+        assert t.layer_scale(1, flag) == t.f32(1.6)
+
+
+def test_piano_and_synth_scales_depend_on_reverb_global():
+    # Reverb GLOBAL off: every piano / synth slot is 1.0 (run: words 0xC2893 .. send 1.0)
+    assert [t.layer_scale(s, False) for s in range(2, 7)] == [1.0] * 5
+    # Reverb GLOBAL on: piano 2.5 (run: 0xC27CC / 0xC27DB), synth 3.25 (run: sends 3.25)
+    assert [t.layer_scale(s, True) for s in (2, 3)] == [2.5, 2.5]
+    assert [t.layer_scale(s, True) for s in (4, 5, 6)] == [3.25] * 3
+    assert t.layer_scale_cell(2, False) == (7, 6)
+    assert t.layer_scale_cell(4, True) == (17, 9)

@@ -236,7 +236,10 @@ mod tests {
         assert!((g - organ_chain_bus_gain()).abs() < 1e-9);
         assert!(g < OutputLevel::Firmware.bus_gain() / 4.0, "13 dB under K");
         let vox = OutputLevel::Chain.vox_gain();
-        assert!((vox * VOX_BAKED_SWELL - g).abs() < 1e-6, "swell word removed");
+        assert!(
+            (vox * VOX_BAKED_SWELL - g).abs() < 1e-6,
+            "swell word removed"
+        );
         assert!((OutputLevel::Chain.layer_gain(0.5) - 0.25).abs() < 1e-7);
         assert!(OutputLevel::Chain.is_firmware_law() && OutputLevel::Firmware.is_firmware_law());
         assert!(!OutputLevel::Legacy.is_firmware_law());
