@@ -12,11 +12,12 @@ const HOST_SOURCES: [&str; 3] = [
 ];
 const PARAMS_SRC: &str = include_str!("../../../nord-plugin/src/params.rs");
 /// Engine sources an `engine:` binding must be found in.
-const ENGINE_SOURCES: [&str; 5] = [
+const ENGINE_SOURCES: [&str; 6] = [
     include_str!("../../../nord-core/src/engine/mod.rs"),
     include_str!("../../../nord-core/src/engine/extern_out.rs"),
     include_str!("../../../nord-core/src/engine/aux_kb.rs"),
     include_str!("../../../nord-core/src/engine/pedals.rs"),
+    include_str!("../../../nord-core/src/engine/pedal_assign.rs"),
     include_str!("../../../nord-core/src/engine/settings.rs"),
 ];
 
@@ -227,5 +228,5 @@ fn binding_totals_are_pinned() {
             Binding::Unsupported(_) => un += 1,
         }
     }
-    assert_eq!((bound, ui, un), (56, 12, 61));
+    assert_eq!((bound, ui, un), (61, 11, 57));
 }

@@ -151,21 +151,7 @@ fn dimmed_ids_are_exactly_the_documented_unsupported_set() {
         }
     }
     dimmed.sort_unstable();
-    assert_eq!(
-        dimmed,
-        [
-            "mst_clk.pedal_tap",
-            "program.menu.aux_kb",
-            "program.menu.extern",
-            "program.menu.midi",
-            "program.menu.organize",
-            "program.menu.output",
-            "program.menu.pedal",
-            "program.menu.sound",
-            "program.menu.system",
-            "program.solo",
-        ]
-    );
+    assert_eq!(dimmed, ["mst_clk.pedal_tap", "program.solo",]);
 }
 
 #[test]
