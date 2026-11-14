@@ -102,7 +102,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     label(
         &painter,
         pos2(panel_rect.right() - 20.0, panel_rect.top() + 6.0),
-        "CLAVIA DMI AB • SWEDEN",
+        "OPEN-SOURCE EMULATOR",
         10.0,
         Color32::from_gray(210),
         Align2::RIGHT_TOP,
