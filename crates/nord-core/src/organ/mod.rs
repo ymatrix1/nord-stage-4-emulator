@@ -52,6 +52,8 @@ mod farfisa_golden;
 #[cfg(test)]
 mod farfisa_source_tests;
 #[cfg(test)]
+mod leslie_tests;
+#[cfg(test)]
 mod pipe_lines;
 #[cfg(test)]
 mod vox_golden;
@@ -127,6 +129,13 @@ pub struct OrganLayer {
     /// Opt-in rotary drive law `tanh(g x) / g`, `g = 1 + 3 drive` (unity small signal gain, so the
     /// drive no longer adds +18.4 dB at drive 2.44); default `false` keeps `tanh(g x)`.
     pub rotary_drive_unity: bool,
+    /// Opt-in firmware Leslie (`--leslie firmware`): the instruction-level port of the PNO core 1
+    /// processor `0x1256AD` ([`crate::fx::FwLeslie`], `docs/research/fx-leslie.md`) replaces the
+    /// engine rotary; `None` keeps the engine model. Allocated by `apply_leslie_firmware`, never
+    /// in the audio path.
+    pub leslie_fw: Option<Box<crate::fx::FwLeslie>>,
+    /// Linear gain after the firmware Leslie (`1.0` = the booted firmware level, about -50 dB).
+    pub leslie_gain: f32,
     /// Rotary microphone placement (`false` = Normal distance with cabinet reflections, `true` = Close mic).
     pub rotary_close_mic: bool,
     /// Stereo virtual microphone separation angle in degrees (`0.0..=180.0`, default `120.0`).
@@ -233,6 +242,8 @@ impl OrganLayer {
             rotary_speed: RotarySpeed::Slow,
             rotary_drive: 0.2,
             rotary_drive_unity: false,
+            leslie_fw: None,
+            leslie_gain: 1.0,
             rotary_close_mic: false,
             rotary_mic_angle_deg: 120.0,
             rotary_stop_mode: false,

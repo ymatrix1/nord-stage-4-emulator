@@ -265,3 +265,38 @@ impl<F: Fp> Core<F> {
         v.fl()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dag_wraps_by_one_buffer_length() {
+        assert_eq!(dag_next(10, 2, 0, 0), 12, "L = 0 is a plain add");
+        assert_eq!(dag_next(108, 2, 10, 100), 100, "reaches B + L: subtract L");
+        assert_eq!(dag_next(100, u32::MAX, 10, 100), 109, "below B: add L");
+    }
+
+    #[test]
+    fn windows_map_addresses_and_unmapped_words_read_zero() {
+        let mut c = Core::<f32>::new();
+        assert_eq!(c.rd(LIMIT), 0x7FFF_FFFF);
+        assert_eq!(c.rd(0x1), 0, "outside every window");
+        c.wr(IO, 0x1234);
+        assert_eq!(c.rd(IO), 0x1234);
+        assert_eq!(c.stray(), 0);
+        c.wr(0x1, 5);
+        assert_eq!(c.stray(), 1);
+        c.set_speed_words([1, 2, 3]);
+        assert_eq!((c.rd(SPEED_WORDS[0]), c.rd(SPEED_WORDS[2])), (1, 3));
+    }
+
+    #[test]
+    fn pair_loads_broadcast_only_through_the_ldb_form() {
+        let mut c = Core::<f32>::new();
+        c.wr(IO, 7);
+        c.wr(IO + 1, 9);
+        assert_eq!(c.ld(IO)[1].wd(), 9);
+        assert_eq!(c.ldb(IO)[1].wd(), 7);
+    }
+}

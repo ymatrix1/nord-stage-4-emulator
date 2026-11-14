@@ -87,6 +87,20 @@ def render(mem, entry: dict, first: int, last: int, tag: str) -> str:
             "/// The slow speed words as the ARM re-sends them (`0xB2F25`, `0xB2F26`, `0xB2FA1`).",
             "pub(super) const SLOW_SPEED: [u32; 3] = [0x22b00, 0x26000, 0x15d00];",
         ]
+    out += [
+        "",
+        "#[cfg(test)]",
+        "mod tests {",
+        "    use super::*;",
+        "",
+        "    #[test]",
+        "    fn the_windows_are_nonempty_and_below_the_address_limit() {",
+        "        for (base, words) in WINDOWS {",
+        "            assert!(!words.is_empty() && base + (words.len() as u32) < 0x100000);",
+        "        }",
+        "    }",
+        "}",
+    ]
     return "\n".join(out) + "\n"
 
 

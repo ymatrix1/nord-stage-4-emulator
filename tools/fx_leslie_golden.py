@@ -78,6 +78,21 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         out.append(
             rust(name, mult, oracle_outputs(ns.pno_core1, ns.script, mult, CALLS, ns.binary))
         )
+    out += [
+        "#[cfg(test)]",
+        "mod tests {",
+        "    use super::*;",
+        "",
+        "    #[test]",
+        "    fn the_golden_blocks_have_the_documented_shape() {",
+        f"        assert_eq!(SLOW_FIRST.len(), {4 * KEEP});",
+        f"        assert_eq!(X12_FIRST.len(), {4 * KEEP});",
+        "        assert_eq!(X12_MULT, 12 * SLOW_MULT);",
+        "        assert_ne!(SLOW_FNV, X12_FNV);",
+        "    }",
+        "}",
+        "",
+    ]
     sys.stdout.write("\n".join(out))
     return 0
 

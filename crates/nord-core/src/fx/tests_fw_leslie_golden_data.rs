@@ -80,3 +80,16 @@ pub(super) const X12_FIRST: [u32; 256] = [
 /// FNV-1a 64 of all 8000 output words (2000 calls).
 pub(super) const X12_FNV: u64 = 0x36f8ad4615113c31;
 pub(super) const X12_MULT: u32 = 12;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_golden_blocks_have_the_documented_shape() {
+        assert_eq!(SLOW_FIRST.len(), 256);
+        assert_eq!(X12_FIRST.len(), 256);
+        assert_eq!(X12_MULT, 12 * SLOW_MULT);
+        assert_ne!(SLOW_FNV, X12_FNV);
+    }
+}

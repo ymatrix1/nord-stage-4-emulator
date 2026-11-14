@@ -249,3 +249,15 @@ const W9: [u32; 2907] = [
 ];
 
 pub(super) const WINDOWS: [(u32, &[u32]); 1] = [(0xb474c, &W9)];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_windows_are_nonempty_and_below_the_address_limit() {
+        for (base, words) in WINDOWS {
+            assert!(!words.is_empty() && base + (words.len() as u32) < 0x100000);
+        }
+    }
+}

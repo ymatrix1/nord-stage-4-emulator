@@ -108,6 +108,19 @@ pub fn apply_rotary_unity(engine: &mut Stage4Engine, on: bool) {
     }
 }
 
+/// Opt-in firmware Leslie on both organ layers (`--leslie firmware`): the instruction-level port of
+/// the PNO core 1 processor replaces the engine rotary ([`crate::fx::FwLeslie`], `fx-leslie.md`).
+/// `gain_db` is applied after it (the booted firmware level is about -50 dB, so the level stage that
+/// makes it up in the hardware is open; `0.0` keeps the firmware level).
+pub fn apply_leslie_firmware(engine: &mut Stage4Engine, on: bool, gain_db: f32) {
+    if on {
+        for organ in [&mut engine.organ_a, &mut engine.organ_b] {
+            organ.leslie_fw = Some(Box::new(crate::fx::FwLeslie::new()));
+            organ.leslie_gain = 10f32.powf(gain_db / 20.0);
+        }
+    }
+}
+
 /// Rescales the program's rotary drive from the preset unit (0..10, `cbin/organ_preset.rs`) to the
 /// engine unit (0..1: `rotary.rs` uses `gain = 1 + 3 drive`). The default program path passes the
 /// preset unit through unchanged, so a stored drive of 2.44 reaches the tube law as 2.44 (gain
@@ -177,6 +190,10 @@ pub struct FirmwareOptions {
     /// word, the squared layer level and the bus gain `ORGAN_BUS_GAIN` on the firmware organ
     /// paths.
     pub organ_level: OutputLevel,
+    /// `--leslie firmware|engine`: the firmware Leslie processor instead of the engine rotary.
+    pub leslie_firmware: bool,
+    /// `--leslie-gain-db <dB>`: gain after the firmware Leslie in millidecibel (default 0).
+    pub leslie_gain_mdb: i32,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -196,6 +213,8 @@ impl Default for FirmwareOptions {
             synth_shape_milli: None,
             firmware_routing: false,
             organ_level: OutputLevel::ModelDefault,
+            leslie_firmware: false,
+            leslie_gain_mdb: 0,
         }
     }
 }
@@ -225,6 +244,8 @@ impl FirmwareOptions {
             synth_shape_milli: None,
             firmware_routing: false,
             organ_level: OutputLevel::ModelDefault,
+            leslie_firmware: false,
+            leslie_gain_mdb: 0,
         }
     }
 
@@ -273,6 +294,19 @@ impl FirmwareOptions {
         if let Some(v) = value("--organ-level") {
             o.organ_level = parse_organ_level(v)?;
         }
+        if let Some(v) = value("--leslie") {
+            o.leslie_firmware = match v {
+                "firmware" => true,
+                "engine" => false,
+                _ => return Err(format!("invalid --leslie '{v}' (firmware|engine)")),
+            };
+        }
+        if let Some(v) = value("--leslie-gain-db") {
+            let db: f32 = v
+                .parse()
+                .map_err(|_| format!("invalid --leslie-gain-db '{v}'"))?;
+            o.leslie_gain_mdb = (db * 1000.0).round() as i32;
+        }
         if let Some(v) = value("--synth-shape") {
             let x: f32 = v
                 .parse()
@@ -295,6 +329,11 @@ impl FirmwareOptions {
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
         apply_b3_tail(engine, self.b3_tail);
+        apply_leslie_firmware(
+            engine,
+            self.leslie_firmware,
+            self.leslie_gain_mdb as f32 / 1000.0,
+        );
         apply_synth_chain(engine, self.synth_chain);
         self.set_shape(engine);
         if self.measured_laws {

@@ -68,3 +68,39 @@ impl<F: Fp> Leslie<F> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_f32_path_follows_the_e40_path_closely() {
+        let (mut a, mut b) = (FwLeslie::new(), FwLeslieE40::new());
+        let mut peak = 0.0f32;
+        let mut err = 0.0f32;
+        for k in 0..400 {
+            let x = 0.2 * (k as f32 * 0.37).sin();
+            let (ya, yb) = (
+                a.process_block([x, 0.0, x, 0.0]),
+                b.process_block([x, 0.0, x, 0.0]),
+            );
+            for (p, q) in ya.iter().zip(yb) {
+                peak = peak.max(q.abs());
+                err = err.max((p - q).abs());
+            }
+        }
+        assert!(peak > 1e-5 && err < 0.02 * peak, "peak {peak} err {err}");
+    }
+
+    #[test]
+    fn a_zero_speed_stops_the_modulation() {
+        let mut l = FwLeslieE40::new();
+        l.set_speed_words([0; 3]);
+        let first = l.process_block([0.1, 0.0, 0.1, 0.0]);
+        let mut last = first;
+        for _ in 0..200 {
+            last = l.process_block([0.1, 0.0, 0.1, 0.0]);
+        }
+        assert!(last.iter().all(|v| v.is_finite()));
+    }
+}

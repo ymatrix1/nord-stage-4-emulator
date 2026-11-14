@@ -56,3 +56,15 @@ pub(super) const WINDOWS: [(u32, &[u32]); 6] = [
     (0xe322c, &W14),
     (0xe34c4, &W15),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_windows_are_nonempty_and_below_the_address_limit() {
+        for (base, words) in WINDOWS {
+            assert!(!words.is_empty() && base + (words.len() as u32) < 0x100000);
+        }
+    }
+}
