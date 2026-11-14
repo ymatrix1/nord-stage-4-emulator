@@ -127,3 +127,24 @@ def test_prepare_builds_an_emulator_with_stubs_and_initialisers(tmp_path) -> Non
     emu = bf.prepare(code, None)
     assert bf.EVENT_INSERT in emu.stubs
     assert ab.OPERATOR_NEW in emu.stubs
+
+
+def test_display_stubs_off_leaves_event_insert_and_text_measure_running() -> None:
+    emu = emu_with(
+        {bf.EVENT_INSERT: words(0xE3A00009, BX_LR), bf.TEXT_MEASURE[0]: words(0xE3A00007, BX_LR)}
+    )
+    bf.install_ui_stubs(emu, display_stubs=False)
+    assert emu.call(bf.EVENT_INSERT) == 9  # the real code ran: `mov r0, #9`
+    assert emu.call(bf.TEXT_MEASURE[0]) == 7
+    assert bf.SPI_TRANSFER in emu.stubs  # the SPI answer stub is not a display stub
+
+
+def test_prepare_without_display_stubs_keeps_the_boot_stubs(tmp_path) -> None:
+    buf = bytearray(BIG)
+    for fn in bf.INIT_ARRAY:
+        buf[fn - ae.LOAD_BASE : fn - ae.LOAD_BASE + 4] = words(BX_LR)
+    code = tmp_path / "code.bin"
+    code.write_bytes(bytes(buf))
+    emu = bf.prepare(code, None, display_stubs=False)
+    assert bf.EVENT_INSERT not in emu.stubs
+    assert ab.OPERATOR_NEW in emu.stubs

@@ -297,7 +297,7 @@ fn draw_timbre(
             if idx == 0 { 0 } else { 1 << (idx - 1) },
         )
     };
-    let step = 8.5;
+    let step = 9.5; // 7.5 px minimum font plus the 2 px gap of audit rule `V`
     let top = rect.center().y - step * 2.0;
     for (i, name) in names.iter().enumerate() {
         let c = pos2(rect.right() + 7.0, top + i as f32 * step);

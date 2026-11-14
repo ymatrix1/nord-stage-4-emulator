@@ -56,11 +56,15 @@ const HEADINGS: [(&str, &str, &str); 6] = [
     ("ARPEGGIATOR / GATE", "synth.arp.mode", "synth.arp.rate"),
 ];
 
+/// Rise (px) of an area heading over the top of its control: one line above the legend that
+/// hangs 3 px over the button, with the 2 px gap of audit rule `V`.
+const HEADING_RISE: f32 = 13.0;
+
 /// Paint and drive every pad and pot of the section.
 pub(super) fn paint_controls(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi) {
     for (x_id, y_id, head) in HEADINGS.map(|(h, x, y)| (x, y, h)) {
         let x = rect_or_empty(x_id, o).center().x;
-        let y = rect_or_empty(y_id, o).top() - 12.0;
+        let y = rect_or_empty(y_id, o).top() - HEADING_RISE;
         tiny(p, pos2(x, y), head, LEGEND, Align2::CENTER_BOTTOM);
     }
     for (b, label) in PADS {

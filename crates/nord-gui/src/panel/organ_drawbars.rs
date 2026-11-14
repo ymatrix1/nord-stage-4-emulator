@@ -33,6 +33,10 @@ const LADDER_IDS: [&str; 9] = [
     "organ.drawbar_ladder.9",
 ];
 
+/// Distance (px) from the slot end to the footage number: clears the cap at the pushed-out end
+/// (half cap 4.5 px plus its shadow, audit rule `F`) and leaves the glyphs a 2 px margin.
+const FOOTAGE_DROP: f32 = 13.0;
+
 /// Footages 16', 5 1/3', 8', 4', 2 2/3', 2', 1 3/5', 1 1/3', 1'.
 const FOOTAGES: [&str; 9] = [
     "16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'",
@@ -81,7 +85,7 @@ pub(super) fn render_drawbars(
         drawbar_ladder(ui, rect_or_empty(LADDER_IDS[i], origin), LADDER_IDS[i], lit);
         label(
             painter,
-            pos2(slot.center().x + 4.0, slot.bottom() + 6.0),
+            pos2(slot.center().x + 4.0, slot.bottom() + FOOTAGE_DROP),
             FOOTAGES[i],
             5.5,
             Color32::WHITE,
