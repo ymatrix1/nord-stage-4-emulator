@@ -11,6 +11,7 @@ mod b3_weights;
 mod b3_wheels;
 mod drawbar;
 mod drawbar_sum;
+mod farfisa_keys;
 mod farfisa_proc_gain;
 mod farfisa_wheels;
 mod firmware_bank;
@@ -21,6 +22,7 @@ mod output_level;
 mod percussion_poly;
 mod preset_live;
 mod rotary;
+mod rotor_stop;
 mod scanner;
 #[cfg(test)]
 mod stereo_lanes;
@@ -81,6 +83,9 @@ pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
 pub use output_level::{
     layer_level_gain, swell_word, OutputLevel, LEGACY_BUS_OVER_UNIT, ORGAN_BUS_GAIN, SWELL_DEFAULT,
 };
+pub use rotor_stop::{
+    clamp_stop_angle, stop_angle_label, STOP_ANGLE_COUNT, STOP_ANGLE_LABELS, STOP_ANGLE_RAD,
+};
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
     ROTARY_BASS_HORN_BALANCES, ROTARY_CROSSOVER_HZ,
@@ -107,6 +112,9 @@ pub struct OrganLayer {
     pub model: OrganModel,
     /// When `true` on `OrganModel::B3`, engages Nord's B3 Bass pickup calibration curve.
     pub b3_bass_mode: bool,
+    /// Opt-in Farfisa processor stage (key-down weights and measured line gain, `farfisa_keys.rs`):
+    /// applies to `OrganModel::Farfisa` with `ToneWheelSource::FarfisaWheels` only.
+    pub farfisa_processor: bool,
     /// Keyboard octave transposition (`-2..=+2`).
     pub octave_shift: i8,
     /// 9 drawbar settings (`0..=8`). Default `88 8000 000`.
@@ -147,6 +155,8 @@ pub struct OrganLayer {
     pub rotary_mic_angle_deg: f32,
     /// When `true`, engages brake/stop mode regardless of `rotary_speed`.
     pub rotary_stop_mode: bool,
+    /// Rest position of horn and rotor in STOP MODE: `0` = Free, `1..=6` = `STOP_ANGLE_LABELS`.
+    pub rotary_stop_angle: u8,
     pub scanner_mode: ScannerMode,
     /// `B3` tonewheel waveform and phase arithmetic (default `Firmware`, role ASSUMED, about 70 %;
     /// `Legacy` stays selectable).
@@ -194,6 +204,7 @@ pub struct OrganLayer {
     b3_tail: bool,
     farfisa_wheels: FarfisaWheels,
     farfisa_synced: (f32, f32),
+    farfisa_keys: farfisa_keys::FarfisaKeys,
     lane_mixer: LaneMixer,
     weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
@@ -260,6 +271,7 @@ impl OrganLayer {
             rotary_close_mic: false,
             rotary_mic_angle_deg: 120.0,
             rotary_stop_mode: false,
+            rotary_stop_angle: 0,
             scanner_mode: ScannerMode::Off,
             tonewheel_source: ToneWheelSource::default(),
             detuned_copies: false,
@@ -285,6 +297,8 @@ impl OrganLayer {
             b3_tail: true,
             farfisa_wheels: FarfisaWheels::new(),
             farfisa_synced: (0.0, f32::NAN),
+            farfisa_keys: farfisa_keys::FarfisaKeys::new(),
+            farfisa_processor: false,
             lane_mixer: LaneMixer::new(sample_rate),
             weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
@@ -399,6 +413,7 @@ impl OrganLayer {
         if self.active_key_count == 0
             && !(self.firmware_weights() && self.weight_state.active())
             && !(self.b3_weights_active() && self.b3_weights.active())
+            && !(self.farfisa_keys_active() && self.farfisa_keys.active())
             && self.click_env < 1e-6
             && self.click_bp_state[0].abs() < 1e-6
         {
@@ -423,6 +438,7 @@ impl OrganLayer {
                 let tone = f32::from(self.active_drawbars()[8].min(8)) / 8.0;
                 dry = (1.0 - 0.5 * tone) * dry + tone * dry.signum() * dry.abs().powf(0.8);
             }
+            OrganModel::Farfisa if self.farfisa_keys_active() => {}
             OrganModel::Farfisa => {
                 // Farfisa dual resonant bandpass formant peaks (750 Hz and 2.5 kHz)
                 let w1 = (TAU * 750.0 * inv_fs).clamp(0.01, 0.45);

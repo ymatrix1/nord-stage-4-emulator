@@ -44,6 +44,7 @@ impl BackupLibraryState {
                     program.name = title.clone();
                     panel.apply_program(&program);
                     audio.send_command(AudioCommand::LoadProgram(program));
+                    panel.program_ui.mark_clean();
                     self.error_message = None;
                     self.status_message = format!("Program: {title}");
                 }
@@ -53,6 +54,9 @@ impl BackupLibraryState {
                     sound,
                     from_program,
                 } => {
+                    if from_program {
+                        panel.program_ui.mark_clean(); // follows a program load
+                    }
                     let sound_name = sound.name.clone();
                     let zones = sound.strokes.len();
                     // The panel type follows the model on the focused layer: header type of the
@@ -94,6 +98,9 @@ impl BackupLibraryState {
                     sound,
                     from_program,
                 } => {
+                    if from_program {
+                        panel.program_ui.mark_clean(); // follows a program load
+                    }
                     let sound_name = sound.name.clone();
                     let zones = sound.zones.len();
                     if let Some(prev) = self.sample_cache.insert(key, Arc::clone(&sound)) {
@@ -135,12 +142,28 @@ impl BackupLibraryState {
             }
         }
         self.reap_retired_sounds();
+        self.sync_toasts(panel);
+    }
+
+    /// Hands the firmware messages the loads raised to the Program OLED, and keeps
+    /// `Please wait...` up while a decode runs.
+    fn sync_toasts(&mut self, panel: &mut Stage4PanelState) {
+        let ui = &mut panel.program_ui;
+        for m in self.notices.drain(..) {
+            ui.show(m);
+        }
+        if self.pending_jobs > 0 {
+            ui.show_wait();
+        } else {
+            ui.clear_wait();
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::panel::FwMessage;
 
     #[test]
     fn test_program_panel_receives_names_and_its_requests_are_run() {
@@ -180,6 +203,29 @@ mod tests {
         lib.poll_results(&mut panel, &audio);
         assert_eq!(lib.pending_jobs, 0);
         assert_eq!(lib.error_message.as_deref(), Some("boom"));
+    }
+
+    #[test]
+    fn test_running_decode_shows_please_wait_and_notices_show_not_found() {
+        let mut lib = BackupLibraryState::new();
+        let (audio, _rx) = AudioHandle::new();
+        let mut panel = Stage4PanelState::default();
+        lib.pending_jobs = 1;
+        lib.poll_results(&mut panel, &audio);
+        assert_eq!(
+            panel.program_ui.message.as_ref().unwrap().0,
+            "Please wait..."
+        );
+        lib.pending_jobs = 0;
+        lib.poll_results(&mut panel, &audio);
+        assert!(panel.program_ui.message.is_none(), "wait goes with the job");
+        lib.notices.push(FwMessage::SampleNotFound);
+        lib.pending_jobs = 1;
+        lib.poll_results(&mut panel, &audio);
+        assert_eq!(
+            panel.program_ui.message.as_ref().unwrap().0,
+            "Sample not found"
+        );
     }
 
     fn piano_outcome(

@@ -119,17 +119,14 @@ pub(super) const NO_CLOCK: &str =
 
 /// Why control `id` cannot be honoured by the engine right now (`None`: fully functional).
 ///
-/// Every Mod type and the Reverb VARIATION are in the engine; what is left dimmed is the Amp
-/// VARIATION (stored, no distinct voicing), TO ROTARY on the Organ slot and the Mod 1 MST CLK of
-/// Ring Mod and A-WAH.
+/// Every Mod type, the Reverb VARIATION and the Amp VARIATION (a separate cabinet voicing per
+/// model, `fx/amp_eq.rs`) are in the engine; what is left dimmed is TO ROTARY on the Organ slot
+/// and the Mod 1 MST CLK of Ring Mod and A-WAH.
 pub(super) fn dim_reason(id: &str, c: &ChainUi, slot: usize) -> Option<&'static str> {
     match id {
         "amp.to_rotary" if slot == 0 => {
             Some("Organ layers feed the Rotary Speaker directly; TO ROTARY routes Piano and Synth layers")
         }
-        "amp.variation" => Some(
-            "the engine stores the Amp VARIATION but has no separate voicing for it yet",
-        ),
         "mod1.mst_clk" if !c.mod1_has_clock() => Some(NO_CLOCK),
         _ => None,
     }
@@ -201,7 +198,12 @@ mod tests {
                 "VARIATION (left) and CHORALE (right) both reach the engine"
             );
         }
-        assert!(dim_reason("amp.variation", &c, 1).is_some());
+        for slot in [0, 1] {
+            assert!(
+                dim_reason("amp.variation", &c, slot).is_none(),
+                "the Amp VARIATION has its own cabinet voicing in the engine"
+            );
+        }
         c.mod1_sel = 2; // RM
         assert!(dim_reason("mod1.mst_clk", &c, 1).is_some());
         c.mod1_sel = 5; // PUMP

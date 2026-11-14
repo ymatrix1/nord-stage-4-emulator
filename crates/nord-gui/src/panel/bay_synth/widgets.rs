@@ -4,8 +4,9 @@
 //! inventory ids it paints with `SynthUi::mark` (the headless coverage test reads them).
 
 use crate::panel::layout_px::rect_or_empty;
+use crate::panel::param_hint::{self, table::LFO_DEST_HINT};
 use crate::panel::prelude::*;
-use crate::panel::ui_state::{unsupported_reason, Btn, Knob, SynthUi};
+use crate::panel::ui_state::{unsupported_reason, Btn, Knob, SynthUi, DIVISIONS};
 use egui::{FontId, Pos2};
 use nord_panel::behaviour::{resolve, Gesture};
 
@@ -78,6 +79,10 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
     if let Some(g) = gesture_of(ui, sui, id, &resp) {
         let shift = ui.input(|i| i.modifiers.shift);
         sui.press(b, resolve(g, shift, b.has_shift_fn()));
+        if b == Btn::LfoDest && !shift {
+            let d = usize::from(sui.layer().lfo_dest) % 4;
+            param_hint::touch_value(ui.ctx(), id, LFO_DEST_HINT[d]);
+        }
     }
     let down = resp.is_pointer_button_down_on();
     p.rect_filled(rect.expand(1.0), 2.5, BUTTON_BEZEL);
@@ -145,6 +150,24 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
     }
 }
 
+/// Parameter hint of pot `k`: the value stored for the focused layer (the pot itself may not have
+/// picked it up yet), or the Master Clock division while the rate is synced.
+pub(super) fn pot_hint(ctx: &egui::Context, sui: &SynthUi, k: Knob) {
+    let l = sui.layer();
+    let div = match k {
+        Knob::LfoRate if l.lfo_sync => Some(l.lfo_div),
+        Knob::ArpRate if l.arp_sync => Some(l.arp_div),
+        _ => None,
+    };
+    if let Some(d) = div {
+        param_hint::touch_value(ctx, k.id(), DIVISIONS[usize::from(d) % DIVISIONS.len()]);
+    } else if k == Knob::ArpRange && l.arp_kind == 2 {
+        param_hint::touch_value(ctx, k.id(), &format!("Gate {:.0} %", l.gate_env * 100.0));
+    } else {
+        param_hint::touch(ctx, k.id(), sui.pots.stored(k));
+    }
+}
+
 /// A pot with pick-up: it moves with the pointer; the layer value follows once picked up.
 pub(super) fn pot(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, k: Knob, label: &str) {
     let rect = rect_or_empty(k.id(), o);
@@ -168,6 +191,7 @@ pub(super) fn pot(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, k: Knob,
         } else {
             sui.knob_input(k, v);
         }
+        pot_hint(ui.ctx(), sui, k);
     }
     tiny(
         p,

@@ -2,7 +2,11 @@
 
 use super::SynthUi;
 use crate::audio::SynthEdit;
+use nord_core::engine::{PSTICK_MAX_RANGE, PSTICK_MIN_RANGE};
 use nord_panel::behaviour::{resolve, Gesture, Trigger};
+
+/// Scroll points that move the PSTICK/RNG list by one entry (same pitch as the dials).
+const POINTS_PER_STEP: f32 = 24.0;
 
 /// What a Layer button press asks the bay to do with the layer's ON state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,9 +57,64 @@ impl SynthUi {
     }
 }
 
+impl SynthUi {
+    /// PSTICK/RNG list (manual p.28): moves the bend range `steps` semitones (clamped to
+    /// `1..=12`) and queues the edit when it changed. Returns whether it changed.
+    pub fn pstick_range_step(&mut self, steps: i32) -> bool {
+        let next = (i32::from(self.pstick_range) + steps)
+            .clamp(i32::from(PSTICK_MIN_RANGE), i32::from(PSTICK_MAX_RANGE))
+            as u8;
+        if next == self.pstick_range {
+            return false;
+        }
+        self.pstick_range = next;
+        self.out.push(SynthEdit::PstickRange(next));
+        true
+    }
+
+    /// Feeds mouse-wheel `points` over the PSTICK/RNG button (scroll up = larger range).
+    pub fn pstick_range_scroll(&mut self, points: f32) -> bool {
+        self.range_acc += points / POINTS_PER_STEP;
+        let whole = self.range_acc.trunc();
+        self.range_acc -= whole;
+        whole != 0.0 && self.pstick_range_step(whole as i32)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn range_steps_clamp_and_queue_one_edit_per_change() {
+        let mut s = SynthUi::new();
+        assert_eq!(s.pstick_range, 2);
+        assert!(s.pstick_range_step(3));
+        assert!(!s.pstick_range_step(0));
+        assert!(s.pstick_range_step(100));
+        assert_eq!(s.pstick_range, 12);
+        assert!(!s.pstick_range_step(1), "already at the top");
+        assert!(s.pstick_range_step(-100));
+        assert_eq!(s.pstick_range, 1);
+        assert_eq!(
+            s.take_edits(),
+            vec![
+                SynthEdit::PstickRange(5),
+                SynthEdit::PstickRange(12),
+                SynthEdit::PstickRange(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn scroll_points_accumulate_into_whole_steps() {
+        let mut s = SynthUi::new();
+        assert!(!s.pstick_range_scroll(10.0));
+        assert!(s.pstick_range_scroll(14.0), "24 points make one step");
+        assert_eq!(s.pstick_range, 3);
+        assert!(s.pstick_range_scroll(-48.0));
+        assert_eq!(s.pstick_range, 1);
+    }
 
     #[test]
     fn layer_tap_focuses_and_activates() {

@@ -4,6 +4,7 @@ use super::catalog::display_name;
 use super::model::{ListMode, PresetKind, ProgView, Screen};
 use super::morph::source_label;
 use super::nav::ORGAN_PRESETS;
+use super::oled_home::{location_title, name_line, section_rows};
 use super::split::{note_name, xfade_label, SplitRow};
 use super::store::{ProgLoc, StoreStage, StoreTarget};
 use crate::panel::ui_state::ProgramUi;
@@ -31,7 +32,11 @@ pub struct OledText {
 impl OledText {
     /// All text joined for the hover tooltip.
     pub fn plain(&self) -> String {
-        let mut s = format!("{}\n{}\n", self.big, self.sub);
+        let mut s = format!(
+            "{}\n{}\n",
+            super::oled_home::strip_marks(&self.big),
+            self.sub
+        );
         for r in &self.rows {
             s.push_str(r.trim_start_matches(super::menu_screen::DIM));
             s.push('\n');
@@ -76,7 +81,7 @@ fn window(items: &[String], cursor: usize, n: usize) -> Vec<String> {
 }
 
 fn home(ui: &ProgramUi, sum: &Summary) -> OledText {
-    let label = ui.loc.label();
+    let label = location_title(ui);
     let sources = format!("{} / {} / {}", sum.organ, sum.piano, sum.synth);
     let mut t = match ui.view {
         ProgView::Name => OledText {
@@ -84,18 +89,14 @@ fn home(ui: &ProgramUi, sum: &Summary) -> OledText {
             sub: if ui.preset_name {
                 sources
             } else {
-                ui.title.clone()
+                name_line(ui)
             },
             ..Default::default()
         },
         ProgView::Layers => OledText {
-            big: format!("{label} {}", ui.title),
+            big: format!("{label} {}", name_line(ui)).trim_end().to_string(),
             sub: String::new(),
-            rows: vec![
-                format!("Org: {}", sum.organ),
-                format!("Pno: {}", sum.piano),
-                format!("Syn: {}", sum.synth),
-            ],
+            rows: section_rows(sum),
             ..Default::default()
         },
         ProgView::Full => {
@@ -105,7 +106,7 @@ fn home(ui: &ProgramUi, sum: &Summary) -> OledText {
                 .map(|&l| layer_label(l))
                 .collect();
             OledText {
-                big: format!("{label} {}", ui.title),
+                big: format!("{label} {}", name_line(ui)).trim_end().to_string(),
                 sub: format!("Scene {}", if ui.scene2 { "II" } else { "I" }),
                 rows: vec![
                     format!("On: {}", on.join(" ")),
@@ -144,7 +145,7 @@ fn home(ui: &ProgramUi, sum: &Summary) -> OledText {
         }
     };
     if let Some((m, _)) = &ui.message {
-        t.rows.push(m.clone());
+        t.rows.extend(m.lines().map(str::to_string));
     }
     t
 }
@@ -399,7 +400,8 @@ mod tests {
         u.preset_name = false;
         u.view = u.view.next();
         let t = compose(&u, &sum());
-        assert!(t.big.contains("Sweet") && t.rows[0].starts_with("Org: B3"));
+        assert_eq!(t.rows, ["Organ B3", "Piano Grand", "Synth SuperSaw"]);
+        assert!(t.big.contains("Sweet"));
         u.view = u.view.next();
         let t = compose(&u, &sum());
         assert!(t.rows[0].contains("Org A") && t.rows[0].contains("Syn A"));
