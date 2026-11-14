@@ -1,5 +1,6 @@
 //! Arpeggiator / gate engine for `SynthLayer`.
 
+use super::arp_order::pool_position;
 use super::*;
 
 impl SynthLayer {
@@ -54,11 +55,10 @@ impl SynthLayer {
                     .take(count.min(MAX_SYNTH_VOICES))
                     .enumerate()
                 {
-                    self.trigger_voice(
-                        note,
-                        self.held_velocities[note as usize],
-                        self.held_gains[note as usize],
-                    );
+                    let velocity = self.accent_velocity(self.held_velocities[note as usize]);
+                    self.perf.voice_pan = self.step_pan();
+                    self.trigger_voice(note, velocity, self.held_gains[note as usize]);
+                    self.perf.voice_pan = 0.0;
                     self.arp_active_notes[slot] = Some(note);
                 }
                 self.arp_step = (self.arp_step + 1) % count.max(1);
@@ -67,15 +67,34 @@ impl SynthLayer {
 
             // Pick next note
             let oct_range = self.arp_octave_range.clamp(1, 4) as usize;
-            let total_steps = count * oct_range;
-            let step = self.arp_step % total_steps;
+            let extra = extra_notes(&held_list[..count], self.perf.range_extra_thirds);
+            let pool = count * oct_range + extra;
+            // ZIG ZAG walks the pool two forward, one back; the step counter then runs over
+            // two periods.
+            let zig = self.perf.zigzag;
+            let step = if zig {
+                zigzag_index(self.arp_step, pool)
+            } else {
+                self.arp_step % pool
+            };
 
             let (note_in_chord, oct_offset) = match self.arp_mode {
-                ArpMode::Up => (step % count, (step / count) as u8),
+                ArpMode::Up => pool_position(step, count),
+                ArpMode::Down if extra > 0 => pool_position(pool - 1 - step, count),
                 ArpMode::Down => (
                     (count - 1) - (step % count),
                     (oct_range - 1 - (step / count)) as u8,
                 ),
+                ArpMode::UpDown if extra > 0 => {
+                    let cycle_len = (pool * 2).saturating_sub(2).max(1);
+                    let sub_step = step % cycle_len;
+                    let pos = if sub_step < pool {
+                        sub_step
+                    } else {
+                        cycle_len - sub_step
+                    };
+                    pool_position(pos, count)
+                }
                 ArpMode::UpDown => {
                     let cycle_len = (count * 2).saturating_sub(2).max(1);
                     let sub_step = step % cycle_len;
@@ -91,24 +110,27 @@ impl SynthLayer {
                         .arp_rng
                         .wrapping_mul(1_664_525)
                         .wrapping_add(1_013_904_223);
-                    (
-                        (self.arp_rng as usize) % count,
-                        ((self.arp_rng >> 16) as usize % oct_range) as u8,
-                    )
+                    if extra > 0 {
+                        pool_position((self.arp_rng as usize) % pool, count)
+                    } else {
+                        (
+                            (self.arp_rng as usize) % count,
+                            ((self.arp_rng >> 16) as usize % oct_range) as u8,
+                        )
+                    }
                 }
                 ArpMode::Off | ArpMode::Poly | ArpMode::Gate => unreachable!(),
             };
 
             let next_note = (held_list[note_in_chord] + oct_offset * 12).min(127);
             self.arp_active_notes[0] = Some(next_note);
-            self.arp_step = (self.arp_step + 1) % total_steps;
+            self.arp_step = (self.arp_step + 1) % if zig { pool * 2 } else { pool };
 
             let source_note = held_list[note_in_chord] as usize;
-            self.trigger_voice(
-                next_note,
-                self.held_velocities[source_note],
-                self.held_gains[source_note],
-            );
+            let velocity = self.accent_velocity(self.held_velocities[source_note]);
+            self.perf.voice_pan = self.step_pan();
+            self.trigger_voice(next_note, velocity, self.held_gains[source_note]);
+            self.perf.voice_pan = 0.0;
         }
     }
 

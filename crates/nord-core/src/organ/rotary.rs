@@ -19,6 +19,7 @@ impl OrganLayer {
         self.rotary_close_mic = src.rotary_close_mic;
         self.rotary_mic_angle_deg = src.rotary_mic_angle_deg;
         self.rotary_stop_mode = src.rotary_stop_mode;
+        self.globals = src.globals;
     }
 
     /// Runs a mono external signal (a Piano / Synth layer routed `TO ROTARY`) through the rotary.
@@ -40,8 +41,8 @@ impl OrganLayer {
         };
         let alpha = (TAU * ROTARY_CROSSOVER_HZ * inv_fs).clamp(0.01, 0.99);
         self.lp_state += alpha * (driven - self.lp_state);
-        let bass = self.lp_state;
-        let treble = driven - bass;
+        let bass = self.lp_state * self.globals.bass_gain;
+        let treble = (driven - self.lp_state) * self.globals.horn_gain;
 
         let effective_speed = if self.rotary_stop_mode {
             RotarySpeed::Stop
@@ -53,8 +54,13 @@ impl OrganLayer {
             RotarySpeed::Slow => (0.80, 0.67),
             RotarySpeed::Fast => (6.85, 5.70),
         };
-        self.horn_rate_hz += (target_horn - self.horn_rate_hz) * (inv_fs / 0.7).min(1.0);
-        self.drum_rate_hz += (target_drum - self.drum_rate_hz) * (inv_fs / 4.2).min(1.0);
+        // Rotary Horn/Rotor Speed and Acc menu entries (factors are exactly 1.0 by default).
+        let target_horn = target_horn * self.globals.horn_speed_scale;
+        let target_drum = target_drum * self.globals.rotor_speed_scale;
+        self.horn_rate_hz += (target_horn - self.horn_rate_hz)
+            * (inv_fs / (0.7 * self.globals.horn_tau_scale)).min(1.0);
+        self.drum_rate_hz += (target_drum - self.drum_rate_hz)
+            * (inv_fs / (4.2 * self.globals.rotor_tau_scale)).min(1.0);
 
         if effective_speed == RotarySpeed::Stop && self.horn_rate_hz < 0.05 {
             // Brake horn cleanly toward front cabinet position

@@ -21,6 +21,10 @@ pub enum OrganEdit {
     Rotary { fast: bool, stop_mode: bool },
     /// Rotary CLOSE MIC (both layers share the one speaker).
     CloseMic(bool),
+    /// SUSTPED of one organ layer (Shift + Layer A button); host `ped_sustped_{n}`.
+    Sustped { layer: u8, on: bool },
+    /// PSTICK of one organ layer (Shift + Layer B button); host `ped_pstick_{n}`.
+    Pstick { layer: u8, on: bool },
 }
 
 fn layer_mut(engine: &mut Stage4Engine, layer: u8) -> &mut OrganLayer {
@@ -61,6 +65,12 @@ impl OrganEdit {
             OrganEdit::CloseMic(on) => {
                 engine.organ_a.rotary_close_mic = on;
                 engine.organ_b.rotary_close_mic = on;
+            }
+            OrganEdit::Sustped { layer, on } => {
+                engine.pedals.sustped[usize::from(layer.min(1))] = on;
+            }
+            OrganEdit::Pstick { layer, on } => {
+                engine.pedals.pstick[usize::from(layer.min(1))] = on;
             }
         }
     }
@@ -128,6 +138,15 @@ mod tests {
         .apply(&mut e);
         assert!(!e.organ_a.rotary_stop_mode);
         assert_eq!(e.organ_b.rotary_speed, RotarySpeed::Fast);
+    }
+
+    #[test]
+    fn pedal_edits_target_one_organ_layer() {
+        let mut e = engine();
+        OrganEdit::Sustped { layer: 1, on: true }.apply(&mut e);
+        OrganEdit::Pstick { layer: 0, on: true }.apply(&mut e);
+        assert_eq!(e.pedals.sustped[..2], [false, true]);
+        assert_eq!(e.pedals.pstick[..2], [true, false]);
     }
 
     #[test]

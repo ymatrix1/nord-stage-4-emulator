@@ -1,7 +1,7 @@
 //! Opt-in firmware paths shared by `ns4 render-patch` and the GUI (`--tone-source`,
 //! `--filter-engine`, `--synth-chain`, `--firmware-fx`, `--measured-laws`, ...). Defaults leave the engine untouched, so default renders stay bit-identical.
 
-use crate::engine::Stage4Engine;
+use crate::engine::{FirmwareRouting, Stage4Engine};
 use crate::fx::FirmwareFx;
 use crate::organ::ToneWheelSource;
 use crate::synth::{FilterEngine, SynthChain};
@@ -145,6 +145,9 @@ pub struct FirmwareOptions {
     /// `--synth-shape <0..1>`: strip shape word of the SHAPE oscillator (`fw_shape.rs`) in
     /// thousandths (`None` = the ASSUMED saw placeholder).
     pub synth_shape_milli: Option<u16>,
+    /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
+    /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
+    pub firmware_routing: bool,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -161,6 +164,7 @@ impl Default for FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
+            firmware_routing: false,
         }
     }
 }
@@ -187,6 +191,7 @@ impl FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
+            firmware_routing: false,
         }
     }
 
@@ -227,6 +232,10 @@ impl FirmwareOptions {
         }
         o.piano_bus_scale |= has("--firmware-piano-bus");
         o.measured_laws |= has("--measured-laws");
+        o.firmware_routing |= has("--firmware-routing");
+        if has("--legacy-routing") {
+            o.firmware_routing = false;
+        }
         if let Some(v) = value("--synth-shape") {
             let x: f32 = v
                 .parse()
@@ -253,6 +262,9 @@ impl FirmwareOptions {
         self.set_shape(engine);
         if self.measured_laws {
             self.set_measured_laws(engine);
+        }
+        if self.firmware_routing {
+            engine.set_firmware_routing(FirmwareRouting::On);
         }
     }
 
@@ -285,6 +297,11 @@ impl FirmwareOptions {
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
         apply_b3_tail(engine, Some(self.b3_tail.unwrap_or(true)));
         self.set_measured_laws(engine);
+        engine.set_firmware_routing(if self.firmware_routing {
+            FirmwareRouting::On
+        } else {
+            FirmwareRouting::Off
+        });
         self.set_shape(engine);
     }
 
@@ -324,6 +341,9 @@ impl FirmwareOptions {
         }
         if self.measured_laws {
             parts.push("measured".into());
+        }
+        if self.firmware_routing {
+            parts.push("routing".into());
         }
         if parts.is_empty() {
             "defaults".into()
@@ -448,6 +468,20 @@ mod tests {
         assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
         FirmwareOptions::legacy_all().apply_exact(&mut e);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
+    }
+
+    #[test]
+    fn firmware_routing_flag_parses_and_switches_the_engine() {
+        let o = FirmwareOptions::from_args(&args(&["--firmware-routing"])).unwrap();
+        assert!(o.firmware_routing && !FirmwareOptions::firmware_all().firmware_routing);
+        let off = FirmwareOptions::from_args(&args(&["--firmware-routing", "--legacy-routing"]));
+        assert_eq!(off, Ok(FirmwareOptions::default()));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert_eq!(e.firmware_routing(), FirmwareRouting::On);
+        assert!(o.summary().contains("routing"));
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert_eq!(e.firmware_routing(), FirmwareRouting::Off);
     }
 
     #[test]

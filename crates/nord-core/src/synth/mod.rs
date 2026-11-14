@@ -17,6 +17,7 @@ pub use crate::synth_wavetable::NUM_WAVETABLES;
 use crate::synth_wavetable::{sample_wavetable, wavetable_bank};
 
 mod arp;
+mod arp_order;
 mod dsp;
 mod fw_adr_chain;
 mod fw_env_rates;
@@ -28,12 +29,15 @@ mod gain_dezip;
 mod hw_saw;
 mod key_velocity;
 mod measured;
+mod pattern;
 mod perf;
 mod render;
 mod render_va;
 mod sample_osc;
+mod sound_init;
 mod strip_map;
 mod strip_path;
+pub use arp_order::{extra_notes, zigzag_index, MAX_RANGE_EXTRA_THIRDS};
 use dsp::unison_pan;
 pub use dsp::{poly_blep, ZdfFilter, FM_RATIOS};
 pub use fw_adr_chain::{fw_adr_step, FwAdrAction, FwAdrRecord, FW_ADR_LIMIT};
@@ -56,6 +60,7 @@ pub use measured::{
     FILTER_ENV_OCTAVES_MEASURED, OSC_ENV_PITCH_OCTAVES_MEASURED, SUPERSAW_OUTER_CENTS,
     SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
 };
+pub use pattern::{pan_gains, CustomPattern, PatternPan, ACCENT_VELOCITY_BOOST, PATTERN_MAX_STEPS};
 pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 use strip_map::strip_cutoff_hz;
@@ -75,6 +80,8 @@ mod tests_fw_shape_golden;
 mod tests_hw_saw_golden;
 #[cfg(test)]
 mod tests_osc_lfo;
+#[cfg(test)]
+mod tests_pattern_edit;
 #[cfg(test)]
 mod tests_perf;
 #[cfg(test)]
@@ -255,6 +262,8 @@ pub struct SynthLayer {
     pub vibrato_ctrl: f32,
     /// Live pitch-stick offset in cents, set by the engine pedal router (`0.0` = no bend).
     pub bend_cents: f32,
+    /// System menu Fine Tune in cents (`0.0` = concert pitch, the default).
+    pub master_tune_cents: f32,
     vib_phase: f32,
     /// Octave offset in octaves (`-3..=3`).
     /// ASSUMED: range clamp of +/-3 octaves; confirm against the panel Octave Shift range.
@@ -358,6 +367,7 @@ impl SynthLayer {
             vibrato_delay_sec: 0.0,
             vibrato_ctrl: 0.0,
             bend_cents: 0.0,
+            master_tune_cents: 0.0,
             vib_phase: 0.0,
             octave_offset: 0,
             last_freq_hz: 0.0,

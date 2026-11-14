@@ -110,3 +110,20 @@ Answered: trademark and art, parity scope, keybed variant, per-layer IDs and Pha
 Conventions: a drawbar rect is its slot (8 px wide) and its LED ladder the 15 px column to its right; the three `keybed.split_leds` are one strip along the top of the keys; `program.shift.right` (the SHIFT rocker next to Layer Effects) is the only rect that lies outside its inventory section (listed in `OUTSIDE_OWN_SECTION` in the tests).
 
 What would confirm or replace the table: a higher-resolution front photo (at least 4000 px wide) or a tape measure on the instrument for the 36 estimated entries and the overall scale. The B8 renderers must not hard-code positions; they read these rects.
+
+## 8. Standalone Program area and keybed (`crates/nord-gui`, B8d / B8g)
+
+`panel/bay_program/` draws every `program.*`, `morph.*`, `split.*`, `mst_clk.*`, `transp.*`, `preset_library.*` id and `panel/keybed.rs` the two `keybed.*` ids at `layout_px::rect_or_empty`. Shifted ids share the base rectangle and draw a legend. Gestures use `nord_panel::behaviour` (`ButtonTracker`, `resolve`, `Latch`, `LiveMode`); a long press on SPLIT, MST CLK, TRANSP, SECTION EDIT and the Morph buttons is their primary function (screen or hold), not the shifted one. Program buttons 1-4 are soft buttons on screens that label them (Shift+n still opens the menu).
+
+| Area | Behaviour | Status |
+|---|---|---|
+| Programs | 8 banks x 8 pages x 8 programs; location index = position in the sorted `.ns4b` program list | `ASSUMED` (bank count, mapping) |
+| LIST | Num = archive order, Abc = by name, Cat = by archive folder (the real category is inside the program) | `ASSUMED` (Cat) |
+| Store / Store As | in-memory user library (no disk); name 16 chars; ABC / Cat / Ins / Del; categories list | `ASSUMED` (length, categories); flow per manual p.41-42 |
+| Split | 11 positions C2..C7 = MIDI 36..96 step 6; xFade Off / 3 / 6 notes (engine `half_semitones`); pressing the selected point's soft button again switches it off | `ASSUMED` (step, deactivation) |
+| Mst Clk | tap tempo from 4 taps (manual p.40), reset after 2 s; KBS is UI-only | `ASSUMED` (2 s) |
+| Morph | hold or latch a source, dial = depth, PAGE = target (7 layer levels, 3 synth cutoffs); knob-move assign needs bay hooks | step 0.05 `ASSUMED` |
+| Live Mode | every slot switch stores the slot (bays do not report edits yet) | `ASSUMED` |
+| Dimmed | 8 menu pages (title screens only), SOLO (needs Layer buttons), PEDAL TAP (no pedal input) | follow-up `ns4-ymci` |
+
+Allocating engine operations run on the audio thread today: TD-12 in [TECH_DEBT](../TECH_DEBT.md).

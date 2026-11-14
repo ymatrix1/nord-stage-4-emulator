@@ -1,7 +1,7 @@
 ---
 # ns4-jpgx
 title: 'Phase 6b B8g: section renderer - keybed'
-status: todo
+status: in-progress
 type: task
 created_at: 2026-11-12T21:36:09Z
 updated_at: 2026-11-12T21:36:09Z
@@ -31,3 +31,4 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
+Standalone (`nord-gui`): 88 keys placed by `keybed.keys`, three split LEDs on `keybed.split_leds` lit from the Keyboard Split state, SET KEY from a clicked key. Open: golden image, plugin editor.

@@ -6,6 +6,7 @@ mod bay_effects;
 mod bay_master;
 mod bay_organ;
 mod bay_piano;
+mod bay_piano_select;
 mod bay_program;
 mod bay_synth;
 mod ctl;
@@ -17,6 +18,11 @@ mod organ_logic;
 mod organ_master_tests;
 mod organ_strip;
 mod organ_widgets;
+#[cfg(test)]
+mod piano_click_tests;
+mod piano_logic;
+mod piano_overlay;
+mod piano_widgets;
 #[cfg(test)]
 mod sim;
 mod state;
@@ -42,6 +48,7 @@ mod prelude {
     pub use nord_core::synth::{FilterModel, SynthOscMode, VaWaveform};
 }
 
+pub use bay_program::catalog::LoadRequest;
 pub use state::Stage4PanelState;
 
 use bay_effects::render_bay_effects;
