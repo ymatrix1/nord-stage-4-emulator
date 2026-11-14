@@ -49,3 +49,16 @@ uv run pytest tools/tests/test_fx_leslie_ir.py
 1. Locate the ARM rotor tick (acceleration) and the DSP consumer of `0xB2F25 / 0xB2F26 / 0xB2FA1`.
 2. Run the PNO core 1 pass with the full boot log and the Leslie row driven, measure the row's response with noise and sine at both speeds.
 3. Then the Python model, goldens, Rust opt-in and the `organ_b3` comparison.
+
+## 4. Second pass: the Leslie processor is `0x1256AD` (2026-11-13)
+
+| Question | Result | Tag |
+|---|---|---|
+| Who calls the row `0xB2F29 / 0xB2F2B`? | **PNO core 1 routine `0x1256AD..0x126366`** (1,440 instructions; listed in [pno-dsp-map](pno-dsp-map.md) s5 and [pno-module-chain](pno-module-chain.md) s4.2 as a "parameter mapper with 65-point table interpolators"). The calls are `I8 = DM(0xB2F29)`, `I1 = DM(0xB2F2A)`, `call (m8,i8)` and the same with `0xB2F2B / 0xB2F2C` at `0x125A99..0x125AAA`. It is the rotary processor, not a mapper | VERIFIED (listing) |
+| Rotor motion | Phase accumulator `DM(0xB2F23) += DM(0xB2F25)` wrapped at the modulus `DM(0xB2F21)` (`0x1256B8..0x1256D5`), a second one from `DM(0xB2F27)`; the phase is split with `fext / fdep` into table index and fraction and drives **65-point interpolated tables at stride `0x41` from `0xB4E97`** (about 24 reads per phase, results to `0xB2FCA..`, `0xB4864..`, `0xB4850`) | VERIFIED (code), table meaning EMPIRICAL |
+| Signal path | input pair through `I2 = DM(0xB4CCC)` (the entry `I0`), two circular delay lines (`B4 / B6 / L6` from `0xB4858..0xB485C`, tap offset `DM(0xB2FAA)`), fraction interpolation, all-pass pairs, two cabinet routine B calls on the pairs `0xB4850` and `0xB4C7C` (horn and drum branch, ASSUMED); results in place at `I0` and `I4` | EMPIRICAL (reading) |
+| State pointer | `I1 = 0xB2F2A`: the only address of `0xB2E00..0xB3500` whose words `+0xB, +0xC, +0xD` are the table pointers `0xB0276`, `0xB02F7`, `0xB0378` that the routine loads into `I4 / I6 / I5` | EMPIRICAL |
+| Runs in the oracle | `tools/fx_leslie_run.py` (boot log replayed, pass context `0x1212E7`, one call per 2 frames): 1,885 steps per call, no skipped operation. With seeded noise (rms 0.17) the output rms is 0.0004 to 0.0006 per lane (about -50 dB) for drive words `0xB2F2D / 0xB2F31` of 0, 0.5 and 1.0: the level does not depend on the drive | VERIFIED (run), cause of the -50 dB open |
+| Elements `0xB0476` / `0xB047E` | not run in this pass; no decision whether they are the rotary or the Amp chain | open |
+
+Stop point of the second pass: the processor is located and runs in the oracle, but its output is about 50 dB below the input, so a gain, a gate word or the input scaling is missing. No responses, no Python model with goldens, no Rust port and no `organ_b3` run were produced. Next: bisect the level with `--trace` (which store brings the signal down: the cabinet scale `c[-30]`, the `128` output gain, or the word `0xB2F3C` read at `0x12592C`), then measure the static and the modulated response at both speeds (speed words for `Fnc_kRotorSpeed` 3 and 4 are still to be captured).
