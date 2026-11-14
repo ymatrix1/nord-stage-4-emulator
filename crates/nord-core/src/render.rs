@@ -114,9 +114,10 @@ pub fn parse_notes(s: &str) -> Result<Vec<u8>, String> {
 
 /// Parses note events written by `tools/video_ref.py notes --events-out`.
 ///
-/// Accepts `{"events": [{"midi", "onset_s", "offset_s", "confirmed"?, "strength"?}]}` or a bare array.
-/// With `confirmed_only`, events whose `confirmed` field is `false` are skipped. Velocity is
-/// `velocity` for every note. Returns the timed events and the last note-off frame.
+/// Accepts `{"events": [{"midi", "onset_s", "offset_s", "velocity"?, "confirmed"?, "strength"?}]}`
+/// or a bare array. With `confirmed_only`, events whose `confirmed` field is `false` are skipped.
+/// An event's own `velocity` (1..=127) wins; otherwise the note plays at `velocity`. Returns the
+/// timed events and the last note-off frame.
 pub fn parse_note_events(
     json: &str,
     sample_rate: f32,
@@ -148,6 +149,14 @@ pub fn parse_note_events(
         {
             continue;
         }
+        let note_velocity = match e.get("velocity") {
+            None | Some(serde_json::Value::Null) => velocity,
+            Some(x) => x
+                .as_u64()
+                .filter(|v| (1..=127).contains(v))
+                .ok_or_else(|| format!("event 'velocity' must be 1..=127: {e}"))?
+                as u8,
+        };
         let on_f = (on * f64::from(sample_rate)).round() as usize;
         let off_f = (off * f64::from(sample_rate)).round() as usize;
         out.push(TimedEvent {
@@ -155,7 +164,7 @@ pub fn parse_note_events(
             event: MidiEvent::NoteOn {
                 channel: 0,
                 note,
-                velocity,
+                velocity: note_velocity,
             },
         });
         out.push(TimedEvent {
@@ -231,6 +240,23 @@ mod tests {
         )
         .is_err());
         assert!(parse_note_events("{", 48_000.0, 90, false).is_err());
+    }
+
+    #[test]
+    fn test_parse_note_events_per_note_velocity() {
+        let js = r#"[{"midi":60,"onset_s":0.0,"offset_s":1.0,"velocity":33},
+            {"midi":62,"onset_s":0.0,"offset_s":1.0},
+            {"midi":64,"onset_s":0.0,"offset_s":1.0,"velocity":null}]"#;
+        let (ev, _) = parse_note_events(js, 48_000.0, 90, false).unwrap();
+        let vel = |i: usize| match ev[i].event {
+            MidiEvent::NoteOn { velocity, .. } => velocity,
+            _ => panic!("expected note-on"),
+        };
+        assert_eq!((vel(0), vel(2), vel(4)), (33, 90, 90));
+        for bad in [0, 128] {
+            let js = format!(r#"[{{"midi":60,"onset_s":0,"offset_s":1,"velocity":{bad}}}]"#);
+            assert!(parse_note_events(&js, 48_000.0, 90, false).is_err());
+        }
     }
 
     #[test]

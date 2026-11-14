@@ -24,7 +24,7 @@ fn layer_of(id: &str) -> Option<LayerId> {
 }
 
 /// Extern layer `0..3` and the id without its `_a|_b|_c` suffix.
-fn extern_target(id: &str) -> Option<(usize, &str)> {
+pub(super) fn extern_target(id: &str) -> Option<(usize, &str)> {
     let (head, layer) = id.rsplit_once('_')?;
     let i = match layer {
         "a" => 0,

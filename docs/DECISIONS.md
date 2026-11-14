@@ -306,6 +306,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** The bus word is VERIFIED but the receiver's full-scale convention is not decoded (ASSUMED), and the video check improves by 0.83 dB only (+12.2 to +11.4 dB), not to within 3 dB (D22). The large gap is the fixed replay velocity 100 and the unknown recording gain: velocity 64 reads +4.8 dB, and against the oracle-verified Pipe path the piano is +2.4 dB.
 - **Alternatives:** Make 0.5 the default now (changes every `.npno` render by 0.83 dB on an assumption); attenuate the piano layer by 12 dB to match the video (fits a replay artefact, would be wrong at the real velocities).
 - **Impact:** `render_hash` unchanged. No engine stage other than the 0.55 constant differs from the firmware at default settings.
+- **Update 2026-11-13 ([piano-note-velocity](research/piano-note-velocity.md)):** the receiver decode found the first reader of the bus (`FLOAT BY -29`, `2^-29` per unit) but not the end-to-end scale, so the convention stays ASSUMED and the default stays 0.55. The video gap is explained by a uniform replay velocity of about 88 (spectrum within 2.7 dB per band) plus a recording offset of +7.3 dB equal to the Pipe yardstick; per-note velocity estimates are not identifiable and are worse than the uniform replay.
 
 ### D25. The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in
 

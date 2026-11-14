@@ -124,6 +124,47 @@ Host rate: the Rust source keeps the pitch (12-TET, A = 440) and the edge and re
 
 `aec.find_stores` of the settled state lists two stores per organ layer (`0x90ffab40` / `0x90ffd720` for layer 0, `0x9101d3d0` / `0x9101ff50` for layer 1). `[store + 0x98]`: `0x90ffca80` (event 0), `0x90fff660` (event 2), `0x9101f310` (event 0), `0x91021e90` (event 2). `Edt_Org_kModel` (`0xC011C9BC`) only writes the first store's chain. The boot slot table of [b3-tone-source](b3-tone-source.md) s4.1 follows: chan 1 and chan 3 write generator slot 0 and processor slots 5 and 7. The piano layers share one chain object (`0x90c81490`, event 22). What the second store represents (a second organ engine: percussion or the bass drawbars) is open.
 
+## 7. Corrected-state oracle chords and the processor inputs (2026-11-13 follow-up)
+
+Method: `tools/organ_proc_oracle.py` (script = full boot log without `DM 0xB2ECF` / `0xB2FF0` + model install + key-down words, [arm-boot-state](arm-boot-state.md) s4), `sharc-pass` PNO core 1, 3,000 passes, set 2 pair 0 lane L, lines at the 43,402.6 Hz anchor (bin width about 8 Hz, so the Hz values are quantised; use the table for levels). New oracle option `sharc-pass --rec ADDR:COUNT:FILE` writes DM words after every pass (ring, state, slot stream, for later model checks). Table: [organ-proc-oracle-lines.csv](data/organ-proc-oracle-lines.csv).
+
+| Model, chord (keys) | Peak | Strongest lines (Hz at dB below the strongest) | Tag |
+|---|---|---|---|
+| Farfisa, 60 64 67 | 0.0867 | 258.7 (0), 392.3 (0), 133.5 (0), 166.9 (-1) | VERIFIED (run) |
+| Farfisa, 48 55 64 | 0.0806 | 133.5 (0), 66.8 (-3), 100.2 (-3), 192.0 (-3) | VERIFIED (run) |
+| Farfisa, 72 76 79 | 0.0693 | 784.6 (0), 659.4 (-1), 525.8 (-5), 1043.3 (-7) | VERIFIED (run) |
+| Farfisa, single key 60 | 0.0405 | 131.8, 263.5, 523.2, 786.7 Hz (0, -1, -7, -9 dB) | VERIFIED (run, reproduces the cited figures) |
+| B3 Bass, 60 64 67 | 0.0679 | 258.7 (0), 325.5 (-2), 392.3 (-2), 525.8 (-38) | VERIFIED (run) |
+| B3 Bass, 48 55 64 | 0.0892 | 192.0 (0), 133.5 (-1), 325.5 (-3), 392.3 (-37) | VERIFIED (run) |
+| B3 Bass, 72 76 79 | 0.0487 | 525.8 (0), 659.4 (-4), 784.6 (-5), 1043.3 (-40) | VERIFIED (run) |
+
+What the Farfisa processor reads (VERIFIED by the runs above and by `sharc-chain` pokes):
+
+| Input | Value / source |
+|---|---|
+| Record `I1 = 0xB474C` (layer A, slot 4) | `{i2, i3, i10, i11}` at `I1 - 0x20..-0x1D` = `0xC2D78, 0xC2C40, 0x95FFC, 0x965FC` (image defaults; boot, install and key-down never write the record) |
+| Weights `DM 0x95FFC + 94 s + idx` (sum `s` = 0..3) | zero in image, boot and install; **key-down only**: key `n` writes 1/48 (`0x3CAAAA80`) at `0x95FE4 + n`, `+ 0x62`, `+ 0xD0` (sum 0 idx `n - 24`, sum 1 idx `n - 20`, sum 2 idx `n - 4`) and one bias word each at `0xC2D58, 0xC2D59, 0xC2D5C` (-0.00958, the same for every key; `keydown-organ-models.csv` notes 36, 60, 84). A probe with one weight and one ring slot set to 1.0 shows sum 0 idx 10 reads ring slot 10 and sum 1 idx 10 reads ring slot 18; sums 2 and 3 were not resolved (the output is delayed by the filters) |
+| Lattice table (`i11 = 0x965FC`) | the processor reads only `pm(i11 - 0x20 .. -0x1C)`: a pointer table `0x965DC..` that is **in the image** (DM pointers such as `0xC2CD8, 0xC2920, 0xC27E8, 0xC2860`), not zero. The 204 boot words at `0x965FC..` belong to another consumer. The coefficient banks the pointers address (`0xC27E0..0xC2D78`) are written by the **boot** (272 words, 142 non-zero) and the **model install** (180 words, 129 non-zero); the state block `0xC2C40..` by the boot (46 words) |
+| Output | `dm(i0, m2) = r0` once per frame (SIMD: PEx lane at `i0`, PEy lane at `i0 + 1`), two frames per call; from zero state the first calls are about 5e-6 |
+
+Who writes "the rest of the lattice table" (OQ19): nothing is missing. The old silent Farfisa pass needed only the key-down weights on top of the corrected boot log; the claim of s1 that the table `0x965FC..` is zero concerned a range the processor does not read.
+
+Not done in this follow-up (stop point at the 90 minute time box): bit-exact Python models of `0x122B85` / `0x122296` (SIMD listing with PEx / PEy swaps `r5 <-> s4`, circular buffers and a record-flag selected lattice; `sharc-chain --trace` gives every register per instruction, so a model can be checked step by step), the Rust processor stages, the line-by-line Rust comparison, `emu_vs_hw.py` for Farfisa and the video check. Defaults and `render_hash` are unchanged. The processors are linear in the ring and the key-down weights (the lattice flag is a record word, not a signal), so the measured-response option of `b3_tail.rs` applies to both; the exact model stays the target.
+
+## 8. Measured line gain of the Farfisa processor (EMPIRICAL)
+
+Tool: `tools/organ_farfisa_proc.py measure` (`sharc-chain`: generator `0x122A71` + processor `0x122B85` per call from the boot-plus-install state, all weights zero but one word 1.0, 4,000 calls, ring slot and output recorded together, Hann FFT, gain `|Y| / |R|` at every ring line within 50 dB of the peak, 22 slots per sum, binned to 1/6 octave). Data: [farfisa-proc-gain.csv](data/farfisa-proc-gain.csv) (sum, Hz, dB, spread). Rust: `organ/farfisa_proc_gain.rs` (`farfisa_proc_gain(sum, hz)`, test against the CSV), **not wired into the render path**.
+
+| Check | Result |
+|---|---|
+| Linearity (weight 1.0 against 0.5, divided by the weight) | max difference 0.00 dB over 110 bins (VERIFIED) |
+| Note independence | median spread of the slots inside one 1/6 octave bin 0.9 dB (it includes the slope of G inside the bin), so G depends on frequency, not on the note (EMPIRICAL) |
+| Sums | sum 0 reads ring slot `idx`, sum 1 slot `idx + 8`; a key therefore feeds the 16' row (`note - 12`) through sum 0 and the 8' row (`note`) through sum 1 (the third key word, sum 2, and sum 3 give output 0.0 exactly with the installed gains, also with weight 1.0 at the key's own index) |
+| Shape of G | sum 0: -1 dB at 60 Hz, -6 dB near 400 Hz, +1.2 dB at 900 Hz, then falling to -26 dB at 8.6 kHz; sum 1 has a similar shape (see the table) |
+| Output scale | gain per unit weight is O(1): a weight of 1.0 gives rms 0.5; the key weight 1/48 gives the chord peaks of s7 |
+
+Not done (time box): per-line comparison of a Rust render with the oracle chords (needs the Farfisa key to bus mapping with two filters per wheel: a wheel is the 8' row of key `n` through sum 1 and the 16' row of key `n + 12` through sum 0, so the bus-of-wheels path cannot apply one table per wheel; the filter has to act on the key mix or on two wheel copies), the B3 Bass table (its weights come from the ARM key-down `DM 0x951F1..` over two ring windows, not the Farfisa words), `emu_vs_hw.py` with `--organ-level firmware`, and the video check. Defaults and `render_hash` unchanged; the opt-in sources stay opt-in because the oracle criterion is not met (no processor in the render path) and the video check was not run.
+
 ## Implications
 
 - The Farfisa generator is fully decoded and ported; the Farfisa audio is not reachable until the ARM weights and the filter table are captured (OQ19). The documented structure (four weighted sums, biquads, 8 lattice sections, four gains) gives the model target.

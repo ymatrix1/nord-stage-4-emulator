@@ -107,7 +107,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Firmware velocity -> level law traced by running the real firmware with a stubbed sound library (`tools/arm_piano_load.py`): `n = rec[0x5E] + 2X + 60 - sum(b)`, `X(velocity)` table and `level_q23` verified; opt-in model `piano/velocity_level.rs` (not in the default render; [research](research/piano-sound-load.md))
 - [x] Level of any note/velocity computed from the parsed `.npno` (`piano/npno_level.rs`): stroke selection, `rec[0x5E]`, `b1..b3`, `X`; 96 of 96 random main-voice cases on four sounds; `PianoLayer::firmware_velocity_level` is the default for `.npno` sounds (D23; `ns4 render-patch --legacy-piano-level` restores the touch curve; extra voices played by `piano/extra_voice.rs`; gain word verified 12 of 12; [research](research/piano-sound-load.md))
 - [x] Downstream level audit of the piano (`piano/downstream.rs`, [piano-downstream-level](research/piano-downstream-level.md), D24): SMP bus word `(y << 17) * gain >> 31` tied to the engine unit, layer level, master, string resonance, dyn comp and unison checked at 0 dB; opt-in `firmware_bus_scale` (`--firmware-piano-bus`, 0.5 against the legacy 0.55, -0.83 dB); the +12 dB of the video segment is the fixed replay velocity (+4.8 dB at velocity 64, +2.4 dB against the Pipe yardstick), not an engine stage
-- [ ] Decode the receiver of the SMP bus and the float-to-Q31 gain step (promote `firmware_bus_scale` to default), per-note velocities of the video replay (OQ20)
+- [x] Per-note replay velocity of the Velvet Grand clip (`tools/piano_velocity.py`, `render-patch` per-event `velocity`, [piano-note-velocity](research/piano-note-velocity.md)): per-note inversion is not identified (worse than uniform); a uniform replay velocity of about 88 matches the spectrum (all bands within 2.7 dB, brilliance +0.5 dB) and its +7.3 dB RMS gap equals the Pipe yardstick; piano layer level law `(v / 127)^2` read from handler `0xC011A7A4`
+- [ ] Decode the receiver of the SMP bus (first consumer found: `FLOAT BY -29` at pc `0x1C0940`; the ring consumer and the master scale are open) to promote `firmware_bus_scale` to default (OQ20)
 
 ---
 
@@ -231,7 +232,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Vox key-down timeline (replaces the click, crest 16.1 dB), drawbar value law and slot wiring, boot gain word ([organ-vox-click](research/organ-vox-click.md))
 - [ ] Vox default: organ output level stage (RMS -13.7 dB) and the 1.5 to 8 kHz deficit (mid +7.8, presence -7.3, brilliance -9.5 dB) (`ns4-58cz`)
 - [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
-- [ ] Farfisa processor `0x122B85` (ARM weights and filter tables, OQ19) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust
+- [x] Oracle chords of the Farfisa and B3 Bass processors with the corrected boot log and key-down words (`tools/organ_proc_oracle.py`, `sharc-pass --rec`, [organ-farfisa-bass](research/organ-farfisa-bass.md) s7)
+- [ ] Farfisa processor `0x122B85` and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust (inputs known, OQ18)
 - [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
 
 ### 7b.4 Effects

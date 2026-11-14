@@ -7,6 +7,8 @@ use super::prelude::*;
 use crate::audio::PianoEdit;
 use nord_panel::behaviour::cycle;
 
+pub use super::piano_models::{model_step, position as models_position, type_cycle};
+
 /// Piano types in LED order (manual p.24).
 pub const CATEGORIES: [PianoCategory; 6] = [
     PianoCategory::Grand,
@@ -207,12 +209,6 @@ pub fn zone_step(s: &mut Stage4PanelState, forward: bool, out: &mut Vec<PianoEdi
     });
 }
 
-/// TYPE button: next of the six piano types.
-pub fn type_cycle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
-    s.piano_cat = CATEGORIES[cycle(category_index(s), CATEGORIES.len(), true)];
-    out.push(PianoEdit::Category(s.piano_cat));
-}
-
 /// SOFT RELEASE of the focused layer.
 pub fn soft_release_toggle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
     let l = s.piano_ui.layer();
@@ -261,28 +257,31 @@ pub fn unison_cycle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
     });
 }
 
-/// TIMBRE: Off, Soft, Mid, Bright, Dyno 1, Dyno 2. On the Clav type the seven pick-up EQ rocker
+/// Number of TIMBRE steps (incl. Off) of a type: the acoustic types have Soft, Mid, Bright; DYNO 1
+/// and 2 exist for the Electric type only (manual p.26).
+pub fn timbre_steps(cat: PianoCategory) -> usize {
+    if cat == PianoCategory::Electric {
+        TIMBRES.len()
+    } else {
+        4
+    }
+}
+
+/// TIMBRE: Off, Soft, Mid, Bright, Dyno 1, Dyno 2 (the last two on Electric only). On the Clav type the seven pick-up EQ rocker
 /// combinations (manual p.26) are stepped instead; the engine has no Clav timbre, so those are UI only.
 pub fn timbre_cycle(s: &mut Stage4PanelState, out: &mut Vec<PianoEdit>) {
     if s.piano_cat == PianoCategory::Clav {
         s.piano_ui.clav_timbre = (s.piano_ui.clav_timbre + 1) % 8;
         return;
     }
-    s.piano_timbre = TIMBRES[cycle(timbre_index(s), TIMBRES.len(), true)];
+    let i = timbre_index(s);
+    let next = if i + 1 >= timbre_steps(s.piano_cat) {
+        0
+    } else {
+        i + 1
+    };
+    s.piano_timbre = TIMBRES[next];
     out.push(PianoEdit::Timbre(s.piano_timbre));
-}
-
-/// Step the PIANO SELECT dial through the library models (wraps). Returns `false` when no model
-/// list is loaded.
-pub fn model_step(s: &mut Stage4PanelState, forward: bool) -> bool {
-    let n = s.piano_ui.models.len();
-    if n == 0 {
-        return false;
-    }
-    let i = cycle(s.piano_ui.model_idx.min(n - 1), n, forward);
-    s.piano_ui.model_idx = i;
-    s.piano_ui.model_request = Some(s.piano_ui.models[i].clone());
-    true
 }
 
 #[cfg(test)]
