@@ -1,6 +1,7 @@
 //! `Mod 1` and `Mod 2` stages of the per-layer FX chain.
 
 use super::*;
+use crate::phase_wrap::wrap_pos;
 
 /// Soft-clipped sine `tanh(k x) / tanh(k)`: approaches a square wave as `k` grows (unity peak).
 #[inline]
@@ -68,7 +69,10 @@ impl LayerFxChain {
         }
         let phase = self.mod1_phase;
         let lfo = phase.sin();
-        self.mod1_phase = (self.mod1_phase + TAU * self.mod1_effective_rate_hz() * inv_fs) % TAU;
+        self.mod1_phase = wrap_pos(
+            self.mod1_phase + TAU * self.mod1_effective_rate_hz() * inv_fs,
+            TAU,
+        );
         let amt = self.mod1_amount.clamp(0.0, 1.0);
         let var = self.mod1_variation;
         match self.mod1_type {
@@ -189,7 +193,7 @@ impl LayerFxChain {
         }
         let lfo_l = self.mod2_phase.sin();
         let lfo_r = self.mod2_phase.cos();
-        self.mod2_phase = (self.mod2_phase + TAU * self.mod2_rate_hz * inv_fs) % TAU;
+        self.mod2_phase = wrap_pos(self.mod2_phase + TAU * self.mod2_rate_hz * inv_fs, TAU);
         let amt = self.mod2_amount.clamp(0.0, 1.0);
         let var = self.mod2_variation;
         // VARIATION of Flanger / Vibe is the mono version (manual p.50): both channels share one LFO.

@@ -3,6 +3,7 @@
 //! Spec: `docs/specs/piano-engine.md`
 
 use crate::cbin::piano_sample::NpnoInstrument;
+use crate::phase_wrap::wrap_pos;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -1455,7 +1456,7 @@ impl PianoLayer {
                     }
                 } else {
                     let p = v.phase;
-                    v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
+                    v.phase = wrap_pos(p + TAU * v.freq * bend32 * inv_fs, TAU);
                     let m = p.sin()
                         + 0.45 * v.amp * (2.0 * p).sin()
                         + 0.20 * v.amp * v.amp * (3.0 * p).sin();
@@ -1464,14 +1465,16 @@ impl PianoLayer {
             } else {
                 // Harmonic piano wave model (fundamental + 2nd + 3rd partials with velocity brightness)
                 let p = v.phase;
-                v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
+                v.phase = wrap_pos(p + TAU * v.freq * bend32 * inv_fs, TAU);
                 let m = p.sin()
                     + 0.45 * v.amp * (2.0 * p).sin()
                     + 0.20 * v.amp * v.amp * (3.0 * p).sin();
                 if unison_on && !v.is_release_sample {
                     let pd = v.phase_detune;
-                    v.phase_detune =
-                        (pd + TAU * v.freq * bend32 * unison_detune_ratio * inv_fs) % TAU;
+                    v.phase_detune = wrap_pos(
+                        pd + TAU * v.freq * bend32 * unison_detune_ratio * inv_fs,
+                        TAU,
+                    );
                     let d = pd.sin() + 0.45 * v.amp * (2.0 * pd).sin();
                     (0.75 * m + 0.25 * d, 0.25 * m + 0.75 * d)
                 } else {

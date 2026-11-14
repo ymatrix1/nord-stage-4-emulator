@@ -1,6 +1,7 @@
 //! Delay stage (tempo sync, filters, feedback FX, ping-pong) of the per-layer FX chain.
 
 use super::*;
+use crate::phase_wrap::wrap_pos;
 
 impl LayerFxChain {
     pub(super) fn target_delay_samples(&self, bpm: f32) -> f32 {
@@ -56,7 +57,7 @@ impl LayerFxChain {
                     (DelayFeedbackFx::Vibe, _) => (3.2, 4.0, 2.5),
                     _ => (0.55, 9.0, 3.0),
                 };
-                self.dfx_phase = (self.dfx_phase + TAU * rate * inv_fs) % TAU;
+                self.dfx_phase = wrap_pos(self.dfx_phase + TAU * rate * inv_fs, TAU);
                 let ph = self.dfx_phase;
                 let tap = |buf: &[f32], phase: f32| {
                     let d = (base_ms + depth_ms * phase.sin()) * 0.001 * fs;

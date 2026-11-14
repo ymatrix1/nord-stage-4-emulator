@@ -1,6 +1,7 @@
 //! Per-sample rendering of `SynthLayer`: LFO, envelopes, oscillators, filter and mix.
 
 use super::*;
+use crate::phase_wrap::wrap_pos;
 
 impl SynthLayer {
     /// Renders a single stereo frame `[left, right]` across all 16 polyphonic voices.
@@ -19,7 +20,7 @@ impl SynthLayer {
 
         // 1. Advance LFO
         let lfo_hz = self.lfo_hz();
-        self.lfo_phase = (self.lfo_phase + TAU * lfo_hz * inv_fs) % TAU;
+        self.lfo_phase = wrap_pos(self.lfo_phase + TAU * lfo_hz * inv_fs, TAU);
         let lfo_val = match self.lfo_shape {
             LfoShape::Triangle => 1.0 - 4.0 * ((self.lfo_phase / TAU) - 0.5).abs(),
             LfoShape::Saw => 2.0 * (self.lfo_phase / TAU) - 1.0,
@@ -88,8 +89,10 @@ impl SynthLayer {
         } else {
             0.0
         };
-        self.vib_phase =
-            (self.vib_phase + TAU * self.vibrato_rate_hz.clamp(0.1, 20.0) * inv_fs) % TAU;
+        self.vib_phase = wrap_pos(
+            self.vib_phase + TAU * self.vibrato_rate_hz.clamp(0.1, 20.0) * inv_fs,
+            TAU,
+        );
         let vib_sin = self.vib_phase.sin();
         // Opt-in measured laws (`measured.rs`); the defaults keep the older scales.
         let (tau_frac, env_octaves, oenv_pitch_oct) = if self.measured_laws {
@@ -340,7 +343,7 @@ impl SynthLayer {
                                 inv_fs,
                                 &mut v.uni_supersaw[k],
                             );
-                            v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                            v.uni_phase[k] = wrap_pos(t_k + dt_k, 1.0);
                             let (gl, gr) = unison_pan(voice.strong_left, weak, pan_norm);
                             acc.0 += s_k * uni_voice_gain * gl;
                             acc.1 += s_k * uni_voice_gain * gr;
@@ -381,7 +384,7 @@ impl SynthLayer {
                             let t_k = v.uni_phase[k];
                             let s_k =
                                 sample_wavetable(bank, self.wavetable_index, wt_pos, t_k, dt_k);
-                            v.uni_phase[k] = (t_k + dt_k) % 1.0;
+                            v.uni_phase[k] = wrap_pos(t_k + dt_k, 1.0);
                             let (gl, gr) = unison_pan(voice.strong_left, weak, pan_norm);
                             acc.0 += s_k * uni_voice_gain * gl;
                             acc.1 += s_k * uni_voice_gain * gr;
@@ -461,9 +464,9 @@ impl SynthLayer {
 
             let raw_osc_l = raw_osc_l * table_gain;
             let raw_osc_r = raw_osc_r.map(|r| r * table_gain);
-            v.phase = (t + dt) % 1.0;
-            v.mod_phase = (v.mod_phase + fm_ratio * dt) % 1.0;
-            v.op3_phase = (v.op3_phase + fm_sub_ratio * dt) % 1.0;
+            v.phase = wrap_pos(t + dt, 1.0);
+            v.mod_phase = wrap_pos(v.mod_phase + fm_ratio * dt, 1.0);
+            v.op3_phase = wrap_pos(v.op3_phase + fm_sub_ratio * dt, 1.0);
 
             let kb_track_scale = if self.kb_track > 0 {
                 let frac = f32::from(self.kb_track.min(3)) / 3.0;
