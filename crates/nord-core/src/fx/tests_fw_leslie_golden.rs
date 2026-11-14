@@ -1,6 +1,8 @@
 //! The Leslie port against `sharc-fx` oracle output (`tools/fx_leslie_golden.py`).
 
+use super::fw_ext40::E40;
 use super::fw_leslie::{FwLeslieE40, SLOW_SPEED_WORDS};
+use super::fw_leslie_ring::RingAdvance;
 use super::tests_fw_leslie_golden_data as g;
 
 /// FNV-1a 64 over the little-endian bytes of the words (as `tools/fx_leslie_words.fnv`).
@@ -29,8 +31,8 @@ fn lcg(calls: usize) -> Vec<[f32; 4]> {
         .collect()
 }
 
-fn run(mult: u32) -> Vec<u32> {
-    let mut l = FwLeslieE40::new();
+fn run(mult: u32, ring: RingAdvance) -> Vec<u32> {
+    let mut l = FwLeslieE40::with_ring(ring);
     l.set_speed_words(SLOW_SPEED_WORDS.map(|w| w * mult));
     lcg(g::CALLS)
         .into_iter()
@@ -40,16 +42,41 @@ fn run(mult: u32) -> Vec<u32> {
 
 #[test]
 fn slow_speed_words_match_the_oracle_for_2000_calls() {
-    let got = run(g::SLOW_MULT);
+    let got = run(g::SLOW_MULT, RingAdvance::FROZEN);
     assert_eq!(got[..g::SLOW_FIRST.len()], g::SLOW_FIRST);
     assert_eq!(fnv(&got), g::SLOW_FNV);
 }
 
 #[test]
 fn speed_words_times_twelve_match_the_oracle_through_several_rotor_wraps() {
-    let got = run(g::X12_MULT);
+    let got = run(g::X12_MULT, RingAdvance::FROZEN);
     assert_eq!(got[..g::X12_FIRST.len()], g::X12_FIRST);
     assert_eq!(fnv(&got), g::X12_FNV);
+}
+
+#[test]
+fn the_pass_routine_ring_matches_the_oracle_for_2000_calls() {
+    let got = run(g::RESET8_MULT, RingAdvance::PASS_RESET8);
+    assert_eq!(got[..g::RESET8_FIRST.len()], g::RESET8_FIRST);
+    assert_eq!(fnv(&got), g::RESET8_FNV);
+}
+
+#[test]
+fn a_plain_four_word_advance_matches_the_oracle_for_2000_calls() {
+    let got = run(g::ADV_MULT, RingAdvance::ADVANCE);
+    assert_eq!(got[..g::ADV_FIRST.len()], g::ADV_FIRST);
+    assert_eq!(fnv(&got), g::ADV_FNV);
+}
+
+#[test]
+fn the_default_processor_uses_the_plain_advance() {
+    let (mut a, mut b) = (
+        FwLeslieE40::new(),
+        FwLeslieE40::with_ring(RingAdvance::ADVANCE),
+    );
+    for row in lcg(50) {
+        assert_eq!(a.process_block(row), b.process_block(row));
+    }
 }
 
 #[test]
@@ -79,4 +106,23 @@ fn the_frame_interface_delays_by_one_frame() {
     assert_eq!(frames[1], [blocks[0][0], blocks[0][1]]);
     assert_eq!(frames[2], [blocks[0][2], blocks[0][3]]);
     assert_eq!(frames[3], [blocks[1][0], blocks[1][1]]);
+}
+
+/// The ARM fast speed words (`tools/arm_leslie_speeds.py`: horn 7.0 Hz, rotor 6.4 Hz, follow word
+/// 0.5748 x horn): the rotor phase `DM(0xB2F23)` gains the rotor word per call (VERIFIED by the
+/// listing `0x1256B8..0x1256D5` and by the x12 golden above, which covers the same word range).
+#[test]
+fn the_arm_fast_speed_words_advance_the_rotor_phase_by_the_word_per_call() {
+    use super::fw_leslie_core::Core;
+    let word = |hz: f64| ((hz * 8_388_607.0 / 11_025.0) as u32) << 8;
+    let fast = [word(6.4), word(7.0), word(0.5748 * 7.0)];
+    assert_eq!(fast[0], 0x130500);
+    assert_eq!(fast[1], 0x14CE00);
+    let mut c = Core::<E40>::new();
+    c.set_speed_words(fast);
+    let p0 = c.rd(0xB2F23);
+    for row in lcg(100) {
+        c.call(row);
+    }
+    assert_eq!(c.rd(0xB2F23), p0.wrapping_add(100 * fast[0]));
 }

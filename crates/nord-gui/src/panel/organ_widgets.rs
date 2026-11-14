@@ -18,6 +18,18 @@ pub(super) fn level_fader(ui: &mut Ui, rect: Rect, id: &str, level: &mut f32) ->
             changed = true;
         }
     }
+    #[cfg(test)]
+    crate::widgets::probe::cap_travel(
+        ui.ctx(),
+        Rect::from_min_max(
+            pos2(rect.center().x - rect.width() * 0.5 - 1.0, rect.top()),
+            pos2(
+                rect.center().x + rect.width() * 0.5 + 1.0,
+                rect.bottom() + 1.5,
+            ),
+        ),
+        id,
+    );
     let p = ui.painter();
     let slot = Rect::from_center_size(rect.center(), vec2(3.0, rect.height()));
     p.rect_filled(slot, 1.5, Color32::from_rgb(10, 12, 15));
@@ -116,6 +128,15 @@ pub(super) fn drawbar_slot(ui: &mut Ui, slot: Rect, id: &str, value: &mut u8, wh
             }
         }
     }
+    #[cfg(test)]
+    crate::widgets::probe::cap_travel(
+        ui.ctx(),
+        Rect::from_min_max(
+            pos2(slot.left() - 3.5, slot.top() - 4.5),
+            pos2(slot.right() + 3.5, slot.bottom() + 6.0),
+        ),
+        id,
+    );
     let p = ui.painter();
     p.rect_filled(slot, 1.5, Color32::from_rgb(8, 10, 12));
     p.rect_stroke(

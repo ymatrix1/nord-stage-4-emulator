@@ -24,6 +24,22 @@ pub const TWEAKS: &[(&str, f32, f32)] = &[
     // The PROG VIEW name printed into the PANIC legend of the TRANSP button above.
     ("program.prog_view", 0.0, 5.0),
     ("program.preset_name", 0.0, 5.0),
+    // Program buttons 5-8: their numbers touched the legends (System, Sound, ...) of buttons 1-4.
+    ("program.button.5", 0.0, 3.0),
+    ("program.button.6", 0.0, 3.0),
+    ("program.button.7", 0.0, 3.0),
+    ("program.button.8", 0.0, 3.0),
+    ("program.menu.output", 0.0, 3.0),
+    ("program.menu.pedal", 0.0, 3.0),
+    ("program.menu.midi", 0.0, 3.0),
+    ("program.menu.extern", 0.0, 3.0),
+    // The MON/COPY name sat 1.5 px under the LAYER INIT legend of SECT EDIT.
+    ("program.mon_copy", 0.0, 3.0),
+    ("program.paste", 0.0, 3.0),
+    // The piano ZONE -/+ legends (now clear of the OCT bezels) printed into the zone LEDs.
+    ("piano.zone_leds", 0.0, 3.0),
+    // The SPLIT name touched the L M H LED strip above its button.
+    ("split.leds", 0.0, -2.0),
     // "DECAY FAST" and "HARMONIC 3RD" touched; the third button moves right.
     ("organ.perc_third", 12.0, 0.0),
 ];

@@ -113,6 +113,11 @@ impl ProgramUi {
                 vec![cmd(ProgramEdit::Transpose(self.transp.effective()))]
             }
             Screen::Preset { kind, .. } => self.preset_dial(kind, delta),
+            // Shift + dial on Preset Organize picks the Preset Library section.
+            Screen::Menu(_) if shift && self.on_preset_organize_page() => {
+                self.step_organize_section(delta);
+                Vec::new()
+            }
             Screen::Menu(_) => self.menu_dial(delta),
             _ => Vec::new(),
         }

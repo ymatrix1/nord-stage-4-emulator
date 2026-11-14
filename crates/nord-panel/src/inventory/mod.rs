@@ -9,6 +9,7 @@ mod piano;
 mod program;
 mod program_perf;
 mod synth;
+pub mod synth_dials;
 mod synth_perf;
 
 use crate::types::ControlEntry;
