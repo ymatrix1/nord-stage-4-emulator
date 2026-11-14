@@ -11,6 +11,7 @@
 //! control-thread engine (tests, offline hosts); the audio callback drops any that reach it.
 
 use crossbeam_channel::Sender;
+use nord_core::cbin::SectionPreset;
 use nord_core::engine::{LayerInitTarget, PanelFunc, ProgramState, Stage4Engine};
 use nord_core::morph::{CrossfadeWidth, LayerId, MorphParameter, MorphSource};
 
@@ -117,6 +118,12 @@ pub enum ProgramEdit {
     },
     /// Recall a stored program (undoable).
     Recall(Box<ProgramState>),
+    /// Load a Preset Library entry into its section, or into one layer (`single`, Shift +
+    /// PIANO / SYNTH). Undoable ("Load Preset", manual p.43).
+    LoadPreset {
+        preset: Box<SectionPreset>,
+        single: Option<LayerId>,
+    },
     /// One menu item write (System, Sound, Output, Aux KB, Pedal, MIDI, Extern menus).
     Settings(super::SettingsEdit),
 }
@@ -149,6 +156,7 @@ impl ProgramEdit {
                 | Self::ClearMorph(_)
                 | Self::Snapshot { .. }
                 | Self::Recall(_)
+                | Self::LoadPreset { .. }
         )
     }
 
@@ -223,6 +231,9 @@ impl ProgramEdit {
             Self::Recall(state) => {
                 engine.begin_undoable(nord_core::engine::UndoOp::ProgramChange);
                 engine.apply_state(state.clone());
+            }
+            Self::LoadPreset { preset, single } => {
+                engine.load_section_preset_undoable(preset, *single);
             }
             Self::Settings(edit) => {
                 // An id no engine field backs is ignored (the menu only sends Bound items).
@@ -334,6 +345,23 @@ mod tests {
         assert_eq!(MorphTarget::from_index(7), MorphTarget::SynthCutoff(0));
         assert_eq!(MorphTarget::from_index(99), MorphTarget::SynthCutoff(2));
         assert_eq!(MorphTarget::from_index(2).label(), "Pno A Lvl");
+    }
+
+    #[test]
+    fn load_preset_applies_undoably_on_a_control_thread_engine() {
+        use nord_core::cbin::SectionPreset;
+        let mut e = engine();
+        let before = e.piano_b.category;
+        let mut p = nord_core::cbin::PianoPresetDecoded::default();
+        p.layer_a.category = nord_core::piano::PianoCategory::Clav;
+        let edit = ProgramEdit::LoadPreset {
+            preset: Box::new(SectionPreset::Piano(Box::new(p))),
+            single: Some(LayerId::PianoB),
+        };
+        edit.apply(&mut e);
+        assert_eq!(e.piano_b.category, nord_core::piano::PianoCategory::Clav);
+        assert!(e.undo().is_some());
+        assert_eq!(e.piano_b.category, before);
     }
 
     #[test]

@@ -201,11 +201,23 @@ The manual says the order of Programs and Presets can be rearranged with Swap an
 
 | Part | Behaviour | Status |
 |---|---|---|
-| Data | `PresetLibrary` keeps, per section (Organ, Piano, Synth), the archive entry at each flat location (`bank * 64 + position`). Read from the `.ns4o` / `.ns4n` / `.ns4y` headers at open (`nord_core::cbin::PresetIndex`). The emulator cannot store a new preset, so cells are entry paths only | header fields `VERIFIED` (`python tools/preset_slots.py "<backup>.ns4b"`: 544 presets, Organ 64 in bank 0, Piano 64 + 32 in banks 0-1, Synth 6 x 64 in banks 0-5, 0 duplicates, folder `Bank n+1` equals header bank + 1) |
+| Data | `PresetLibrary` keeps, per section (Organ, Piano, Synth), the archive entry at each flat location (`bank * 64 + position`). Read from the `.ns4o` / `.ns4n` / `.ns4y` headers at open (`nord_core::cbin::PresetIndex`). Cells are entry paths, or the virtual path of a preset stored with STORE (section 5.4) | header fields `VERIFIED` (`python tools/preset_slots.py "<backup>.ns4b"`: 544 presets, Organ 64 in bank 0, Piano 64 + 32 in banks 0-1, Synth 6 x 64 in banks 0-5, 0 duplicates, folder `Bank n+1` equals header bank + 1) |
 | Capacity | Organ 2 banks, Piano 2, Synth 8 (128 / 128 / 512 locations) | `ASSUMED`: the factory banks are the folders `Bank 1..2`, `1..2`, `1..8` of the backup layout table; the manual gives no capacity |
 | Section | Shift + PROGRAM dial steps Organ / Piano / Synth (no wrap); the location pointer is clamped into the new section and a pending choice is cancelled | `ASSUMED`: the manual does not say how the section is chosen |
 | Location | PROGRAM dial moves the pointer; text `bank:position`, both 1-based, two digits (`1:05`, as the preset ids of manual p.42) | `ASSUMED` (open: the manual's example `1:27 B3 Flute 2` does not match the header location 8 of that preset in the factory backup, see OPEN-QUESTIONS) |
 | Operations | Swap, Move, Ok, Undo, Memory Protect gate and messages as the Program page (section 5.2), one Undo level per section, `nord_core::library_ops` | manual text `VERIFIED`; ends of the list `ASSUMED` equal to the middle |
 | Export | `plan_presets` (`library/export.rs`) compares each location with the archive index: an entry not at its old place is written with the new header bank / location (`PresetPut`, folder `Bank n+1`), an emptied location is removed (`preset_edits`); untouched entries stay byte-identical | tests `library/export_presets_tests.rs`, `cbin/backup_presets.rs` |
 
-Not covered: storing a new preset into the Preset Library (STORE with a Preset Library button, manual p.42) and loading `.ns4o` / `.ns4n` / `.ns4y` presets into the engine (the Preset Library browser loads organ models, piano models and samples). Hardware validation of an edited backup is open as for programs (section 5.2).
+Storing a new preset and loading presets into the engine are section 5.4.
+
+### 5.4 Preset Library: browse, load and store (manual p.41-42)
+
+| Part | Behaviour | Status |
+|---|---|---|
+| Browse | ORGAN / PIANO / SYNTH in PRESET LIBRARY (Shift + PIANO / SYNTH: Single Layer) opens the browser; the PROGRAM dial walks the occupied locations of the section (`bay_program/preset_browse.rs`), the OLED lists their names and prints `bank:position name`. A backup without presets keeps the earlier model browser (Organ models, `.npno`, `.nsmp4`) | manual `VERIFIED`; the list order is the location (Num); Cat sort and Cancel (revert) are not built |
+| Load | Every dial step requests the entry (`LoadRequest::Preset`); `library/preset_load.rs` decodes it and sends `ProgramEdit::LoadPreset` (undoable, [cbin-and-presets.md](cbin-and-presets.md) section 5.6); the panel controls follow; the sounds the preset names load like a program's. A load counts as a program edit (boxed `E`). Single Layer takes layer A of the file into the focused layer | engine rule `ASSUMED` for the layer choice, otherwise manual p.42-43 |
+| Store | STORE, then ORGAN / PIANO / SYNTH: "Store Preset To" (`bay_program/preset_store.rs`); the dial, PAGE and BANK buttons and the Program buttons pick the location (starts on the loaded preset's cell, else the first free one), STORE confirms. A Preset Library button first and then STORE does the same; STORE AS names the preset first. Memory Protect blocks it like a program STORE ("Memory Protect is on"). The name defaults to the loaded preset's | flow `VERIFIED` from the manual text; the screen text and the default name are `ASSUMED` |
+| Data | A stored preset is a program snapshot plus the base entry (`bay_program/preset_user.rs`); its cell holds the virtual path `~user/<n>/<name>.<ext>`, so Preset Organize moves it and the browser lists it. Overwritten or organized-away presets are forgotten | |
+| Export | Export backup writes each stored preset as a file at its location (`library/preset_export.rs`, `PresetPut`); other entries stay byte-identical (`library/export_presets_tests.rs`) | hardware acceptance open (OQ31) |
+
+Not built: "Cancel" reverting to the previous sound, sorting by Cat, and the Synth sound edits in a stored preset (OQ30).

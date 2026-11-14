@@ -134,10 +134,9 @@ impl ProgramUi {
 
     fn preset_open(&mut self, kind: PresetKind, single: bool) -> Vec<AudioCommand> {
         if self.store.stage == StoreStage::Choosing {
-            self.set_message("Preset store: not supported yet");
-            return Vec::new();
+            return self.preset_store_begin(kind);
         }
-        self.preset_cursor = 0;
+        self.preset_cursor = self.preset_start_cursor(kind);
         if single {
             self.focus = match (kind, self.focus) {
                 (PresetKind::Piano, LayerId::PianoA | LayerId::PianoB) => self.focus,
@@ -196,9 +195,17 @@ impl ProgramUi {
     pub fn store_press(&mut self) -> Vec<AudioCommand> {
         match self.store.stage {
             StoreStage::Idle => {
+                // A Preset Library button first, then STORE, also stores a preset (manual p.42).
+                let from_browser = match self.screen {
+                    Screen::Preset { kind, .. } => Some(kind),
+                    _ => None,
+                };
                 self.store.begin(&self.title, self.loc);
                 self.screen = Screen::StoreTo;
-                Vec::new()
+                match from_browser {
+                    Some(kind) => self.preset_store_begin(kind),
+                    None => Vec::new(),
+                }
             }
             StoreStage::Naming => {
                 self.store.finish_naming();
@@ -222,6 +229,9 @@ impl ProgramUi {
     }
 
     fn store_confirm(&mut self) -> Vec<AudioCommand> {
+        if self.store.preset.is_some() {
+            return self.preset_store_confirm();
+        }
         let name = {
             let n = self.store.editor.name();
             if n.is_empty() {
@@ -283,6 +293,9 @@ impl ProgramUi {
                 self.mark_clean(); // STORE clears the boxed `E`
             }
             PendingSnapshot::Live(slot) => self.library.put_live(slot, state),
+            PendingSnapshot::Preset { kind, loc, name } => {
+                self.accept_preset_snapshot(kind, loc, name, state);
+            }
         }
     }
 }

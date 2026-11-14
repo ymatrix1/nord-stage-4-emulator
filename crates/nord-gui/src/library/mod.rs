@@ -9,6 +9,8 @@ mod loaders;
 mod piano_bridge;
 mod piano_catalog;
 mod poll;
+mod preset_export;
+mod preset_load;
 mod program;
 #[cfg(test)]
 mod support;

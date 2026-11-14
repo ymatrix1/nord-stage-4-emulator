@@ -169,6 +169,12 @@ pub enum PendingSnapshot {
     },
     /// Live Mode auto-store into slot `0..8`.
     Live(u8),
+    /// STORE of a section preset into the Preset Library (flat location `loc`).
+    Preset {
+        kind: super::model::PresetKind,
+        loc: u16,
+        name: String,
+    },
 }
 
 /// Where a STORE writes.
@@ -186,6 +192,9 @@ pub struct StoreFlow {
     pub stage: StoreStage,
     pub target: Option<StoreTarget>,
     pub editor: NameEditor,
+    /// "Store Preset To": a PRESET LIBRARY button was pressed during Choosing; the section and
+    /// the flat location of the Preset Library (`preset_store.rs`).
+    pub preset: Option<(super::model::PresetKind, u16)>,
 }
 
 /// Stage of a Store operation.
@@ -204,6 +213,7 @@ impl StoreFlow {
     pub fn begin(&mut self, name: &str, here: ProgLoc) {
         self.editor = NameEditor::new(name);
         self.target = Some(StoreTarget::Bank(here));
+        self.preset = None;
         self.stage = StoreStage::Choosing;
     }
 
@@ -225,6 +235,7 @@ impl StoreFlow {
     pub fn cancel(&mut self) {
         self.stage = StoreStage::Idle;
         self.target = None;
+        self.preset = None;
     }
 
     /// A store is in progress.

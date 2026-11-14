@@ -8,6 +8,7 @@ pub mod midi;
 pub mod morph;
 pub mod organ;
 pub mod piano;
+pub mod preset_cli;
 pub mod render;
 pub mod render_opts;
 pub mod sinc;

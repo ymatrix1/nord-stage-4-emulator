@@ -89,6 +89,10 @@ impl ProgramUi {
         match self.screen {
             Screen::Home | Screen::NumPad => self.select_loc(self.loc.step(delta)),
             Screen::List => self.list_dial(delta),
+            Screen::StoreTo if self.store.preset.is_some() => {
+                self.preset_store_step(delta);
+                Vec::new()
+            }
             Screen::StoreTo => {
                 self.store.target = match self.store.target {
                     Some(StoreTarget::Live(s)) => {
@@ -150,6 +154,7 @@ impl ProgramUi {
                 return out;
             }
             Screen::Menu(_) => self.menu.step_page(delta),
+            Screen::StoreTo if self.store.preset.is_some() => self.preset_store_page(delta, bank),
             Screen::StoreTo => {
                 if let Some(StoreTarget::Bank(l)) = self.store.target {
                     self.store.target = Some(StoreTarget::Bank(step(l)));
@@ -167,6 +172,10 @@ impl ProgramUi {
         }
         if self.num_pad {
             return self.num_digit(n);
+        }
+        if self.store.stage == StoreStage::Choosing && self.store.preset.is_some() {
+            self.preset_store_button(n);
+            return Vec::new();
         }
         if self.store.stage == StoreStage::Choosing {
             self.store.target = match self.store.target {

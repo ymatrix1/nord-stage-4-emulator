@@ -133,6 +133,11 @@ pub fn plan_presets(
             let here = index.entry_at(section, bank, loc);
             match entry {
                 Some(e) if here != Some(e.as_str()) => {
+                    if let Some(u) = lib.presets.user(&e) {
+                        plan.puts
+                            .push(super::preset_export::user_put(u, bank, loc, read)?);
+                        continue;
+                    }
                     let file = base_file(Some(&e), read)?.ok_or("missing entry")?;
                     plan.puts.push(
                         PresetPut::from_file(section, bank, loc, &display_name(&e), &file)
