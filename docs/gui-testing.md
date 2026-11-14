@@ -86,17 +86,56 @@ Scale: the panel is drawn at `LAYOUT_SCALE` = 2 (3120 x 840 logical px, `panel/l
 that 7.5 px labels fit between neighbours. A 1900 px window therefore shows the overview at about
 0.6x: read labels in the focus view or in `gui_shots.py` output.
 
-`panel/legibility_tests.rs` renders the real panel headless and fails on: any text under
-`MIN_FONT_PX` (7.5), two overlapping labels, or a label overlapping a control rectangle it
-does not belong to. `legibility_allow.txt` lists tolerated collisions (empty now; the test also
-fails on stale entries). Nudges for tight neighbours live in `panel/layout_tweaks.rs`, never in
-the `ASSUMED` photo tables. Before/after: `docs/img/gui/`.
+`panel/legibility_tests.rs` (collector, control rectangles) and `panel/legibility_rules.rs`
+(geometry rules) render the real panel headless and record every painted text galley with its
+clip rectangle, plus the group frames and knob extents the widgets report through the test-only
+`widgets/probe.rs`. The audit fails on:
+
+| Rule | Meaning |
+|---|---|
+| min font | any text under `MIN_FONT_PX` (7.5 px) |
+| `L` | two labels overlap or are closer than 0.9 px |
+| `C` | a label overlaps (bezel +1.5 px) a control rectangle whose body it is not printed on |
+| `K` | a label is clipped by the clip rectangle it was painted with (OLED soft labels) |
+| `S` | a label crosses the edge of a section rectangle (text cut by the section) |
+| `G` | a label crosses a group frame (Rotary Speaker box, `group_frame`) other than its own title |
+| `N` | a label touches a knob body or its tick ring (the ring is open below the knob) |
+
+Round 2 (`panel/legibility_caps.rs`, same collector plus `Kind::CapTravel` / `Kind::Led` records
+from the widgets) adds:
+
+| Rule | Meaning |
+|---|---|
+| `F` | a label overlaps the travel of a fader cap (drawbar numbers hidden by the pushed-out cap) |
+| `E` | an LED bezel is closer than 4 px to a group frame edge, or on it |
+| `T` | a label comes closer than 0.6 px to an LED bezel |
+| `V` | two stacked labels (sharing a third of their width) have less than 2 px between their ink; text inside OLEDs is exempt |
+| `M` | a knob's name is more than 12 px from its tick ring (or missing); a caption beside a trimmer counts |
+
+The bezel margin of rule `C` grew from 1.5 to 2.5 px (the button bezel is 2 px). Stacked-line
+pitches (`ctl::TAG_LINE`, `bay_effects::ctx::CAPTION_LINE`, Synth headings, Piano TIMBRE rows)
+are 9.5-10 px so that rule `V` holds; state LEDs of Shift legends sit before the text, as printed
+on the instrument.
+
+`legibility_allow.txt` lists tolerated violations (empty now; the test also fails on stale
+entries). Run with `NS4_WRITE_COLLISIONS=<file> cargo test -p nord-gui collisions_match` to dump
+the current list. Fixes go into the shared helpers first: `widgets::label_fit` / `fit_size`
+shrink a text to the room it has (never below 7.5 px), `ctl::tag_fit` stacks a two-word name,
+`ctl::shift_legend` puts its LED after the measured text, `bay_effects::ctx::CAPTION_DROP` /
+`CAPTION_LINE` keep captions clear of knobs and bezels. Per-control nudges for tight neighbours
+live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one exception: the
+`rotary.speed_leds` rectangle was widened so the row holds its two names). Before/after:
+`docs/img/gui/`.
 
 | State | Labels >= 7.5 px | Collisions |
 |---|---|---|
 | Before (original fonts 4.5-7 px, 1560 px panel) | no (smallest 4.5) | 33 |
 | 7.5 px minimum at 1560 px | yes | 98 (with the stricter 1 px-gap rule: more) |
-| 7.5 px minimum at 3120 px plus 6 nudges | yes | 0 |
+| 7.5 px minimum at 3120 px plus 6 nudges (first audit: L and C only) | yes | 0 |
+| Same panel, audit extended with K, S, G, N, 0.9 px gap, bezel margin (B8 label legibility) | yes | 30 |
+| After the legibility fixes (Rotary box widened, captions, OLED soft labels, SOLO, nudges) | yes | 0 |
+| Round 2 rules F, E, T, V, M and bezel 2.5 px added (first run: 9 F, 8 T, 22 V = 39; M and the wider bezel added 1 + 6 on later runs) | yes | 39 |
+| After round 2 (drawbar numbers below the cap travel, LEDs before legend text, 9.5 px line pitch, nudges) | yes | 0 |
 
 ## What each switch changes
 

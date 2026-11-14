@@ -1,38 +1,63 @@
-//! Bay 1: Master level, wheels and the Rotary Speaker box (manual p.11, p.53).
+//! The Rotary Speaker box of the Master bay (manual p.53): DRIVE, ORGAN (+ CLOSE MIC on Shift),
+//! STOP MODE (+ ANGLE on Shift) and the SLOW/STOP - FAST button with its two LEDs.
 //!
-//! Controls sit at their `nord_panel::layout` positions. Shift functions (ANGLE on STOP MODE,
-//! CLOSE MIC on ORGAN) share the base button and are printed as legends below it.
+//! The control rectangles come from `nord_panel::layout`; the frame and the printed legends are
+//! laid out here. The buttons are only ~37 px wide, so the frame grows leftwards into the empty
+//! Master area (the Organ section starts right of it) and the wide legends are centred on the
+//! frame, not on the button.
 
-use super::ctl::{gesture_button, led_small, mark, shift_legend, tag, Face};
-use super::layout_px::rect_or_empty;
-use super::prelude::*;
+use super::super::ctl::{gesture_button, led_small, mark, shift_legend, tag, Face};
+use super::super::layout_px::rect_or_empty;
+use super::super::prelude::*;
 use crate::audio::OrganEdit;
 use nord_panel::behaviour::Trigger;
 
-fn send_rotary(state: &Stage4PanelState, audio: &AudioHandle) {
+/// Frame extent left of the button column centre (px).
+const FRAME_LEFT: f32 = 52.0;
+/// Frame extent right of the button column centre (px), capped by the section edge.
+const FRAME_RIGHT: f32 = 30.0;
+/// Free space kept between the frame and the Master / Organ section boundary (px).
+const SECTION_GAP: f32 = 3.0;
+/// Space from the frame top to the DRIVE knob top (room for title and the DRIVE name).
+const TITLE_ROOM: f32 = 34.0;
+
+pub(super) fn send_rotary(state: &Stage4PanelState, audio: &AudioHandle) {
     audio.send_command(AudioCommand::Organ(OrganEdit::Rotary {
         fast: matches!(state.rotary_speed, RotarySpeed::Fast),
         stop_mode: state.rotary_stop,
     }));
 }
 
-/// Draw this bay and apply its input to `state` / the audio thread.
-pub(super) fn render_bay_master(
+/// Rectangle of the Rotary Speaker group frame for a panel at `o`.
+pub(super) fn frame_rect(o: egui::Pos2) -> Rect {
+    let (top, bottom) = (
+        rect_or_empty("rotary.drive", o),
+        rect_or_empty("rotary.speed", o),
+    );
+    let cx = rect_or_empty("rotary.organ", o).center().x;
+    let section = super::super::view::section_px(nord_panel::Section::Master, o);
+    let right = (cx + FRAME_RIGHT).min(section.right() - SECTION_GAP);
+    Rect::from_min_max(
+        pos2(cx - FRAME_LEFT, top.top() - TITLE_ROOM),
+        pos2(right, bottom.bottom() + 12.0),
+    )
+}
+
+/// Draw the Rotary Speaker box and apply its input.
+pub(super) fn render_rotary(
     ui: &mut Ui,
     painter: &Painter,
-    panel_rect: Rect,
+    o: egui::Pos2,
     state: &mut Stage4PanelState,
     audio: &AudioHandle,
 ) {
-    let o = panel_rect.min;
-    let rc = |id: &str| rect_or_empty(id, o);
-    render_controllers(ui, painter, o, state, audio);
-
-    // Rotary Speaker group frame behind the rotary controls.
-    let (top, bottom) = (rc("rotary.drive"), rc("rotary.speed"));
-    let frame = Rect::from_min_max(
-        pos2(top.left() - 16.0, top.top() - 26.0),
-        pos2(top.right() + 7.0, bottom.bottom() + 12.0),
+    let frame = frame_rect(o);
+    #[cfg(test)]
+    crate::widgets::probe::record(
+        ui.ctx(),
+        crate::widgets::probe::Kind::GroupInside,
+        frame,
+        "ROTARY SPEAKER",
     );
     painter.rect_filled(frame, 4.0, Color32::from_rgb(110, 20, 24));
     painter.rect_stroke(
@@ -41,16 +66,17 @@ pub(super) fn render_bay_master(
         Stroke::new(1.0_f32, GROUP_BORDER),
         StrokeKind::Inside,
     );
-    label(
+    label_fit(
         painter,
-        pos2(frame.center().x, frame.top() + 4.0),
+        pos2(frame.center().x, frame.top() + 6.0),
         "ROTARY SPEAKER",
         5.0,
+        frame.width() - 6.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
 
-    let drive = rc("rotary.drive");
+    let drive = rect_or_empty("rotary.drive", o);
     if knob(
         ui,
         drive.center(),
@@ -65,82 +91,14 @@ pub(super) fn render_bay_master(
     }
     mark(ui, "rotary.drive");
     tag(painter, drive, "DRIVE", 6.0);
-    render_rotary_buttons(ui, painter, o, state, audio);
-}
-
-/// 14-bit pitch bend (centre 8192) of a pitch stick position `-1.0..=1.0`.
-/// VERIFIED: MIDI 1.0 pitch bend is 0..=16383 with 8192 at rest; checked by
-/// `pitch_bend_value_spans_the_14_bit_range`.
-fn pitch_bend_value(stick: f32) -> u16 {
-    (8192.0 + stick.clamp(-1.0, 1.0) * 8191.0).round() as u16
-}
-
-fn render_controllers(
-    ui: &mut Ui,
-    painter: &Painter,
-    o: egui::Pos2,
-    state: &mut Stage4PanelState,
-    audio: &AudioHandle,
-) {
-    let level = rect_or_empty("master.level", o);
-    if knob(
-        ui,
-        level.center(),
-        level.width().min(level.height()) * 0.42,
-        "master.level",
-        &mut state.master_volume,
-        0.0,
-        1.0,
-        "",
-    ) {
-        audio.send_command(AudioCommand::SetMasterVolume(state.master_volume));
-    }
-    mark(ui, "master.level");
-    tag(painter, level, "MASTER LEVEL", 7.0);
-
-    let (pitch, wheel) = (
-        rect_or_empty("master.pitch_stick", o),
-        rect_or_empty("master.mod_wheel", o),
-    );
-    let (before, stick_before) = (state.mod_wheel, state.pitch_stick);
-    pitch_and_mod_wheels(
-        ui,
-        pitch,
-        wheel,
-        &mut state.pitch_stick,
-        &mut state.mod_wheel,
-    );
-    if state.pitch_stick != stick_before {
-        audio.send_keyboard_midi(MidiEvent::PitchBend {
-            channel: 0,
-            value: pitch_bend_value(state.pitch_stick),
-        });
-    }
-    if state.mod_wheel != before {
-        audio.send_keyboard_midi(MidiEvent::ControlChange {
-            channel: 0,
-            controller: 1, // Mod wheel
-            value: (state.mod_wheel * 127.0).round() as u8,
-        });
-    }
-    mark(ui, "master.pitch_stick");
-    mark(ui, "master.mod_wheel");
-    for (r, text) in [(pitch, "PITCH STICK"), (wheel, "MOD WHEEL")] {
-        label(
-            painter,
-            pos2(r.left() - 3.0, r.center().y),
-            text,
-            5.5,
-            Color32::WHITE,
-            Align2::RIGHT_CENTER,
-        );
-    }
+    render_rotary_buttons(ui, painter, o, frame, state, audio);
 }
 
 fn render_rotary_buttons(
     ui: &mut Ui,
     painter: &Painter,
     o: egui::Pos2,
+    frame: Rect,
     state: &mut Stage4PanelState,
     audio: &AudioHandle,
 ) {
@@ -219,13 +177,25 @@ fn render_rotary_buttons(
         None,
     );
     // The mic separation toggle is a row of the popup; the id is painted with the legend.
-    super::ctl::mark(ui, "rotary.angle");
-    super::rotor_angle::draw(ui, painter, stop, state, audio);
+    mark(ui, "rotary.angle");
+    super::super::rotor_angle::draw(ui, painter, stop, state, audio);
+    render_speed(ui, painter, o, frame, state, audio);
+}
 
-    // SLOW/STOP - FAST button and its two LEDs.
+/// SLOW/STOP - FAST button, its two LEDs and legends.
+fn render_speed(
+    ui: &mut Ui,
+    painter: &Painter,
+    o: egui::Pos2,
+    frame: Rect,
+    state: &mut Stage4PanelState,
+    audio: &AudioHandle,
+) {
     let fast = matches!(state.rotary_speed, RotarySpeed::Fast);
-    let leds = rc("rotary.speed_leds");
+    let leds = rect_or_empty("rotary.speed_leds", o);
     let ly = leds.center().y;
+    // Hardware order: LED, then its name. The row rectangle spans both pairs.
+    let (lx_slow, lx_fast) = (leds.left() - 0.4, leds.center().x + 3.0);
     // LEDs show the real rotor state (a pedal can change it); `fast` stays the UI toggle.
     let (led_slow, led_fast) = (
         state.telemetry.rotary_slow(fast),
@@ -233,7 +203,7 @@ fn render_rotary_buttons(
     );
     led_small(
         painter,
-        pos2(leds.left() + 2.0, ly),
+        pos2(lx_slow, ly),
         led_slow,
         LED_GREEN,
         LED_GREEN_DIM,
@@ -241,7 +211,7 @@ fn render_rotary_buttons(
     );
     led_small(
         painter,
-        pos2(leds.right() - 2.0, ly),
+        pos2(lx_fast, ly),
         led_fast,
         LED_RED,
         LED_RED_DIM,
@@ -249,22 +219,22 @@ fn render_rotary_buttons(
     );
     label(
         painter,
-        pos2(leds.left() - 3.0, ly),
+        pos2(lx_slow + 4.5, ly),
         "SLOW",
         5.0,
         Color32::WHITE,
-        Align2::RIGHT_CENTER,
+        Align2::LEFT_CENTER,
     );
     label(
         painter,
-        pos2(leds.right() + 3.0, ly),
+        pos2(lx_fast + 4.5, ly),
         "FAST",
         5.0,
         Color32::WHITE,
         Align2::LEFT_CENTER,
     );
     mark(ui, "rotary.speed_leds");
-    let speed = rc("rotary.speed");
+    let speed = rect_or_empty("rotary.speed", o);
     let face = Face {
         tip: "Toggle slow/stop and fast rotor speed",
         ..Face::black()
@@ -284,11 +254,12 @@ fn render_rotary_buttons(
         };
         send_rotary(state, audio);
     }
-    label(
+    label_fit(
         painter,
-        pos2(speed.center().x, speed.bottom() + 4.0),
+        pos2(frame.center().x, speed.bottom() + 6.5),
         "SLOW/STOP - FAST",
         5.0,
+        frame.width() - 4.0,
         Color32::WHITE,
         Align2::CENTER_CENTER,
     );
@@ -297,21 +268,6 @@ fn render_rotary_buttons(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::panel::support::shapes_painted;
-
-    #[test]
-    fn pitch_bend_value_spans_the_14_bit_range() {
-        assert_eq!(pitch_bend_value(0.0), 8192);
-        assert_eq!(pitch_bend_value(1.0), 16383);
-        assert_eq!(pitch_bend_value(-1.0), 1);
-        assert_eq!(pitch_bend_value(5.0), 16383, "clamped");
-    }
-
-    #[test]
-    fn render_bay_master_paints_shapes() {
-        let n = shapes_painted(render_bay_master);
-        assert!(n > 50, "render_bay_master painted only {n} shapes");
-    }
 
     #[test]
     fn rotary_command_follows_speed_and_stop_state() {
@@ -338,5 +294,16 @@ mod tests {
                 ..
             }))
         ));
+    }
+
+    #[test]
+    fn frame_is_wide_enough_for_its_labels_and_stays_in_the_master_section() {
+        let o = pos2(0.0, 0.0);
+        let f = frame_rect(o);
+        let sec = super::super::super::view::section_px(nord_panel::Section::Master, o);
+        assert!(f.width() >= 70.0, "frame {f:?}");
+        assert!(sec.contains_rect(f), "frame {f:?} leaves {sec:?}");
+        let speed = rect_or_empty("rotary.speed", o);
+        assert!(f.contains_rect(speed.expand(2.0)));
     }
 }

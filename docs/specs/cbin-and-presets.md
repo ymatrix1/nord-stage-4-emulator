@@ -56,11 +56,12 @@ Every `.ns4p`, `.ns4l`, `.ns4y`, `.ns4n`, `.ns4o`, and `.ns4t` file begins with 
 | `0x08` | 4 B | ASCII | `tag` | 4-char type tag: `"ns4p"`, `"ns4l"`, `"ns4y"`, `"ns4n"`, `"ns4o"`, `"ns4t"`, `"npno"`, `"nsmp"` |
 | `0x0C` | 2 B | `u16` LE | `bank_index` | Zero-based bank index (`0` = Bank A / Bank 1) |
 | `0x0E` | 2 B | `u16` LE | `location_index` | Zero-based program/preset index within the bank (`0..47`) |
-| `0x10` | 4 B | `u32` LE | `category_id` | Musical category enum (`0x00` = None/Live, `0x12` = Organ, `0x16` = Upright/Grand, `0x17` = EPiano, `0x2C` = Bass, `0x2D` = Synth, `0x2E` = Pad, `0x2F` = Pluck/Acoustic) |
+| `0x10` | 4 B | `u32` LE | `category_id` | Category id. `.ns4p` programs: 18 distinct ids over the 384 factory programs, `1, 2, 3, 6, 7, 9, 11, 13, 23, 30, 40, 42, 44, 45, 46, 47, 49, 52` (VERIFIED, [synth-wave-categories](../research/synth-wave-categories.md) s5); by program names `1` Bass, `2` Brass, `3` tuned percussion, `6` lead, `7` Organ, `9` Piano, `11` Strings, `13` Choir, `23` EPiano, `40` Effects, `42` Guitar, `44` Synth Bass, `45` Synth, `46` Pad, `47` Wind solo, `49` Analog strings, `52` Synth brass (ASSUMED reading). It is **not** the index of the 26-name firmware category table (`0xC02BF3C8`); the mapping is open (OQ26). Other types: `0x00` None/Live, `0x2D` Synth (`.ns4y`) |
 | `0x14` | 4 B | `u32` LE | `schema_id_le` | Payload schema version (matches big-endian repeat at `0x2E`) |
 | `0x18` | 4 B | `u32` LE | `checksum` | 32-bit payload checksum / CRC over `+0x2E..EOF` |
 | `0x1C` | 18 B | `[u8; 18]` | `reserved` | All zeros (`0x00`) in preset files |
-| `0x2E` | 2 B | `u16` BE | `schema_id_be` | Big-endian repeat of `schema_id` (`0x0139` for `ns4p`/`ns4l`, `0x00D0` for `ns4y`, `0x00CD` for `ns4o`, `0x00CB` for `ns4n`, `0x006C` for `ns4t`) |
+
+| `0x2E` | 2 B | `u16` BE | `schema_id_be` | Big-endian repeat of `schema_id` (`0x0139` for `ns4p`/`ns4l`, `0x00D0` for `ns4y`, `0x00CD` for `ns4o`, `0x00CB` for `ns4n`, `0x006C` for `ns4t`) |
 | `0x30` | `N` B | Bitstream | `payload` | Bit-packed preset state (`820` B for `ns4p`/`ns4l`, `493` B for `ns4y`, `147` B for `ns4n`, `135` B for `ns4o`, `76` B for `ns4t`) |
 
 **`.npno` piano models:** `bank_index` is the piano **type** (`0` Grand, `1` Upright, `2` Electric, `3` Clav, `4` Digital, `5` Misc; the TYPE LED order and the `.ns4p` piano layer `category` field) and `location_index` is the position of the model inside its type on the hardware. VERIFIED on the 38 models of `Nord Stage 4 Factory Restore RevK v1.66.ns4b`: type equals the archive folder and positions run `0..N-1` without gaps per type (`python tools/npno_types.py <backup>`; [piano-types](../research/piano-types.md)).
@@ -105,7 +106,7 @@ Morphable parameters of bit width `W` occupy `4W + 3` bits:
 #### Global Program Header (`0x2C`, `45` Bytes)
 - `0..8`: block tag `0x2C`.
 - `8`: `split_enabled` (1b); `9..12`: `split_zone_enabled[0..3]` (3×1b).
-- `12..24`: 3×4b split note indices (`[41, 48, 53, 60, 65, 72, 77, 84, 89, 96]`).
+- `12..24`: 3×4b split position settings `0..10` -> keys `[36, 41, 48, 53, 60, 65, 72, 77, 84, 89, 96]` (VERIFIED: firmware data `0xC02D8370`; the decode used a 10-entry table without 36 until 2026-11-14, [zone-key-ranges](../research/zone-key-ranges.md)).
 - `24..30`: 3×2b crossfade width (`0=Off, 1=Small, 2=Large`).
 - `35..43`: `MasterClockRate` (8b; BPM = `30 + val`).
 - `284..287`: `SectionEnable_I` (`bit2=Org, bit1=Pno, bit0=Syn`); `287..290`: `SectionEnable_II`.
@@ -318,3 +319,5 @@ ns4 backup-store in.ns4b out.ns4b --live live-1.ns4l --slot 0
 ```
 
 GUI: the library top bar has **Export backup** (path field, default `<name>-edited.ns4b`) and **Load Live slots**. Export applies the program library (STORE, Organize) and the Live slots to a copy: a stored program is patched onto the archive program of the same cell (`export_into`, so FX chains and deep Synth data come from that program; `ASSUMED` limitation: a stored program does not remember which program it was edited from), a moved archive program only gets its header location rewritten (payload bit-identical), emptied locations lose their entry. See [midi-and-control.md](midi-and-control.md) section 5.2 for the Organize flow.
+
+**Presets (`cbin/backup_presets.rs`).** `.ns4o`, `.ns4n` and `.ns4y` entries carry their location the same way (`bank_index` `0x0C`, `location_index` `0x0E`, `0..63`) and live in `<Organ|Piano|Synth> Preset/Bank <bank + 1>/<name>.<ext>`. `PresetIndex::read` maps them, `preset_edits(index, puts, cleared)` turns "preset P at (section, bank, loc)" into edits with the same rules as `store_edits` (replace in place, new bank folder when the bank changes, ` (2)` on a name clash, vacated paths removed). VERIFIED on the factory backup: `python tools/preset_slots.py "<backup>.ns4b"` prints 544 presets (Organ 64 in bank 0, Piano 64 + 32 in banks 0 and 1, Synth 6 x 64 in banks 0 to 5) and `problems: 0` (no duplicate location, location `<= 63`, folder `Bank n+1` equals header bank + 1). Preset Organize ([midi-and-control.md](midi-and-control.md) section 5.3) feeds it; Export backup applies program and preset edits in one rewrite. `ASSUMED`: capacity of banks beyond the factory content (Organ 2, Piano 2, Synth 8); the preset payload is never touched, only the header location.

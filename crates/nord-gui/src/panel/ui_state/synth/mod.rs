@@ -8,6 +8,8 @@
 mod buttons;
 mod dials;
 mod dials_pages;
+#[cfg(test)]
+mod dials_table_tests;
 mod groups;
 mod knobs;
 mod layer;
@@ -20,6 +22,7 @@ mod pots;
 mod press;
 mod samples;
 mod tables;
+mod waves;
 
 pub use buttons::Btn;
 pub use knobs::Knob;

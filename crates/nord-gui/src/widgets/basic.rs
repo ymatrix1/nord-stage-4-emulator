@@ -10,13 +10,53 @@ use egui::{
 /// (`docs/gui-testing.md`), judged by eye.
 pub const MIN_FONT_PX: f32 = 7.5;
 
-/// Draws a text label (never smaller than [`MIN_FONT_PX`]).
-pub fn label(p: &Painter, pos: Pos2, s: &str, size: f32, col: Color32, al: Align2) {
-    p.text(pos, al, s, FontId::proportional(size.max(MIN_FONT_PX)), col);
+/// Draws a text label (never smaller than [`MIN_FONT_PX`]); returns the rectangle it covers.
+pub fn label(p: &Painter, pos: Pos2, s: &str, size: f32, col: Color32, al: Align2) -> Rect {
+    p.text(pos, al, s, FontId::proportional(size.max(MIN_FONT_PX)), col)
+}
+
+/// Width in px of `s` drawn by [`label`] at `size` (clamped to [`MIN_FONT_PX`]).
+pub fn text_width(p: &Painter, s: &str, size: f32) -> f32 {
+    p.layout_no_wrap(
+        s.to_string(),
+        FontId::proportional(size.max(MIN_FONT_PX)),
+        Color32::WHITE,
+    )
+    .rect
+    .width()
+}
+
+/// Font size (px) for `s` so it is at most `max_w` wide: `size`, shrunk in 0.25 px steps down to
+/// [`MIN_FONT_PX`] (never below, the text then overflows and the legibility audit reports it).
+pub fn fit_size(p: &Painter, s: &str, size: f32, max_w: f32) -> f32 {
+    let mut sz = size.max(MIN_FONT_PX);
+    while sz > MIN_FONT_PX {
+        if text_width(p, s, sz) <= max_w {
+            break;
+        }
+        sz = (sz - 0.25).max(MIN_FONT_PX);
+    }
+    sz
+}
+
+/// Like [`label`], shrunk (see [`fit_size`]) to fit `max_w`; the caller picks a shorter `s`
+/// beforehand when even [`MIN_FONT_PX`] is too wide.
+pub fn label_fit(
+    p: &Painter,
+    pos: Pos2,
+    s: &str,
+    size: f32,
+    max_w: f32,
+    col: Color32,
+    al: Align2,
+) -> Rect {
+    label(p, pos, s, fit_size(p, s, size, max_w), col, al)
 }
 
 /// Draws a round indicator LED with a dark bezel, 3D glint, and realistic bloom.
 pub fn led(p: &Painter, c: Pos2, on: bool, col_on: Color32, col_off: Color32) {
+    #[cfg(test)]
+    super::probe::led(p, c, 4.5);
     p.circle_filled(c, 4.5, Color32::from_rgb(14, 16, 19));
     p.circle_filled(c, 3.4, if on { col_on } else { col_off });
     if on {
@@ -57,6 +97,8 @@ pub fn section_frame(p: &Painter, rect: Rect, title: &str) {
 
 /// Silkscreen rounded group outline with a centred title that breaks the border.
 pub fn group_frame(p: &Painter, rect: Rect, title: &str) {
+    #[cfg(test)]
+    super::probe::record(p.ctx(), super::probe::Kind::GroupBreak, rect, title);
     p.rect_stroke(
         rect,
         6.0,
@@ -129,6 +171,23 @@ mod tests {
                 Align2::LEFT_TOP,
             );
             led(&p, pos2(20.0, 20.0), true, LED_RED, Color32::BLACK);
+            // fit-aware: a wide text shrinks to the minimum, never below it.
+            let wide = "A RATHER LONG LEGEND";
+            let fitted = fit_size(&p, wide, 12.0, 60.0);
+            assert!((MIN_FONT_PX..12.0).contains(&fitted));
+            assert_eq!(fit_size(&p, "A", 12.0, 60.0), 12.0);
+            assert_eq!(fit_size(&p, wide, 12.0, 1.0), MIN_FONT_PX);
+            assert!(text_width(&p, wide, 12.0) > text_width(&p, "A", 12.0));
+            let r = label_fit(
+                &p,
+                pos2(5.0, 5.0),
+                "A",
+                12.0,
+                60.0,
+                Color32::WHITE,
+                Align2::LEFT_TOP,
+            );
+            assert!(r.width() > 0.0);
             section_frame(&p, rect, "Sec");
             group_frame(&p, rect, "Grp");
             assert!(!nord_button(ui, rect, "btn", false));

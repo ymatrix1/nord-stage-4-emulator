@@ -84,6 +84,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 | [research/arm-param-messages.md](research/arm-param-messages.md) | Parameter senders, channel tables, targets |
 | [research/arm-fw-emulation.md](research/arm-fw-emulation.md) | `unicorn` harness capturing real ARM to DSP messages |
 | [research/arm-organ-messages.md](research/arm-organ-messages.md) | Edit registry, organ layer, partial boot and the steady state (s10) |
+| [research/arm-oled-render.md](research/arm-oled-render.md) | Real OLED screens from the ARM emulator: panel link (EMIFA CS2), fonts, captured boot splash and Program screen, blockers |
 | [research/dsp-rx-protocol.md](research/dsp-rx-protocol.md) | How the ORG image receives data (peek/poke port, strips) |
 | [research/preset-dsp-map.md](research/preset-dsp-map.md) | Preset fields against DSP strips, packed words and conversion tables |
 
@@ -116,7 +117,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 | [research/sy-smp-audio.md](research/sy-smp-audio.md) | SY1SY2 and SMP voices and audio through the oracle |
 | [research/oracle-vs-engine.md](research/oracle-vs-engine.md) | SY1SY2 resampler: oracle against the Rust engine |
 | [research/synth-voice-control.md](research/synth-voice-control.md) | Where oscillators, filters and envelopes run; saw and gain smoother |
-| [research/synth-arp-patterns.md](research/synth-arp-patterns.md) | Synth arp / gate pattern storage in `.ns4y`, 29 firmware presets (table not found) |
+| [research/synth-arp-patterns.md](research/synth-arp-patterns.md) | Synth arp / gate pattern storage in `.ns4y`, the 29 firmware presets (table recovered, [arp-preset-table.csv](research/arp-preset-table.csv)) |
 | [research/synth-stage-equations.md](research/synth-stage-equations.md) | Core2 filter stage `0x12566E` |
 | [research/synth-0x2f-ns4decode-crosscheck.md](research/synth-0x2f-ns4decode-crosscheck.md) | `0x32` / `0x2F` bit map cross-check |
 | [research/synth-0x2f-filter-env-adr.md](research/synth-0x2f-filter-env-adr.md) | Filter envelope ADR location |

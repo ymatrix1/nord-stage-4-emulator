@@ -25,10 +25,14 @@ mod fw_filter;
 mod fw_filter_table_d;
 mod fw_filter_tables;
 mod fw_shape;
+mod fw_sine3;
 mod fw_sine_hp;
 mod fw_sine_warps;
 mod fw_stages;
 mod fw_strip_cutoff;
+mod fw_super1;
+mod fw_sync;
+mod fw_sync_table;
 mod gain_dezip;
 mod hw_saw;
 mod key_velocity;
@@ -36,6 +40,7 @@ mod measured;
 mod p_block;
 mod p_table;
 mod pattern;
+mod pattern_presets;
 mod perf;
 mod render;
 mod render_va;
@@ -68,9 +73,12 @@ pub use measured::{
     SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
 };
 pub use p_block::{PBlock, PSpec};
-pub use p_table::{PTable, PTableSpec, PWave, PWAVE_COUNT};
+pub use p_table::{type_cutoff_scale, PTable, PTableSpec, PWave, PWAVE_COUNT};
 pub use pattern::{pan_gains, CustomPattern, PatternPan, ACCENT_VELOCITY_BOOST, PATTERN_MAX_STEPS};
-pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
+pub use perf::{
+    ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT,
+    PATTERN_PRESET_MAX,
+};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 use strip_map::strip_cutoff_hz;
 pub use strip_map::{
@@ -93,6 +101,8 @@ mod tests_fw_stage_golden2;
 mod tests_fw_stage_golden3;
 #[cfg(test)]
 mod tests_fw_stage_golden4;
+#[cfg(test)]
+mod tests_fw_stage_golden5;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
@@ -212,6 +222,9 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
+    /// `SAMPLES` oscillator only, opt-in (default off): pick the 12-tap kernel with the firmware
+    /// key rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
+    pub sample_kernel_by_key: bool,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -360,6 +373,7 @@ impl SynthLayer {
             p_wave: PWave::Other,
             strip_stage: None,
             strip_stages: true,
+            sample_kernel_by_key: false,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,

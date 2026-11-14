@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 pub mod category;
 pub mod downstream;
+pub mod label;
 pub mod level_q23;
 pub mod npno_level;
 pub mod q31_kernel;
@@ -866,6 +867,10 @@ pub struct PianoLayer {
     /// Scale the sample path by the SMP bus convention (`downstream::FIRMWARE_SAMPLE_SCALE`,
     /// 0.5) instead of the legacy 0.55. Default `false`: the Q31 receiver convention is ASSUMED.
     pub firmware_bus_scale: bool,
+    /// Layer level fader follows the firmware law `(v / 127)^2` (handler `0xC011A7A4`, run live
+    /// in `tools/arm_layer_level.py`) instead of the linear engine fader. Default `false`: the
+    /// path from the stored word to the SMP voice gains is not traced (D22).
+    pub firmware_layer_law: bool,
     /// Sample interpolation: hardware-parity SMP kernel (default) or the older cubic.
     pub sample_interp: SampleInterp,
     kernel: &'static SmpKernel,
@@ -950,6 +955,7 @@ impl PianoLayer {
             sound,
             firmware_velocity_level: true,
             firmware_bus_scale: false,
+            firmware_layer_law: false,
             sample_interp: SampleInterp::default(),
             kernel: SmpKernel::shared(),
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],

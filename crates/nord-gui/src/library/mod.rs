@@ -17,7 +17,7 @@ mod ui;
 use crate::panel::bay_program::store::PER_BANK;
 use crate::panel::FwMessage;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded, SlotIndex};
+use nord_core::cbin::{Ns4BackupArchive, PresetIndex, PresetSection, ProgramDecoded, SlotIndex};
 use nord_core::piano::{NpnoSound, PianoCategory};
 use nord_core::synth::SynthSampleSound;
 use std::collections::HashMap;
@@ -83,6 +83,8 @@ pub struct BackupLibraryState {
     pub export_path: String,
     /// `(flat location, entry path)` of every program of the opened backup, from the entry headers.
     program_slots: Vec<(u16, String)>,
+    /// The same for the Preset Library: `(section, flat location, entry path)`.
+    preset_slots: Vec<(PresetSection, u16, String)>,
     layout_rev: u32,
     synced_layout_rev: u32,
     piano_cache: HashMap<String, Arc<NpnoSound>>,
@@ -126,6 +128,7 @@ impl BackupLibraryState {
             error_message: None,
             export_path: String::new(),
             program_slots: Vec::new(),
+            preset_slots: Vec::new(),
             layout_rev: 0,
             synced_layout_rev: 0,
             piano_cache: HashMap::new(),
@@ -179,6 +182,15 @@ impl BackupLibraryState {
             })
             .unwrap_or_default();
 
+        let preset_slots = PresetIndex::read(&archive, &mut reader)
+            .map(|idx| {
+                PresetSection::ALL
+                    .into_iter()
+                    .flat_map(|s| idx.slots(s).into_iter().map(move |(i, n)| (s, i, n)))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let mut programs: Vec<String> = archive
             .entries_with_ext(".ns4p")
             .into_iter()
@@ -220,6 +232,7 @@ impl BackupLibraryState {
         self.backup_path = Some(path.to_path_buf());
         self.export_path = export::default_export_path(path).display().to_string();
         self.program_slots = slots;
+        self.preset_slots = preset_slots;
         self.layout_rev = self.layout_rev.wrapping_add(1);
         self.archive = Some(Arc::new(archive));
         self.manifest_summary = manifest_summary;

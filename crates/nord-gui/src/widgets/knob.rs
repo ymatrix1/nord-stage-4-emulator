@@ -29,6 +29,13 @@ pub fn knob(
         let n = ((*value - min) / (max - min).max(1e-6)).clamp(0.0, 1.0);
         crate::panel::param_hint::touch(ui.ctx(), id, n);
     }
+    #[cfg(test)]
+    super::probe::record(
+        ui.ctx(),
+        super::probe::Kind::Knob,
+        Rect::from_center_size(center, vec2(radius + 5.5, radius + 5.5) * 2.0),
+        id,
+    );
     let p = ui.painter();
     let norm = ((*value - min) / (max - min).max(1e-6)).clamp(0.0, 1.0);
     let a0 = 0.75 * std::f32::consts::PI;

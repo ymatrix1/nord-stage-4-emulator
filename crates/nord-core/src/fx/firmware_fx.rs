@@ -68,6 +68,8 @@ pub struct FirmwareFx {
     /// Firmware A-PAN (Fx1 types 0, 1) and TREM (types 2, 3) with the `kFx1Amt` /
     /// `kFx1RateClkDiv` words.
     pub mod1: bool,
+    /// Firmware Mod 2 `CHOR` (`kFx2Type` 4, 5) with the `kFx2Amt` / `kFx2Rate` words.
+    pub mod2: bool,
 }
 
 impl Default for FirmwareFx {
@@ -92,6 +94,7 @@ impl FirmwareFx {
         reverb: false,
         amp: false,
         mod1: false,
+        mod2: false,
     };
 
     /// Every switch on.
@@ -103,6 +106,7 @@ impl FirmwareFx {
         reverb: true,
         amp: true,
         mod1: true,
+        mod2: true,
     };
 }
 
@@ -124,9 +128,11 @@ mod tests {
                 && all.reverb
                 && all.amp
                 && all.mod1
+                && all.mod2
         );
         assert!(!d.reverb, "the firmware reverb is opt-in");
         assert!(!d.mod1 && all.mod1, "the firmware Mod 1 is opt-in");
+        assert!(!d.mod2 && all.mod2, "the firmware Mod 2 is opt-in");
         assert_ne!(all, FirmwareFx::OFF);
     }
 }

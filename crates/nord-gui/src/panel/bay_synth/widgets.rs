@@ -28,6 +28,8 @@ pub(super) fn tiny(p: &Painter, pos: Pos2, s: &str, col: Color32, al: Align2) {
 
 /// Small round LED.
 pub(super) fn dot(p: &Painter, c: Pos2, on: bool, col_on: Color32, col_off: Color32) {
+    #[cfg(test)]
+    crate::widgets::probe::led(p, c, 3.0);
     p.circle_filled(c, 3.0, Color32::from_rgb(14, 16, 19));
     p.circle_filled(c, 2.3, if on { col_on } else { col_off });
 }
@@ -137,16 +139,27 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
         } else {
             LEGEND
         };
-        tiny(
-            p,
-            pos2(rect.center().x, rect.bottom() + 3.0),
-            legend,
-            col,
-            Align2::CENTER_TOP,
-        );
+        let (pos, al) = legend_anchor(b, rect);
+        tiny(p, pos, legend, col, al);
         if let Some(why) = why {
             let _ = resp.on_hover_text(format!("{legend} (Shift): {why}"));
         }
+    }
+}
+
+/// Where the alias legend of `b` is printed. ON has the OLED right below it, so its SOLO legend
+/// goes to the right of the button (as on the hardware); the others print below.
+fn legend_anchor(b: Btn, rect: Rect) -> (Pos2, Align2) {
+    if b == Btn::On {
+        (
+            pos2(rect.right() + 4.0, rect.center().y),
+            Align2::LEFT_CENTER,
+        )
+    } else {
+        (
+            pos2(rect.center().x, rect.bottom() + 3.0),
+            Align2::CENTER_TOP,
+        )
     }
 }
 
@@ -305,6 +318,15 @@ pub(super) fn fader(
             }
         }
     }
+    #[cfg(test)]
+    crate::widgets::probe::cap_travel(
+        ui.ctx(),
+        Rect::from_center_size(
+            rect.center(),
+            vec2(rect.width().max(9.0), rect.height() + 6.0),
+        ),
+        id,
+    );
     p.rect_filled(
         Rect::from_center_size(rect.center(), vec2(2.5, rect.height())),
         1.0,
@@ -340,6 +362,15 @@ pub(super) fn ladder(p: &Painter, rect: Rect, level: f32, n: usize) {
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    #[test]
+    fn on_prints_its_solo_legend_to_the_right_and_others_below() {
+        let r = Rect::from_min_size(pos2(10.0, 10.0), vec2(30.0, 12.0));
+        let (on, al) = legend_anchor(Btn::On, r);
+        assert!(on.x > r.right() && al == Align2::LEFT_CENTER);
+        let (other, _) = legend_anchor(Btn::FilterType, r);
+        assert!(other.y > r.bottom());
+    }
 
     #[test]
     fn pad_pot_dial_fader_and_ladder_paint_and_mark_their_ids() {

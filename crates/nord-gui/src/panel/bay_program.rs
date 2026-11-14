@@ -33,6 +33,7 @@ pub mod oled_hint;
 pub mod oled_home;
 pub mod oled_paint;
 pub mod organize;
+pub mod organize_presets;
 pub mod soft;
 pub mod split;
 pub mod store;
@@ -40,14 +41,17 @@ pub mod store;
 use super::layout_px::{rect_or_empty, to_px};
 use super::prelude::*;
 use controls::{BUTTONS, MORPH_BUTTONS, PROGRAM_BUTTONS};
+use nord_core::organ::OrganModel;
+use nord_core::piano::label::PianoLabel;
 use nord_panel::{layout, Section};
 
 /// What the display needs from the rest of the panel.
 fn summary(state: &Stage4PanelState) -> oled::Summary {
-    let piano = state
-        .loaded_piano_name
-        .clone()
-        .unwrap_or_else(|| format!("{:?}", state.piano_cat));
+    // The loaded name is the `.npno` header name (`Pearl Upright#GRT 120   Lrg`): the model and
+    // the size letter are what the display shows.
+    let label = state.loaded_piano_name.as_deref().map(PianoLabel::parse);
+    let piano_size = label.as_ref().and_then(|l| l.size);
+    let piano = label.map_or_else(|| format!("{:?}", state.piano_cat), |l| l.model);
     let synth = if state.synth_osc_mode == SynthOscMode::Sample {
         state
             .loaded_sample_name
@@ -60,6 +64,8 @@ fn summary(state: &Stage4PanelState) -> oled::Summary {
         organ: format!("{:?}", state.organ_model),
         piano,
         synth,
+        piano_size,
+        organ_bars: (state.organ_model == OrganModel::B3).then_some(state.organ_drawbars),
         layers_on: [
             state.organ_a_active,
             state.organ_b_active,
@@ -74,6 +80,8 @@ fn summary(state: &Stage4PanelState) -> oled::Summary {
 
 fn led_dot(painter: &Painter, rect: Rect, on: bool, col: Color32, dim: Color32) {
     let r = (rect.width().max(rect.height()) * 0.5).max(1.5);
+    #[cfg(test)]
+    crate::widgets::probe::led(painter, rect.center(), r + 1.0);
     painter.circle_filled(rect.center(), r + 1.0, Color32::from_rgb(14, 16, 19));
     painter.circle_filled(rect.center(), r, if on { col } else { dim });
 }
@@ -271,6 +279,7 @@ pub(super) fn render_bay_program(
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+    use nord_core::piano::label::PianoSize;
 
     #[test]
     fn render_bay_program_paints_shapes() {
@@ -284,7 +293,20 @@ mod tests {
         s.loaded_piano_name = Some("Astoria".into());
         let sum = summary(&s);
         assert_eq!(sum.piano, "Astoria");
+        assert_eq!(sum.piano_size, None);
         assert!(sum.layers_on[0] && !sum.layers_on[6]);
         assert_eq!(sum.organ, "B3");
+        assert_eq!(sum.organ_bars, Some([8, 8, 8, 0, 0, 0, 0, 0, 0]));
+    }
+
+    #[test]
+    fn summary_splits_the_header_name_and_hides_bars_off_the_b3() {
+        let mut s = Stage4PanelState::default();
+        s.loaded_piano_name = Some("Astoria Grand#Stw O     Lrg".into());
+        s.organ_model = OrganModel::Vox;
+        let sum = summary(&s);
+        assert_eq!(sum.piano, "Astoria Grand");
+        assert_eq!(sum.piano_size, Some(PianoSize::Large));
+        assert_eq!(sum.organ_bars, None, "only the B3 has drawbars");
     }
 }

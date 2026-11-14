@@ -63,11 +63,11 @@ pub(super) fn amp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             c.mid_freq = from_log(n, MID_HZ.0, MID_HZ.1);
             changed = true;
         }
-        // The RES knob sits under FREQ, so its caption goes above the knob.
+        // The RES knob sits under FREQ, so its caption goes above the knob, over its tick ring.
         let mf = f.rect("amp.mid_freq");
         crate::widgets::label(
             f.p,
-            egui::pos2(mf.center().x, mf.top() - 5.0),
+            egui::pos2(mf.center().x, mf.top() - 11.0),
             "FREQ",
             6.5,
             super::ctx::CAPTION,
@@ -82,6 +82,16 @@ pub(super) fn amp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
         );
         let tip = "FILTER RES: resonance of LP24 / HP24";
         changed |= f.knob("amp.res", &mut c.res, (0.0, 1.0), tip, None);
+        // The trimmer has no room under it (MID is right below): its name goes to its right.
+        let res = f.rect("amp.res");
+        crate::widgets::label(
+            f.p,
+            egui::pos2(res.right() + 6.5, res.center().y),
+            "RES",
+            6.5,
+            super::ctx::CAPTION,
+            egui::Align2::LEFT_CENTER,
+        );
 
         changed |= model_selector(f, c, slot);
     }
@@ -137,7 +147,7 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
     }
     crate::widgets::label(
         f.p,
-        egui::pos2(flt.center().x, flt.top() - 4.0),
+        egui::pos2(flt.center().x, flt.top() - 8.5),
         name,
         5.5,
         super::ctx::CAPTION,
@@ -158,7 +168,7 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
     }
     crate::widgets::label(
         f.p,
-        egui::pos2(rot.center().x, rot.top() - 4.0),
+        egui::pos2(rot.center().x, rot.top() - 8.5),
         "ROT",
         5.5,
         super::ctx::CAPTION,

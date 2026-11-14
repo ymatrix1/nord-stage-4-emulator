@@ -101,7 +101,7 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
 1. **Central Program OLED (`128×64` aspect):**
    - Top row: Bank & Location (`A:11`) + Program Title (`Nord Stage 4`) + Category icon.
    - Edited marker: a boxed `E` follows the location while the program differs from what was loaded or stored (VERIFIED, course footage and manual p.13). The panel counts the sound edits it sends (`AudioHandle::edit_count`, `AudioCommand::is_program_edit`) and compares the count with its value at the last load, program change or STORE (`bay_program/edited.rs`). Setters sent with the same value still count (ASSUMED). In Live Mode the title is `Live N` and no `E` shows (ASSUMED: Live programs auto-store).
-   - Section rows (Layers view): one row per section with a layer on (`Organ B3`, `Piano ...`, `Synth ...`). Hardware also prints the preset id (`1:05`) or source name with a size letter and mini drawbars; those are not modelled yet.
+   - Section rows (Layers view): one row per section with a layer on (`Organ B3`, `Piano ...`, `Synth ...`). The Piano row ends with the size letter of the loaded library file (`Pearl Upright  L`; `S`, `M`, `L`, `XL` from the `.npno` header name, `VERIFIED`, see [piano-types](../research/piano-types.md)) and the B3 Organ row with the drawbar positions as nine digits (`Organ B3 888000000`, `ASSUMED` text form of the mini drawbars; Vox, Farfisa and Pipe show none). The preset id (`1:05`) the hardware prints before a preset name is not shown: a program stores no preset link and the emulator does not load `.ns4o` / `.ns4n` / `.ns4y` presets (bean `ns4-bjvn`).
    - Bottom 3 rows: Active Organ model/drawbar preview (`888000000`), active Piano model (`White Grand XL`), and active Synth patch (`Vista Pad WH`) with `A/B/C` layer badges.
 2. **Synth Section Graphic OLED (`128×64` aspect):**
    - Header: `OSC WAVEFORM`
@@ -191,3 +191,44 @@ First measured output of the D15 baker: one knob filmstrip and one fader cap wit
 | Camera | orthographic, 14 deg tilt toward player | `ASSUMED` |
 | Size, one of each asset | 420 KB (1x), 1.28 MB (2x) PNG | measured |
 | Full-panel estimate (4 knob styles, 3 fader styles) | 1.56 MB (1x), 4.62 MB (2x) PNG | counts `ASSUMED` until B2 |
+
+## Label legibility rules (B8)
+
+Printed text never goes below 7.5 px (`widgets::MIN_FONT_PX`) and must not touch anything it does
+not describe. The headless audit in `crates/nord-gui/src/panel/legibility_*.rs` enforces it per
+rule (overlap and 0.9 px gap, control bezel, clipping, section edge, group frame, knob ring; table
+in [GUI testing](../gui-testing.md)). Layout decisions it led to:
+
+- Rotary Speaker box: the frame extends 52 px left of the button column (the Master area is empty
+  there) and 30 px right, capped 3 px inside the Master section. Wide legends (`SLOW/STOP - FAST`,
+  title) are centred on the frame, narrow ones on their button. The `rotary.speed_leds` rectangle
+  (`ESTIMATED`) is widened from 20 to 33 photo px so the row holds `LED SLOW   LED FAST`.
+- Shift legends place their state LED after the measured text, not at a character-count guess.
+- Effects captions start 6.5 px below the control (clear of knob shadow and button bezel) with
+  8.5 px between stacked lines.
+- The Synth ON button prints SOLO to its right (the OLED sits right below it); the OLED soft
+  labels use two 9.5 px lines and are kept inside the glass; the vibrato selector no longer repeats
+  the VIBRATO heading (SELECT).
+- Two-word percussion names (`VOLUME SOFT`, `HARMONIC 3RD`) stack when the neighbour is closer
+  than the full name.
+
+### Round 2: fader caps, LEDs, stacked legends, comparison with the photos
+
+Added rules `F`, `E`, `T`, `V`, `M` ([GUI testing](../gui-testing.md)). Changes: drawbar footage
+numbers print 13 px below the slot (the cap and its shadow reach 6 px past it); state LEDs of Shift
+legends sit before the text (photo: `o SUSTPED`, `o CLOSE MIC`); stacked lines use 9.5 px pitch;
+the Program buttons 5-8 and MON/COPY moved 3 px down, the Piano zone LEDs 3 px down, the split LEDs
+2 px up (`layout_tweaks.rs`; control rectangles in `nord-panel` are unchanged); the layer-strip
+`FX FOCUS` LED now has its caption (left of the LED, over the free strip above the faders); the
+Effects amp RES trimmer has a `RES` name to its right.
+
+Remaining differences against `.reference/crops` (kept: legibility over fidelity, or out of scope):
+
+| Section | Photo | Emulator |
+|---|---|---|
+| Organ | bold caps, bass/str names over each drawbar, 1-8 numerals beside the ladders, group frames (ORGAN MODEL, VIB/CHORUS, B3 PERCUSSION), `C2 V3 C3` matrix | plain regular text; no per-drawbar names or numerals; no group frames; LED column per model |
+| Piano | ACOUSTICS / UNISON / KB TOUCH / DYN COMP titles with numbered LEDs, PIANO SELECT box always visible, TIMBRE listed BRIGHT, MID, SOFT with DYNO1/2 | no titles, select box only as overlay, TIMBRE listed SOFT, MID, BRIGHT; SOFT REL / STR RES names are inside the buttons |
+| Synth | MODE, ARPEGGIATOR/GATE, VOICE, VIBRATO, LFO, OSCILLATORS, FILTER, AMP, UNISON framed boxes with 0-10 numerals; INFO / LIST / LIST under the three knobs | only the heading text; no numerals; the three OLED knobs have no name |
+| Effects | MOD 1, MOD 2, DELAY, COMP, REVERB, AMP SIM/EQ boxes, scale numerals, variation lists | one grid of knobs and buttons, GROUP / MST CLK sub-legends, no boxes or numerals |
+| Master / Program | ROTARY SPEAKER box in the master column, MORPH ASSIGN / SPLIT / MST CLK / TRANSP / PRESET LIBRARY / PROGRAM boxes | rotary box only; other legends plain; dimmed legends are grey 150 on red |
+| Keybed | keys only | keys only, split LEDs as unlabelled dots at the top edge |
