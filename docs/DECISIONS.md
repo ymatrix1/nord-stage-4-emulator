@@ -43,7 +43,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D32](#d32-fx-mod-2-chor-uses-the-firmware-routines-behind-firmwarefxmod2) | 2026-11-14 | FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2` | accepted |
 | [D40](#d40-fx-mod-2-phas-0-and-flang-use-the-firmware-routines-behind-firmwarefxmod2-ens-and-spin-are-verified-and-ported-only-delays-are-rescaled-to-the-engine-rate) | 2026-11-14 | FX Mod 2: PHAS 0 and FLANG use the firmware routines behind `FirmwareFx::mod2`; ENS and SPIN are verified and ported only; delays are rescaled to the engine rate | accepted |
 | [D41](#d41-the-b3-bass-stage-is-wired-opt-in-the-generator-weights-follow-a-table-of-held-writes-no-default-flips) | 2026-11-14 | The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips | accepted |
-| [D48](#d48-the-ladder24-filter-stage-is-modelled-and-wired-opt-in-under-the-strip-chain) | 2026-11-14 | The Ladder24 filter stage `0x12549D` is modelled bit exactly and wired opt-in under the strip chain with an assumed cutoff law | accepted |
+| [D50](#d50-the-ladder24-filter-stage-is-modelled-and-wired-opt-in-under-the-strip-chain) | 2026-11-14 | The Ladder24 filter stage `0x12549D` is modelled bit exactly and wired opt-in under the strip chain with an assumed cutoff law | accepted |
 
 ---
 
@@ -519,7 +519,7 @@ writer chip verified running firmware senders in settled emulator; organ `K` sti
 Apply 1.6 word engine organ gain lower `K` 1.75 numbers independent unresolved FX clips were re-run); piano scale receiver reading 0.7464 (rejected same reason, organ side disagrees 13.4 dB).
 None rendering. OQ20 OQ24 narrow (writer chips resolved; open: layer mode flag FX scale cells, source sender A, stream edges, damper strokes). ASSUMED master level 1.0 D39 firmware default; ASSUMED organ chain word 1.0 states 1.6.
 
-### D48. The Ladder24 filter stage is modelled and wired opt-in under the strip chain
+### D50. The Ladder24 filter stage is modelled and wired opt-in under the strip chain
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-9`; evidence [synth-stage-models-9](research/synth-stage-models-9.md))
