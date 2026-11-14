@@ -117,6 +117,8 @@ pitches (`ctl::TAG_LINE`, `bay_effects::ctx::CAPTION_LINE`, Synth headings, Pian
 are 9.5-10 px so that rule `V` holds; state LEDs of Shift legends sit before the text, as printed
 on the instrument.
 
+Round 3 adds frames (`panel/frames.rs`, `widgets/scale.rs`) and needs no new rule: boxes record themselves with the widget probe, so rule `G` keeps every label inside or clear of a box, rule `E` keeps LEDs 4 px from its edge, rule `C` keeps scale numerals off control rectangles and rule `N` off tick rings. Unit tests cover the frame table (`nord-panel`: members exist, frames inside sections; `nord-gui`: boxes do not overlap after nudges), the numerals, the type and timbre names, the keybed LED letters and the contrast floor (`style::dim_legend`, 4.5:1 against slate and red).
+
 `legibility_allow.txt` lists tolerated violations (empty now; the test also fails on stale
 entries). Run with `NS4_WRITE_COLLISIONS=<file> cargo test -p nord-gui collisions_match` to dump
 the current list. Fixes go into the shared helpers first: `widgets::label_fit` / `fit_size`
@@ -136,6 +138,8 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | After the legibility fixes (Rotary box widened, captions, OLED soft labels, SOLO, nudges) | yes | 0 |
 | Round 2 rules F, E, T, V, M and bezel 2.5 px added (first run: 9 F, 8 T, 22 V = 39; M and the wider bezel added 1 + 6 on later runs) | yes | 39 |
 | After round 2 (drawbar numbers below the cap travel, LEDs before legend text, 9.5 px line pitch, nudges) | yes | 0 |
+| Round 3 content added (31 frames, type / timbre names first run: 28; then scale numerals, dial names, drawbar names and numerals: 64 and 43 on the next runs; rules unchanged) | yes | 28 |
+| After round 3 (frame pads, group nudges, scale placement, title positions) | yes | 0 |
 
 ## What each switch changes
 

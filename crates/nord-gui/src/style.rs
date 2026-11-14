@@ -81,6 +81,53 @@ pub fn load_panel_texture(ctx: &egui::Context) -> egui::TextureHandle {
     )
 }
 
+/// Red of the Program / Master blocks behind legends (`bay_program`, `panel::frames`).
+pub const PROGRAM_RED: Color32 = Color32::from_rgb(115, 18, 22);
+
+/// Smallest contrast ratio (WCAG 2, 4.5:1 for small text) a printed legend keeps against the panel,
+/// dimmed or not.
+pub const LEGEND_MIN_CONTRAST: f32 = 4.5;
+
+fn linear(c: u8) -> f32 {
+    let v = f32::from(c) / 255.0;
+    if v <= 0.039_28 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn luminance(c: Color32) -> f32 {
+    0.2126 * linear(c.r()) + 0.7152 * linear(c.g()) + 0.0722 * linear(c.b())
+}
+
+/// WCAG 2 contrast ratio between two opaque colours (1 to 21).
+pub fn contrast_ratio(a: Color32, b: Color32) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// Colour of a dimmed (not supported yet, or secondary) legend: `ink` faded toward the panel, but
+/// never below [`LEGEND_MIN_CONTRAST`] against the slate and the red of the panel, so a dimmed
+/// legend stays readable. The fade is strongest at a blend of 0.45.
+pub fn dim_legend(ink: Color32) -> Color32 {
+    let lerp = |bg: Color32, t: f32| {
+        let m = |a: u8, b: u8| (f32::from(a) + (f32::from(b) - f32::from(a)) * t).round() as u8;
+        Color32::from_rgb(m(bg.r(), ink.r()), m(bg.g(), ink.g()), m(bg.b(), ink.b()))
+    };
+    let mut t = 0.45_f32;
+    while t < 1.0 {
+        let c = lerp(MODULE_SLATE, t);
+        if contrast_ratio(c, MODULE_SLATE) >= LEGEND_MIN_CONTRAST
+            && contrast_ratio(lerp(PROGRAM_RED, t), PROGRAM_RED) >= LEGEND_MIN_CONTRAST
+        {
+            return c;
+        }
+        t += 0.01;
+    }
+    ink
+}
+
 /// Configure egui visual style to match authentic Nord chassis aesthetics.
 pub fn setup_nord_visuals(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::dark();
@@ -100,6 +147,33 @@ mod tests {
         assert_eq!(MODULE_SLATE.g(), 0x3D);
         assert_eq!(LED_GREEN.b(), 0x2E);
         assert_eq!(BUTTON_STORE_RED.r(), 0xB8);
+    }
+
+    #[test]
+    fn contrast_ratio_matches_wcag_reference_values() {
+        assert!((contrast_ratio(Color32::WHITE, Color32::BLACK) - 21.0).abs() < 0.01);
+        assert!((contrast_ratio(Color32::WHITE, Color32::WHITE) - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn dimmed_legends_keep_the_minimum_contrast_on_slate_and_red() {
+        for ink in [
+            Color32::WHITE,
+            Color32::from_gray(225),
+            Color32::from_rgb(235, 190, 190),
+        ] {
+            let c = dim_legend(ink);
+            for bg in [MODULE_SLATE, PROGRAM_RED] {
+                assert!(
+                    contrast_ratio(c, bg) >= LEGEND_MIN_CONTRAST,
+                    "{c:?} on {bg:?}"
+                );
+            }
+            // Still dimmer than the full ink.
+            assert!(luminance(c) < luminance(ink));
+        }
+        // The legacy greys (150 and 105) were below the floor.
+        assert!(contrast_ratio(Color32::from_gray(105), MODULE_SLATE) < LEGEND_MIN_CONTRAST);
     }
 
     #[test]

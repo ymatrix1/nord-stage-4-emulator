@@ -48,3 +48,28 @@ Golden images (B6), 2.5D look (B7), fader-cap versus drawbar-number overlap, foc
 
 ## Summary of Changes
 See the PR (fix/label-legibility).
+
+## Round 3 (fix/panel-titles-frames)
+
+### Context
+A user cannot find or understand a control whose name, frame or scale the real panel prints and the emulator omitted: Piano ACOUSTICS / UNISON / KB TOUCH / DYN COMP titles and the PIANO SELECT box, TIMBRE listed in the wrong order, per-drawbar names and 1-8 numerals, the Synth and Effects boxes and 0-10 scales, the names of the three OLED dials, the Program-area boxes, the split LED letters, and dim legends (grey 150 on red) below a readable contrast.
+
+### Higher Goal
+Every control can be identified from what is printed on it, as on the instrument, without hovering; the legibility audit still passes with an empty allow-list.
+
+### Acceptance Criteria
+- [x] Frame table in `nord-panel` (`layout/frames.rs`, 31 frames: members plus pad, tests, control inventory section 7) and a painter in `nord-gui` (`panel/frames.rs`) that records boxes for rule `G`
+- [x] Piano: four titles, always-visible PIANO SELECT box with type names, TIMBRE order BRIGHT, MID, SOFT (+ DYNO1/2)
+- [x] Organ: ORGAN MODEL, VIB/CHORUS, B3 PERCUSSION frames, drawbar register names and 1-8 numerals
+- [x] Synth: nine boxes, 0-10 scale ends (`widgets/scale.rs`), INFO / LIST / LIST under the dials; Effects: six boxes and scale ends
+- [x] Program: six boxes; keybed L / M / H letters
+- [x] Dimmed legends at least 4.5:1 against slate and red (`style::dim_legend`, tested)
+- [x] Audit: 0 before (main), 28 on the first run with the new content (64 and 43 on later runs), 0 after; allow-list empty
+- [x] Docs: visual-style spec (round 3 section), gui-testing, control inventory section 7, ROADMAP B8
+
+### Out of Scope
+Variation lists beside the effects rockers, numbered LEDs on UNISON / DYN COMP, the 1-9 numerals all around each knob, the SAMPLES / ANALOG and MONO / LEGATO LED names, golden images.
+
+### Summary of Changes
+`nord-panel/src/layout/frames.rs`; `nord-gui`: `panel/frames.rs`, `panel/bay_piano_names.rs`, `widgets/scale.rs`, `panel/layout_tweaks.rs` (group nudges), `style.rs` (contrast), edits in the organ, piano, synth, effects, program bays and the keybed.
+

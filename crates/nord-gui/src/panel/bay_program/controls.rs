@@ -135,10 +135,10 @@ pub const BUTTONS: [Spec; 17] = [
     },
     b("program.mon_copy", "MON/COPY", sf("program.paste", "PASTE"), false),
     b("program.layer_scene_ii", "SCENE II", None, false),
-    b("split.on_set", "SPLIT", sf("split.set_key", "SET KEY"), true),
+    b("split.on_set", "ON/SET", sf("split.set_key", "SET KEY"), true),
     Spec {
         id: "mst_clk.tap_set",
-        label: "MST CLK",
+        label: "TAP/SET",
         shift: Some(ShiftFn {
             id: "mst_clk.pedal_tap",
             label: "PEDAL TAP",
@@ -147,7 +147,7 @@ pub const BUTTONS: [Spec; 17] = [
         support: Support::Partial("KBS and an external MIDI clock are not modelled by the engine"),
         hold_primary: true,
     },
-    b("transp.on_set", "TRANSP", sf("transp.panic", "PANIC"), true),
+    b("transp.on_set", "ON/SET", sf("transp.panic", "PANIC"), true),
     b("preset_library.organ", "ORGAN", None, false),
     Spec {
         id: "preset_library.piano",
@@ -276,7 +276,11 @@ pub fn draw_button(
         Align2::CENTER_BOTTOM,
         spec.label,
         FontId::proportional(size.max(MIN_FONT_PX)),
-        fade(Color32::WHITE),
+        if dim {
+            dim_legend(Color32::WHITE)
+        } else {
+            Color32::WHITE
+        },
     );
     if let Some(s) = spec.shift {
         let col = if shift_lit {
@@ -290,7 +294,7 @@ pub fn draw_button(
             s.label,
             FontId::proportional((size * 0.9).max(MIN_FONT_PX)),
             if s.support.is_dimmed() {
-                col.gamma_multiply(0.45)
+                dim_legend(col)
             } else {
                 col
             },
