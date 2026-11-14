@@ -1,50 +1,47 @@
-# Synth filter type: what `kFltType` installs on the strip (partial)
+# Synth filter type: what `kFltType` installs on the strip
 
-- **Checked:** 2026-11-14
-- **Sources (local, never committed):** OS v1.66 `bank0_CODE.bin` / `bank0_SRAM.bin` in the ARM harness (`tools/arm_edit_capture.py` settled snapshot, `tools/arm_params.py`, `docs/research/arm-edit-params.csv`), `capstone` ARM listings of the apply function `0xC00171B0` region and of `0xC01CCF84`, `docs/research/data/program-sweep.json`. Builds on [synth-wave-stages](synth-wave-stages.md) (the same apply path for the Wave type) and [pno-module-chain](pno-module-chain.md) s5 (strip word 1 table).
-- **Question:** Which strip stage (strip word 1) does each `Edt_Syn_kFltType` value install (LP12 / LP24 / Ladder / BP / HP / ...)?
+- **Checked:** 2026-11-14 (second pass)
+- **Sources (local, never committed):** OS v1.66 `bank0_CODE.bin` / `bank0_SRAM.bin` in the ARM harness (`tools/arm_edit_capture.py` settled snapshot, `docs/research/arm-edit-params.csv`), `capstone` ARM listings of the apply function `0xC00171B0` region and of `0xC01CCF84`, ORG core 2 image with `sharc-org` (`tools/synth_stage_oracle.py`, `tools/synth_filter_lp12.py`), `docs/research/data/program-sweep.json`. Builds on [synth-wave-stages](synth-wave-stages.md) and [pno-module-chain](pno-module-chain.md) s5.
+- **Question:** Which strip stage (strip word 1) does each `Edt_Syn_kFltType` value install?
 
 Tags follow `.agents/rules/provenance-in-code.md`. Only addresses, indices and derived values are recorded.
 
 ## 1. Short answer
 
-The map from `kFltType` to a stage id is **not closed**. What the runs establish:
+The type value is the **index of the word-1 stage table** (identity), with filter-off = index 6 (null stage). The ARM harness shows the type reaching the strip only as a selector field, not the table index field the sender reads, so the identity is established by the stage responses and the off case, not by one traced store.
 
 | Item | Result | Tag |
 |---|---|---|
-| Edit id | `Edt_Syn_kFltType` = `0x133`, range 0..5 (six values), default 1; `kFltEnable` `0x132`, `kFltDrive` `0x137` (0..3), `kFltKbdTrk` `0x136` | VERIFIED (`arm-edit-params.csv`) |
-| Value handler | `0x133` (and `0x132`, `kMode` `0xFA`) reach the apply case at `0xC0017B4C`: `[layer + 0xDC] = (word + 0x8000) >> 16` (the type, `pc 0xC0017B5C`), then `bl 0xC01CCF84` with `r0 = layer + 0x68` (the strip object). Value 0..5 gives `[strip + 0x74] = 0..5` in the harness | VERIFIED (write watch over the six values) |
-| Word 1 sender | `0xC01CCF84` builds strip word 1 = `((byte & 0x7F) << 24) \| table[[strip + 0x7C]]`, table `bank0_CODE@0x2F72F0` (7 ids). The index is the strip field `+0x7C` (= `layer + 0xE4`), **not** the field the `kFltType` case writes (`+0x74`). In the harness it stays 1 for every `kFltType` value, so word 1 stays `0x0612566E` | VERIFIED (run: `[strip + 0x7C]` forced to 0..6 gives the table below) |
-| Writer of `strip + 0x7C` | not found: no `Edt_Syn*` id writes `layer + 0xE4` in the harness (write watch over the `Flt` / `Drive` / `Mode` ids, the full `Edt_Syn*` sweep was still running at the time box) and the only static stores to a `+0x7C` field in `0xC0010000..0xC0030000` are `0xC00175D8` (`[layer + 0x7C]`, another field) and struct copies | open |
-| Callers of the sender | only `0xC0017B60` (type / enable / mode case) and `0xC0017C10` (`kFltDrive` case) | VERIFIED (scan of the code) |
+| Edit ids | `kFltType` `0x133` (0..5, default 1), `kFltEnable` `0x132`, `kFltDrive` `0x137`, `kMode` `0xFA` | VERIFIED (`arm-edit-params.csv`) |
+| Apply case | `0xC0017B4C`: `[strip + 0x74] = enable ? type : 6` (run: `kFltEnable = 0` gives 6, `= 1` keeps the type 0..5), then `bl 0xC01CCF84` with `r0 = layer + 0x68` | VERIFIED (write watch over `kFltType` 0..5 and `kFltEnable` 0, 1) |
+| Word 1 sender | `0xC01CCF84`: word 1 = `((byte & 0x7F) << 24) \| table[[strip + 0x7C]]`, table `bank0_CODE@0x2F72F0` (7 ids); callers only `0xC0017B60` (type / enable / mode) and `0xC0017C10` (`kFltDrive`). The index field read by the sender is `+0x7C`, the selector written by the apply case is `+0x74`; in the harness `+0x7C` stays 1, so word 1 stays `0x0612566E` for every value. No `Edt_Syn*` id writes `+0x7C` (full write-watch sweep of the filter ids, `kMode`, `kOscWave`) | VERIFIED (run); the link `+0x74 -> +0x7C` not traced |
+| Off = index 6 | the selector becomes 6 when the filter is disabled and table entry 6 is the null stage `0x125B79` (the stub the oracle uses for an idle slot): a match that fits the identity reading | VERIFIED (run), reading ASSUMED |
 
-So the harness cannot show which stage a type selects: the index field is set by a path the edit ids alone do not reach (a preset-load or filter-model path is the candidate, ASSUMED).
+## 2. Table and measured behaviour (VERIFIED, magnitude response of an impulse in `sharc-org`, frame `R = 0.1`, table position index 64)
 
-## 2. Index to stage table (VERIFIED, run of the sender with `[strip + 0x7C]` forced)
+| Value / index | Stage | Response | Panel type (decoder names, `cbin/synth_preset.rs`) | Layers | Model |
+|---|---|---|---|---|---|
+| 0 | `0x1253BD` | -10.3 dB at 2 fc, -24.6 dB at 4 fc (12 dB per octave), resonant peak 6 dB at fc | `Lp12` | 218 | **bit exact** (1280 of 1280 words, [synth-stage-models-2](synth-stage-models-2.md)), Rust `FwFilterType::Lp2` |
+| 1 | `0x12566E` | -21.3 dB at 2 fc, -49.3 dB at 4 fc (24 dB per octave) | `Lp24` | 118 | ported earlier (Lp4) |
+| 2 | `0x12549D` | not a low pass: DC gain 19.7 dB, -6 dB per octave from 0.05 fc; the code reads the delay pointer `I2` and the interpolation table `0xC02DE` (182 instructions, 77 multiplies) | `Ladder24` (raw 2) | 68 | open |
+| 3 | `0x1257B2` | flat within a few dB (boost 2 to 6 dB at low resonance index, a -15 dB notch at index 126): an equalizer / notch like module, not a low pass | decoder maps raw 3 to `Lp12` (no factory use known) | - | open |
+| 4 | `0x125913` | band pass | `BandPass` | 24 | ported earlier (Bp4) |
+| 5 | `0x125A50` | high pass | `HighPass` | 14 | ported earlier (Hp4) |
+| 6 | `0x125B79` | null stage | filter off | - | n/a |
 
-| Index | Word 1 stage | Routine | Status in this repo |
-|---|---|---|---|
-| 0 | `0x1253BD` | prologue of `0x12566E` with table `0xB0F94`, same loop (ASSUMED, not run) | open |
-| 1 (idle) | `0x12566E` | 4-pole low pass | ported, `fw_filter.rs` (LP4) |
-| 2 | `0x12549D` | 182 instructions, 77 multiplies, `fext` / `fdep` (delay-line style module in the PNO chain) | open |
-| 3 | `0x1257B2` | ladder-like low pass (pole table in [synth-stage-equations](synth-stage-equations.md)) | partial |
-| 4 | `0x125913` | band pass | ported (BP4) |
-| 5 | `0x125A50` | high pass | ported (HP4) |
-| 6 | `0x125B79` | null stage | n/a |
-
-The factory bank uses (program-sweep, layers): Lp12 218, Lp24 118, Ladder24 68, BandPass 24, HighPass 14 (decoded names; the decode has five names for the six `kFltType` values). A candidate reading, **ASSUMED** and not run: `kFltType` value = table index (LP4 at 1 is the default; BP4 at 4 and HP4 at 5 fit the order of the names), with the 12 dB low pass at 0 or 2. Nothing here changes `FwFilterType::from_model`, which stays the existing mapping (TD-11, OQ22).
+The identity reading therefore matches all four types whose stage is a filter (0, 1, 4, 5) in order and name; the two other table entries are not filters of the usual kind, so what the `Ladder24` layers run is **open**: either entry 2 with inputs the harness frame does not supply (the first impulse used default frame words), or the type is stored differently. `FwFilterType::from_model` keeps `Ladder24 -> Lp4` (ASSUMED) and now maps `Lp12 -> Lp2`.
 
 ## 3. What would close it
 
-1. Find the writer of `strip + 0x7C`: watch `layer + 0xE4` over a preset load in the ARM harness (the `Edt_Syn*` sweep above only covers the edit ids), or trace which function stores a `0..6` value before `0xC01CCF84` runs on a loaded preset.
-2. Or run the DSP side: install each of the six stages in slot B of the oracle pass with the strip words of one filter setting and compare the magnitude response with the panel types.
-3. Model the open stages (`0x1253BD`, `0x12549D`) against the oracle once their role is known.
+1. Trace the store that copies the selector (`+0x74`) into the sender index (`+0x7C`, `layer + 0xE4`), probably at a preset-load or strip commit path outside the edit-id cases.
+2. Drive `0x12549D` with a frame set up from the real strip words (delay pointer `I2`, `DM(0xC1360/1)` tables) and compare against a ladder response.
+3. Characterise `0x1257B2` (notch / peaking) and decide if any panel value selects it.
 
 ## Implications
 
-- The filter family already ported (LP4, BP4, HP4) is the table entries 1, 4, 5; the 12 dB low pass of the factory majority (218 layers) is not identified as a stage.
-- Do not flip any filter default (D22): the map is partial.
+- The most used filter, Lp12 (218 of 442 filter layers), has a verified stage; 374 of 442 filter layers (84.6 %) now run a modelled stage.
+- No filter default changed (D22).
 
 ## Follow-ups
 
-1. Close item 1 of section 3, then update `FwFilterType::from_model` and OQ22.
+1. Items 1 to 3 above.

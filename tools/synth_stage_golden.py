@@ -16,6 +16,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import synth_stage_noise as noise
+import synth_stage_shape_sine as shape_sine
 import synth_stage_shapes as shapes
 import synth_stage_unison as unison
 import synth_wave_model as m
@@ -73,7 +74,7 @@ def square_rows() -> list[tuple[int, int, int, int]]:
     rows = []
     for dt in INCREMENTS:
         for shape in SQUARE_SHAPES:
-            for s in range(STARTS):
+            for s in range(STARTS // 2):
                 ph0 = phase_word(s)
                 lane = m.Lane(
                     pitch=m.f2u(2.0 * f32(dt)), phase1=ph0, phase2=0,
@@ -81,6 +82,30 @@ def square_rows() -> list[tuple[int, int, int, int]]:
                     weights=(zero, one, zero, zero), out_gain=one,
                 )  # fmt: skip
                 out, _, _ = shapes.stage_shape_square([lane, lane])
+                inc = m.fix(m.mul(m.ld(lane.pitch), m.ld(lane.ratio1)), 31)
+                for k in range(1, 5):
+                    ph = ((ph0 + k * inc) & 0xFFFFFFFF) / 2**32
+                    rows.append((m.f2u(ph), m.f2u(inc / 2**32), m.f2u(shape), out[0][k - 1]))
+    return rows
+
+
+SINE_SHAPES = (0.0, 0.25, 0.5, 0.9)
+
+
+def shape_sine_rows() -> list[tuple[int, int, int, int]]:
+    """`(phase bits, increment bits, shape bits, sample bits)` of one SHAPE SINE 0 oscillator."""
+    one, zero = m.f2u(1.0), m.f2u(0.0)
+    rows = []
+    for dt in INCREMENTS:
+        for shape in SINE_SHAPES:
+            for s in range(STARTS // 2):
+                ph0 = phase_word(s)
+                lane = m.Lane(
+                    pitch=m.f2u(2.0 * f32(dt)), phase1=ph0, phase2=0,
+                    shape_a=zero, shape_b=zero, ratio1=one, ratio2=one,
+                    weights=(zero, one, zero, zero), out_gain=one, spread=m.f2u(shape),
+                )  # fmt: skip
+                out, _, _ = shape_sine.stage_shape_sine([lane, lane])
                 inc = m.fix(m.mul(m.ld(lane.pitch), m.ld(lane.ratio1)), 31)
                 for k in range(1, 5):
                     ph = ((ph0 + k * inc) & 0xFFFFFFFF) / 2**32
@@ -96,33 +121,54 @@ def words_rust(name: str, words: list[int]) -> str:
     return f"pub(super) const {name}: [u32; {len(words)}] = [\n{body}];\n"
 
 
-def rust() -> str:
-    saw, noi, spr, sq = saw_rows(), noise_rows(), spread_rows(), square_rows()
-    parts = [
-        "//! Firmware parity of the unison, noise and Shape Square stages (`fw_stages.rs`).\n"
-        "//!\n"
-        "//! Derived values only, made by `python tools/synth_stage_golden.py > <this file>` from\n"
-        "//! the bit-exact models of stages `0x121D6D`, `0x121FD8` and `0x121AB5`\n"
-        "//! (`docs/research/synth-stage-models.md`).\n",
-        words_rust("SAW_PHASE", [r[0] for r in saw]),
-        words_rust("SAW_DT", [r[1] for r in saw]),
-        words_rust("SAW_OUT", [r[2] for r in saw]),
-        words_rust("NOISE_STATE", [r[0] for r in noi]),
-        words_rust("NOISE_OUT", [r[1] for r in noi]),
-        words_rust("SPREAD_IN", [r[0] for r in spr]),
-        words_rust("SPREAD_OUT", [r[1] for r in spr]),
-        words_rust("SQUARE_PHASE", [r[0] for r in sq]),
-        words_rust("SQUARE_DT", [r[1] for r in sq]),
-        words_rust("SQUARE_SHAPE", [r[2] for r in sq]),
-        words_rust("SQUARE_OUT", [r[3] for r in sq]),
-    ]
-    tail = """
+def rust(part: int = 1) -> str:
+    """Rust golden file text: part 1 (saw, noise, spread) or part 2 (Shape Square, SHAPE SINE 0)."""
+    if part == 1:
+        saw, noi, spr = saw_rows(), noise_rows(), spread_rows()
+        parts = [
+            "//! Firmware parity of the unison and noise stages (`fw_stages.rs`), part 1.\n"
+            "//!\n"
+            "//! Derived values only, made by `python tools/synth_stage_golden.py 1 > <file>`\n"
+            "//! from the bit-exact models of stages `0x121D6D` and `0x121FD8`\n"
+            "//! (`docs/research/synth-stage-models.md`).\n",
+            words_rust("SAW_PHASE", [r[0] for r in saw]),
+            words_rust("SAW_DT", [r[1] for r in saw]),
+            words_rust("SAW_OUT", [r[2] for r in saw]),
+            words_rust("NOISE_STATE", [r[0] for r in noi]),
+            words_rust("NOISE_OUT", [r[1] for r in noi]),
+            words_rust("SPREAD_IN", [r[0] for r in spr]),
+            words_rust("SPREAD_OUT", [r[1] for r in spr]),
+        ]
+        tail = """
 #[test]
 fn golden_tables_have_the_documented_shape() {
     assert_eq!(SAW_PHASE.len(), 64);
     assert_eq!(NOISE_STATE.len(), 16);
     assert_eq!(SPREAD_IN.len(), 16);
-    assert_eq!(SQUARE_PHASE.len(), 384);
+}
+"""
+        return "\n".join(parts) + tail
+    sq, ss = square_rows(), shape_sine_rows()
+    parts = [
+        "//! Firmware parity of Shape Square and SHAPE SINE 0 (`fw_stages.rs`), part 2.\n"
+        "//!\n"
+        "//! Derived values only, made by `python tools/synth_stage_golden.py 2 > <file>`\n"
+        "//! from the bit-exact models of stages `0x121AB5` and `0x123427`\n"
+        "//! (`docs/research/synth-stage-models.md`, `synth-stage-models-2.md`).\n",
+        words_rust("SQUARE_PHASE", [r[0] for r in sq]),
+        words_rust("SQUARE_DT", [r[1] for r in sq]),
+        words_rust("SQUARE_SHAPE", [r[2] for r in sq]),
+        words_rust("SQUARE_OUT", [r[3] for r in sq]),
+        words_rust("SSINE_PHASE", [r[0] for r in ss]),
+        words_rust("SSINE_DT", [r[1] for r in ss]),
+        words_rust("SSINE_SHAPE", [r[2] for r in ss]),
+        words_rust("SSINE_OUT", [r[3] for r in ss]),
+    ]
+    tail = """
+#[test]
+fn golden_tables_have_the_documented_shape() {
+    assert_eq!(SQUARE_PHASE.len(), 192);
+    assert_eq!(SSINE_PHASE.len(), 256);
     assert!(SQUARE_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));
 }
 """
@@ -130,4 +176,4 @@ fn golden_tables_have_the_documented_shape() {
 
 
 if __name__ == "__main__":
-    sys.stdout.write(rust())
+    sys.stdout.write(rust(int(sys.argv[1]) if len(sys.argv) > 1 else 1))

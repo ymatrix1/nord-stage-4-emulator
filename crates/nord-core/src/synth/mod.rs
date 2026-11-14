@@ -84,6 +84,8 @@ mod tests_fw_shape_golden;
 #[cfg(test)]
 mod tests_fw_stage_golden;
 #[cfg(test)]
+mod tests_fw_stage_golden2;
+#[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
 mod tests_osc_lfo;
