@@ -68,6 +68,9 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
     if m == MenuId::Organize && ui.on_organize_page() {
         return super::organize::compose(ui);
     }
+    if m == MenuId::Organize && ui.on_preset_organize_page() {
+        return super::organize_presets::compose(ui);
+    }
     let page = menu.page();
     let focus = menu.focus();
     let start = menu.block_start();
@@ -124,15 +127,12 @@ mod tests {
 
     #[test]
     fn unsupported_rows_are_dimmed_and_name_their_bean() {
+        // No shipped item is `Unsupported` any more; the renderer still handles one.
+        let mut item = find_item("organize.2.swap").unwrap();
+        item.binding = Binding::Unsupported("ns4-zb9o");
         let mut ui = ProgramUi::default();
-        ui.open_menu(MenuId::Organize);
-        ui.menu.step_page(1); // the Preset page is the unsupported one
-        let t = compose(&ui, MenuId::Organize);
-        assert!(
-            t.rows[0].starts_with(DIM) && t.rows[0].contains("ns4-"),
-            "{:?}",
-            t.rows
-        );
+        let r = row(&ui, &item, true);
+        assert!(r.starts_with(DIM) && r.contains("ns4-zb9o"), "{r}");
         ui.open_menu(MenuId::Output);
         ui.menu.step_page(1);
         ui.menu.soft(3); // More: bus_sub3 .. mono

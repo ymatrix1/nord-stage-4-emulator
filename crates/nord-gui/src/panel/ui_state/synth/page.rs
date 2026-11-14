@@ -72,6 +72,32 @@ impl SynthPage {
     }
 }
 
+impl SynthPage {
+    /// Key of this page in the inventory's dial table (`nord_panel::inventory::synth_dials`).
+    /// The Waveform and PITCH/SMP pages differ by oscillator mode; ARP pages past 5 do not exist.
+    pub fn dial_key(self, mode: SynthOscMode) -> &'static str {
+        let sample = mode == SynthOscMode::Sample;
+        match self {
+            Self::Waveform if sample => "waveform.sample",
+            Self::Waveform => "waveform.analog",
+            Self::FilterType => "filter_type",
+            Self::EnvOsc => "env_osc",
+            Self::EnvFilter => "env_filter",
+            Self::EnvAmp => "env_amp",
+            Self::LfoWave => "lfo_wave",
+            Self::Arp(1) => "arp.1",
+            Self::Arp(2) => "arp.2",
+            Self::Arp(3) => "arp.3",
+            Self::Arp(4) => "arp.4",
+            Self::Arp(_) => "arp.5",
+            Self::Vibrato => "vibrato",
+            Self::PitchSmp if sample => "pitch_smp.sample",
+            Self::PitchSmp => "pitch_smp.analog",
+            Self::Extern => "extern",
+        }
+    }
+}
+
 /// One dial of a page: its soft label and, when the engine cannot do it, why.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DialDef {
@@ -123,9 +149,43 @@ pub fn dial_defs(page: SynthPage, mode: SynthOscMode) -> [Option<DialDef>; 3] {
     }
 }
 
+/// Every (page, mode) the dial table distinguishes; Extern in Sample mode repeats Analog.
+#[cfg(test)]
+pub(super) const ALL_PAGES_FOR_TESTS: [(SynthPage, SynthOscMode); 17] = {
+    use SynthOscMode::{Analog as A, Sample as S};
+    [
+        (SynthPage::Waveform, A),
+        (SynthPage::Waveform, S),
+        (SynthPage::FilterType, A),
+        (SynthPage::EnvOsc, A),
+        (SynthPage::EnvFilter, A),
+        (SynthPage::EnvAmp, A),
+        (SynthPage::LfoWave, A),
+        (SynthPage::Arp(1), A),
+        (SynthPage::Arp(2), A),
+        (SynthPage::Arp(3), A),
+        (SynthPage::Arp(4), A),
+        (SynthPage::Arp(5), A),
+        (SynthPage::Vibrato, A),
+        (SynthPage::PitchSmp, A),
+        (SynthPage::PitchSmp, S),
+        (SynthPage::Extern, A),
+        (SynthPage::Extern, S),
+    ]
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dial_keys_are_distinct_per_page_and_mode() {
+        let keys: std::collections::HashSet<_> = ALL_PAGES_FOR_TESTS
+            .iter()
+            .map(|&(p, m)| p.dial_key(m))
+            .collect();
+        assert_eq!(keys.len(), 16, "Extern repeats in Sample mode");
+    }
 
     #[test]
     fn every_page_maps_to_a_synth_button() {

@@ -145,6 +145,16 @@ fn every_page_of_every_menu_renders_all_its_items() {
                 p.page_up(1);
                 continue;
             }
+            if m == MenuId::Organize && page == 1 {
+                // Dedicated Preset Organize page: same soft buttons, own title.
+                let t = p.text();
+                assert_eq!(
+                    (t.big.as_str(), t.sub.as_str()),
+                    ("PRESET ORGANIZE", "2/2 Preset Organize")
+                );
+                assert_eq!(t.soft, ["Swap", "Move", "Ok", "Undo"]);
+                continue;
+            }
             let mut rows = 0;
             let blocks = model.items.len().div_ceil(p.ui.menu.block_size());
             for _ in 0..blocks {
@@ -170,18 +180,40 @@ fn every_page_of_every_menu_renders_all_its_items() {
 }
 
 #[test]
-fn unsupported_items_render_dimmed_with_their_bean() {
+fn no_menu_page_renders_dimmed_any_more() {
+    // Every menu item has a binding; Preset Organize was the last gap (ns4-zb9o).
+    for (m, n) in PAGES {
+        let mut p = Panel::new();
+        p.open(match m {
+            MenuId::System => 1,
+            MenuId::Sound => 2,
+            MenuId::Organize => 3,
+            MenuId::AuxKb => 4,
+            MenuId::Output => 5,
+            MenuId::Pedal => 6,
+            MenuId::Midi => 7,
+            MenuId::Extern => 8,
+        });
+        for page in 0..n {
+            assert!(
+                p.text().rows.iter().all(|r| !r.starts_with(DIM)),
+                "{m:?} page {page}"
+            );
+            p.page_up(1);
+        }
+    }
+}
+
+#[test]
+fn preset_organize_page_is_live_and_swaps_through_the_panel_buttons() {
     let mut p = Panel::new();
-    p.open(3); // Organize
-    p.page_up(1); // Preset Organize: still a gap; Program Organize is a dedicated page
+    p.open(3);
+    p.page_up(1);
     let t = p.text();
-    assert!(t
-        .rows
-        .iter()
-        .all(|r| r.starts_with(DIM) && r.contains("ns4-")));
-    assert_eq!(p.dial(1), 0, "nothing to edit");
+    assert_eq!(t.big, "PRESET ORGANIZE");
+    assert!(t.rows[0].starts_with(">1:01"), "{:?}", t.rows);
     p.soft(1);
-    assert_eq!(p.ui.message.as_ref().unwrap().0, "Not supported yet");
+    assert!(p.ui.organize.preset.pending.is_some(), "Swap chosen");
 }
 
 #[test]
