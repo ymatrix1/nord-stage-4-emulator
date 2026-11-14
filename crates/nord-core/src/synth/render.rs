@@ -121,14 +121,32 @@ impl SynthLayer {
         // `0x12501F`, so a decoded `Triangle` of that category plays as the firmware saw.
         // Opt-in `p_block` (empirical fit, `p_block.rs`): its shape word stands in for an unset
         // `strip_shape`, its gain and second oscillator apply to the saw / shape stages.
-        let p_block = if strip.is_some() { self.p_block } else { None };
+        // The per-wave table replaces the single block and scales every oscillator path.
+        let table_block = self
+            .p_table
+            .filter(|_| strip.is_some())
+            .map(|t| t.block(self.p_wave));
+        let p_block = if strip.is_some() {
+            table_block.or(self.p_block)
+        } else {
+            None
+        };
         let shape_stage = if strip.is_some()
             && self.osc_shape_category
             && self.waveform == VaWaveform::Triangle
         {
-            self.strip_shape.or(p_block.map(|p| p.shape))
+            // Table mode: the shape word follows the Osc Ctrl knob (`row.shape` scales it).
+            self.strip_shape
+                .or(table_block.map(|b| (b.shape * self.supersaw_detune).clamp(0.0, 1.0)))
+                .or(p_block.map(|p| p.shape))
         } else {
             None
+        };
+        // Table mode: the row's gain scales every oscillator path except the shape stage, whose
+        // mix applies it itself.
+        let table_gain = match table_block {
+            Some(b) if shape_stage.is_none() => b.gain,
+            _ => 1.0,
         };
         let waveform = if strip.is_some()
             && self.osc_shape_category
@@ -439,6 +457,8 @@ impl SynthLayer {
                 }
             };
 
+            let raw_osc_l = raw_osc_l * table_gain;
+            let raw_osc_r = raw_osc_r.map(|r| r * table_gain);
             v.phase = (t + dt) % 1.0;
             v.mod_phase = (v.mod_phase + fm_ratio * dt) % 1.0;
             v.op3_phase = (v.op3_phase + fm_sub_ratio * dt) % 1.0;

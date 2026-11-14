@@ -213,9 +213,12 @@ mod tests {
     }
 
     #[test]
-    fn default_chain_is_legacy() {
-        assert_eq!(SynthLayer::new(48_000.0).chain, SynthChain::Legacy);
-        assert!(!SynthLayer::new(48_000.0).strip_chain());
+    fn default_chain_is_the_firmware_strip_and_legacy_is_one_call_away() {
+        assert_eq!(SynthLayer::new(48_000.0).chain, SynthChain::FirmwareStrip);
+        assert!(SynthLayer::new(48_000.0).strip_chain());
+        let l = SynthLayer::legacy(48_000.0);
+        assert_eq!(l.chain, SynthChain::Legacy);
+        assert!(!l.strip_chain() && l.p_table.is_none() && !l.strip_stages);
     }
 
     #[test]

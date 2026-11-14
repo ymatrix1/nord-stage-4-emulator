@@ -343,7 +343,7 @@ mod tests {
         assert_eq!(sound.zones[0].loop_end, Some(8));
         assert!(sound.zones[0].pcm_right.is_some());
 
-        let mut layer = SynthLayer::new(48_000.0);
+        let mut layer = SynthLayer::legacy(48_000.0);
         layer.osc_mode = SynthOscMode::Sample;
         layer.cutoff_hz = 18_000.0;
         layer.load_sample(Some(sound));

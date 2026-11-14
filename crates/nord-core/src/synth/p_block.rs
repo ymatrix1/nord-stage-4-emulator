@@ -13,6 +13,7 @@
 //!
 //! Spec: `docs/specs/synth-engine.md` section 4.2.
 
+use super::p_table::{PTable, PTableSpec};
 use super::SUPERSAW_VOICES;
 
 /// Free parameters of the oscillator stage.
@@ -107,6 +108,8 @@ pub enum PSpec {
     Fitted,
     /// Explicit values in thousandths (fit sweeps, experiments).
     Custom([i32; 5]),
+    /// The per-wave table (`p_table.rs`), optionally with rows overridden (fit sweeps).
+    Table(PTableSpec),
 }
 
 impl PSpec {
@@ -115,7 +118,11 @@ impl PSpec {
         if v.eq_ignore_ascii_case("fitted") {
             return Ok(PSpec::Fitted);
         }
-        let bad = || format!("invalid --synth-p '{v}' (expected fitted|gain,w2,r2,shape,cutoff)");
+        if let Some(rest) = v.strip_prefix("table") {
+            return PTableSpec::parse(rest).map(PSpec::Table);
+        }
+        let bad =
+            || format!("invalid --synth-p '{v}' (expected fitted|table|gain,w2,r2,shape,cutoff)");
         let mut m = [0i32; 5];
         let mut it = v.split(',');
         for slot in &mut m {
@@ -138,6 +145,16 @@ impl PSpec {
         match self {
             PSpec::Fitted => PBlock::FITTED,
             PSpec::Custom(m) => PBlock::from_milli(m),
+            // the single-block view of a table is the idle block; use `table()`
+            PSpec::Table(_) => PBlock::IDLE,
+        }
+    }
+
+    /// The per-wave table when this selection is one.
+    pub fn table(self) -> Option<PTable> {
+        match self {
+            PSpec::Table(t) => Some(t.table()),
+            _ => None,
         }
     }
 }
@@ -235,6 +252,8 @@ mod tests {
         };
         s.osc_shape_category = shape_cat;
         s.p_block = pb;
+        s.p_table = None;
+        s.strip_stages = false;
         s.note_on(60, 127);
         let mut acc = 0.0f64;
         for i in 0..24_000 {

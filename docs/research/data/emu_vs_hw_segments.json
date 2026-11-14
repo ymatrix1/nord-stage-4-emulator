@@ -45,9 +45,41 @@
        {"label": "default", "flags": []},
        {"label": "fw-filter", "flags": ["--filter-engine", "firmware"]},
        {"label": "fw-filter+fx", "flags": ["--filter-engine", "firmware", "--firmware-fx"]},
-       {"label": "strip", "flags": ["--synth-chain", "strip"]},
-       {"label": "strip+p", "flags": ["--synth-chain", "strip", "--synth-p", "fitted"]},
+       {"label": "strip", "flags": ["--synth-chain", "strip", "--synth-p", "off", "--no-synth-stages"]},
+       {"label": "strip+p", "flags": ["--synth-chain", "strip", "--synth-p", "fitted", "--no-synth-stages"]},
        {"label": "routing", "flags": ["--firmware-routing"]}]},
+    {"id": "synth_crunch", "entry": "Program/Bank A/Crunch Synth.ns4p", "engine": "A:66 synth SHAPE Triangle LP12", "at_s": 1900, "duration_s": 26,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
+    {"id": "synth_silkpad", "entry": "Program/Bank A/Silk Pad.ns4p", "engine": "A:86 synth SUPER wave 0 LP12 pad", "at_s": 2398, "duration_s": 18,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
+    {"id": "synth_filterbank", "entry": "Program/Bank A/Filter Bank Ld.ns4p", "engine": "A:75 3 x Pure Saw, band pass", "at_s": 2102, "duration_s": 40,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
+    {"id": "synth_sineplk", "entry": "Program/Bank A/Sine-Saw Plk Whl.ns4p", "engine": "A:26 synth SHAPE SINE LP12", "at_s": 636, "duration_s": 40,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
+    {"id": "synth_megaline", "entry": "Program/Bank A/Mega Line Whl.ns4p", "engine": "A:48 MULTI + SUPER x3 LP12", "at_s": 1372, "duration_s": 40,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
+    {"id": "synth_12db", "entry": "Program/Bank A/12dB Sweep.ns4p", "engine": "A:57 Shape Square x2 + Pure Saw LP12", "at_s": 1619, "duration_s": 20,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
+    {"id": "synth_phat3", "entry": "Program/Bank A/Phat 3 Osc MiniM.ns4p", "engine": "A:67 3 x Pure Saw Ladder24", "at_s": 1933, "duration_s": 18,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
+    {"id": "synth_80s", "entry": "Program/Bank A/80s Sci-Fi.ns4p", "engine": "A:44 MULTI Ladder24", "at_s": 1206, "duration_s": 50,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "legacy", "flags": ["--synth-chain", "legacy"]}]},
     {"id": "fx_amp", "entry": "Program/Bank A/Tiny Transistor.ns4p", "engine": "organ Farfisa + Small II amp + reverb", "at_s": 1812, "duration_s": 25,
      "variants": [
        {"label": "default", "flags": []},

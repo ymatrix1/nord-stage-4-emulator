@@ -5,7 +5,7 @@ use super::*;
 
 #[test]
 fn dedicated_filter_envelope_uses_adr_and_velocity() {
-    let mut s = SynthLayer::new(48_000.0);
+    let mut s = SynthLayer::legacy(48_000.0);
     s.filter_env_dedicated = true;
     s.filter_env_amount = 1.0;
     s.filter_env_attack_sec = 0.001;
@@ -30,7 +30,7 @@ fn dedicated_filter_envelope_uses_adr_and_velocity() {
 #[test]
 fn filter_envelope_decay_follows_the_measured_time_constant() {
     // Laser-zap clip: displayed Decay 2.07 s, audible tau 0.38 s (0.18 x display).
-    let mut s = SynthLayer::new(48_000.0);
+    let mut s = SynthLayer::legacy(48_000.0);
     s.filter_env_dedicated = true;
     s.filter_env_amount = 0.74;
     s.filter_env_attack_sec = 0.0005;
@@ -48,7 +48,7 @@ fn filter_envelope_decay_follows_the_measured_time_constant() {
 #[test]
 fn amp_velocity_zero_ignores_velocity_and_one_follows_it() {
     let run = |sens: f32, vel: u8| {
-        let mut s = SynthLayer::new(48_000.0);
+        let mut s = SynthLayer::legacy(48_000.0);
         s.amp_velocity = sens;
         s.note_on(60, vel);
         energy(&render_n(&mut s, 4000))
@@ -60,7 +60,7 @@ fn amp_velocity_zero_ignores_velocity_and_one_follows_it() {
 #[test]
 fn filter_off_bypasses_a_closed_filter() {
     let run = |on: bool| {
-        let mut s = SynthLayer::new(48_000.0);
+        let mut s = SynthLayer::legacy(48_000.0);
         s.cutoff_hz = 40.0;
         s.filter_on = on;
         s.note_on(81, 100);
@@ -72,7 +72,7 @@ fn filter_off_bypasses_a_closed_filter() {
 #[test]
 fn oscillator_envelope_modulates_pitch_or_osc_ctrl_only_when_amount_set() {
     let run = |amount: f32, to_pitch: bool| {
-        let mut s = SynthLayer::new(48_000.0);
+        let mut s = SynthLayer::legacy(48_000.0);
         s.osc_mode = SynthOscMode::Wavetable;
         s.osc_env_amount = amount;
         s.osc_env_to_pitch = to_pitch;
@@ -90,7 +90,7 @@ fn oscillator_envelope_modulates_pitch_or_osc_ctrl_only_when_amount_set() {
 #[test]
 fn osc_envelope_decay_uses_the_same_time_constant_fraction() {
     // Pitch-blip clip: displayed Decay 100 ms, audible tau about 18 ms.
-    let mut s = SynthLayer::new(48_000.0);
+    let mut s = SynthLayer::legacy(48_000.0);
     s.osc_env_to_pitch = true;
     s.osc_env_amount = 1.0;
     s.osc_env_attack_sec = 0.0005;
@@ -107,7 +107,7 @@ fn osc_envelope_decay_uses_the_same_time_constant_fraction() {
 
 #[test]
 fn test_synth_kb_track_and_14hz_floor() {
-    let mut s_track = SynthLayer::new(48_000.0);
+    let mut s_track = SynthLayer::legacy(48_000.0);
     s_track.cutoff_hz = 220.0;
     s_track.kb_track = 3; // 1/1 octave tracking
     s_track.note_on(84, 120); // +2 octaves above C4 -> 4x cutoff -> brighter than low note
@@ -117,7 +117,7 @@ fn test_synth_kb_track_and_14hz_floor() {
         rms_high += l * l;
     }
 
-    let mut s_notrack = SynthLayer::new(48_000.0);
+    let mut s_notrack = SynthLayer::legacy(48_000.0);
     s_notrack.cutoff_hz = 220.0;
     s_notrack.kb_track = 0;
     s_notrack.note_on(84, 120);

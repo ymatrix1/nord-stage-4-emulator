@@ -108,6 +108,7 @@ pub fn probe_commands() -> Vec<C> {
         C::Organ(OrganEdit::LiveDrawbars([8, 7, 6, 5, 4, 3, 2, 1, 0])),
         C::Organ(OrganEdit::RotaryOrgan(false)),
         C::Organ(OrganEdit::RotaryAngle { wide: true }),
+        C::Organ(OrganEdit::RotaryStopAngle(3)),
         C::Organ(OrganEdit::Sustped { layer: 0, on: true }),
         C::Organ(OrganEdit::Pstick { layer: 1, on: true }),
         C::Piano(PianoEdit::Level {
@@ -180,6 +181,7 @@ pub fn probe_commands() -> Vec<C> {
         })),
         C::Synth(SynthEdit::Sustped(true)),
         C::Synth(SynthEdit::Pstick(true)),
+        C::Synth(SynthEdit::PstickRange(7)),
         sp(SynthParam::KbHoldExclude(true)),
         sp(SynthParam::KbSync(true)),
         sp(SynthParam::LfoClockSync(true)),

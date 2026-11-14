@@ -13,7 +13,7 @@ pub use param::SynthParam;
 pub use pattern::PatternParam;
 
 use nord_core::engine::Stage4Engine;
-use nord_core::morph::MorphParameter;
+use nord_core::morph::{LayerId, MorphParameter};
 use nord_core::synth::SynthLayer;
 
 /// Engine layer index of Synth A (Organ A, B, Piano A, B, Synth A, B, C).
@@ -43,6 +43,9 @@ pub enum SynthEdit {
     Sustped(bool),
     /// PSTICK (Shift+Layer B): all three Synth layers follow the pitch stick.
     Pstick(bool),
+    /// PSTICK/RNG (Shift+Layer B list, manual p.28): bend range of the three Synth layers in
+    /// semitones, clamped to `1..=12` by the engine.
+    PstickRange(u8),
 }
 
 /// The three synth layers, in A, B, C order.
@@ -83,6 +86,11 @@ impl SynthEdit {
                 engine.pedals.pstick[SYNTH_FIRST_LAYER..SYNTH_FIRST_LAYER + 3].fill(on);
                 engine.refresh_pedal_routing();
             }
+            Self::PstickRange(semitones) => {
+                for layer in [LayerId::SynthA, LayerId::SynthB, LayerId::SynthC] {
+                    engine.set_pstick_range(layer, semitones);
+                }
+            }
             Self::Group { src, group } => {
                 let [a, b, c] = layers(engine);
                 match src {
@@ -116,6 +124,22 @@ mod tests {
         assert_eq!(e.synth_b.cutoff_hz, 1234.0);
         assert_ne!(e.synth_a.cutoff_hz, 1234.0);
         assert_ne!(e.synth_c.cutoff_hz, 1234.0);
+    }
+
+    #[test]
+    fn pstick_range_sets_and_clamps_the_three_synth_layers_only() {
+        let mut e = Stage4Engine::new(48_000.0);
+        SynthEdit::Pstick(true).apply(&mut e);
+        SynthEdit::PstickRange(7).apply(&mut e);
+        assert_eq!(e.pedals.pstick_range[4..7], [7; 3]);
+        assert_eq!(e.pedals.pstick_range[..4], [2; 4]);
+        SynthEdit::PstickRange(99).apply(&mut e);
+        assert_eq!(e.pedals.pstick_range[4..7], [12; 3]);
+        e.handle_midi(nord_core::midi::MidiEvent::PitchBend {
+            channel: 0,
+            value: 16383,
+        });
+        assert!((e.synth_c.bend_cents - 1200.0).abs() < 0.5);
     }
 
     #[test]

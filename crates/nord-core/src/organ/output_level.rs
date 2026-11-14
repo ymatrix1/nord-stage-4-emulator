@@ -248,8 +248,10 @@ mod tests {
         use crate::midi::MidiEvent;
         let rms = |level: OutputLevel| {
             let mut e = Stage4Engine::new(48_000.0);
+            for l in e.layer_levels.iter_mut() {
+                l.base = 0.0; // the synth layers answer the same key
+            }
             e.layer_levels[0].base = 0.5;
-            e.layer_levels[1].base = 0.0;
             e.organ_a.output_level = level;
             e.organ_a.rotary_enabled = false;
             e.organ_a.key_click_enabled = false;

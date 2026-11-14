@@ -33,6 +33,7 @@ mod hw_saw;
 mod key_velocity;
 mod measured;
 mod p_block;
+mod p_table;
 mod pattern;
 mod perf;
 mod render;
@@ -66,6 +67,7 @@ pub use measured::{
     SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
 };
 pub use p_block::{PBlock, PSpec};
+pub use p_table::{PTable, PTableSpec, PWave, PWAVE_COUNT};
 pub use pattern::{pan_gains, CustomPattern, PatternPan, ACCENT_VELOCITY_BOOST, PATTERN_MAX_STEPS};
 pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
@@ -197,6 +199,11 @@ pub struct SynthLayer {
     pub strip_shape: Option<f32>,
     /// Strip chain only (opt-in): empirical oscillator-stage parameter block (`p_block.rs`).
     pub p_block: Option<PBlock>,
+    /// Strip chain only (opt-in): the per-wave P table (`p_table.rs`); overrides `p_block` and also
+    /// scales the oscillators that have no stage block of their own.
+    pub p_table: Option<PTable>,
+    /// Row of the table the decoded oscillator plays through (set from `(category, wave)`).
+    pub p_wave: PWave,
     /// ANALOG category / wave of the decoded oscillator as a modelled firmware stage (`fw_stages.rs`).
     pub strip_stage: Option<FwStage>,
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
@@ -321,6 +328,18 @@ pub struct SynthLayer {
 }
 
 impl SynthLayer {
+    /// A layer on the legacy engine chain: no strip chain, no stage oscillators, no P table.
+    /// `new` is the firmware default (D22); this is the A/B reference and what the legacy-path
+    /// tests build on.
+    pub fn legacy(sample_rate: f32) -> Self {
+        Self {
+            chain: SynthChain::Legacy,
+            p_table: None,
+            strip_stages: false,
+            ..Self::new(sample_rate)
+        }
+    }
+
     pub fn new(sample_rate: f32) -> Self {
         // Warm up the static mipmapped wavetable bank at construction time so render_frame never initializes it.
         let _ = wavetable_bank();
@@ -330,12 +349,14 @@ impl SynthLayer {
             waveform: VaWaveform::Saw,
             saw_model: SawModel::Classic,
             gain_dezipper: false,
-            chain: SynthChain::Legacy,
+            chain: SynthChain::FirmwareStrip,
             strip_key_velocity: true,
             strip_shape: None,
             p_block: None,
+            p_table: Some(PTable::FITTED),
+            p_wave: PWave::Other,
             strip_stage: None,
-            strip_stages: false,
+            strip_stages: true,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,

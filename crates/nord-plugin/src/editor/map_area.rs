@@ -8,7 +8,7 @@ use super::map::{
     LAYER_ENABLED,
 };
 use super::write::ParamWrite as W;
-use nord_core::organ::ScannerMode;
+use nord_core::organ::{ScannerMode, STOP_ANGLE_COUNT};
 use nord_gui::audio::{OrganEdit, PianoEdit, ANGLE_NARROW_DEG, ANGLE_WIDE_DEG};
 
 /// friends number only their own area (Organ 1..2, Piano 1..2, Synth 1..3).
@@ -85,6 +85,9 @@ pub(super) fn map_organ(e: &OrganEdit, out: &mut Vec<W>) {
             }
         }
         OrganEdit::RotaryOrgan(on) => both_organ(out, "organy_rotary_on", flag(on)),
+        OrganEdit::RotaryStopAngle(a) => {
+            both_organ(out, "organy_stop_angle", f32::from(a.min(STOP_ANGLE_COUNT)))
+        }
         OrganEdit::RotaryAngle { wide } => both_organ(
             out,
             "organy_mic_angle",
@@ -199,6 +202,17 @@ mod tests {
             vec![
                 W::global("rotary_speed_fast", 1.0),
                 W::global("organx_stop_mode", 0.0)
+            ]
+        );
+    }
+
+    #[test]
+    fn stop_angle_maps_to_both_layers_and_clamps() {
+        assert_eq!(
+            organ(OrganEdit::RotaryStopAngle(9)),
+            vec![
+                W::layer("organy_stop_angle", ORGAN_FIRST, 6.0),
+                W::layer("organy_stop_angle", ORGAN_FIRST + 1, 6.0)
             ]
         );
     }

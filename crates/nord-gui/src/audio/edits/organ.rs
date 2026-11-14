@@ -6,7 +6,7 @@
 
 use nord_core::engine::Stage4Engine;
 use nord_core::morph::LayerId;
-use nord_core::organ::{OrganLayer, OrganModel, RotarySpeed, ScannerMode};
+use nord_core::organ::{clamp_stop_angle, OrganLayer, OrganModel, RotarySpeed, ScannerMode};
 
 /// Panel edits for the Organ area.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +39,9 @@ pub enum OrganEdit {
     /// Rotary ANGLE (Shift + STOP MODE): wide or narrow microphone separation; host
     /// `organy_mic_angle_{n}`.
     RotaryAngle { wide: bool },
+    /// Rotary stop ANGLE picker (Shift + STOP MODE, manual p.53): `0` = Free, `1..=6` = rest
+    /// position of horn and rotor in Stop Mode; host `organy_stop_angle_{n}`.
+    RotaryStopAngle(u8),
     /// KB ZONE of one layer as a set of the four zone LEDs (bit `u` = zone `u + 1`).
     Zone { layer: u8, leds: u8 },
     /// Aux KB LED of one layer: the layer is played by the aux keyboard.
@@ -125,6 +128,11 @@ impl OrganEdit {
             OrganEdit::RotaryOrgan(on) => {
                 engine.organ_a.rotary_enabled = on;
                 engine.organ_b.rotary_enabled = on;
+            }
+            OrganEdit::RotaryStopAngle(angle) => {
+                let angle = clamp_stop_angle(angle);
+                engine.organ_a.rotary_stop_angle = angle;
+                engine.organ_b.rotary_stop_angle = angle;
             }
             OrganEdit::RotaryAngle { wide } => {
                 let deg = if wide {
@@ -232,6 +240,20 @@ mod tests {
         assert_eq!(e.organ_b.rotary_mic_angle_deg, ANGLE_NARROW_DEG);
         OrganEdit::RotaryAngle { wide: true }.apply(&mut e);
         assert_eq!(e.organ_a.rotary_mic_angle_deg, 120.0, "engine default");
+    }
+
+    #[test]
+    fn stop_angle_reaches_both_layers_and_clamps() {
+        let mut e = engine();
+        OrganEdit::RotaryStopAngle(4).apply(&mut e);
+        assert_eq!(
+            (e.organ_a.rotary_stop_angle, e.organ_b.rotary_stop_angle),
+            (4, 4)
+        );
+        OrganEdit::RotaryStopAngle(99).apply(&mut e);
+        assert_eq!(e.organ_a.rotary_stop_angle, 6);
+        OrganEdit::RotaryStopAngle(0).apply(&mut e);
+        assert_eq!(e.organ_b.rotary_stop_angle, 0);
     }
 
     #[test]

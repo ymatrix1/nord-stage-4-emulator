@@ -127,17 +127,23 @@ Smallest next experiment (follow-up 1): remove the two stubs, give the widget a 
 - `affix` is deliberately loose; every row of that class needs a human decision, and only unambiguous ones were changed.
 - The ARM boot, I2C and GPIO readings are measurements of the emulator under the harness stubs, not of the device.
 
+## 8. Messages adopted (bean `ns4-0u5u`)
+
+- Strings and offsets: [visual-style-and-panel.md](../specs/visual-style-and-panel.md) section 4.5.1; code `crates/nord-gui/src/panel/bay_program/fw_messages.rs`; check `test_message_strings_are_in_the_firmware` (VERIFIED against `bank0_CODE.bin`, 10 strings).
+- **`%c` decoded (VERIFIED):** the firmware strings are `Unable to Paste\n%c Memory Protected` (`0x283790`) and `Unable to Swap\n%c Memory Protected` (`0x2837FC`); both callers (`0xC003D33C`, `0xC003D324`) load `r3 = 0x89` as the `%c` argument before `bl 0xC0257AD4`. `0x89` is a font glyph code, not a letter. The glyph shape is not decoded (ASSUMED padlock); the emulator draws `Memory Protected` without it.
+- Triggers are emulator-side: which firmware event raises `Piano not found` / `Sample not found` / `Please wait...` and the toast lifetime are `ASSUMED` (they need the ARM display path, `ns4-2gdc`).
+
 ## Implications
 
 - 37 menu / OLED strings now carry the firmware wording; the menu tests pin them and the local check keeps them from drifting (`test_menu_surface_has_no_unexpected_case_or_missing_titles`).
 - The program category list is real firmware data; a store flow can offer the 26 categories (the short names for a narrow LIST column are in the pointer table).
-- The firmware has messages we do not show at all (`Piano not found`, `Sample not found`, `Please wait...`, `Pasted`, `Swapped`, `Nothing to Swap with`, `Are you sure?`, `Press to initialize`, `Single Layer`, `Change param to morph`, `Clear Morph %s`), a list for the next OLED pass.
+- The firmware has messages we did not show (`Piano not found`, `Sample not found`, `Please wait...`, `Pasted`, `Swapped`, `Nothing to Swap with`, `Are you sure?`). Bean `ns4-0u5u` adopted these (section 8); `Single Layer`, `Change param to morph`, `Clear Morph %s` stay open.
 - Real screen geometry cannot come from the emulator yet; the OLED layout stays `ASSUMED` (manual p.37-46 and the demo videos).
 
 ## Follow-ups
 
 1. Find the panel / display link: trace the stores of `0xC024DA6C` (EMIFA CS2) and the writers of `0x60000070`, un-stub `TEXT_MEASURE` and `EVENT_INSERT`, decode the font descriptor, hook the frame buffer, call the `program_screen_base` redraw; capture the Program view and one menu page as PBM and compare rows and fonts with `bay_program/oled_paint.rs` (bean `ns4-2gdc`).
 2. Confirm whether titles are drawn in capitals by the renderer: 19 `oled` literals differ from the firmware only by case (`SAMPLE LIBRARY` / `Sample Library`, `OSC PITCH` / `Osc Pitch`, `UNDO` / `Undo`, `LAYER INIT` / `Layer Init`), while menu overview titles are capitals in the firmware itself; needs the real render (bean `ns4-2gdc`) or a video frame.
-3. Adopt the missing firmware messages and the page structure of the Output and MIDI menus (`Organ Output Channel` with `Global` / `Per Program`, `Rotary Output Channel`, `Output Routing Mode`, `Bus Output Channels`) in place of our descriptive per-item labels (bean `ns4-0u5u`).
+3. (messages done in `ns4-0u5u`, section 8) Adopt the page structure of the Output and MIDI menus (`Organ Output Channel` with `Global` / `Per Program`, `Rotary Output Channel`, `Output Routing Mode`, `Bus Output Channels`) in place of our descriptive per-item labels (bean `ns4-0u5u`).
 4. ~~Decode which wave belongs to which category~~ Done in [synth-wave-categories](synth-wave-categories.md): the builder `0xC01ADBC0` gives 8 ANALOG categories (45 waves, `Chop *` and `Sine`..`Pulse 10` belong to the new `SYNC`), 5 WAVE categories (46) and the FM groups; our tables use them (bean `ns4-zoep`).
 5. Trace the STORE `Cat:` field: done in part ([synth-wave-categories](synth-wave-categories.md) s5): `0xC014D4EC` is the caption, the value comes from a model whose class is open (OQ26); the link of section 4 stays ASSUMED.

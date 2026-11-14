@@ -15,6 +15,7 @@
 /// `(id, base id)`; the base id must not itself appear on the left.
 pub const SHARED: &[(&str, &str)] = &[
     // Master / Rotary: ANGLE is Shift on the STOP MODE button, CLOSE MIC on ORGAN.
+    ("rotary.stop_angle", "rotary.stop_mode"),
     ("rotary.angle", "rotary.stop_mode"),
     ("rotary.close_mic", "rotary.organ"),
     // Organ.
