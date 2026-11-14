@@ -4,7 +4,7 @@
 use crate::engine::{FirmwareRouting, Stage4Engine};
 use crate::fx::FirmwareFx;
 use crate::organ::{OutputLevel, ToneWheelSource};
-use crate::synth::{FilterEngine, SynthChain};
+use crate::synth::{FilterEngine, PSpec, SynthChain};
 
 /// Parses a `--tone-source` value: `default | legacy | firmware | vox | b3wheels`.
 pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
@@ -105,6 +105,19 @@ pub fn apply_rotary_unity(engine: &mut Stage4Engine, on: bool) {
     if on {
         engine.organ_a.rotary_drive_unity = true;
         engine.organ_b.rotary_drive_unity = true;
+    }
+}
+
+/// Opt-in firmware Leslie on both organ layers (`--leslie firmware`): the instruction-level port of
+/// the PNO core 1 processor replaces the engine rotary ([`crate::fx::FwLeslie`], `fx-leslie.md`).
+/// `gain_db` is applied after it (the booted firmware level is about -50 dB, so the level stage that
+/// makes it up in the hardware is open; `0.0` keeps the firmware level).
+pub fn apply_leslie_firmware(engine: &mut Stage4Engine, on: bool, gain_db: f32) {
+    if on {
+        for organ in [&mut engine.organ_a, &mut engine.organ_b] {
+            organ.leslie_fw = Some(Box::new(crate::fx::FwLeslie::new()));
+            organ.leslie_gain = 10f32.powf(gain_db / 20.0);
+        }
     }
 }
 
@@ -209,6 +222,9 @@ pub struct FirmwareOptions {
     /// `--synth-stages`: `SynthLayer::strip_stages` (noise, Shape Square, SUPER, MULTI firmware stages
     /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
     pub synth_stages: bool,
+    /// `--synth-p fitted|gain,w2,r2,shape,cutoff`: the EMPIRICAL oscillator P block of the strip
+    /// chain (`synth/p_block.rs`); `None` keeps the single idle oscillator.
+    pub synth_p: Option<PSpec>,
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
@@ -221,6 +237,10 @@ pub struct FirmwareOptions {
     /// word, the squared layer level and the bus gain `ORGAN_BUS_GAIN` on the firmware organ
     /// paths.
     pub organ_level: OutputLevel,
+    /// `--leslie firmware|engine`: the firmware Leslie processor instead of the engine rotary.
+    pub leslie_firmware: bool,
+    /// `--leslie-gain-db <dB>`: gain after the firmware Leslie in millidecibel (default 0).
+    pub leslie_gain_mdb: i32,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -239,10 +259,13 @@ impl Default for FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             synth_stages: false,
+            synth_p: None,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
             organ_level: OutputLevel::ModelDefault,
+            leslie_firmware: false,
+            leslie_gain_mdb: 0,
         }
     }
 }
@@ -271,10 +294,13 @@ impl FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             synth_stages: false,
+            synth_p: None,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
             organ_level: OutputLevel::ModelDefault,
+            leslie_firmware: false,
+            leslie_gain_mdb: 0,
         }
     }
 
@@ -330,11 +356,27 @@ impl FirmwareOptions {
         if let Some(v) = value("--organ-level") {
             o.organ_level = parse_organ_level(v)?;
         }
+        if let Some(v) = value("--leslie") {
+            o.leslie_firmware = match v {
+                "firmware" => true,
+                "engine" => false,
+                _ => return Err(format!("invalid --leslie '{v}' (firmware|engine)")),
+            };
+        }
+        if let Some(v) = value("--leslie-gain-db") {
+            let db: f32 = v
+                .parse()
+                .map_err(|_| format!("invalid --leslie-gain-db '{v}'"))?;
+            o.leslie_gain_mdb = (db * 1000.0).round() as i32;
+        }
         if let Some(v) = value("--synth-shape") {
             let x: f32 = v
                 .parse()
                 .map_err(|_| format!("invalid --synth-shape '{v}'"))?;
             o.synth_shape_milli = Some((x.clamp(0.0, 1.0) * 1000.0).round() as u16);
+        }
+        if let Some(v) = value("--synth-p") {
+            o.synth_p = Some(PSpec::parse(v)?);
         }
         Ok(o)
     }
@@ -352,9 +394,15 @@ impl FirmwareOptions {
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
         apply_b3_tail(engine, self.b3_tail);
+        apply_leslie_firmware(
+            engine,
+            self.leslie_firmware,
+            self.leslie_gain_mdb as f32 / 1000.0,
+        );
         apply_synth_chain(engine, self.synth_chain);
         self.set_shape(engine);
         self.set_stages(engine);
+        self.set_p_block(engine);
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
@@ -421,6 +469,7 @@ impl FirmwareOptions {
         });
         self.set_shape(engine);
         self.set_stages(engine);
+        self.set_p_block(engine);
         self.set_organ_level(engine);
     }
 
@@ -447,6 +496,13 @@ impl FirmwareOptions {
         engine.synth_a.strip_stages = self.synth_stages;
         engine.synth_b.strip_stages = self.synth_stages;
         engine.synth_c.strip_stages = self.synth_stages;
+    }
+
+    fn set_p_block(&self, engine: &mut Stage4Engine) {
+        let p = self.synth_p.map(PSpec::block);
+        engine.synth_a.p_block = p;
+        engine.synth_b.p_block = p;
+        engine.synth_c.p_block = p;
     }
 
     fn set_measured_laws(&self, engine: &mut Stage4Engine) {
@@ -493,6 +549,9 @@ impl FirmwareOptions {
         }
         if self.synth_stages {
             parts.push("stages".into());
+        }
+        if let Some(p) = self.synth_p {
+            parts.push(format!("synth-p={p:?}"));
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
@@ -626,6 +685,26 @@ mod tests {
         FirmwareOptions::default().apply_exact(&mut e);
         assert_eq!(e.synth_b.strip_shape, None);
         assert!(FirmwareOptions::from_args(&["--synth-shape".into(), "x".into()]).is_err());
+    }
+
+    #[test]
+    fn synth_p_flag_sets_and_clears_the_p_block() {
+        let args: Vec<String> = ["--synth-p", "fitted"].map(String::from).to_vec();
+        let o = FirmwareOptions::from_args(&args).unwrap();
+        assert_eq!(o.synth_p, Some(PSpec::Fitted));
+        assert!(o.summary().contains("synth-p"));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert_eq!(e.synth_c.p_block, Some(crate::synth::PBlock::FITTED));
+        let custom = FirmwareOptions::from_args(&["--synth-p".into(), "1,0,1,0.5,1".into()]);
+        assert_eq!(
+            custom.unwrap().synth_p,
+            Some(PSpec::Custom([1000, 0, 1000, 500, 1000]))
+        );
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert_eq!(e.synth_c.p_block, None);
+        assert!(FirmwareOptions::from_args(&["--synth-p".into(), "x".into()]).is_err());
+        assert_eq!(FirmwareOptions::firmware_all().synth_p, None);
     }
 
     #[test]

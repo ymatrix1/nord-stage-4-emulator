@@ -31,6 +31,47 @@ impl OrganLayer {
         self.process_rotary(x, 1.0 / self.sample_rate)
     }
 
+    /// The firmware Leslie processor on one organ sample: the engine's ramped rotor rates become
+    /// the three speed words by the ARM's own law (`tools/arm_leslie_speeds.py`: `0xB2F25` rotor,
+    /// `0xB2F26` horn, `0xB2FA1` follows the horn), the organ signal goes in the left lane (the
+    /// right lane of the organ bus is silent, `docs/research/fx-leslie.md`).
+    ///
+    /// VERIFIED (ARM state block, `docs/research/arm-part-activation.md`): the firmware speeds are
+    /// horn 0.80 Hz slow / 7.0 Hz fast and rotor 0.73 / 6.4 Hz, `word = int(hz * 8388607 /
+    /// 11025) << 8`. The engine's ramp (its own time constants) supplies the speed in between:
+    /// the fraction of the engine's slow to fast range is mapped onto the firmware range.
+    fn process_leslie_firmware(&mut self, x: f32) -> [f32; 2] {
+        const FS_DSP: f64 = 44_444_000.0 / 1024.0;
+        const SCALE: f64 = 8_388_607.0 / 11_025.0;
+        const HORN_FOLLOW: f64 = 0.5748; // EMPIRICAL, fits 0xB2FA1 at 0.80 and 0.86 Hz
+                                         // (engine slow, engine fast, firmware slow, firmware fast) in Hz
+        const HORN: (f64, f64, f64, f64) = (0.80, 6.85, 0.80, 7.0);
+        const ROTOR: (f64, f64, f64, f64) = (0.67, 5.70, 0.73, 6.4);
+        let arm_hz = |r: f64, (es, ef, fs, ff): (f64, f64, f64, f64)| {
+            if r <= es {
+                r * fs / es
+            } else {
+                fs + (r - es) / (ef - es) * (ff - fs)
+            }
+        };
+        // the firmware words mean Hz at its own frame rate; at the engine rate they scale
+        let k = FS_DSP / f64::from(self.sample_rate);
+        let word = |hz: f64| (((hz * SCALE).trunc().max(0.0) as u32) << 8) as f64 * k;
+        let horn = arm_hz(f64::from(self.horn_rate_hz), HORN);
+        let rotor = arm_hz(f64::from(self.drum_rate_hz), ROTOR);
+        let gain = self.leslie_gain;
+        if let Some(l) = self.leslie_fw.as_mut() {
+            l.set_speed_words([
+                word(rotor).round() as u32,
+                word(horn).round() as u32,
+                word(horn * HORN_FOLLOW).round() as u32,
+            ]);
+            let y = l.process(x, 0.0);
+            return [y[0] * gain, y[1] * gain];
+        }
+        [0.0; 2]
+    }
+
     /// Processes Model 122 Rotary Speaker with Doppler delay, Close Mic, Angle, Stop Mode, and cabinet reflections.
     pub(super) fn process_rotary(&mut self, scanner_out: f32, inv_fs: f32) -> [f32; 2] {
         let drive = if self.rotary_drive_scaled {
@@ -68,6 +109,9 @@ impl OrganLayer {
         self.drum_rate_hz += (target_drum - self.drum_rate_hz)
             * (inv_fs / (4.2 * self.globals.rotor_tau_scale)).min(1.0);
 
+        if self.leslie_fw.is_some() {
+            return self.process_leslie_firmware(scanner_out);
+        }
         if effective_speed == RotarySpeed::Stop && self.horn_rate_hz < 0.05 {
             // Brake horn cleanly toward front cabinet position
             self.horn_phase *= (1.0 - inv_fs * 6.0).max(0.0);

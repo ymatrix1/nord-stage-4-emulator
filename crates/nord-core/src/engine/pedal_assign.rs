@@ -138,7 +138,7 @@ impl TripleState {
         self.tap_age = self.tap_age.saturating_add(1);
     }
 
-    fn resolve(&self, func: TripleFunc) -> TripleFunc {
+    pub(super) fn resolve(&self, func: TripleFunc) -> TripleFunc {
         if func != TripleFunc::PanelAssigned {
             return func;
         }
@@ -201,12 +201,23 @@ impl Stage4Engine {
         }
         let (u, p) = (unit as usize, pedal as usize);
         let value = value.min(127);
-        let norm = f32::from(value) / 127.0;
         let down = value >= DOWN;
         let was = std::mem::replace(&mut self.pedals.triple.down[u][p], down);
-        let pressed = down && !was;
-        let released = !down && was;
         let func = self.pedals.triple.resolve(self.pedals.triple.funcs[u][p]);
+        self.apply_pedal_func(func, value, down && !was, !down && was);
+    }
+
+    /// Runs a resolved pedal function for an input of `value` (`0..=127`); `pressed` / `released`
+    /// are the edges of that input. Shared by the Triple Pedal and the Foot Switch SW B.
+    pub(super) fn apply_pedal_func(
+        &mut self,
+        func: TripleFunc,
+        value: u8,
+        pressed: bool,
+        released: bool,
+    ) {
+        let norm = f32::from(value) / 127.0;
+        let down = value >= DOWN;
         match func {
             TripleFunc::UnaCorda => {
                 self.piano_a.set_soft_pedal(down, value);

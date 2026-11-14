@@ -65,6 +65,9 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
             ..Default::default()
         };
     }
+    if m == MenuId::Organize && ui.on_organize_page() {
+        return super::organize::compose(ui);
+    }
     let page = menu.page();
     let focus = menu.focus();
     let start = menu.block_start();
@@ -122,13 +125,15 @@ mod tests {
     #[test]
     fn unsupported_rows_are_dimmed_and_name_their_bean() {
         let mut ui = ProgramUi::default();
-        ui.open_menu(MenuId::Output);
-        let t = compose(&ui, MenuId::Output);
+        ui.open_menu(MenuId::Organize);
+        ui.menu.step_page(1); // the Preset page is the unsupported one
+        let t = compose(&ui, MenuId::Organize);
         assert!(
             t.rows[0].starts_with(DIM) && t.rows[0].contains("ns4-"),
             "{:?}",
             t.rows
         );
+        ui.open_menu(MenuId::Output);
         ui.menu.step_page(1);
         ui.menu.soft(3); // More: bus_sub3 .. mono
         let t = compose(&ui, MenuId::Output);

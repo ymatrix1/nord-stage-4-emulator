@@ -64,6 +64,11 @@ pub fn apply_to_engine(
     mode: MidiRoutingMode,
     ev: MidiEvent,
 ) {
+    // Local Control Off (MIDI menu page 1): the on-screen keys only transmit.
+    if !engine.midi_menu.local_control {
+        engine.handle_keyboard_midi(ev);
+        return;
+    }
     let note_event = match ev {
         MidiEvent::NoteOn {
             channel,
@@ -155,6 +160,20 @@ mod tests {
             }
             assert!(peak > 0.0, "{mode:?}: key press produced no audio");
         }
+    }
+
+    #[test]
+    fn local_control_off_keeps_the_on_screen_keys_silent_but_transmits_them() {
+        let params = Stage4Params::default();
+        let mut engine = Stage4Engine::new(48_000.0);
+        engine.midi_menu.local_control = false;
+        apply_to_engine(&mut engine, &params, MidiRoutingMode::OmniSplit, on(60));
+        let peak = (0..4_000).fold(0.0f32, |m, _| m.max(engine.render_frame()[0].abs()));
+        assert_eq!(peak, 0.0);
+        assert_eq!(
+            engine.pop_midi_out().map(|m| m.bytes()),
+            Some([0x90, 60, 100])
+        );
     }
 
     #[test]

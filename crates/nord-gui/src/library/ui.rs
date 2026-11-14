@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 impl BackupLibraryState {
     /// Renders the compact top library utility strip.
-    pub fn render_top_bar(&mut self, ui: &mut egui::Ui, sync_knobs_on_load: &mut bool) {
+    pub fn render_top_bar(&mut self, ui: &mut egui::Ui, panel: &mut Stage4PanelState) {
         ui.horizontal(|ui| {
             let toggle_label = if self.drawer_open {
                 "Close Library"
@@ -28,10 +28,37 @@ impl BackupLibraryState {
             }
 
             ui.separator();
-            ui.checkbox(sync_knobs_on_load, "Sync Knobs on Preset")
+            ui.checkbox(&mut panel.sync_knobs_on_program_load, "Sync Knobs on Preset")
                 .on_hover_text(
                     "Real Nord Stage 4 knobs are non-motorized (OLED & LED ladders update on load, while pots keep their physical angle). Enable to move GUI knobs on preset load.",
                 );
+
+            ui.separator();
+            ui.add_enabled_ui(self.backup_path.is_some(), |ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.export_path)
+                        .desired_width(170.0)
+                        .hint_text("Export path (.ns4b)"),
+                );
+                if ui
+                    .button("Export backup")
+                    .on_hover_text(
+                        "Write the stored and organized programs and the Live slots into a copy of the opened .ns4b. The opened file is never changed.",
+                    )
+                    .clicked()
+                {
+                    let r = self.export_backup(&panel.program_ui.library);
+                    self.report(r);
+                }
+                if ui
+                    .button("Load Live slots")
+                    .on_hover_text("Load the Live slots (.ns4l) of the opened backup into the eight Live programs.")
+                    .clicked()
+                {
+                    let r = self.import_live_slots(&mut panel.program_ui.library);
+                    self.report(r);
+                }
+            });
 
             ui.separator();
             if self.pending_jobs > 0 {
@@ -43,6 +70,17 @@ impl BackupLibraryState {
                 ui.label(RichText::new(&self.status_message).color(Color32::LIGHT_GRAY));
             }
         });
+    }
+
+    /// Shows the outcome of an Export / Live import in the status strip.
+    fn report(&mut self, result: Result<String, String>) {
+        match result {
+            Ok(msg) => {
+                self.status_message = msg;
+                self.error_message = None;
+            }
+            Err(err) => self.error_message = Some(err),
+        }
     }
 
     /// Renders the docked `.ns4b` archive browser side panel when `drawer_open` is true.
@@ -200,10 +238,9 @@ mod tests {
         let mut lib = BackupLibraryState::new();
         let (audio, _rx) = AudioHandle::new();
         let mut panel = Stage4PanelState::default();
-        let mut sync = false;
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| lib.render_top_bar(ui, &mut sync));
+            egui::CentralPanel::default().show(ctx, |ui| lib.render_top_bar(ui, &mut panel));
             lib.render_drawer(ctx, &mut panel, &audio);
         });
         assert!(!lib.drawer_open);

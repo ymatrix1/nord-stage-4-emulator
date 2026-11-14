@@ -3,7 +3,9 @@
 //! The Program bay's menu screens (`nord_panel::menus`, manual OS v1.6x p.57-64) write one item at
 //! a time: [`SettingsEdit`] names the item by its stable model id and carries the new
 //! [`Value`]. `apply` routes it to the engine's own setter: `settings` (System/Sound/Output/Aux
-//! KB), `pedals` and `pedal_assign` (Pedal), `extern_out` and the channel setters (MIDI, Extern).
+//! KB), `pedals` and `pedal_assign` (Pedal), `extern_out` and the channel setters (MIDI, Extern),
+//! and `routing` for the MIDI / Extern / Output menu state (`midi_menu`, `extern_menu`,
+//! `output_routing`, `organ_trigger`, Foot Switch SW B).
 //! Everything here is plain assignments on pre-allocated engine fields: no heap allocation, no
 //! lock, no I/O, so it is safe to run inside the audio callback.
 //!
@@ -17,6 +19,7 @@ use nord_panel::menus::Value;
 mod channels;
 mod global;
 mod pedal;
+mod routing;
 
 /// One menu item write.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,7 +33,10 @@ pub struct SettingsEdit {
 impl SettingsEdit {
     /// Writes the item to the engine. Returns `false` when no engine field backs `id`.
     pub fn apply(&self, engine: &mut Stage4Engine) -> bool {
-        global::apply(self, engine) || pedal::apply(self, engine) || channels::apply(self, engine)
+        global::apply(self, engine)
+            || pedal::apply(self, engine)
+            || channels::apply(self, engine)
+            || routing::apply(self, engine)
     }
 
     /// Choice index (also the On/Off of a toggle: 0 / 1); `0` for other kinds.

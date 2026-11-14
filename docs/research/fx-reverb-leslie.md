@@ -215,6 +215,37 @@ So the match is **exact (0 differing words, sign of zero aside)** on the 40-bit 
 
 **Decision (D22).** The port matches the oracle exactly, but the end-to-end conditions are not met: the decay gap cannot be measured with the available clips, the stereo gap grows, the spectral gain is 0.75 dB at one clip, and the name mapping of types 0, 1 to the UI's SPRING is still ASSUMED (s8). `FirmwareFx::reverb` therefore stays opt-in and `render_hash` is unchanged. What would move it: a hardware clip with a clean release into a Spring reverb (or a long sustained note released), or the type 0 name check on the unit.
 
+## 11. Types 2..11: routine identification and the blocker (fourth pass, 2026-11-14)
+
+Checked with `sharc-disasm` on the FX Core 2 flat image (byte offset = 2 x parcel address), [fx-contexts](fx-contexts.md) s4 and [data/fx-type-words.csv](data/fx-type-words.csv). Time-boxed; no port was written, D22 is unchanged.
+
+| Finding | Evidence | Tag |
+|---|---|---|
+| `0x12314A` / `0x12329B` / `0x123466` are **not** reverb routines: the type-to-module table installs them only for the **Dly** feedback-fx types 10, 11 (module `0xC0441AC4#2`). `0x123ABE` is the init / clear routine of the same family (its first lines are `R5 = 0x32` clear loops ending in `RTS`; the process entry is `0x123AD2`) | [fx-contexts](fx-contexts.md) s4 table (rows `Dly 10, 11`), listing | VERIFIED (table), EMPIRICAL (clear routine reading) |
+| Reverb types 2..5 and 7..11 own **no state row and no routine of their own**: their words are the 54-word block at DM `0x9500A..0x95033` plus the context words of module `0xC02BB44C#0` (`ctx = 0xB0F28`: `kRvbAmt` at `-31`, `-30`, coefficients at `-27 .. -7`) and `0xB0F59 .. 0xB0F6C`, `0xB1C26 .. 0xB1C2C` | `fx-type-words.csv` (192 rows per type) | VERIFIED (capture) |
+| The module `0xC02BB44C` routine is `0x120FDB` (not `0x12417E`): three fs/4 biquad stages (PM `0x9437A`), a hold, a second bank (PM `0x9437F`), then `CALL 0x120D8A`, a mix with `c[-28]` (dry) and `c[42]`, `c[43]` (output scales). The called core `0x120D8A .. 0x120FDA` is a **16 bit packed multi-tap delay** (`FPACK`, `FDEP` / `FEXT` 16:16, `FUNPACK`), with the tap structure read through `I4` (`DM(-30 .. -22, I4)`, the `0x9500A` block: lengths 262 / 1324 / 270 / 1766 / 920 / 1788, offsets `-16`, `+18`) and per-line pointer words `B2 L2 I2`, `B6 L6 I6`, `I10`, `I11` read from the module context (`c[-15 .. -13]`, `c[-24 .. -19]`) | listing `0x241b14 ..` (core 2) | VERIFIED (code), EMPIRICAL (reading) |
+| The pair structure of s3 (`2/3`, `4/5`, `8/9`, `10/11` differ in one length word and one `0xB0F59` / `0xB0F5C` pair) is data for this one core, as for the Amp unit | s3 + above | EMPIRICAL |
+
+**Blocker (why there is no port or response table).** For types 0 and 1 the line pointers, lengths and the loop state were static initial DM of the image (s8). For `0xC02BB44C` they are **not**: DM `0xB0E94 .. 0xB0FE5` (the whole context of this instance, including `c[-24 .. -13]`) is **zero in the image**, and the ARM sends only the 54 words (no base, length or write-pointer words; `fx-type-words.csv` lists `c[-27 .. -7]` partially and nothing at `c[-24 .. -20]`, `c[-15 .. -13]`). The delay line bases are therefore created by an ARM path the boot capture does not run (module activation, [fx-contexts](fx-contexts.md) s7). Without them a model proves the routine on synthetic pointers only, and the decay, density and band responses would be invented, so none is quoted. Mapping types to the UI names (Room, Stage, Hall, Cath, Spring, Booth) stays at the s3 reading: size rises with the word `0xB0F0D` (0.21, 0.28, 0.35) and the length words, SPRING-for-0/1 stays ASSUMED; no program-decode evidence was gathered.
+
+Next steps, in order: (1) hook the DSP-message writer while the harness enables a reverb of type 2 (`tools/fx_clients.py`, enable path) to capture the pointer words of `0xB0F28`; (2) model `0x120D8A` (about 120 instructions, forms already handled by `tools/fx_rvbcore_gen.py` plus `FPACK` / `FUNPACK` / `FDEP` / `FEXT`) and `0x120FDB`; (3) golden vectors, E40 port, then the response table and the video check; (4) D22 only after (1) to (3). Types 0, 1 stay the only firmware-ported pair; every other type keeps the engine FDN.
+
+## 12. Types 2..11: instance layout read from the code, capture attempt (fifth pass, 2026-11-14)
+
+The aim was the instance context of `0xC02BB44C` (ctx `0xB0F28`) so that `0x120FDB` plus `0x120D8A` can be modelled on a real instance as in s8. Result: **the layout is now read from the listing, the pointer words are still not obtainable**; no model, port or response table was produced.
+
+| Finding | Evidence | Tag |
+|---|---|---|
+| The module's third routine `0x120F7E` (`0xC02BB520`, run 40) is the **clear routine** of this instance: it loads `I4 = c[0]`, `I5 = c[1]` (two table pointers), `B2 L2 = c[-15] c[-14]` with `I2 = c[-4]`, zeroes 90 words of line 1, then `B2 L2 = c[-24] c[-23]` with `I2 = c[-6]` and zeroes 8 words of line 2, then `DM(-19, I4) = DM(-19, I5) = 0` and the words `c[2]`, `c[4]`, `c[18 .. 40]` (even); it stores `EMUCLK` at `c[6]`, `c[8]` | listing `0x241efc ..` (core 2) | VERIFIED (code) |
+| `I4` / `I5` point **behind** the two 16-word tap tables of the type block: the core reads `M6 = DM(-32, I4)` (the length word 262 / 1324 / ...), `M3 = DM(-31, I4)` (`-16`), `M5`, `M3`, `I10 = DM(-30 .. -28, I4)`, a state word `DM(-19, I4)` and `I1 = DM(-17, I4)` (the 7-tap FIR coefficient pointer, the seven words `0xB1C26 .. 0xB1C2C`). So `c[0] = 0x95033`, `c[1] = 0x95044` (organ; the piano and synth parts use `0x94405` / `0xC1C5D` ... blocks) is the consistent reading, not a measurement. The line and FIR pointer words in the tables (`0x95022`, ...) are sent as **zero** in the captured block | listing + `fx-type-words.csv` | EMPIRICAL |
+| The core loop structure: smoothing of the send word (`c[-32]` pole, `c[-31]` target, `c[-29]` state), two packed (16 bit float, 16:16) delay lines read and written through `I2` and `I6`, a 7-tap packed FIR (`DO ... LCNTR = 7`), and five all-pass-like stages with gains `c[-19 .. -7]`; outputs `R12`, `R14` | listing | EMPIRICAL |
+| The ARM harness runs (`uv run --with unicorn python tools/fx_clients.py ... --slots ... --slot Rvb`, about 3 minutes for one unit, snapshot `settled.snap`) and reproduces the same 54 words per type plus the module words; the enable ids queue a command in the part's list that the main loop never consumes in the window (fx-contexts s7), so no `0xC02BB44C` pointer, length or smoothing word appears: **the activation path is still not driven** | run | EMPIRICAL |
+| Static data: the only SDRAM line pointers in the FX images are the five type 0, 1 instances (`0xB2439 ..`, `0xC1A39 ..`, bases `0x08004000 ..` core 1, `0x08020000 ..` core 2); there is no static record for `0xC02BB44C` | scan of `0xB0000 .. 0xC4000`, both cores | VERIFIED (scan) |
+
+Why no response table: the model needs `c[0]`, `c[1]`, `c[-24 .. -13]`, `c[-6]`, `c[-4]`, the smoothing pole `c[-32]`, the mix words `c[-28]`, `c[42]`, `c[43]` and the FIR pointer. Ring lengths do not matter if they exceed the largest tap (a ring output is independent of its length), but the table pointers, the smoothing words and the FIR pointer change the data flow, and each would be a guess that a golden vector cannot check against the hardware. The reading above is the best one; it is recorded here as the starting point.
+
+Next steps (unchanged in order): (1) drive the part's command consumer (`[part + 0xC8]` list, node `{-1, counter}`) in the harness after `kRvbEnable` and capture the DSP messages of `0xC02BB44C` (hook `0xC006CA48`, `0xC001C6A0`); (2) model `0x120D8A`, `0x120FDB`, `0x120F7E` with `FPACK`/`FUNPACK`/`FDEP`/`FEXT` in `tools/fx_rvbcore_gen.py` and check word for word against `sharc-fx --trace`; (3) golden vectors, E40 port, response table, UI names, video check; D22 only after those.
+
 ## Implications
 
 - The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are not.
@@ -223,5 +254,5 @@ So the match is **exact (0 differing words, sign of zero aside)** on the 40-bit 
 ## Follow-ups
 
 1. A hardware clip with a clean release into a Spring reverb (decay), and the SPRING name check of types 0, 1; then re-run the s10 comparison and revisit the default (D22).
-3. Types 2..11 (`0x9500A..` words, s3): their routines (`0x123ABE`, `0x12314A`, `0x12329B`) are not these wrappers; the listing-to-steps generator applies.
+3. Types 2..11: module `0xC02BB44C`, wrapper `0x120FDB` plus packed multi-tap core `0x120D8A`, not `0x123ABE` / `0x12314A` / `0x12329B` (s11); blocked on the pointer words (ARM activation path).
 4. Leslie: capture the rotor words over many ARM ticks per `kEffectsLeslieSpeed` value.

@@ -30,6 +30,7 @@ mod gain_dezip;
 mod hw_saw;
 mod key_velocity;
 mod measured;
+mod p_block;
 mod pattern;
 mod perf;
 mod render;
@@ -62,6 +63,7 @@ pub use measured::{
     FILTER_ENV_OCTAVES_MEASURED, OSC_ENV_PITCH_OCTAVES_MEASURED, SUPERSAW_OUTER_CENTS,
     SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
 };
+pub use p_block::{PBlock, PSpec};
 pub use pattern::{pan_gains, CustomPattern, PatternPan, ACCENT_VELOCITY_BOOST, PATTERN_MAX_STEPS};
 pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
@@ -192,6 +194,8 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
+    /// Strip chain only (opt-in): empirical oscillator-stage parameter block (`p_block.rs`).
+    pub p_block: Option<PBlock>,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -325,6 +329,7 @@ impl SynthLayer {
             strip_shape: None,
             strip_stage: None,
             strip_stages: false,
+            p_block: None,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,
