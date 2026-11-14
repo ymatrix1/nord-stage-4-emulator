@@ -318,7 +318,7 @@ ns4 backup-store in.ns4b out.ns4b --program edited.ns4p --bank A --loc 38 [--nam
 ns4 backup-store in.ns4b out.ns4b --live live-1.ns4l --slot 0
 ```
 
-GUI: the library top bar has **Export backup** (path field, default `<name>-edited.ns4b`) and **Load Live slots**. Export applies the program library (STORE, Organize) and the Live slots to a copy: a stored program is patched onto the archive program of the same cell (`export_into`, so FX chains and deep Synth data come from that program; `ASSUMED` limitation: a stored program does not remember which program it was edited from), a moved archive program only gets its header location rewritten (payload bit-identical), emptied locations lose their entry. See [midi-and-control.md](midi-and-control.md) section 5.2 for the Organize flow.
+GUI: the library top bar has **Export backup** (path field, default `<name>-edited.ns4b`) and **Load Live slots**. Export applies the program library (STORE, Organize) and the Live slots to a copy: a stored program is patched onto the archive program of the same cell (`export_into`: panel edits of the Synth sound and the FX chains are written back, section 5.7; the rest comes from that program; `ASSUMED` limitation: a stored program does not remember which program it was edited from). `ProgramDecoded::to_cbin_file_like` merges at bit level like presets (section 5.6): bits the decoders collapse (OQ31) stay as in the archive program, so an unedited program re-encodes to the identical file (before: 224 of 384 factory programs changed), a moved archive program only gets its header location rewritten (payload bit-identical), emptied locations lose their entry. See [midi-and-control.md](midi-and-control.md) section 5.2 for the Organize flow.
 
 **Presets (`cbin/backup_presets.rs`).** `.ns4o`, `.ns4n` and `.ns4y` entries carry their location the same way (`bank_index` `0x0C`, `location_index` `0x0E`, `0..63`) and live in `<Organ|Piano|Synth> Preset/Bank <bank + 1>/<name>.<ext>`. `PresetIndex::read` maps them, `preset_edits(index, puts, cleared)` turns "preset P at (section, bank, loc)" into edits with the same rules as `store_edits` (replace in place, new bank folder when the bank changes, ` (2)` on a name clash, vacated paths removed). VERIFIED on the factory backup: `python tools/preset_slots.py "<backup>.ns4b"` prints 544 presets (Organ 64 in bank 0, Piano 64 + 32 in banks 0 and 1, Synth 6 x 64 in banks 0 to 5) and `problems: 0` (no duplicate location, location `<= 63`, folder `Bank n+1` equals header bank + 1). Preset Organize ([midi-and-control.md](midi-and-control.md) section 5.3) feeds it; Export backup applies program and preset edits in one rewrite. `ASSUMED`: capacity of banks beyond the factory content (Organ 2, Piano 2, Synth 8); the preset payload is never touched, only the header location.
 
@@ -332,7 +332,7 @@ GUI: the library top bar has **Export backup** (path field, default `<name>-edit
 
 **Load.** `Stage4Engine::load_section_preset(preset, single)` (undoable variant `load_section_preset_undoable`) calls `apply_organ_section`, `apply_piano_section` (per layer `apply_piano_layer`) or `apply_synth_section` (`apply_synth_layer`): the layers, the effect chains (`0x36`) and the levels with their morph deltas. `apply_program` is built from the same functions. Layer Scene (manual p.43): a section preset switches the layers its enable flags name on in the playing scene and the whole section off in the other scene; a single-layer preset (Shift + PIANO / SYNTH) takes layer A of the file into the chosen layer, switches it on in the playing scene and leaves the other scene alone (`ASSUMED`: which layer of a multi-layer file a Single Layer load uses is not in the manual). GUI: `ProgramEdit::LoadPreset` is a control operation (shadow engine, one `SwapState`, Undo "Load Preset"), `library/preset_load.rs` reads the entry, `Stage4PanelState::apply_section_preset` mirrors the display controls, and the sounds it names are decoded like a program's (`Piano not found` / `Sample not found` as for programs).
 
-**Store.** `ProgramState::capture_section_preset(section, base)` = the section block of `export_into` on top of `base` (the preset the section was loaded from, else the init preset) plus the layer enable flags of the playing Layer Scene. Export backup writes it with `to_file_like(base file)` (header and category of the base, every unmapped bit kept) or `to_file(bank, loc, 0)` without a base. `ASSUMED` limits: effect chains and the Synth sound come from the base (OQ30); the header category of a new preset is the base's or 0 (OQ26).
+**Store.** `ProgramState::capture_section_preset(section, base)` = the section block of `export_into` on top of `base` (the preset the section was loaded from, else the init preset) plus the layer enable flags of the playing Layer Scene. Export backup writes it with `to_file_like(base file)` (header and category of the base, every unmapped bit kept) or `to_file(bank, loc, 0)` without a base. The Synth sound and the effect chains are written back by the inverse mapping (section 5.7, OQ30 narrowed); `ASSUMED` limit: the header category of a new preset is the base's or 0 (OQ26).
 
 | Check | Command | Result (Factory Restore RevK v1.66) |
 |---|---|---|
@@ -340,3 +340,32 @@ GUI: the library top bar has **Export backup** (path field, default `<name>-edit
 | Decode, bit-identical re-encode, merged edit touches only its bits, finite render after load | `ns4 preset-check "<backup>.ns4b"` | Organ 64 (0 lossy decodes), Piano 96 (4), Synth 384 (136), 544 presets, problems: 0 |
 
 Tests: `cbin/checksum.rs`, `cbin/section_preset.rs`, `engine/preset_load.rs`, `engine/preset_capture.rs`, `preset_cli.rs`, `tools/tests/test_preset_check.py`, GUI `library/preset_load_tests.rs`, `library/preset_export.rs`, `library/export_presets_tests.rs`.
+
+### 5.7 STORE of the Synth sound and the FX chains: inverse mappings (`synth_params_export.rs`, `engine/program_fx_export.rs`)
+
+`ProgramState::export_into` (program STORE, Live slots, `capture_section_preset`) writes the engine back into the base `ProgramDecoded`. Besides levels, octaves and the Organ / Piano panel it now inverts `synth_params::apply_decoded_layer` and `Stage4Engine::apply_fx_chain`. Control thread only (it clones layers and allocates); `process_block` is untouched.
+
+**Rule.** The base is the reference: a field is written only where the engine value differs from what the base produces (`export_decoded_layer` applies the base to a reference `SynthLayer` and compares the mapped engine fields; `invert_fx_chain` keeps a base value that still projects onto the engine value). An unedited layer therefore returns the base, and `pack` + the bit merge (5.6, programs too) keep every bit the decoders collapse (OQ31).
+
+| Group | Written back (engine field to decoded field) |
+|---|---|
+| Oscillator | `osc_mode`, `waveform` (not for SAMPLES); Wavetable index, FM ratio index (low 4 bits of `wave_id`); Osc Ctrl from the active mode (`wavetable_position`, `fm_amount`, `supersaw_detune`, pulse width) to `detune`; `pitch_cents` to fine / coarse (the base split is kept while the fine part fits `-64..=63`) |
+| Filter | model, on, cutoff Hz, resonance, drive, env amount, KB track, filter ADR (s to ms), velocity (`> 0.5`), cutoff morph deltas |
+| Envelopes | amp ADR, amp velocity (`round(3 v)`), osc env ADR, amount, to pitch, velocity |
+| Modulation | LFO shape, dest, rate, amount; Vibrato mode, delay, rate, amount (cents to `0..10`); pattern on |
+| Arpeggiator | run switch, mode, direction, zig zag, KB sync, Master Clock, RANGE (Arp: thirds, Gate: envelope hardness), rate or Master Clock division |
+| Voice mode | unison, mono / legato, priority, glide (`sqrt(sec / 2) * 10`) |
+| FX (per chain) | Mod 1 / Mod 2 type, enable, rate, amount; Amp cabinet and variation, drive, EQ, mid frequency; comp; delay on, time or sync division, mix, feedback, analog, ping pong, filter, feedback effect; reverb model, variation, color, amount; the nine morph delta sets |
+
+Organ chains A and B load from one block: an edit of either is stored (A first).
+
+**Left with the base** (`LOSSY_FIELDS`, `LOSSY_FX_FIELDS`; not representable exactly in the engine, never overwritten): `sample_id`, `osc_type`, `osc_category`, `osc_wave` (the engine keeps only the derived waveform); pattern steps, accent, gate and pan words (engine gate lengths are eighths, the file has the four codes `E q Q .`; only `pattern.enabled` is written); `lfo_mst_clk`, `filter_env_dedicated`, `knobs`; `osc_ctrl_morph`, `filter_resonance_morph` (no engine slot); Mod 1 clock sync, the morph bases, the amp filter resonance (carried by the Mid dB field), Mod 1 Auto Wah / Pump (no file value known), reverb color raw 3. `pan` and `enabled` belong to the layer mix state.
+
+| Check | Command | Result (Factory Restore RevK v1.66) |
+|---|---|---|
+| Inverse: `pack(inverse(engine(x))) == pack(x)`, 1152 Synth layers, all chains | `ns4 preset-check "<backup>.ns4b"` | 0 problems |
+| Unedited STORE byte round trip + one cutoff edit (Synth) | same, per preset | 544 presets, 0 problems |
+| Unedited STORE byte round trip + one cutoff and one reverb edit | same, per program | 384 programs, 0 problems (224 changed before the program bit merge) |
+| Random decoder payloads (synthetic, in memory) | `cargo test -p nord-core synth_params_export program_fx_export` | 1500 Synth presets, 6000 FX blocks round trip |
+
+`ns4 store-program <base> <out> [--layer A|B|C] [--cutoff HZ] [--resonance 0-1] [--reverb-mix 0-1]` applies such edits to the engine before the export. `ASSUMED`: hardware accepts a backup whose edited fields moved onto the nearest table index (cutoff, ADR times, delay time are quantised by the packer); needs a Stage 4.
