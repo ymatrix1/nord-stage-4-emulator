@@ -40,6 +40,11 @@ impl BackupLibraryState {
                     self.synth_layer_idx = layer.min(2);
                     self.request_sample_entry(&entry);
                 }
+                LoadRequest::Preset {
+                    section,
+                    entry,
+                    single,
+                } => self.load_preset_entry(section, &entry, single, panel, audio),
             }
         }
     }

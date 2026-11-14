@@ -59,6 +59,10 @@ impl ProgramUi {
     }
 
     pub(super) fn preset_dial(&mut self, kind: PresetKind, delta: i32) -> Vec<AudioCommand> {
+        if self.has_presets(kind) {
+            self.preset_library_step(kind, delta);
+            return Vec::new();
+        }
         let n = match kind {
             PresetKind::Organ => ORGAN_PRESETS.len(),
             PresetKind::Piano => self.catalog.pianos.len(),

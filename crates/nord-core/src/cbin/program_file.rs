@@ -7,14 +7,6 @@
 use super::container::{CbinError, CbinFile, CbinKind};
 use super::presets::ProgramDecoded;
 
-/// Payload checksum used by `ProgramDecoded::to_cbin_file`: wrapping byte sum.
-/// ASSUMED: matches the hardware sum; the existing encoder and its round-trip test use the same rule.
-fn payload_sum(payload: &[u8]) -> u32 {
-    payload
-        .iter()
-        .fold(0u32, |acc, &b| acc.wrapping_add(u32::from(b)))
-}
-
 impl ProgramDecoded {
     /// Encodes against `template`, keeping its header (format version, kind, bank, location,
     /// category and the 18 reserved bytes). The checksum is kept when the payload is unchanged,
@@ -24,12 +16,13 @@ impl ProgramDecoded {
             self.to_cbin_file(template.header.bank_index, template.header.location_index)?;
         let mut header = template.header.clone();
         header.category_id = self.category_id;
-        header.checksum = if file.payload == template.payload {
-            template.header.checksum
-        } else {
-            payload_sum(&file.payload)
-        };
+        // An unchanged payload keeps the template checksum (byte-identical file); an edited one
+        // gets the CRC-32 of `cbin/checksum.rs` (VERIFIED on the factory backup).
+        let unchanged = file.payload == template.payload;
         file.header = header;
+        if !unchanged {
+            file.refresh_checksum();
+        }
         Ok(file)
     }
 
@@ -65,7 +58,7 @@ mod tests {
         let out = edited.to_cbin_file_like(&parsed).unwrap();
         assert_eq!(out.header.reserved, [7u8; 18]);
         assert_eq!(out.header.bank_index, 3);
-        assert_eq!(out.header.checksum, payload_sum(&out.payload));
+        assert!(out.checksum_ok());
         assert_ne!(out.header.checksum, 0xDEAD_BEEF);
         let back =
             ProgramDecoded::from_cbin_file(&CbinFile::parse(&out.to_bytes()).unwrap()).unwrap();

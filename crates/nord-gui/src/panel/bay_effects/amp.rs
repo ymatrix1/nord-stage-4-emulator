@@ -63,11 +63,11 @@ pub(super) fn amp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             c.mid_freq = from_log(n, MID_HZ.0, MID_HZ.1);
             changed = true;
         }
-        // The RES knob sits under FREQ, so its caption goes above the knob, over its tick ring.
+        // The RES trimmer sits under the FREQ knob, right of the FREQ name (below the numerals).
         let mf = f.rect("amp.mid_freq");
         crate::widgets::label(
             f.p,
-            egui::pos2(mf.center().x, mf.top() - 11.0),
+            egui::pos2(mf.center().x - 15.0, mf.bottom() + super::ids::RES_DROP),
             "FREQ",
             6.5,
             super::ctx::CAPTION,
@@ -86,7 +86,7 @@ pub(super) fn amp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
         let res = f.rect("amp.res");
         crate::widgets::label(
             f.p,
-            egui::pos2(res.right() + 6.5, res.center().y),
+            egui::pos2(res.right() + 8.0, res.center().y),
             "RES",
             6.5,
             super::ctx::CAPTION,
@@ -110,7 +110,7 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
         ("JC", c.cabinet == AmpCabinet::Jc, ""),
         ("SMALL", c.cabinet == AmpCabinet::Small, ""),
     ];
-    f.led_row("amp.model", m, &leds);
+    f.led_list("amp.model", m, &leds, &[2, 1, 0], &[]);
     let tip = "AMP MODEL: click cycles none, Twin, JC, Small. Shift+click or hold: VARIATION";
     match f.button("amp.model", m, MODELS[1..].contains(&c.cabinet), true, tip) {
         Some(Trigger::Primary) => {
@@ -147,11 +147,11 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
     }
     crate::widgets::label(
         f.p,
-        egui::pos2(flt.center().x, flt.top() - 8.5),
+        egui::pos2(flt.right() + 3.0, flt.center().y),
         name,
         5.5,
         super::ctx::CAPTION,
-        egui::Align2::CENTER_CENTER,
+        egui::Align2::LEFT_CENTER,
     );
 
     let rot = f.rect("amp.to_rotary");
@@ -168,11 +168,11 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
     }
     crate::widgets::label(
         f.p,
-        egui::pos2(rot.center().x, rot.top() - 8.5),
+        egui::pos2(rot.right() + 3.0, rot.center().y),
         "ROT",
         5.5,
         super::ctx::CAPTION,
-        egui::Align2::CENTER_CENTER,
+        egui::Align2::LEFT_CENTER,
     );
     if let Some(why) = dim {
         f.dim(rot);

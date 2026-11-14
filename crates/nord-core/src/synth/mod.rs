@@ -102,6 +102,8 @@ mod tests_fw_filter_golden;
 #[cfg(test)]
 mod tests_fw_ladder_golden;
 #[cfg(test)]
+mod tests_fw_ladder_strip;
+#[cfg(test)]
 mod tests_fw_shape_golden;
 #[cfg(test)]
 mod tests_fw_stage_golden;

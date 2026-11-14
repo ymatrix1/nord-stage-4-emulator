@@ -13,6 +13,13 @@ pub enum LoadRequest {
     Piano { entry: String, slot_b: bool },
     /// A `.nsmp4` entry into Synth layer `0..3`.
     Sample { entry: String, layer: usize },
+    /// A Preset Library entry (archive path, or the virtual path of a stored preset) into its
+    /// section, or into the layer `single`.
+    Preset {
+        section: nord_core::cbin::PresetSection,
+        entry: String,
+        single: Option<nord_core::morph::LayerId>,
+    },
 }
 
 /// Names of the opened `.ns4b` backup (empty while none is open).
