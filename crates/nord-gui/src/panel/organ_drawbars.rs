@@ -76,7 +76,8 @@ pub(super) fn render_drawbars(
         ) {
             changed = true;
         }
-        let lit = ladder_value(state.organ_drawbars[i], live);
+        let shown = state.telemetry.drawbar(false, i, state.organ_drawbars[i]);
+        let lit = ladder_value(shown, live);
         drawbar_ladder(ui, rect_or_empty(LADDER_IDS[i], origin), LADDER_IDS[i], lit);
         label(
             painter,

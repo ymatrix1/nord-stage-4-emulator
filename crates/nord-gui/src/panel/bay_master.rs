@@ -213,10 +213,15 @@ fn render_rotary_buttons(
     let fast = matches!(state.rotary_speed, RotarySpeed::Fast);
     let leds = rc("rotary.speed_leds");
     let ly = leds.center().y;
+    // LEDs show the real rotor state (a pedal can change it); `fast` stays the UI toggle.
+    let (led_slow, led_fast) = (
+        state.telemetry.rotary_slow(fast),
+        state.telemetry.rotary_fast(fast),
+    );
     led_small(
         painter,
         pos2(leds.left() + 2.0, ly),
-        !fast,
+        led_slow,
         LED_GREEN,
         LED_GREEN_DIM,
         1.6,
@@ -224,7 +229,7 @@ fn render_rotary_buttons(
     led_small(
         painter,
         pos2(leds.right() - 2.0, ly),
-        fast,
+        led_fast,
         LED_RED,
         LED_RED_DIM,
         1.6,

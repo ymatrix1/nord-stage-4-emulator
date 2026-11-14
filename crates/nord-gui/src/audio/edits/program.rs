@@ -83,6 +83,8 @@ pub enum ProgramEdit {
     LayerInit(LayerInitTarget),
     /// UNDO (Shift+Solo): single level.
     Undo,
+    /// Re-apply the edit the last UNDO reverted.
+    Redo,
     /// MON/COPY.
     Copy(CopyItem),
     /// PASTE (Shift+Mon/Copy).
@@ -136,6 +138,9 @@ impl ProgramEdit {
             Self::LayerInit(t) => engine.layer_init(*t),
             Self::Undo => {
                 engine.undo();
+            }
+            Self::Redo => {
+                engine.redo();
             }
             Self::Copy(item) => match *item {
                 CopyItem::Layer(id) => engine.copy_layer(id),

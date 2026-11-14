@@ -5,7 +5,7 @@ use super::{apply_audio_command, AudioCommand, AudioHandle};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam_channel::Receiver;
 use midir::{Ignore, MidiInput};
-use nord_core::engine::Stage4Engine;
+use nord_core::engine::{Stage4Engine, TelemetryCell};
 use nord_core::midi::MidiEvent;
 use nord_core::synth::VaWaveform;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,8 +17,9 @@ pub fn start_audio_and_midi(active_keys: Arc<[AtomicBool; 128]>) -> AudioHandle 
 
     // 1. Spawn Audio Output Thread
     let audio_rx = rx;
+    let telemetry = handle.telemetry().cell();
     std::thread::spawn(move || {
-        run_cpal_audio(audio_rx);
+        run_cpal_audio(audio_rx, telemetry);
     });
 
     // 2. Spawn MIDI In Listener
@@ -31,7 +32,7 @@ pub fn start_audio_and_midi(active_keys: Arc<[AtomicBool; 128]>) -> AudioHandle 
     handle
 }
 
-fn run_cpal_audio(rx: Receiver<AudioCommand>) {
+fn run_cpal_audio(rx: Receiver<AudioCommand>, telemetry: Arc<TelemetryCell>) {
     let host = cpal::default_host();
     let device = match host.default_output_device() {
         Some(d) => d,
@@ -62,6 +63,7 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
     engine.layer_levels[5].base = 0.0;
     engine.layer_levels[6].base = 0.0;
     engine.synth_a.waveform = VaWaveform::SuperSaw;
+    engine.attach_telemetry(telemetry);
 
     let mut master_vol: f32 = 0.85;
 
@@ -79,6 +81,7 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
                     let [l, r] = engine.render_frame();
                     render_frame_to_f32(channels, l * master_vol, r * master_vol, frame);
                 }
+                engine.publish_telemetry();
             },
             err_fn,
             None,
@@ -94,6 +97,7 @@ fn run_cpal_audio(rx: Receiver<AudioCommand>) {
                     let [l, r] = engine.render_frame();
                     render_frame_to_i16(channels, l * master_vol, r * master_vol, frame);
                 }
+                engine.publish_telemetry();
             },
             err_fn,
             None,
