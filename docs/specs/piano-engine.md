@@ -51,6 +51,7 @@ Each Piano layer offers selectable spectral contours modeled via 2nd-order biqua
 - **`Soft`:** $-6\text{ dB}$ high-shelf above $1.8\text{ kHz}$ for warm ballad voicings.
 - **`Mid`:** $+3.5\text{ dB}$ presence peak at $1.2\text{ kHz}$ ($Q = 0.9$) to cut through a live band.
 - **`Bright`:** $+4.5\text{ dB}$ high-shelf above $2.5\text{ kHz}$.
+- **Electric type** (`PianoLayer::category == Electric`, manual p.26): `Soft`, `Mid`, `Bright` are tailored. The bell/presence band moves to the upper mid-range (ASSUMED 2.2 kHz); `Soft` cuts treble and bell (`-0.55 high - 0.30 bell`), `Mid` boosts the bell (`+0.60 bell`), `Bright` boosts bell and treble (`+0.50 bell + 0.65 high`). Gains are ASSUMED (manual wording only); confirm with a hardware sweep of the TIMBRE steps on an EP model. All other types keep the acoustic set above bit-identically. `Dyno1` / `Dyno2` exist for Electric only (the panel cycles Off, Soft, Mid, Bright for the other types). The seven Clav pick-up EQ combinations (p.26) are UI-only; the engine has no Clav timbre yet.
 - **`Dyno1` / `Dyno2`** (Electric Pianos): Classic Dyno-My-Piano bell boost ($+6\text{ dB}$ @ $3.8\text{ kHz}$, $+3\text{ dB}$ @ $120\text{ Hz}$, $-4\text{ dB}$ notch @ $800\text{ Hz}$).
 
 ---
@@ -159,3 +160,7 @@ Status: **candidate, ASSUMED, not implemented.** The PNO Core1 routine `0x122620
 | Role judgement | superseded by `docs/research/organ-tone-source.md`: about 70 % organ tonewheels, about 20 % string resonance only (ASSUMED) |
 
 The modal resonators of section 4 are the shipped model; this bank would replace them only after the ARM weight writer or a running capture confirms the role. Open items stay in `docs/OPEN-QUESTIONS.md` and TD-04.
+
+## 5. Piano types and models (PIANO SELECT, manual p.24-25)
+
+The TYPE button selects one of six types (Grand, Upright, Electric, Clav, Digital, Misc); the PIANO SELECT dial steps through the models of that type; the TYPE LEDs show the type of the current model; LIST shows `Piano <Type> n/N` and INFO `Type: <Type> n/N`. The model's type is the `bank_index` of its `.npno` CBIN header and its place in the type is `location_index` (VERIFIED, [piano-types](../research/piano-types.md)). The GUI library (`library/piano_catalog.rs`) reads only the 16 header bytes of each `.npno` entry (archive folder, then `Misc`, as fallbacks), lists models in hardware order and publishes `(entry, type)` pairs; TYPE loads the last used (else first) model of the next type that has models. Without a library TYPE only changes the engine type (Electric timbre set, Dyno steps) and the OLED reads `No piano library`. Engine `category` is set when a sound loads (its header type) and by TYPE; loading a program sets it from the preset.

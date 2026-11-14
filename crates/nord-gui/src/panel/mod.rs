@@ -26,6 +26,7 @@ mod organ_widgets;
 #[cfg(test)]
 mod piano_click_tests;
 mod piano_logic;
+pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
 #[cfg(test)]
