@@ -239,7 +239,7 @@ The odd harmonics are far below the unfiltered single-note values of organ-post-
 
 ### 3.1.8 Farfisa divider (`ToneWheelSource::FarfisaWheels`, `farfisa_wheels.rs`)
 
-Status: the measured per-sum line gain of the processor is in `farfisa_proc_gain.rs` (research s8, not wired); the generator is ported; the processor `0x122B85` is not (its key-down inputs and the oracle chords are in [organ-farfisa-bass](../research/organ-farfisa-bass.md) s7). The source stays opt-in: the oracle criterion (<= 1 dB per line) cannot hold without the processor, and no video check was run.
+Status: the generator is ported; the processor `0x122B85` is wired as the **key stage** `farfisa_keys.rs` (below, opt-in `--farfisa-processor on`): key-down weights `1/48` through the measured per-sum line gain of `farfisa_proc_gain.rs`. It is not a bit-exact processor model (no lattice, no phase), so the source stays opt-in: oracle chord a is matched in peak (+0.2 dB) and to 3.5 dB per line, not to the <= 1 dB criterion, and no video check was run.
 
 Opt-in tone source of the `Farfisa` model, the PNO core 1 generator `0x122A71` ([organ-farfisa-bass](../research/organ-farfisa-bass.md)). It is a free-running top-octave divider, not a tonewheel bank, but its 98 outputs are one signal per note, so it plugs into the 91-wheel bus: wheel `w` = note `24 + w`, oscillator `n` (semitone 0..11), row `r` = note `12 + n + 12 r` (8 rows, 9 for `n < 2`). Row 0 (notes 12..23) is below the bus and dropped; wheels 86..90 (notes 110..114) have no source and stay silent. `ToneWheelSource::FarfisaWheels` applies to `OrganModel::Farfisa` only (other models fall back to their default); `ModelDefault` on `Farfisa` stays `Legacy`. All state is in `OrganLayer::new()` (12 oscillators x 9 rows of `f32`); `advance` has no allocation or lock.
 
@@ -260,7 +260,18 @@ y = max(b clip(u) + a y_prev, clip(u))   a = exp(-0.0047343 2^r 2^(n/12) rho)  (
 | Frame rate 43,402.6 Hz | puts oscillator 0 row 0 on C0 = 16.3516 Hz; the Vox offset (-9.9 cent against the Pipe bank rate) agrees | ASSUMED |
 | LFO (rate `DM 0xC27D6`, depth `0xC27D7`, the Farfisa vibrato) | modelled in Python, not in Rust (the depth is an ARM word with unknown mapping) | VERIFIED in Python, not ported |
 
-Not modelled (why it stays opt-in): the processor `0x122B85` (four weighted sums of the ring, filter sections, lattice, gains; every coefficient is an ARM word that no captured burst writes, so the oracle pass is silent), the Farfisa vibrato, the per-key weights. The existing drawbar bus, percussion and rotary run unchanged on the wheel outputs. Default render hash unchanged (`25baa387b0219c08`). Tests: `farfisa_wheels::tests` (steps, wheel map, pitch, golden rows, release, sample rate, Fine Tune), `farfisa_source_tests` (resolution, host-rate pitch, Fine Tune, determinism, silent top, other models unchanged), `tools/tests/test_organ_farfisa_ref.py`, `test_organ_farfisa_oracle.py`, `test_organ_fb_pass.py`.
+Key stage (`farfisa_keys.rs`, `OrganLayer::farfisa_processor`, `--farfisa-processor on|off`, default off; active on `OrganModel::Farfisa` with `ToneWheelSource::FarfisaWheels` only): `y = L sum_keys g_key/48 (G0 * wheel(n - 12) + G1 * wheel(n))`, with `g_key` the 2 ms ramped held-key gain (ASSUMED ramp), `G0`, `G1` the measured sum 0 / sum 1 line gains realised as two 255-tap linear-phase FIRs designed in place from the tables (Hann-windowed frequency sampling, redesigned when the sample rate changes), `L = weight_level x bus_gain` of the output law. It replaces the drawbar sum, percussion and the legacy 750 Hz / 2.5 kHz formant filter of the Farfisa model; the key click, scanner and rotary run unchanged. No allocation in `render_frame` (history and FIR buffers are built at construction, a redesign writes in place).
+
+| Item | Source | Tag |
+|---|---|---|
+| Key weight `1/48` on sums 0 and 1, sums 2 / 3 silent | `keydown-organ-models.csv` (notes 36, 60, 84); sum 0 reads ring slot `idx` (note `n - 12`), sum 1 slot `idx + 8` (note `n`) | VERIFIED |
+| Per-sum magnitude `G0`, `G1` | `farfisa-proc-gain.csv` via `farfisa_proc_gain.rs` | EMPIRICAL (magnitude only, no phase) |
+| Chord a (keys 60 64 67): peak 0.08835 against the oracle 0.08666 (+0.17 dB); lines C4 / G4 / C3 / E3 within 2.9 dB of each other (oracle: within 1 dB; the 16' rows C3 / E3 come out about 2.5 dB lower) | `farfisa_keys::tests::oracle_chord_a_line_levels` against `organ-proc-oracle-lines.csv` | EMPIRICAL (3.5 dB tolerance) |
+| FIR realisation, 2 ms ramp, no tab selection, no bias words (`-0.00958`), no Farfisa vibrato | not in the captured key-down path | ASSUMED |
+
+Tests: `farfisa_keys::tests` (FIR within 1 dB of the table, wheel map, oracle chord, ring-down to exact silence, octave shift, opt-in and model gating), `render_opts` flag test.
+
+Not modelled (why it stays opt-in): the bit-exact processor `0x122B85` (four weighted sums of the ring, filter sections, lattice, gains; every coefficient is an ARM word that no captured burst writes, so the oracle pass is silent), the Farfisa vibrato, the per-key weights. The existing drawbar bus, percussion and rotary run unchanged on the wheel outputs. Default render hash unchanged (`25baa387b0219c08`). Tests: `farfisa_wheels::tests` (steps, wheel map, pitch, golden rows, release, sample rate, Fine Tune), `farfisa_source_tests` (resolution, host-rate pitch, Fine Tune, determinism, silent top, other models unchanged), `tools/tests/test_organ_farfisa_ref.py`, `test_organ_farfisa_oracle.py`, `test_organ_fb_pass.py`.
 
 ### 3.1.9 Output level law (`output_level.rs`, `OrganLayer::output_level`)
 

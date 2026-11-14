@@ -10,6 +10,8 @@ const ORGAN_B: u8 = 1 << LayerId::OrganB as u8;
 /// layer A in the lower zone (code 0), layer B in the upper zone (code 6).
 fn b3_chords_n_solo() -> ProgramDecoded {
     let mut prog = ProgramDecoded::default();
+    prog.global.section_enable_i = 0b100;
+    prog.global.section_enable_ii = 0;
     prog.global.scene_1_mask = ORGAN_A | ORGAN_B;
     prog.global.scene_2_mask = 0;
     prog.global.split_enabled = true;
@@ -61,6 +63,7 @@ fn routing_set_before_the_program_gives_the_same_result() {
 fn empty_scene_mask_is_silent_with_firmware_routing_only() {
     let mut prog = ProgramDecoded::default();
     prog.global.scene_1_mask = 0;
+    prog.global.section_enable_i = 0;
     let mut e = Stage4Engine::new(48_000.0);
     e.apply_program(&prog);
     assert_ne!(press(&mut e, 60), 0, "legacy falls back to default layers");
@@ -71,6 +74,18 @@ fn empty_scene_mask_is_silent_with_firmware_routing_only() {
         velocity: 0,
     });
     assert_eq!(press(&mut e, 61), 0);
+}
+
+#[test]
+fn enabled_section_without_layers_plays_layer_a_with_firmware_routing() {
+    // `Vox Like Me`: organ section on, organ layer enable 0, nothing else (OQ25).
+    let mut prog = ProgramDecoded::default();
+    prog.global.section_enable_i = 0b100;
+    prog.global.scene_1_mask = 0;
+    let mut e = Stage4Engine::new(48_000.0);
+    e.apply_program(&prog);
+    e.set_firmware_routing(FirmwareRouting::On);
+    assert_eq!(press(&mut e, 61), ORGAN_A);
 }
 
 #[test]

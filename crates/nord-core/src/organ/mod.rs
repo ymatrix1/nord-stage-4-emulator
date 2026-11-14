@@ -11,6 +11,7 @@ mod b3_weights;
 mod b3_wheels;
 mod drawbar;
 mod drawbar_sum;
+mod farfisa_keys;
 mod farfisa_proc_gain;
 mod farfisa_wheels;
 mod firmware_bank;
@@ -107,6 +108,9 @@ pub struct OrganLayer {
     pub model: OrganModel,
     /// When `true` on `OrganModel::B3`, engages Nord's B3 Bass pickup calibration curve.
     pub b3_bass_mode: bool,
+    /// Opt-in Farfisa processor stage (key-down weights and measured line gain, `farfisa_keys.rs`):
+    /// applies to `OrganModel::Farfisa` with `ToneWheelSource::FarfisaWheels` only.
+    pub farfisa_processor: bool,
     /// Keyboard octave transposition (`-2..=+2`).
     pub octave_shift: i8,
     /// 9 drawbar settings (`0..=8`). Default `88 8000 000`.
@@ -194,6 +198,7 @@ pub struct OrganLayer {
     b3_tail: bool,
     farfisa_wheels: FarfisaWheels,
     farfisa_synced: (f32, f32),
+    farfisa_keys: farfisa_keys::FarfisaKeys,
     lane_mixer: LaneMixer,
     weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
@@ -285,6 +290,8 @@ impl OrganLayer {
             b3_tail: true,
             farfisa_wheels: FarfisaWheels::new(),
             farfisa_synced: (0.0, f32::NAN),
+            farfisa_keys: farfisa_keys::FarfisaKeys::new(),
+            farfisa_processor: false,
             lane_mixer: LaneMixer::new(sample_rate),
             weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
@@ -399,6 +406,7 @@ impl OrganLayer {
         if self.active_key_count == 0
             && !(self.firmware_weights() && self.weight_state.active())
             && !(self.b3_weights_active() && self.b3_weights.active())
+            && !(self.farfisa_keys_active() && self.farfisa_keys.active())
             && self.click_env < 1e-6
             && self.click_bp_state[0].abs() < 1e-6
         {
@@ -423,6 +431,7 @@ impl OrganLayer {
                 let tone = f32::from(self.active_drawbars()[8].min(8)) / 8.0;
                 dry = (1.0 - 0.5 * tone) * dry + tone * dry.signum() * dry.abs().powf(0.8);
             }
+            OrganModel::Farfisa if self.farfisa_keys_active() => {}
             OrganModel::Farfisa => {
                 // Farfisa dual resonant bandpass formant peaks (750 Hz and 2.5 kHz)
                 let w1 = (TAU * 750.0 * inv_fs).clamp(0.01, 0.45);
