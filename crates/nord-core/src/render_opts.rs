@@ -142,6 +142,9 @@ pub struct FirmwareOptions {
     pub piano_bus_scale: bool,
     /// `--measured-laws`: `SynthLayer::measured_laws` (EMPIRICAL, Audible Genius clips).
     pub measured_laws: bool,
+    /// `--synth-shape <0..1>`: strip shape word of the SHAPE oscillator (`fw_shape.rs`) in
+    /// thousandths (`None` = the ASSUMED saw placeholder).
+    pub synth_shape_milli: Option<u16>,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -157,6 +160,7 @@ impl Default for FirmwareOptions {
             piano_firmware_level: true,
             piano_bus_scale: false,
             measured_laws: false,
+            synth_shape_milli: None,
         }
     }
 }
@@ -182,6 +186,7 @@ impl FirmwareOptions {
             piano_firmware_level: true,
             piano_bus_scale: false,
             measured_laws: false,
+            synth_shape_milli: None,
         }
     }
 
@@ -222,6 +227,12 @@ impl FirmwareOptions {
         }
         o.piano_bus_scale |= has("--firmware-piano-bus");
         o.measured_laws |= has("--measured-laws");
+        if let Some(v) = value("--synth-shape") {
+            let x: f32 = v
+                .parse()
+                .map_err(|_| format!("invalid --synth-shape '{v}'"))?;
+            o.synth_shape_milli = Some((x.clamp(0.0, 1.0) * 1000.0).round() as u16);
+        }
         Ok(o)
     }
 
@@ -239,6 +250,7 @@ impl FirmwareOptions {
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
         apply_b3_tail(engine, self.b3_tail);
         apply_synth_chain(engine, self.synth_chain);
+        self.set_shape(engine);
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
@@ -273,6 +285,14 @@ impl FirmwareOptions {
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
         apply_b3_tail(engine, Some(self.b3_tail.unwrap_or(true)));
         self.set_measured_laws(engine);
+        self.set_shape(engine);
+    }
+
+    fn set_shape(&self, engine: &mut Stage4Engine) {
+        let shape = self.synth_shape_milli.map(|m| f32::from(m) / 1000.0);
+        engine.synth_a.strip_shape = shape;
+        engine.synth_b.strip_shape = shape;
+        engine.synth_c.strip_shape = shape;
     }
 
     fn set_measured_laws(&self, engine: &mut Stage4Engine) {
@@ -394,6 +414,19 @@ mod tests {
         };
         m.apply_to(&mut a);
         assert!(a.synth_a.measured_laws && a.synth_b.measured_laws && a.synth_c.measured_laws);
+    }
+
+    #[test]
+    fn synth_shape_flag_sets_the_strip_shape_word() {
+        let args: Vec<String> = ["--synth-shape", "0.25"].map(String::from).to_vec();
+        let o = FirmwareOptions::from_args(&args).unwrap();
+        assert_eq!(o.synth_shape_milli, Some(250));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert_eq!(e.synth_b.strip_shape, Some(0.25));
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert_eq!(e.synth_b.strip_shape, None);
+        assert!(FirmwareOptions::from_args(&["--synth-shape".into(), "x".into()]).is_err());
     }
 
     #[test]

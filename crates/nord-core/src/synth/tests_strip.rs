@@ -146,3 +146,21 @@ fn legacy_chain_ignores_the_key_velocity_series() {
     };
     assert_eq!(rms(true), rms(false));
 }
+
+#[test]
+fn shape_stage_replaces_the_saw_placeholder_only_when_enabled() {
+    let render = |shape: Option<f32>| {
+        let mut s = layer(SynthChain::FirmwareStrip);
+        s.waveform = VaWaveform::Triangle;
+        s.osc_shape_category = true;
+        s.strip_shape = shape;
+        s.note_on(57, 100);
+        render_n(&mut s, 2_400)
+    };
+    let saw = render(None);
+    let stage = render(Some(0.25));
+    assert!(stage.iter().all(|f| f[0].is_finite()));
+    assert!(energy(&stage) > 1e-3);
+    assert_ne!(saw, stage, "the stage changes the waveform");
+    assert_eq!(render(None), saw, "the default stays the placeholder");
+}
