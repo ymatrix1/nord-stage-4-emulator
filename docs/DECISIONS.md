@@ -29,7 +29,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D21](#d21-organ-model-to-dsp-path-map) | 2026-11-13 | Organ model to DSP path map (B3, Vox, Pipe) | accepted |
 | [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
 | [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
-| [D26](#d26-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
+| [D27](#d27-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
 
 ---
@@ -323,7 +323,17 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Fit one gain per model (rejected: hides the structure); flip B3 and Vox on RMS alone (rejected: D22 criteria).
 - **Impact:** `render_hash` `c7f06ca7...` unchanged (the dump has no Pipe layer or program rotary). Program renders change: rotary drive 10 times lower in the engine unit, Pipe level.
 
-### D26. The piano layer level law is opt-in; the bus convention stays ASSUMED
+### D26. FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1`
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-delay-mod-types`; evidence [fx-mod-types](research/fx-mod-types.md))
+- **Context:** The engine models A-PAN and TREM as `sin` LFOs with an assumed `0.1 .. 15 Hz` rate. The firmware routines are `0x122D93` (A-PAN, `kFx1Type` 0, 1) and `0x122C39` (types 2, 3, earlier mislabelled all-pass); their instance words are in the FX image and the boot log.
+- **Decision:** Model `0x122D93` (`tools/fx_model_apan.py`, bit identical to the oracle on 1000 scenarios plus per-instruction traces), port it as `FwAutoPan`, and wire it and the already verified `FwAllpass` (mix 0 = tremolo) through `fx/fw_mod1.rs` behind `FirmwareFx::mod1`. Default stays off.
+- **Why:** 70 of 89 Mod 1 programs use these two types. The routines and parameter words are VERIFIED; what is not verified end to end is the rate in hertz (4 frames per call at the DSP frame rate) and the TREM role, so D22 keeps the switch opt-in.
+- **Alternatives:** Flip the default (rejected: no hardware recording of the rate); tune the engine LFO range by ear (rejected: the firmware words are available).
+- **Impact:** `ns4 render-patch --firmware-fx` and `FirmwareFx::ALL` change A-PAN and TREM programs (4 frame latency, firmware depth and rate); the default `render_hash` is unchanged.
+
+### D27. The piano layer level law is opt-in; the bus convention stays ASSUMED
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))

@@ -45,7 +45,7 @@ Not worked on in this pass (time box); the listing facts of [smp-voice](smp-voic
 
 ## Decision
 
-D26 (opt-in layer law; defaults unchanged). `firmware_bus_scale` stays opt-in.
+D27 (opt-in layer law; defaults unchanged). `firmware_bus_scale` stays opt-in.
 
 ## Implications
 
