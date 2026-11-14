@@ -1,6 +1,26 @@
-//! Bay 6: Layer Effects of the front panel.
+//! Bay 6: Layer Effects of the front panel (Phase 6b B8f, `ns4-hcuh`).
+//!
+//! Every control of the inventory section `Effects` (50 ids, `ids::HANDLED`) is placed with
+//! `layout_px::rect_or_empty`; Shift / hold-to-shift functions share their base control's
+//! rectangle and appear as legends below it. The bay edits the chain of the focused FX slot
+//! (Organ, Piano A/B, Synth A/B/C) through `AudioCommand::Fx`; the GUI view of the six chains
+//! lives in `ui_state::fx`. Spec: `docs/specs/effects-and-routing.md`, manual p.48-53.
 
+mod amp;
+mod ctx;
+mod delay;
+mod focus;
+mod ids;
+mod modulation;
+mod reverb;
+#[cfg(test)]
+mod tests;
+
+use super::layout_px::to_px;
 use super::prelude::*;
+use super::ui_state::fx::{slot_for, StateEcho};
+use ctx::Fx;
+use nord_panel::{section_rect, Section};
 
 /// Draw this bay and apply its input to `state` / the audio thread.
 pub(super) fn render_bay_effects(
@@ -10,219 +30,59 @@ pub(super) fn render_bay_effects(
     state: &mut Stage4PanelState,
     audio_handle: &AudioHandle,
 ) {
-    // =========================================================================
-    // BAY 6: LAYER EFFECTS (Slate: x: 1354..1552, y: 24..300)
-    // =========================================================================
-    let bay6 = Rect::from_min_max(
-        pos2(panel_rect.left() + 1354.0, panel_rect.top() + 24.0),
-        pos2(panel_rect.left() + 1552.0, panel_rect.top() + 300.0),
+    let origin = panel_rect.min;
+    section_frame(
+        painter,
+        to_px(section_rect(Section::Effects), origin),
+        "LAYER EFFECTS",
     );
-    section_frame(painter, bay6, "LAYER EFFECTS");
 
-    // FX Focus buttons (Organ, Piano, Synth A/B/C)
-    let focus_rect = Rect::from_min_size(
-        pos2(bay6.left() + 6.0, bay6.top() + 28.0),
-        vec2(186.0, 24.0),
-    );
-    let focus_labels = ["ORG", "PNO", "SYN A", "SYN B", "SYN C"];
-    for (i, &lbl) in focus_labels.iter().enumerate() {
-        let is_sel = state.fx_focus == i;
-        let bx = focus_rect.left() + (i as f32) * 37.0;
-        let b_rect = Rect::from_min_size(pos2(bx, focus_rect.top()), vec2(34.0, 18.0));
-        if nord_button(ui, b_rect, &format!("fx_foc_{i}"), is_sel) {
-            state.fx_focus = i;
-        }
-        label(
-            painter,
-            pos2(b_rect.center().x, b_rect.center().y),
-            lbl,
-            7.5,
-            Color32::WHITE,
-            Align2::CENTER_CENTER,
-        );
-    }
+    let (now_ms, shift) = ui.input(|i| ((i.time * 1000.0) as u32, i.modifiers.shift));
+    let trackers = std::mem::take(&mut state.fx_ui.trackers);
+    let mut f = Fx {
+        ui,
+        p: painter,
+        origin,
+        audio: audio_handle,
+        now_ms,
+        shift,
+        trackers,
+    };
 
-    // Mod 1 & Mod 2 Knobs
-    let mod1_rect =
-        Rect::from_min_size(pos2(bay6.left() + 6.0, bay6.top() + 56.0), vec2(90.0, 70.0));
-    group_frame(painter, mod1_rect, "MOD 1");
-    if knob(
-        ui,
-        pos2(mod1_rect.left() + 24.0, mod1_rect.top() + 36.0),
-        13.0,
-        "m1_rate",
-        &mut state.mod1_rate,
-        0.5,
-        20.0,
-        "RATE",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxMod1 {
-            kind: state.mod1_type,
-            rate: state.mod1_rate,
-            amount: state.mod1_amount,
-        });
-    }
-    if knob(
-        ui,
-        pos2(mod1_rect.left() + 66.0, mod1_rect.top() + 36.0),
-        13.0,
-        "m1_amt",
-        &mut state.mod1_amount,
-        0.0,
-        1.0,
-        "AMT",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxMod1 {
-            kind: state.mod1_type,
-            rate: state.mod1_rate,
-            amount: state.mod1_amount,
-        });
-    }
+    // A program load writes the legacy `mod1_type`, `delay_on`, ... fields; adopt that first.
+    let slot = slot_for(state.fx_focus, state.fx_ui.piano_b);
+    state.fx_ui.pull_external(StateEcho::read(state), slot);
 
-    let mod2_rect = Rect::from_min_size(
-        pos2(bay6.left() + 100.0, bay6.top() + 56.0),
-        vec2(90.0, 70.0),
-    );
-    group_frame(painter, mod2_rect, "MOD 2");
-    if knob(
-        ui,
-        pos2(mod2_rect.left() + 24.0, mod2_rect.top() + 36.0),
-        13.0,
-        "m2_rate",
-        &mut state.mod2_rate,
-        0.2,
-        10.0,
-        "RATE",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxMod2 {
-            kind: state.mod2_type,
-            rate: state.mod2_rate,
-            amount: state.mod2_amount,
-        });
-    }
-    if knob(
-        ui,
-        pos2(mod2_rect.left() + 66.0, mod2_rect.top() + 36.0),
-        13.0,
-        "m2_amt",
-        &mut state.mod2_amount,
-        0.0,
-        1.0,
-        "AMT",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxMod2 {
-            kind: state.mod2_type,
-            rate: state.mod2_rate,
-            amount: state.mod2_amount,
-        });
-    }
+    focus::focus(&mut f, state);
+    let slot = slot_for(state.fx_focus, state.fx_ui.piano_b);
+    modulation::mod1(&mut f, state, slot);
+    modulation::mod2(&mut f, state, slot);
+    delay::delay(&mut f, state, slot);
+    amp::amp(&mut f, state, slot);
+    amp::comp(&mut f, state, slot);
+    reverb::reverb(&mut f, state, slot);
 
-    // Delay & Reverb Knobs
-    let delay_rect = Rect::from_min_size(
-        pos2(bay6.left() + 6.0, bay6.top() + 132.0),
-        vec2(90.0, 70.0),
-    );
-    group_frame(painter, delay_rect, "DELAY");
-    if knob(
-        ui,
-        pos2(delay_rect.left() + 24.0, delay_rect.top() + 36.0),
-        13.0,
-        "dly_fb",
-        &mut state.delay_feedback,
-        0.0,
-        0.9,
-        "FEEDBK",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxDelay {
-            enabled: state.delay_on,
-            feedback: state.delay_feedback,
-            mix: state.delay_mix,
-        });
-    }
-    if knob(
-        ui,
-        pos2(delay_rect.left() + 66.0, delay_rect.top() + 36.0),
-        13.0,
-        "dly_mix",
-        &mut state.delay_mix,
-        0.0,
-        1.0,
-        "MIX",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxDelay {
-            enabled: state.delay_on,
-            feedback: state.delay_feedback,
-            mix: state.delay_mix,
-        });
-    }
-
-    let rev_rect = Rect::from_min_size(
-        pos2(bay6.left() + 100.0, bay6.top() + 132.0),
-        vec2(90.0, 70.0),
-    );
-    group_frame(painter, rev_rect, "REVERB");
-    if knob(
-        ui,
-        pos2(rev_rect.center().x, rev_rect.top() + 36.0),
-        15.0,
-        "rev_mix",
-        &mut state.reverb_mix,
-        0.0,
-        1.0,
-        "REVERB",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxReverb {
-            model: state.reverb_model,
-            mix: state.reverb_mix,
-        });
-    }
-
-    // Amp / Master Compressor
-    let comp_rect = Rect::from_min_size(
-        pos2(bay6.left() + 6.0, bay6.top() + 208.0),
-        vec2(184.0, 62.0),
-    );
-    group_frame(painter, comp_rect, "COMPRESSOR & DRIVE");
-    if knob(
-        ui,
-        pos2(comp_rect.left() + 48.0, comp_rect.top() + 32.0),
-        14.0,
-        "eq_drv",
-        &mut state.eq_drive,
-        0.0,
-        1.0,
-        "DRIVE",
-    ) {
-        audio_handle.send_command(AudioCommand::SetFxEq {
-            drive: state.eq_drive,
-            bass: state.eq_bass,
-            mid: state.eq_mid,
-            mid_freq: state.eq_mid_freq,
-            treble: state.eq_treble,
-        });
-    }
-    if knob(
-        ui,
-        pos2(comp_rect.left() + 136.0, comp_rect.top() + 32.0),
-        14.0,
-        "mst_comp",
-        &mut state.master_comp,
-        0.0,
-        1.0,
-        "COMPRESSOR",
-    ) {
-        audio_handle.send_command(AudioCommand::SetMasterComp(state.master_comp));
-    }
+    // Keep the legacy fields a write-through view of the focused chain.
+    let echo = StateEcho::of(&state.fx_ui.chains[slot]);
+    echo.write_to(state);
+    state.fx_ui.set_echo(echo);
+    state.fx_ui.trackers = f.trackers;
 }
 
 #[cfg(test)]
-mod tests {
+mod frame_tests {
     use super::*;
     use crate::panel::support::shapes_painted;
 
     #[test]
-    fn render_bay_effects_paints_shapes() {
-        let n = shapes_painted(render_bay_effects);
-        assert!(n > 50, "render_bay_effects painted only {n} shapes");
+    fn writing_the_legacy_view_follows_the_focused_chain() {
+        let mut state = Stage4PanelState::default();
+        state.fx_ui.chains[0].mod1_on = true;
+        state.fx_ui.chains[0].mod1_sel = 1;
+        let n = shapes_painted(|ui, p, rect, _s, audio| {
+            render_bay_effects(ui, p, rect, &mut state, audio);
+        });
+        assert!(n > 100);
+        assert_eq!(state.mod1_type, nord_core::fx::Mod1Type::Tremolo);
     }
 }

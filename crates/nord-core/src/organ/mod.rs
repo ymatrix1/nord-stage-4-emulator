@@ -36,6 +36,7 @@ mod vox_output;
 mod vox_shaper;
 mod vox_sines;
 mod vox_source;
+mod vox_timeline;
 mod weight_state;
 mod weights;
 
@@ -159,6 +160,7 @@ pub struct OrganLayer {
     synced_fine_cents: f32,
     tone_bank: ToneBank,
     vox: vox_source::VoxSource,
+    vox_timeline: vox_timeline::VoxTimeline,
     b3_wheels: B3Wheels,
     b3_weights: b3_weights::B3Weights,
     b3_synced: (f32, f32),
@@ -242,6 +244,7 @@ impl OrganLayer {
             synced_fine_cents: 0.0,
             tone_bank,
             vox: vox_source::VoxSource::new(sample_rate),
+            vox_timeline: vox_timeline::VoxTimeline::default(),
             b3_wheels: B3Wheels::new(),
             b3_weights: b3_weights::B3Weights::new(sample_rate),
             b3_synced: (0.0, f32::NAN),

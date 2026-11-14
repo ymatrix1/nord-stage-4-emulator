@@ -22,7 +22,7 @@ In this engine, incoming CC and channel aftertouch affect global controls only w
 
 ## 2a. Aux KB, pedals, pitch stick and Extern (Phase 6b B9d, `ns4-ymci`)
 
-Source: manual OS v1.6x p.21-22, p.26-28, p.43-47, p.55-56, p.59-64. Code: `engine/aux_kb.rs`, `engine/pedals.rs`, `engine/extern_out.rs`, `midi.rs` (`MidiEvent::PitchBend`).
+Source: manual OS v1.6x p.21-22, p.26-28, p.43-47, p.55-56, p.59-64. Code: `engine/aux_kb.rs`, `engine/pedals.rs`, `engine/pedal_assign.rs`, `engine/extern_out.rs`, `midi.rs` (`MidiEvent::PitchBend`).
 
 | Area | Behaviour | Status |
 |---|---|---|
@@ -31,7 +31,13 @@ Source: manual OS v1.6x p.21-22, p.26-28, p.43-47, p.55-56, p.59-64. Code: `engi
 | SUSTPED | Per layer. Default On for Piano A/B only (the previous hard-wired behaviour), Off elsewhere. Organ and Synth layers defer note release while the pedal is down (`held` bitmask, no allocation); Pianos use their damper model | Manual p.18, p.28 |
 | Aux sustain/bend | `CC64` and pitch bend on the Aux KB channel reach Aux layers regardless of SUSTPED/PSTICK; the internal pedal needs the flag | Manual p.45 |
 | Half pedaling | Sustain value `>= 64` = down. Between 20 % and 50 % depth the Pianos use the slow soft-release decay (`PianoLayer::damper_half`) | Manual p.26; band and mapping `ASSUMED` |
-| Sostenuto, soft | `CC66`, `CC67` on the Global channel, Piano layers (unchanged) | Manual p.27 |
+| Sostenuto, soft | `CC66`, `CC67` on the Global channel stand for the TP-2 Middle / Left pedals and go through `triple_pedal`; with the default assignments (Sostenuto / Una Corda) they drive the Piano layers exactly as before | Manual p.27 |
+| Triple Pedal assignments | `triple_pedal(unit, pedal, value)`; `TripleFunc`: Una Corda (Left default), Sostenuto (Middle default), Panel Assigned, Layer Scene Hold/Toggle, Pump, Mst Clk Tap, Synth Vibrato, Program Up/Down, Rotor Hold/Toggle, Control (TP-2 only). Left/Middle of a TP-1 (`SustainPedalType::Tp1`) share the list and are ignored ("Sustain Only") when a TP-2 is attached. Switch functions act on the press edge (`>= 64`); Una Corda, Sostenuto, Pump, Synth Vibrato and Control follow the continuous value. Panel Assigned resolves through `triple.panel_assigned` (Layer Scene II taken as Hold, `ASSUMED`). The function list is the manual's (p.60); retailer listings of the TP-2 agree on it (https://www.kirstein.de/en/Pedals-and-Buttons/Clavia-Nord-Triple-Pedal-2.html, https://www.perfectcircuit.com/nord-ntp2-triple-pedal-2.html; `EMPIRICAL`, secondary sources, no behaviour detail) | Manual p.26, p.60 |
+| Pump | The Pump FX type does not exist yet: `PedalState::pump_value()` exposes `0..1`. When Pump lands, feed it to `mod1_ped_pos` of the chains in Mod 1 PED mode | Open |
+| Synth Vibrato pedal | Writes `SynthLayer::vibrato_ctrl` of all Synth layers (audible in vibrato mode PED) | Manual p.60 |
+| Program Up/Down | The engine does not own the program list: `take_program_step()` returns the net presses (`+1` / `-1`) since the last call; the host loads the neighbouring program | Manual p.60 |
+| Mst Clk Tap | `tap_tempo()`: an interval between two taps of `0.2..2.0` s sets `master_clock.bpm = 60 / interval` and re-snaps delay times; a longer gap starts a new sequence. Sample-counted (`render_frame` ticks), no allocation. Window and last-interval-only law `ASSUMED` | Manual p.60 |
+| Sustain Pedal Type | `SustainPedalType { Sp1, Sp2, Tp1, NormallyOpen, NormallyClosed }` conditions the jack value (Global source only, never Aux KB): `Sp1` / `NormallyOpen` binary, `NormallyClosed` inverted, `Sp2` / `Tp1` continuous. The hardware default is SP-1, but the engine default is `Sp2` so continuous `CC64` half pedaling keeps working and existing renders stay identical. Control / Swell pedal brand ranges (Roland, Yamaha, ...) are analog calibrations with no MIDI equivalent: not modelled | Manual p.26, p.60 |
 | Control pedal | `CC11` is the Morph source; `Ctrl + Swell` also drives Swell; gain 1-10 | Manual p.60 |
 | Swell | `CC4` scales the Organ layers. B3 floor 0.1 (-20 dB, `ASSUMED`); other models reach 0. Function `Volume` scales the master mix, `Wheel Morph` mirrors the mod wheel | Manual p.22, p.60 |
 | Rotor pedal, foot switch | `rotor_pedal(down)` and `foot_switch(down)`; Toggle/Hold; foot switch can switch Layer Scene or the rotor; Sustain+Rotor Hold/Toggle on the sustain jack. No MIDI CC exists for these jacks in the manual, so they are API/host-parameter inputs only | Manual p.53, p.61 |
@@ -40,7 +46,7 @@ Source: manual OS v1.6x p.21-22, p.26-28, p.43-47, p.55-56, p.59-64. Code: `engi
 | Output queue | `MidiOutQueue`: fixed 256-entry ring buffer; backends drain with `pop_midi_out()`; overflow drops the newest event and counts it (`dropped()`). No allocation on the audio path | `ASSUMED` capacity |
 | Channel helpers | `set_global_channel`, `set_layer_channel`, `set_aux_channel` take panel numbers 1-16 or `None` (Off); `route_for(layer, channel)` resolves `NoteRoute::{Layer, Aux, Global}` | Manual p.62 |
 
-Not modelled: Echo Global To Extern (the emulator has no separate internal keybed, so Global notes always reach Extern layers inside their zone), Extern device filters (mod wheel, aftertouch, control/swell/volume pedal forwarding), Extern keyboard velocity curve, Piano/Organ pitch bend, Triple Pedal left/middle assignments (Pump, Mst Clk Tap, Program Up/Down), the plugin MIDI output port for Extern.
+Not modelled: Echo Global To Extern (the emulator has no separate internal keybed, so Global notes always reach Extern layers inside their zone), Extern device filters (mod wheel, aftertouch, control/swell/volume pedal forwarding), Extern keyboard velocity curve, Piano/Organ pitch bend, the Pump FX itself (the pedal value is exposed), TP-2 jack detection, the plugin MIDI output port for Extern.
 
 ---
 

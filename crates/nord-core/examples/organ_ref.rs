@@ -161,6 +161,10 @@ fn render_layer(o: &Opts) -> Vec<[f32; 2]> {
         organ.key_click_enabled = false;
     }
     organ.drawbars = o.drawbars;
+    if o.mode == "vox" && o.drawbars == [8, 8, 8, 0, 0, 0, 0, 0, 0] {
+        // the Vox default program has drawbars 1..4 at 8 (level slots 0, 2, 5, 10)
+        organ.drawbars = [8, 8, 8, 8, 0, 0, 0, 0, 0];
+    }
     organ.drawbar_law = if o.linear {
         DrawbarLaw::Linear
     } else {

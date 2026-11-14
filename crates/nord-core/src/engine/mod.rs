@@ -15,6 +15,9 @@ use crate::synth::SynthLayer;
 
 pub use aux_kb::{AuxKb, AuxVelocityCurve, NoteRoute};
 pub use extern_out::{ExternLayer, ExternState, MidiOut, MidiOutQueue, MIDI_OUT_CAPACITY};
+pub use pedal_assign::{
+    PanelFunc, SustainPedalType, TripleFunc, TriplePedal, TripleState, TripleUnit,
+};
 pub use pedals::{
     ControlFunc, FootSwitchFunc, PedalSource, PedalState, RightPedal, RotorFunc, SwellFunc,
     B3_SWELL_FLOOR, HALF_PEDAL_MIN,
@@ -29,8 +32,10 @@ mod live_slots;
 mod midi_dispatch;
 mod morph_clip;
 mod organ_modes;
+mod pedal_assign;
 mod pedals;
 mod program;
+mod program_export;
 mod program_fx;
 mod program_ops;
 mod routing;
@@ -50,6 +55,7 @@ mod tests_program;
 #[cfg(test)]
 mod tests_routing;
 mod undo;
+mod undo_ops;
 
 pub use clipboard::{Clip, ClipboardError, LayerClip};
 pub use fx_params::FxParams;
@@ -174,6 +180,7 @@ impl Stage4Engine {
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
     pub fn render_frame(&mut self) -> [f32; 2] {
         self.master_clock.advance(self.sample_rate);
+        self.pedals.triple.tick();
         self.sync_synth_clock();
 
         // Apply Morphing Matrix to Synth filter cutoffs via OS v1.66 14 Hz .. 32 kHz curve

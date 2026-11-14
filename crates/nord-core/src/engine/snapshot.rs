@@ -11,22 +11,23 @@ use super::*;
 /// the notes currently held.
 #[derive(Debug, Clone)]
 pub struct ProgramState {
-    organ_a: OrganLayer,
-    organ_b: OrganLayer,
-    piano_a: PianoLayer,
-    piano_b: PianoLayer,
-    synth_a: SynthLayer,
-    synth_b: SynthLayer,
-    synth_c: SynthLayer,
-    fx: [FxParams; 7],
-    layer_levels: [MorphParameter; 7],
-    synth_cutoff_morph: [MorphParameter; 3],
-    scene: LayerSceneState,
-    split_router: KeybedSplitRouter,
-    transpose: i8,
-    program_level_db: f32,
-    tempo_bpm: f32,
-    compressor_amount: f32,
+    pub(super) organ_a: OrganLayer,
+    pub(super) organ_b: OrganLayer,
+    pub(super) piano_a: PianoLayer,
+    pub(super) piano_b: PianoLayer,
+    pub(super) synth_a: SynthLayer,
+    pub(super) synth_b: SynthLayer,
+    pub(super) synth_c: SynthLayer,
+    pub(super) fx: [FxParams; 7],
+    pub(super) layer_levels: [MorphParameter; 7],
+    pub(super) synth_cutoff_morph: [MorphParameter; 3],
+    pub(super) scene: LayerSceneState,
+    pub(super) split_router: KeybedSplitRouter,
+    pub(super) transpose: i8,
+    pub(super) program_level_db: f32,
+    pub(super) tempo_bpm: f32,
+    pub(super) compressor_amount: f32,
+    pub(super) fx_sharing: FxSharing,
 }
 
 /// Clones `layer` with every note released (all 128 note-offs on the copy).
@@ -58,6 +59,7 @@ impl Stage4Engine {
             program_level_db: self.program_level_db,
             tempo_bpm: self.master_clock.bpm,
             compressor_amount: self.master_bus.compressor_amount,
+            fx_sharing: self.fx_sharing,
         })
     }
 
@@ -81,6 +83,7 @@ impl Stage4Engine {
         self.split_router = s.split_router;
         self.set_transpose(s.transpose);
         self.set_program_level_db(s.program_level_db);
+        self.fx_sharing = s.fx_sharing;
         self.master_clock.bpm = s.tempo_bpm;
         self.master_bus.compressor_amount = s.compressor_amount;
         for fx in &mut self.fx_chains {
