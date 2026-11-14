@@ -179,7 +179,7 @@ fn verified_entries_use_the_default_manual_source() {
 
 #[test]
 fn per_section_counts_are_pinned() {
-    assert_eq!(count(Section::Master), 10);
+    assert_eq!(count(Section::Master), 11);
     assert_eq!(count(Section::Organ), 50);
     assert_eq!(count(Section::Piano), 32);
     assert_eq!(count(Section::Program), 56);
@@ -201,21 +201,21 @@ fn per_kind_counts_are_pinned() {
 
 #[test]
 fn total_is_the_sum_of_sections() {
-    assert_eq!(all_controls().len(), 274);
+    assert_eq!(all_controls().len(), 275);
 }
 
 #[test]
 fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
-    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 141);
+    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 142);
     assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 58);
     assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 75);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)
         .count();
-    assert_eq!(assumed, 23);
+    assert_eq!(assumed, 24);
     assert_eq!(all.iter().filter(|c| c.morphable).count(), 35);
 }
 

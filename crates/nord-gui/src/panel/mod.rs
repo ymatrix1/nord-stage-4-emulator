@@ -32,6 +32,7 @@ mod piano_logic;
 pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
+mod rotor_angle;
 #[cfg(test)]
 mod sim;
 mod state;
