@@ -155,7 +155,7 @@ Frames stay in `target/` (git-ignored, firmware font pixels). What each text wid
 
 | Screen | Strings the widgets got (font index; `^` = upper-case flag) | Reached by |
 |---|---|---|
-| Program home, empty program | `A:11` (0) / `<empty>` (0) / rows `As:`, `B3`, `!Piano not found`, `Pure Saw` (3) / drawbar digits `88AA09009` (their own font object `0xC02C3BA8`) | `(0x01, 0, 3)` |
+| Program home, empty program | `A:11` (0) / `<empty>` (0) / rows `As:`, `B3`, `!Piano not found`, `Pure Saw` (3) / drawbar digits `88AA09009` (nine digits, their own font object `0xC02C3BA8`: confirms the nine-digit text form of `section_rows`, bean `ns4-bjvn`) | `(0x01, 0, 3)` |
 | Edited marker | the boxed `E` after `A:11` is drawn once the program counts as edited | seen after `(0x01, 0, 2)` and `(0x02, 1, 0)` |
 | Parameter popup | label + value, 8 px (3), both mixed case: `Delay Tempo`, `250 ms`, `Octave Shift`, `Reverb Type` / `Hall`, `Master Clock Tempo` / `120 bpm`; a right-aligned graphic (4 boxes for the clock, `+1` slider for the octave) | `(0x01, 1, 2)` ... |
 | `ORGAN PRESET` / `PIANO PRESET` / `SYNTH PRESET` | title ^3; `1:01` (5), `<None>`, soft buttons `Num` `Cat` `Cancel`, a letter column `A` `B` (`C` for Synth), row ` <empty>` | `(0x08, 0, 0 / 1 / 5)` |
@@ -179,7 +179,7 @@ Rows measured on the frames (bounding boxes of lit pixels; text boxes are the fi
 | Home name line | **13 px, same font as the title**, text box y = 18 (15 px pitch) | `h * 0.16`, smaller than the title | fixed: same size, y = 18 |
 | Home rule | 1 px, full width, y = 33 | at about y = 27 | fixed: y = 33 (`oled_paint::grid`) |
 | Home rows | 8 px font idx 3, from y = 36, pitch 10, an 8 px icon column at x = 0 to 7 and text from x = 12 | pitch `1.15 * 0.12 h` = 8.8, no icons | pitch fixed: 10; icons: follow-up 3 |
-| Section row text | `B3` / `!Piano not found` / `Pure Saw`: the source name (not `Organ B3`), a warning glyph when the sound is missing; the organ row ends with the mini drawbar digits | `Organ B3` ... | follow-up 3 |
+| Section row text | `B3` / `!Piano not found` / `Pure Saw`: the source name (not `Organ B3`), a warning glyph when the sound is missing; the organ row ends with the mini drawbar digits (done in `oled_home::section_rows`, `ns4-bjvn`) | `Organ B3` ... | icons, source names, warning glyph: follow-up 3 |
 | Popup | the lower half under the rule: label at y = 45, value at y = 55 (8 px), graphic right-aligned | none: ours replaces the whole screen (`TRANSPOSE`, ...) | follow-up 4 |
 | Title bar | inverted: rows 0 to 10 fully lit, text 8 px unlit at y = 2, page counter right-aligned with a tab | plain text line | follow-up 2 |
 | Menu body | label 8 px at y = 15, **value 13 px at y = 26** | `1/7 Control Pedal` sub line, rows | follow-up 2 |
@@ -223,7 +223,7 @@ The **fonts are proportional bitmaps** (glyph advance = width incl. the gap colu
 
 1. Capture the I2C writes of a Store and replay them as an initial EEPROM image to get a real program name, the section rows with sources and the Organize list (blocker 1).
 2. GUI: inverted title bar with a right-aligned page counter, menu body (8 px label, 13 px value), outlined soft buttons, Organize list with the inverted row (one bean each, with the measurements of section 9).
-3. GUI: Program home section rows with an icon column, source names (`B3`, `Pure Saw`), the warning glyph and the mini drawbar digits.
+3. GUI: Program home section rows with an icon column, source names (`B3`, `Pure Saw`) and the warning glyph (bean `ns4-aivy`; the size letter and drawbar digits are done in `ns4-bjvn`).
 4. GUI: parameter popups in the lower half of the home screen (label, value, graphic) instead of full-screen pages (`TRANSPOSE`, tempo).
 5. GUI: a proportional bitmap font with the metrics of `arm_oled.font_table` (derived metrics only, never the bitmaps).
 6. Identify Program 1, 2, 5, 6, Page, Store, Undo and Layer Init keys and the dial inputs; capture the System, Sound, Output and Pedal menus and the other Synth pages to settle the rest of the case-only list.
