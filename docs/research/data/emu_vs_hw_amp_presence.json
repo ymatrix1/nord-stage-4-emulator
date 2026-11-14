@@ -1,0 +1,32 @@
+{
+  "video": "_zksT69H30c",
+  "note": "B3 and Vox presence / brilliance with the firmware amp (drive + cabinet, default since D22) against the engine amp and amp off (docs/research/fx-amp-parity.md). Flags are render-patch flags; 'edits' set program JSON fields.",
+  "segments": [
+    {
+      "id": "organ_vox",
+      "entry": "Program/Bank A/Vintage Vox J3.ns4p",
+      "engine": "organ Vox (Twin amp 289 drive 1.1)",
+      "at_s": 2360,
+      "duration_s": 11,
+      "variants": [
+        {"label": "default", "flags": []},
+        {"label": "vox_fwamp", "flags": ["--tone-source", "vox", "--organ-level", "firmware"]},
+        {"label": "vox_engineamp", "flags": ["--tone-source", "vox", "--organ-level", "firmware", "--amp-path", "engine"]},
+        {"label": "vox_noamp", "flags": ["--tone-source", "vox", "--organ-level", "firmware"], "edits": {"organ.fx.amp_enabled": false}},
+        {"label": "vox_fwamp_drive5", "flags": ["--tone-source", "vox", "--organ-level", "firmware"], "edits": {"organ.fx.amp_drive": 5.0}}
+      ]
+    },
+    {
+      "id": "organ_b3",
+      "entry": "Program/Bank A/B3 Chords n Solo.ns4p",
+      "engine": "organ B3",
+      "at_s": 238,
+      "duration_s": 25,
+      "variants": [
+        {"label": "default", "flags": []},
+        {"label": "bw_fwamp", "flags": ["--tone-source", "b3wheels", "--organ-level", "firmware"]},
+        {"label": "bw_engineamp", "flags": ["--tone-source", "b3wheels", "--organ-level", "firmware", "--amp-path", "engine"]}
+      ]
+    }
+  ]
+}

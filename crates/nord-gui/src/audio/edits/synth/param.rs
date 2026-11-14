@@ -7,6 +7,7 @@
 use super::pattern::PatternParam;
 use nord_core::synth::{
     ClockDivision, FilterModel, SampleTimbre, SynthLayer, SynthOscMode, VaWaveform,
+    PATTERN_PRESET_MAX,
 };
 use nord_core::synth_types::{ArpMode, LfoDestination, LfoShape, NotePriority, VibratoMode};
 
@@ -151,7 +152,7 @@ impl SynthParam {
             P::ArpRate(bpm) => l.arp_rate_bpm = bpm.clamp(20.0, 300.0),
             P::GateEnv(g) => l.perf.gate_env = g.clamp(0.0, 1.0),
             P::PatternOn(b) => l.perf.pattern_on = b,
-            P::PatternPreset(p) => l.perf.pattern_preset = p.min(7),
+            P::PatternPreset(p) => l.perf.pattern_preset = p.min(PATTERN_PRESET_MAX),
             P::KbSync(b) => l.perf.kb_sync = b,
             P::Pattern(p) => p.apply(l),
             P::ArpClockSync(b) => l.perf.arp_clock_sync = b,
@@ -366,7 +367,7 @@ mod tests {
         assert_eq!(l.arp_rate_bpm, 300.0);
         assert_eq!(l.perf.gate_env, 0.75);
         assert!(l.perf.pattern_on);
-        assert_eq!(l.perf.pattern_preset, 7);
+        assert_eq!(l.perf.pattern_preset, 28);
     }
 
     #[test]
