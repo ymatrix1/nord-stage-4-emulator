@@ -305,3 +305,4 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Make 0.5 the default now (changes every `.npno` render by 0.83 dB on an assumption); attenuate the piano layer by 12 dB to match the video (fits a replay artefact, would be wrong at the real velocities).
 - **Impact:** `render_hash` unchanged. No engine stage other than the 0.55 constant differs from the firmware at default settings.
 
+- **Update 2026-11-13 (routing):** `FirmwareRouting::{Off, On}` (`ns4 render-patch --firmware-routing`) makes the engine follow the program's section / layer enables and per-layer KB zones. Default stays `Off`: the zone-enable rule is VERIFIED on the ARM firmware, but the meaning of the 12 `kKbZone` codes is EMPIRICAL (the firmware key-range writer is not found, OQ23), so criterion (2) is not met and `render_hash` is unchanged ([engine-routing](research/engine-routing.md)).
