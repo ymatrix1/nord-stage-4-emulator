@@ -73,6 +73,20 @@ The harness grid ([synth-wave-stages](synth-wave-stages.md)) gives 7, 3, 9, 5, 7
 
 The P block (`P[-32]`, `P[-30]` ratios, `P[-14..-10]` weights, `P[16]` gain) and the shape words `DM(17, I2)`, `DM(19, I2)` are not derived from the strip words by the ORG or PNO core 2 pass of the harness: poking each of the 62 words of strip 0 and the 32 common words changes only the pitch word (strip word 2, common word 0). The pass installs only `0x12082F` / `0x120C68` from strip words 0 / 1, and no stage in slot 0, so the real device must reach these words through a path the oracle pass does not run (the apply flag `DM(0xC136C)`, the setup routine `0x120300`, which now runs without a fault). A loaded program in the ARM harness only produces the ARM side messages (controller bytes), not the DSP-side words. Capturing them needs the DSP-side installer, not more ARM work.
 
+## 9. Where the P block and the shape words come from (oracle experiments, third round)
+
+Experiments with `sharc-org` on the ORG and PNO core 2 images (commands in this section; `--watch` logs every store of the pass):
+
+| Question | Result | Tag |
+|---|---|---|
+| Is the P block written by the pass? | No: `--watch 0xC1672:0x50` over 40 passes, and over a key-down pass, logs no store into it. Key-down (`DM(0xC1DCC) = 0x0B00E200` at pass 2) makes the pass run the setup routine `0x120300` once (4991 instead of 4265 steps): it resets the slot record (`DM(0xC10B8)` back to the null stage `0x120BF7`, which removes a stage installed by hand), clears the phases (`DM(-21 ..)`), but still writes nothing into `0xC1672..0xC16C2` | VERIFIED (run) |
+| Is it built from strip words at boot? | No: `--pre` of each of the 62 words of strip 0 changes only the pitch record (strip word 2) | VERIFIED (run) |
+| Content | one 150-word block per slot (`0xC169A + 0x96 s`), **identical for slots 0..3**: `P[-32..-17]` = 0.0770, -0.0775, -0.065, 0.0655, 0.053, -0.0535, -0.046, 0.0465, 0.031, -0.0315, -0.026, 0.0265, 0.010, -0.0105, 0, 0.0005 (a +- spread, the pairs are lane x and lane y); `P[-16 .. +17]`: four-word groups `0.25 0.25 0 0` (so the idle weights are `wB1 = wA2 = 0.25`, `wA1 = wB2 = 0`, gain `P[16] = 0.25`) | VERIFIED (dump) |
+| Who writes the shape words `DM(17, I2)`, `DM(19, I2)`? | the pass itself: stores at pc `0x126966` / `0x126969` (and `0x126352`, `0x126355` for `DM(0xC1FAD..AF)`) in every pass, from the modulation source pointers (`I0 = DM(0xC0CD2)`, `I4 = DM(0xC0CD9)`, `I5 = DM(0xC0CD8)`, `I2 = DM(0xC0CD0)`), idle value 0.5 and 0 | VERIFIED (watch), sources open |
+| Pitch word law | `DM(-29, I2)` is cycles per SY frame (`f / 43402.34`): strip 0 word 2 = 0 gives 0.0060278 = 261.619 Hz = C4 exactly; the top byte is a signed step count, 12 steps give a factor of 1.9801 (not 2; 17.3 cents per octave flat if the steps are semitones; see [data/synth-pitch-word.csv](data/synth-pitch-word.csv)), the low 24 bits interpolate a table (`0xB080D`) | VERIFIED (run) |
+
+Consequence: with the oscillator increment `inc = FIX(f r 2^31)` (cycles per sample `f r / 2`), a played pitch needs `r = 2` (or a pitch word of twice the note frequency), and the idle `P[-32] = 0.077` cannot be the ratio of a running voice. Since no DSP-side routine in the pass, the setup or the key-down path writes the block, **the real P block is written from outside the ORG / PNO core 2 program**: by the other core of the same chip or by DMA (hypothesis, not tested: the oracle runs core 2 only). The ARM never sends a word into `0xC1600..0xC1700` (the captured messages in [data/synth-edit-messages.csv](data/synth-edit-messages.csv) go to `0xE0000..`, `0xC13A9..AC`, `0xC1B3C..46`, `0xB00xx`, `0x92xxx`). The next experiment is therefore on the core 1 image of the chip that plays the synth: which routine of it writes `0xC1672..` (find with `--watch` on core 1, `sharc-organ` / `sharc-bank`), fed by the same ARM messages.
+
 ## Implications
 
 - The SHAPE category is a morphing parabola-difference oscillator (a triangle to saw-like family), not a triangle and not the saw helper: the decoder placeholder is wrong in kind. The stage, bit exact, is available (`SynthLayer::strip_shape`).
@@ -80,6 +94,6 @@ The P block (`P[-32]`, `P[-30]` ratios, `P[-14..-10]` weights, `P[16]` gain) and
 
 ## Follow-ups
 
-1. Find the DSP-side path that builds the P block and the shape words from the controller words (section 8): run the apply flag / setup routine `0x120300` chain in `sharc-org` with the strip and controller words of a program, then set ratios, weights and shape.
+1. Find the writer of the P block on the **core 1** program of the chip (section 9: core 2 never writes it) and replay the ARM messages of a loaded program into core 1 and core 2 together; then set ratios, weights and shape.
 2. Model the remaining stages of [synth-wave-stages](synth-wave-stages.md) (sine, triangle, SUB OSC, SYNC, Shape Saw / Square / Half Sine / Parabolic, SHAPE SINE, MULTI, SUPER, MISC) with `mix_lanes` and the 40-bit helpers.
 3. Port the saw and pulse stages to Rust as two-oscillator modules once the weights are known (the single-oscillator saw already exists as `SawModel::FirmwareSy`).
