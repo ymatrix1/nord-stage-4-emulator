@@ -162,7 +162,10 @@ fn every_page_of_every_menu_renders_all_its_items() {
                 assert_eq!(t.big, bar_title(m, page, model.title), "{m:?}");
                 assert_eq!(t.sub, model.title, "{m:?}");
                 assert_eq!(t.bar, Some(format!("{}/{n}", page + 1)), "{m:?}");
-                assert!(!t.rows.is_empty() && t.rows.iter().any(|r| r.contains('>')));
+                // One-item pages show the bare value (13 px); several items keep the focus marker.
+                assert!(
+                    !t.rows.is_empty() && (t.body_big || t.rows.iter().any(|r| r.contains('>')))
+                );
                 rows += t.rows.len();
                 if p.ui.menu.paged() {
                     assert_eq!(t.soft[3], "More");

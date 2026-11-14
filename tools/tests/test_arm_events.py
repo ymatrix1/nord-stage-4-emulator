@@ -1,0 +1,34 @@
+"""Unit tests for tools/arm_events.py: event decoding and the encoder id map."""
+
+from __future__ import annotations
+
+import arm_events as ev
+import arm_keys as ak
+
+
+def test_an_encoder_entry_decodes_with_a_signed_delta() -> None:
+    e = ev.decode_event((ev.TAG_ENCODER, 1, 6, 0xFFFFFFFE))
+    assert (e.kind, e.ident, e.flags, e.delta) == ("encoder", 6, 1, -2)
+    assert ev.decode_event((ev.TAG_ENCODER, 0, 7, 3)).delta == 3
+
+
+def test_key_and_unknown_tags_are_told_apart() -> None:
+    assert ev.decode_event((ev.TAG_KEY, 0, 0x13, 1)).kind == "key"
+    assert ev.decode_event((0x1234, 0, 0, 0)).kind == "other"
+
+
+def test_the_five_encoder_ids_map_to_the_five_pairs_both_ways() -> None:
+    assert len(ev.ENCODER_PAIR_OF_ID) == len(ak.ENCODER_PAIRS) == 5
+    for ident, pair in ev.ENCODER_PAIR_OF_ID.items():
+        assert ev.ID_OF_ENCODER_PAIR[pair] == ident
+        assert ev.encoder_pair_for(ident) == pair
+    assert ev.encoder_pair_for(99) is None
+    # The Program dial is pair 1 (index 6), the value widget's other id is pair 0 (index 7).
+    assert (ev.ID_OF_ENCODER_PAIR[1], ev.ID_OF_ENCODER_PAIR[0]) == (6, 7)
+
+
+def test_the_queue_merges_deltas_and_wraps_its_ring() -> None:
+    assert ev.merge_delta(1, 2) == 3 and ev.merge_delta(-1, -1) == -2
+    assert ev.queue_depth(7, 8) == 1 and ev.queue_depth(8, 8) == 0
+    assert ev.ring_slot(256, 0xFF) == 0 and ev.ring_slot(257, 0xFF) == 1
+    assert ev.EVENT_BYTES == 64
