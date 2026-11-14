@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 
 const SAMPLE_RATE: f32 = 48_000.0;
-const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--synth-chain legacy|strip] [--b3-tail on|off] [--amp-path engine|firmware] [--rotary-drive engine|unity] [--firmware-routing] [--firmware-fx] [--legacy-piano-level] [--measured-laws] [--firmware-all|--legacy-all]...";
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--synth-chain legacy|strip] [--b3-tail on|off] [--amp-path engine|firmware] [--rotary-drive engine|unity|scaled] [--firmware-fx] [--legacy-piano-level] [--firmware-routing] [--measured-laws] [--firmware-all|--legacy-all]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
@@ -283,7 +283,10 @@ fn run_cli(args: &[String]) -> Result<String, String> {
             match flag("--rotary-drive").map(String::as_str) {
                 None | Some("engine") => {}
                 Some("unity") => nord_core::render_opts::apply_rotary_unity(&mut engine, true),
-                Some(v) => return Err(format!("invalid --rotary-drive '{v}' (expected engine|unity)")),
+                Some("scaled") => nord_core::render_opts::apply_rotary_scaled(&mut engine),
+                Some(v) => {
+                    return Err(format!("invalid --rotary-drive '{v}' (expected engine|unity|scaled)"))
+                }
             }
 
 
