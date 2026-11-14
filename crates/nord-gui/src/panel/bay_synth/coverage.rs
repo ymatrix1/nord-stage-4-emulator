@@ -107,23 +107,12 @@ fn every_synth_inventory_id_has_a_painted_widget() {
 }
 
 #[test]
-fn dimmed_controls_are_exactly_the_ones_without_engine_support() {
-    let mut dim: Vec<_> = synth_ids()
+fn no_synth_control_is_dimmed_any_more() {
+    let dim: Vec<_> = synth_ids()
         .into_iter()
         .filter(|id| unsupported_reason(id).is_some())
         .collect();
-    dim.sort();
-    let mut expected = [
-        "synth.aux_led.a",
-        "synth.aux_led.b",
-        "synth.aux_led.c",
-        "synth.extern",
-        "synth.kb_zone_down",
-        "synth.kb_zone_up",
-        "synth.zone_leds",
-    ];
-    expected.sort();
-    assert_eq!(dim, expected);
+    assert!(dim.is_empty(), "still dimmed: {dim:?}");
 }
 
 #[test]
@@ -312,4 +301,47 @@ fn cat_and_sample_dials_queue_a_sample_load_for_the_focused_layer() {
     );
     let v = super::oled_view::view_of(&state.synth_ui, None);
     assert_eq!(v.soft[1].as_ref().unwrap().value, "Choir");
+}
+
+#[test]
+fn shift_wheel_over_layer_b_sets_the_pstick_range_in_the_engine() {
+    let (ctx, mut state, audio, rx) = fresh();
+    let c = rect_or_empty("synth.layer.b", pos2(0.0, 0.0)).center();
+    run_frame(
+        &ctx,
+        &mut state,
+        &audio,
+        plain(vec![egui::Event::PointerMoved(c)], shift()),
+    );
+    let wheel = egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, 5.0 * 24.0),
+        modifiers: shift(),
+    };
+    run_frame(&ctx, &mut state, &audio, plain(vec![wheel], shift()));
+    assert_eq!(
+        state.synth_ui.pstick_range, 7,
+        "default 2 plus five notches"
+    );
+    let edits = synth_edits(&rx);
+    assert_eq!(edits, vec![SynthEdit::PstickRange(7)]);
+    let mut engine = Stage4Engine::new(48_000.0);
+    let mut vol = 0.8;
+    for e in edits {
+        apply_audio_command(AudioCommand::Synth(e), &mut engine, &mut vol);
+    }
+    assert_eq!(engine.pedals.pstick_range[4..7], [7; 3]);
+    // Without Shift the wheel over the button leaves the range alone.
+    let plain_wheel = egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, 48.0),
+        modifiers: egui::Modifiers::NONE,
+    };
+    run_frame(
+        &ctx,
+        &mut state,
+        &audio,
+        plain(vec![plain_wheel], egui::Modifiers::NONE),
+    );
+    assert_eq!(state.synth_ui.pstick_range, 7);
 }

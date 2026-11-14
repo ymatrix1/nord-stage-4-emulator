@@ -14,6 +14,7 @@ pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_
         AudioCommand::Program(e) => e.apply(engine),
         AudioCommand::SwapState(s) => s.apply(engine),
         AudioCommand::Midi(ev) => engine.handle_midi(ev),
+        AudioCommand::Keyboard(ev) => engine.handle_keyboard_midi(ev),
         AudioCommand::SetMasterVolume(v) => *master_vol = v.clamp(0.0, 1.0),
         AudioCommand::SetDrawbars(d) => engine.organ_a.drawbars = d,
         AudioCommand::SetOrganModel(m) => {
@@ -188,8 +189,28 @@ pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nord_core::midi::MidiEvent;
     use nord_core::organ::OrganModel;
     use std::sync::Arc;
+
+    #[test]
+    fn keyboard_commands_obey_local_control_but_midi_in_does_not() {
+        let note = MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 100,
+        };
+        let peak = |cmd: AudioCommand, local: bool| {
+            let mut e = Stage4Engine::new(48_000.0);
+            e.midi_menu.local_control = local;
+            let mut vol = 0.8;
+            apply_audio_command(cmd, &mut e, &mut vol);
+            (0..2048).fold(0.0f32, |m, _| m.max(e.render_frame()[0].abs()))
+        };
+        assert_eq!(peak(AudioCommand::Keyboard(note), false), 0.0);
+        assert!(peak(AudioCommand::Keyboard(note), true) > 1e-4);
+        assert!(peak(AudioCommand::Midi(note), false) > 1e-4);
+    }
 
     #[test]
     fn test_apply_audio_command_updates_engine() {

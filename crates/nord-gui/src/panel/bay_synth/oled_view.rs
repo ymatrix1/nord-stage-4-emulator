@@ -8,16 +8,7 @@ use crate::panel::ui_state::{
     dial_defs, SynthPage, SynthUi, FILTER_TYPES, LFO_SHAPES, VIBRATO_DELAYS, WAVE_TYPES,
 };
 
-/// `103 ms`, `1.5 s`, `11 s`.
-pub fn fmt_time(s: f32) -> String {
-    if s < 1.0 {
-        format!("{:.0} ms", s * 1000.0)
-    } else if s < 10.0 {
-        format!("{s:.1} s")
-    } else {
-        format!("{s:.0} s")
-    }
-}
+pub use crate::panel::param_hint::fmt::time as fmt_time;
 
 fn icon_of(sui: &SynthUi) -> Icon {
     let l = sui.layer();
@@ -194,13 +185,14 @@ pub fn view_of(sui: &SynthUi, sample_name: Option<&str>) -> OledView {
             "EXTERN",
             Graphic::Lines(vec![
                 "MIDI out to external gear".to_string(),
-                "not implemented".to_string(),
+                if l.extern_on {
+                    "layer is Extern"
+                } else {
+                    "layer is internal"
+                }
+                .to_string(),
             ]),
-            [
-                sui.extern_vals[0].to_string(),
-                sui.extern_vals[1].to_string(),
-                sui.extern_vals[2].to_string(),
-            ],
+            l.extern_vals.map(|v| v.to_string()),
         ),
     };
     OledView {
@@ -366,7 +358,8 @@ mod tests {
         s.open(SynthPage::Extern);
         let v = view_of(&s, None);
         assert_eq!(v.title, "EXTERN");
-        assert!(v.soft.iter().flatten().all(|x| x.dim));
+        assert!(v.soft.iter().flatten().all(|x| !x.dim), "Extern dials work");
+        assert_eq!(v.soft[2].as_ref().unwrap().label, "PROGRAM");
     }
 
     #[test]

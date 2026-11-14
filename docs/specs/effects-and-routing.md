@@ -44,7 +44,7 @@ Layer Synth/Piano/Organ Output (Stereo)
 - **Amp Sim / EQ modes (`amp_type_new & 0x0F`):** `0` Off, `1` Twin, `2` Twin II, `3` JC, `4` JC II, `5` Small Speaker, `6` Very Small Speaker, `7` To Rotary, `8` LP24, `9` HP24.
   - Names and order: **VERIFIED** from UI strings at `0x2cc6cc` in OS v1.66 `bank0_CODE.bin` (`Twin Type I/II`, `JC Type I/II`, `Small Speaker`, `Very Small Speaker`, `To Rotary`, `LP24`, `HP24`).
   - Numeric index: **EMPIRICAL**, identical to third-party `ns4decode` (MIT, Randy 2024) on 10 factory programs covering modes 0..9.
-  - `Twin` / `JC` / `Small` cabinet voicings (HP/LP/mid-peak Hz and dB): **ASSUMED**, inherited from the earlier 1-pole code. `II` variants are stored (`amp_variation`) but not modelled. `To Rotary` is a pass-through here (the firmware Leslie is the PNO core 1 processor `0x1256AD`, ported as opt-in `--leslie firmware`, [fx-leslie](../research/fx-leslie.md) s8) (routing into the rotary is not implemented). The old `British` model does not exist on hardware and was removed.
+  - `Twin` / `JC` / `Small` cabinet voicings (HP/LP/mid-peak Hz and dB): **ASSUMED**, inherited from the earlier 1-pole code. The `II` variants (`amp_variation`, `Twin II` / `JC II` / `Small II`) have their own voicing rows in `fx/amp_eq.rs` (Twin II: 12 kHz low-pass, +1 dB at 900 Hz, +2 dB shelf; JC II: 9 kHz low-pass, +1.5 dB at 1.8 kHz, -3 dB shelf; Small II: 220 Hz..2.6 kHz): direction **VERIFIED** (manual p.51: less treble on both II amps, a smaller speaker for Small II; test `test_cabinet_variation_switch_redesigns_filters` and the Twin/JC/Small ordering test in `fx/tests_chain.rs`), every Hz and dB value **ASSUMED** (would be confirmed by a hardware sweep of each II type, `ns4-4p0s`). `To Rotary` is a pass-through here (the firmware Leslie is the PNO core 1 processor `0x1256AD`, ported as opt-in `--leslie firmware`, [fx-leslie](../research/fx-leslie.md) s8) (routing into the rotary is not implemented). The old `British` model does not exist on hardware and was removed.
   - `LP24` / `HP24`: cutoff = EQ Mid Freq knob, resonance `0..10` = Mid knob (`10 * (60 + 4 * mid_db) / 120`, from `ns4decode`); implemented as two cascaded 2nd-order sections (Butterworth-4 Q `0.5412` / `1.3066`, resonance scales the 2nd Q): topology **ASSUMED**.
 - **Overdrive (`Drive`):** Soft-clipping asymmetric saturation stage (`1.0..20.0x` pre-gain with makeup compensation).
 - **3-Band EQ:**
@@ -102,6 +102,21 @@ Source: `Nord Stage 4 User Manual v1.6X-Edition-N.pdf` (local, `.reference/`), p
 
 Consequence for Jazz Guitar II (A:78): Mod 2 = `VIBE variation` is a *mono* vibe, so the hardware stereo width (0.96, coherence 0.06 at 1..2 kHz) cannot come from Mod 2; the remaining candidates are the delay feedback `CHOR variation` (stereo widening pedal) and the reverb.
 
+### 2.7b Rotary ANGLE: rotor stop position (implemented, `ns4-uo53`)
+
+Manual p.53: with STOP MODE active, Shift + STOP MODE selects ANGLE from a list so the rotor and horn always stop at the same position; the default `Free` leaves the stop position to chance. Course video ORG 10:08-10:22 shows the screen `ROTOR STOP ANGLE` with `Free`, `1: Front Center`, `2: Front Left`, `4: Back Left`, `6: Back Center`.
+
+| Item | Behaviour | Fields / code |
+|---|---|---|
+| Value | `rotary_stop_angle`: `0` Free, `1..=6` = `STOP_ANGLE_LABELS`; clamped by `clamp_stop_angle` | `organ/rotor_stop.rs`, `OrganLayer::rotary_stop_angle` (mirrored to the TO ROTARY bus) |
+| Free | The rotors keep their residual rate (no pull to a fixed phase), so the rest phase depends on where they stopped. Before this change the legacy path always pulled to phase 0 | `organ/rotary.rs` |
+| Angle 1..6 | Once Stop is active and a rate is below 0.05 Hz, horn (6/s) and drum (3/s) phases ease along the shortest arc to `STOP_ANGLE_RAD[angle]`; no allocation, deterministic | `ease_phase`, test `stop_angle_parks_horn_and_rotor_at_the_picked_position_from_any_start` |
+| Firmware Leslie | The firmware Leslie path (`leslie_fw`, opt-in) does not use the angle: its rotor phase lives in the ported state | not modelled |
+| Host | `organy_stop_angle_{1,2}` (int `0..=6`, default 0, additive; `organ_extra_params.rs`) | `param-ids.snapshot` |
+| GUI | `OrganEdit::RotaryStopAngle`; popup `panel/rotor_angle.rs` opened by Shift + STOP MODE (a last row keeps the wide/narrow mic toggle, previously the Shift function) | inventory `rotary.stop_angle` |
+
+Provenance: list text `VERIFIED` for the five entries seen on screen; entries 3 (Front Right) and 5 (Back Right) `ASSUMED`; the rest phases (0, +-60, +-120, 180 degrees) are `ASSUMED` and the horn and drum share one phase (no recording of the hardware at each angle).
+
 ### 2.8 Variations, PED, TO ROTARY, GLOBAL and GROUP (implemented, `ns4-e3zs`)
 
 Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant below is ASSUMED (no firmware or recording source).
@@ -138,7 +153,7 @@ Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant belo
 | Mod 1 MST CLK | `mod1.mst_clk` (Shift + turn RATE, manual p.50): A-PAN, TREM, WAH and PUMP follow the Master Clock with the delay's 17 divisions (`mod1_sync_beats`); dimmed for RM and A-WAH, which the engine does not clock |
 | Filter RES | UI `0..1`, sent as `0..10` (`eq_filter_res`, engine range). The plugin parameter `fxx_filter_res_*` is `0..1` and is written unscaled, so it only reaches the lowest tenth of the range (plugin follow-up, not changed here) |
 | Selector LEDs | Every LED of both selectors has an engine type: A-WAH, PUMP, ENS and SPIN are `Mod1Type::AutoWah`, `Pump`, `Mod2Type::Ensemble`, `Spin`. The panel keeps the printed LED order (A-PAN, TREM, RM, A-WAH, WAH, PUMP; PHAS, FLANG, CHOR, VIBE, ENS, SPIN) and maps LED to type by name, because the engine and host enums append the later types and so differ in order. Their DSP is ASSUMED (`mod1_dynamic.rs`, `mod2_spin.rs`) |
-| Still dimmed | Amp VARIATION (stored by the engine, no distinct voicing yet), TO ROTARY on the Organ slot (inert), Mod 1 MST CLK on RM and A-WAH |
+| Still dimmed | TO ROTARY on the Organ slot (inert), Mod 1 MST CLK on RM and A-WAH (the Amp VARIATION is no longer dimmed: it has its own voicing, section 2.3) |
 | UI-only | Per-unit ON state, LAYER EFFECTS ON, focus, GROUP / GLOBAL sources and tap tempo live in `FxUi`; after a program load the legacy `mod1_type`, `delay_on`, `reverb_model` and knob fields are adopted into the focused chain (`StateEcho`), the other five slots keep their last panel view |
 
 ## 3. Master Bus: Global Compressor & Reconstruction Stage

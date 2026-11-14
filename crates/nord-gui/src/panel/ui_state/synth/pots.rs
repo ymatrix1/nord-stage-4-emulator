@@ -10,13 +10,13 @@ use nord_panel::behaviour::PotTracker;
 
 /// Lowest and highest cutoff of the FREQ pot in Hz.
 /// ASSUMED: log scale 40 Hz .. 15 kHz (the previous panel's range); the hardware law is unknown.
-pub(super) const FREQ_MIN: f32 = 40.0;
-pub(super) const FREQ_MAX: f32 = 15_000.0;
+pub const FREQ_MIN: f32 = 40.0;
+pub const FREQ_MAX: f32 = 15_000.0;
 /// ASSUMED: LFO rate log scale 0.05 .. 40 Hz (the host parameter range in `synth_mod_params.rs`).
-pub(super) const LFO_MIN: f32 = 0.05;
-pub(super) const LFO_MAX: f32 = 40.0;
+pub const LFO_MIN: f32 = 0.05;
+pub const LFO_MAX: f32 = 40.0;
 /// ASSUMED: glide seconds per octave `4 n^2` (the host range 0..4 with a skewed taper).
-pub(super) const GLIDE_MAX: f32 = 4.0;
+pub const GLIDE_MAX: f32 = 4.0;
 
 /// Pot positions and pick-up trackers.
 #[derive(Debug, Clone, PartialEq)]

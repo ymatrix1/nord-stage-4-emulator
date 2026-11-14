@@ -119,17 +119,9 @@ pub fn dial_defs(page: SynthPage, mode: SynthOscMode) -> [Option<DialDef>; 3] {
             ),
         ],
         SynthPage::PitchSmp => [d("PITCH"), d("FINE"), None],
-        SynthPage::Extern => [
-            dim("CC", EXTERN_WHY),
-            dim("VALUE", EXTERN_WHY),
-            dim("CHANNEL", EXTERN_WHY),
-        ],
+        SynthPage::Extern => [d("CC VAL 1"), d("CC VAL 2"), d("PROGRAM")],
     }
 }
-
-/// Why the Extern pages have no effect (inventory bean `ns4-ymci`).
-pub const EXTERN_WHY: &str =
-    "Extern mode (MIDI out to external gear) is not implemented (bean ns4-ymci)";
 
 #[cfg(test)]
 mod tests {
@@ -195,9 +187,13 @@ mod tests {
     }
 
     #[test]
-    fn extern_dials_are_all_unsupported_and_lfo_uses_one_dial() {
+    fn extern_dials_follow_the_manual_and_lfo_uses_one_dial() {
         let e = dial_defs(SynthPage::Extern, SynthOscMode::Analog);
-        assert!(e.iter().all(|x| x.unwrap().unsupported.is_some()));
+        assert_eq!(
+            e.map(|x| x.unwrap().label),
+            ["CC VAL 1", "CC VAL 2", "PROGRAM"]
+        );
+        assert!(e.iter().all(|x| x.unwrap().unsupported.is_none()));
         let l = dial_defs(SynthPage::LfoWave, SynthOscMode::Analog);
         assert!(l[1].is_none() && l[2].is_none());
     }

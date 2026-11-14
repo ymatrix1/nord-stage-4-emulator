@@ -221,7 +221,19 @@ fn rotary_organ_and_angle_buttons_change_the_rotary_engine_fields() {
     sim.click("rotary.organ");
     assert_eq!(sim.organ_edits(), vec![OrganEdit::RotaryOrgan(false)]);
     assert!(!sim.state.organ_ui.rotary_organ);
+    // Shift + STOP MODE opens the ANGLE popup; its last row is the wide / narrow mic toggle.
     sim.tap_with("rotary.stop_mode", SHIFT);
+    assert!(sim.state.organ_ui.stop_angle_open);
+    assert!(sim.organ_edits().is_empty());
+    sim.frame(vec![], egui::Modifiers::NONE);
+    let rect = super::rotor_angle::popup_rect(rect_or_empty("rotary.stop_mode", sim.origin));
+    let mic_row = pos2(rect.center().x, rect.bottom() - 6.0);
+    sim.frame(
+        vec![egui::Event::PointerMoved(mic_row)],
+        egui::Modifiers::NONE,
+    );
+    sim.press(mic_row, true, egui::Modifiers::NONE);
+    sim.press(mic_row, false, egui::Modifiers::NONE);
     let edits = sim.organ_edits();
     assert_eq!(edits, vec![OrganEdit::RotaryAngle { wide: false }]);
     let mut e = Stage4Engine::new(48_000.0);
@@ -231,12 +243,31 @@ fn rotary_organ_and_angle_buttons_change_the_rotary_engine_fields() {
     }
     assert!(!e.organ_a.rotary_enabled && !e.organ_b.rotary_enabled);
     assert!(e.organ_a.rotary_mic_angle_deg < 120.0);
-    sim.time += 2.0;
-    sim.tap_with("rotary.stop_mode", SHIFT);
+    sim.press(mic_row, true, egui::Modifiers::NONE);
+    sim.press(mic_row, false, egui::Modifiers::NONE);
     assert_eq!(
         sim.organ_edits(),
         vec![OrganEdit::RotaryAngle { wide: true }]
     );
+}
+
+#[test]
+fn stop_angle_popup_picks_an_angle_sends_it_to_the_engine_and_closes() {
+    let mut sim = Sim::new();
+    sim.tap_with("rotary.stop_mode", SHIFT);
+    sim.frame(vec![], egui::Modifiers::NONE);
+    let rect = super::rotor_angle::popup_rect(rect_or_empty("rotary.stop_mode", sim.origin));
+    // rows: title, Free, 1..6, mic; row 3 is "2: Front Left"
+    let row = pos2(rect.center().x, rect.top() + 4.0 + 3.5 * 11.0);
+    sim.frame(vec![egui::Event::PointerMoved(row)], egui::Modifiers::NONE);
+    sim.press(row, true, egui::Modifiers::NONE);
+    sim.press(row, false, egui::Modifiers::NONE);
+    let edits = sim.organ_edits();
+    assert_eq!(edits, vec![OrganEdit::RotaryStopAngle(2)]);
+    assert!(!sim.state.organ_ui.stop_angle_open);
+    let mut e = Stage4Engine::new(48_000.0);
+    edits[0].apply(&mut e);
+    assert_eq!(e.organ_a.rotary_stop_angle, 2);
 }
 
 #[test]

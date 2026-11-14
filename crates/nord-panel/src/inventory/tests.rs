@@ -25,8 +25,9 @@ const HOST_SOURCES: [&str; 16] = [
     include_str!("../../../nord-plugin/src/fx_variation_params.rs"),
 ];
 /// Engine sources an `engine:<path>` binding must be found in.
-const ENGINE_SOURCES: [&str; 4] = [
+const ENGINE_SOURCES: [&str; 5] = [
     include_str!("../../../nord-core/src/engine/mod.rs"),
+    include_str!("../../../nord-core/src/engine/extern_out.rs"),
     include_str!("../../../nord-core/src/engine/zone_assign.rs"),
     include_str!("../../../nord-core/src/morph.rs"),
     include_str!("../../../nord-core/src/synth/sound_init.rs"),
@@ -179,7 +180,7 @@ fn verified_entries_use_the_default_manual_source() {
 
 #[test]
 fn per_section_counts_are_pinned() {
-    assert_eq!(count(Section::Master), 10);
+    assert_eq!(count(Section::Master), 11);
     assert_eq!(count(Section::Organ), 50);
     assert_eq!(count(Section::Piano), 32);
     assert_eq!(count(Section::Program), 56);
@@ -201,21 +202,21 @@ fn per_kind_counts_are_pinned() {
 
 #[test]
 fn total_is_the_sum_of_sections() {
-    assert_eq!(all_controls().len(), 274);
+    assert_eq!(all_controls().len(), 275);
 }
 
 #[test]
 fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
-    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 141);
+    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 150);
     assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 58);
-    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 75);
+    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 67);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)
         .count();
-    assert_eq!(assumed, 23);
+    assert_eq!(assumed, 24);
     assert_eq!(all.iter().filter(|c| c.morphable).count(), 35);
 }
 
@@ -237,6 +238,7 @@ fn host_id_resolver_accepts_literals_and_nested_ids_only() {
     assert!(host_id_exists("organy_rotary_on_{n}"));
     assert!(host_id_exists("organy_mic_angle_{n}"));
     assert!(host_id_exists("auxkb_organ"));
+    assert!(host_id_exists("auxkb_synth"));
     assert!(host_id_exists("fxz_mod1_beats_{n}"));
     assert!(host_id_exists("fxz_rev_var_{n}"));
     assert!(!host_id_exists("pianox_nope_{n}"));
@@ -252,6 +254,10 @@ fn engine_path_resolver_accepts_fields_and_rejects_unknown_ones() {
     assert!(engine_path_exists("synth_a.sound_init"), "a method segment");
     assert!(!engine_path_exists("synth_a.no_such_method"));
     assert!(!engine_path_exists(""));
+    assert!(
+        engine_path_exists("set_layer_extern"),
+        "extern_out.rs method"
+    );
 }
 
 #[test]
@@ -259,6 +265,14 @@ fn rewired_synth_and_effects_controls_are_bound() {
     let all = all_controls();
     for id in [
         "synth.sound_init",
+        "synth.extern",
+        "synth.on",
+        "synth.kb_zone_down",
+        "synth.kb_zone_up",
+        "synth.zone_leds",
+        "synth.aux_led.a",
+        "synth.aux_led.b",
+        "synth.aux_led.c",
         "reverb.variation",
         "mod1.mst_clk",
         "mod1.variation",
