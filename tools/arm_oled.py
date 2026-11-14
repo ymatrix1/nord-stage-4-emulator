@@ -3,13 +3,14 @@
 
 Everything here works on bytes: the OS v1.66 host image (`target/fw_unpacked/bank0_CODE.bin`, load
 base `0xC0000000`, local only) for the fonts, and the write stream the host firmware sends to the
-two OLED controllers (captured by `tools/arm_panel.py`). Nothing firmware-derived is stored in the repo.
+two OLED controllers (captured by `tools/arm_panel.py`). Nothing firmware-derived is stored in
+the repo.
 Findings and evidence: `docs/research/arm-oled-render.md`, spec `docs/specs/arm-oled-render.md`.
 
-Frame format (VERIFIED, `0xC0076924` flush + the controller init): 128 x 64, 1 bit per pixel, 8 pages
-of 128 bytes; byte `page * 128 + x`, bit `i` (LSB first) is row `page * 8 + i`, 1 = lit. The same
-layout is the firmware's own frame buffer (`[display + 0x18]`, `0x400` bytes), so frames captured
-from the bus equal the buffer the draw routines wrote.
+Frame format (VERIFIED, `0xC0076924` flush + the controller init): 128 x 64, 1 bit per pixel, 8
+pages of 128 bytes; byte `page * 128 + x`, bit `i` (LSB first) is row `page * 8 + i`, 1 = lit. The
+same layout is the firmware's own frame buffer (`[display + 0x18]`, `0x400` bytes), so frames
+captured from the bus equal the buffer the draw routines wrote.
 
 Font object (VERIFIED by `tools/arm_panel.py oracle`, which renders strings through the firmware's
 own draw routine `0xC004064C` and compares): 16 bytes `{height u32, first u8 @+4, last u8 @+5,
