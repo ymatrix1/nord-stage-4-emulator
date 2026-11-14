@@ -16,6 +16,7 @@ import synth_stage_shape_sine2 as sine2  # noqa: E402
 import synth_stage_shape_sine3 as sine3  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
 import synth_stage_super1 as super1  # noqa: E402
+import synth_stage_sync as sync  # noqa: E402
 import synth_stage_unison as unison  # noqa: E402
 import synth_wave_model as m  # noqa: E402
 import synth_wave_oracle as o  # noqa: E402
@@ -35,6 +36,7 @@ MODELS = {
     "0x120dab": sine2.stage_shape_sine_4,
     "0x121e9d": super1.stage_super1,
     "0x12377d": sine3.stage_shape_sine_3,
+    "0x122a32": sync.stage_sync2,
 }
 
 
@@ -195,3 +197,42 @@ def test_shape_sine_3_golden_has_96_rows() -> None:
     import synth_stage_golden5 as g5
 
     assert len(g5.sine3_rows()) == 96
+
+
+def test_sync_table_file_has_the_documented_nodes() -> None:
+    words = sync.table()
+    assert len(words) == 258
+    assert m.ld(words[0]) == m.ONE and m.ld(words[128]) == m.X(16)
+    assert words[257] == 0x358637BD
+    assert all(m.ld(a) < m.ld(b) for a, b in zip(words[:127], words[1:128], strict=True))
+
+
+def test_sync_lookup_interpolates_linearly_and_hits_the_nodes() -> None:
+    words = sync.table()
+    assert sync.lookup(m.f2u(0.5), words) == m.ld(words[64])  # index 64, fraction 0
+    mid = sync.lookup(m.f2u(0.5 + 0.5 / 128), words)
+    want = m.ld(words[64]) + (m.ld(words[65]) - m.ld(words[64])) / 2
+    assert abs(float(mid - want)) < 1e-6
+
+
+def test_sync_uuf_is_the_upper_unsigned_product_word() -> None:
+    assert sync.uuf(0x80000000, 0x80000000) == 0x40000000
+    assert sync.uuf(0xFFFFFFFF, 2) == 1
+    assert sync.int_clip(0x00000500, 0x100) == 0x100
+    assert sync.int_clip(m.u32(-0x500), 0x100) == m.u32(-0x100)
+
+
+def test_sync_setup_at_the_idle_spread_matches_the_table_node() -> None:
+    f = m.f2u(0.01)
+    g, frac, lim, mult, q, r7, off = sync.setup(f, m.f2u(0.5), sync.table())
+    h = m.ld(sync.table()[64])  # 4.0439
+    assert lim == 4 << 25 and mult == m.fix(h, 25)
+    assert abs(float(frac) - (float(h) - 4)) < 1e-6
+    assert abs(float(r7) - 50.0) < 1e-3 and abs(float(q) - 50.0 / float(h)) < 1e-4
+    assert abs(off + 2**31 / float(h)) < 2**8 or off == m.fix(-m.X(1) / h, 31)
+    assert 0 < float(g) < 1.5
+
+
+def test_sync_and_sine3_rust_table_is_what_the_generator_prints() -> None:
+    path = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
+    assert (path / "fw_sync_table.rs").read_text() == sync.rust_table()

@@ -4,7 +4,7 @@
     python tools/synth_stage_golden5.py > crates/nord-core/src/synth/tests_fw_stage_golden5.rs
 
 Derived values of the bit-exact models (checked against the SHARC oracle by
-`tools/synth_wave_oracle.py`): the SUPER wave 1 inline square and one SHAPE SINE wave 3 oscillator. Only derived values appear.
+`tools/synth_wave_oracle.py`): the SUPER wave 1 inline square one SHAPE SINE wave 3 oscillator and one SYNC wave 2 oscillator. Only derived values appear.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ if __package__ in (None, ""):
 import synth_stage_golden as g
 import synth_stage_shape_sine3 as sine3
 import synth_stage_super1 as super1
+import synth_stage_sync as sync
 import synth_wave_model as m
 
 
@@ -65,6 +66,28 @@ def sine3_rows() -> list[tuple[int, int, int, int]]:
     return rows
 
 
+def sync2_rows() -> list[tuple[int, int, int, int]]:
+    """`(phase bits, increment bits, shape bits, sample bits)` of one SYNC 2 oscillator (own
+    weight 1, gain 1): 2 starts x 5 shapes x 4 increments x 4 samples (shape = spread word)."""
+    one, zero = m.f2u(1.0), m.f2u(0.0)
+    rows = []
+    for dt in g.INCREMENTS:
+        for shape in (0.1, 0.25, 0.5, 0.7, 0.9):
+            for s in range(g.STARTS // 4):
+                ph0 = g.phase_word(s + 3)
+                lane = m.Lane(
+                    pitch=m.f2u(2.0 * g.f32(dt)), phase1=ph0, phase2=0,
+                    shape_a=zero, shape_b=zero, ratio1=one, ratio2=one,
+                    weights=(zero, one, zero, zero), out_gain=one, spread=m.f2u(shape),
+                )  # fmt: skip
+                out, _, _ = sync.stage_sync2([lane, lane])
+                inc = m.fix(m.mul(m.ld(lane.pitch), m.ld(lane.ratio1)), 31)
+                for k in range(1, 5):
+                    ph = ((ph0 + k * inc) & 0xFFFFFFFF) / 2**32
+                    rows.append((m.f2u(ph), m.f2u(inc / 2**32), m.f2u(shape), out[0][k - 1]))
+    return rows
+
+
 def rust() -> str:
     parts = [
         "//! Firmware parity of the sixth stage batch (`fw_super1.rs`, ...).\n"
@@ -78,12 +101,17 @@ def rust() -> str:
     sine = sine3_rows()
     for i, name in enumerate(("PHASE", "DT", "SHAPE", "OUT")):
         parts.append(g.words_rust(f"SS3_{name}", [r[i] for r in sine]))
+    sy2 = sync2_rows()
+    for i, name in enumerate(("PHASE", "DT", "SHAPE", "OUT")):
+        parts.append(g.words_rust(f"SY2_{name}", [r[i] for r in sy2]))
     tail = (
         "\n#[test]\nfn golden_tables_have_the_documented_shape() {\n"
         f"    assert_eq!(FOLD_PHASE.len(), {len(fold)});\n"
         "    assert!(FOLD_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n"
         f"    assert_eq!(SS3_PHASE.len(), {len(sine)});\n"
-        "    assert!(SS3_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n}\n"
+        "    assert!(SS3_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n"
+        f"    assert_eq!(SY2_PHASE.len(), {len(sy2)});\n"
+        "    assert!(SY2_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n}\n"
     )
     return "\n".join(parts) + tail
 
