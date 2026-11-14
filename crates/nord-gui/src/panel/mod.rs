@@ -8,8 +8,17 @@ mod bay_organ;
 mod bay_piano;
 mod bay_program;
 mod bay_synth;
+mod ctl;
 mod keybed;
 pub mod layout_px;
+mod organ_drawbars;
+mod organ_logic;
+#[cfg(test)]
+mod organ_master_tests;
+mod organ_strip;
+mod organ_widgets;
+#[cfg(test)]
+mod sim;
 mod state;
 #[cfg(test)]
 mod support;
