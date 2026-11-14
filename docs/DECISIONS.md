@@ -42,6 +42,9 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
 | [D32](#d32-fx-mod-2-chor-uses-the-firmware-routines-behind-firmwarefxmod2) | 2026-11-14 | FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2` | accepted |
 | [D40](#d40-fx-mod-2-phas-0-and-flang-use-the-firmware-routines-behind-firmwarefxmod2-ens-and-spin-are-verified-and-ported-only-delays-are-rescaled-to-the-engine-rate) | 2026-11-14 | FX Mod 2: PHAS 0 and FLANG use the firmware routines behind `FirmwareFx::mod2`; ENS and SPIN are verified and ported only; delays are rescaled to the engine rate | accepted |
+| [D41](#d41-the-b3-bass-stage-is-wired-opt-in-the-generator-weights-follow-a-table-of-held-writes-no-default-flips) | 2026-11-14 | The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips | accepted |
+| [D50](#d50-the-ladder24-filter-stage-is-modelled-and-wired-opt-in-under-the-strip-chain) | 2026-11-14 | The Ladder24 filter stage `0x12549D` is modelled bit exactly and wired opt-in under the strip chain with an assumed cutoff law [D48](#d48-the-master-level-word-and-the-layer-word-targets-are-found-the-organ-chain-word-is-16-the-level-defaults-stay) master level word layer word targets are found; organ word 1.6; level defaults stay [D49](#d49-the-layer-mode-flag-is-reverb-global-the-verified-chain-is-exposed-opt-in-the-level-defaults-stay) layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay | accepted |
+| [D49](#d49-the-layer-mode-flag-is-reverb-global-the-verified-chain-is-exposed-opt-in-the-level-defaults-stay) | 2026-11-14 | The layer mode flag is Reverb GLOBAL; the verified chain is exposed opt-in; the level defaults stay | accepted |
 
 ---
 
@@ -365,13 +368,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 
 ### D29. The piano layer level law is opt-in; the bus convention stays ASSUMED
 
-**Status:** accepted 2026-11-14
-**Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))
-**Context:** OQ20 listed the SMP bus receiver convention and the piano layer level handler `0xC011A7A4` (law read from the listing, never run) as open. D22 requires end-to-end verification before a default changes.
-**Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and the bus convention stays ASSUMED.
-**Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
-**Alternatives:** Flip the layer law by default (changes every piano program with level below 127 an untraced path); flip the bus scale (0.83 dB an assumption, and the true receiver scale is unknown by up to 12 dB).
-`render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))
+- **Context:** OQ20 listed the SMP bus receiver convention and the piano layer level handler `0xC011A7A4` (law read from the listing, never run) as open. D22 requires end-to-end verification before a default changes.
+- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and the bus convention stays ASSUMED.
+- **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
+- **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 an untraced path); flip the bus scale (0.83 dB an assumption, and the true receiver scale is unknown by up to 12 dB).
+- **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
 
 ### D30. The SMP post stage is unity; the piano defaults stay until the receiver is found
 
@@ -433,9 +436,6 @@ cabinet taps fingerprint response test.
 - **Why:** D22 needs the end-to-end run. The two claims to flip (key without transposition; the firmware step scale) are still structural or law-only, and the join found a mismatch between the ARM word target and the table the DSP reads, so the EMPIRICAL step model stays the only calibrated one.
 - **Alternatives:** Forge a sample slot object (rejected: proves nothing about the key field); flip `--sample-kernel key` on the structural evidence (rejected, as in D35); replace the step model by `word(key) / word(60)` (rejected: not joined).
 - **Impact:** None on renders or `render_hash`; one new tool and tests.
-
-- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and response test.
-
 ### D31. The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED
 
 - **Status:** accepted 2026-11-14
@@ -498,3 +498,51 @@ unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
 - **Why:** The routines reproduce the oracle; the laws are exact at the captured samples. ENS output is silent and SPIN diverges with the words that the captures provide, so a stage would be a guess; PHAS 1 has 2 of about 20 words. Rescaling the delay keeps the ms and Hz of the hardware at 44.1 / 48 / 96 kHz.
 - **Alternatives:** Interpolate with the quadratic closed forms where they exist (kept the samples: one mechanism for all types); wire SPIN with an assumed rotor driver (rejected: unstable); rescale the filter coefficients too (rejected: needs a redesign of the all-pass and biquad words, not data).
 - **Impact:** `FirmwareFx::ALL` changes FLANG and PHAS 0 programs (4 frame latency); `DEFAULT` and `render_hash` unchanged. Types 1, 8 to 11 stay on the engine. OQ21 lists what remains (ENS / SPIN / PHAS 1 instance words, Mod 1 RM / A-WAH / PUMP).
+
+### D41. The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/organ-b3-bass-wired`; evidence [organ-farfisa-bass](research/organ-farfisa-bass.md) s12)
+- **Context:** The B3 Bass ring is `wheel x generator weight` (`DM 0x95122..`), and the weight shrinks on wheels shared by several keys. The processor part (windows, `G`, line gain) was already within 1.45 dB (s11). D22 allows a default flip only after an end-to-end check.
+- **Decision:** (1) Model the weight of a wheel as `T[note][n]`, `n` = held writes on the wheel (drawbar and percussion items of every held key), table derived from the real ARM key-down (`bass-gen-weights.csv`, `organ/b3_bass_gen.rs`); key-up removes the writes of the key. (2) Wire the stage opt-in (`OrganLayer::set_b3_bass_processor`, `--b3-bass-processor on`, `organ/b3_bass_stage.rs`): wheel bus x coefficient per wheel and window, two 511-tap FIRs from the measured window gains, output `1 - 0.84 G`. (3) Share the FIR design with the Farfisa stage (`gain_fir.rs`). (4) Flip no default.
+- **Why:** The rule is bit exact over 297 replayed writes of 9 sequences; the chord 60 64 67 is +1.1 to +2.5 dB per oracle line (not within 1 dB); the key tables are the `888888888` key-down and the real default program writes smaller window steps; the B3 clip of the presence gap plays the B3 model, so no hardware clip of a B3 Bass program exists to compare.
+- **Alternatives:** Find a closed form of `T` first (rejected: five fit families leave 0.3 to 1.3 % residual, the table is exact); flip the Bass default on the chord check (rejected: 2.5 dB at slot 48 and no clip); wait for the bit-exact `0x122296` model (rejected: the opt-in stage is useful now and does not touch defaults).
+- **Impact:** `render_hash` unchanged (flag default off, no code path changes when off). The Farfisa FIR design moves to `gain_fir.rs` with identical numerics. Open: drawbar and percussion dependence of the key tables, bit-exact processor, closed form of `T`, `G` resync after key-up, a B3 Bass clip.
+
+### D48. The master level word and the layer word targets are found; the organ chain word is 1.6; the level defaults stay
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/master-level-chain`; evidence [piano-receiver-scale](research/piano-receiver-scale.md) s5, `tools/arm_master_level.py`)
+- **Context:** D39 left the writer of the FX master level word `DM(0xB6518)` (0 in the image), the chip behind the `0xC023195C` messages and the 17.5 dB gap between the organ `K = 2.8` and the piano peaks open (OQ20, OQ24).
+- **Decision:** Record that `DM(0xB6518)` is channel-table record 2 of `0xC0549E28` (FX core 1, byte address `0x282D9460`), written by two ARM senders that share the mixer object `[0xC055D720]`: `0xC01897A4` stores `(v / 127)^2` and `0xC010BE18` a 128-entry knob taper (1.0 at 127); the word is `(volume / 127)^2 * taper` = 1.0 at the defaults (`piano::downstream::master_level_word`). Record that the layer level sender `0xC023195C` writes `base + 1` / `base + 2` of the rows of table `0xC0547C58`: PNO core 1 organ chain gains (`0xB2ECF`, `0xB2EDE`, ...) and FX core 1 / 2 bus gains (`DM(0xC2780 + 15 i)`), and that the organ chain word is **1.6** at layer level 127 (scale cell `[mixer + 0x150]`), not the image default 1.0 of the oracle states. No engine default changes.
+- **Why:** The writer and the chip are verified by running the firmware senders in the settled emulator; the organ `K` is still not derivable (13.4 dB remain after the 1.6 word, the FX bus scale cells depend on a layer mode flag that is 0 in the settled state), and no hardware clip was re-run, so D22 gives no basis to flip `firmware_bus_scale`, `firmware_layer_law`, `piano_firmware_level` or the organ `K`.
+- **Alternatives:** Apply the 1.6 word to the engine organ gain and lower `K` to 1.75 (rejected: the two numbers are not independent of the unresolved FX bus gains, and the clips were not re-run); flip the piano scale to the receiver reading 0.7464 (rejected for the same reason, the organ side disagrees by 13.4 dB).
+- **Impact:** None on rendering. OQ20 and OQ24 narrow (writer and chips resolved; open: the layer mode flag and the FX bus scale cells, the source of sender A, stream edges, damper strokes). The ASSUMED master level 1.0 of D39 is the firmware default; the ASSUMED organ chain word 1.0 of the oracle states 1.6.
+
+### D49. The layer mode flag is Reverb GLOBAL; the verified chain is exposed opt-in; the level defaults stay
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/organ-k-derivation`; evidence [piano-receiver-scale](research/piano-receiver-scale.md) s6, `tools/arm_master_level.py modes`)
+- **Context:** D48 left the layer mode flag `[mixer + scene + 0x5B8]` and the FX bus scale cells (2.5, 3.25, 0.25) open as candidates for the 13.4 dB between the organ `K = 2.8` and the piano reading, plus the source of the volume sender.
+- **Decision:** (1) Record the flag as the Reverb GLOBAL state (`0xC010E36C`, edit id `0x1B9`) and the sender's slot map: with Reverb GLOBAL off organ 1.6 (PNO chain words), piano 1.0 (SMP stream rows), synth 1.0; with it on piano 2.5 and synth 3.25; cells 1.3, 1.14, 0.25 are not reachable from layer slots (`layer_scale_cell`). (2) Add the verified chain as opt-in: `--organ-level chain` (`OutputLevel::Chain`, `1.6 * 0.3732 = 0.597`) and `--firmware-piano-chain` (`PianoLayer::receiver_chain_scale`, `4 G = 0.7464`). (3) Keep every default, `K = 2.8` and `render_hash`.
+- **Why:** The cells cannot close the gap (they apply only with a global reverb). The clips under the chain are 14 to 15 dB under (B3, Vox) and 10 to 12 dB over (Velvet Grand) on the same video, so the chain is not verified end to end (D22).
+- **Alternatives:** Lower `K` to 1.75 and apply the 1.6 word (rejected: the same 25 dB piano / organ spread remains and the clips decide the sum, not the words); flip the piano to 0.7464 (rejected: +10 dB on the Velvet Grand clip).
+- **Impact:** Two new opt-in switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults and `render_hash` unchanged. OQ20 and OQ24 narrow: the flag and cells are resolved; open are the 25 dB engine spread, the rows `0..4` and `0xB2FF0` family writers, and White Grand / DSoundman clips under the chain.
+
+### D50. The Ladder24 filter stage is modelled and wired opt-in under the strip chain
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-9`; evidence [synth-stage-models-9](research/synth-stage-models-9.md))
+- **Context:** `kFltType = 2` (`Ladder24`, 68 of 442 filter layers) maps to `0x12549D`, the last filter stage without a model; the Rust engine approximated it with the four-pole low pass `Lp4` (ASSUMED).
+- **Decision:** Port the stage (`synth/fw_ladder.rs`, `FwFilterType::Ladder`) and select it for `Ladder24` in the strip chain when `strip_stages` (`--synth-stages`) is on; `FilterEngine::Firmware` without the strip chain keeps `Lp4`. The panel cutoff reaches the stage as the table position whose section pole equals `exp(-2 atan R)`.
+- **Why:** The stage equals the oracle word for word (1840 of 1840), so the DSP is verified; only the strip word to position law is not (the stage reads a log-frequency position, the other stages the tangent coefficient `R`), hence ASSUMED and opt-in per D22.
+- **Alternatives:** Keep `Lp4` for `Ladder24` (rejected: different shape and resonance); feed `R` straight to the position word (rejected: the table runs 8 Hz to 28 kHz over `0..0.95`, so 6 kHz would play near 400 Hz); make the stage the default outside `--synth-stages` (rejected until the ARM cutoff word for type 2 is traced).
+- **Impact:** Ladder24 layers change sound under the firmware strip chain with stage oscillators (the default of `SynthLayer::new`, off in `legacy_all`); the test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
+D49. layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay
+
+`feat/organ-k-derivation`; [piano-receiver-scale](research/piano-receiver-scale.md) s6, `tools/arm_master_level.py modes`)
+D48 left layer mode flag `[mixer + scene + 0x5B8]` FX bus scale cells (2.5, 3.25, 0.25) open candidates 13.4 dB between organ `K 2.8` piano reading, plus source volume sender.
+(1) Record flag Reverb GLOBAL state (`0xC010E36C`, edit id `0x1B9`) sender's slot map: Reverb GLOBAL organ 1.6 (PNO words), piano 1.0 (SMP stream rows), synth 1.0; on piano 2.5 synth 3.25; cells 1.3, 1.14, 0.25 are reachable from layer slots (`layer_scale_cell`). (2) Add verified opt-in: `--organ-level chain` (`OutputLevel::Chain`, `1.6 * 0.3732 0.597`) `--firmware-piano-chain` (`PianoLayer::receiver_chain_scale`, `4 G 0.7464`). (3) every default, `K 2.8` `render_hash`.
+cells cannot close gap (they apply global reverb). clips are 14 15 dB (B3, Vox) 10 12 dB (Velvet Grand) on same video, verified end end (D22).
+Lower `K` 1.75 apply 1.6 same 25 dB piano / organ spread remains clips decide sum, words); flip piano 0.7464 +10 dB on Velvet Grand clip).
+Two new switches (CLI, `FirmwareOptions`, GUI Firmware bar); defaults, GUI defaults `render_hash` unchanged. OQ20 OQ24 narrow: flag cells are resolved; open are 25 dB spread, rows `0..4` `0xB2FF0` family writers, White Grand / DSoundman clips chain.

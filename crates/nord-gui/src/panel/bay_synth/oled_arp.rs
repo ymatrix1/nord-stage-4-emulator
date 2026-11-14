@@ -108,7 +108,7 @@ mod tests {
         s.turn_dial(1, 1, false);
         s.turn_dial(2, 1, false);
         let (title, gfx, v) = arp_page(&s, 1);
-        assert_eq!(title, "ARPEGGIATOR");
+        assert_eq!(title, "Arpeggiator");
         assert!(matches!(gfx, Graphic::Direction(1)));
         assert_eq!(v, ["1/5", "DOWN", "ON"]);
         s.open(SynthPage::Arp(2));
