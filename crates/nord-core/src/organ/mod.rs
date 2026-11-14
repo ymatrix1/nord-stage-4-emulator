@@ -11,6 +11,7 @@ mod b3_weights;
 mod b3_wheels;
 mod drawbar;
 mod drawbar_sum;
+mod farfisa_proc_gain;
 mod farfisa_wheels;
 mod firmware_bank;
 mod globals;
@@ -64,6 +65,7 @@ pub use b3_wheels::{
     note_step as b3_note_step, B3Wheels, ARM_FINE_WORD as B3_ARM_FINE_WORD,
 };
 pub use drawbar::{drawbar_gain, drawbar_gain_law, DrawbarLaw, FIRMWARE_DRAWBAR_CURVE};
+pub use farfisa_proc_gain::farfisa_proc_gain;
 pub use farfisa_wheels::{
     FarfisaWheels, DSP_FRAME_RATE as FARFISA_DSP_FRAME_RATE, OSCILLATORS as FARFISA_OSCILLATORS,
     ROWS as FARFISA_ROWS,

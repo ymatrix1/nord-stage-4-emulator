@@ -239,7 +239,7 @@ The odd harmonics are far below the unfiltered single-note values of organ-post-
 
 ### 3.1.8 Farfisa divider (`ToneWheelSource::FarfisaWheels`, `farfisa_wheels.rs`)
 
-Status: the generator is ported; the processor `0x122B85` is not (its key-down inputs and the oracle chords are in [organ-farfisa-bass](../research/organ-farfisa-bass.md) s7). The source stays opt-in: the oracle criterion (<= 1 dB per line) cannot hold without the processor, and no video check was run.
+Status: the measured per-sum line gain of the processor is in `farfisa_proc_gain.rs` (research s8, not wired); the generator is ported; the processor `0x122B85` is not (its key-down inputs and the oracle chords are in [organ-farfisa-bass](../research/organ-farfisa-bass.md) s7). The source stays opt-in: the oracle criterion (<= 1 dB per line) cannot hold without the processor, and no video check was run.
 
 Opt-in tone source of the `Farfisa` model, the PNO core 1 generator `0x122A71` ([organ-farfisa-bass](../research/organ-farfisa-bass.md)). It is a free-running top-octave divider, not a tonewheel bank, but its 98 outputs are one signal per note, so it plugs into the 91-wheel bus: wheel `w` = note `24 + w`, oscillator `n` (semitone 0..11), row `r` = note `12 + n + 12 r` (8 rows, 9 for `n < 2`). Row 0 (notes 12..23) is below the bus and dropped; wheels 86..90 (notes 110..114) have no source and stay silent. `ToneWheelSource::FarfisaWheels` applies to `OrganModel::Farfisa` only (other models fall back to their default); `ModelDefault` on `Farfisa` stays `Legacy`. All state is in `OrganLayer::new()` (12 oscillators x 9 rows of `f32`); `advance` has no allocation or lock.
 
