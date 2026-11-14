@@ -121,6 +121,7 @@ pub(super) fn render_strip(
         Some(state.organ_ui.solo),
         None,
     );
+    super::ctl::fx_focus_caption(ui.painter(), rc("organ.fx_focus_led").center());
     led_row(
         ui,
         rc("organ.fx_focus_led"),
