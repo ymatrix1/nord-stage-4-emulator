@@ -139,6 +139,12 @@ impl Fx<'_> {
         }
     }
 
+    /// Replace the value text of the parameter hint of knob `id` (the knob widget only knows a
+    /// plain position; steps, clock divisions and log sweeps with a per-type range say it here).
+    pub fn hint(&self, id: &str, value: &str) {
+        crate::panel::param_hint::touch_value(self.ui.ctx(), id, value);
+    }
+
     /// Knob at the layout rect of `id`. A dimmed knob is drawn and explained but not edited.
     pub fn knob(
         &mut self,

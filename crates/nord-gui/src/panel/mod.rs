@@ -28,12 +28,14 @@ mod organ_preset;
 mod organ_rewire_tests;
 mod organ_strip;
 mod organ_widgets;
+pub mod param_hint;
 #[cfg(test)]
 mod piano_click_tests;
 mod piano_logic;
 pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
+mod rotor_angle;
 #[cfg(test)]
 mod sim;
 mod state;
@@ -63,6 +65,7 @@ mod prelude {
 }
 
 pub use bay_program::catalog::LoadRequest;
+pub use bay_program::fw_messages::FwMessage;
 pub use state::Stage4PanelState;
 
 use bay_effects::render_bay_effects;

@@ -25,6 +25,9 @@ pub fn knob(
             *value = nv;
             changed = true;
         }
+        // Parameter hint line on the OLEDs; `id` is the inventory id where the knob has one.
+        let n = ((*value - min) / (max - min).max(1e-6)).clamp(0.0, 1.0);
+        crate::panel::param_hint::touch(ui.ctx(), id, n);
     }
     #[cfg(test)]
     super::probe::record(
@@ -134,5 +137,39 @@ mod tests {
             ));
             assert_eq!(v, 0.5);
         });
+    }
+
+    /// Dragging a knob that has an inventory id raises the parameter hint of that id.
+    #[test]
+    fn dragging_a_knob_raises_its_parameter_hint() {
+        use egui::{Event, Modifiers, PointerButton, RawInput};
+        let ctx = egui::Context::default();
+        let c = pos2(50.0, 50.0);
+        let mut v = 0.5_f32;
+        let mut run = |events: Vec<Event>| {
+            let _ = ctx.run(
+                RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        knob(ui, c, 14.0, "synth.lfo.mod_amt", &mut v, 0.0, 1.0, "");
+                    });
+                },
+            );
+        };
+        assert_eq!(crate::panel::param_hint::active(&ctx), None);
+        run(vec![Event::PointerMoved(c)]);
+        run(vec![Event::PointerButton {
+            pos: c,
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Modifiers::NONE,
+        }]);
+        run(vec![Event::PointerMoved(pos2(c.x, c.y - 12.0))]);
+        run(vec![Event::PointerMoved(pos2(c.x, c.y - 24.0))]);
+        let h = crate::panel::param_hint::active(&ctx).expect("hint");
+        assert!(h.starts_with("LFO Amount "), "{h}");
     }
 }

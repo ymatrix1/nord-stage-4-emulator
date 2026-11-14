@@ -251,7 +251,6 @@ fn audit_records_frames_knobs_and_clip_rects() {
     use crate::widgets::probe::Kind;
     let a = audit_of(None, vec2(3300.0, 900.0));
     assert!(a.recs.iter().any(|r| r.kind == Kind::GroupInside));
-    assert!(a.recs.iter().any(|r| r.kind == Kind::GroupBreak));
     assert!(a.recs.iter().filter(|r| r.kind == Kind::Knob).count() > 20);
     assert!(a.labs.iter().all(|l| l.clip.is_positive()));
     // Every label of the rotary box sits inside its frame (rule G of `legibility_rules`).

@@ -2,6 +2,7 @@
 
 use super::ctx::{from_log, to_log, Fx};
 use super::ids::dim_reason;
+use crate::panel::param_hint::table::{EQ_DB, MID_HZ};
 use crate::panel::prelude::Stage4PanelState;
 use crate::panel::ui_state::fx::{ChainUi, Unit};
 use crate::style::{LED_RED, LED_RED_DIM};
@@ -15,11 +16,6 @@ const MODELS: [AmpCabinet; 4] = [
     AmpCabinet::Jc,
     AmpCabinet::Small,
 ];
-
-/// EQ gain range in dB (VERIFIED in `nord-plugin` `fx_params.rs`: 7-bit signed x 0.25 dB).
-const EQ_DB: (f32, f32) = (-16.0, 16.0);
-/// MID FREQ sweep (manual p.51: 200 Hz to 8 kHz).
-const MID_HZ: (f32, f32) = (200.0, 8000.0);
 
 /// Next model after `cur`; a filter or TO ROTARY selection counts as "no model".
 pub(super) fn next_model(cur: AmpCabinet) -> AmpCabinet {
@@ -218,6 +214,10 @@ pub(super) fn comp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             ) {
                 c.comp_fast = v > 0.5;
                 changed = true;
+                f.hint(
+                    "comp.amount",
+                    if c.comp_fast { "Fast On" } else { "Fast Off" },
+                );
             }
         } else {
             let tip = format!(

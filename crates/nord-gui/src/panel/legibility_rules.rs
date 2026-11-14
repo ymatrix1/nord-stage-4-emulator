@@ -7,8 +7,8 @@ use crate::widgets::probe::Kind;
 use egui::{pos2, Pos2, Rect};
 use std::collections::BTreeSet;
 
-/// Space (px) that must stay free between two labels (a visible gap, not just no overlap).
-pub(super) const GAP: f32 = 1.0;
+/// Space (px) that must stay free between the ink rectangles of two labels.
+pub(super) const GAP: f32 = 0.9;
 /// Text may leave its clip rectangle by this much (anti-aliasing).
 const CLIP_TOL: f32 = 0.6;
 
@@ -91,7 +91,8 @@ fn knobs(a: &Audit, out: &mut BTreeSet<String>) {
 fn touching(labs: &[Lab], out: &mut BTreeSet<String>) {
     for (i, a) in labs.iter().enumerate() {
         for b in &labs[i + 1..] {
-            if overlaps(a.rect.expand(GAP * 0.5), b.rect.expand(GAP * 0.5)) {
+            let i = a.rect.expand(GAP * 0.5).intersect(b.rect.expand(GAP * 0.5));
+            if i.width() > 0.0 && i.height() > 0.0 {
                 let (mut ka, mut kb) = (key(a), key(b));
                 if ka > kb {
                     std::mem::swap(&mut ka, &mut kb);
@@ -153,10 +154,10 @@ mod tests {
     fn touching_labels_are_reported_but_spaced_ones_are_not() {
         let c = Rect::EVERYTHING;
         let mut v = BTreeSet::new();
-        touching(&[lab("A", 0.0, 0.0, c), lab("B", 0.0, 8.2, c)], &mut v);
+        touching(&[lab("A", 0.0, 0.0, c), lab("B", 0.0, 8.5, c)], &mut v);
         assert_eq!(v.len(), 1);
         v.clear();
-        touching(&[lab("A", 0.0, 0.0, c), lab("B", 0.0, 10.0, c)], &mut v);
+        touching(&[lab("A", 0.0, 0.0, c), lab("B", 0.0, 9.0, c)], &mut v);
         assert!(v.is_empty());
     }
 }

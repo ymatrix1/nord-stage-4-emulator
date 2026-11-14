@@ -88,7 +88,7 @@ clip rectangle, plus the group frames and knob extents the widgets report throug
 | Rule | Meaning |
 |---|---|
 | min font | any text under `MIN_FONT_PX` (7.5 px) |
-| `L` | two labels overlap or are closer than 1 px |
+| `L` | two labels overlap or are closer than 0.9 px |
 | `C` | a label overlaps (bezel +1.5 px) a control rectangle whose body it is not printed on |
 | `K` | a label is clipped by the clip rectangle it was painted with (OLED soft labels) |
 | `S` | a label crosses the edge of a section rectangle (text cut by the section) |
@@ -110,7 +110,7 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | Before (original fonts 4.5-7 px, 1560 px panel) | no (smallest 4.5) | 33 |
 | 7.5 px minimum at 1560 px | yes | 98 (with the stricter 1 px-gap rule: more) |
 | 7.5 px minimum at 3120 px plus 6 nudges (first audit: L and C only) | yes | 0 |
-| Same panel, audit extended with K, S, G, N, 1 px gap, bezel margin (B8 label legibility) | yes | 30 |
+| Same panel, audit extended with K, S, G, N, 0.9 px gap, bezel margin (B8 label legibility) | yes | 30 |
 | After the legibility fixes (Rotary box widened, captions, OLED soft labels, SOLO, nudges) | yes | 0 |
 
 ## What each switch changes

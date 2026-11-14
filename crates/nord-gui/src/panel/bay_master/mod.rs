@@ -22,6 +22,13 @@ pub(super) fn render_bay_master(
     rotary::render_rotary(ui, painter, o, state, audio);
 }
 
+/// 14-bit pitch bend (centre 8192) of a pitch stick position `-1.0..=1.0`.
+/// VERIFIED: MIDI 1.0 pitch bend is 0..=16383 with 8192 at rest; checked by
+/// `pitch_bend_value_spans_the_14_bit_range`.
+fn pitch_bend_value(stick: f32) -> u16 {
+    (8192.0 + stick.clamp(-1.0, 1.0) * 8191.0).round() as u16
+}
+
 fn render_controllers(
     ui: &mut Ui,
     painter: &Painter,
@@ -34,7 +41,7 @@ fn render_controllers(
         ui,
         level.center(),
         level.width().min(level.height()) * 0.42,
-        "master_vol",
+        "master.level",
         &mut state.master_volume,
         0.0,
         1.0,
@@ -49,7 +56,7 @@ fn render_controllers(
         rect_or_empty("master.pitch_stick", o),
         rect_or_empty("master.mod_wheel", o),
     );
-    let before = state.mod_wheel;
+    let (before, stick_before) = (state.mod_wheel, state.pitch_stick);
     pitch_and_mod_wheels(
         ui,
         pitch,
@@ -57,8 +64,14 @@ fn render_controllers(
         &mut state.pitch_stick,
         &mut state.mod_wheel,
     );
+    if state.pitch_stick != stick_before {
+        audio.send_keyboard_midi(MidiEvent::PitchBend {
+            channel: 0,
+            value: pitch_bend_value(state.pitch_stick),
+        });
+    }
     if state.mod_wheel != before {
-        audio.send_midi(MidiEvent::ControlChange {
+        audio.send_keyboard_midi(MidiEvent::ControlChange {
             channel: 0,
             controller: 1, // Mod wheel
             value: (state.mod_wheel * 127.0).round() as u8,
@@ -82,6 +95,14 @@ fn render_controllers(
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    #[test]
+    fn pitch_bend_value_spans_the_14_bit_range() {
+        assert_eq!(pitch_bend_value(0.0), 8192);
+        assert_eq!(pitch_bend_value(1.0), 16383);
+        assert_eq!(pitch_bend_value(-1.0), 1);
+        assert_eq!(pitch_bend_value(5.0), 16383, "clamped");
+    }
 
     #[test]
     fn render_bay_master_paints_shapes() {

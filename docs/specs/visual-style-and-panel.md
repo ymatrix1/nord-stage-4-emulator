@@ -100,11 +100,53 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
 ### 4.5 Dual Monochrome OLED Displays (`ProgramOledWidget` & `SynthOledWidget`)
 1. **Central Program OLED (`128×64` aspect):**
    - Top row: Bank & Location (`A:11`) + Program Title (`Nord Stage 4`) + Category icon.
+   - Edited marker: a boxed `E` follows the location while the program differs from what was loaded or stored (VERIFIED, course footage and manual p.13). The panel counts the sound edits it sends (`AudioHandle::edit_count`, `AudioCommand::is_program_edit`) and compares the count with its value at the last load, program change or STORE (`bay_program/edited.rs`). Setters sent with the same value still count (ASSUMED). In Live Mode the title is `Live N` and no `E` shows (ASSUMED: Live programs auto-store).
+   - Section rows (Layers view): one row per section with a layer on (`Organ B3`, `Piano ...`, `Synth ...`). Hardware also prints the preset id (`1:05`) or source name with a size letter and mini drawbars; those are not modelled yet.
    - Bottom 3 rows: Active Organ model/drawbar preview (`888000000`), active Piano model (`White Grand XL`), and active Synth patch (`Vista Pad WH`) with `A/B/C` layer badges.
 2. **Synth Section Graphic OLED (`128×64` aspect):**
    - Header: `OSC WAVEFORM`
    - Center graphic: Real-time anti-aliased waveform / wavetable / FM operator visualization + primary parameter readout (`Super Saw`, `DETUNE: 3.4`).
    - Bottom bar: 4 inverted/outlined soft-label tabs (`ANALOG`, `SUPER`, `1 (6)`, `WAVE`) controlled by the 3 encoders below the screen.
+
+#### Parameter hint line (`ns4-wxly`)
+
+While a knob moves, both OLEDs show `<label> <value>` (`LFO Rate 0.08 Hz`, `LFO Amount 7.1`, `Filter Frequency 1.2 kHz`) for 1.5 s after the last movement (hold time `ASSUMED`, no timing measured).
+
+| Display | Where the hint goes | Source |
+|---|---|---|
+| Synth OLED | replaces the page title in the header row (right-hand layer letter stays) | LFO course video 0:27-0:45 (EMPIRICAL) |
+| Program OLED | replaces the rows below the separator on the home screen; menus, STORE, LIST and split screens keep their text | manual p.42 (VERIFIED) |
+
+Data: `panel/param_hint/table.rs` maps an inventory control id to label and value formatter (`fmt.rs`); every `widgets::knob` drag records `(id, position)` in the egui context (`param_hint::touch`), owners with a non-linear value (Master Clock divisions, stored layer value, per-type mod rate) refine it with `touch_value`. The LFO DEST button taps raise `LFO Destination <Filter|Osc Pitch|OscCtrl|Off>`.
+
+| Item | Status |
+|---|---|
+| Labels `Oscillator Ctrl`, `Oscillator Env Amount`, `Filter Frequency`, `Filter Resonance`, `Filter Env Amount`, `LFO Destination`, `LFO Rate`, `LFO Amount`, `Glide Rate`, `Arpeggiator Rate`, `Arpeggiator Range`, `Filter`, `Osc Pitch`, `OscCtrl` | VERIFIED in the firmware pool, `tools/tests/test_ns4_oled_strings.py::test_param_hint_labels_are_in_the_firmware` |
+| Effects and Master labels (`Amp Bass`, `Delay Feedback`, `Master Level`, ...), `Off` | ASSUMED: not firmware strings; built from the panel silkscreen |
+| Hz precision (2 decimals below 1 Hz, 1 below 10 Hz, 0 above) | EMPIRICAL: LFO clip overlay readings, [dsoundman-synth-lfo](../research/dsoundman-synth-lfo.md) section 2 |
+| `dB` with one decimal, `bpm` integer | VERIFIED unit strings (`%.1f dB`, `%d bpm`, `0x2CA110..`) |
+| Panel-unit scale `0..10` (osc ctrl, resonance, LFO amount), `-10..10` (env amounts) | EMPIRICAL for LFO amount (`7.1`, one reading); ASSUMED for the others |
+| Knob laws (log or linear sweeps and their ranges) | ASSUMED, as in `ui_state/synth/pots.rs` |
+| Open | The hardware LFO RATE table (`LFO_RATE_HZ_TABLE`, 128 steps) is not used for the hint: it shows the emulator's own rate (log 0.05..40 Hz); moving the knob law to the table is a separate change |
+
+#### 4.5.1 Firmware messages and toasts (`bay_program/fw_messages.rs`, bean `ns4-0u5u`)
+
+The Program OLED shows short messages ("toasts") for events. They use the firmware's own strings; every offset is a file offset in `bank0_CODE.bin` (OS v1.66, local only), checked by `tools/tests/test_ns4_oled_strings.py::test_message_strings_are_in_the_firmware`.
+
+| Message | Offset | Shown when | Status |
+|---|---|---|---|
+| `Piano not found` | `0x2CA180` | a program load finds an enabled piano layer whose model the opened `.ns4b` lacks, or a piano is requested with no archive open | string `VERIFIED`, trigger `ASSUMED` |
+| `Sample not found` | `0x2CA198` | same for an enabled synth layer in Sample mode | string `VERIFIED`, trigger `ASSUMED` |
+| `Please wait...` | `0x2C75D0` | a piano / sample decode is running (`pending_jobs > 0`); removed when it ends, never hides another message | string `VERIFIED`, trigger `ASSUMED` |
+| `Pasted` / `Swapped` | `0x283758` / `0x283760` | Paste / Swap soft buttons with a filled clipboard | `VERIFIED` |
+| `Nothing to Paste` / `Nothing to Swap with` | `0x28377D` / `0x2837E5` | Paste / Swap soft button with an empty clipboard | `VERIFIED` |
+| `Are you sure?` | `0x2C0E38` | first press of System > Reset all settings (`0x2C0E08`, the string right before it); a second press within 2 s runs it | string `VERIFIED`, pairing with Reset `ASSUMED` (neighbouring strings, caller not traced) |
+| `Unable to Paste` + `Memory Protected` | `0x283790` (one string with `\n%c Memory Protected`) | pasting a whole program while Memory Protect is on | string `VERIFIED`, use `ASSUMED` |
+| `Memory Protected` | `0x2837A0` (`%c Memory Protected`) | STORE / Organize blocked by Memory Protect | `VERIFIED` |
+
+`%c` in `%c Memory Protected` is the character code `0x89` (`mov r3, #0x89` before the print call at `0xC003D32C` and `0xC003D344`, `VERIFIED` by `python tools/arm_xref.py dis target/fw_unpacked/bank0_CODE.bin 0xC003D2E0 0xC003D360`), a glyph of the panel's OLED font. Its shape is not decoded (a padlock is `ASSUMED` from context); the emulator font has no such glyph, so only `Memory Protected` is drawn.
+
+Mechanism: `ProgramUi::set_message` / `show(FwMessage)` store `(text, end_ms)` and `begin_frame(now_ms, ..)` drops the message at `end_ms`, so the lifetime follows the injected frame clock and tests pass a time instead of sleeping. The lifetime `TOAST_MS = 2000` is `ASSUMED`. A message with a line break is drawn as one OLED row per line. `ProgramUi::confirm(Confirm)` is the two-press prompt: the first press shows `Are you sure?` and arms the action for `TOAST_MS`, the same action again inside the window returns `true`. Library loads queue `FwMessage`s in `BackupLibraryState` and the panel poll turns them into toasts.
 
 ### 4.6 Known discrepancies (open, Phase 6b `ns4-xc5n`)
 
@@ -142,7 +184,7 @@ First measured output of the D15 baker: one knob filmstrip and one fader cap wit
 
 Printed text never goes below 7.5 px (`widgets::MIN_FONT_PX`) and must not touch anything it does
 not describe. The headless audit in `crates/nord-gui/src/panel/legibility_*.rs` enforces it per
-rule (overlap and 1 px gap, control bezel, clipping, section edge, group frame, knob ring; table
+rule (overlap and 0.9 px gap, control bezel, clipping, section edge, group frame, knob ring; table
 in [GUI testing](../gui-testing.md)). Layout decisions it led to:
 
 - Rotary Speaker box: the frame extends 52 px left of the button column (the Master area is empty
