@@ -8,6 +8,7 @@
 use crate::cbin::{CbinFile, Ns4BackupArchive, PresetSection, SectionPreset};
 use crate::engine::{invert_fx_chain, FxParams, Stage4Engine};
 use crate::midi::MidiEvent;
+use crate::program_check::check_program;
 use crate::synth_params_export::invert_decoded_layer;
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -203,8 +204,20 @@ fn check_archive(args: &[String]) -> Result<String, String> {
     let mut lossy: BTreeMap<PresetSection, usize> = BTreeMap::new();
     let mut lines = Vec::new();
     let mut failed = 0usize;
+    let mut programs = 0usize;
     for (i, e) in archive.entries().iter().enumerate() {
         let Some(section) = PresetSection::from_entry(&e.name) else {
+            if e.name.starts_with("Program/") && e.name.ends_with(".ns4p") {
+                let bytes = archive
+                    .read_entry_by_index(&mut reader, i)
+                    .map_err(|err| format!("{}: {err}", e.name))?;
+                programs += 1;
+                let problems = check_program(&bytes, 48_000.0);
+                if !problems.is_empty() {
+                    failed += 1;
+                    lines.push(format!("PROBLEM {}: {}", e.name, problems.join("; ")));
+                }
+            }
             continue;
         };
         let bytes = archive
@@ -225,6 +238,7 @@ fn check_archive(args: &[String]) -> Result<String, String> {
         lines.push(format!("{s:?}: {n} presets, {l} with a lossy decode"));
     }
     let total: usize = counts.values().sum();
+    lines.push(format!("{programs} programs (STORE round trip + edits)"));
     lines.push(format!("{total} presets; problems: {failed}"));
     if failed > 0 {
         return Err(lines.join("\n"));
