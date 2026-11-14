@@ -79,6 +79,13 @@ pub(super) fn map_synth(e: &SynthEdit, out: &mut Vec<W>) {
             }
             return;
         }
+        // PSTICK/RNG: the host `ped_range` bank, same three layers (Synth only).
+        SynthEdit::PstickRange(semitones) => {
+            for n in 5..=7 {
+                out.push(W::layer("ped_range", n, f32::from(semitones)));
+            }
+            return;
+        }
         // GROUP copies and SOUND INIT have no host parameter; per-layer values stay independent.
         SynthEdit::Group { .. } | SynthEdit::SoundInit(_) => return,
     };
@@ -166,6 +173,20 @@ mod tests {
         for i in 0..4 {
             assert_eq!(lfo_dest_index(dest(i)), i as f32);
         }
+    }
+
+    #[test]
+    fn pstick_range_writes_the_three_synth_ped_range_params() {
+        let mut v = Vec::new();
+        map_synth(&SynthEdit::PstickRange(7), &mut v);
+        assert_eq!(
+            v,
+            vec![
+                W::layer("ped_range", 5, 7.0),
+                W::layer("ped_range", 6, 7.0),
+                W::layer("ped_range", 7, 7.0)
+            ]
+        );
     }
 
     #[test]

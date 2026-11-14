@@ -354,12 +354,13 @@ fn organ_and_piano_layers_bend_with_the_pitch_stick() {
     ] {
         assert!((cents - 200.0).abs() < 0.1, "{cents}");
     }
-    e.pedals.pstick_range[LayerId::PianoA as usize] = 12;
+    // Piano has no range list (manual p.23): a range written to its slot changes nothing.
+    e.set_pstick_range(LayerId::PianoA, 12);
     e.handle_midi(MidiEvent::PitchBend {
         channel: 0,
         value: 0,
     });
-    assert!((e.piano_a.bend_cents() + 1200.0).abs() < 1e-3);
+    assert!((e.piano_a.bend_cents() + 200.0).abs() < 0.1);
     assert!((e.organ_a.bend_cents() + 200.0).abs() < 0.1);
     // PSTICK off (the default) leaves them alone.
     let mut off = Stage4Engine::new(48_000.0);
