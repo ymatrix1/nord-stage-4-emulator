@@ -35,6 +35,8 @@ pub mod notes;
 pub mod probe;
 pub mod readback;
 pub mod readback_menu;
+#[cfg(test)]
+mod section_edit_tests;
 pub mod sink;
 pub mod write;
 

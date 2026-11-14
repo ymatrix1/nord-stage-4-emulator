@@ -140,7 +140,12 @@ pub(super) fn paint_strip(
         let fr = rect_or_empty(FADERS[i], o);
         sui.mark(FADERS[i]);
         if fader(ui, p, FADERS[i], fr, &mut levels[i]) {
-            send_layer(audio, i, levels[i], on);
+            // SECTION EDIT: the other Synth layers take the same level.
+            let moved = levels[i];
+            for j in crate::panel::section_edit::layers_for(i, 3, sui.section_edit) {
+                levels[j] = moved;
+                send_layer(audio, j, moved, active[j] && sui.section_on);
+            }
         }
         sui.mark(LADDERS[i]);
         ladder(
