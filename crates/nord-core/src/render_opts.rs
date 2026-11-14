@@ -219,12 +219,12 @@ pub struct FirmwareOptions {
     /// `--synth-shape <0..1>`: strip shape word of the SHAPE oscillator (`fw_shape.rs`) in
     /// thousandths (`None` = the ASSUMED saw placeholder).
     pub synth_shape_milli: Option<u16>,
-    /// `--synth-stages`: `SynthLayer::strip_stages` (noise, Shape Square, SUPER, MULTI firmware stages
-    /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
-    pub synth_stages: bool,
     /// `--synth-p fitted|gain,w2,r2,shape,cutoff`: the EMPIRICAL oscillator P block of the strip
     /// chain (`synth/p_block.rs`); `None` keeps the single idle oscillator.
     pub synth_p: Option<PSpec>,
+    /// `--synth-stages`: `SynthLayer::strip_stages` (noise, Shape Square, SUPER, MULTI firmware stages
+    /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
+    pub synth_stages: bool,
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
@@ -258,8 +258,8 @@ impl Default for FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
-            synth_stages: false,
             synth_p: None,
+            synth_stages: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -293,8 +293,8 @@ impl FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
-            synth_stages: false,
             synth_p: None,
+            synth_stages: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -401,8 +401,8 @@ impl FirmwareOptions {
         );
         apply_synth_chain(engine, self.synth_chain);
         self.set_shape(engine);
-        self.set_stages(engine);
         self.set_p_block(engine);
+        self.set_stages(engine);
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
@@ -468,8 +468,8 @@ impl FirmwareOptions {
             FirmwareRouting::Off
         });
         self.set_shape(engine);
-        self.set_stages(engine);
         self.set_p_block(engine);
+        self.set_stages(engine);
         self.set_organ_level(engine);
     }
 
@@ -492,17 +492,17 @@ impl FirmwareOptions {
         engine.synth_c.strip_shape = shape;
     }
 
-    fn set_stages(&self, engine: &mut Stage4Engine) {
-        engine.synth_a.strip_stages = self.synth_stages;
-        engine.synth_b.strip_stages = self.synth_stages;
-        engine.synth_c.strip_stages = self.synth_stages;
-    }
-
     fn set_p_block(&self, engine: &mut Stage4Engine) {
         let p = self.synth_p.map(PSpec::block);
         engine.synth_a.p_block = p;
         engine.synth_b.p_block = p;
         engine.synth_c.p_block = p;
+    }
+
+    fn set_stages(&self, engine: &mut Stage4Engine) {
+        engine.synth_a.strip_stages = self.synth_stages;
+        engine.synth_b.strip_stages = self.synth_stages;
+        engine.synth_c.strip_stages = self.synth_stages;
     }
 
     fn set_measured_laws(&self, engine: &mut Stage4Engine) {
@@ -547,11 +547,11 @@ impl FirmwareOptions {
         if let Some(m) = self.synth_shape_milli {
             parts.push(format!("shape={:.2}", f32::from(m) / 1000.0));
         }
-        if self.synth_stages {
-            parts.push("stages".into());
-        }
         if let Some(p) = self.synth_p {
             parts.push(format!("synth-p={p:?}"));
+        }
+        if self.synth_stages {
+            parts.push("stages".into());
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));

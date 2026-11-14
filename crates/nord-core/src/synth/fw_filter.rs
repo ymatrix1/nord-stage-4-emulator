@@ -20,6 +20,7 @@
 //! section 1: u = cin x      section 2: u = out of section 1
 //! ```
 
+use super::fw_filter_table_d::TABLE_D_BITS;
 use super::fw_filter_tables::{TABLE_A_BITS, TABLE_B_BITS, TABLE_C_BITS};
 use crate::synth_types::FilterModel;
 
@@ -39,6 +40,8 @@ pub enum FwFilterType {
     /// Stage `0x12566E`, four-pole low pass, input gain table A.
     #[default]
     Lp4,
+    /// Stage `0x1253BD`, 12 dB low pass (one section), gain table A, damping table D.
+    Lp2,
     /// Stage `0x125913`, four-pole band pass (two cascaded band-pass sections), table C.
     Bp4,
     /// Stage `0x125A50`, four-pole high pass, table A.
@@ -55,6 +58,7 @@ impl FwFilterType {
         match model {
             FilterModel::BandPass => Self::Bp4,
             FilterModel::HighPass => Self::Hp4,
+            FilterModel::Lp12 => Self::Lp2,
             _ => Self::Lp4,
         }
     }
@@ -180,7 +184,12 @@ impl FwCoefs {
             &TABLE_A_BITS
         };
         let cin = interp(table, pos);
-        let p = interp(&TABLE_B_BITS, pos);
+        let damping = if kind == FwFilterType::Lp2 {
+            &TABLE_D_BITS
+        } else {
+            &TABLE_B_BITS
+        };
+        let p = interp(damping, pos);
         let n = 1.0 / (1.0 + r * p + r * r).sqrt();
         let g = 2.0 * r * n;
         let k = p * n;
@@ -261,6 +270,9 @@ impl FwFilter {
     pub fn process(&mut self, x: f32, co: &FwCoefs, kind: FwFilterType) -> f32 {
         let x = if x.is_finite() { x } else { 0.0 };
         let y1 = Self::section(&mut self.s[0], co.cin * x, co, kind);
+        if kind == FwFilterType::Lp2 {
+            return y1;
+        }
         Self::section(&mut self.s[1], y1, co, kind)
     }
 }
@@ -313,6 +325,57 @@ mod tests {
         let hi = TablePos { idx: 0, fr: 0.0 };
         assert!((FwCoefs::new(FwFilterType::Bp4, 0.3, hi).cin - 1.98).abs() < 1e-5);
         assert!((FwCoefs::new(FwFilterType::Lp4, 0.3, hi).cin - 1.0).abs() < 1e-6);
+    }
+
+    /// Output words of `tools/synth_filter_lp12.py` (bit exact against the oracle, 1280 of 1280 words).
+    #[test]
+    fn lp2_matches_the_python_model_words() {
+        let run = |r: f32, w28: u32, xs: &[f32]| -> Vec<f32> {
+            let co = FwCoefs::new(FwFilterType::Lp2, r, TablePos::from_word(w28));
+            let mut f = FwFilter::default();
+            xs.iter()
+                .map(|&x| f.process(x, &co, FwFilterType::Lp2))
+                .collect()
+        };
+        let imp = run(0.3, 0x4000_0000, &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        let want1 = [
+            0x0, 0x3d9328a0, 0x3e7f2779, 0x3ec426a6, 0x3ebf2ff5, 0x3e83eb28, 0x3dc2c2a8, 0xbd644e6e,
+        ];
+        let sig = [0.5, -0.25, 0.75, 0.0, 0.125, -0.5, 0.25, 1.0];
+        let out = run(0.1, 0x2080_0000, &sig);
+        let want2 = [
+            0x0, 0x3b921c95, 0x3c6e9513, 0x3cec2802, 0x3d4e5af5, 0x3d96da13, 0x3db31cae, 0x3db7f4cc,
+        ];
+        for (got, want) in imp.iter().zip(want1).chain(out.iter().zip(want2)) {
+            assert!(
+                (got - f32::from_bits(want)).abs() < 1e-6,
+                "{got} vs {want:#x}"
+            );
+        }
+    }
+
+    #[test]
+    fn lp2_has_twelve_db_per_octave_and_lp4_twentyfour() {
+        let gain = |kind: FwFilterType, f: f32| {
+            let co = FwCoefs::new(kind, 0.1, TablePos { idx: 64, fr: 0.0 });
+            let mut flt = FwFilter::default();
+            let n = 4096;
+            let mut peak = 0.0f32;
+            for i in 0..n {
+                let x = (2.0 * std::f32::consts::PI * f * i as f32).sin();
+                let y = flt.process(x, &co, kind);
+                if i > n / 2 {
+                    peak = peak.max(y.abs());
+                }
+            }
+            peak
+        };
+        // fc = atan(0.1) / pi = 0.0317 cycles per sample: one and two octaves above it
+        let fc = 0.0317;
+        let lp2 = gain(FwFilterType::Lp2, 4.0 * fc) / gain(FwFilterType::Lp2, 2.0 * fc);
+        let lp4 = gain(FwFilterType::Lp4, 4.0 * fc) / gain(FwFilterType::Lp4, 2.0 * fc);
+        assert!(lp2 > 0.12 && lp2 < 0.3, "12 dB per octave, got {lp2}");
+        assert!(lp4 > 0.02 && lp4 < 0.08, "24 dB per octave, got {lp4}");
     }
 
     #[test]
