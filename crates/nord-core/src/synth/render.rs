@@ -466,7 +466,7 @@ impl SynthLayer {
                 v.gain
             };
             let env_gain = v.amp_env * amp_vel * voice_gain * 0.25;
-            mix_l += filtered_l * env_gain;
+            let (mut out_l, mut out_r) = (filtered_l * env_gain, filtered_l * env_gain);
             if let Some(osc_r) = raw_osc_r {
                 let filtered_r = if !self.filter_on {
                     osc_r
@@ -482,14 +482,23 @@ impl SynthLayer {
                         self.sample_rate,
                     )
                 };
-                mix_r += filtered_r * env_gain;
-            } else {
-                mix_r += filtered_l * env_gain;
+                out_r = filtered_r * env_gain;
             }
+            if v.pan != 0.0 {
+                let (gl, gr) = pan_gains(v.pan);
+                out_l *= gl;
+                out_r *= gr;
+            }
+            mix_l += out_l;
+            mix_r += out_r;
         }
 
         if self.arp_mode == ArpMode::Gate {
             let g = self.perf.gate_level;
+            if self.perf.pattern_on && self.perf.cur_pan != PatternPan::Center {
+                let (gl, gr) = pan_gains(self.perf.cur_pan.position());
+                return [mix_l * g * gl, mix_r * g * gr];
+            }
             return [mix_l * g, mix_r * g];
         }
         [mix_l, mix_r]

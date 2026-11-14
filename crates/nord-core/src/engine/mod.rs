@@ -37,6 +37,7 @@ mod section_edit;
 mod settings;
 mod sharing;
 mod snapshot;
+mod sound_init;
 #[cfg(test)]
 mod tests_extern;
 #[cfg(test)]
