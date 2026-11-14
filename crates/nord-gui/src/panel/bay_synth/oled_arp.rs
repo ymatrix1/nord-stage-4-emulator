@@ -36,10 +36,7 @@ pub(super) fn arp_page(sui: &SynthUi, n: u8) -> (&'static str, Graphic, [String;
             ARP_DIRECTIONS[usize::from(l.arp_dir) % 4].to_string(),
             if l.zigzag { "ON" } else { "OFF" }.to_string(),
         ),
-        2 => (
-            format!("{}", l.pattern_preset + 1),
-            l.pattern_len.to_string(),
-        ),
+        2 => (format!("{}", l.pattern_preset), l.pattern_len.to_string()),
         3 => (step_no(l), format!("{}/8", l.step_gate[cursor(l)])),
         4 => (
             step_no(l),
@@ -116,6 +113,6 @@ mod tests {
         assert_eq!(v, ["1/5", "DOWN", "ON"]);
         s.open(SynthPage::Arp(2));
         let (_, _, v) = arp_page(&s, 2);
-        assert_eq!(v, ["2/5", "1", "4"], "preset 1, 4 steps");
+        assert_eq!(v, ["2/5", "0", "8"], "preset 0, 8 steps");
     }
 }

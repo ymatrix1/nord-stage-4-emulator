@@ -76,6 +76,15 @@ fn gate_mode_plays_notes_normally_and_resets_level_when_left() {
     assert_eq!(s.perf.gate_level, 1.0);
 }
 
+/// Custom pattern `[rest, 4, rest, 4]`: no factory preset starts with a rest.
+fn rest_note_pattern(s: &mut SynthLayer) {
+    s.set_pattern_length(4);
+    for (i, g) in [0, 4, 0, 4].into_iter().enumerate() {
+        s.set_step_gate(i, g);
+    }
+    s.perf.pattern_custom = true;
+}
+
 #[test]
 fn gate_pattern_rests_follow_the_preset() {
     let mut s = layer();
@@ -83,7 +92,7 @@ fn gate_pattern_rests_follow_the_preset() {
     s.arp_rate_bpm = 240.0;
     s.perf.gate_env = 1.0;
     s.perf.pattern_on = true;
-    s.perf.pattern_preset = 1; // [rest, 4, rest, 4]
+    rest_note_pattern(&mut s); // [rest, 4, rest, 4]
     s.note_on(57, 110);
     let frames = render_n(&mut s, 3000 * 9);
     // Step 0 uses the initial length; steps 1.. follow the pattern from its first entry (a rest).
@@ -103,7 +112,7 @@ fn arp_pattern_skips_rest_steps() {
     s.arp_mode = ArpMode::Up;
     s.arp_rate_bpm = 240.0;
     s.perf.pattern_on = true;
-    s.perf.pattern_preset = 1; // [rest, 4, rest, 4]
+    rest_note_pattern(&mut s); // [rest, 4, rest, 4]
     s.note_on(60, 100);
     s.note_on(64, 100);
     let mut edges = 0;

@@ -117,6 +117,15 @@ STATUS: dict[str, tuple[str, str, str]] = {
         "synth-engine: .nsmp4 PCM played through the verified 12-tap sinc kernels (kernel choice ASSUMED)",
     ),
     "synth.sample=missing": (N, N, "no .nsmp4 resolved or loadable"),
+    **{
+        f"synth.sample.kernel={k}": (
+            A,
+            A,
+            "synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field"
+            " ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule",
+        )
+        for k in range(6)
+    },
     "synth.analog=PURE": (
         A,
         V,
@@ -243,7 +252,9 @@ def fx_paths(fx: dict) -> list[str]:
     return out
 
 
-def _synth_paths(s: dict, loaded: bool, has_ref: bool) -> list[str]:
+def _synth_paths(
+    s: dict, loaded: bool, has_ref: bool, kernels: list[int] | None = None
+) -> list[str]:
     out = [f"synth.osc={s['osc_mode']}"]
     if s["osc_mode"] == "Analog":
         out.append(f"synth.analog={_name(ANALOG_CATEGORIES, s['osc_category'])}")
@@ -254,6 +265,7 @@ def _synth_paths(s: dict, loaded: bool, has_ref: bool) -> list[str]:
         out.append(f"synth.wave={_name(WAVE_CATEGORIES, s['osc_category'])}")
     elif s["osc_mode"] == "Sample":
         out.append("synth.sample=loaded" if loaded else "synth.sample=missing")
+        out += [f"synth.sample.kernel={k}" for k in kernels or []]
     if s["filter_on"]:
         out.append(f"synth.filter={s['filter_model']}")
     out.append("synth.envelopes")
@@ -316,7 +328,9 @@ def program_paths(rec: dict) -> dict[str, list[str]]:
         else:
             sub = "layer_" + name[-1]
             has_ref = snd[name]["ref"]
-            out[name] = _synth_paths(prog["synth"][sub], snd[name]["loaded"], has_ref)
+            out[name] = _synth_paths(
+                prog["synth"][sub], snd[name]["loaded"], has_ref, snd.get(name + "_kernels")
+            )
     fx_blocks = {
         "organ": (prog["organ"]["fx"], {0, 1}),
         "piano_a": (prog["piano"]["fx_a"], {2}),

@@ -4,7 +4,7 @@
 //! `organ_strip.rs`, the drawbars in `organ_drawbars.rs`; this file has the section frame, the
 //! model selector, PRESET/SYNC, vibrato/chorus and the percussion buttons.
 
-use super::ctl::{gesture_button, led_small, shift_legend, tag, Face};
+use super::ctl::{gesture_button, led_small, shift_legend, tag, tag_fit, Face};
 use super::layout_px::{rect_or_empty, to_px};
 use super::organ_drawbars::render_drawbars;
 use super::organ_logic::{model_index, scanner_for, vib_index, MODELS, VIB_TYPES};
@@ -214,7 +214,14 @@ fn render_percussion(
             }
             _ => {}
         }
-        tag(painter, rect, text, 8.0);
+        // The buttons are 47 px apart: the two-word names stack instead of touching.
+        if id == "organ.perc_on" {
+            // The button sits 17 px under HARMONIC 3RD: its name goes to the left instead.
+            let at = pos2(rect.left() - 4.0, rect.center().y);
+            label(painter, at, text, 5.5, Color32::WHITE, Align2::RIGHT_CENTER);
+        } else {
+            tag_fit(painter, rect, text, 8.0, 44.0);
+        }
         if id == "organ.perc_volume" {
             shift_legend(
                 ui,
