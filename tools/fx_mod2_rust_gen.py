@@ -31,11 +31,13 @@ FILES = {
     "flang": ("fw_flang.rs", "`0x12348D` (`kFx2Type` 2, 3 `FLANG`, module `0xC02BB3A0`)"),
     "phas0": ("fw_phas0.rs", "`0x12379B` (`kFx2Type` 0 `PHAS`, module `0xC02BB1E8`)"),
     "phas1": ("fw_phas1.rs", "`0x1238FC` (`kFx2Type` 1 `PHAS`, module `0xC02BB2C4`)"),
+    "ens": ("fw_ens.rs", "`0x123A7B` (`kFx2Type` 8, 9 `ENS`, module `0xC0441558`)"),
+    "spin": ("fw_spin.rs", "`0x123557` (`kFx2Type` 10, 11 `SPIN`, module `0xC0278FAC`)"),
 }
 #: Pair functions taken over by name (all in `fw_pe.rs` / `fw_pe_ops.rs`).
 PAIR_FNS = {
     "fmul", "fadd", "fsub", "fabs", "ffloat", "ftrunc", "iadd", "isub", "ishl", "fpass", "favg",
-    "fclip", "frecips",
+    "fclip", "frecips", "imax", "imin", "fext_p", "fdep_p", "swap",
 }  # fmt: skip
 CONDS = {"ne": "Ne", "eq": "Eq", "av": "Av", "ac": "Ac"}
 PE_EXPORTS = [
@@ -43,7 +45,8 @@ PE_EXPORTS = [
     "ftrunc", "iadd", "imm",
 ]  # fmt: skip
 OPS_EXPORTS = [
-    "Cond", "favg", "fclip", "fl_add_sub", "fl_float", "fl_int", "fpass", "frecips", "ishl", "isub",
+    "Cond", "favg", "fclip", "fdep_p", "fext_p", "fl_add_sub", "fl_float", "fl_int", "fpass",
+    "frecips", "imax", "imin", "ishl", "isub", "swap",
 ]  # fmt: skip
 
 

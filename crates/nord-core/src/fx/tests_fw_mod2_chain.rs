@@ -1,5 +1,6 @@
-//! `FirmwareFx::mod2` in the layer chain: the firmware `CHOR` stages replace the engine chorus
-//! only for `kFx2Type` 4 to 7 (`CHOR`, `VIBE`).
+//! `FirmwareFx::mod2` in the layer chain: the firmware stages replace the engine Mod 2 for
+//! `kFx2Type` 0, 2 to 7 (`PHAS 0`, `FLANG`, `CHOR`, `VIBE`); types 1, 8 to 11 stay on the engine
+//! (instance words of `PHAS 1`, `ENS`, `SPIN` not all known).
 
 use super::*;
 
@@ -26,8 +27,8 @@ fn run(fx: &mut LayerFxChain, n: usize) -> Vec<[f32; 2]> {
 }
 
 #[test]
-fn the_firmware_chorus_and_vibe_have_a_four_frame_delay_and_stays_bounded() {
-    for ty in [4, 5, 6, 7] {
+fn the_firmware_stages_have_a_four_frame_delay_and_stay_bounded() {
+    for ty in [0, 2, 3, 4, 5, 6, 7] {
         let mut fx = chain(true, ty);
         let y = run(&mut fx, 20_000);
         assert!(y[..4].iter().all(|f| *f == [0.0, 0.0]), "type {ty}");
@@ -47,7 +48,7 @@ fn the_engine_path_is_used_when_the_switch_is_off_or_the_type_is_not_a_firmware_
     let first_frames_live =
         |fx: &mut LayerFxChain| run(fx, 3).iter().any(|f| f[0] != 0.0 || f[1] != 0.0);
     assert!(first_frames_live(&mut chain(false, 4)));
-    for ty in [0, 2, 8, 10] {
+    for ty in [1, 8, 9, 10, 11, 12] {
         assert!(
             first_frames_live(&mut chain(true, ty)),
             "type {ty} stays on the engine"
@@ -65,4 +66,19 @@ fn changing_the_type_rebuilds_the_stage() {
     fx.mod2_type_raw = Some(5);
     let y = run(&mut fx, 20_000);
     assert!(y[5_000..].iter().any(|f| f[0].abs() > 0.1));
+}
+
+#[test]
+fn changing_between_the_law_stages_and_the_others_rebuilds() {
+    let mut fx = chain(true, 2);
+    run(&mut fx, 16);
+    for ty in [3, 6, 4, 0, 2] {
+        fx.mod2_type_raw = Some(ty);
+        let y = run(&mut fx, 20_000);
+        assert!(
+            y[..4].iter().all(|f| *f == [0.0, 0.0]),
+            "type {ty} restarts"
+        );
+        assert!(y[5_000..].iter().any(|f| f[0].abs() > 0.05), "type {ty}");
+    }
 }
