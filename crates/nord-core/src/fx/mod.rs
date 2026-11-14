@@ -22,6 +22,18 @@ mod fw_delay_table;
 pub mod fw_delay_time;
 mod fw_drive_tables;
 mod fw_ext40;
+pub mod fw_leslie;
+mod fw_leslie_callee;
+mod fw_leslie_core;
+mod fw_leslie_data_a;
+mod fw_leslie_data_b;
+mod fw_leslie_data_c;
+mod fw_leslie_main_a;
+mod fw_leslie_main_b;
+mod fw_leslie_main_c;
+mod fw_leslie_main_d;
+mod fw_leslie_main_e;
+mod fw_leslie_ops;
 pub mod fw_map;
 mod fw_params;
 mod fw_reverb;
@@ -67,6 +79,12 @@ mod tests_fw_amp_chain;
 #[cfg(test)]
 mod tests_fw_delay_time;
 #[cfg(test)]
+mod tests_fw_leslie_data;
+#[cfg(test)]
+mod tests_fw_leslie_golden;
+#[cfg(test)]
+mod tests_fw_leslie_golden_data;
+#[cfg(test)]
 mod tests_fw_map;
 #[cfg(test)]
 mod tests_fw_reverb_chain;
@@ -95,6 +113,7 @@ pub use fw_amp_drive::{ctx as fw_amp_drive_ctx, DriveTables, FwAmpDrive};
 pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
 pub use fw_ext40::{Fp, E40};
+pub use fw_leslie::{FwLeslie, FwLeslieE40};
 pub use fw_map::AllpassType;
 pub use fw_params::{
     compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,

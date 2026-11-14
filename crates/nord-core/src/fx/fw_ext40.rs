@@ -29,6 +29,12 @@ pub trait Fp: Copy + Default + std::fmt::Debug {
     /// `(a + b) / 2`, one rounding.
     fn avg(self, o: Self) -> Self;
 
+    /// The register value as an `f64` (exact for both formats).
+    fn to_f64(self) -> f64;
+    /// A register value from an `f64` that is exact in the format (integers of at most 32 bits
+    /// times a power of two, or a value taken from [`Fp::to_f64`]).
+    fn from_f64(x: f64) -> Self;
+
     /// The value after a store to memory and a reload.
     fn store(self) -> Self {
         Self::from_word(self.to_word())
@@ -71,6 +77,12 @@ impl Fp for f32 {
     }
     fn avg(self, o: Self) -> Self {
         Self::from_word(((self + o) * 0.5).to_bits())
+    }
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+    fn from_f64(x: f64) -> Self {
+        Self::from_word((x as f32).to_bits())
     }
 }
 
@@ -164,6 +176,12 @@ impl Fp for E40 {
     fn avg(self, o: Self) -> Self {
         let s = self.add(o);
         E40(s.0 * 0.5)
+    }
+    fn to_f64(self) -> f64 {
+        self.0
+    }
+    fn from_f64(x: f64) -> Self {
+        E40(x)
     }
 }
 
