@@ -126,6 +126,7 @@ mod tests {
     fn unsupported_rows_are_dimmed_and_name_their_bean() {
         let mut ui = ProgramUi::default();
         ui.open_menu(MenuId::Organize);
+        ui.menu.step_page(1); // the Preset page is the unsupported one
         let t = compose(&ui, MenuId::Organize);
         assert!(
             t.rows[0].starts_with(DIM) && t.rows[0].contains("ns4-"),
