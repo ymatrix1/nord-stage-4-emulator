@@ -63,6 +63,18 @@ Access log over 40 ticks of the settled state with the real hooks (code hooks on
 
 EMPIRICAL: a strobe-walking scanner with two input words. Whether it scans the keybed matrix or only panel buttons / LEDs is not decided; no input value was injected, so the key path through this device is untested. The harness maps the window to zero pages, so both input words read 0.
 
+## 5c. The sound load chain (follow-up session; voice start still not reached)
+
+| Item | Result | Tag |
+|---|---|---|
+| Sound object class | vtable `0xC02AE808` (slots `0xC00B2810, 0xC00B29E0, 0xC00B29D8, 0xC00B2944 (+0xC), 0xC00B2920, 0xC00B28FC`; literal users `0xC00B92D4`, `0xC00C17F0`). `0xC00B90F8(pool, flags, desc, mode)` takes an object from a free pool (`[pool + 8]` array, `[pool + 0]` next index), sets `P + 4` = owner, `P + 8..0xD` = id bytes from the descriptor halfwords, copies the 0x20-byte name from `desc + 0x18` and stores `P + 0x64C0` (state), then calls `0xC00B84CC` (header copy `0x8B7..0x909` to `0xEBE..0xF0F`) | EMPIRICAL (disassembly) |
+| Loader | `0xC00B92E4(pool, x, desc)` (callers `0xC00BA410` in `0xC00BA1F8`, `0xC00BAA8C` in `0xC00BA99C`): finds the `.` in the descriptor name (`0xC02581E8`, `0x2E`), reads the 22-byte file header with `0xC0094EA0(storage, entry, offset, buf, 0x16)`, byte-swaps its halfwords (the library files are big-endian), compares a magic word, then creates the object. `0xC0094EA0` is a FAT-style file read (cluster chain over `[storage + 0x14 / 0x20 / 0x58 / 0x60]`) that reaches the block device through a virtual call on `[storage + 0x24]` | EMPIRICAL (disassembly) |
+| Manager method | `0xC00C0444(mgr, op, arg)`: op 1 calls `0xC00BA99C` (load), op 2 binds / finds an existing object, op 4 calls `0xC00BA74C`. `mgr + 4` is the pool, `mgr + 0xC` the instance index | EMPIRICAL |
+| Does an edit id start a load? | No. In the settled state `Edt_Pno_kBank` 1, 2, 0, `kEntry` 1, 3, 0, `kVariation` 1, 2, 0 on the first piano store call the reload trigger `0xC021C0A4` once (`kBank = 1`) and **never** `0xC00B90F8`, `0xC00B84CC`, `0xC0094EA0` or the loader | VERIFIED (run, `tools/arm_keydown.py` rig + `arm_edit_capture.apply_value`) |
+| What serving the data needs | The sound files (`.npno`, 38 in the factory backup; layout in [nord-piano-npno-and-codec](nord-piano-npno-and-codec.md)) sit behind a FAT-like file system on NAND. Either emulate the block device (the virtual method of `[storage + 0x24]`) with a file system image built from the local backup, or stub `0xC0094EA0(storage, entry, offset, buf, len)` to serve file bytes by `(entry, offset)`. The directory (descriptor list with the file names) must also exist before `0xC00C0444` op 1 can run. Not done | open |
+
+Consequence: no key-induced DSP message and no voice start were produced; section 4 stands. The shortest next experiment is to call `0xC00C0444(mgr, 1, arg)` from the settled state with `0xC0094EA0` stubbed to serve a real `.npno` header, then check whether `[core + 4]` becomes non-zero.
+
 ## 6. Reproduce
 
 ```bash

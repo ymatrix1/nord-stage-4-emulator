@@ -96,6 +96,17 @@ Write each as a Core1 assembly or C program run on the 21571 (or SC573) simulato
 | P7 | `SPI2_CTL = 0x6510`, then `0x6511`; `SPI2_RXCTL`, `SPI2_TXCTL`, `SPI2_STAT` after each; write `SPI2_TFIFO` twice | Which `STAT` bits an idle slave shows, whether `TFIFO` writes need `TXCTL.TEN` (`spi2.rs`; the simulator may not model an external master, in which case P7 only checks the register bits) |
 | P8 | Read `RCU0_MSG` (`0x3108C06C`), `RCU0_CRSTAT` (`0x3108C00C`), `CGU0_STAT` (`0x3108D004`) at reset | Reset values the harness scripts with `--dev` (not modelled) |
 
+### Results on the ADSP-21571 cycle-accurate simulator (checked 2026-11-13, CCES 2.12.1)
+Run through the TpsdkServer debug API (`docs/research/sharc-seq/probe_p1_l2.py`, run with the 32-bit Python 3.6 of `sim_run.py`; no program needed).
+
+| Probe | Result | Status of the model |
+|---|---|---|
+| P1 L2 | Memory type "L2 RAM 8-bit (BW)" spans `0x20000000..0x200FFFFF` (1 MiB; the 32-bit NW view has `0x40000` words). A 32-bit write reads back as bytes `78 56 34 12` (**byte addressed, little endian**, matches `l2.rs`). A byte write to `0x20004001` changes only that byte; the top word `0x200FFFFC` stores and reads back; a write to `0x20100000` is not retained (reads 0); never-written L2 reads `0xEE` per byte (debugger fill, not hardware). 16-bit view: `5678 1234` at half-word pairs, same byte order. | `l2.rs` size, byte order and `contains()` **VERIFIED** against the simulator memory map |
+| P2..P7 (SEC, MDMA, SPI2/TRU) | Not measurable: the simulator has no peripheral model. Every access to the system MMR window (`0x3108C06C`, `0x3108C00C`, `0x3108D004`, `0x31046200`) prints `Unimplemented MMR Read from ...` and returns 0 (RCU0_MSG shows `0x000C0000`, the register-definition value, not behaviour). | model behaviour stays **ASSUMED**; needs silicon or the ARM-side trace |
+| P8 reset values | The same unimplemented-MMR reads: `0` for `RCU0_CRSTAT`, `CGU0_STAT`; `0x000C0000` for `RCU0_MSG` (definition default, not a measured reset). | `--dev` scripted values stay as they are |
+
+Consequence for follow-up 1: probes P2..P7 cannot promote the SEC/DMA/SPI2 models; only L2 (P1) is settled. A core-executed confirmation (a program writing `SEC0_RAISE` and reading `SEC0_CSID1`) would only re-confirm the "Unimplemented MMR" behaviour and was not run.
+
 ## Implications
 
 - FX, PNO and ORG are SHARC+ on an ADSP-2157x: the register map for the oracle comes from the CCES headers, which are on this machine and authoritative (they are not committed: licence; cite the file and the symbol).

@@ -113,7 +113,23 @@ pub const CHAIN: SwitchInfo = sw(
     "--synth-chain",
     "Chain",
     Mixed,
-    "Per-voice chain: classic engine or the firmware strip (partly VERIFIED, ADR/R laws open).",
+    "Per-voice chain: firmware strip (default, D22: validated on hardware clips, see docs/research/synth-validation.md) or the classic engine chain.",
+);
+/// Stage oscillators (`--synth-stages` / `--no-synth-stages`).
+pub const STAGES: SwitchInfo = sw(
+    "Synth",
+    "--synth-stages",
+    "Stage oscillators",
+    Mixed,
+    "Bit-exact firmware stages (noise, Shape Square, SUPER, MULTI, SHAPE SINE) on the strip chain; on by default, off with --no-synth-stages.",
+);
+/// Oscillator P table (`--synth-p`).
+pub const P_TABLE: SwitchInfo = sw(
+    "Synth",
+    "--synth-p",
+    "P table",
+    Empirical,
+    "Per-wave level, cutoff factor and SHAPE word law fitted to hardware clips (default); off = unit P, fitted = the Smooth Lead block.",
 );
 /// Synth filter (`--filter-engine`).
 pub const FILTER: SwitchInfo = sw(
@@ -181,12 +197,14 @@ pub const ROUTING: SwitchInfo = sw(
 );
 
 /// All switches in bar order.
-pub const ALL: [SwitchInfo; 14] = [
+pub const ALL: [SwitchInfo; 16] = [
     TONE,
     B3_TAIL,
     ROTARY,
     ORGAN_LEVEL,
     CHAIN,
+    STAGES,
+    P_TABLE,
     FILTER,
     MEASURED,
     SHAPE,
