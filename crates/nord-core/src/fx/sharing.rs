@@ -36,8 +36,10 @@ impl LayerFxChain {
     pub fn copy_reverb_settings_from(&mut self, src: &LayerFxChain) {
         self.reverb_model = src.reverb_model;
         self.reverb_color = src.reverb_color;
+        self.reverb_variation = src.reverb_variation;
         self.reverb_mix = src.reverb_mix;
         self.firmware_fx.reverb_mix = src.firmware_fx.reverb_mix;
+        self.firmware_fx.reverb = src.firmware_fx.reverb;
         self.morph.reverb_amount = src.morph.reverb_amount;
     }
 

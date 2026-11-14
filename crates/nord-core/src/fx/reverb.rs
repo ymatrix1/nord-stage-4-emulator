@@ -3,9 +3,31 @@
 use super::*;
 
 impl LayerFxChain {
+    /// The firmware Spring reverb (`firmware_fx.reverb`, `kRvbType` 0 or 1): the routine mixes dry
+    /// and wet itself from the `kRvbAmt` words, so the result replaces the engine's mix.
+    fn process_fw_reverb(&mut self, l: f32, r: f32) -> [f32; 2] {
+        let rvb_type = usize::from(self.reverb_variation);
+        let ui = fw_map::unit_to_ui(self.reverb_mix.clamp(0.0, 1.0));
+        if !matches!(&self.fw_reverb, Some(rv) if rv.rvb_type() == rvb_type) {
+            let mut rv = Box::new(FwReverb::new(rvb_type));
+            rv.set_amount(ui, true);
+            self.fw_reverb = Some(rv);
+        }
+        match &mut self.fw_reverb {
+            Some(rv) => {
+                rv.set_amount(ui, false);
+                rv.process_frame([l, r])
+            }
+            None => [l, r],
+        }
+    }
+
     pub(super) fn process_reverb(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {
         if self.reverb_model == ReverbModel::Off || self.reverb_mix <= 0.0 {
             return [l, r];
+        }
+        if self.firmware_fx.reverb && self.reverb_model == ReverbModel::Spring {
+            return self.process_fw_reverb(l, r);
         }
         let (decay_gain, room_scale) = match self.reverb_model {
             ReverbModel::Off => (0.0, 1.0),
