@@ -1,0 +1,208 @@
+id,name,layer,dm_word,where,dest,mode,v_lo,v_hi,values,kind,lin_err,exp_err,q16_only,words
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc108e,0xc108e,FX/1/2,auto,0,1,0-1,const,-,-,False,0x000c108c
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc108e,0xc108e,FX/1/2,q16,0,1,0-1,const,-,-,False,0x000c108c
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc13fa,0xc13fa,FX/1/2,auto,0,1,0-1,const,-,-,False,0x000c13f8
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc13fa,0xc13fa,FX/1/2,q16,0,1,0-1,const,-,-,False,0x000c13f8
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc1508,0xc1508,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00103200
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc1508,0xc1508,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00103200
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc150d,0xc150d,FX/1/2,auto,0,1,0-1,varies,0,2.84e-14,False,0x000c1509 0x000c0c70
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc150d,0xc150d,FX/1/2,q16,0,1,0-1,const,-,-,False,0x000c1509
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc150e,0xc150e,FX/1/2,auto,0,1,0-1,varies,0,2.84e-14,False,0x00000001 0x00000018
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc150e,0xc150e,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000001
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc15a1,0xc15a1,FX/1/2,auto,0,1,0-1,varies,0,0,False,0x000c159f 0x000c0c70
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc15a1,0xc15a1,FX/1/2,q16,0,1,0-1,const,-,-,False,0x000c159f
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc15a2,0xc15a2,FX/1/2,auto,0,1,0-1,varies,0,2.84e-14,False,0x00000001 0x00000018
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc15a2,0xc15a2,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000001
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc165f,0xc165f,FX/1/2,auto,0,1,0-1,const,-,-,False,0x000c165d
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc165f,0xc165f,FX/1/2,q16,0,1,0-1,const,-,-,False,0x000c165d
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc1660,0xc1660,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000001
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc1660,0xc1660,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000001
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc1666,0xc1666,FX/1/2,auto,0,1,0-1,const,-,-,False,0x7f000000
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc1666,0xc1666,FX/1/2,q16,0,1,0-1,const,-,-,False,0x7f000000
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc166a,0xc166a,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000000
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc166a,0xc166a,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000000
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc17ef,0xc17ef,FX/1/2,auto,0,1,0-1,varies,0,2.84e-14,False,0x000c17ed 0x000c0c70
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc17ef,0xc17ef,FX/1/2,q16,0,1,0-1,const,-,-,False,0x000c17ed
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc17f0,0xc17f0,FX/1/2,auto,0,1,0-1,varies,0,2.84e-14,False,0x00000001 0x00000018
+0x194,Edt_Effects_kFx1ClkEnable,0,0xc17f0,0xc17f0,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000001
+0x198,Edt_Effects_kFx1Type,0,0xb045e,0xb045e,FX/1/2,auto,4,5,4-5,const,-,-,False,0x003d2000
+0x198,Edt_Effects_kFx1Type,0,0xb0463,0xb0463,FX/1/2,auto,4,5,4-5,const,-,-,False,0x3f010204
+0x198,Edt_Effects_kFx1Type,0,0xb0464,0xb0464,FX/1/2,auto,4,5,4-5,const,-,-,False,0x3efdfbf8
+0x198,Edt_Effects_kFx1Type,0,0xb0467,0xb0467,FX/1/2,auto,4,5,4-5,const,-,-,False,0xba83126f
+0x198,Edt_Effects_kFx1Type,0,0xc1508,0xc1508,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00103200
+0x198,Edt_Effects_kFx1Type,0,0xc1508,0xc1508,FX/1/2,q16,0,11,"0,9,10,11",const,-,-,False,0x00103200
+0x198,Edt_Effects_kFx1Type,0,0xc1510,0xc1510,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3e010204
+0x198,Edt_Effects_kFx1Type,0,0xc1510,0xc1510,FX/1/2,q16,0,11,"0,9,10,11",const,-,-,False,0x3e010204
+0x198,Edt_Effects_kFx1Type,0,0xc1512,0xc1512,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f3f7efe
+0x198,Edt_Effects_kFx1Type,0,0xc1512,0xc1512,FX/1/2,q16,0,11,"0,9,10,11",const,-,-,False,0x3f3f7efe
+0x198,Edt_Effects_kFx1Type,0,0xc159e,0xc159e,FX/1/2,auto,2,3,2-3,const,-,-,False,0x00103200
+0x198,Edt_Effects_kFx1Type,0,0xc15a4,0xc15a4,FX/1/2,auto,2,3,2-3,const,-,-,False,0x3e810204
+0x198,Edt_Effects_kFx1Type,0,0xc15a5,0xc15a5,FX/1/2,auto,2,3,2-3,const,-,-,False,0x3f3f7efe
+0x198,Edt_Effects_kFx1Type,0,0xc165c,0xc165c,FX/1/2,auto,10,11,10-11,const,-,-,False,0x00103200
+0x198,Edt_Effects_kFx1Type,0,0xc1661,0xc1661,FX/1/2,auto,10,11,10-11,const,-,-,False,0x3f010204
+0x198,Edt_Effects_kFx1Type,0,0xc17ec,0xc17ec,FX/1/2,auto,0,11,0-11,varies,0.728,4.64,False,0x00003200 0x00003200 0x00003200 0x00003200 0x00003200 0x00003200 0x00003200 0x00003200 0x00103200 0x00103200 0x00003200 0x00003200
+0x198,Edt_Effects_kFx1Type,0,0xc17ec,0xc17ec,FX/1/2,q16,0,11,0-11,const,-,-,False,0x00003200
+0x198,Edt_Effects_kFx1Type,0,0xc17fc,0xc17fc,FX/1/2,auto,0,11,0-11,varies,0.728,-,False,0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f000000 0x3f000000 0x00000000 0x00000000
+0x198,Edt_Effects_kFx1Type,0,0xc17fc,0xc17fc,FX/1/2,q16,0,11,0-11,const,-,-,False,0x00000000
+0x198,Edt_Effects_kFx1Type,0,0xc180c,0xc180c,FX/1/2,auto,8,9,8-9,const,-,-,False,0xbe7c0000
+0x198,Edt_Effects_kFx1Type,0,0xc18c0,0xc18c0,FX/1/2,auto,6,7,6-7,const,-,-,False,0x3d800000
+0x198,Edt_Effects_kFx1Type,0,0xc18d2,0xc18d2,FX/1/2,auto,6,7,6-7,const,-,-,False,0xbe7dfbf8
+0x19d,Edt_Effects_kFx2Type,0,0xb01c0,0xb01c0,FX/1/2,auto,2,3,2-3,const,-,-,False,0xbe7d94c2
+0x19d,Edt_Effects_kFx2Type,0,0xb01cc,0xb01cc,FX/1/2,auto,2,3,2-3,const,-,-,False,0x00096da6
+0x19d,Edt_Effects_kFx2Type,0,0xb01d0,0xb01d0,FX/1/2,auto,2,3,2-3,const,-,-,False,0xc1e4907d
+0x19d,Edt_Effects_kFx2Type,0,0xb01d1,0xb01d1,FX/1/2,auto,2,3,2-3,const,-,-,False,0xc32b6df0
+0x19d,Edt_Effects_kFx2Type,0,0xb0274,0xb0274,FX/1/2,auto,0,0,0-0,const,-,-,False,0x00028e62
+0x19d,Edt_Effects_kFx2Type,0,0xb0274,0xb0274,FX/1/2,q16,0,11,"0,10,11",const,-,-,False,0x00028e62
+0x19d,Edt_Effects_kFx2Type,0,0xb0278,0xb0278,FX/1/2,auto,0,0,0-0,const,-,-,False,0x422dde16
+0x19d,Edt_Effects_kFx2Type,0,0xb0278,0xb0278,FX/1/2,q16,0,11,"0,10,11",const,-,-,False,0x422dde16
+0x19d,Edt_Effects_kFx2Type,0,0xb0279,0xb0279,FX/1/2,auto,0,0,0-0,const,-,-,False,0x42dadde2
+0x19d,Edt_Effects_kFx2Type,0,0xb0279,0xb0279,FX/1/2,q16,0,11,"0,10,11",const,-,-,False,0x42dadde2
+0x19d,Edt_Effects_kFx2Type,0,0xb027a,0xb027a,FX/1/2,auto,0,0,0-0,const,-,-,False,0x3f000000
+0x19d,Edt_Effects_kFx2Type,0,0xb027a,0xb027a,FX/1/2,q16,0,11,"0,10,11",const,-,-,False,0x3f000000
+0x19d,Edt_Effects_kFx2Type,0,0xb03a0,0xb03a0,FX/1/2,auto,1,1,1-1,const,-,-,False,0x00041900
+0x19d,Edt_Effects_kFx2Type,0,0xb03aa,0xb03aa,FX/1/2,auto,1,1,1-1,const,-,-,False,0x3ee20000
+0x19d,Edt_Effects_kFx2Type,0,0xc107d,0xc107d,FX/1/2,auto,10,11,10-11,const,-,-,False,0x3f404d50
+0x19d,Edt_Effects_kFx2Type,0,0xc107e,0xc107e,FX/1/2,auto,10,11,10-11,const,-,-,False,0x3f3fb280
+0x19d,Edt_Effects_kFx2Type,0,0xc1081,0xc1081,FX/1/2,auto,10,11,10-11,const,-,-,False,0x3fcd9b37
+0x19d,Edt_Effects_kFx2Type,0,0xc1082,0xc1082,FX/1/2,auto,10,11,10-11,const,-,-,False,0x3efe632d
+0x19d,Edt_Effects_kFx2Type,0,0xc1085,0xc1085,FX/1/2,auto,10,11,10-11,const,-,-,False,0x000aa2e6
+0x19d,Edt_Effects_kFx2Type,0,0xc1086,0xc1086,FX/1/2,auto,10,11,10-11,const,-,-,False,0x0013068a
+0x19d,Edt_Effects_kFx2Type,0,0xc1087,0xc1087,FX/1/2,auto,10,11,10-11,const,-,-,False,0xffffffea
+0x19d,Edt_Effects_kFx2Type,0,0xc1202,0xc1202,FX/1/2,auto,8,9,8-9,const,-,-,False,0x0000b200
+0x19d,Edt_Effects_kFx2Type,0,0xc1205,0xc1205,FX/1/2,auto,8,9,8-9,const,-,-,False,0x3efd70a0
+0x19d,Edt_Effects_kFx2Type,0,0xc120a,0xc120a,FX/1/2,auto,8,9,8-9,const,-,-,False,0x3f000000
+0x19d,Edt_Effects_kFx2Type,0,0xc120b,0xc120b,FX/1/2,auto,8,9,8-9,const,-,-,False,0x3f000000
+0x19d,Edt_Effects_kFx2Type,0,0xc120c,0xc120c,FX/1/2,auto,8,9,8-9,const,-,-,False,0x3ecccccc
+0x19d,Edt_Effects_kFx2Type,0,0xc12e2,0xc12e2,FX/1/2,auto,4,4,4-4,const,-,-,False,0x00043200
+0x19d,Edt_Effects_kFx2Type,0,0xc12e4,0xc12e4,FX/1/2,auto,4,4,4-4,const,-,-,False,0x00000000
+0x19d,Edt_Effects_kFx2Type,0,0xc12e5,0xc12e5,FX/1/2,auto,4,4,4-4,const,-,-,False,0x00000000
+0x19d,Edt_Effects_kFx2Type,0,0xc12ff,0xc12ff,FX/1/2,auto,4,4,4-4,const,-,-,False,0x3f34fdf4
+0x19d,Edt_Effects_kFx2Type,0,0xc1300,0xc1300,FX/1/2,auto,4,4,4-4,const,-,-,False,0x3bb66ac4
+0x19d,Edt_Effects_kFx2Type,0,0xc1303,0xc1303,FX/1/2,auto,4,4,4-4,const,-,-,False,0x3f5a3361
+0x19d,Edt_Effects_kFx2Type,0,0xc13f2,0xc13f2,FX/1/2,auto,5,5,5-5,const,-,-,False,0x3f7f966c
+0x19d,Edt_Effects_kFx2Type,0,0xc13f3,0xc13f3,FX/1/2,auto,5,5,5-5,const,-,-,False,0x00074308
+0x19d,Edt_Effects_kFx2Type,0,0xc13f4,0xc13f4,FX/1/2,auto,5,5,5-5,const,-,-,False,0x43169fac
+0x19d,Edt_Effects_kFx2Type,0,0xc13f5,0xc13f5,FX/1/2,auto,5,5,5-5,const,-,-,False,0x4346c0a8
+0x19d,Edt_Effects_kFx2Type,0,0xc16e7,0xc16e7,FX/1/2,auto,6,7,6-7,const,-,-,False,0x00083200
+0x19d,Edt_Effects_kFx2Type,0,0xc16fc,0xc16fc,FX/1/2,auto,6,7,6-7,const,-,-,False,0x3f000000
+0x19d,Edt_Effects_kFx2Type,0,0xc1701,0xc1701,FX/1/2,auto,6,7,6-7,const,-,-,False,0x3fc9006a
+0x1ab,Edt_Effects_kCmpResponse,0,0xb0148,0xb0148,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3dd10ac8
+0x1ab,Edt_Effects_kCmpResponse,0,0xb0148,0xb0148,FX/1/2,q16,0,1,0-1,varies,0,4.44e-16,True,0x3dd10ac8 0x3cba9680
+0x1ab,Edt_Effects_kCmpResponse,0,0xb0149,0xb0149,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f800000
+0x1ab,Edt_Effects_kCmpResponse,0,0xb0149,0xb0149,FX/1/2,q16,0,1,0-1,const,-,-,False,0x3f800000
+0x1ab,Edt_Effects_kCmpResponse,0,0xb014a,0xb014a,FX/1/2,auto,0,1,0-1,const,-,-,False,0x39f18800
+0x1ab,Edt_Effects_kCmpResponse,0,0xb014a,0xb014a,FX/1/2,q16,0,1,0-1,varies,0,0,True,0x39f18800 0x3b16d300
+0x1ab,Edt_Effects_kCmpResponse,0,0xb014b,0xb014b,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3d23d70a
+0x1ab,Edt_Effects_kCmpResponse,0,0xb014b,0xb014b,FX/1/2,q16,0,1,0-1,const,-,-,False,0x3d23d70a
+0x1ae,Edt_Effects_kDlyClkEnable,0,0xc1cf0,0xc1cf0,FX/1/2,q16,1,1,1-1,const,-,-,False,0x3f010204
+0x1ae,Edt_Effects_kDlyClkEnable,0,0xc1cf1,0xc1cf1,FX/1/2,q16,1,1,1-1,const,-,-,False,0x3f010204
+0x1ae,Edt_Effects_kDlyClkEnable,0,0xc1cf4,0xc1cf4,FX/1/2,q16,1,1,1-1,const,-,-,False,0x00000000
+0x1ae,Edt_Effects_kDlyClkEnable,0,0xc1cf5,0xc1cf5,FX/1/2,q16,1,1,1-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cef,0xc1cef,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f800000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cef,0xc1cef,FX/1/2,q16,0,1,0-1,varies,0,-,True,0x3f800000 0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf0,0xc1cf0,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f010204
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf0,0xc1cf0,FX/1/2,q16,0,1,0-1,varies,0,-,True,0x3f010204 0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf1,0xc1cf1,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f010204
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf1,0xc1cf1,FX/1/2,q16,0,1,0-1,varies,0,-,True,0x3f010204 0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf2,0xc1cf2,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf2,0xc1cf2,FX/1/2,q16,0,1,0-1,varies,0,-,True,0x00000000 0x3f000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf3,0xc1cf3,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf3,0xc1cf3,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf4,0xc1cf4,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf4,0xc1cf4,FX/1/2,q16,0,1,0-1,varies,0,-,True,0x00000000 0x3f010204
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf5,0xc1cf5,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cf5,0xc1cf5,FX/1/2,q16,0,1,0-1,varies,0,-,True,0x00000000 0x3f800000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cff,0xc1cff,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f7fd094
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1cff,0xc1cff,FX/1/2,q16,0,1,0-1,const,-,-,False,0x3f7fd094
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d00,0xc1d00,FX/1/2,auto,0,1,0-1,const,-,-,False,0xbe7d5525
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d00,0xc1d00,FX/1/2,q16,0,1,0-1,const,-,-,False,0xbe7d5525
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d0e,0xc1d0e,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f800000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d0e,0xc1d0e,FX/1/2,q16,0,1,0-1,const,-,-,False,0x3f800000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d2e,0xc1d2e,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3fc00000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d2e,0xc1d2e,FX/1/2,q16,0,1,0-1,const,-,-,False,0x3fc00000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d2f,0xc1d2f,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3e800000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc1d2f,0xc1d2f,FX/1/2,q16,0,1,0-1,const,-,-,False,0x3e800000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23d4,0xc23d4,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00003200
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23d4,0xc23d4,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00003200
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23d6,0xc23d6,FX/1/2,auto,0,1,0-1,const,-,-,False,0x436a0000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23d6,0xc23d6,FX/1/2,q16,0,1,0-1,const,-,-,False,0x436a0000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23d7,0xc23d7,FX/1/2,auto,0,1,0-1,const,-,-,False,0x43ab0000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23d7,0xc23d7,FX/1/2,q16,0,1,0-1,const,-,-,False,0x43ab0000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23f1,0xc23f1,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23f1,0xc23f1,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23f2,0xc23f2,FX/1/2,auto,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23f2,0xc23f2,FX/1/2,q16,0,1,0-1,const,-,-,False,0x00000000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23f5,0xc23f5,FX/1/2,auto,0,1,0-1,const,-,-,False,0x3f800000
+0x1b3,Edt_Effects_kDlyFbkPingPong,0,0xc23f5,0xc23f5,FX/1/2,q16,0,1,0-1,const,-,-,False,0x3f800000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf0,0xc1cf0,FX/1/2,auto,0,3,0-3,const,-,-,False,0x3f010204
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf0,0xc1cf0,FX/1/2,q16,0,3,0-3,const,-,-,False,0x3f010204
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf1,0xc1cf1,FX/1/2,auto,0,3,0-3,const,-,-,False,0x3f010204
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf1,0xc1cf1,FX/1/2,q16,0,3,0-3,const,-,-,False,0x3f010204
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf4,0xc1cf4,FX/1/2,auto,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf4,0xc1cf4,FX/1/2,q16,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf5,0xc1cf5,FX/1/2,auto,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cf5,0xc1cf5,FX/1/2,q16,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cff,0xc1cff,FX/1/2,auto,0,3,0-3,const,-,-,False,0x3f7fd094
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1cff,0xc1cff,FX/1/2,q16,0,3,0-3,varies,0.336,0.00491,True,0x3f7fd094 0x3f7fd094 0x3f7d3d4f 0x3f7d7897
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1d00,0xc1d00,FX/1/2,auto,0,3,0-3,const,-,-,False,0xbe7d5525
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1d00,0xc1d00,FX/1/2,q16,0,3,0-3,varies,0.6,-,True,0xbe7d5525 0xbf617743 0xbe7d5525 0xbf617743
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1d2e,0xc1d2e,FX/1/2,auto,0,3,0-3,const,-,-,False,0x3fc00000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1d2e,0xc1d2e,FX/1/2,q16,0,3,0-3,const,-,-,False,0x3fc00000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1d2f,0xc1d2f,FX/1/2,auto,0,3,0-3,const,-,-,False,0x3e800000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc1d2f,0xc1d2f,FX/1/2,q16,0,3,0-3,const,-,-,False,0x3e800000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23d4,0xc23d4,FX/1/2,auto,0,3,0-3,const,-,-,False,0x00003200
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23d4,0xc23d4,FX/1/2,q16,0,3,0-3,const,-,-,False,0x00003200
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23d6,0xc23d6,FX/1/2,auto,0,3,0-3,const,-,-,False,0x436a0000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23d6,0xc23d6,FX/1/2,q16,0,3,0-3,const,-,-,False,0x436a0000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23d7,0xc23d7,FX/1/2,auto,0,3,0-3,const,-,-,False,0x43ab0000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23d7,0xc23d7,FX/1/2,q16,0,3,0-3,const,-,-,False,0x43ab0000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23f1,0xc23f1,FX/1/2,auto,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23f1,0xc23f1,FX/1/2,q16,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23f2,0xc23f2,FX/1/2,auto,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23f2,0xc23f2,FX/1/2,q16,0,3,0-3,const,-,-,False,0x00000000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23f5,0xc23f5,FX/1/2,auto,0,3,0-3,const,-,-,False,0x3f800000
+0x1b4,Edt_Effects_kDlyFbkFilt,0,0xc23f5,0xc23f5,FX/1/2,q16,0,3,0-3,const,-,-,False,0x3f800000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf0,0xc1cf0,FX/1/2,auto,0,11,0-11,varies,0.755,0.248,False,0x3f010204 0x3f010204 0x3f010204 0x3f010204 0x3f010204 0x3f010204 0x3f010204 0x3f010204 0x3ee6550c 0x3ecd9efa 0x3f010204 0x3f010204
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf0,0xc1cf0,FX/1/2,q16,0,11,0-11,const,-,-,False,0x3f010204
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf1,0xc1cf1,FX/1/2,auto,0,11,0-11,const,-,-,False,0x3f010204
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf1,0xc1cf1,FX/1/2,q16,0,11,0-11,const,-,-,False,0x3f010204
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf4,0xc1cf4,FX/1/2,auto,0,11,0-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf4,0xc1cf4,FX/1/2,q16,0,11,0-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf5,0xc1cf5,FX/1/2,auto,0,11,0-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cf5,0xc1cf5,FX/1/2,q16,0,11,0-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cff,0xc1cff,FX/1/2,auto,0,11,0-11,varies,0.844,0.00598,False,0x3f7fd094 0x3f7fd094 0x3f7f71d8 0x3f7f71d8 0x3f7fd094 0x3f7fd094 0x3f7f71d8 0x3f7e9002 0x3f7fd094 0x3f7fd094 0x3f7fd094 0x3f7fd094
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1cff,0xc1cff,FX/1/2,q16,0,11,0-11,varies,0.974,-,False,0x3f7fd094 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f7fd094 0x3f7fd094 0x3f7fd094
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1d00,0xc1d00,FX/1/2,auto,0,11,0-11,varies,0.665,-,False,0xbe7d5525 0xbe7d5525 0xbf1087c7 0xbf1087c7 0xbe7d5525 0xbe7d5525 0xbf30d020 0xbf30d020 0xbe7d5525 0xbe7d5525 0xbe7d5525 0xbefdb1c0
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1d00,0xc1d00,FX/1/2,q16,0,11,0-11,varies,0.974,-,False,0xbe7d5525 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0xbe7d5525 0xbe7d5525 0xbe7d5525
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1d2e,0xc1d2e,FX/1/2,auto,0,11,0-11,varies,0.728,0.426,False,0x3fc00000 0x3fc00000 0x3fc00000 0x3fc00000 0x3fc00000 0x3fc00000 0x3fc00000 0x3fc00000 0x3f800000 0x3f800000 0x3fc00000 0x3fc00000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1d2e,0xc1d2e,FX/1/2,q16,0,11,0-11,const,-,-,False,0x3fc00000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1d2f,0xc1d2f,FX/1/2,auto,0,11,0-11,varies,0.728,1.46,False,0x3e800000 0x3e800000 0x3e800000 0x3e800000 0x3e800000 0x3e800000 0x3e800000 0x3e800000 0x3f800000 0x3f800000 0x3e800000 0x3e800000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc1d2f,0xc1d2f,FX/1/2,q16,0,11,0-11,const,-,-,False,0x3e800000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc2268,0xc2268,FX/1/2,auto,2,3,2-3,varies,0,0,False,0x0000b200 0x0000f200
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc226b,0xc226b,FX/1/2,auto,2,3,2-3,varies,0,2.22e-16,False,0x3ec35c24 0x3ee30a38
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc2270,0xc2270,FX/1/2,auto,2,3,2-3,varies,0,4.44e-16,False,0x3e200000 0x3eb00000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc2271,0xc2271,FX/1/2,auto,2,3,2-3,varies,0,4.44e-16,False,0x3e200000 0x3eb00000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc2272,0xc2272,FX/1/2,auto,2,3,2-3,varies,0,2.22e-16,False,0x3e000000 0x3e8ccccc
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc234a,0xc234a,FX/1/2,auto,4,5,4-5,varies,0,2.84e-14,False,0x0009c400 0x00051400
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc234d,0xc234d,FX/1/2,auto,4,5,4-5,const,-,-,False,0x3ed80000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc2352,0xc2352,FX/1/2,auto,4,5,4-5,const,-,-,False,0x3fc9006a
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23d4,0xc23d4,FX/1/2,auto,0,11,0-11,varies,0.59,3.27,False,0x00003200 0x00003200 0x00043200 0x00063200 0x00049200 0x00035200 0x00023200 0x00058200 0x00003200 0x00003200 0x00003200 0x00003200
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23d4,0xc23d4,FX/1/2,q16,0,11,0-11,const,-,-,False,0x00003200
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23d6,0xc23d6,FX/1/2,auto,0,6,"0,1,6",const,-,-,False,0x436a0000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23d6,0xc23d6,FX/1/2,q16,0,11,0-11,const,-,-,False,0x436a0000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23d7,0xc23d7,FX/1/2,auto,0,6,"0,1,6",const,-,-,False,0x43ab0000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23d7,0xc23d7,FX/1/2,q16,0,11,0-11,const,-,-,False,0x43ab0000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23f1,0xc23f1,FX/1/2,auto,0,6,"0,1,6",varies,0.0968,-,False,0x00000000 0x00000000 0x3f05f66c
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23f1,0xc23f1,FX/1/2,q16,0,11,0-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23f2,0xc23f2,FX/1/2,auto,0,6,"0,1,6",const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23f2,0xc23f2,FX/1/2,q16,0,11,0-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23f5,0xc23f5,FX/1/2,auto,0,6,"0,1,6",varies,0.0968,0.016,False,0x3f800000 0x3f800000 0x3f643dbb
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc23f5,0xc23f5,FX/1/2,q16,0,11,0-11,const,-,-,False,0x3f800000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc24e4,0xc24e4,FX/1/2,auto,7,7,7-7,const,-,-,False,0x3f7f7814
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc24e5,0xc24e5,FX/1/2,auto,7,7,7-7,const,-,-,False,0x000ba7e3
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc24e6,0xc24e6,FX/1/2,auto,7,7,7-7,const,-,-,False,0x432079ce
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc24e7,0xc24e7,FX/1/2,auto,7,7,7-7,const,-,-,False,0x43330c65
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc264e,0xc264e,FX/1/2,auto,10,11,10-11,const,-,-,False,0x3f800000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc264f,0xc264f,FX/1/2,auto,10,11,10-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc2650,0xc2650,FX/1/2,auto,10,11,10-11,const,-,-,False,0x00000000
+0x1b6,Edt_Effects_kDlyFbFxType,0,0xc2651,0xc2651,FX/1/2,auto,10,11,10-11,const,-,-,False,0x3f800000

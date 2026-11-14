@@ -84,6 +84,7 @@ fn apply_filter(
     synth.filter_env_decay_sec = ms_to_sec(dec.filter_env_decay_ms);
     synth.filter_env_release_sec = ms_to_sec(dec.filter_env_release_ms);
     synth.filter_env_vel_amount = if dec.filter_velocity { 1.0 } else { 0.0 };
+    synth.strip_knobs = dec.knobs;
 
     cutoff_morph.base = cutoff_hz_to_norm(dec.filter_cutoff_hz);
     cutoff_morph.delta_wheel = dec.filter_cutoff_morph.wheel;
