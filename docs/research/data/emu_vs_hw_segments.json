@@ -6,12 +6,15 @@
      "variants": [
        {"label": "default", "flags": []},
        {"label": "b3wheels", "flags": ["--tone-source", "b3wheels"]},
-       {"label": "firmware-fx", "flags": ["--firmware-fx"]}]},
+       {"label": "firmware-fx", "flags": ["--firmware-fx"]},
+       {"label": "routing", "flags": ["--firmware-routing"]},
+       {"label": "b3wheels+routing", "flags": ["--tone-source", "b3wheels", "--firmware-routing"]}]},
     {"id": "organ_vox", "entry": "Program/Bank A/Vintage Vox J3.ns4p", "engine": "organ Vox + Twin amp", "at_s": 2360, "duration_s": 11,
      "variants": [
        {"label": "default", "flags": []},
        {"label": "vox", "flags": ["--tone-source", "vox"]},
-       {"label": "vox+firmware-fx", "flags": ["--tone-source", "vox", "--firmware-fx"]}]},
+       {"label": "vox+firmware-fx", "flags": ["--tone-source", "vox", "--firmware-fx"]},
+       {"label": "routing", "flags": ["--firmware-routing"]}]},
     {"id": "organ_pipe", "entry": "Program/Bank A/Space Drama II.ns4p", "engine": "organ Pipe2 + synth, reverb", "at_s": 1094, "duration_s": 30,
      "variants": [
        {"label": "default", "flags": []},
@@ -23,21 +26,25 @@
        {"label": "org_dry", "edits": {"global.section_enable_i": 4, "global.section_enable_ii": 4, "organ.fx.mod2_enabled": false, "organ.fx.reverb_enabled": false}},
        {"label": "org_dry_legacy", "flags": ["--tone-source", "legacy"], "edits": {"global.section_enable_i": 4, "global.section_enable_ii": 4, "organ.fx.mod2_enabled": false, "organ.fx.reverb_enabled": false}},
        {"label": "synth_only", "edits": {"global.section_enable_i": 1, "global.section_enable_ii": 1}},
-       {"label": "synth_dry", "edits": {"global.section_enable_i": 1, "global.section_enable_ii": 1, "synth.fx_a.reverb_enabled": false, "synth.fx_b.reverb_enabled": false, "synth.fx_a.mod2_enabled": false}}]},
+       {"label": "synth_dry", "edits": {"global.section_enable_i": 1, "global.section_enable_ii": 1, "synth.fx_a.reverb_enabled": false, "synth.fx_b.reverb_enabled": false, "synth.fx_a.mod2_enabled": false}},
+       {"label": "routing", "flags": ["--firmware-routing"]}]},
     {"id": "piano_dry", "entry": "Program/Bank A/Velvet Grand.ns4p", "engine": "piano Grand, no FX", "at_s": 1708, "duration_s": 25,
      "variants": [
        {"label": "default", "flags": []},
        {"label": "firmware-fx", "flags": ["--firmware-fx"]},
-       {"label": "firmware-piano-level", "flags": ["--firmware-piano-level"]}]},
+       {"label": "firmware-piano-level", "flags": ["--firmware-piano-level"]},
+       {"label": "routing", "flags": ["--firmware-routing"]}]},
     {"id": "synth_lead", "entry": "Program/Bank A/Smooth Lead.ns4p", "engine": "synth Triangle LP24", "at_s": 2420, "duration_s": 22,
      "variants": [
        {"label": "default", "flags": []},
        {"label": "fw-filter", "flags": ["--filter-engine", "firmware"]},
        {"label": "fw-filter+fx", "flags": ["--filter-engine", "firmware", "--firmware-fx"]},
-       {"label": "strip", "flags": ["--synth-chain", "strip"]}]},
+       {"label": "strip", "flags": ["--synth-chain", "strip"]},
+       {"label": "routing", "flags": ["--firmware-routing"]}]},
     {"id": "fx_amp", "entry": "Program/Bank A/Tiny Transistor.ns4p", "engine": "organ Farfisa + Small II amp + reverb", "at_s": 1812, "duration_s": 25,
      "variants": [
        {"label": "default", "flags": []},
-       {"label": "firmware-fx", "flags": ["--firmware-fx"]}]}
+       {"label": "firmware-fx", "flags": ["--firmware-fx"]},
+       {"label": "routing", "flags": ["--firmware-routing"]}]}
   ]
 }

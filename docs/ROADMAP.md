@@ -206,6 +206,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
 - [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
 - [x] Corrected B3 tail ported with regenerated chord tests, oracle chords within 0.54 dB and video mid -1.1 dB ([b3-tail-bootstate](research/b3-tail-bootstate.md)); `B3Wheels` stays opt-in (RMS +8.0 dB)
+- [x] Engine layer routing: section / layer enables VERIFIED on the ARM (`tools/arm_program_routing.py`), per-layer KB zone codes decoded, opt-in `FirmwareRouting` / `--firmware-routing`; B3 clip sub +16.5 to -1.6 dB, crest 12.8 to 17.2 dB, RMS +8.0 to +3.8 dB ([engine-routing](research/engine-routing.md))
+- [ ] Firmware map from the `kKbZone` code to the key range (OQ23), then flip `FirmwareRouting` to the default with a `render_hash` re-baseline
 - [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ

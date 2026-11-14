@@ -129,3 +129,7 @@ The `organ_pipe` clip has two synth layers on. Section isolation, the oracle lin
 Update 2 (B3 tail): with the processor tail's amplitude response (`b3_tail.rs`, [organ-b3-tail](organ-b3-tail.md)) the `b3wheels` row of `organ_b3` becomes sub +16.8, low -3.0, mid -11.9, presence +1.2, brilliance +7.4 dB, RMS -2.6 dB, crest 23.1 dB, 0.021 % at full scale, score 8.07 (4.76 without the tail, default 4.83): the oracle-faithful chain is 12 dB too dark in the mid band against the recording, so the default stays Legacy.
 
 Update 3 (stage ablation): the B3 mid deficit of the tail variant and the Vox mid excess are not post-chain effects (rotary, reverb, vibrato, firmware FX, delay, EQ, modulation move the mid band by under 1 dB; the Twin amp lifts Vox presence and brilliance). See [b3-vox-video-gap](b3-vox-video-gap.md).
+
+## Update: layer routing (2026-11-13)
+
+The B3 clip sub excess and clipping are the layer zone, not the output stage: with the opt-in `--firmware-routing` (per-layer KB zones and section / layer enables, [engine-routing](engine-routing.md)) `b3wheels` gives sub -1.6 dB, crest 17.2 dB (hardware 18.6), 0 % at full scale and RMS +3.8 dB; presence stays -12.5 dB. The other five segments are unchanged.
