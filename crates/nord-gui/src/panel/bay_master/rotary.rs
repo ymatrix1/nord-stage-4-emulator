@@ -18,6 +18,8 @@ const FRAME_LEFT: f32 = 52.0;
 const FRAME_RIGHT: f32 = 30.0;
 /// Free space kept between the frame and the Master / Organ section boundary (px).
 const SECTION_GAP: f32 = 3.0;
+/// Distance from the bottom of the DRIVE knob rectangle to its name (px): below the `0` and `10`.
+const DRIVE_NAME_DROP: f32 = 9.5;
 /// Space from the frame top to the DRIVE knob top (room for title and the DRIVE name).
 const TITLE_ROOM: f32 = 34.0;
 
@@ -90,7 +92,15 @@ pub(super) fn render_rotary(
         audio.send_command(AudioCommand::SetRotaryDrive(state.rotary_drive));
     }
     mark(ui, "rotary.drive");
-    tag(painter, drive, "DRIVE", 6.0);
+    // Printed below the knob, under the numerals around its ring (photo `NS4-Panel-organ`).
+    label(
+        painter,
+        pos2(drive.center().x, drive.bottom() + DRIVE_NAME_DROP),
+        "DRIVE",
+        6.0,
+        Color32::from_gray(235),
+        Align2::CENTER_CENTER,
+    );
     render_rotary_buttons(ui, painter, o, frame, state, audio);
 }
 

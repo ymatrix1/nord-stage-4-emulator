@@ -52,7 +52,14 @@ fn tempo(f: &mut Fx, c: &mut ChainUi) -> bool {
     } else {
         format!("{:.0} ms", c.tempo_ms)
     };
-    f.caption(f.rect("delay.tempo"), 0, &readout, super::ctx::CAPTION);
+    let r = f.rect("delay.tempo");
+    f.caption_at(
+        r,
+        super::ctx::caption_drop("delay.tempo"),
+        0,
+        &readout,
+        super::ctx::CAPTION,
+    );
     f.legend(
         "delay.mst_clk",
         "MST CLK",
@@ -112,7 +119,8 @@ pub(super) fn delay(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             .enumerate()
             .map(|(i, ch)| (ch.label, i == c.delay_fx, ch.missing))
             .collect();
-        f.led_row("delay.effects", fx, &leds);
+        // LED 0 is BYPASS (no LED printed); CHOR, VIBE, ENS beside FLAM, SPACE.
+        f.led_list("delay.effects", fx, &leds, &[3, 2, 1], &[4, 5]);
         let tip = format!(
             "DELAY EFFECT: {}\nClick: next. Shift+click or hold: VARIATION",
             DELAY_FX[c.delay_fx.min(5)].label
@@ -143,7 +151,7 @@ pub(super) fn delay(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             ("HP", c.delay_filter == DelayFilterMode::Hp, ""),
             ("BP", c.delay_filter == DelayFilterMode::Bp, ""),
         ];
-        f.led_row("delay.filter", flt, &leds);
+        f.led_list("delay.filter", flt, &leds, &[1, 0], &[2]);
         match f.button(
             "delay.filter",
             flt,
