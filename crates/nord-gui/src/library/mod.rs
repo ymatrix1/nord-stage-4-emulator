@@ -5,6 +5,7 @@
 //! heap allocations when hot-swapping instruments.
 
 mod loaders;
+mod piano_bridge;
 mod poll;
 mod program;
 #[cfg(test)]
