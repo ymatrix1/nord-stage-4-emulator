@@ -35,6 +35,9 @@ import organ_farfisa_proc as fp
 W1_BASE, W1_WORDS, RING1 = 0x951F1, 56, 0xB32E8
 W2_BASE, W2_WORDS, RING2 = 0x95241, 68, 0xB32F4
 RATE = fp.RATE
+# VERIFIED (run, s11): output gain accumulator written by the drawbar key-down; the processor
+# output is scaled by `1 - 0.84 G` (G = this word), so `measure` pins it to 0 for a state free gain.
+G_WORD = 0xB44C9
 # VERIFIED (run): the processor reads frame 1 of the ring `0x68` words after frame 0.
 FRAME1 = 0x68
 SKIP, FFT = 1200, 8192
@@ -137,7 +140,7 @@ def cmd_measure(a: argparse.Namespace) -> int:  # pragma: no cover - runs the or
         base, words_n, ring = spec[window]
         rows = []
         for k in range(a.first_k, words_n - 1, a.step_k):
-            extra = zero_window_lines(1) + zero_window_lines(2)
+            extra = zero_window_lines(1) + zero_window_lines(2) + [f"0 {G_WORD:#x} 0x0"]
             extra.append(f"0 {base + k:#x} {fp.f32_bits(a.weight):#x}")
             slot = ring + k
             w = run_chain(a.exe, a.image, [a.script], extra, steps, (SKIP + FFT) // 2, slot)
