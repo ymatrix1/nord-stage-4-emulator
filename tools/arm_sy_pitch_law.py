@@ -35,7 +35,14 @@ import arm_emu as ae
 BLOCK_START = 0xC01E14B8
 BLOCK_END = 0xC01E15A4
 # VERIFIED (listing): field offsets of the voice object `r6` and of the layer object `r0`.
-OBJ_KEY, OBJ_TRANSPOSE, OBJ_CENTS_A, OBJ_CENTS_B, OBJ_FINE, OBJ_LAYER = 0x08, 0x18, 0x14, 0x1C, 0x74, 0x34
+OBJ_KEY, OBJ_TRANSPOSE, OBJ_CENTS_A, OBJ_CENTS_B, OBJ_FINE, OBJ_LAYER = (
+    0x08,
+    0x18,
+    0x14,
+    0x1C,
+    0x74,
+    0x34,
+)
 LAYER_MODE, LAYER_FIXED_KEY, LAYER_TUNE = 0x6C, 0x60, 0x10
 # Scratch objects live in the stack window of the harness (mapped, not firmware data).
 OBJ_BASE = ae.STACK_TOP - 0x8000
@@ -94,7 +101,8 @@ def semitone_error(values: list[float], keys: range = range(128)) -> float:
     """Largest deviation (cents) of `log2(values[i] / values[60])` from `(key - 60) / 12`."""
     base = values[60]
     return max(
-        abs(1200.0 * (math.log2(v / base) - (k - 60) / 12.0)) for k, v in zip(keys, values, strict=True)
+        abs(1200.0 * (math.log2(v / base) - (k - 60) / 12.0))
+        for k, v in zip(keys, values, strict=True)
     )
 
 
