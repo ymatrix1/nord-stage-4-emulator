@@ -61,7 +61,9 @@ impl SynthUi {
             (Btn::LfoWaveform, _) if shifted => self.toggle_group(SynthGroup::Lfo),
             (Btn::LfoWaveform, _) => self.open(SynthPage::LfoWave),
             (Btn::LfoDest, _) => {
-                let d = cycle(usize::from(self.layer().lfo_dest), 4, true) as u8;
+                // VERIFIED (video): hardware taps run Off, OSC CTRL, OSC PITCH, FILTER (both
+                // LEDs), Off; the table is in LED order, so the cycle steps backwards.
+                let d = cycle(usize::from(self.layer().lfo_dest), 4, false) as u8;
                 let dest = super::tables::LFO_DESTS[usize::from(d)].1;
                 self.edit(Scope::Lfo, SynthParam::LfoDest(dest), |l| l.lfo_dest = d);
             }
@@ -239,14 +241,17 @@ mod tests {
     }
 
     #[test]
-    fn lfo_destination_cycles_through_the_four_leds() {
+    fn lfo_destination_taps_follow_the_hardware_order() {
+        // DSoundman LFO video 0:30-0:35: Off -> OSC CTRL -> OSC PITCH -> FILTER.
         let mut s = SynthUi::new();
         let mut seen = Vec::new();
         for _ in 0..4 {
             tap(&mut s, Btn::LfoDest);
             seen.extend(params(&mut s));
         }
-        assert_eq!(seen[0], SynthParam::LfoDest(LfoDestination::OscPitch));
+        assert_eq!(seen[0], SynthParam::LfoDest(LfoDestination::Off));
+        assert_eq!(seen[1], SynthParam::LfoDest(LfoDestination::OscCtrl));
+        assert_eq!(seen[2], SynthParam::LfoDest(LfoDestination::OscPitch));
         assert_eq!(seen[3], SynthParam::LfoDest(LfoDestination::FilterCutoff));
         assert_eq!(s.layer().lfo_dest, 0);
     }

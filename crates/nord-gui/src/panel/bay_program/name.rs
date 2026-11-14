@@ -5,10 +5,12 @@
 /// ASSUMED: 16 characters, the usual Clavia name length; the manual shows no limit.
 pub const MAX_NAME: usize = 16;
 
-/// Characters the ABC soft button offers (the manual shows `A..Z` and digits in the row).
+/// Characters the ABC soft button offers, in dial order.
 ///
-/// ASSUMED: lower case, space and a few separators are also available on hardware.
-pub const CHARSET: &str = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!&";
+/// VERIFIED (order up to `-`): STORE PROGRAM AS strip in the DSoundman piano-pad video
+/// (`hR31DQrxfT4`, 5:45-6:00) reads blank, `a..z`, `A..Z`, `0..9`, `-` left to right.
+/// ASSUMED: the tail `_.!&` after `-` (the strip was cut off at the display edge).
+pub const CHARSET: &str = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.!&";
 
 /// Program categories offered by the Cat soft button.
 ///
