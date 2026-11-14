@@ -2,6 +2,19 @@
 
 use super::*;
 
+/// The delay feedback effect a stored `delay_fb_fx_type` names (odd values are the variation).
+pub(super) fn feedback_fx_of(raw: u8) -> crate::fx::DelayFeedbackFx {
+    use crate::fx::DelayFeedbackFx as F;
+    match raw {
+        2 | 3 => F::Ensemble,
+        4 | 5 => F::Vibe,
+        6 | 7 => F::Chorus,
+        8 | 9 => F::Flam,
+        10 | 11 => F::Space,
+        _ => F::Off,
+    }
+}
+
 impl Stage4Engine {
     pub(super) fn apply_fx_chain(fx: &mut LayerFxChain, dec: &crate::cbin::FxDecoded) {
         fx.mod1_type = dec.mod1_type();
@@ -70,14 +83,7 @@ impl Stage4Engine {
             _ => DelayFilterMode::Off,
         };
         // `Delay Feedback Effect`: 0/1 none, 2/3 ENS, 4/5 VIBE, 6/7 CHOR, 8/9 FLAM, 10/11 SPACE (odd = variation).
-        fx.delay_fx = match dec.delay_fb_fx_type {
-            2 | 3 => crate::fx::DelayFeedbackFx::Ensemble,
-            4 | 5 => crate::fx::DelayFeedbackFx::Vibe,
-            6 | 7 => crate::fx::DelayFeedbackFx::Chorus,
-            8 | 9 => crate::fx::DelayFeedbackFx::Flam,
-            10 | 11 => crate::fx::DelayFeedbackFx::Space,
-            _ => crate::fx::DelayFeedbackFx::Off,
-        };
+        fx.delay_fx = feedback_fx_of(dec.delay_fb_fx_type);
         fx.delay_fx_variation = dec.delay_fb_fx_type >= 2 && (dec.delay_fb_fx_type & 1) == 1;
         fx.delay_feedback = dec.delay_feedback.clamp(0.0, 0.95);
         fx.delay_mix = if dec.delay_enabled {

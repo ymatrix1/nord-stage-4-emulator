@@ -7,6 +7,7 @@
 //! raw) therefore stay bit-identical, and `apply_program(base)` then `export_program(base)`
 //! returns `base`. Control thread only: it allocates.
 
+use super::program_fx_export::invert_fx_chain;
 use super::*;
 use crate::cbin::{CbinError, CbinFile, CbinKind, MorphDeltas, ProgramDecoded};
 
@@ -97,6 +98,13 @@ impl ProgramState {
             &mut o.layer_b_level_morph,
             &self.layer_levels[1],
         );
+        // Both Organ chains load from one block: an edit of either is stored (chain A first).
+        let mut fx = o.fx.clone();
+        invert_fx_chain(&self.fx[0], &mut fx);
+        if fx == o.fx {
+            invert_fx_chain(&self.fx[1], &mut fx);
+        }
+        o.fx = fx;
     }
 
     fn export_piano(&self, prog: &mut ProgramDecoded) {
@@ -121,6 +129,8 @@ impl ProgramState {
                 &self.layer_levels[idx],
             );
         }
+        invert_fx_chain(&self.fx[2], &mut p.fx_a);
+        invert_fx_chain(&self.fx[3], &mut p.fx_b);
     }
 
     fn export_synth(&self, prog: &mut ProgramDecoded) {
@@ -143,6 +153,9 @@ impl ProgramState {
                 &self.layer_levels[idx],
             );
         }
+        invert_fx_chain(&self.fx[4], &mut s.fx_a);
+        invert_fx_chain(&self.fx[5], &mut s.fx_b);
+        invert_fx_chain(&self.fx[6], &mut s.fx_c);
     }
 }
 

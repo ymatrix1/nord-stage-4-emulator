@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn the_inverse_of_apply_returns_the_same_bits_for_random_layers() {
-        for seed in 1..=150 {
+        for seed in 1..=1500 {
             let preset = random_preset(seed);
             for dec in [&preset.layer_a, &preset.layer_b, &preset.layer_c] {
                 let (s, m) = applied(dec);
