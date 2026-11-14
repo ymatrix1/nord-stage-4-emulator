@@ -20,6 +20,7 @@ import synth_stage_shape_sine3 as sine3  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
 import synth_stage_sub as sub  # noqa: E402
 import synth_stage_super1 as super1  # noqa: E402
+import synth_stage_super2 as super2  # noqa: E402
 import synth_stage_sync as sync  # noqa: E402
 import synth_stage_sync1 as sync1  # noqa: E402
 import synth_stage_sync3 as sync3  # noqa: E402
@@ -56,6 +57,7 @@ MODELS = {
     "0x12179a": sub.stage_sub_osc,
     "0x120f55": shape3.stage_shape3,
     "0x12145e": shape4.stage_shape4,
+    "0x124985": lambda lanes: super2.stage_super24(lanes, super2.load_tables()),
 }
 
 
