@@ -21,13 +21,18 @@ impl LayerFxChain {
     }
 
     /// The firmware A-PAN / TREM stage (`FirmwareFx::mod1`): `None` when this program is not one
-    /// of `kFx1Type` 0..=3, runs in Master Clock sync, or has no raw values (engine path).
+    /// of `kFx1Type` 0..=3 (types 4..=11 go to `process_fw_mod1_rest`), runs in Master Clock sync, or has no raw values (engine path).
     fn process_fw_mod1(&mut self, l: f32, r: f32) -> Option<[f32; 2]> {
         let (ty, rate) = (self.mod1_type_raw?, self.mod1_rate_raw?);
-        if ty > 3 || self.mod1_sync_beats.is_some() {
+        if ty > 11 || self.mod1_sync_beats.is_some() {
             self.fw_mod1 = None;
+            self.fw_mod1_rest = None;
             return None;
         }
+        if ty > 3 {
+            return self.process_fw_mod1_rest(ty, u32::from(rate), l, r);
+        }
+        self.fw_mod1_rest = None;
         let shape = if ty < 2 {
             fw_mod1::Mod1Shape::AutoPan
         } else {
@@ -49,6 +54,26 @@ impl LayerFxChain {
             }
         }
         self.fw_mod1.as_mut().map(|st| st.process_frame([l, r]))
+    }
+
+    /// The firmware RM / A-WAH / WAH / PUMP stages (`kFx1Type` 4 to 11). The PED variation of the
+    /// wah (type 9) takes its position from the pedal in place of the rate (ASSUMED: the ARM
+    /// writes the pedal through the rate id, the type 9 law of `c[-16]` is `v / 128`).
+    fn process_fw_mod1_rest(&mut self, ty: u8, rate: u32, l: f32, r: f32) -> Option<[f32; 2]> {
+        self.fw_mod1 = None;
+        let amount = (self.mod1_amount.clamp(0.0, 1.0) * 127.0).round() as u32;
+        let rate = if ty == 9 && self.mod1_ped {
+            (self.mod1_ped_pos.clamp(0.0, 1.0) * 127.0).round() as u32
+        } else {
+            rate
+        };
+        match &mut self.fw_mod1_rest {
+            Some(st) if st.ty() == ty => st.set_params(rate, amount),
+            slot => *slot = fw_mod1_rest::FwMod1Rest::new(ty, rate, amount, self.sample_rate),
+        }
+        self.fw_mod1_rest
+            .as_mut()
+            .map(|st| st.process_frame([l, r]))
     }
 
     pub(super) fn process_mod1(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {

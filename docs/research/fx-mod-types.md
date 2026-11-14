@@ -12,12 +12,14 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 |---|---|---|---|
 | 0, 1 **A-PAN** soft, hard | `0x122D93`, module `0xC02BAF54` | **model VERIFIED, ported** (`FwAutoPan`) | 50 / 70 |
 | 2, 3 **TREM** soft, hard | `0x122C39` (earlier called the all-pass / phaser), module `0xC02BB030` | **role identified (EMPIRICAL), routine already VERIFIED, wired** (`FwAllpass` at mix 0) | 20 / 22 |
-| 4, 5 RM | `0x1239D0`, module `0xC02BB10C` | not modelled | 3 / 3 |
-| 6, 7 A-WAH | `0x123E9B`, module `0xC0279290` | not modelled (by type-module order, ASSUMED) | 6 / 7 |
-| 8, 9 WAH | none of its own (waveshaper `0x123DD2` only) | not decoded | 2 / 2 |
-| 10, 11 PUMP | `0x124374`, `0x122D2C`, module `0xC02BB5E4` | not modelled (order ASSUMED) | 9 / 19 |
+| 4, 5 RM | `0x1239D0`, module `0xC02BB10C` | **model VERIFIED 500/500 twice, ported, wired** (`FwMod1Rest`, s7) | 3 / 3 |
+| 6, 7 A-WAH | `0x123E9B`, module `0xC0279290` | **model VERIFIED, ported, wired** (s7) | 6 / 7 |
+| 8, 9 WAH | `0x123DD2` (what s1 of the first version called the waveshaper: an LFO or pedal driven state variable filter; module `0xC04414C4`) | **model VERIFIED, ported, wired** (s7) | 2 / 2 |
+| 10, 11 PUMP | `0x122D2C` (`0x124374` is the module's reset routine, not audio), module `0xC02BB5E4` | **model VERIFIED, ported, wired** (s7) | 9 / 19 |
 
-Coverage: A-PAN plus TREM are used by **70 of the 89 programs** with Mod 1 enabled (79 %) and by **92 of 123 Mod 1 occurrences** (75 %), counting `fx.mod1=A-PAN` 70, `TREM` 22 (`program-coverage.md` s6). The wiring is opt-in (`FirmwareFx::mod1`, D22/D26); the default render is unchanged.
+Update (s7): all 12 Mod 1 types now run a firmware routine under `FirmwareFx::mod1`, so every one of the 89 programs with Mod 1 enabled (123 occurrences) is covered.
+
+Coverage of the first pass: A-PAN plus TREM are used by **70 of the 89 programs** with Mod 1 enabled (79 %) and by **92 of 123 Mod 1 occurrences** (75 %), counting `fx.mod1=A-PAN` 70, `TREM` 22 (`program-coverage.md` s6). The wiring is opt-in (`FirmwareFx::mod1`, D22/D26); the default render is unchanged.
 
 Not done in this pass (stopped at what could be verified): the **delay type** (`kDlyFbFxType`) routines, the **Mod 2 types** (Phaser `0x12379B`, Flanger, Chorus, Vibe, Ensemble, Spin: only the module map of [fx-contexts](fx-contexts.md) s4 exists) and tempo sync / loop period. See s6.
 
@@ -101,8 +103,41 @@ Hence `g` sweeps `[1 - v/127, 1]`: **maximum level 1 at any amount, minimum `1 -
 |---|---|
 | Delay types (`kDlyFbFxType`) | module map only ([fx-contexts](fx-contexts.md) s4: types 2, 3 `0x123A7B / 0x123BD0`, 4, 5 `0x123BEE`, 7 `0x122F77`, 9 `0x1230CA`, 10, 11 packed multi-tap `0x12314A / 0x12329B / 0x123466`); the base words of those instances are not in the image (the Dly row of the synth unit holds only the delay itself) and the ring variant `0x120AB5` is not modelled, so a register check needs invented pointers |
 | Mod 2 types | CHOR (types 4, 5, `0x122E24`, `0x122F77`) decoded, verified and ported: [fx-mod2-types](fx-mod2-types.md). Open: PHAS `0x12379B` / `0x1238FC`, FLANG `0x12348D` / `0x123539`, VIBE `0x123C84` / `0x123DB4`, ENS, SPIN |
-| Mod 1 RM, A-WAH, WAH, PUMP | 20 programs, routines named above, no model yet |
+| Mod 1 RM, A-WAH, WAH, PUMP | done in s7 |
 | Tempo sync and loop period | not decoded (the stage only runs free) |
+
+## 7. RM, A-WAH, WAH and PUMP (Mod 1 types 4 to 11) and the boot words
+
+Checked 2026-11-14. The pipeline is the one of [fx-mod2-types](fx-mod2-types.md) s7: `tools/fx_listing_gen.py` (four new `ROUTINES`) turns the ADI listing into `tools/fx_model_mod2_gen.py`, `tools/fx_model_mod2.py` describes the scenarios, `tools/fx_models.py` compares every written word with `sharc-fx`, `tools/fx_mod2_rust_gen.py` writes `fw_rm.rs`, `fw_wah.rs`, `fw_awah.rs`, `fw_pump.rs`.
+
+```bash
+python tools/fx_models.py check rm   SRAM/core2_sram.bin --scenarios 500 --seed 5   # 500/500 bit-identical (seed 7: 500/500)
+python tools/fx_models.py check wah  SRAM/core2_sram.bin --scenarios 500 --seed 5   # 500/500 (seed 7: 500/500)
+python tools/fx_models.py check awah SRAM/core2_sram.bin --scenarios 500 --seed 5   # 500/500 (seed 7: 500/500)
+python tools/fx_models.py check pump SRAM/core2_sram.bin --scenarios 500 --seed 5   # 500/500 (seed 7: 500/500)
+python tools/fx_models.py trace rm|wah|awah|pump SRAM/core2_sram.bin                # 76 / 85 / 83 / 49 instructions identical
+python tools/fx_golden_mod1.py > crates/nord-core/src/fx/tests_mod1_golden.rs
+```
+
+| Routine | pc range | What it does (from the model and the words) | Words |
+|---|---|---|---|
+| `rm` (4, 5) | `0x1239D0..0x123A7A` | carrier phase `c[-0x1F] += c[-0x20] << c[-16]` when the pointer `c[-0x1D]` is the phase word itself; two sine polynomial samples per block (triangle, `c[-0x14..-0x12]`) with smoothed depth `c[-27]`, `c[-25]`, a ramp `c[-22] += c[-23]` towards -1 (reset to 0 when the sum is positive: the sign of `c[-23]` at rate 0 holds it), gain `1 - c[-26] ...` on the input pair | `c[-32]` carrier increment (table, `0x38400 .. 0xFB63B00` piano), `c[-27]`, `c[-26]` depth `v / 127`, `1 - v / 127` |
+| `awah` (6, 7) | `0x123E9B..0x123F60` | envelope of the input `c[-4]` (smoothed square, cleared on entry), clipped sweep `f2`, state variable filter with two integrators per channel (`c[-0x1A..]`, `c[-12..]`) | `c[-2]` amount (`-0.5 + v / 254`), `c[-20]` envelope coefficient (quadratic in the rate), type words `c[-6..-22]` (Q, bounds) differ between 6 and 7 |
+| `wah` (8, 9) | `0x123DD2..0x123E9A` | LFO phase `c[-0x1F] = [c[-0x1D]] + c[-0x20]`, triangle to sine polynomial, **or the position word `c[-16]` when `c[3]` is 0** (type 9, the PED variation: the rate id carries the pedal `v / 128`), then the same state variable filter as A-WAH | `c[-32]` increment `12800 + 16384 v`, `c[-16]` position, `c[0]` amount (table), `c[3] = 1 / 0` |
+| `pump` (10, 11) | `0x122D2C..0x122D92` | phase `c[-0x1F] += c[-0x20]` (reset to `0x80000000` when the counter `c[-0x15]` differs from its copy `c[-0x14]`: the Master Clock tick; free running otherwise), capped by `c[-0x16]` (`0x7FFFFFFF` type 10, `0x7F000000` type 11), shaped by a clipped parabola, gain `1 - depth (1 - shape)` on both channels | `c[-32]` increment, `c[-27]` depth `v / 127`, `c[-18]` offset (`0x80000000` / 0), `c[-22]` cap |
+
+**WAH found.** The first pass labelled `0x123DD2` a waveshaper because of its polynomial. It is the routine of module `0xC04414C4`, which the type switch writes for every Fx1 type (2 words to park it, 12 words for type 8, 3 for type 9: `fx-type-modules.csv`), so it is the WAH. **PUMP**: `0x124374` (`r0 = emuclk`, clears the ring and state, `r0 - emuclk` stored at `c[0x3F]`) is the reset run at activation; the audio routine is `0x122D2C`.
+
+**Boot words (VERIFIED).** The boot message log of the harness (96,111 messages in this capture) holds the words the ARM sends to the DSPs; the DSP words of the FX instances are reduced to the last value per word by `python tools/arm_bulk_tables.py capture target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin --out target/bulk` (`fx_core1.script`, 3,499 words). Applied over the static image they give the words that no type or parameter write lists: the **self pointers** (`c[-29]` of RM, WAH, PUMP: the address of `c[-31]`; PHAS 1 `c[-29]`; ENS `c[-5]`; SPIN `c[-8]`: `c[-10]`), the **block counts (1 block of 2 frames for the piano unit)**, and the instance constants (PHAS 1 all-pass gains `c[-26] = 0.3125`, `c[-25] = 0.5`, `c[-23] = 0.7383`, `c[-17] = -0.7`, `c[-16] = -0.7299`; SPIN speed clamps and tap words; PUMP `c[-17..-15]`; A-WAH `c[-5] = 1.44`). `python tools/fx_mod1_laws.py rows SRAM/core1_sram.bin target/bulk/fx_core1.script` writes [data/fx-mod1-rows.csv](data/fx-mod1-rows.csv) (name, offset, word, source `image` or `boot`); `python tools/fx_mod1_laws.py rust` writes `fx/fw_mod1_data.rs` (rows, type words and the 11 sample laws of types 4 to 11). Tests: `tools/tests/test_fx_mod1_laws.py`, `fx::fw_mod1_rest`, `fx::fw_mod2_run` (golden), `fx::tests_fw_mod1_chain`.
+
+**Stage (`fx/fw_mod1_rest.rs`, `FwMod1Rest`).** Row (relocated self pointers), then type words, then the laws at `v` (linear between the samples, exact at them); phase increments x `F / fs`; **latency 2 frames** (the piano unit runs one block of two frames per call; the first Mod 1 stages of s2 / s3 assume 4 frames from the synth boot row: the piano boot word `c[-3]` of A-PAN is 1, so the LFO rate of `FwMod1Stage` may be a factor 2 low for the piano and organ units: open, OQ21). Wiring: `process_fw_mod1` sends types 4 to 11 to the new stage; Master Clock sync (`mod1_sync_beats`) and missing raw values keep the engine path; WAH type 9 with `mod1_ped` takes `mod1_ped_pos * 127` as its rate value (ASSUMED: the pedal reaches the DSP through the rate id).
+
+### 7.1 Not verified
+
+* No hardware clip contains RM, A-WAH, WAH or PUMP (`docs/research/data/emu_vs_hw_*.json`: the Vox clip has Mod 2 VIBE only); the stages are compared with the oracle word for word, not with hardware.
+* The piano unit words are used for every layer (ASSUMED); the synth unit has its own rate tables (RM `0x1C200 .. 0x7DB1D00`).
+* The PUMP counter `c[-0x15]` (Master Clock tick) is not driven: the stage free runs; sync stays on the engine.
+* Filter coefficients (A-WAH, WAH) are those of 43.4 kHz: ASSUMED about 10 % cutoff shift at 48 kHz.
 
 ## Implications
 
@@ -110,6 +145,8 @@ Hence `g` sweeps `[1 - v/127, 1]`: **maximum level 1 at any amount, minimum `1 -
 * Fx1 types 2, 3 are a tremolo; the module name "all-pass" came from the shape of the routine, not from a role.
 
 ## Follow-ups
+
+0. Compare a hardware recording of a WAH or PUMP program; drive the PUMP counter from the Master Clock; check the 2-frame versus 4-frame call of the A-PAN / TREM stages on the piano unit (s7).
 
 1. Model `0x12379B` (Fx2 type 0, Phaser) and `0x12348D` / `0x123539` (Fx2 types 2, 3) with the same tools: their instance words are static image DM like the A-PAN row.
 2. Find the Dly feedback-effect instance words (activation path, [fx-contexts](fx-contexts.md) s7) so the `0x123A7B` family can be modelled on a real instance.
