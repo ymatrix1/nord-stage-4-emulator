@@ -69,7 +69,10 @@ impl LayerFxChain {
         };
         match &mut self.fw_mod1_rest {
             Some(st) if st.ty() == ty => st.set_params(rate, amount),
-            slot => *slot = fw_mod1_rest::FwMod1Rest::new(ty, rate, amount, self.sample_rate),
+            slot => {
+                *slot =
+                    fw_mod1_rest::FwMod1Rest::new(ty, rate, amount, self.sample_rate).map(Box::new);
+            }
         }
         self.fw_mod1_rest
             .as_mut()

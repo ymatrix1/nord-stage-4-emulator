@@ -292,8 +292,9 @@ pub struct LayerFxChain {
     /// Raw `kFx2Type` (`0..=11`) of the program; the firmware Mod 2 runs for every type 0 to 11.
     pub mod2_type_raw: Option<u8>,
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
-    /// The firmware RM / A-WAH / WAH / PUMP stages (`firmware_fx.mod1`, types 4 to 11).
-    fw_mod1_rest: Option<fw_mod1_rest::FwMod1Rest>,
+    /// The firmware RM / A-WAH / WAH / PUMP stages (`firmware_fx.mod1`, types 4 to 11), boxed:
+    /// the context, ring and scratch arrays are several KB.
+    fw_mod1_rest: Option<Box<fw_mod1_rest::FwMod1Rest>>,
     /// The firmware chorus (`firmware_fx.mod2`), boxed: the ring is 4 KB.
     fw_mod2: Option<Box<fw_mod2::FwMod2Stage>>,
     fw_vibe: Option<Box<fw_vibe_stage::FwVibeStage>>,
