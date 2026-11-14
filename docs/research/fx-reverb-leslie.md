@@ -1,7 +1,7 @@
 # FX reverb mix, reverb type words, `kCmpResponse` and the Leslie status
 
 - **Checked:** 2026-11-13
-- **Sources (local, never committed):** the settled ARM snapshot and `unicorn` harness ([fx-delay-time](fx-delay-time.md) s2, `tools/fx_clients.py`), `capstone` listings of the `kCmpResponse` handler, `docs/research/data/fx-type-words.csv`. Derived data committed: [data/fx-reverb-amt.csv](data/fx-reverb-amt.csv) (128 captured word pairs), [data/fx-reverb-types.csv](data/fx-reverb-types.csv) (the per-type differing words).
+- **Sources (local, never committed):** the boot log (`tools/arm_bulk_tables.py capture`), the FX images (`ns4_dsp_images.py`, `ns4_dsp_ldr.py --sram`), `sharc-fx --trace`, `sharc-visa` listings, the settled ARM snapshot and `unicorn` harness ([fx-delay-time](fx-delay-time.md) s2, `tools/fx_clients.py`), `capstone` listings of the `kCmpResponse` handler, `docs/research/data/fx-type-words.csv`. Derived data committed: [data/fx-reverb-amt.csv](data/fx-reverb-amt.csv) (128 captured word pairs), [data/fx-reverb-types.csv](data/fx-reverb-types.csv) (the per-type differing words).
 - **Question:** what do `kRvbAmt` and the reverb type words write, why does `kCmpResponse` write no value-dependent word, and where is the Leslie?
 
 Tags follow `.agents/rules/provenance-in-code.md`.
@@ -13,7 +13,7 @@ Tags follow `.agents/rules/provenance-in-code.md`.
 | `kRvbAmt` (0..127) | two words per reverb module (`0xC02BB44C` words `-0x1F`, `-0x1E`; the type 0, 1 module `0xC02BB54C` words 18, 19): send `wet = x^2 (2 - x)`, `x = v / 128`, and dry `sqrt(1 - wet^2)`; at `v = 127` exactly `(1, 0)`. Equal power, max abs error 1.2e-7 over all 128 values | words VERIFIED, role EMPIRICAL |
 | `kRvbType` words | types 2..11 write 64 words each; only 10 to 21 of them differ from type 2 (s3) | VERIFIED (capture) |
 | `kCmpResponse` | the handler (jump table entry reached from `0xC010C990`, gate `0xC010D0AC`, body `0xC0012270`) **ignores the value**: it re-sends the four constants attack `0.102071`, `1.0`, release `4.607e-4`, `0.04` for 0 and 1, in every state tried (fresh, `kCmpEnable` 1, `kCmpAmt` 64, `Edt_Com_kEffectsCmpGlobal` 0 and 1). The 253-instruction trace is identical for both values | EMPIRICAL (4 states x 2 values; the jump-table path never reads the value) |
-| Types 0, 1 routines | `0x12417E` / `0x12435C` are a half-rate wrapper (fs/4 Butterworth banks, hold, dry/wet mix) around the core `0x123F61`; wrapper bit-exact (6000 of 6000 words), core not modelled (s5) | wrapper VERIFIED, core structure EMPIRICAL |
+| Types 0, 1 routines | `0x12417E` / `0x12435C` are a half-rate wrapper (fs/4 Butterworth banks, hold, dry/wet mix) around the core `0x123F61`; wrapper bit-exact (6000 of 6000 words), core modelled instruction by instruction against the oracle (s6); its pointer words and PM coefficient list are not found (s6, s7) | wrapper and core code VERIFIED, data open |
 | Leslie | no code record in the 100 FX routines; the rotor runs from the ARM tick state machine and the ORG DSP image. Only `kEffectsLeslieDrv` (`v / 127`, words 3 and 7 of its row) is mapped | open (not attempted beyond [fx-contexts](fx-contexts.md) s6) |
 
 ## 2. Reverb amount
@@ -49,7 +49,7 @@ Structure (EMPIRICAL, positions only): the types come in pairs of two (2 and 3, 
 
 Dispatch trace of `Edt_Effects_kCmpResponse` (id `0x1AB`): `0xC00CC4F0` dispatch, `0xC010C990` jump table (`id - 0x18A` entries), `0xC010D0AC` (`cmp r3, #0; beq` to `0xC010D78C`), `0xC0012270` (the compressor setter: it loads the effect slot, then sends four words through the message queue in the block `0xC0012588`) with `r3 = 0` for both values. The second path (`0xC01F5CC0`) that would use a non-zero gate was never entered. So `kCmpResponse` has no DSP effect in OS v1.66 in the settled state: the engine's `comp_fast` keeps its legacy meaning, and the compressor words stay `CMP_ATTACK` / `CMP_RELEASE`.
 
-## 5. Reverb routines of types 0 and 1 (Spring): wrapper modelled, core not
+## 5. Reverb routines of types 0 and 1 (Spring): wrapper and core code modelled
 
 Checked 2026-11-13 with `tools/adi_dis.py` on the FX Core 2 image (`ns4_dsp_ldr.py --sram`) and the `sharc-fx` oracle. The earlier reading "five multi-tap routines" does not hold for `0x12417E` / `0x12435C` (types 0, 1 are SPRING in the UI, [effects-and-routing](../specs/effects-and-routing.md) s3): they are **a sample-rate wrapper around one core routine, `0x123F61`**, called through `I8` (`call (m8,i8)`, `i8 = 0x123F61` in both). `0x12417E` is 0xDE parcels to the call and returns at `+0x1DD`; `0x12435C` (`+0x1DE`..`+0x1F5`) is the 2-frame variant; the rest up to `+0x275` is the clear routine of the same module (zeroes the three buffers and the state words, reads `emuclk`).
 
@@ -63,9 +63,9 @@ Checked 2026-11-13 with `tools/adi_dis.py` on the FX Core 2 image (`ns4_dsp_ldr.
 
 Tests: `tools/fx_reverb_model.py check4` (`0x12417E` end to end with the core's outputs read from the oracle trace: 5 seeds x 30 carried calls x 40 words = 6000 of 6000 words identical; an underflowing value flushes to zero, the sign of that zero is not modelled) and `check2`; `tools/tests/test_fx_reverb_model.py` (no image); Rust `fx/fw_rvb_wrap.rs` (`FwRvbWrap`, `fw_rvb_mix2`) against generated golden words (`tests_rvb_wrap_golden.rs`, ext40 reference exact, f32 path below 2e-6).
 
-### The core `0x123F61` (231 parcels, structure only)
+### The core `0x123F61` (structure; the instruction-level model is s6)
 
-Read from the listing and from oracle runs (EMPIRICAL; not a model):
+Read from the listing and from oracle runs (EMPIRICAL):
 
 * `c[0x12]` is smoothed into `c[0x14]` with the pole `c[0x11]` (`c[0x14] = c[0x14] c[0x11] + c[0x12] (1 - c[0x11])`; `c[0x12]` is the `kRvbAmt` send word, s2). `c[0x16]` and `c[-6]` scale the output, which is the **previous** call's result (`c[-0x20]`, `c[-0x1E]`), a one call latency.
 * Two input frames are averaged `(f0 + f1) / 2`, written into a circular line A (`b2 l2 i2 m4` from `c[0x27] c[0x28] c[0x29] c[0x2B]`) and read back at the tap offset `c[0x2B] = -2658` words (type words, both types); a second line B (`c[0x2C..0x30]`, tap `c[0x30] = -4068`).
@@ -84,23 +84,64 @@ A chain of dispersive all-passes at half rate is what a spring reverb needs; thi
 
 An impulse through the oracle with **synthetic** buffer pointers (the lengths and base words are set by the ARM at module creation and are unknown) shows the structure but not the real decay: with 4096 / 8192 / 4096 word buffers and the type 0 words the first wet output comes at output sample 5441 (113 ms), then a band-limited oscillation of period 8..11 samples; the right channel stays silent because the pointer set is incomplete. This is not a measurement of the hardware reverb.
 
-## 6. Not done (stop point)
+## 6. Core `0x123F61`: instruction-level model (2026-11-13)
+
+`tools/fx_model_rvbcore.py` is a transliteration of all 230 instructions of the core (one `Machine.step` per executed instruction, 17 of them in the 21-pass loop body `_body`), produced from the `sharc-visa` listing of the FX Core 2 image. `tools/fx_rvbcore_check.py check` runs the 2-frame wrapper `0x12435C` (which calls the core) in `sharc-fx --trace` and compares **every register and DAG register before every instruction** plus every written memory word with the model:
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DSP
+python tools/ns4_dsp_ldr.py DSP/dsp_image_0_FX.bin --sram SRAM
+python tools/fx_rvbcore_check.py check SRAM/core2_sram.bin --calls 40 --seed 3           # real line lengths
+python tools/fx_rvbcore_check.py check SRAM/core2_sram.bin --calls 170 --seed 5 --short  # data reaches every stage
+uv run pytest tools/tests/test_fx_rvbcore.py      # pinned golden words, no image needed
+```
+
+| Run | Result |
+|---|---|
+| 40 calls, seed 3, type 0 words, lines 2658 / 4068 words | 9360 of 9360 written words identical, every instruction's registers equal |
+| 60 calls, seed 2, `--short` (lines 16 / 24 words, data reaches the loop) | 14040 of 14040 identical |
+| 170 calls, seed 5, `--short` (data reaches the all-pass taps, first tap 114 calls) | 39780 of 39780 identical, every instruction's registers equal |
+
+What the oracle taught beyond the listing text (VERIFIED by the trace comparison):
+
+* `[pre-mod]` in the listing is the **pre-modify without write-back**: `R9 = DM(I5, M6) [pre-mod]` reads `I5 + M6` and leaves `I5` unchanged. A plain `DM(Ii, Mm)` is post-modify.
+* A write to `Bn` also loads `In`; post-modify, pre-modify and `MODIFY` honour `Bn` / `Ln` (`fx_pe.dag_next`, the rule of `crates/nord-sharc/src/core/dag.rs`: a non-negative step reaching `B + L` subtracts `L`, a negative step below `B` adds `L`, one wrap only).
+* A float result below the smallest normal number flushes to zero (the loop reaches it); the sign of a zero differs between oracle and `Fraction` arithmetic and is not modelled (the trace compare treats `+0` and `-0` as equal).
+* `M4 = S1` takes the PEy element, `R3 <-> S2` swaps `PEx.R3` with `PEy.S2`, `S1 = R0` swaps the pair (as in [fx-routine-models](fx-routine-models.md)); `M10 = 2` (the PM list is read as pairs).
+
+Dataflow (EMPIRICAL, read from the model): the two input frames are averaged per channel and the pair is written to line A (`DM(I2, M2)`, circular, one pair = 2 words per call) after adding `c[-11] * c[-28]` (a state word); line A is read at `c[43]` words behind the write pointer; a loop of `c[-18] = 21` passes runs the 8-multiply two-section filter on pairs read from the PM list at `I10 = c[-12]` (4 words per pass), with the state words `c[-26 .. -20]`; line B (`c[44 .. 48]`) is written and read the same way; four all-pass sections share the buffer `B6 = c[50]`, `L6 = c[0x20]`: each reads the pair at the left tap (`DM(I4, M0)`) and the pair `L6` words further at the right tap (`DM(I5, M6)`, so the buffer holds **two copies of length `L6`**) and writes both; `R12`, `R14` of one call are the results of the previous call (one call latency) and the smoothed gain `c[0x15]` is rewritten.
+
+### Pointer and length words (task 2): not recoverable here, layout assumed
+
+| Word | Meaning in the core | Source |
+|---|---|---|
+| `c[0x20] = 1570` | all-pass buffer length `L6` (largest tap 1568 + 2) | VERIFIED: boot state of the Rvb instances at `0xB2439`, `0xB2573`, `0xB26AD`, `0xB27E7`, `0xB2921` (`tools/arm_bulk_tables.py capture`, `fx_core1.script`) |
+| `c[18]`, `c[19]` | `kRvbAmt` send and dry | VERIFIED (s2) |
+| `c[0x27 .. 0x29]`, `c[0x2B]`; `c[0x2C .. 0x2E]`, `c[0x30]` | line A base, length, write pointer, tap; line B | **not in the boot log** (the ARM sends 39 words per instance, none of these) and **zero in the DSP image** |
+| `c[0x32]`, `c[0x34]` | all-pass base, write pointer | same |
+| `c[-13]`, `c[-12]`, `c[0x11]`, `c[0x16]`, `c[0x17]` | loop state array, PM coefficient list, smoothing pole, output scales | same; the list at `I10` is not in the image's PM data (`0x94378..` holds only the Butterworth banks) |
+
+The tap words fix the **shape** of the lines: with `L = |tap|` (ASSUMED) each is a pure delay of 2658 and 4068 words (1329 and 2034 calls, 111 and 169 ms at 24 kHz if one call is one stereo pair). The model needs a pointer layout, not the firmware's addresses (`layout()` in the check tool uses regions at `0xB5000 .. 0xB9000` and a random coefficient list: the check proves the routine, not the data). **The 84-word coefficient list is the open item**: without it the decay and spectrum of the type 0, 1 reverb cannot be reproduced, so no impulse response or decay time is quoted.
+
+## 7. Not done (stop point)
 
 | Item | State |
 |---|---|
-| Core `0x123F61` bit-exact model | not done: 231 parcels with five circular-buffer pointer files (`B2/L2/I2/M4`, `B6/L6/I6`), a PM coefficient list read through `I10`, a register-count loop and dual-PE address arithmetic (`m4 = s1` takes a PEy value); `fx_pe.py` has no `B/L` wrap yet. Needs the real pointer and length words (ARM module constructor `0xC02BB54C`), which are not in `fx-type-words.csv` |
-| Types 2..11 (module with no state row) and the Dly feedback pair `0x123ABE` / `0x12314A` / `0x12329B` | not analysed; their code is not these wrappers |
-| End-to-end reverb type, `emu_vs_hw.py` reverb segment, spectral / decay gap | not possible without the core; no segment added |
+| Real pointer words and the PM coefficient list `c[-12]` | not found: not in the 96,111-message boot log, not in the FX image DM / PM. They come from an ARM path the boot capture does not run (reverb enable / module activation, [fx-contexts](fx-contexts.md) s7) or from a table `0xC02BB54C`'s constructor copies; next: hook the DSP-message writer while the harness enables the reverb |
+| Impulse and noise responses with the real context | blocked by the list above |
+| Rust port (`fx/`, opt-in `FirmwareFx::reverb`) | not started: the model (230 instructions) is the specification, but a port without the real list would only reproduce the routine on synthetic data |
+| `emu_vs_hw.py` reverb segment, decay time, spectral gap | not possible without the list |
+| Types 2..11 (`0x123ABE`, `0x12314A`, `0x12329B`, `0x12417E` variants) | not started; the listing-to-steps generator handled every instruction form of the core and applies to them |
 | Leslie / rotary | not started |
 
 ## Implications
 
-- The reverb dry / send law is exact; it is the only part of the reverb the Rust engine can follow the firmware on now.
+- The reverb dry / send law is exact; it is the only part of the reverb the Rust engine can follow the firmware on now. The core routine is reproduced (s6) but not its data.
 - `kCmpResponse` is closed: no word depends on it.
 
 ## Follow-ups
 
-1. Capture the pointer and length words of the type 0 instance (ARM harness, `0xC02BB54C` after the module constructor) and add `B/L` circular addressing to `fx_pe.py`; then transliterate the core `0x123F61` (the wrapper is done).
-2. Check the SPRING reading: compare the all-pass taps of s5 against a spring recording (`emu_vs_hw.py`).
-3. Types 2..11 (`0x9500A..` words, s3): find their routines; they are not `0x12417E` / `0x12435C`.
+1. Find the pointer words and the PM coefficient list `c[-12]` (s7): run the reverb enable / module activation in the ARM harness with the DSP-message hook on, or find the table the constructor of `0xC02BB54C` copies. Then: impulse and noise responses of `0x123F61` in the oracle, decay time, the Rust port from the model.
+2. Check the SPRING reading against a recording (`emu_vs_hw.py`) once the response exists.
+3. Types 2..11 (`0x9500A..` words, s3): their routines (`0x123ABE`, `0x12314A`, `0x12329B`) are not these wrappers; the listing-to-steps generator applies.
 4. Leslie: capture the rotor words over many ARM ticks per `kEffectsLeslieSpeed` value.
