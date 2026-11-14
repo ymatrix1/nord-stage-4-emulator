@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """SAMPLES note-on in the booted host firmware: run the voice update `0xC01E00AC` end to end.
 
-Evidence and tables: `docs/research/synth-sample-kernel-rule.md` section 12. After `arm_sample_probe`
-has loaded and bound a sample (layer table index 0), a MIDI note-on posts two events to the handler
-queue `0x9062E330` (class `0xC02FDB40`). Nothing in the harness drains that queue, so the voice
-update (slot 1) never ran. This tool plays the part of the consumer and of one DSP status bit:
+Evidence and tables: `docs/research/synth-sample-kernel-rule.md` section 12. After
+`arm_sample_probe` has loaded and bound a sample (layer table index 0), a MIDI note-on posts two
+events to the handler queue `0x9062E330` (class `0xC02FDB40`). Nothing in the harness drains that
+queue, so the voice update (slot 1) never ran. This tool plays the part of the consumer and of
+one DSP status bit:
 
 * `pump` pops the queue head-first, `[handler + 8]` head index, `[handler + 4]` count, items at
   `[handler + 0x10 + 4 i]` (ring of `0x200`), and calls the event class thunk `[[event]]`
@@ -46,7 +47,8 @@ HANDLER_VTABLE = 0xC02FDB40
 QUEUE_COUNT, QUEUE_HEAD, QUEUE_ITEMS, QUEUE_SIZE = 4, 8, 0x10, 0x200
 VOICE_UPDATE = 0xC01E00AC
 # VERIFIED (listing): the wait for the DSP status bit, and the two instructions after the voice
-# KEY and TRANSPOSE stores (`str r3, [r4, #8]` at `0xC01E0A00`, `str r1, [r4, #0x18]` at `0xC01E0A10`).
+# KEY and TRANSPOSE stores (`str r3, [r4, #8]` at `0xC01E0A00`, `str r1, [r4, #0x18]` at
+# `0xC01E0A10`).
 ACK_PCS = (0xC01E0694, 0xC01E06A4)
 KEY_STORE_DONE, TRANSPOSE_STORE_DONE = 0xC01E0A04, 0xC01E0A14
 # VERIFIED (listing `0xC01E14AC..0xC01E15A4`): voice object fields the pitch block reads.
