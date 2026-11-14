@@ -238,6 +238,8 @@ impl Stage4Engine {
             slot.delta_aftertouch = morph.aftertouch;
             slot.delta_pedal = morph.ctrl_pedal;
         }
+
+        self.record_program_routing(prog);
     }
 }
 

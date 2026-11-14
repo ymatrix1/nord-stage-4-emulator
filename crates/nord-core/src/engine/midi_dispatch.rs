@@ -31,7 +31,7 @@ impl Stage4Engine {
                         continue;
                     };
                     let split_gain = if route == NoteRoute::Global {
-                        self.split_router.note_gain(layer, note)
+                        self.keybed_gain(layer, note)
                     } else {
                         1.0
                     };
