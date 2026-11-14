@@ -27,22 +27,28 @@ not in a worktree: pass the absolute path from a worktree, e.g.
 
 ## The bar
 
-Presets `Firmware preset` (`--firmware-all`), `Legacy preset` (`--legacy-all` plus the engine amp)
-and `Defaults`, then one group per engine, each switch with a tooltip (`[STATUS] flag` and a
-one-line meaning) and an `Engine: ...` status line with the active set (also in the window title):
+Whole-engine presets `Firmware preset` (`--firmware-all`), `Classic preset` (`--legacy-all` plus
+the engine amp) and `Defaults`; each group (Organ, Piano, Synth, FX) also has small `C` (Classic)
+and `F` (Firmware) buttons that set only that engine's controls and leave the others as picked
+(`firmware_panel/presets.rs`; tests check that the four engine presets compose to the whole
+presets). Below, one row per group, each switch with a tooltip (`[STATUS] flag` and a one-line
+meaning) and an `Engine: ...` status line with the active set (also in the window title). Every
+opt-in field of `FirmwareOptions` has a control:
 
 | Group | Controls |
 |---|---|
-| Organ | Source, B3 tail (enabled with B3 wheels), Rotary drive, Level |
-| Synth | Chain, Filter, Measured laws, Shape (checkbox + slider) |
-| Piano | Level, SMP bus scale |
-| FX | Amp path, Firmware FX, Firmware reverb |
+| Organ | Source, B3 tail (enabled with B3 wheels), Farfisa processor, Rotary drive, Level, Leslie (engine / firmware), Ring and Leslie gain (enabled with the firmware Leslie) |
+| Piano | Level, SMP bus scale, Layer law |
 | Global | Firmware routing |
+| Synth | Chain, Stage oscillators, P table, Filter, Measured laws, Shape (checkbox + slider), Sample kernel, Sample pitch |
+| FX | Amp path, All ports, then one checkbox per port: Delay laws, Delay time, Reverb mix, Reverb (Spring and the multi-tap types 2..11), Compressor, Mod 1, Mod 2, Amp EQ |
 
 Changes are sent as `AudioCommand::SetFirmwareOptions` and `FirmwareOptions::apply_exact` runs on
 the audio thread between blocks (plain field writes, no allocation; rotary scaling is a flag, the
-program's drive is never rewritten). Only a real B3 tail change rebuilds the wheel tables
-(allocates once, resets the wheel phases and can click).
+program's drive is never rewritten). Two switches allocate once: a real B3 tail change rebuilds
+the wheel tables (resets the wheel phases and can click), and switching the firmware Leslie on
+or changing its ring builds a new processor (the rotor restarts); identical repeated commands keep
+both. Switching the Leslie back to the engine rotary drops the processor.
 
 ## Headless check (no window, no audio device)
 
@@ -148,22 +154,36 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | `--tone-source` (Organ: Source) | `firmware` pipe bank VERIFIED vs SHARC oracle; `b3wheels` ladder VERIFIED 2.5e-11, per-key weights not modelled; `vox`, `farfisa` partial; `legacy` ASSUMED | MIXED per choice |
 | `--b3-tail on\|off` (Organ: B3 tail) | B3 processor-tail response (`docs/research/b3-vox-video-gap.md`) | EMPIRICAL |
 | `--rotary-drive engine\|unity\|scaled` (Organ: Rotary drive) | `tanh(g x)`, `tanh(g x)/g`, or drive/10 (`docs/research/b3-rotary.md`) | EMPIRICAL |
+| `--farfisa-processor on\|off` (Organ: Farfisa processor) | Key-down weights and line gain of the Farfisa processor `0x122B85` (Farfisa wheels source; partial) | ASSUMED |
+| `--leslie firmware\|engine` (Organ: Leslie) | Firmware Leslie processor instead of the engine rotary (`docs/research/fx-leslie.md`) | MIXED (routine VERIFIED, ring EMPIRICAL) |
+| `--leslie-ring firmware\|advance\|frozen` (Organ: Ring) | History ring pointers of the firmware Leslie: advance (default), booted pass routine, first oracle state | EMPIRICAL |
+| `--leslie-gain-db <dB>` (Organ: Leslie gain) | Gain after the firmware Leslie, -24..+24 dB in the bar | ASSUMED |
 | `--organ-level default\|legacy\|firmware` (Organ: Level) | Organ output level law: legacy bus scale, or firmware swell word and squared layer level (`docs/research/organ-output-law.md`) | MIXED per choice |
 | `--synth-chain legacy\|strip` (Synth: Chain) | Per-voice chain: firmware strip (default since D22, `docs/research/synth-validation.md`) or the classic engine chain; `--legacy-all` selects the classic chain | MIXED (partly VERIFIED) |
 | `--synth-stages` / `--no-synth-stages` (Synth: Stage oscillators) | Bit-exact firmware oscillator stages on the strip chain (noise, Shape Square, SUPER, MULTI, SHAPE SINE); on by default | MIXED (stages VERIFIED, voice weights ASSUMED) |
 | `--synth-p table\|fitted\|off\|g,w2,r2,shape,cutoff` (Synth: P table) | Per-wave oscillator level, cutoff factor and SHAPE word law fitted to hardware clips (`synth/p_table.rs`) | EMPIRICAL |
+| `--sample-kernel key\|ratio` (Synth: Sample kernel) | `SAMPLES` oscillator 12-tap kernel pick: firmware key rule or the ratio rule | MIXED (run VERIFIED, key field ASSUMED) |
+| `--sample-pitch fw\|equal` (Synth: Sample pitch) | `SAMPLES` step from the ARM exponent tables or exact `2^(n/12)` | MIXED (law VERIFIED, root and rate ASSUMED) |
 | `--filter-engine zdf\|firmware` (Synth: Filter) | Firmware synth filter (`synth-engine.md`) | VERIFIED vs oracle |
 | `--measured-laws` (Synth: Measured laws) | 16-voice Super Saw, envelope depth, decay, pitch, vibrato (`audible-genius-synth-lessons.md`) | EMPIRICAL |
 | `--synth-shape <0..1>` (Synth: Shape) | Shape word of the firmware SHAPE oscillator (strip chain); off keeps the saw placeholder | ASSUMED |
 | `--firmware-piano-level` / `--legacy-piano-level` (Piano: Level) | Firmware velocity level law for `.npno` (default on); legacy is the touch curve (`piano-engine.md`) | VERIFIED |
+| `--firmware-piano-layer-law` (Piano: Layer law) | Piano layer fader follows `(v / 127)^2` | ASSUMED |
 | `--firmware-piano-bus` (Piano: SMP bus scale) | Sample path scaled 0.5 instead of 0.55 (Q31 receiver convention) | ASSUMED |
 | `--amp-path engine\|firmware` (FX: Amp path) | Firmware drive stage (engine default) or engine tanh drive and RBJ cabinet; 4 frames latency | VERIFIED (`tests_amp_golden.rs`) |
-| `--firmware-fx` (FX: Firmware FX) | Every `FirmwareFx` port (delay laws, delay time, reverb mix, compressor), see `effects-and-routing.md` | MIXED per port |
-| `--firmware-reverb` (FX: Firmware reverb) | Firmware Spring reverb routine on every chain, Spring types only, 4 frames latency | MIXED (see `fx-reverb-leslie.md`) |
+| `--firmware-fx` (FX: All ports) | Every `FirmwareFx` port at once, see `effects-and-routing.md`; the bar shows them as the eight checkboxes below | MIXED per port |
+| `--firmware-fx-ports delay-laws` (FX: Delay laws) | Delay send and dry gains follow `kDlyMix` | MIXED |
+| `--firmware-fx-ports delay-time` (FX: Delay time) | Free-running delay time follows `kDlyRateClkDiv` | VERIFIED |
+| `--firmware-fx-ports reverb-mix` (FX: Reverb mix) | Reverb send and dry gains follow `kRvbAmt` | MIXED |
+| `--firmware-reverb` (FX: Reverb) | Firmware reverb routines on every chain: Spring (types 0, 1) and multi-tap (types 2..11), 4 frames latency | MIXED (see `fx-reverb-leslie.md`) |
+| `--firmware-fx-ports compressor` (FX: Compressor) | Firmware gain computer with the `kCmpAmt` words, 4 frames latency | MIXED |
+| `--firmware-fx-ports mod1` (FX: Mod 1) | A-PAN and TREM firmware routines, free running only | MIXED |
+| `--firmware-fx-ports mod2` (FX: Mod 2) | Firmware CHOR, PHAS, FLANG, ENS and SPIN stages | MIXED |
+| `--firmware-fx-ports eq` (FX: Amp EQ) | Firmware tone stack `0x1243F4` instead of the engine's three biquads, 2 frames latency | MIXED |
 | `--firmware-routing` (Global: Firmware routing) | Section/layer enables and per-layer KB zones as stored (D22); zone codes open | ASSUMED |
 | `--firmware-all` / `--legacy-all` | Presets: verified paths on (not measured laws, routing, Vox/Farfisa/B3) / all defaults | - |
 
 Defaults are unchanged: with no flag the engine and the `render_hash` stay as before. The same flags
 work for `ns4 render-patch`; both parse them with `FirmwareOptions::from_args`, so a switch added to
-that struct needs a field, a parser, `apply_to`/`apply_exact`, a `summary` entry, a `SwitchInfo` in
+that struct needs a field, a parser, an `apply_exact` line (the GUI path), a per-engine preset entry in `firmware_panel/presets.rs`, `apply_to`/`apply_exact`, a `summary` entry, a `SwitchInfo` in
 `firmware_panel/info.rs`, a bar control and a row in this table (a unit test checks the table).

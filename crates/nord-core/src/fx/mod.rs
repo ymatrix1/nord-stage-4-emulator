@@ -9,6 +9,7 @@ mod amp_eq;
 mod biquad;
 mod delay;
 mod firmware_fx;
+mod firmware_fx_ports;
 mod fw_allpass;
 mod fw_amp_drive;
 mod fw_amp_stage;
@@ -151,6 +152,7 @@ mod types;
 
 pub use biquad::*;
 pub use firmware_fx::FirmwareFx;
+pub use firmware_fx_ports::PORT_NAMES as FX_PORT_NAMES;
 pub use fw_allpass::{ctx as fw_allpass_ctx, FwAllpass};
 pub use fw_amp_drive::{ctx as fw_amp_drive_ctx, DriveTables, FwAmpDrive};
 pub use fw_autopan::{ctx as fw_autopan_ctx, FwAutoPan};

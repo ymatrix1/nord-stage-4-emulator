@@ -51,6 +51,11 @@ impl<F: Fp> Leslie<F> {
         l
     }
 
+    /// The history ring behaviour this processor was built with.
+    pub fn ring(&self) -> RingAdvance {
+        self.core.ring()
+    }
+
     /// Sets the rotor speed words (`0xB2F25`, `0xB2F26`, `0xB2FA1`).
     pub fn set_speed_words(&mut self, words: [u32; 3]) {
         self.core.set_speed_words(words);

@@ -152,6 +152,20 @@ pub fn parse_leslie_ring(v: &str) -> Result<crate::fx::RingAdvance, String> {
     }
 }
 
+/// Name of a ring behaviour as `--leslie-ring` spells it (`custom` for other values).
+pub fn leslie_ring_name(r: crate::fx::RingAdvance) -> &'static str {
+    use crate::fx::RingAdvance;
+    if r == RingAdvance::PASS_RESET8 {
+        "firmware"
+    } else if r == RingAdvance::ADVANCE {
+        "advance"
+    } else if r == RingAdvance::FROZEN {
+        "frozen"
+    } else {
+        "custom"
+    }
+}
+
 /// Rescales the program's rotary drive from the preset unit (0..10, `cbin/organ_preset.rs`) to the
 /// engine unit (0..1: `rotary.rs` uses `gain = 1 + 3 drive`). The default program path passes the
 /// preset unit through unchanged, so a stored drive of 2.44 reaches the tube law as 2.44 (gain
@@ -259,11 +273,10 @@ pub struct FirmwareOptions {
     /// `--farfisa-processor on|off` (`None` = off): the Farfisa key-down weights and measured line
     /// gain of the processor `0x122B85` on `--tone-source farfisa`-style `FarfisaWheels` layers.
     pub farfisa_processor: Option<bool>,
-    /// `--firmware-fx`: every `FirmwareFx` port on every FX chain.
-    pub firmware_fx: bool,
-    /// `--firmware-reverb`: only the firmware Spring reverb (`FirmwareFx::reverb`) on every chain,
-    /// on top of whatever `firmware_fx` selects.
-    pub firmware_reverb: bool,
+    /// The `FirmwareFx` ports of every FX chain (engine default: only `amp`). `--firmware-fx` sets
+    /// every port, `--firmware-reverb` the `reverb` port (Spring and, types 2..11, the multi-tap
+    /// routines), `--firmware-fx-ports a,b` the listed ones; `amp` is overridden by `amp_path`.
+    pub fx: FirmwareFx,
     /// `--firmware-piano-level`: `PianoLayer::firmware_velocity_level`.
     pub piano_firmware_level: bool,
     /// `--firmware-piano-bus`: `PianoLayer::firmware_bus_scale` (opt-in, ASSUMED receiver scale).
@@ -320,8 +333,7 @@ impl Default for FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             farfisa_processor: None,
-            firmware_fx: false,
-            firmware_reverb: false,
+            fx: FirmwareFx::DEFAULT,
             piano_firmware_level: true,
             piano_bus_scale: false,
             piano_layer_law: false,
@@ -363,8 +375,7 @@ impl FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             farfisa_processor: None,
-            firmware_fx: true,
-            firmware_reverb: false,
+            fx: FirmwareFx::ALL,
             piano_firmware_level: true,
             piano_bus_scale: false,
             piano_layer_law: false,
@@ -417,8 +428,15 @@ impl FirmwareOptions {
         if let Some(v) = value("--farfisa-processor") {
             o.farfisa_processor = Some(parse_on_off("--farfisa-processor", v)?);
         }
-        o.firmware_fx |= has("--firmware-fx");
-        o.firmware_reverb |= has("--firmware-reverb");
+        if has("--firmware-fx") {
+            o.fx = FirmwareFx::ALL;
+        }
+        if has("--firmware-reverb") {
+            o.fx.reverb = true;
+        }
+        if let Some(v) = value("--firmware-fx-ports") {
+            o.fx.enable_ports(v)?;
+        }
         o.piano_firmware_level |= has("--firmware-piano-level");
         if has("--legacy-piano-level") {
             o.piano_firmware_level = false;
@@ -484,12 +502,10 @@ impl FirmwareOptions {
     /// Switches the selected paths on (identical to the individual `apply_*` calls render-patch
     /// used before this struct existed).
     pub fn apply_to(&self, engine: &mut Stage4Engine) {
-        apply_firmware_options(
-            engine,
-            self.tone_source,
-            self.filter_engine,
-            self.firmware_fx,
-        );
+        apply_firmware_options(engine, self.tone_source, self.filter_engine, false);
+        for c in engine.fx_chains.iter_mut() {
+            c.firmware_fx.merge_on(&self.fx);
+        }
         apply_piano_level(engine, self.piano_firmware_level);
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
@@ -511,22 +527,12 @@ impl FirmwareOptions {
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
-        if self.firmware_reverb {
-            self.set_reverb(engine);
-        }
         if self.firmware_routing {
             engine.set_firmware_routing(FirmwareRouting::On);
         }
         apply_amp_path(engine, self.amp_path);
         self.set_rotary(engine);
         self.set_organ_level(engine);
-    }
-
-    /// The firmware Spring reverb on every chain (`reverb` switch only).
-    fn set_reverb(&self, engine: &mut Stage4Engine) {
-        for c in engine.fx_chains.iter_mut() {
-            c.firmware_fx.reverb = true;
-        }
     }
 
     /// Sets every path to exactly this value, including back to the engine default. Runs on
@@ -546,19 +552,12 @@ impl FirmwareOptions {
             s.filter_engine = filter;
             s.chain = chain;
         }
-        let mut fx = if self.firmware_fx {
-            FirmwareFx::ALL
-        } else {
-            FirmwareFx::DEFAULT
-        };
+        let mut fx = self.fx;
         if let Some(amp) = self.amp_path {
             fx.amp = amp;
         }
         for c in engine.fx_chains.iter_mut() {
             c.firmware_fx = fx;
-        }
-        if self.firmware_reverb {
-            self.set_reverb(engine);
         }
         engine.piano_a.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
@@ -579,6 +578,27 @@ impl FirmwareOptions {
         self.set_stages(engine);
         self.set_sample_kernel(engine);
         self.set_organ_level(engine);
+        self.set_leslie(engine);
+        for organ in [&mut engine.organ_a, &mut engine.organ_b] {
+            organ.farfisa_processor = self.farfisa_processor == Some(true);
+        }
+    }
+
+    /// Firmware Leslie on both organ layers, or back to the engine rotary. The processor is only
+    /// rebuilt (one allocation) when it is switched on or its ring behaviour changes, so repeated
+    /// identical commands keep the rotor state.
+    fn set_leslie(&self, engine: &mut Stage4Engine) {
+        for organ in [&mut engine.organ_a, &mut engine.organ_b] {
+            if !self.leslie_firmware {
+                organ.leslie_fw = None;
+                organ.leslie_gain = 1.0;
+                continue;
+            }
+            if organ.leslie_fw.as_ref().map(|l| l.ring()) != Some(self.leslie_ring) {
+                organ.leslie_fw = Some(Box::new(crate::fx::FwLeslie::with_ring(self.leslie_ring)));
+            }
+            organ.leslie_gain = 10f32.powf(self.leslie_gain_mdb as f32 / 20_000.0);
+        }
     }
 
     fn set_organ_level(&self, engine: &mut Stage4Engine) {
@@ -655,11 +675,11 @@ impl FirmwareOptions {
                 if b { "on" } else { "off" }
             ));
         }
-        if self.firmware_fx {
+        let ports = self.fx.ports_on();
+        if ports.len() == crate::fx::FX_PORT_NAMES.len() {
             parts.push("fx".into());
-        }
-        if self.firmware_reverb {
-            parts.push("reverb".into());
+        } else {
+            parts.extend(ports.iter().map(|p| (*p).to_string()));
         }
         if !self.piano_firmware_level {
             parts.push("legacy-piano".into());
@@ -684,6 +704,13 @@ impl FirmwareOptions {
         }
         if !self.synth_stages {
             parts.push("no-stages".into());
+        }
+        if self.leslie_firmware {
+            parts.push(format!(
+                "leslie=firmware ring={} gain={:+.1}dB",
+                leslie_ring_name(self.leslie_ring),
+                self.leslie_gain_mdb as f32 / 1000.0
+            ));
         }
         if self.sample_kernel_key {
             parts.push("sample-kernel=key".into());
@@ -748,7 +775,7 @@ mod tests {
         .unwrap();
         assert_eq!(o.tone_source, Some(ToneWheelSource::B3Wheels));
         assert_eq!(o.b3_tail, Some(false));
-        assert!(o.firmware_fx && o.piano_firmware_level && o.measured_laws);
+        assert!(o.fx == FirmwareFx::ALL && o.piano_firmware_level && o.measured_laws);
         assert!(!o.piano_bus_scale, "the bus scale is opt-in");
         let bus = FirmwareOptions::from_args(&args(&["--firmware-piano-bus"])).unwrap();
         assert!(bus.piano_bus_scale);
@@ -926,7 +953,7 @@ mod tests {
     #[test]
     fn firmware_reverb_flag_switches_only_the_reverb() {
         let o = FirmwareOptions::from_args(&args(&["--firmware-reverb"])).unwrap();
-        assert!(o.firmware_reverb && !o.firmware_fx);
+        assert!(o.fx.reverb && o.fx.ports_on() == ["reverb"]);
         let mut e = Stage4Engine::new(48_000.0);
         o.apply_to(&mut e);
         assert!(e.fx_chains.iter().all(|c| c.firmware_fx.reverb));
@@ -1150,3 +1177,7 @@ mod tests {
         assert_eq!(e.fx_chains[6].firmware_fx, FirmwareFx::ALL);
     }
 }
+
+#[cfg(test)]
+#[path = "render_opts_ports_tests.rs"]
+mod ports_tests;

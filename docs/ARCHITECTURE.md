@@ -157,6 +157,7 @@ The runtime engine stays high-level ([D2](DECISIONS.md#d2-high-level-dsp-emulati
               ▼
   committed: VERIFIED / EMPIRICAL / ASSUMED tags, research notes, derived CSVs,
              opt-in firmware paths in nord-core (D22), golden tests, `render_hash`
+             (per-engine segments pinned by `tests/golden_render.rs`, re-baseline steps in its docs)
 
   model vs reference:  nord-sharc  ◄── measured fixtures ──  ADI CCES simulator (headless TpsdkServer,
                                                              docs/research/sharc-seq/sim_run.py, local only)
