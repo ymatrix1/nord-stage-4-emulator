@@ -211,6 +211,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Engine layer routing: section / layer enables VERIFIED on the ARM (`tools/arm_program_routing.py`), per-layer KB zone codes decoded, opt-in `FirmwareRouting` / `--firmware-routing`; B3 clip sub +16.5 to -1.6 dB, crest 12.8 to 17.2 dB, RMS +8.0 to +3.8 dB ([engine-routing](research/engine-routing.md))
 - [ ] Firmware map from the `kKbZone` code to the key range (OQ23), then flip `FirmwareRouting` to the default with a `render_hash` re-baseline
 - [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] B3 clip gap decomposed: layer B (section II off in the program) and notes outside the zone cause the sub and most of the RMS gap; Farfisa sounds in the oracle with the key-down words ([organ-output-level](research/organ-output-level.md))
+- [ ] Engine: honour section I / II and zone flags for organ layers, then re-run `emu_vs_hw.py --only organ_b3`; Farfisa processor port; layer level law; Vox level word; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 
