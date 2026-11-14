@@ -151,6 +151,20 @@ Who writes "the rest of the lattice table" (OQ19): nothing is missing. The old s
 
 Not done in this follow-up (stop point at the 90 minute time box): bit-exact Python models of `0x122B85` / `0x122296` (SIMD listing with PEx / PEy swaps `r5 <-> s4`, circular buffers and a record-flag selected lattice; `sharc-chain --trace` gives every register per instruction, so a model can be checked step by step), the Rust processor stages, the line-by-line Rust comparison, `emu_vs_hw.py` for Farfisa and the video check. Defaults and `render_hash` are unchanged. The processors are linear in the ring and the key-down weights (the lattice flag is a record word, not a signal), so the measured-response option of `b3_tail.rs` applies to both; the exact model stays the target.
 
+## 8. Measured line gain of the Farfisa processor (EMPIRICAL)
+
+Tool: `tools/organ_farfisa_proc.py measure` (`sharc-chain`: generator `0x122A71` + processor `0x122B85` per call from the boot-plus-install state, all weights zero but one word 1.0, 4,000 calls, ring slot and output recorded together, Hann FFT, gain `|Y| / |R|` at every ring line within 50 dB of the peak, 22 slots per sum, binned to 1/6 octave). Data: [farfisa-proc-gain.csv](data/farfisa-proc-gain.csv) (sum, Hz, dB, spread). Rust: `organ/farfisa_proc_gain.rs` (`farfisa_proc_gain(sum, hz)`, test against the CSV), **not wired into the render path**.
+
+| Check | Result |
+|---|---|
+| Linearity (weight 1.0 against 0.5, divided by the weight) | max difference 0.00 dB over 110 bins (VERIFIED) |
+| Note independence | median spread of the slots inside one 1/6 octave bin 0.9 dB (it includes the slope of G inside the bin), so G depends on frequency, not on the note (EMPIRICAL) |
+| Sums | sum 0 reads ring slot `idx`, sum 1 slot `idx + 8`; a key therefore feeds the 16' row (`note - 12`) through sum 0 and the 8' row (`note`) through sum 1 (the third key word, sum 2, and sum 3 give output 0.0 exactly with the installed gains, also with weight 1.0 at the key's own index) |
+| Shape of G | sum 0: -1 dB at 60 Hz, -6 dB near 400 Hz, +1.2 dB at 900 Hz, then falling to -26 dB at 8.6 kHz; sum 1 has a similar shape (see the table) |
+| Output scale | gain per unit weight is O(1): a weight of 1.0 gives rms 0.5; the key weight 1/48 gives the chord peaks of s7 |
+
+Not done (time box): per-line comparison of a Rust render with the oracle chords (needs the Farfisa key to bus mapping with two filters per wheel: a wheel is the 8' row of key `n` through sum 1 and the 16' row of key `n + 12` through sum 0, so the bus-of-wheels path cannot apply one table per wheel; the filter has to act on the key mix or on two wheel copies), the B3 Bass table (its weights come from the ARM key-down `DM 0x951F1..` over two ring windows, not the Farfisa words), `emu_vs_hw.py` with `--organ-level firmware`, and the video check. Defaults and `render_hash` unchanged; the opt-in sources stay opt-in because the oracle criterion is not met (no processor in the render path) and the video check was not run.
+
 ## Implications
 
 - The Farfisa generator is fully decoded and ported; the Farfisa audio is not reachable until the ARM weights and the filter table are captured (OQ19). The documented structure (four weighted sums, biquads, 8 lattice sections, four gains) gives the model target.
