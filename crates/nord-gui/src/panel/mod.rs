@@ -43,6 +43,9 @@ pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
 mod rotor_angle;
+mod section_edit;
+#[cfg(test)]
+mod section_edit_tests;
 #[cfg(test)]
 mod sim;
 mod state;

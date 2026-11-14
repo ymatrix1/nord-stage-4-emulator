@@ -21,6 +21,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fx_biquad_check as fb
 import fx_leslie_ops as ops
+import fx_mod2_tables as tables
 import fx_model_mod2_gen as gen
 import fx_oracle as fo
 
@@ -48,6 +49,10 @@ class Spec:
     #: range of the random float words (a reciprocal in the routine needs them away from -1)
     span: tuple[float, float] = (-1.0, 1.0)
     sets: dict[str, int] = field(default_factory=dict)
+    #: tables filled once for the model and the oracle: `{address: word}`
+    static: Callable = lambda: {}
+    #: extra DAG registers the routine reads before writing (model side; `sets` is the oracle side)
+    regs: dict[str, int] = field(default_factory=dict)
 
 
 def rnd_float(rng: random.Random, span: tuple[float, float] = (-1.0, 1.0)) -> int:
@@ -72,8 +77,8 @@ def finite_scenario(spec: Spec, rng: random.Random) -> dict[int, int]:
     while True:
         case = scenario(spec, rng)
         try:
-            m = run(spec, fo.Missing(case))
-        except OverflowError:
+            m = run(spec, fo.Missing({**spec.static(), **case}))
+        except (OverflowError, ValueError):  # no infinity, no NaN in the models
             continue
         floats = [v for v in (*m.x, *m.y) if isinstance(v, Fraction)]
         if all(abs(v) < 2**64 for v in floats):
@@ -89,11 +94,14 @@ def routine(spec: Spec):
         {"I0": IN_ADDR, "I1": CTX, "M0": 0, "M2": 2, "M9": 1, **spec.sets},
         lambda mem, trace=None: run(spec, mem, trace),
         lambda rng: finite_scenario(spec, rng),
+        static=spec.static(),
     )
 
 
 def run(spec: Spec, mem: dict[int, int], trace=None) -> ops.LMachine:
     m = ops.LMachine(mem, {**REGS, "i0": IN_ADDR, "i1": CTX}, trace)
+    for k, v in spec.regs.items():
+        m.ir[k] = v
     try:
         spec.fn(m)
     except IndexError:  # the oracle stops before the final `rts`: one step past the trace
@@ -156,6 +164,47 @@ def fix_phas0(rng: random.Random, mem: dict[int, int], count: int) -> None:
     })  # fmt: skip
 
 
+ENS_ADDR = 0xC0BD4
+
+
+def ens_table() -> dict[int, int]:
+    """`ENS` reads its waveform at DM `0xC0BD4` (`docs/research/data/fx-mod2-tables.csv`)."""
+    return {ENS_ADDR + k: w for k, w in enumerate(tables.load()["ens"])}
+
+
+def fix_ens(rng: random.Random, mem: dict[int, int], count: int) -> None:
+    """`0x123A7B`: phase `c[-8] += c[-6]` read back through the pointer `c[-5]`; ring base
+    `c[-0x20]`, running pointer `c[-0x1E]` (`L6 = 0x200`); `c[0x11]` blocks."""
+    mem.update({
+        CTX - 5: CTX - 8,
+        CTX - 8: rng.randrange(1 << 32),
+        CTX - 6: rng.randrange(1 << 24),
+        CTX - 0x20: BUF,
+        CTX - 0x1E: BUF + 2 * rng.randrange(0, 0x100),
+        CTX + 0x11: count,
+    })  # fmt: skip
+
+
+BUF2, RING2_WORDS = 0xB5000, 0x300  # SPIN: second ring (`L7 = 0x26C`) plus the next pair
+
+
+def fix_spin(rng: random.Random, mem: dict[int, int], count: int) -> None:
+    """`0x123557`: phase read through the pointer `c[-8]`; ring 1 (`L6 = 0xc8`): running pointer
+    `c[-0x1D]`, base `c[-0x1C]`; ring 2 (`L7 = 0x26C`): base `c[0x1D]`, running pointer `c[0x1B]`,
+    modifier `c[0x1E]` (a signed delay in words); `c[0x21]` blocks."""
+    mem.update({a: rnd_float(rng) for a in range(BUF2, BUF2 + RING2_WORDS)})
+    mem.update({
+        CTX - 8: CTX - 0x13,
+        CTX - 0x13: rng.randrange(1 << 32),
+        CTX - 0x1D: BUF + 2 * rng.randrange(0, 0x64),
+        CTX - 0x1C: BUF,
+        CTX + 0x1D: BUF2,
+        CTX + 0x1B: BUF2 + 2 * rng.randrange(0, 0x13A),
+        CTX + 0x1E: rng.randrange(-0x26B, 0x26B) & 0xFFFFFFFF,
+        CTX + 0x21: count,
+    })  # fmt: skip
+
+
 SPECS: dict[str, Spec] = {
     "vibe": Spec("vibe", 0x123C84, 0x123DB3, gen.vibe, fixup=fix_vibe, blocks=0x14),
     "flang": Spec("flang", 0x12348D, 0x123538, gen.flang, fixup=fix_flang, blocks=2),
@@ -163,6 +212,10 @@ SPECS: dict[str, Spec] = {
         "phas0", 0x12379B, 0x1238FB, gen.phas0, fixup=fix_phas0, blocks=0x1B, span=(0.0, 0.2)
     ),
     "phas1": Spec("phas1", 0x1238FC, 0x1239CF, gen.phas1, fixup=fix_phas1, blocks=4, ring=False),
+    "ens": Spec("ens", 0x123A7B, 0x123BCF, gen.ens, fixup=fix_ens, blocks=0x11, static=ens_table),
+    "spin": Spec(
+        "spin", 0x123557, 0x12377C, gen.spin, fixup=fix_spin, blocks=0x21, window=(-0x20, 0x2A)
+    ),
 }
 
 

@@ -157,9 +157,7 @@ pub const BUTTONS: [Spec; 17] = [
         id: "program.section_edit",
         label: "SECT EDIT",
         shift: sf("program.layer_init", "LAYER INIT"),
-        support: Support::Partial(
-            "Latches and lights, but no bay applies it to edits yet (ns4-fqym)",
-        ),
+        support: Support::Full,
         hold_primary: true,
     },
     b(

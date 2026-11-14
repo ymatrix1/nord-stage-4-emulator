@@ -122,14 +122,17 @@ impl LayerFxChain {
         }
     }
 
-    /// The firmware `CHOR` stage (`FirmwareFx::mod2`): `None` unless the program is `kFx2Type` 4,
-    /// 5, 6 or 7 with its raw values (engine path otherwise).
+    /// The firmware Mod 2 stages (`FirmwareFx::mod2`): `None` unless the program is `kFx2Type` 0
+    /// to 11 with its raw values (engine path otherwise). Types 0 to 3 and 8 to 11 run through
+    /// the law stage (`PHAS`, `FLANG`, `ENS`, `SPIN`), 4 and 5 through the chorus, 6 and 7 through
+    /// `VIBE`; only one stage is kept alive.
     fn process_fw_mod2(&mut self, l: f32, r: f32) -> Option<[f32; 2]> {
         let (ty, rate) = (self.mod2_type_raw?, self.mod2_rate_raw?);
         let amount = (self.mod2_amount.clamp(0.0, 1.0) * 127.0).round() as u32;
         let rate = u32::from(rate);
         if (6..=7).contains(&ty) {
             self.fw_mod2 = None;
+            self.fw_law = None;
             match &mut self.fw_vibe {
                 Some(st) => st.set_params(rate, amount),
                 slot => {
@@ -145,8 +148,16 @@ impl LayerFxChain {
         self.fw_vibe = None;
         if !(4..=5).contains(&ty) {
             self.fw_mod2 = None;
-            return None;
+            match &mut self.fw_law {
+                Some(st) if st.ty() == ty => st.set_params(rate, amount),
+                slot => {
+                    *slot = fw_mod2_law_stage::FwLawStage::new(ty, rate, amount, self.sample_rate)
+                        .map(Box::new);
+                }
+            }
+            return self.fw_law.as_mut().map(|st| st.process_frame([l, r]));
         }
+        self.fw_law = None;
         let variation = ty == 5;
         match &mut self.fw_mod2 {
             Some(st) if st.variation() == variation => st.set_params(rate, amount),

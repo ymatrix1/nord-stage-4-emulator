@@ -23,6 +23,7 @@ mod pattern;
 mod pots;
 mod press;
 mod samples;
+mod section;
 mod tables;
 mod waves;
 
@@ -80,6 +81,9 @@ pub struct SynthUi {
     pub pstick_range: u8,
     /// Fractional scroll points of the PSTICK/RNG list, kept between frames.
     pub(crate) range_acc: f32,
+    /// SECTION EDIT is active (manual p.43): every edit reaches all three layers, like GROUP.
+    /// The bay copies `ProgramUi::section_edit_active()` here at the start of each frame.
+    pub section_edit: bool,
     pub group_filter: Latch,
     pub group_lfo: Latch,
     pub group_arp: Latch,
@@ -118,6 +122,7 @@ impl SynthUi {
             pstick: false,
             pstick_range: nord_core::engine::PSTICK_DEFAULT_RANGE,
             range_acc: 0.0,
+            section_edit: false,
             group_filter: Latch::default(),
             group_lfo: Latch::default(),
             group_arp: Latch::default(),
@@ -141,8 +146,12 @@ impl SynthUi {
         &mut self.layers[f]
     }
 
-    /// GROUP of `scope` is on: edits reach all layers.
+    /// GROUP of `scope` or SECTION EDIT is on: edits reach all layers.
     pub(crate) fn grouped(&self, scope: Scope) -> bool {
+        self.section_edit || self.group_scope(scope)
+    }
+
+    fn group_scope(&self, scope: Scope) -> bool {
         match scope {
             Scope::Layer => false,
             Scope::Filter => self.group_filter.is_active(),
@@ -162,17 +171,6 @@ impl SynthUi {
             let l = self.focus.min(2) as u8;
             self.out.push(SynthEdit::Param(SynthTarget::Layer(l), p));
         }
-    }
-
-    /// Queue the focused layer's oscillator writes (mode, waveform, OSC CTRL ...).
-    pub(crate) fn resend_osc(&mut self) {
-        let layer = self.focus.min(2) as u8;
-        let mut v = Vec::new();
-        self.layer().emit_osc(&mut |p| v.push(p));
-        self.out.extend(
-            v.into_iter()
-                .map(|p| SynthEdit::Param(SynthTarget::Layer(layer), p)),
-        );
     }
 
     /// Queue a GROUP copy from the focused layer.

@@ -1,22 +1,38 @@
 //! Driver of the generated Mod 2 routine ports ([`super::fw_vibe`], [`super::fw_flang`],
-//! [`super::fw_phas0`], [`super::fw_phas1`]): the memory map and one call on a frame block.
+//! [`super::fw_phas0`], [`super::fw_phas1`], [`super::fw_ens`], [`super::fw_spin`]): the memory
+//! map and one call on a frame block.
 //!
 //! The routines keep their state in the context words around `I1` (phase, filter states,
 //! smoothers) and, for the delay routines, a circular ring of `0x400` words that the ARM
-//! allocates. Here the context, the ring and one small frame block are three arrays at the
-//! addresses of the model scenarios (`tools/fx_model_mod2.py`), so a context captured from the DSP
-//! loads unchanged and the written-back words compare word for word with the golden vectors.
+//! allocates (`SPIN` has a second ring of `0x26C` words and scratch words at `0xC2861..`, `ENS`
+//! reads a waveform table at `0xC0BD4`). Here the context, the rings, the scratch words and one
+//! small frame block are arrays at the addresses of the model scenarios
+//! (`tools/fx_model_mod2.py`), so a context captured from the DSP loads unchanged and the
+//! written-back words compare word for word with the golden vectors.
 //!
 //! VERIFIED: every routine against the `sharc-fx` oracle (`docs/research/fx-mod2-types.md`).
 
-use super::fw_chorus::{CTX_I1, CTX_LO, CTX_N, MAX_BLOCKS, RING_BASE, RING_N};
+use super::fw_chorus::{CTX_I1, CTX_LO, MAX_BLOCKS, RING_BASE, RING_N};
+use super::fw_mod2_tables::ENS_TABLE;
 use super::fw_pe::{Mem, Pe};
-use super::{fw_flang, fw_phas0, fw_phas1, fw_vibe};
+use super::{fw_ens, fw_flang, fw_phas0, fw_phas1, fw_spin, fw_vibe};
 
+/// Context words `c[-0x20] ..= c[0x2A]` (`SPIN` reads up to `c[0x29]`).
+pub(super) const CTX_N: usize = 0x4B;
+/// Second ring (`SPIN`, `L7 = 0x26C`) and its size in words (the ring plus the next pair).
+pub(super) const RING2_BASE: u32 = 0xB5000;
+pub(super) const RING2_N: usize = 0x300;
+/// Scratch words of `SPIN` (`0xC2861 ..= 0xC286B`).
+const SCRATCH_BASE: u32 = 0xC2860;
+const SCRATCH_N: usize = 16;
+/// `ENS` waveform table (DM `0xC0BD4`, 1025 words).
+const ENS_BASE: u32 = 0xC0BD4;
 /// Frame block (`I0`).
 const IO_BASE: u32 = 0xB1000;
 
-/// Which routine runs. FLANG and PHAS are verified ports without a wired stage yet.
+/// Which routine runs (`kFx2Type`: PHAS 0, 1, FLANG 2, 3, VIBE 6, 7, ENS 8, 9, SPIN 10, 11).
+/// `Phas1`, `Ens` and `Spin` are verified ports without a wired stage (the words of their
+/// instances are not all known, `docs/research/fx-mod2-types.md` s8.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(super) enum Routine {
@@ -28,6 +44,10 @@ pub(super) enum Routine {
     Phas0,
     /// `kFx2Type` 1: `0x1238FC`.
     Phas1,
+    /// `kFx2Type` 8, 9: `0x123A7B`.
+    Ens,
+    /// `kFx2Type` 10, 11: `0x123557`.
+    Spin,
 }
 
 impl Routine {
@@ -38,14 +58,35 @@ impl Routine {
             Self::Flang => 2,
             Self::Phas0 => 0x1B,
             Self::Phas1 => 4,
+            Self::Ens => 0x11,
+            Self::Spin => 0x21,
         }
     }
 }
 
-/// The three memory regions of one call.
+/// The state a stage keeps between calls: context, ring, second ring, scratch words.
+#[derive(Debug, Clone)]
+pub(super) struct Mod2State {
+    pub(super) ctx: [u32; CTX_N],
+    pub(super) ring: [u32; RING_N],
+    pub(super) ring2: [u32; RING2_N],
+    scratch: [u32; SCRATCH_N],
+}
+
+impl Mod2State {
+    pub(super) fn new() -> Self {
+        Self {
+            ctx: [0; CTX_N],
+            ring: [0; RING_N],
+            ring2: [0; RING2_N],
+            scratch: [0; SCRATCH_N],
+        }
+    }
+}
+
+/// The memory regions of one call.
 struct Mod2Mem<'a> {
-    ctx: &'a mut [u32; CTX_N],
-    ring: &'a mut [u32; RING_N],
+    st: &'a mut Mod2State,
     io: [u32; 4 * MAX_BLOCKS],
 }
 
@@ -57,11 +98,17 @@ fn slot(addr: u32, lo: u32, n: usize) -> Option<usize> {
 impl Mem for Mod2Mem<'_> {
     fn rd(&self, a: u32) -> u32 {
         if let Some(k) = slot(a, CTX_LO, CTX_N) {
-            self.ctx[k]
+            self.st.ctx[k]
         } else if let Some(k) = slot(a, RING_BASE, RING_N) {
-            self.ring[k]
+            self.st.ring[k]
         } else if let Some(k) = slot(a, IO_BASE, self.io.len()) {
             self.io[k]
+        } else if let Some(k) = slot(a, RING2_BASE, RING2_N) {
+            self.st.ring2[k]
+        } else if let Some(k) = slot(a, ENS_BASE, ENS_TABLE.len()) {
+            ENS_TABLE[k]
+        } else if let Some(k) = slot(a, SCRATCH_BASE, SCRATCH_N) {
+            self.st.scratch[k]
         } else {
             0
         }
@@ -69,11 +116,15 @@ impl Mem for Mod2Mem<'_> {
 
     fn wr(&mut self, a: u32, w: u32) {
         if let Some(k) = slot(a, CTX_LO, CTX_N) {
-            self.ctx[k] = w;
+            self.st.ctx[k] = w;
         } else if let Some(k) = slot(a, RING_BASE, RING_N) {
-            self.ring[k] = w;
+            self.st.ring[k] = w;
         } else if let Some(k) = slot(a, IO_BASE, self.io.len()) {
             self.io[k] = w;
+        } else if let Some(k) = slot(a, RING2_BASE, RING2_N) {
+            self.st.ring2[k] = w;
+        } else if let Some(k) = slot(a, SCRATCH_BASE, SCRATCH_N) {
+            self.st.scratch[k] = w;
         }
     }
 }
@@ -81,24 +132,21 @@ impl Mem for Mod2Mem<'_> {
 /// One call on `frames = [l0, r0, l1, r1, ...]` in place: whole blocks of two stereo frames (a
 /// trailing partial block is left untouched). The routine's block count word is set to the number
 /// of blocks.
-pub(super) fn process(
-    routine: Routine,
-    ctx: &mut [u32; CTX_N],
-    ring: &mut [u32; RING_N],
-    frames: &mut [f32],
-) {
+pub(super) fn process(routine: Routine, st: &mut Mod2State, frames: &mut [f32]) {
     let n = (frames.len() / 4).min(MAX_BLOCKS);
-    ctx[(routine.blocks_offset() + 0x20) as usize] = n as u32;
+    st.ctx[(routine.blocks_offset() + 0x20) as usize] = n as u32;
     let mut io = [0u32; 4 * MAX_BLOCKS];
     for (w, f) in io.iter_mut().zip(frames.iter()).take(4 * n) {
         *w = f.to_bits();
     }
-    let mut pe = Pe::new(Mod2Mem { ctx, ring, io }, IO_BASE, CTX_I1);
+    let mut pe = Pe::new(Mod2Mem { st, io }, IO_BASE, CTX_I1);
     match routine {
         Routine::Vibe => fw_vibe::run(&mut pe),
         Routine::Flang => fw_flang::run(&mut pe),
         Routine::Phas0 => fw_phas0::run(&mut pe),
         Routine::Phas1 => fw_phas1::run(&mut pe),
+        Routine::Ens => fw_ens::run(&mut pe),
+        Routine::Spin => fw_spin::run(&mut pe),
     }
     for (f, w) in frames.iter_mut().zip(pe.mem.io).take(4 * n) {
         *f = f32::from_bits(w);
@@ -112,7 +160,7 @@ mod tests {
     use super::*;
 
     /// The deterministic ring of `tools/fx_golden_mod2.py::ring_word`.
-    fn golden_ring() -> [u32; RING_N] {
+    fn golden_ring<const N: usize>() -> [u32; N] {
         std::array::from_fn(|k| {
             let h = (k as u32).wrapping_mul(2_654_435_761).wrapping_add(12345);
             ((h >> 9) as f32 / 4_194_304.0 - 1.0).to_bits()
@@ -123,10 +171,28 @@ mod tests {
     /// (measured differences up to 2e-5 after three calls with a feedback path).
     const LOOSE: f32 = 1.0e-4;
 
+    /// The changed words of `ring` against the deterministic ring, as `(offset, word)`.
+    fn changed<const N: usize>(ring: &[u32; N]) -> Vec<(u32, u32)> {
+        let want = golden_ring::<N>();
+        (0..N)
+            .filter(|&k| ring[k] != want[k])
+            .map(|k| (k as u32, ring[k]))
+            .collect()
+    }
+
+    fn check_ring(got: &[(u32, u32)], want: &[(u32, u32)], tol: f32, what: &str) {
+        let offs = |v: &[(u32, u32)]| v.iter().map(|d| d.0).collect::<Vec<_>>();
+        assert_eq!(offs(got), offs(want), "{what}: the same words are written");
+        let words = |v: &[(u32, u32)]| v.iter().map(|d| d.1).collect::<Vec<_>>();
+        assert_close(&words(got), &words(want), tol, what);
+    }
+
     /// Runs a golden: three calls of two blocks, then the final context and the changed ring words.
     fn check(routine: Routine, v: &g::Golden, tol: f32) {
-        let mut ctx: [u32; CTX_N] = v.ctx_in.try_into().unwrap();
-        let mut ring = golden_ring();
+        let mut st = Mod2State::new();
+        st.ctx = v.ctx_in.try_into().unwrap();
+        st.ring = golden_ring();
+        st.ring2 = golden_ring();
         for (n, (i, o)) in v
             .frames_in
             .chunks(8)
@@ -134,21 +200,28 @@ mod tests {
             .enumerate()
         {
             let mut frames: Vec<f32> = i.iter().map(|w| f32::from_bits(*w)).collect();
-            process(routine, &mut ctx, &mut ring, &mut frames);
+            process(routine, &mut st, &mut frames);
             let got: Vec<u32> = frames.iter().map(|f| f.to_bits()).collect();
             assert_close(&got, o, tol, &format!("{routine:?} call {n}"));
         }
-        assert_close(&ctx, v.ctx_out, tol, &format!("{routine:?} final context"));
-        let want = golden_ring();
-        let changed: Vec<usize> = (0..RING_N).filter(|&k| ring[k] != want[k]).collect();
-        assert_eq!(
-            changed,
-            v.ring_diff.iter().map(|d| d.0 as usize).collect::<Vec<_>>(),
-            "{routine:?}: the same ring words are written"
+        assert_close(
+            &st.ctx,
+            v.ctx_out,
+            tol,
+            &format!("{routine:?} final context"),
         );
-        let got: Vec<u32> = v.ring_diff.iter().map(|d| ring[d.0 as usize]).collect();
-        let exp: Vec<u32> = v.ring_diff.iter().map(|d| d.1).collect();
-        assert_close(&got, &exp, tol, &format!("{routine:?} ring words"));
+        check_ring(
+            &changed(&st.ring),
+            v.ring_diff,
+            tol,
+            &format!("{routine:?} ring"),
+        );
+        check_ring(
+            &changed(&st.ring2),
+            v.ring2_diff,
+            tol,
+            &format!("{routine:?} ring 2"),
+        );
     }
 
     #[test]
@@ -172,24 +245,40 @@ mod tests {
     }
 
     #[test]
+    fn the_ensemble_routine_matches_the_firmware_model() {
+        check(Routine::Ens, &g::ENS, LOOSE);
+    }
+
+    #[test]
+    fn the_spin_routine_matches_the_firmware_model() {
+        check(Routine::Spin, &g::SPIN, LOOSE);
+    }
+
+    #[test]
     fn the_golden_vectors_are_not_silent() {
-        for v in [&g::VIBE, &g::FLANG, &g::PHAS0, &g::PHAS1] {
+        for v in [&g::VIBE, &g::FLANG, &g::PHAS0, &g::PHAS1, &g::ENS, &g::SPIN] {
             assert!(v.frames_in != v.frames_out && v.ctx_in != v.ctx_out);
         }
         assert!(g::VIBE.ring_diff.len() > 1 && g::FLANG.ring_diff.len() > 1);
+        assert!(g::ENS.ring_diff.len() > 1 && g::SPIN.ring_diff.len() > 1);
+        assert!(!g::SPIN.ring2_diff.is_empty(), "the second ring is written");
     }
 
     #[test]
     fn memory_outside_the_regions_reads_zero_and_ignores_writes() {
-        let (mut ctx, mut ring) = ([0u32; CTX_N], [0u32; RING_N]);
+        let mut st = Mod2State::new();
         let mut m = Mod2Mem {
-            ctx: &mut ctx,
-            ring: &mut ring,
+            st: &mut st,
             io: [0; 4 * MAX_BLOCKS],
         };
         m.wr(0x1234, 7);
         assert_eq!(m.rd(0x1234), 0);
         m.wr(IO_BASE + 1, 5);
         assert_eq!(m.rd(IO_BASE + 1), 5);
+        m.wr(SCRATCH_BASE + 1, 9);
+        assert_eq!(m.rd(SCRATCH_BASE + 1), 9);
+        assert_eq!(m.rd(ENS_BASE), ENS_TABLE[0], "the table is read only data");
+        m.wr(ENS_BASE, 1);
+        assert_eq!(m.rd(ENS_BASE), ENS_TABLE[0]);
     }
 }
