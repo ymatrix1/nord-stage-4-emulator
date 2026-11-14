@@ -32,11 +32,14 @@ mod pedals;
 mod program;
 mod program_fx;
 mod program_ops;
+mod routing;
 mod section_edit;
 mod sharing;
 mod snapshot;
 #[cfg(test)]
 mod tests_extern;
+#[cfg(test)]
+mod tests_firmware_routing;
 #[cfg(test)]
 mod tests_pedals;
 #[cfg(test)]
@@ -51,6 +54,7 @@ pub use layer_init::LayerInitTarget;
 pub use live_slots::{LiveSlots, LIVE_SLOT_COUNT};
 pub use morph_clip::MorphClip;
 pub use program_ops::{PROGRAM_LEVEL_DB_RANGE, TRANSPOSE_RANGE};
+pub use routing::{zone_leds, FirmwareRouting, ProgramRouting};
 pub use section_edit::Section;
 pub use snapshot::ProgramState;
 pub use undo::UndoOp;
@@ -82,6 +86,9 @@ pub struct Stage4Engine {
     pub morph_controllers: MorphControllers,
     pub scene: LayerSceneState,
     pub split_router: KeybedSplitRouter,
+    /// Opt-in firmware layer routing mode (default `Off`) and the routing facts of the applied program.
+    firmware_routing: FirmwareRouting,
+    routing: ProgramRouting,
     pub master_bus: MasterBus,
     pub master_clock: MasterClock,
     /// MIDI channel (0..15) used for global keybed, controller, and program input.
@@ -130,6 +137,8 @@ impl Stage4Engine {
             morph_controllers: MorphControllers::default(),
             scene: LayerSceneState::default(),
             split_router: KeybedSplitRouter::default(),
+            firmware_routing: FirmwareRouting::default(),
+            routing: ProgramRouting::default(),
             master_bus: MasterBus::default(),
             master_clock: MasterClock::default(),
             global_midi_channel: Some(0),
