@@ -22,6 +22,10 @@ pub(super) struct Fx<'a> {
     pub trackers: HashMap<&'static str, ButtonTracker>,
 }
 
+/// Distance from the bottom of a control to the centre of its first caption line (px).
+pub(super) const CAPTION_DROP: f32 = 6.5;
+/// Pitch of stacked caption lines (px): the 7.5 px minimum font plus a 1 px gap.
+pub(super) const CAPTION_LINE: f32 = 8.5;
 /// Colour of a dimmed (unsupported) control overlay.
 const DIM: Color32 = Color32::from_black_alpha(140);
 /// Caption colour (silkscreen white-grey).
@@ -97,9 +101,13 @@ impl Fx<'_> {
         self.p.rect_filled(rect.expand(2.0), 3.0, DIM);
     }
 
-    /// Small silkscreen caption `line` rows below `rect`.
+    /// Small silkscreen caption `line` rows below `rect`, clear of the knob shadow and the
+    /// button bezel (`CAPTION_DROP`).
     pub fn caption(&self, rect: Rect, line: usize, text: &str, col: Color32) {
-        let c = pos2(rect.center().x, rect.bottom() + 5.0 + 7.5 * line as f32);
+        let c = pos2(
+            rect.center().x,
+            rect.bottom() + CAPTION_DROP + CAPTION_LINE * line as f32,
+        );
         label(self.p, c, text, 6.5, col, Align2::CENTER_CENTER);
     }
 

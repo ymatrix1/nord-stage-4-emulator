@@ -5,6 +5,7 @@
 //! legend under the base control is their widget; three direct controls the layout puts into one
 //! rectangle (`amp.filter`, `amp.to_rotary`, `amp.res`) get a sub-rectangle next to it.
 
+use super::ctx::{CAPTION_DROP, CAPTION_LINE};
 use crate::panel::layout_px::rect_or_empty;
 use crate::panel::ui_state::fx::ChainUi;
 use egui::{pos2, vec2, Pos2, Rect};
@@ -88,7 +89,10 @@ const LEGENDS: [(&str, &str, usize); 15] = [
 pub(super) fn draw_rect(id: &str, origin: Pos2) -> Rect {
     if let Some(&(_, base, line)) = LEGENDS.iter().find(|(l, _, _)| *l == id) {
         let b = rect_or_empty(base, origin);
-        let c = pos2(b.center().x, b.bottom() + 5.0 + 7.5 * line as f32);
+        let c = pos2(
+            b.center().x,
+            b.bottom() + CAPTION_DROP + CAPTION_LINE * line as f32,
+        );
         return Rect::from_center_size(c, vec2(b.width().max(26.0), 7.0));
     }
     match id {

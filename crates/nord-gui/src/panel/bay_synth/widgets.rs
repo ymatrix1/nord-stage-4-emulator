@@ -132,16 +132,27 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
         } else {
             LEGEND
         };
-        tiny(
-            p,
-            pos2(rect.center().x, rect.bottom() + 3.0),
-            legend,
-            col,
-            Align2::CENTER_TOP,
-        );
+        let (pos, al) = legend_anchor(b, rect);
+        tiny(p, pos, legend, col, al);
         if let Some(why) = why {
             let _ = resp.on_hover_text(format!("{legend} (Shift): {why}"));
         }
+    }
+}
+
+/// Where the alias legend of `b` is printed. ON has the OLED right below it, so its SOLO legend
+/// goes to the right of the button (as on the hardware); the others print below.
+fn legend_anchor(b: Btn, rect: Rect) -> (Pos2, Align2) {
+    if b == Btn::On {
+        (
+            pos2(rect.right() + 4.0, rect.center().y),
+            Align2::LEFT_CENTER,
+        )
+    } else {
+        (
+            pos2(rect.center().x, rect.bottom() + 3.0),
+            Align2::CENTER_TOP,
+        )
     }
 }
 
@@ -316,6 +327,15 @@ pub(super) fn ladder(p: &Painter, rect: Rect, level: f32, n: usize) {
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    #[test]
+    fn on_prints_its_solo_legend_to_the_right_and_others_below() {
+        let r = Rect::from_min_size(pos2(10.0, 10.0), vec2(30.0, 12.0));
+        let (on, al) = legend_anchor(Btn::On, r);
+        assert!(on.x > r.right() && al == Align2::LEFT_CENTER);
+        let (other, _) = legend_anchor(Btn::FilterType, r);
+        assert!(other.y > r.bottom());
+    }
 
     #[test]
     fn pad_pot_dial_fader_and_ladder_paint_and_mark_their_ids() {

@@ -25,6 +25,8 @@ const MIN_FONT_PX: f32 = crate::widgets::MIN_FONT_PX;
 const BIG_RECT_PX2: f32 = 6000.0;
 /// Overlap (px) in both axes needed to count as a collision.
 const TOL: f32 = 1.0;
+/// Button bezel and LED ring around a control rectangle: labels keep out of it too.
+const BEZEL_PX: f32 = 1.5;
 const ALLOW: &str = include_str!("legibility_allow.txt");
 
 /// One painted text.
@@ -33,12 +35,16 @@ pub(super) struct Lab {
     pub text: String,
     /// Ink rectangle (galley width, glyph-height band), in panel px.
     pub rect: Rect,
+    /// Full galley rectangle in panel px (what the clip rectangle must contain).
+    pub full: Rect,
+    /// Clip rectangle the text was painted with, in panel px.
+    pub clip: Rect,
     pub size: f32,
 }
 
-fn collect(shape: &Shape, origin: egui::Pos2, out: &mut Vec<Lab>) {
+fn collect(shape: &Shape, clip: Rect, origin: egui::Pos2, out: &mut Vec<Lab>) {
     match shape {
-        Shape::Vec(v) => v.iter().for_each(|s| collect(s, origin, out)),
+        Shape::Vec(v) => v.iter().for_each(|s| collect(s, clip, origin, out)),
         Shape::Text(t) => {
             let size = t
                 .galley
@@ -53,6 +59,8 @@ fn collect(shape: &Shape, origin: egui::Pos2, out: &mut Vec<Lab>) {
             out.push(Lab {
                 text: t.galley.text().to_string(),
                 rect: ink.translate(-origin.to_vec2()),
+                full: g.translate(-origin.to_vec2()),
+                clip: clip.translate(-origin.to_vec2()),
                 size,
             });
         }
@@ -65,6 +73,18 @@ pub(super) fn labels_of(
     focus: Option<nord_panel::Section>,
     screen: egui::Vec2,
 ) -> (Vec<Lab>, Rect) {
+    let a = audit_of(focus, screen);
+    (a.labs, a.visible)
+}
+
+/// Labels, visible rectangle and recorded widget rectangles of one headless frame.
+pub(super) struct Audit {
+    pub labs: Vec<Lab>,
+    pub visible: Rect,
+    pub recs: Vec<crate::widgets::probe::Rec>,
+}
+
+pub(super) fn audit_of(focus: Option<nord_panel::Section>, screen: egui::Vec2) -> Audit {
     let ctx = egui::Context::default();
     let (audio, _rx) = AudioHandle::new();
     let mut state = Stage4PanelState::default();
@@ -78,6 +98,7 @@ pub(super) fn labels_of(
             ..Default::default()
         };
         out = Some(ctx.run(input, |ctx| {
+            crate::widgets::probe::clear(ctx);
             egui::CentralPanel::default()
                 .frame(egui::Frame::NONE)
                 .show(ctx, |ui| {
@@ -97,9 +118,20 @@ pub(super) fn labels_of(
     }
     let mut labs = Vec::new();
     for cs in out.map(|o| o.shapes).unwrap_or_default() {
-        collect(&cs.shape, origin, &mut labs);
+        collect(&cs.shape, cs.clip_rect, origin, &mut labs);
     }
-    (labs, visible.translate(-origin.to_vec2()))
+    let recs = crate::widgets::probe::recorded(&ctx)
+        .into_iter()
+        .map(|mut r| {
+            r.rect = r.rect.translate(-origin.to_vec2());
+            r
+        })
+        .collect();
+    Audit {
+        labs,
+        visible: visible.translate(-origin.to_vec2()),
+        recs,
+    }
 }
 
 fn overlaps(a: Rect, b: Rect) -> bool {
@@ -140,7 +172,7 @@ pub(super) fn violations(labs: &[Lab]) -> BTreeSet<String> {
             continue;
         }
         for l in labs {
-            if !r.contains(l.rect.center()) && overlaps(l.rect, r) {
+            if !r.contains(l.rect.center()) && overlaps(l.rect, r.expand(BEZEL_PX)) {
                 v.insert(format!("C {} / {}", pos_key(l), c.id));
             }
         }
@@ -159,8 +191,10 @@ fn allowed() -> BTreeSet<String> {
 
 #[test]
 fn collisions_match_the_allow_list() {
-    let (labs, _) = labels_of(None, vec2(1700.0, 500.0));
-    let found = violations(&labs);
+    let audit = audit_of(None, vec2(3300.0, 900.0));
+    let mut found = violations(&audit.labs);
+    found.extend(super::legibility_rules::extra_violations(&audit));
+    let labs = audit.labs;
     println!(
         "legibility: {} labels, {} collisions",
         labs.len(),
@@ -209,6 +243,41 @@ fn every_section_draws_its_title_and_labels_when_focused() {
             .count();
         assert!(inside > 15, "{s:?}: only {inside} labels in the section");
         assert!(visible.width() > 100.0, "{s:?} visible {visible:?}");
+    }
+}
+
+#[test]
+fn audit_records_frames_knobs_and_clip_rects() {
+    use crate::widgets::probe::Kind;
+    let a = audit_of(None, vec2(3300.0, 900.0));
+    assert!(a.recs.iter().any(|r| r.kind == Kind::GroupInside));
+    assert!(a.recs.iter().any(|r| r.kind == Kind::GroupBreak));
+    assert!(a.recs.iter().filter(|r| r.kind == Kind::Knob).count() > 20);
+    assert!(a.labs.iter().all(|l| l.clip.is_positive()));
+    // Every label of the rotary box sits inside its frame (rule G of `legibility_rules`).
+    let frame = a
+        .recs
+        .iter()
+        .find(|r| r.kind == Kind::GroupInside)
+        .map(|r| r.rect)
+        .unwrap();
+    for t in [
+        "ROTARY SPEAKER",
+        "DRIVE",
+        "CLOSE MIC",
+        "SLOW/STOP - FAST",
+        "FAST",
+    ] {
+        let l = a
+            .labs
+            .iter()
+            .find(|l| l.text == t)
+            .unwrap_or_else(|| panic!("{t}"));
+        assert!(
+            frame.contains_rect(l.full),
+            "{t} {:?} outside {frame:?}",
+            l.full
+        );
     }
 }
 
