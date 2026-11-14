@@ -27,7 +27,7 @@ pub use layer::{step_time, Env, SynthLayerUi};
 pub use layer_btn::LayerAction;
 pub use legacy::Legacy;
 pub use page::{dial_defs, DialDef, SynthPage, ARP_PAGES, EXTERN_WHY};
-pub use pots::Pots;
+pub use pots::{Pots, FREQ_MAX, FREQ_MIN, GLIDE_MAX, LFO_MAX, LFO_MIN};
 pub use samples::SampleBrowser;
 pub use tables::*;
 

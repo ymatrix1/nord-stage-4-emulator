@@ -26,6 +26,7 @@ mod organ_preset;
 mod organ_rewire_tests;
 mod organ_strip;
 mod organ_widgets;
+pub mod param_hint;
 #[cfg(test)]
 mod piano_click_tests;
 mod piano_logic;

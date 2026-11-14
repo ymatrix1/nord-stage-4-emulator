@@ -213,3 +213,28 @@ def test_fixed_wording_is_in_the_firmware() -> None:
         "ModWheel MIDI",
     ):
         assert text in pool.exact, text
+
+
+@needs_fw
+def test_param_hint_labels_are_in_the_firmware() -> None:
+    """Labels and LFO destination words of `panel/param_hint/table.rs` marked VERIFIED."""
+    fw = firmware()
+    assert fw is not None
+    pool = os_.Pool(os_.fw_strings(fw.read_bytes()))
+    for text in (
+        "Oscillator Ctrl",
+        "Oscillator Env Amount",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Filter Env Amount",
+        "LFO Destination",
+        "LFO Rate",
+        "LFO Amount",
+        "Glide Rate",
+        "Arpeggiator Rate",
+        "Arpeggiator Range",
+        "Filter",
+        "Osc Pitch",
+        "OscCtrl",
+    ):
+        assert text in pool.exact, text
