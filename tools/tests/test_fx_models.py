@@ -7,7 +7,10 @@ import pytest
 def test_registry_lists_every_modelled_routine():
     rts = fx_models.routines()
     assert set(rts) == set(fx_models.MODULES)
-    assert {"delay", "lfo", "allpass", "apan", "resonant", "resonant4"} == set(rts)
+    assert {
+        "delay", "lfo", "allpass", "apan", "resonant", "resonant4", "chor4", "chor5",
+        "vibe", "flang", "phas0", "phas1",
+    } == set(rts)  # fmt: skip
     assert all(rt.pc < rt.end and rt.sets["M2"] == 2 for rt in rts.values())
 
 

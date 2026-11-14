@@ -11,6 +11,7 @@ fn sum() -> Summary {
         piano: "Grand".into(),
         synth: "SuperSaw".into(),
         layers_on: [true, false, true, false, true, false, false],
+        ..Default::default()
     }
 }
 

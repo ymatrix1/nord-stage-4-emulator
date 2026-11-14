@@ -84,7 +84,7 @@ pub fn face(p: &Painter, rect: Rect, down: bool, dim: bool) {
 pub fn legend(p: &Painter, rect: Rect, text: &str, dim: bool) {
     label(
         p,
-        pos2(rect.center().x, rect.bottom() + 5.0),
+        pos2(rect.center().x, rect.bottom() + 7.0),
         text,
         6.0,
         tone(Color32::from_gray(225), dim),
@@ -108,7 +108,7 @@ pub fn inside(p: &Painter, rect: Rect, text: &str, dim: bool) {
 pub fn caption(p: &Painter, rect: Rect, text: &str, dim: bool) {
     label(
         p,
-        pos2(rect.center().x, rect.top() - 5.0),
+        pos2(rect.center().x, rect.top() - 7.0),
         text,
         6.0,
         tone(Color32::from_gray(225), dim),
@@ -118,6 +118,8 @@ pub fn caption(p: &Painter, rect: Rect, text: &str, dim: bool) {
 
 /// Small round LED of radius `r`.
 pub fn mini_led(p: &Painter, c: Pos2, on: bool, col: Color32, col_off: Color32, r: f32, dim: bool) {
+    #[cfg(test)]
+    crate::widgets::probe::led(p, c, r + 1.0);
     p.circle_filled(c, r + 1.0, tone(Color32::from_rgb(14, 16, 19), dim));
     p.circle_filled(c, r, tone(if on { col } else { col_off }, dim));
     if on && !dim {
@@ -185,6 +187,12 @@ pub fn fader(ui: &mut Ui, rect: Rect, id: &str, level: f32) -> (Option<f32>, Res
         }
     }
     let shown = out.unwrap_or(level).clamp(0.0, 1.0);
+    #[cfg(test)]
+    crate::widgets::probe::cap_travel(
+        ui.ctx(),
+        Rect::from_center_size(rect.center(), vec2(rect.width() + 4.0, rect.height() + 3.5)),
+        id,
+    );
     let p = ui.painter();
     let slot = Rect::from_center_size(rect.center(), vec2(2.5, rect.height()));
     p.rect_filled(slot, 1.0, Color32::from_rgb(10, 12, 15));

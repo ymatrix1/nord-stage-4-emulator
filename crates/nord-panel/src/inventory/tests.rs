@@ -1,6 +1,7 @@
 //! Cross-section checks of the inventory (`docs/specs/control-inventory.md` §4).
 
 use super::all_controls;
+use super::synth_dials::DialTarget;
 use crate::types::{Binding, ControlKind, Provenance, Section};
 use std::collections::HashSet;
 use std::path::Path;
@@ -63,6 +64,20 @@ fn engine_path_exists(path: &str) -> bool {
     })
 }
 
+/// A `ui:<area>.<name>` binding names the GUI path that performs the control (no host parameter
+/// or engine field backs it). The path is lowercase ASCII with one or more dots and an area
+/// prefix that has a GUI proof test (`nord-gui`: program, synth, fx).
+fn ui_action_ok(action: &str) -> bool {
+    let Some((area, rest)) = action.split_once('.') else {
+        return false;
+    };
+    ["program", "synth", "fx"].contains(&area)
+        && !rest.is_empty()
+        && rest
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '.')
+}
+
 fn count(section: Section) -> usize {
     all_controls()
         .iter()
@@ -113,7 +128,17 @@ fn every_binding_is_set() {
 fn bound_ids_exist_in_the_host_parameter_list() {
     for c in all_controls() {
         if let Binding::Bound(id) = c.binding {
-            if let Some(path) = id.strip_prefix("engine:") {
+            if id.starts_with("dial:") {
+                let cells = super::synth_dials::cells_of(id);
+                assert!(!cells.is_empty(), "{}: no dial cells for {id}", c.id);
+                for cell in cells {
+                    if let DialTarget::Edit { host: Some(h), .. } = cell.target {
+                        assert!(host_id_exists(h), "{}: dial host id {h} not found", c.id);
+                    }
+                }
+            } else if let Some(action) = id.strip_prefix("ui:") {
+                assert!(ui_action_ok(action), "{}: bad ui action {id}", c.id);
+            } else if let Some(path) = id.strip_prefix("engine:") {
                 assert!(
                     engine_path_exists(path),
                     "{}: engine path {path} not found in nord-core",
@@ -209,9 +234,9 @@ fn total_is_the_sum_of_sections() {
 fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
-    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 150);
-    assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 58);
-    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 67);
+    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 207);
+    assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 67);
+    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 1);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)
@@ -245,6 +270,17 @@ fn host_id_resolver_accepts_literals_and_nested_ids_only() {
     assert!(!host_id_exists("organz_nope_{n}"));
     assert!(!host_id_exists("nopex_unison_{n}"));
     assert!(!host_id_exists("nothing"));
+}
+
+#[test]
+fn ui_action_resolver_accepts_area_dot_name_only() {
+    assert!(ui_action_ok("program.slot"));
+    assert!(ui_action_ok("synth.page.env_osc"));
+    assert!(ui_action_ok("fx.mod1_on"));
+    assert!(!ui_action_ok("program"));
+    assert!(!ui_action_ok("program."));
+    assert!(!ui_action_ok("nowhere.thing"));
+    assert!(!ui_action_ok("synth.Page"));
 }
 
 #[test]
@@ -296,4 +332,33 @@ fn organ_piano_and_master_have_no_unsupported_strip_controls_left() {
             );
         }
     }
+}
+
+/// Every control that is still `Unsupported`, with its bean. A new entry here needs a reason in
+/// `docs/specs/control-inventory.md` section 10 and a bean that states what data or work is missing.
+#[test]
+fn the_unsupported_set_is_pinned() {
+    let left: Vec<(String, &str)> = all_controls()
+        .into_iter()
+        .filter_map(|c| match c.binding {
+            Binding::Unsupported(b) => Some((c.id, b)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(left, [("program.section_edit".to_string(), "ns4-fqym")]);
+}
+
+/// Controls the classification pass (`ns4-lu50`) moved out of `Unsupported`, by binding kind.
+#[test]
+fn classification_pass_totals_are_pinned() {
+    let all = all_controls();
+    let ui_bound = |prefix: &str| {
+        all.iter()
+            .filter(|c| matches!(c.binding, Binding::Bound(b) if b.starts_with(prefix)))
+            .count()
+    };
+    assert_eq!(ui_bound("ui:program."), 29);
+    assert_eq!(ui_bound("ui:synth."), 18);
+    assert_eq!(ui_bound("ui:fx."), 5);
+    assert_eq!(ui_bound("ui:"), 52);
 }

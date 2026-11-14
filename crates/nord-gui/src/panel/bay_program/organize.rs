@@ -138,6 +138,8 @@ pub struct OrganizeFlow {
     /// Swap or Move chosen, with the source location picked by the dial at that moment.
     pub pending: Option<(OrganizeOp, ProgLoc)>,
     undo: OrganizeUndo<Cell>,
+    /// The Preset Organize page (`organize_presets.rs`).
+    pub preset: super::organize_presets::PresetOrganizeFlow,
 }
 
 impl OrganizeFlow {
@@ -145,6 +147,7 @@ impl OrganizeFlow {
     pub fn reset(&mut self) {
         self.pending = None;
         self.undo.clear();
+        self.preset.reset();
     }
 }
 

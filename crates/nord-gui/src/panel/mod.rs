@@ -16,6 +16,8 @@ mod keybed;
 pub mod layout_px;
 mod layout_tweaks;
 #[cfg(test)]
+mod legibility_caps;
+#[cfg(test)]
 mod legibility_rules;
 #[cfg(test)]
 mod legibility_tests;

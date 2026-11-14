@@ -5,9 +5,13 @@
 //! `buttons.rs` (button + SHIFT triggers), `dials.rs` (the three OLED dials), `knobs.rs` (pots with
 //! pick-up), `legacy.rs` (the older `synth_*` fields of the panel state), `layer.rs` (values).
 
+#[cfg(test)]
+mod binding_tests;
 mod buttons;
 mod dials;
 mod dials_pages;
+#[cfg(test)]
+mod dials_table_tests;
 mod groups;
 mod knobs;
 mod layer;

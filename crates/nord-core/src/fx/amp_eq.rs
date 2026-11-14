@@ -26,6 +26,35 @@ impl LayerFxChain {
         }
     }
 
+    /// Runs the firmware Amp EQ on `(l, r)` when `firmware_fx.eq` is on; returns whether it did.
+    /// `LP24` / `HP24` use the Mid knob as resonance, so the mid band is neutral there.
+    fn process_fw_eq(&mut self, l: &mut f32, r: &mut f32) -> bool {
+        if !self.firmware_fx.eq {
+            self.fw_eq = None;
+            return false;
+        }
+        let mid_is_res = matches!(
+            self.amp_cabinet,
+            AmpCabinet::LpFilter | AmpCabinet::HpFilter
+        );
+        let bass = fw_eq::counts_of_db(self.eq_bass_db);
+        let mid = if mid_is_res {
+            0.0
+        } else {
+            fw_eq::counts_of_db(self.eq_mid_db)
+        };
+        let treble = fw_eq::counts_of_db(self.eq_treble_db);
+        let freq = fw_eq::freq_index_of_hz(self.eq_mid_freq_hz);
+        match &mut self.fw_eq {
+            Some(st) => st.set(bass, mid, treble, freq, false),
+            slot => *slot = Some(fw_eq::FwEqStage::new(bass, mid, treble, freq)),
+        }
+        if let Some(st) = &mut self.fw_eq {
+            [*l, *r] = st.process_frame([*l, *r]);
+        }
+        true
+    }
+
     pub(super) fn process_amp_eq_comp(&mut self, mut l: f32, mut r: f32, inv_fs: f32) -> [f32; 2] {
         // Opt-in firmware drive stage (`FirmwareFx::amp`): replaces the tube drive and the cabinet
         // voicing below for the amps whose type switch installs drive stage words.
@@ -132,55 +161,61 @@ impl LayerFxChain {
             }
         }
 
-        // 3-band EQ: bass low shelf, sweepable mid peak (200 Hz .. 8 kHz), treble high shelf.
-        // True 2nd-order biquads per channel (stereo image preserved); redesigned only on change.
-        let eq_now = [
-            self.eq_bass_db,
-            self.eq_mid_db,
-            self.eq_mid_freq_hz,
-            self.eq_treble_db,
-        ];
-        if eq_now != self.eq_cache {
-            let fs = self.sample_rate;
-            let mid_fc = self.eq_mid_freq_hz.clamp(200.0, 8000.0);
-            self.eq_bass.set(
-                BiquadKind::LowShelf,
-                EQ_BASS_HZ,
-                fs,
-                EQ_SHELF_Q,
-                self.eq_bass_db.clamp(-15.0, 15.0),
+        // Opt-in firmware Amp EQ (`FirmwareFx::eq`): the tone stack `0x1243F4` with the ARM words
+        // replaces the three biquads below (latency 2 frames).
+        if self.process_fw_eq(&mut l, &mut r) {
+            // handled
+        } else {
+            // 3-band EQ: bass low shelf, sweepable mid peak (200 Hz .. 8 kHz), treble high shelf.
+            // True 2nd-order biquads per channel (stereo image preserved); redesigned only on change.
+            let eq_now = [
+                self.eq_bass_db,
+                self.eq_mid_db,
+                self.eq_mid_freq_hz,
+                self.eq_treble_db,
+            ];
+            if eq_now != self.eq_cache {
+                let fs = self.sample_rate;
+                let mid_fc = self.eq_mid_freq_hz.clamp(200.0, 8000.0);
+                self.eq_bass.set(
+                    BiquadKind::LowShelf,
+                    EQ_BASS_HZ,
+                    fs,
+                    EQ_SHELF_Q,
+                    self.eq_bass_db.clamp(-15.0, 15.0),
+                );
+                self.eq_mid.set(
+                    BiquadKind::Peak,
+                    mid_fc,
+                    fs,
+                    firmware_q(EQ_MID_Q_IDX),
+                    self.eq_mid_db.clamp(-15.0, 15.0),
+                );
+                self.eq_treble.set(
+                    BiquadKind::HighShelf,
+                    EQ_TREBLE_HZ,
+                    fs,
+                    EQ_SHELF_Q,
+                    self.eq_treble_db.clamp(-15.0, 15.0),
+                );
+                self.eq_cache = eq_now;
+            }
+            if self.eq_bass_db.abs() > 0.1 {
+                l = self.eq_bass.process(0, l);
+                r = self.eq_bass.process(1, r);
+            }
+            let mid_is_res = matches!(
+                self.amp_cabinet,
+                AmpCabinet::LpFilter | AmpCabinet::HpFilter
             );
-            self.eq_mid.set(
-                BiquadKind::Peak,
-                mid_fc,
-                fs,
-                firmware_q(EQ_MID_Q_IDX),
-                self.eq_mid_db.clamp(-15.0, 15.0),
-            );
-            self.eq_treble.set(
-                BiquadKind::HighShelf,
-                EQ_TREBLE_HZ,
-                fs,
-                EQ_SHELF_Q,
-                self.eq_treble_db.clamp(-15.0, 15.0),
-            );
-            self.eq_cache = eq_now;
-        }
-        if self.eq_bass_db.abs() > 0.1 {
-            l = self.eq_bass.process(0, l);
-            r = self.eq_bass.process(1, r);
-        }
-        let mid_is_res = matches!(
-            self.amp_cabinet,
-            AmpCabinet::LpFilter | AmpCabinet::HpFilter
-        );
-        if !mid_is_res && self.eq_mid_db.abs() > 0.1 {
-            l = self.eq_mid.process(0, l);
-            r = self.eq_mid.process(1, r);
-        }
-        if self.eq_treble_db.abs() > 0.1 {
-            l = self.eq_treble.process(0, l);
-            r = self.eq_treble.process(1, r);
+            if !mid_is_res && self.eq_mid_db.abs() > 0.1 {
+                l = self.eq_mid.process(0, l);
+                r = self.eq_mid.process(1, r);
+            }
+            if self.eq_treble_db.abs() > 0.1 {
+                l = self.eq_treble.process(0, l);
+                r = self.eq_treble.process(1, r);
+            }
         }
 
         // Opt-in firmware gain computer with the `kCmpAmt` words (latency 4 frames). It runs even

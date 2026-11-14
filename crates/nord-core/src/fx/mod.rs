@@ -16,13 +16,19 @@ mod fw_amp_types;
 mod fw_autopan;
 mod fw_cabinet;
 mod fw_cabinet_taps;
+mod fw_chorus;
+mod fw_chorus4;
+mod fw_chorus5;
 mod fw_coeffs;
 mod fw_compressor;
 mod fw_delay;
 mod fw_delay_table;
 pub mod fw_delay_time;
 mod fw_drive_tables;
+mod fw_eq;
+mod fw_eq_tables;
 mod fw_ext40;
+mod fw_flang;
 pub mod fw_leslie;
 mod fw_leslie_callee;
 mod fw_leslie_core;
@@ -35,17 +41,31 @@ mod fw_leslie_main_c;
 mod fw_leslie_main_d;
 mod fw_leslie_main_e;
 mod fw_leslie_ops;
+mod fw_leslie_ring;
 pub mod fw_map;
 mod fw_mod1;
+mod fw_mod2;
+mod fw_mod2_run;
 mod fw_params;
+mod fw_pe;
+mod fw_pe_ops;
+mod fw_phas0;
+mod fw_phas1;
 mod fw_reverb;
 mod fw_rvb_core;
 mod fw_rvb_steps;
 mod fw_rvb_words;
 mod fw_rvb_wrap;
+mod fw_rvbm;
+mod fw_rvbm_ops;
+mod fw_rvbm_steps_core;
+mod fw_rvbm_steps_wrap;
+mod fw_rvbm_words;
 mod fw_short_float;
 mod fw_stage;
 mod fw_tone_stack;
+mod fw_vibe;
+mod fw_vibe_stage;
 mod fw_words;
 mod master;
 mod master_iir;
@@ -71,6 +91,8 @@ mod tests_cabinet_golden;
 #[cfg(test)]
 mod tests_chain;
 #[cfg(test)]
+mod tests_chorus_golden;
+#[cfg(test)]
 mod tests_compressor_golden;
 #[cfg(test)]
 mod tests_delay;
@@ -83,6 +105,8 @@ mod tests_fw_amp_chain;
 #[cfg(test)]
 mod tests_fw_delay_time;
 #[cfg(test)]
+mod tests_fw_eq_chain;
+#[cfg(test)]
 mod tests_fw_leslie_data;
 #[cfg(test)]
 mod tests_fw_leslie_golden;
@@ -93,6 +117,8 @@ mod tests_fw_map;
 #[cfg(test)]
 mod tests_fw_mod1_chain;
 #[cfg(test)]
+mod tests_fw_mod2_chain;
+#[cfg(test)]
 mod tests_fw_reverb_chain;
 #[cfg(test)]
 mod tests_fw_reverb_mix;
@@ -101,11 +127,17 @@ mod tests_fw_rvb_golden;
 #[cfg(test)]
 mod tests_fw_rvb_golden_data;
 #[cfg(test)]
+mod tests_fw_rvbm_golden;
+#[cfg(test)]
+mod tests_fw_rvbm_golden_data;
+#[cfg(test)]
 mod tests_fw_series;
 #[cfg(test)]
 mod tests_lfo_golden;
 #[cfg(test)]
 mod tests_master_golden;
+#[cfg(test)]
+mod tests_mod2_golden;
 #[cfg(test)]
 mod tests_resonant_golden;
 #[cfg(test)]
@@ -121,6 +153,7 @@ pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
 pub use fw_ext40::{Fp, E40};
 pub use fw_leslie::{FwLeslie, FwLeslieE40};
+pub use fw_leslie_ring::RingAdvance;
 pub use fw_map::AllpassType;
 pub use fw_params::{
     compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,
@@ -128,6 +161,7 @@ pub use fw_params::{
 };
 pub use fw_reverb::{FwReverb, FwReverbF32};
 pub use fw_rvb_wrap::{mix2 as fw_rvb_mix2, FwRvbWrap};
+pub use fw_rvbm::{FwReverbMulti, FwReverbMultiF32};
 pub use fw_tone_stack::{ctx as fw_tone_stack_ctx, FwToneStack2, FwToneStack4};
 pub use master::MasterBus;
 pub use tables::*;
@@ -240,11 +274,23 @@ pub struct LayerFxChain {
     /// Raw `kFx1Type` (`0..=11`) of the program; the firmware Mod 1 runs for 0..=3 only (the
     /// engine's `Mod1Type` folds the Pump types 10, 11 into `Tremolo`). `None`: engine path.
     pub mod1_type_raw: Option<u8>,
+    /// 7 bit `kFx2RateClkDiv` value (`0..=127`) of the program; read only with `firmware_fx.mod2`.
+    pub mod2_rate_raw: Option<u8>,
+    /// Raw `kFx2Type` (`0..=11`) of the program; the firmware Mod 2 runs for 4 and 5 (`CHOR`).
+    pub mod2_type_raw: Option<u8>,
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
+    /// The firmware chorus (`firmware_fx.mod2`), boxed: the ring is 4 KB.
+    fw_mod2: Option<Box<fw_mod2::FwMod2Stage>>,
+    fw_vibe: Option<Box<fw_vibe_stage::FwVibeStage>>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
+    /// The firmware Amp EQ (`firmware_fx.eq`), built when first needed.
+    fw_eq: Option<fw_eq::FwEqStage>,
     /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
     fw_reverb: Option<Box<FwReverb>>,
+    /// The firmware multi-tap reverb (`firmware_fx.reverb`, `kRvbType` 2..11), built when first
+    /// needed and retyped in place afterwards.
+    fw_reverb_multi: Option<Box<FwReverbMulti>>,
     fw_comp_amount: f32,
     clock_bpm: f32,
     dyn1: mod1_dynamic::Mod1Dyn,
@@ -346,10 +392,16 @@ impl LayerFxChain {
             delay_rate_raw: None,
             mod1_rate_raw: None,
             mod1_type_raw: None,
+            mod2_rate_raw: None,
+            mod2_type_raw: None,
             fw_mod1: None,
+            fw_mod2: None,
+            fw_vibe: None,
             fw_comp: None,
             fw_amp: None,
+            fw_eq: None,
             fw_reverb: None,
+            fw_reverb_multi: None,
             fw_comp_amount: 0.0,
             clock_bpm: 120.0,
             dyn1: mod1_dynamic::Mod1Dyn::new(),

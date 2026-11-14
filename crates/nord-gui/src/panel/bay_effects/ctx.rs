@@ -24,8 +24,8 @@ pub(super) struct Fx<'a> {
 
 /// Distance from the bottom of a control to the centre of its first caption line (px).
 pub(super) const CAPTION_DROP: f32 = 6.5;
-/// Pitch of stacked caption lines (px): the 7.5 px minimum font plus a 1 px gap.
-pub(super) const CAPTION_LINE: f32 = 8.5;
+/// Pitch of stacked caption lines (px): the 7.5 px minimum font plus a 2 px gap (audit rule `V`).
+pub(super) const CAPTION_LINE: f32 = 9.5;
 /// Colour of a dimmed (unsupported) control overlay.
 const DIM: Color32 = Color32::from_black_alpha(140);
 /// Caption colour (silkscreen white-grey).
@@ -276,6 +276,8 @@ pub(super) fn paint_pill(p: &Painter, rect: Rect, lit: bool, down: bool) {
 
 /// Mini indicator LED (the panel's LEDs are about 3 px; `widgets::led` is too large here).
 pub(super) fn mini_led(p: &Painter, c: Pos2, on: bool, col: Color32, dim_col: Color32) {
+    #[cfg(test)]
+    crate::widgets::probe::led(p, c, 2.6);
     p.circle_filled(c, 2.6, Color32::from_rgb(14, 16, 19));
     p.circle_filled(c, 1.9, if on { col } else { dim_col });
     if on {

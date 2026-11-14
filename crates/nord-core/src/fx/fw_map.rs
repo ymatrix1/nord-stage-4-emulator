@@ -131,7 +131,7 @@ pub fn allpass_dry(v: f32) -> f32 {
 
 /// UI counts of the 13 captured points of the tone controls (non uniform: the steps 1, 15, 30, 45
 /// near the ends are the series' sample values).
-const TONE_COUNTS: [i32; 13] = [-60, -59, -58, -45, -30, -15, -1, 0, 1, 15, 30, 45, 60];
+pub(super) const TONE_COUNTS: [i32; 13] = [-60, -59, -58, -45, -30, -15, -1, 0, 1, 15, 30, 45, 60];
 
 /// Shelf gain word of `kAmpTreble` (`c[-0x1B]`, `F`) and of `kAmpBass` (`c[-0x20]`, `A`): the same
 /// curve for both ids and all three units (series `Amp,7,kAmpTreble,..,-27`, `kAmpBass,..,-32`).
@@ -189,7 +189,7 @@ const TONE_BASS_SMOOTHER_PIANO: [f32; 13] = [
 ];
 
 /// Piecewise linear interpolation of a 13-point table at signed `counts` (clamped to `-60..=60`).
-fn tone_table(table: &[f32; 13], counts: f32) -> f32 {
+pub(super) fn tone_table(table: &[f32; 13], counts: f32) -> f32 {
     let x = counts.clamp(-60.0, 60.0);
     let hi = TONE_COUNTS
         .iter()

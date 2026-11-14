@@ -121,11 +121,34 @@ pub fn apply_rotary_unity(engine: &mut Stage4Engine, on: bool) {
 /// `gain_db` is applied after it (the booted firmware level is about -50 dB, so the level stage that
 /// makes it up in the hardware is open; `0.0` keeps the firmware level).
 pub fn apply_leslie_firmware(engine: &mut Stage4Engine, on: bool, gain_db: f32) {
+    apply_leslie_firmware_ring(engine, on, gain_db, crate::fx::RingAdvance::ADVANCE);
+}
+
+/// [`apply_leslie_firmware`] with an explicit history ring behaviour (`--leslie-ring`).
+pub fn apply_leslie_firmware_ring(
+    engine: &mut Stage4Engine,
+    on: bool,
+    gain_db: f32,
+    ring: crate::fx::RingAdvance,
+) {
     if on {
         for organ in [&mut engine.organ_a, &mut engine.organ_b] {
-            organ.leslie_fw = Some(Box::new(crate::fx::FwLeslie::new()));
+            organ.leslie_fw = Some(Box::new(crate::fx::FwLeslie::with_ring(ring)));
             organ.leslie_gain = 10f32.powf(gain_db / 20.0);
         }
+    }
+}
+
+/// Parses a `--leslie-ring` value: `firmware | advance | frozen`.
+pub fn parse_leslie_ring(v: &str) -> Result<crate::fx::RingAdvance, String> {
+    use crate::fx::RingAdvance;
+    match v {
+        "firmware" => Ok(RingAdvance::PASS_RESET8),
+        "advance" => Ok(RingAdvance::ADVANCE),
+        "frozen" => Ok(RingAdvance::FROZEN),
+        _ => Err(format!(
+            "invalid --leslie-ring '{v}' (expected firmware|advance|frozen)"
+        )),
     }
 }
 
@@ -183,6 +206,15 @@ pub fn parse_sample_kernel(v: &str) -> Result<bool, String> {
         _ => Err(format!(
             "invalid --sample-kernel '{v}' (expected key|ratio)"
         )),
+    }
+}
+
+/// Parses `--sample-pitch`: `fw` (firmware exponent tables, true) or `equal` (exact `2^(n/12)`).
+pub fn parse_sample_pitch(v: &str) -> Result<bool, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "fw" | "firmware" => Ok(true),
+        "equal" => Ok(false),
+        _ => Err(format!("invalid --sample-pitch '{v}' (expected fw|equal)")),
     }
 }
 
@@ -253,6 +285,9 @@ pub struct FirmwareOptions {
     /// firmware key rule (`sinc::key_rule`, VERIFIED run, key field ASSUMED) instead of the ASSUMED
     /// ratio rule. Off by default until a program level check against hardware exists.
     pub sample_kernel_key: bool,
+    /// `--sample-pitch fw|equal`: the `SAMPLES` oscillator step follows the ARM exponent tables
+    /// (`sinc::pitch_law`, VERIFIED law; root and sample-rate fields ASSUMED). Off by default.
+    pub sample_pitch_fw: bool,
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
@@ -269,6 +304,10 @@ pub struct FirmwareOptions {
     pub leslie_firmware: bool,
     /// `--leslie-gain-db <dB>`: gain after the firmware Leslie in millidecibel (default 0).
     pub leslie_gain_mdb: i32,
+    /// `--leslie-ring firmware|advance|frozen`: the history ring pointers of the firmware Leslie
+    /// (default `advance`: 4 words per call; `firmware`: re-based every 8 calls like the booted
+    /// pass routine; `frozen`: the first oracle state, `fx-leslie.md` s10).
+    pub leslie_ring: crate::fx::RingAdvance,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -291,12 +330,14 @@ impl Default for FirmwareOptions {
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
             sample_kernel_key: false,
+            sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
             organ_level: OutputLevel::ModelDefault,
             leslie_firmware: false,
             leslie_gain_mdb: 0,
+            leslie_ring: crate::fx::RingAdvance::ADVANCE,
         }
     }
 }
@@ -332,12 +373,14 @@ impl FirmwareOptions {
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
             sample_kernel_key: false,
+            sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
             organ_level: OutputLevel::ModelDefault,
             leslie_firmware: false,
             leslie_gain_mdb: 0,
+            leslie_ring: crate::fx::RingAdvance::ADVANCE,
         }
     }
 
@@ -390,6 +433,9 @@ impl FirmwareOptions {
         if let Some(v) = value("--sample-kernel") {
             o.sample_kernel_key = parse_sample_kernel(v)?;
         }
+        if let Some(v) = value("--sample-pitch") {
+            o.sample_pitch_fw = parse_sample_pitch(v)?;
+        }
         o.firmware_routing |= has("--firmware-routing");
         if has("--legacy-routing") {
             o.firmware_routing = false;
@@ -409,6 +455,9 @@ impl FirmwareOptions {
                 "engine" => false,
                 _ => return Err(format!("invalid --leslie '{v}' (firmware|engine)")),
             };
+        }
+        if let Some(v) = value("--leslie-ring") {
+            o.leslie_ring = parse_leslie_ring(v)?;
         }
         if let Some(v) = value("--leslie-gain-db") {
             let db: f32 = v
@@ -448,10 +497,11 @@ impl FirmwareOptions {
         engine.piano_b.firmware_layer_law = self.piano_layer_law;
         apply_b3_tail(engine, self.b3_tail);
         apply_farfisa_processor(engine, self.farfisa_processor);
-        apply_leslie_firmware(
+        apply_leslie_firmware_ring(
             engine,
             self.leslie_firmware,
             self.leslie_gain_mdb as f32 / 1000.0,
+            self.leslie_ring,
         );
         apply_synth_chain(engine, self.synth_chain);
         self.set_shape(engine);
@@ -567,6 +617,9 @@ impl FirmwareOptions {
         engine.synth_a.sample_kernel_by_key = self.sample_kernel_key;
         engine.synth_b.sample_kernel_by_key = self.sample_kernel_key;
         engine.synth_c.sample_kernel_by_key = self.sample_kernel_key;
+        engine.synth_a.sample_pitch_fw = self.sample_pitch_fw;
+        engine.synth_b.sample_pitch_fw = self.sample_pitch_fw;
+        engine.synth_c.sample_pitch_fw = self.sample_pitch_fw;
     }
 
     fn set_stages(&self, engine: &mut Stage4Engine) {
@@ -634,6 +687,9 @@ impl FirmwareOptions {
         }
         if self.sample_kernel_key {
             parts.push("sample-kernel=key".into());
+        }
+        if self.sample_pitch_fw {
+            parts.push("sample-pitch=fw".into());
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
@@ -760,6 +816,21 @@ mod tests {
         let r = FirmwareOptions::from_args(&["--sample-kernel".into(), "ratio".into()]).unwrap();
         assert!(!r.sample_kernel_key);
         assert!(parse_sample_kernel("bogus").is_err());
+    }
+
+    #[test]
+    fn sample_pitch_flag_selects_the_firmware_exponent_law_on_every_layer() {
+        assert!(!FirmwareOptions::default().sample_pitch_fw);
+        let o = FirmwareOptions::from_args(&["--sample-pitch".into(), "fw".into()]).unwrap();
+        assert!(o.sample_pitch_fw && o.summary().contains("sample-pitch=fw"));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert!(
+            e.synth_a.sample_pitch_fw && e.synth_b.sample_pitch_fw && e.synth_c.sample_pitch_fw
+        );
+        let r = FirmwareOptions::from_args(&["--sample-pitch".into(), "equal".into()]).unwrap();
+        assert!(!r.sample_pitch_fw);
+        assert!(parse_sample_pitch("bogus").is_err());
     }
 
     #[test]

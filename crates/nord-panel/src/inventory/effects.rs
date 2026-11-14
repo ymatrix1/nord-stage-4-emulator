@@ -6,16 +6,20 @@
 
 use crate::types::{ControlEntry, ControlKind as K, Section};
 
+/// Reason shared by the three FX FOCUS buttons.
+const FOCUS: &str = "selects which Layer's effects chain the Layer Effects knobs address; \
+no sound parameter of its own";
+
 pub fn controls() -> Vec<ControlEntry> {
     let s = Section::Effects;
     let e = ControlEntry::new;
-    let bean = "ns4-e3zs";
     vec![
         // FX Focus and master switches (p.48)
-        e("fx.layer_effects_on", s, K::Button, "LAYER EFFECTS ON", 48).todo(bean),
-        e("fx.focus.organ", s, K::Button, "FX FOCUS ORGAN", 48).todo(bean),
-        e("fx.focus.piano", s, K::Button, "FX FOCUS PIANO", 48).todo(bean),
-        e("fx.focus.synth", s, K::Button, "FX FOCUS SYNTH", 48).todo(bean),
+        e("fx.layer_effects_on", s, K::Button, "LAYER EFFECTS ON", 48)
+            .bound("ui:fx.layer_effects_on"),
+        e("fx.focus.organ", s, K::Button, "FX FOCUS ORGAN", 48).ui(FOCUS),
+        e("fx.focus.piano", s, K::Button, "FX FOCUS PIANO", 48).ui(FOCUS),
+        e("fx.focus.synth", s, K::Button, "FX FOCUS SYNTH", 48).ui(FOCUS),
         e(
             "fx.focus.group_piano",
             s,
@@ -36,7 +40,7 @@ pub fn controls() -> Vec<ControlEntry> {
         .bound("fxy_group_{n}"),
         e("fx.focus.leds", s, K::Led, "FX FOCUS LEDs", 48).ui("show the focused section or layer"),
         // Mod 1 (p.49-50)
-        e("mod1.on", s, K::Button, "MOD 1 ON", 49).todo(bean),
+        e("mod1.on", s, K::Button, "MOD 1 ON", 49).bound("ui:fx.mod1_on"),
         e("mod1.selector", s, K::Button, "MOD 1 TYPE (6)", 49).bound("mod1_type"),
         e(
             "mod1.variation",
@@ -63,7 +67,7 @@ pub fn controls() -> Vec<ControlEntry> {
             .morph()
             .bound("fxx_mod1_amount_{n}"),
         // Mod 2 (p.50)
-        e("mod2.on", s, K::Button, "MOD 2 ON", 50).todo(bean),
+        e("mod2.on", s, K::Button, "MOD 2 ON", 50).bound("ui:fx.mod2_on"),
         e("mod2.selector", s, K::Button, "MOD 2 TYPE (6)", 50).bound("mod2_type"),
         e(
             "mod2.variation",
@@ -115,12 +119,12 @@ pub fn controls() -> Vec<ControlEntry> {
         )
         .shift()
         .bound("delay_pp"),
-        e("delay.tap_set", s, K::Button, "TAP/SET", 50).todo(bean),
+        e("delay.tap_set", s, K::Button, "TAP/SET", 50).bound("delay_ms"),
         e("delay.analog", s, K::Button, "ANALOG (Shift+Tap/Set)", 51)
             .shift()
             .bound("fxx_delay_analog_{n}"),
         // Amp Sim / EQ (p.51-52)
-        e("amp.on", s, K::Button, "AMP SIM/EQ ON", 51).todo(bean),
+        e("amp.on", s, K::Button, "AMP SIM/EQ ON", 51).bound("ui:fx.amp_on"),
         e("amp.drive", s, K::Knob, "DRIVE", 51)
             .morph()
             .bound("drive"),
@@ -143,7 +147,7 @@ pub fn controls() -> Vec<ControlEntry> {
         e("amp.res", s, K::Knob, "FILTER RES", 52)
             .assumed("RES knob named on p.52; its panel position is not described")
             .bound("fxx_filter_res_{n}"),
-        e("amp.filter", s, K::Button, "FILTER LP24/HP24", 52).todo(bean),
+        e("amp.filter", s, K::Button, "FILTER LP24/HP24", 52).bound("fxsel_cabinet_{n}"),
         e("amp.to_rotary", s, K::Button, "TO ROTARY", 52).bound("fxsel_cabinet_{n}"),
         // Compressor (p.52)
         e("comp.on", s, K::Button, "COMP ON", 52).bound("comp_on"),
@@ -157,7 +161,7 @@ pub fn controls() -> Vec<ControlEntry> {
             .shift()
             .bound("comp_fast"),
         // Reverb (p.52-53)
-        e("reverb.on", s, K::Button, "REVERB ON", 52).todo(bean),
+        e("reverb.on", s, K::Button, "REVERB ON", 52).bound("ui:fx.reverb_on"),
         e("reverb.global", s, K::Button, "GLOBAL (Shift+On)", 52)
             .shift()
             .bound("fxy_glob_rev_{n}"),

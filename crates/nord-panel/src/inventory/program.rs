@@ -9,13 +9,16 @@ const MENUS: [&str; 8] = [
     "system", "sound", "organize", "aux_kb", "output", "pedal", "midi", "extern",
 ];
 
+/// Reason shared by PAGE / BANK: they move the browse cursor of the program list only.
+const BROWSE: &str =
+    "moves the program-list browse cursor; the program changes only when a Program button picks a slot";
+
 pub fn controls() -> Vec<ControlEntry> {
     let s = Section::Program;
     let e = ControlEntry::new;
-    let bean = "ns4-ymci";
     let mut v = vec![
         e("program.oled", s, K::Oled, "PROGRAM DISPLAY", 38).ui("drawn by the OLED renderer (B8d)"),
-        e("program.dial", s, K::Encoder, "PROGRAM DIAL", 41).todo(bean),
+        e("program.dial", s, K::Encoder, "PROGRAM DIAL", 41).bound("ui:program.dial"),
         e("program.list", s, K::Encoder, "LIST (Shift+dial)", 41)
             .shift()
             .ui("list view of programs"),
@@ -28,14 +31,14 @@ pub fn controls() -> Vec<ControlEntry> {
             44,
         )
         .ui("second modifier key"),
-        e("program.page_down", s, K::Button, "PAGE -", 41).todo(bean),
-        e("program.page_up", s, K::Button, "PAGE +", 41).todo(bean),
+        e("program.page_down", s, K::Button, "PAGE -", 41).ui(BROWSE),
+        e("program.page_up", s, K::Button, "PAGE +", 41).ui(BROWSE),
         e("program.bank_down", s, K::Button, "BANK - (Shift+Page)", 41)
             .shift()
-            .todo(bean),
+            .ui(BROWSE),
         e("program.bank_up", s, K::Button, "BANK + (Shift+Page)", 41)
             .shift()
-            .todo(bean),
+            .ui(BROWSE),
     ];
     for n in 1..=8 {
         v.push(
@@ -46,7 +49,7 @@ pub fn controls() -> Vec<ControlEntry> {
                 "PROGRAM 1-8",
                 44,
             )
-            .todo(bean),
+            .bound("ui:program.slot"),
         );
     }
     for (i, m) in MENUS.iter().enumerate() {
@@ -68,7 +71,8 @@ pub fn controls() -> Vec<ControlEntry> {
         );
     }
     v.extend([
-        e("program.prog_view", s, K::Button, "PROG VIEW", 42).todo(bean),
+        e("program.prog_view", s, K::Button, "PROG VIEW", 42)
+            .ui("cycles the OLED home view (name, category, ...); changes no sound parameter"),
         e(
             "program.preset_name",
             s,
@@ -77,8 +81,8 @@ pub fn controls() -> Vec<ControlEntry> {
             42,
         )
         .shift()
-        .todo(bean),
-        e("program.live_mode", s, K::Button, "LIVE MODE", 44).todo(bean),
+        .ui("shows the program name on the OLED while latched; changes no sound parameter"),
+        e("program.live_mode", s, K::Button, "LIVE MODE", 44).bound("ui:program.live_mode"),
         e(
             "program.num_pad",
             s,
@@ -87,8 +91,8 @@ pub fn controls() -> Vec<ControlEntry> {
             44,
         )
         .shift()
-        .todo(bean),
-        e("program.store", s, K::Button, "STORE", 41).todo(bean),
+        .bound("ui:program.num_pad"),
+        e("program.store", s, K::Button, "STORE", 41).bound("ui:program.store"),
         e(
             "program.store_as",
             s,
@@ -97,12 +101,12 @@ pub fn controls() -> Vec<ControlEntry> {
             42,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:program.store_as"),
         e("program.solo", s, K::Button, "SOLO", 42).ui("monitor mode, not stored"),
         e("program.undo", s, K::Button, "UNDO (Shift+Solo)", 42)
             .shift()
-            .todo("ns4-q6p7"),
-        e("program.section_edit", s, K::Button, "SECTION EDIT", 43).todo("ns4-q6p7"),
+            .bound("ui:program.undo"),
+        e("program.section_edit", s, K::Button, "SECTION EDIT", 43).todo("ns4-fqym"),
         e(
             "program.layer_init",
             s,
@@ -111,11 +115,11 @@ pub fn controls() -> Vec<ControlEntry> {
             43,
         )
         .shift()
-        .todo(bean),
-        e("program.mon_copy", s, K::Button, "MON/COPY", 43).todo("ns4-q6p7"),
+        .bound("ui:program.layer_init"),
+        e("program.mon_copy", s, K::Button, "MON/COPY", 43).bound("ui:program.mon_copy"),
         e("program.paste", s, K::Button, "PASTE (Shift+Mon/Copy)", 43)
             .shift()
-            .todo("ns4-q6p7"),
+            .bound("ui:program.paste"),
         e("program.layer_scene_ii", s, K::Button, "LAYER SCENE II", 43).bound("layer_scene_ii"),
         e("program.midi_led", s, K::Led, "MIDI", 41).ui("blinks on incoming MIDI"),
         e("program.extern_led", s, K::Led, "EXTERN", 41).ui("blinks on outgoing Extern MIDI"),

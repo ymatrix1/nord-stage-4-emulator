@@ -3,6 +3,7 @@
 use super::{BackupLibraryState, LibraryLoadOutcome};
 use crate::audio::{AudioCommand, AudioHandle, PianoEdit};
 use crate::panel::{LoadRequest, Stage4PanelState};
+use nord_core::cbin::PresetSection;
 use nord_core::piano::PianoCategory;
 use nord_core::synth::SynthOscMode;
 use std::sync::Arc;
@@ -16,6 +17,15 @@ impl BackupLibraryState {
             .sync_catalog(&self.programs, &self.pianos, &self.samples);
         if self.synced_layout_rev != self.layout_rev {
             panel.program_ui.library.set_factory(&self.program_slots);
+            for s in PresetSection::ALL {
+                let slots: Vec<(u16, String)> = self
+                    .preset_slots
+                    .iter()
+                    .filter(|(sec, _, _)| *sec == s)
+                    .map(|(_, i, n)| (*i, n.clone()))
+                    .collect();
+                panel.program_ui.library.presets.set_factory(s, &slots);
+            }
             panel.program_ui.organize.reset();
             self.synced_layout_rev = self.layout_rev;
         }

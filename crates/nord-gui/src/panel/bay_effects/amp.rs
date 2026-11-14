@@ -82,6 +82,16 @@ pub(super) fn amp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
         );
         let tip = "FILTER RES: resonance of LP24 / HP24";
         changed |= f.knob("amp.res", &mut c.res, (0.0, 1.0), tip, None);
+        // The trimmer has no room under it (MID is right below): its name goes to its right.
+        let res = f.rect("amp.res");
+        crate::widgets::label(
+            f.p,
+            egui::pos2(res.right() + 6.5, res.center().y),
+            "RES",
+            6.5,
+            super::ctx::CAPTION,
+            egui::Align2::LEFT_CENTER,
+        );
 
         changed |= model_selector(f, c, slot);
     }

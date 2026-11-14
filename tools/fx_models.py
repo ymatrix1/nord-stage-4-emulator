@@ -21,8 +21,10 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fx_model_allpass
 import fx_model_apan
+import fx_model_chorus
 import fx_model_delay
 import fx_model_lfo
+import fx_model_mod2
 import fx_model_resonant
 import fx_model_resonant4
 import fx_oracle as fo
@@ -33,6 +35,9 @@ MODULES = {
     "lfo": fx_model_lfo,
     "allpass": fx_model_allpass,
     "apan": fx_model_apan,
+    "chor4": fx_model_chorus.Kind(4),
+    "chor5": fx_model_chorus.Kind(5),
+    **{name: fx_model_mod2.Kind(name) for name in fx_model_mod2.SPECS},
     "resonant": fx_model_resonant,
     "resonant4": fx_model_resonant4,
 }

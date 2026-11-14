@@ -28,6 +28,8 @@ pub(super) fn tiny(p: &Painter, pos: Pos2, s: &str, col: Color32, al: Align2) {
 
 /// Small round LED.
 pub(super) fn dot(p: &Painter, c: Pos2, on: bool, col_on: Color32, col_off: Color32) {
+    #[cfg(test)]
+    crate::widgets::probe::led(p, c, 3.0);
     p.circle_filled(c, 3.0, Color32::from_rgb(14, 16, 19));
     p.circle_filled(c, 2.3, if on { col_on } else { col_off });
 }
@@ -316,6 +318,15 @@ pub(super) fn fader(
             }
         }
     }
+    #[cfg(test)]
+    crate::widgets::probe::cap_travel(
+        ui.ctx(),
+        Rect::from_center_size(
+            rect.center(),
+            vec2(rect.width().max(9.0), rect.height() + 6.0),
+        ),
+        id,
+    );
     p.rect_filled(
         Rect::from_center_size(rect.center(), vec2(2.5, rect.height())),
         1.0,

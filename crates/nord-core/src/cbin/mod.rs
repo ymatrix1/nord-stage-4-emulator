@@ -3,6 +3,7 @@
 //! Spec: `docs/specs/cbin-and-presets.md`
 
 pub mod backup;
+pub mod backup_presets;
 pub mod backup_store;
 pub mod backup_writer;
 pub mod bitstream;
@@ -18,9 +19,11 @@ pub mod presets;
 pub mod program_file;
 pub mod sample;
 pub mod synth_osc;
+pub mod synth_pattern;
 pub mod synth_preset;
 
 pub use backup::*;
+pub use backup_presets::*;
 pub use backup_store::*;
 pub use backup_writer::*;
 pub use bitstream::*;
