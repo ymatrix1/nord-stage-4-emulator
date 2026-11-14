@@ -12,7 +12,6 @@
 //! can write the new layout.
 
 use super::catalog::display_name;
-use super::model::MenuId;
 use super::oled::OledText;
 use super::oled_icons::ICON_LIST;
 use super::oled_lists::{entry_text, window_start, LIST_ROWS};
@@ -283,7 +282,7 @@ pub fn compose(ui: &ProgramUi) -> OledText {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::panel::bay_program::model::Screen;
+    use crate::panel::bay_program::model::{MenuId, Screen};
     use nord_core::engine::Stage4Engine;
 
     fn prog(name: &str) -> UserProgram {

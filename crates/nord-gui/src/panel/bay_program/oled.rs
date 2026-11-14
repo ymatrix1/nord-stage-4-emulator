@@ -196,14 +196,17 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         Screen::Menu(m) => super::menu_screen::compose(ui, m),
         Screen::StoreTo | Screen::StoreAs => super::oled_store::compose(ui),
         Screen::Split => super::oled_lists::split(ui),
-        Screen::Clock => t(
-            "MST CLK",
-            format!("{:.0} BPM", ui.clock.bpm),
-            vec![
-                format!("KBS: {}", ui.clock.kbs.label()),
-                "External clock: none".into(),
-            ],
-        ),
+        // VERIFIED (ARM frame, research note s16.7, key id 16): a popup in the lower half of the
+        // home screen, label `Master Clock Tempo` (row y = 45, four beat boxes at the right, the
+        // first lit) and `120 bpm` (y = 55). ASSUMED: the Keyboard Sync state is appended to the
+        // value (the real popup has no room for the KBS soft button, which stays functional).
+        Screen::Clock => OledText {
+            popup: Some((
+                "Master Clock Tempo".into(),
+                format!("{:.0} bpm\tKBS {}", ui.clock.bpm, ui.clock.kbs.label()),
+            )),
+            ..home(ui, sum)
+        },
         // VERIFIED: Transpose is a popup in the lower half of the home screen, label and value
         // (`Transpose` / `+1 semi`, ARM frames, research note s12). ASSUMED: `Off` for the off state.
         Screen::Transpose => OledText {
@@ -218,17 +221,30 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
             ..home(ui, sum)
         },
         Screen::Preset { kind, single } => super::oled_lists::preset(ui, kind, single),
-        Screen::Undo => t(
-            "UNDO",
-            match (ui.undo_blocked, ui.redo_available) {
-                (true, true) => "Nothing to Undo. Redo?",
-                (true, false) => "Nothing to Undo",
-                (false, true) => "Revert the last edit? (Redo ready)",
-                (false, false) => "Revert the last edit?",
+        // VERIFIED (ARM frame, research note s16.7, key id 21 with the modifier bit set): bar `UNDO`
+        // without a counter, `Nothing to Undo` (8 px, ink rows 16 to 23), and one outlined `Ok`
+        // button in the fourth soft slot. ASSUMED: with history the label reads `Undo to before` and
+        // the row `the last edit?` (the pool pair `Undo to before` / `%s?`), `Redo` sits in the
+        // third slot (the pool order is `Ok`, `Redo`); the Redo slot is only drawn when a redo exists.
+        Screen::Undo => {
+            let (sub, rows) = if ui.undo_blocked {
+                ("Nothing to Undo", Vec::new())
+            } else {
+                ("Undo to before", vec!["the last edit?".to_string()])
+            };
+            let mut soft = ui.screen.soft_labels();
+            if !ui.redo_available {
+                soft[2] = "";
             }
-            .into(),
-            Vec::new(),
-        ),
+            OledText {
+                bar: Some(String::new()),
+                big: "UNDO".into(),
+                sub: sub.into(),
+                rows,
+                soft,
+                ..Default::default()
+            }
+        }
         // VERIFIED: title, prompt and the per-section layer letters (`AB`, `A`, `A`) above the
         // All / Organ / Piano / Synth soft buttons (soft-piano video `NVMtX0epXog` 1:16,
         // piano-pad video `hR31DQrxfT4` 1:02). PAGE picking the layer is emulator-only.

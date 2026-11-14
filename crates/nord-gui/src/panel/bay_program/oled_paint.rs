@@ -172,6 +172,7 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
         let soft_top = top + b.soft_y;
         if let Some((label, value)) = &text.popup {
             line(top + b.popup_y[0], label, f_row);
+            // The value row keeps its second part (after a tab) at the right edge.
             line(top + b.popup_y[1], value, f_row);
         }
         for (i, r) in text.rows.iter().enumerate() {

@@ -68,13 +68,25 @@ pub(super) fn paint_oled(
         let x = rect_or_empty(DIAL_IDS[i], o).center().x;
         let col = if s.dim { FG.gamma_multiply(0.4) } else { FG };
         soft_text(&p, disp, x, disp.bottom() - 21.5, &s.value, col);
-        soft_text(
-            &p,
-            disp,
-            x,
-            disp.bottom() - 11.5,
+        // VERIFIED (research note s16.4): the labels are small inverted tabs, not outlined boxes.
+        let tab_col = col.gamma_multiply(0.8);
+        let w = p
+            .layout_no_wrap(
+                s.label.to_string(),
+                FontId::monospace(crate::widgets::MIN_FONT_PX),
+                tab_col,
+            )
+            .rect
+            .width();
+        let cx = soft_x(disp, x, w);
+        let tab = Rect::from_center_size(pos2(cx, disp.bottom() - 6.0), vec2(w + 3.0, 10.5));
+        p.rect_filled(tab, 1.0, tab_col);
+        p.text(
+            pos2(cx, disp.bottom() - 11.0),
+            Align2::CENTER_TOP,
             s.label,
-            col.gamma_multiply(0.8),
+            FontId::monospace(crate::widgets::MIN_FONT_PX),
+            OLED_BG,
         );
     }
 }

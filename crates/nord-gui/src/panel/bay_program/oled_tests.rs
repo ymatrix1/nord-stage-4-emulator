@@ -91,7 +91,11 @@ fn menus_list_and_preset_screens_have_their_titles() {
 fn clock_transpose_morph_numpad_and_message_text() {
     let mut u = ProgramUi::default();
     u.screen = Screen::Clock;
-    assert_eq!(compose(&u, &sum()).sub, "120 BPM");
+    let t = compose(&u, &sum());
+    let (label, value) = t.popup.clone().unwrap();
+    assert_eq!(label, "Master Clock Tempo");
+    assert!(value.starts_with("120 bpm	"), "{value}");
+    assert_eq!(t.big, "A:11", "the home header stays above the popup");
     u.screen = Screen::Transpose;
     u.transp.dial(2);
     let t = compose(&u, &sum());
@@ -122,6 +126,18 @@ fn undo_and_paste_messages_use_the_firmware_wording() {
     u.screen = Screen::Undo;
     u.undo_blocked = true;
     assert_eq!(compose(&u, &sum()).sub, "Nothing to Undo");
+    // VERIFIED frame (research s16.7): bar `UNDO`, no counter, a lone `Ok` in the fourth slot.
+    let t = compose(&u, &sum());
+    assert_eq!((t.big.as_str(), t.bar.as_deref()), ("UNDO", Some("")));
+    assert_eq!(t.soft, ["", "", "", "Ok"]);
+    u.undo_blocked = false;
+    u.redo_available = true;
+    let t = compose(&u, &sum());
+    assert_eq!(
+        (t.sub.as_str(), t.soft),
+        ("Undo to before", ["", "", "Redo", "Ok"])
+    );
+    u.undo_blocked = true;
     u.screen = Screen::Paste;
     u.copied = None;
     u.soft_down(1);

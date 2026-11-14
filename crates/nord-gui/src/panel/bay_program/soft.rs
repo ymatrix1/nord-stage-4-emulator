@@ -59,8 +59,8 @@ impl ProgramUi {
             Screen::Undo => {
                 self.screen = Screen::Home;
                 match n {
-                    1 if !self.undo_blocked => vec![cmd(ProgramEdit::Undo)],
-                    2 if self.redo_available => vec![cmd(ProgramEdit::Redo)],
+                    4 if !self.undo_blocked => vec![cmd(ProgramEdit::Undo)],
+                    3 if self.redo_available => vec![cmd(ProgramEdit::Redo)],
                     _ => Vec::new(),
                 }
             }
