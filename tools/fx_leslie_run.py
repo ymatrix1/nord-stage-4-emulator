@@ -49,6 +49,27 @@ def noise_pokes(calls: int, seed: int = 3, amp: float = 0.3) -> list[str]:
     return out
 
 
+def lcg_words(calls: int, seed: int = 12345) -> list[list[float]]:
+    """Four integer-LCG noise values per call, exact in `f32` (mirrored by the Rust golden test)."""
+    state, out = seed, []
+    for _ in range(calls):
+        row = []
+        for _ in range(4):
+            state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+            row.append(((state >> 8) - 8388608) / 33554432.0)
+        out.append(row)
+    return out
+
+
+def lcg_pokes(calls: int, seed: int = 12345) -> list[str]:
+    """`--poke` arguments of [`lcg_words`] at `IO` before each call."""
+    out: list[str] = []
+    for k, row in enumerate(lcg_words(calls, seed)):
+        for j, v in enumerate(row):
+            out += ["--poke", f"{k}:{IO + j:#x}=f{v}"]
+    return out
+
+
 def sine_pokes(calls: int, hz: float, amp: float = 0.3, fs: float = 44_444_000 / 1024) -> list[str]:
     """A sine of `hz` on all four words of each call (2 frames per call, words `2 f + k`)."""
     out: list[str] = []
@@ -60,7 +81,7 @@ def sine_pokes(calls: int, hz: float, amp: float = 0.3, fs: float = 44_444_000 /
 
 
 def build_args(
-    script: Path, calls: int, extra: list[str], sine_hz: float | None = None
+    script: Path, calls: int, extra: list[str], sine_hz: float | None = None, lcg: bool = False
 ) -> list[str]:
     args = ["--entry", "0x121007"]
     for d in PASS_DEVS:
@@ -70,7 +91,15 @@ def build_args(
     for reg, v in (("I0", IO), ("I1", STATE), ("M0", 0), ("M1", 1), ("M2", 2), ("M9", 1)):
         args += ["--set", f"{reg}={v:#x}"]
     args += (
-        boot_pokes(script) + (sine_pokes(calls, sine_hz) if sine_hz else noise_pokes(calls)) + extra
+        boot_pokes(script)
+        + (
+            lcg_pokes(calls)
+            if lcg
+            else sine_pokes(calls, sine_hz)
+            if sine_hz
+            else noise_pokes(calls)
+        )
+        + extra
     )
     return [*args, "--dump", f"{IO:#x}:4"]
 

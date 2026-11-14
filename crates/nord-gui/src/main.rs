@@ -224,8 +224,7 @@ impl eframe::App for Stage4App {
                         .inner_margin(egui::Margin::symmetric(10, 4)),
                 )
                 .show(ctx, |ui| {
-                    self.library
-                        .render_top_bar(ui, &mut self.state.sync_knobs_on_program_load);
+                    self.library.render_top_bar(ui, &mut self.state);
                 });
 
             let before = self.firmware.opts;

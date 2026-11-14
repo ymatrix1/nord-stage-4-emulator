@@ -304,11 +304,13 @@ mod tests {
     #[test]
     fn unsupported_items_and_actions_never_change() {
         let mut u = open(Menu::Organize);
+        u.step_page(1); // the Preset page keeps Unsupported items
         assert!(matches!(u.focused_item().binding, Binding::Unsupported(_)));
         assert!(u.dial(1).is_none());
         let before = u.value(u.focused_item());
         assert_eq!(before, u.focused_item().default);
         let mut o = open(Menu::Organize);
+        o.step_page(1);
         o.soft(1);
         assert!(o.dial(1).is_none());
     }
