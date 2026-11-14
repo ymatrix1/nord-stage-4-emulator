@@ -169,3 +169,25 @@ def test_reset_requires_a_loaded_state() -> None:
     session._saved = None
     with pytest.raises(AssertionError):
         session.reset()
+
+
+def test_edit_clears_the_modifier_word_before_turning() -> None:
+    writes: list[tuple[int, int]] = []
+
+    class _Emu:
+        def write32(self, address: int, value: int) -> None:
+            writes.append((address, value))
+
+    session = sc.Session.__new__(sc.Session)
+    session.emu = _Emu()
+    turned: list[tuple[int, int, dict]] = []
+
+    def fake_turn(pair: int, detents: int, **kw: object) -> str:
+        assert writes == [(sc.MODIFIER_WORD, 0)]  # cleared before the first Gray state
+        turned.append((pair, detents, kw))
+        return "capture"
+
+    session.turn = fake_turn  # type: ignore[method-assign]
+    assert sc.edit(session, 1, -3, dwell=5) == "capture"
+    assert turned == [(1, -3, {"dwell": 5})]
+    assert sc.MODIFIER_WORD == 0xC05846AC

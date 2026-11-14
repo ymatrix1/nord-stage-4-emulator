@@ -4,6 +4,7 @@
 
 use super::types::SCANNER_BUFFER_SIZE;
 use super::{OrganLayer, ScannerMode};
+use crate::phase_wrap::wrap_pos;
 use std::f32::consts::TAU;
 
 impl OrganLayer {
@@ -34,7 +35,7 @@ impl OrganLayer {
             ScannerMode::C3 => (2.50, 0.5),
         };
 
-        self.scanner_phase = (self.scanner_phase + TAU * 6.85 * inv_fs) % TAU;
+        self.scanner_phase = wrap_pos(self.scanner_phase + TAU * 6.85 * inv_fs, TAU);
         let mod_delay_samples =
             (depth_ms * 0.001 * self.sample_rate) * (0.5 + 0.5 * self.scanner_phase.sin());
 

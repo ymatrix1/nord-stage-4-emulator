@@ -64,41 +64,48 @@ impl OrganLayer {
         } else {
             1.0
         };
+        // Loop invariants of the per-key sum, hoisted out of the 128-key scan: the nine drawbar
+        // gains (a table read and a division each) and the percussion constants. The terms keep
+        // their exact evaluation order (`gain * bus * key_gain * dip * 0.08`, keys ascending,
+        // drawbars ascending), so the sum is bit-identical to the unhoisted loop.
+        let drawbars = *self.active_drawbars();
+        let gains: [f32; 9] =
+            std::array::from_fn(|i| drawbar_gain_law(drawbars[i], self.drawbar_law));
+        let perc_on = self.percussion_env > 1e-4;
+        let perc_offset = if self.percussion_third_harmonic {
+            19
+        } else {
+            12
+        };
+        let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
+        let [b0, b1] = buses;
+        let [d0, d1] = &mut dry;
+        let two = lanes >= 2;
         for note in 0u8..=127u8 {
             if !self.held_notes[note as usize] {
                 continue;
             }
             let base_midi = i32::from(note) + oct_semis;
             let key_gain = self.note_gains[note as usize];
-            let legacy_drawbars = if firmware {
-                &[][..]
-            } else {
-                &self.active_drawbars()[..]
-            };
-            for (db_idx, &level) in legacy_drawbars.iter().enumerate() {
-                if level == 0 {
-                    continue;
-                }
-                let gain = drawbar_gain_law(level, self.drawbar_law);
-                let tw = foldback_tonewheel(base_midi + DRAWBAR_OFFSETS[db_idx]);
-                for (acc, bus) in dry.iter_mut().zip(buses.iter()).take(lanes) {
-                    *acc += gain * bus[tw] * key_gain * db_bus_scale * 0.08;
+            if !firmware {
+                for (db_idx, &level) in drawbars.iter().enumerate() {
+                    if level == 0 {
+                        continue;
+                    }
+                    let gain = gains[db_idx];
+                    let tw = foldback_tonewheel(base_midi + DRAWBAR_OFFSETS[db_idx]);
+                    *d0 += gain * b0[tw] * key_gain * db_bus_scale * 0.08;
+                    if two {
+                        *d1 += gain * b1[tw] * key_gain * db_bus_scale * 0.08;
+                    }
                 }
             }
-            if self.percussion_env > 1e-4 {
-                let perc_offset = if self.percussion_third_harmonic {
-                    19
-                } else {
-                    12
-                };
+            if perc_on {
                 let tw = foldback_tonewheel(base_midi + perc_offset);
-                let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
-                for (acc, bus) in dry.iter_mut().zip(buses.iter()).take(lanes) {
-                    *acc += self.perc_env_for(note as usize)
-                        * bus[tw]
-                        * perc_gain
-                        * key_gain
-                        * perc_scale;
+                let env = self.perc_env_for(note as usize);
+                *d0 += env * b0[tw] * perc_gain * key_gain * perc_scale;
+                if two {
+                    *d1 += env * b1[tw] * perc_gain * key_gain * perc_scale;
                 }
             }
         }

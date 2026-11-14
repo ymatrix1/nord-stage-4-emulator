@@ -59,8 +59,9 @@ USABLE_BITS: dict[tuple[int, int], int] = {
 # firmware decodes as quadrature; a pair is `(port, bit of A)` and B is the next bit. Which pair
 # is which dial is found by turning it and reading the screen (`docs/research/arm-oled-render.md`).
 # VERIFIED (research note s15, `arm_events.py`): pair 1 (event id 6) is the Program dial; it pages
-# the menus, steps the preset lists and scrolls the program list. Pair 0 (id 7) reaches the menu
-# value widget but its parameter step is a no-op in the harness; pairs 2 to 4 find no widget.
+# the menus (or edits the menu value, `arm_screens.edit`), steps the preset lists and scrolls the
+# program list. Pair 0 (id 7) is PIANO SELECT (its piano list is empty without a piano library);
+# pairs 2 to 4 are the three Synth dials of the waveform page (research note s16).
 ENCODER_PAIRS: tuple[tuple[int, int], ...] = ((0, 0), (0, 2), (1, 0), (1, 2), (1, 4))
 # Gray cycle of `(A, B)` levels for one detent, positive direction (the other runs it backwards).
 # EMPIRICAL: with this order the step decoder `0xC0082A9C` adds +1 three times per cycle; each

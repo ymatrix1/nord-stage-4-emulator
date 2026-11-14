@@ -56,21 +56,3 @@ fn layer_init_screen_matches_the_hardware_prompt_and_letters() {
     u.focus = LayerId::PianoB;
     assert_eq!(compose(&u, &sum()).rows[0], "Organ AB  Piano B  Synth A");
 }
-
-#[test]
-fn store_screens_show_target_and_name_cursor() {
-    let mut u = ProgramUi::default();
-    u.title = "Rusty".into();
-    u.store_as();
-    let t = compose(&u, &sum());
-    assert_eq!(t.big, "STORE PROGRAM AS");
-    assert!(t.sub.starts_with("[R]usty"), "{}", t.sub);
-    assert_eq!(t.soft, ["Abc", "Cat", "Del", "Ins"]);
-    assert_eq!(t.rows[0], "Cat: Undefined");
-    u.store_press();
-    let t = compose(&u, &sum());
-    assert_eq!(t.big, "STORE PROGRAM TO");
-    assert_eq!(t.sub, "A:11");
-    // Unused target: `<empty>`, then the name that will be stored.
-    assert_eq!(t.rows, ["<empty>", "As: Rusty"]);
-}

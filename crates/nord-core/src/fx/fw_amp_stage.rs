@@ -25,6 +25,9 @@ pub(super) struct FwAmpStage {
     drive_ui: f32,
     input: [[f32; 2]; 4],
     output: [[f32; 2]; 4],
+    /// Cabinet output for the four frames of `output` (computed when the block is released, see
+    /// [`FwCabinet::process_block4`]).
+    cabinet_out: [[f32; 2]; 4],
     pos: usize,
 }
 
@@ -32,13 +35,18 @@ impl FwAmpStage {
     /// Stage for amp type `kind` (`1..=6`) with `kAmpDrive = drive_ui` (`0..=127`), or `None` for a
     /// type that has no drive stage words.
     pub(super) fn new(kind: u8, drive_ui: f32) -> Option<Self> {
+        let mut cabinet = FwCabinet::new(kind)?;
+        // The first four frames feed the cabinet with the silent initial block.
+        let silent = [[0.0; 2]; 4];
+        let cabinet_out = cabinet.process_block4(silent);
         Some(Self {
             drive: FwAmpDrive::from_words(context_words(kind, drive_ui)?),
-            cabinet: FwCabinet::new(kind)?,
+            cabinet,
             kind,
             drive_ui,
-            input: [[0.0; 2]; 4],
-            output: [[0.0; 2]; 4],
+            input: silent,
+            output: silent,
+            cabinet_out,
             pos: 0,
         })
     }
@@ -56,10 +64,12 @@ impl FwAmpStage {
         }
     }
 
-    /// Pushes one frame and returns the frame of the previous block at the same position.
+    /// Pushes one frame and returns the frame of the previous block at the same position, through
+    /// the cabinet. The cabinet input of the next four frames is the block released here, so the
+    /// cabinet runs on the whole block at once; the result is the same as filtering frame by frame.
     #[inline]
     pub(super) fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
-        let out = self.output[self.pos];
+        let out = self.cabinet_out[self.pos];
         self.input[self.pos] = frame;
         self.pos += 1;
         if self.pos == 4 {
@@ -73,8 +83,9 @@ impl FwAmpStage {
             };
             self.drive.process(&tables, &mut block);
             self.output = std::array::from_fn(|k| [block[2 * k], block[2 * k + 1]]);
+            self.cabinet_out = self.cabinet.process_block4(self.output);
         }
-        self.cabinet.process_frame(out)
+        out
     }
 }
 
