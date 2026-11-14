@@ -22,6 +22,7 @@ mod dsp;
 mod fw_adr_chain;
 mod fw_env_rates;
 mod fw_filter;
+mod fw_filter_table_d;
 mod fw_filter_tables;
 mod fw_shape;
 mod fw_stages;
@@ -82,6 +83,8 @@ mod tests_fw_filter_golden;
 mod tests_fw_shape_golden;
 #[cfg(test)]
 mod tests_fw_stage_golden;
+#[cfg(test)]
+mod tests_fw_stage_golden2;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
@@ -189,13 +192,13 @@ pub struct SynthLayer {
     /// shape word (`fw_shape.rs`; the idle frame holds 0.5, the knob scale is open); `None` keeps
     /// the ASSUMED saw placeholder.
     pub strip_shape: Option<f32>,
+    /// Strip chain only (opt-in): empirical oscillator-stage parameter block (`p_block.rs`).
+    pub p_block: Option<PBlock>,
     /// ANALOG category / wave of the decoded oscillator as a modelled firmware stage (`fw_stages.rs`).
     pub strip_stage: Option<FwStage>,
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
-    /// Strip chain only (opt-in): empirical oscillator-stage parameter block (`p_block.rs`).
-    pub p_block: Option<PBlock>,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -327,9 +330,9 @@ impl SynthLayer {
             chain: SynthChain::Legacy,
             strip_key_velocity: true,
             strip_shape: None,
+            p_block: None,
             strip_stage: None,
             strip_stages: false,
-            p_block: None,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,

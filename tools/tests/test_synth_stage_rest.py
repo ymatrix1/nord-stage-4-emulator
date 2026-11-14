@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import synth_stage_noise as noise  # noqa: E402
 import synth_stage_record as rec  # noqa: E402
+import synth_stage_shape_sine as shape_sine  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
 import synth_stage_unison as unison  # noqa: E402
 import synth_wave_model as m  # noqa: E402
@@ -24,6 +25,7 @@ MODELS = {
     "0x121ab5": shapes.stage_shape_square,
     "0x121d6d": unison.stage_super,
     "0x121c54": unison.stage_multi,
+    "0x123427": shape_sine.stage_shape_sine,
 }
 
 
@@ -38,13 +40,12 @@ def test_recorded_oracle_cases_are_reproduced_word_for_word() -> None:
             assert out == case["oracle_out"], name
 
 
-def test_rust_golden_file_is_what_the_generator_prints() -> None:
+def test_rust_golden_files_are_what_the_generator_prints() -> None:
     import synth_stage_golden as g
 
-    rust = (
-        Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth/tests_fw_stage_golden.rs"
-    )
-    assert rust.read_text() == g.rust(), "regenerate: python tools/synth_stage_golden.py > <file>"
+    base = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
+    for part, name in ((1, "tests_fw_stage_golden.rs"), (2, "tests_fw_stage_golden2.rs")):
+        assert (base / name).read_text() == g.rust(part), f"regenerate part {part}"
 
 
 def test_dump_round_trips_through_json() -> None:

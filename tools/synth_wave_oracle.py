@@ -26,6 +26,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import synth_stage_noise as noise
+import synth_stage_shape_sine as shape_sine
 import synth_stage_shapes as shapes
 import synth_stage_unison as unison
 import synth_wave_model as m
@@ -43,6 +44,7 @@ STAGE_SHAPE_SAW = 0x12169D
 STAGE_NOISE = 0x121FD8
 STAGE_SHAPE_SQUARE = 0x121AB5
 STAGE_SUPER = 0x121D6D
+STAGE_SHAPE_SINE0 = 0x123427
 STAGE_MULTI = 0x121C54
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI)
 PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
@@ -65,6 +67,7 @@ MODELS = {
     STAGE_NOISE: noise.stage_noise,
     STAGE_SHAPE_SQUARE: shapes.stage_shape_square,
     STAGE_SUPER: unison.stage_super,
+    STAGE_SHAPE_SINE0: shape_sine.stage_shape_sine,
     STAGE_MULTI: unison.stage_multi,
 }
 
