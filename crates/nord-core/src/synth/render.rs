@@ -279,8 +279,13 @@ impl SynthLayer {
                     self.vibrato_ctrl.clamp(0.0, 1.0)
                 }
             };
-            let vib_pitch =
-                2.0f32.powf(vib_amount * self.vibrato_depth_cents * vib_scale * vib_sin / 1200.0);
+            // 2^0 is exactly 1.0, so a silent vibrato skips the `powf` without changing a bit.
+            let vib_octaves = vib_amount * self.vibrato_depth_cents * vib_scale * vib_sin / 1200.0;
+            let vib_pitch = if vib_octaves == 0.0 {
+                1.0
+            } else {
+                2.0f32.powf(vib_octaves)
+            };
 
             // Filter envelope: dedicated ADR, or mirror the amp decay (legacy).
             let fenv_peak = 1.0 - self.filter_env_vel_amount.clamp(0.0, 1.0) * (1.0 - v.velocity);

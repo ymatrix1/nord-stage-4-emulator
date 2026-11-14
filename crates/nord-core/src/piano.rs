@@ -1424,6 +1424,10 @@ impl PianoLayer {
             _ => 1.0,
         };
 
+        let mut dec_release_sample: Option<f32> = None;
+        let mut dec_soft: Option<f32> = None;
+        let mut dec_hard: Option<f32> = None;
+        let mut dec_sustain: Option<f32> = None;
         for v in &mut self.voices {
             if !v.active {
                 continue;
@@ -1491,13 +1495,18 @@ impl PianoLayer {
             sum_l += sig_l * voice_gain;
             sum_r += sig_r * voice_gain;
 
+            // The decay factors depend on the sample rate only; each is evaluated at most once
+            // per frame, on first use (the same `exp` of the same argument, so bit-identical).
             if v.is_release_sample {
-                v.env *= (-inv_fs / 1.15).exp();
+                v.env *= *dec_release_sample.get_or_insert_with(|| (-inv_fs / 1.15).exp());
             } else if v.releasing {
-                let decay_time = if v.soft_release { 0.180 } else { 0.080 };
-                v.env *= (-inv_fs / decay_time).exp();
+                if v.soft_release {
+                    v.env *= *dec_soft.get_or_insert_with(|| (-inv_fs / 0.180).exp());
+                } else {
+                    v.env *= *dec_hard.get_or_insert_with(|| (-inv_fs / 0.080).exp());
+                }
             } else if v.stroke_idx.is_none() {
-                v.env *= (-inv_fs / 1.8).exp();
+                v.env *= *dec_sustain.get_or_insert_with(|| (-inv_fs / 1.8).exp());
             }
             if v.env < 1e-4 {
                 v.active = false;
