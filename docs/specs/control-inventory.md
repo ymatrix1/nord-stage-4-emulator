@@ -47,7 +47,7 @@ enum Binding {
 |---|---|---|
 | Unique ids | Lowercase ASCII, no duplicates | implemented |
 | Provenance | Every entry has page 11-53, a label and a source; `Assumed` entries state why | implemented |
-| Bindings | Every binding is non-empty; every `Bound` id appears as a quoted literal in the `nord-plugin` sources, or as `<prefix>_<name>[_{n}]` where `<prefix>` is a nested `id_prefix` in `params.rs` and `<name>` a literal `#[id]` (per-layer ids such as `pianox_unison_{n}`); every `Unsupported` bean exists in `.beans/` | implemented |
+| Bindings | Every binding is non-empty; every `Bound` id appears as a quoted literal in the `nord-plugin` sources, or as `<prefix>_<name>[_{n}]` where `<prefix>` is a nested `id_prefix` in `params.rs` and `<name>` a literal `#[id]` (per-layer ids such as `pianox_unison_{n}`), or is `engine:<path>` whose dot-separated fields are `pub` fields of `nord-core` (`engine:split_router.layer_zone_masks`); every `Unsupported` bean exists in `.beans/` | implemented |
 | Counts | Per-section, per-kind, per-binding, `Assumed` and `morphable` totals pinned (§5) | implemented |
 | Layout completeness | Every inventory id has a layout rect (`layout/tests.rs`) | implemented |
 | Geometry | Rects have positive size; each lies inside its section rect and the panel; section rects do not overlap; two rects overlap only when both share a base (`layout::SHARED`) | implemented |
@@ -68,13 +68,13 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
 | **Total** | | | | | | **273** |
 
-By binding: `Bound` 119, `UiOnly` 49, `Unsupported` 105. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 75 controls. Morphable: 35.
+By binding: `Bound` 138, `UiOnly` 49, `Unsupported` 86. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 75 controls. Morphable: 35.
 
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
 ## Gap list
 
-The old code-review gap list is replaced by the 105 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects/rotary, `ns4-h7he` organ/piano, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the 86 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 5b. Behaviour layer
 
@@ -127,3 +127,21 @@ What would confirm or replace the table: a higher-resolution front photo (at lea
 | Dimmed | 8 menu pages (title screens only), SOLO (needs Layer buttons), PEDAL TAP (no pedal input) | follow-up `ns4-ymci` |
 
 Allocating engine operations run on the audio thread today: TD-12 in [TECH_DEBT](../TECH_DEBT.md).
+
+## 9. Organ, Piano and Master rewire (`crates/nord-gui`, `ns4-h7he`)
+
+Since poly percussion, Drawbar Live, Aux KB, pedals and system settings landed in the engine, every Organ and Master control and every Piano control except `piano.select_dial` is `Bound` and no longer dimmed (`panel/organ_master_tests.rs` and `panel/organ_rewire_tests.rs` pin the dimmed set to the `Unsupported` set). Engine edits are `OrganEdit` / `PianoEdit` variants (`audio/edits/{organ,piano}.rs`), each applied without allocation.
+
+| Control | Binding | Engine effect | Status |
+|---|---|---|---|
+| `organ.on`, `piano.on` | `organ_a_enabled` / `piano_a_enabled` (both layers' enable params) | tap switches every layer of the section off (scene masks via `SetLayerActive` / `PianoEdit::LayerActive`) or brings the remembered layers back (layer A when none were remembered); LED lit while any layer is active | `ASSUMED`: the emulator has no section-enable flag separate from the layer enables, so ON is the layer set |
+| `organ.perc_poly` | `organz_poly_perc_{n}` | `OrganEdit::PercPoly` sets `percussion_poly` on both layers | engine `percussion_poly.rs` |
+| `organ.preset` | `organz_drawbar_live_{n}` | `OrganEdit::DrawbarLive` (both layers); entering Live first sends the slider positions (`LiveDrawbars`, `organz_live1..9_{n}`). Sliders are the physical drawbars: Preset mode edits the preset and the physical bars, Live edits only the physical bars; the ladders show the preset and are dark in Live | manual p.21 |
+| `organ.sync` | `organz_sync_{n}` | `OrganEdit::SyncPreset`: `sync_organ_preset` for A and B, panel preset takes the slider values | manual p.21 |
+| `organ.vibrato_on.a/b` | `organx_scanner_{n}` (Off = scanner mode 0) | already sent `OrganEdit::Scanner`; binding corrected | - |
+| `{organ,piano}.kb_zone_down/up`, `zone_leds` | `engine:split_router.layer_zone_masks` | Shift + OCTAVE steps the focused layer through 5 positions (all zones, zone 1..4); `Stage4Engine::set_layer_zone_leds` writes the legacy router mask and the firmware `kKbZone` code (`engine/zone_assign.rs`). Zones act once a Split is on; with no split any non-empty set spans the keyboard. Default = all zones (bit-identical) | stepping `ASSUMED` (`panel/kb_zone.rs`); code table as `routing.rs` |
+| `{organ,piano}.aux_led.a/b` | `auxkb_organ` / `auxkb_piano` | LED click sends `AuxKb { layer, on }` -> `Stage4Engine::set_layer_aux` (also sets Aux KB Enable when switching on). The LED shows the UI flag through `aux_flag_from_telemetry`, to be replaced by the engine read-back | enable-on-switch `ASSUMED` |
+| `rotary.organ` | `organy_rotary_on_{n}` | `OrganEdit::RotaryOrgan` sets `rotary_enabled` on both layers | engine default on |
+| `rotary.angle` | `organy_mic_angle_{n}` | `OrganEdit::RotaryAngle`: wide 120 deg (engine default), narrow 60 deg | both degrees `ASSUMED` |
+
+Still dimmed in these bays: `piano.select_dial` (`ns4-h7he`; the dial still cycles the loaded library models, the inventory keeps it `Unsupported` until the model list is a host parameter). The Synth strip's `synth.on`, `synth.kb_zone_*`, `synth.zone_leds` and `synth.aux_led.*` keep their `Unsupported` bindings (synth bay is another change).

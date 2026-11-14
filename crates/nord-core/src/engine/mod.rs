@@ -56,6 +56,7 @@ mod tests_program;
 mod tests_routing;
 mod undo;
 mod undo_ops;
+mod zone_assign;
 
 pub use clipboard::{Clip, ClipboardError, LayerClip};
 pub use fx_params::FxParams;
@@ -71,6 +72,7 @@ pub use settings::{
 };
 pub use snapshot::ProgramState;
 pub use undo::UndoOp;
+pub use zone_assign::zone_code;
 #[cfg(test)]
 mod tests_sharing;
 

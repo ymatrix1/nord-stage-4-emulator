@@ -53,15 +53,6 @@ pub(super) fn step_octave(cur: i8, up: bool) -> i8 {
     (cur + if up { 1 } else { -1 }).clamp(-2, 2)
 }
 
-/// KB ZONE position after a press, `0..=3` (four LEDs).
-pub(super) fn step_zone(cur: u8, up: bool) -> u8 {
-    if up {
-        (cur + 1).min(3)
-    } else {
-        cur.saturating_sub(1)
-    }
-}
-
 impl Stage4PanelState {
     pub(super) fn organ_layer_active(&self, layer: usize) -> bool {
         if layer == 0 {
@@ -69,6 +60,32 @@ impl Stage4PanelState {
         } else {
             self.organ_b_active
         }
+    }
+
+    /// Section ON LED: lit while any organ layer is active.
+    pub(super) fn organ_section_on(&self) -> bool {
+        self.organ_a_active || self.organ_b_active
+    }
+
+    /// ON tap (manual p.18): switch the whole Organ section off, or bring back the layers it
+    /// had. Returns which layers changed so the caller can send their enable state.
+    pub(super) fn organ_on_tap(&mut self) -> [bool; 2] {
+        let before = [self.organ_a_active, self.organ_b_active];
+        if self.organ_section_on() {
+            self.organ_ui.restore_layers = u8::from(before[0]) | (u8::from(before[1]) << 1);
+            self.organ_a_active = false;
+            self.organ_b_active = false;
+        } else {
+            let r = self.organ_ui.restore_layers & 0b11;
+            let r = if r == 0 { 0b01 } else { r };
+            self.organ_a_active = r & 1 != 0;
+            self.organ_b_active = r & 2 != 0;
+            self.organ_ui.focus_layer = r.trailing_zeros() as usize;
+        }
+        [
+            before[0] != self.organ_a_active,
+            before[1] != self.organ_b_active,
+        ]
     }
 
     pub(super) fn organ_layer_level(&self, layer: usize) -> f32 {
@@ -143,9 +160,6 @@ mod tests {
         assert_eq!(step_octave(2, true), 2);
         assert_eq!(step_octave(-2, false), -2);
         assert_eq!(step_octave(0, true), 1);
-        assert_eq!(step_zone(3, true), 3);
-        assert_eq!(step_zone(0, false), 0);
-        assert_eq!(step_zone(1, true), 2);
     }
 
     #[test]
@@ -159,5 +173,34 @@ mod tests {
         assert_eq!(s.organ_vib_of(0), (ScannerMode::C3, false));
         assert!(s.organ_layer_active(0) && !s.organ_layer_active(1));
         assert!(s.organ_layer_level(0) > s.organ_layer_level(1));
+    }
+
+    #[test]
+    fn on_tap_switches_the_section_off_and_restores_the_same_layers() {
+        let mut s = Stage4PanelState {
+            organ_b_active: true,
+            ..Default::default()
+        };
+        assert!(s.organ_section_on());
+        assert_eq!(s.organ_on_tap(), [true, true]);
+        assert!(!s.organ_section_on());
+        assert_eq!(s.organ_on_tap(), [true, true]);
+        assert!(s.organ_a_active && s.organ_b_active);
+        s.organ_a_active = false;
+        assert_eq!(s.organ_on_tap(), [false, true]);
+        assert_eq!(s.organ_on_tap(), [false, true]);
+        assert!(!s.organ_a_active && s.organ_b_active);
+        assert_eq!(s.organ_ui.focus_layer, 1);
+    }
+
+    #[test]
+    fn on_tap_with_nothing_remembered_brings_back_layer_a() {
+        let mut s = Stage4PanelState {
+            organ_a_active: false,
+            ..Default::default()
+        };
+        s.organ_ui.restore_layers = 0;
+        assert_eq!(s.organ_on_tap(), [true, false]);
+        assert!(s.organ_a_active);
     }
 }

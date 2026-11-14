@@ -27,6 +27,7 @@ Source: manual OS v1.6x p.21-22, p.26-28, p.43-47, p.55-56, p.59-64. Code: `engi
 | Area | Behaviour | Status |
 |---|---|---|
 | Aux KB | `AuxKb { enabled, channel (default 16), layers[7], curve }`. A layer in Aux KB mode ignores the Global channel (internal keybed) and answers only the Aux KB channel, bypassing keyboard zones. Direct layer channels still win. | Manual p.43-45 |
+| Aux KB panel LED | `Stage4Engine::set_layer_aux(layer, on)` (`engine/zone_assign.rs`) sets `layers[i]` and, when switching on, `enabled`; the Organ / Piano Aux KB LEDs (`aux_led.a/b`) send it via `OrganEdit::AuxKb` / `PianoEdit::AuxKb` and display the UI flag until telemetry reads the routing back | switch-on enabling `ASSUMED` |
 | Aux curve | Soft/Medium/Hard: identity for Medium, power law 0.7 / 1.4 otherwise | `ASSUMED` exponents |
 | SUSTPED | Per layer. Default On for Piano A/B only (the previous hard-wired behaviour), Off elsewhere. Organ and Synth layers defer note release while the pedal is down (`held` bitmask, no allocation); Pianos use their damper model | Manual p.18, p.28 |
 | Aux sustain/bend | `CC64` and pitch bend on the Aux KB channel reach Aux layers regardless of SUSTPED/PSTICK; the internal pedal needs the flag | Manual p.45 |

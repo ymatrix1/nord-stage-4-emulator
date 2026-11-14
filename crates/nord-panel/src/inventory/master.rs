@@ -22,8 +22,9 @@ pub fn controls() -> Vec<ControlEntry> {
         e("rotary.stop_mode", s, K::Button, "STOP MODE", 53).bound("organx_stop_mode"),
         e("rotary.angle", s, K::Button, "ANGLE", 53)
             .shift()
-            .todo("ns4-e3zs"),
-        e("rotary.organ", s, K::Button, "ORGAN (route to rotary)", 53).todo("ns4-e3zs"),
+            .bound("organy_mic_angle_{n}"),
+        e("rotary.organ", s, K::Button, "ORGAN (route to rotary)", 53)
+            .bound("organy_rotary_on_{n}"),
         e("rotary.close_mic", s, K::Button, "CLOSE MIC", 53)
             .shift()
             .bound("organx_close_mic"),

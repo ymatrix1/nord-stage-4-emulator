@@ -121,15 +121,33 @@ fn octave_steps_clamp_and_follow_the_focus() {
 }
 
 #[test]
-fn zone_step_wraps_over_four_leds() {
+fn zone_step_walks_the_positions_and_sends_the_led_set() {
     let mut s = st();
-    for _ in 0..5 {
-        zone_step(&mut s, true);
+    let mut out = Vec::new();
+    for _ in 0..7 {
+        zone_step(&mut s, true, &mut out);
     }
-    assert_eq!(s.piano_ui.kb_zone[0], 1);
-    zone_step(&mut s, false);
-    zone_step(&mut s, false);
+    assert_eq!(s.piano_ui.kb_zone[0], 4, "clamped at the last zone");
+    assert_eq!(
+        out.last(),
+        Some(&PianoEdit::Zone {
+            layer: 0,
+            leds: 0b1000
+        })
+    );
+    out.clear();
+    zone_step(&mut s, false, &mut out);
     assert_eq!(s.piano_ui.kb_zone[0], 3);
+    s.piano_ui.focus = 1;
+    zone_step(&mut s, true, &mut out);
+    assert_eq!(s.piano_ui.kb_zone, [3, 1]);
+    assert_eq!(
+        out[1],
+        PianoEdit::Zone {
+            layer: 1,
+            leds: 0b0001
+        }
+    );
 }
 
 #[test]
