@@ -56,3 +56,21 @@ def test_chord_script_has_install_and_one_write_per_row() -> None:
 def test_slot_offsets_map_to_level_slots() -> None:
     assert av.slot_of(0xD18) == 0 and av.slot_of(0xD68) == 10 and av.slot_of(0xDB0) == 19
     assert av.case_slots([0xD30, 0xD80, 0xDE4]) == [3, 13]  # 0xDE4 is not a level
+
+
+def test_level_table_reads_nine_words() -> None:
+    import struct
+
+    code = bytearray(av.LEVEL_TABLE - av.LOAD_BASE + 36)
+    vals = [0, 629145, 838860, 1048576, 1258291, 1468006, 1677721, 1887436, 2076180]
+    for v, x in enumerate(vals):
+        struct.pack_into("<i", code, av.LEVEL_TABLE - av.LOAD_BASE + 4 * v, x)
+    assert av.levels(bytes(code)) == vals
+
+
+def test_timeline_script_staggers_the_footages() -> None:
+    lines = vc.timeline_script([60]).splitlines()
+    rows = {ln.split()[1]: int(ln.split()[0]) for ln in lines if "# tick" in ln}
+    assert rows[hex(vc.WEIGHTS0 + 24)] == 65  # 16' at tick 3 = 65 passes
+    assert rows[hex(vc.WEIGHTS0 + 36)] == 369  # 8' at tick 17
+    assert rows[hex(vc.WEIGHTS0 + 60)] == 1020  # 2' at tick 47

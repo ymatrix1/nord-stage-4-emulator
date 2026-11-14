@@ -85,6 +85,8 @@ pub struct PedalState {
     pub pstick: [bool; 7],
     /// Per-layer bend range in semitones (default 2, PSTICK/RNG list, p.28).
     pub pstick_range: [u8; 7],
+    /// Triple pedal Left/Middle functions, Sustain Pedal Type and tap-tempo state.
+    pub triple: super::pedal_assign::TripleState,
     pub(super) swell: f32,
     pub(super) volume: f32,
     pub(super) sustain: [u8; 2],
@@ -108,6 +110,7 @@ impl Default for PedalState {
             sustped: [false, false, true, true, false, false, false],
             pstick: [false; 7],
             pstick_range: [2; 7],
+            triple: super::pedal_assign::TripleState::default(),
             swell: 1.0,
             volume: 1.0,
             sustain: [0; 2],
@@ -164,6 +167,11 @@ impl Stage4Engine {
 
     /// Sustain pedal value `0..=127` from the Global (internal jack) or Aux KB channel.
     pub fn set_sustain_pedal(&mut self, source: PedalSource, value: u8) {
+        // Sustain Pedal Type applies to the jack (Global), not to Aux KB MIDI.
+        let value = match source {
+            PedalSource::Global => self.pedals.triple.condition_sustain(value.min(127)),
+            PedalSource::Aux => value,
+        };
         self.pedals.sustain[source as usize] = value.min(127);
         if source == PedalSource::Global {
             let down = value >= SUSTAIN_DOWN;
@@ -232,7 +240,7 @@ impl Stage4Engine {
         self.organ_b.rotary_speed = speed;
     }
 
-    fn rotor_hold(&mut self, down: bool) {
+    pub(super) fn rotor_hold(&mut self, down: bool) {
         self.set_rotor_speed(if down {
             RotarySpeed::Fast
         } else {
@@ -240,7 +248,7 @@ impl Stage4Engine {
         });
     }
 
-    fn rotor_toggle(&mut self) {
+    pub(super) fn rotor_toggle(&mut self) {
         let fast = self.organ_a.rotary_speed == RotarySpeed::Fast;
         self.set_rotor_speed(if fast {
             RotarySpeed::Slow

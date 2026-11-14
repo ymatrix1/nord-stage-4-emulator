@@ -452,8 +452,10 @@ Wrote {wav_path} ({} bytes, 32-bit float stereo)", wav.len()));
             }
             Ok(out)
         }
+        "store-program" => nord_core::store_cli::store_program(&args[2..]),
+        "export-live" => nord_core::store_cli::export_live(&args[2..]),
         other => Err(format!(
-            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | render-demo | render-patch <path>)"
+            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | store-program <base> <out> | export-live <dir> <slots...> | render-demo | render-patch <path>)"
         )),
     }
 }

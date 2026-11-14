@@ -9,7 +9,7 @@
 
 use super::types::ScannerMode;
 use super::vibrato_bank::clamp_fine_tune;
-use super::vox_keys::{self, ROWS};
+use super::vox_keys;
 use super::{OrganLayer, ToneWheelSource};
 
 /// VERIFIED: the three vibrato depth words the ARM writes to `DM(0xE20E3)` for the Vox vibrato
@@ -49,23 +49,20 @@ impl OrganLayer {
         // a key drives the rows `fold(key - 36 + SLOT_OFFSETS[slot])` of the default footage
         // slots with their level and no velocity (`vox_keys`, VERIFIED, keydown-zones.md s5)
         let shift = i32::from(self.octave_shift.clamp(-2, 2)) * 12;
-        let levels = vox_keys::default_levels();
-        let mut targets = [0.0f32; ROWS];
-        for (note, _) in self.held_notes.iter().enumerate().filter(|(_, &h)| h) {
-            vox_keys::add_key(&mut targets, note as i32 + shift, &levels);
-        }
+        let levels = vox_keys::levels_from_drawbars(&self.drawbars);
+        let mut targets =
+            *self
+                .vox_timeline
+                .step(&self.held_notes, shift, &levels, self.sample_rate);
         for t in &mut targets {
             *t *= self.weight_level;
         }
         let dry = self.vox.render(&targets, vox_depth(self.scanner_mode));
-        if self.active_key_count == 0
-            && self.vox.is_idle()
-            && self.click_env < 1e-6
-            && self.click_bp_state[0].abs() < 1e-6
-        {
+        // No key click on the firmware path: the weight steps of the ARM timeline are the attack
+        // (docs/research/organ-vox-click.md).
+        if self.active_key_count == 0 && self.vox.is_idle() {
             return [0.0, 0.0];
         }
-        let dry = dry + self.process_key_click(inv_fs);
         if self.rotary_enabled {
             self.process_rotary(dry, inv_fs)
         } else {
@@ -169,6 +166,23 @@ mod tests {
             .map(|_| o.render_frame()[0].abs())
             .fold(0.0f32, f32::max);
         assert!(peak > 0.005, "{peak}");
+    }
+
+    #[test]
+    fn drawbars_add_footages_and_the_attack_is_the_weight_timeline_not_a_click() {
+        let render = |db: [u8; 9]| {
+            let mut o = vox_layer();
+            o.drawbars = db;
+            o.note_on(48);
+            (0..4800).map(|_| o.render_frame()[0]).collect::<Vec<_>>()
+        };
+        let base = render([8, 8, 8, 8, 0, 0, 0, 0, 0]);
+        let more = render([8, 8, 8, 8, 8, 8, 8, 0, 0]);
+        let diff: f32 = base.iter().zip(&more).map(|(a, b)| (a - b).abs()).sum();
+        assert!(diff > 0.5, "{diff}");
+        // nothing sounds before the first tick: the 16' arrives at 3 ms (144 samples)
+        assert!(base[..100].iter().all(|&v| v == 0.0));
+        assert!(base[300..].iter().any(|&v| v != 0.0));
     }
 
     #[test]
