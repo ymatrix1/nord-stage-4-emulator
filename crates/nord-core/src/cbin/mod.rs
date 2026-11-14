@@ -20,6 +20,7 @@ pub mod presets;
 pub mod program_file;
 pub mod sample;
 pub mod section_preset;
+pub mod synth_arp;
 pub mod synth_osc;
 pub mod synth_pattern;
 pub mod synth_preset;

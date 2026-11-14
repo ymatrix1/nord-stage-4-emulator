@@ -8,7 +8,7 @@
 //! engine does not map back (effect chains, the Synth sound itself, reserved bits) comes from
 //! the base: the preset the section was loaded from, or the init preset. `ASSUMED` limitation,
 //! shared with stored programs (`docs/specs/cbin-and-presets.md` section 5.5); the open item is
-//! the inverse of `synth_params::apply_decoded_layer` (OQ28).
+//! the inverse of `synth_params::apply_decoded_layer` (OQ30).
 
 use super::{ProgramState, Stage4Engine};
 use crate::cbin::{PresetSection, ProgramDecoded, SectionPreset};
