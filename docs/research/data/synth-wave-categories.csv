@@ -1,0 +1,92 @@
+type,cat_index,category,wave_index,name,wave_id
+Analog,0,Pure,0,Sine,0
+Analog,0,Pure,1,Triangle,1
+Analog,0,Pure,2,Saw,2
+Analog,0,Pure,3,Square,3
+Analog,0,Pure,4,Pulse 33,4
+Analog,0,Pure,5,Pulse 10,5
+Analog,0,Pure,6,White Noise,46
+Analog,1,Sub Osc,0,Sub Square Saw,10
+Analog,1,Sub Osc,1,Sub Pulse Saw,11
+Analog,1,Sub Osc,2,Sub Sine Saw,12
+Analog,2,Sync,0,Sine,27
+Analog,2,Sync,1,Triangle,28
+Analog,2,Sync,2,Saw,29
+Analog,2,Sync,3,Square,30
+Analog,2,Sync,4,Pulse 33,31
+Analog,2,Sync,5,Pulse 10,32
+Analog,2,Sync,6,Chop Saw 1,33
+Analog,2,Sync,7,Chop Saw 2,34
+Analog,2,Sync,8,Chop Square,35
+Analog,3,Shape,0,Triangle,7
+Analog,3,Shape,1,Saw,8
+Analog,3,Shape,2,Square,9
+Analog,3,Shape,3,Half Sine,43
+Analog,3,Shape,4,Parabolic,44
+Analog,4,Shape Sine,0,Saw,38
+Analog,4,Shape Sine,1,Square,39
+Analog,4,Shape Sine,2,Pulse,13
+Analog,4,Shape Sine,3,Squeeze,41
+Analog,4,Shape Sine,4,Fold,42
+Analog,4,Shape Sine,5,ESaw,36
+Analog,4,Shape Sine,6,ESquare,37
+Analog,5,Multi,0,Saw,16
+Analog,5,Multi,1,Saw 8ve,17
+Analog,5,Multi,2,Saw 5th,19
+Analog,5,Multi,3,Saw 5th+,20
+Analog,5,Multi,4,Saw 8ve 8ve+,18
+Analog,5,Multi,5,Saw 8ve 5th+,21
+Analog,6,Super,0,Saw,22
+Analog,6,Super,1,Square,23
+Analog,6,Super,2,Organ,24
+Analog,6,Super,3,Saw Bright,25
+Analog,6,Super,4,Square Bright,26
+Analog,7,Misc,0,Pink Noise,47
+Analog,7,Misc,1,Red Noise,48
+Analog,7,Misc,2,Bell,45
+Wave,0,Bells/Tines,0,Bell,40
+Wave,0,Bells/Tines,1,Bar 1,41
+Wave,0,Bells/Tines,2,Bar 2,42
+Wave,0,Bells/Tines,3,Tines,43
+Wave,0,Bells/Tines,4,Marimba,44
+Wave,0,Bells/Tines,5,Tubular Bells,45
+Wave,1,Acoustic,0,Flute 1,10
+Wave,1,Acoustic,1,Flute 2,11
+Wave,1,Acoustic,2,Clarinet 1,12
+Wave,1,Acoustic,3,Clarinet 2,13
+Wave,1,Acoustic,4,Alto Sax,14
+Wave,1,Acoustic,5,Tenor Sax,15
+Wave,2,Digital,0,2nd Spectra,16
+Wave,2,Digital,1,3rd Spectra,17
+Wave,2,Digital,2,4th Spectra,18
+Wave,2,Digital,3,5th Spectra,19
+Wave,2,Digital,4,6th Spectra,20
+Wave,2,Digital,5,7th Spectra,21
+Wave,2,Digital,6,8th Spectra,22
+Wave,2,Digital,7,Saw Random,23
+Wave,2,Digital,8,Saw Bright,24
+Wave,2,Digital,9,Saw NoFund,26
+Wave,2,Digital,10,Square Bright,25
+Wave,2,Digital,11,Ice 1,34
+Wave,2,Digital,12,Ice 2,35
+Wave,2,Digital,13,Triplets,39
+Wave,3,Organ,0,Second,0
+Wave,3,Organ,1,Third,1
+Wave,3,Organ,2,Jimmy Smith,2
+Wave,3,Organ,3,Blues,3
+Wave,3,Organ,4,Gospel,4
+Wave,3,Organ,5,Church,5
+Wave,3,Organ,6,Squabble,6
+Wave,3,Organ,7,Full Organ,7
+Wave,3,Organ,8,Full Organ+,8
+Wave,3,Organ,9,Principal,9
+Wave,4,Keys,0,EPiano 1,27
+Wave,4,Keys,1,EPiano 2,28
+Wave,4,Keys,2,EPiano 3,29
+Wave,4,Keys,3,DX 1,30
+Wave,4,Keys,4,DX 2,31
+Wave,4,Keys,5,Full Tines,32
+Wave,4,Keys,6,AcPiano,33
+Wave,4,Keys,7,Clavinet 1,36
+Wave,4,Keys,8,Clavinet 2,37
+Wave,4,Keys,9,Clavinet 3,38

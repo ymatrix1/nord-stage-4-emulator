@@ -237,6 +237,7 @@ impl eframe::App for Stage4App {
                 )));
             }
 
+            self.library.handle_keys(ctx);
             self.library
                 .render_drawer(ctx, &mut self.state, &self.audio_handle);
         }

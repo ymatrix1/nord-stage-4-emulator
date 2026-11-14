@@ -12,7 +12,8 @@ pub fn rect(id: &str) -> Option<Rect> {
         "rotary.drive" => px(382.0, 191.0, 404.0, 213.0),
         "rotary.organ" => px(385.0, 229.0, 407.0, 241.0),
         "rotary.stop_mode" => px(385.0, 262.0, 407.0, 274.0),
-        "rotary.speed_leds" => px(386.0, 285.0, 406.0, 291.0),
+        // Widened from 386..406 so the row also holds the SLOW / FAST names (LED then name).
+        "rotary.speed_leds" => px(379.0, 285.0, 412.0, 291.0),
         "rotary.speed" => px(385.0, 294.0, 407.0, 306.0),
         _ => return None,
     })

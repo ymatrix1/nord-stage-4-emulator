@@ -10,6 +10,7 @@
 //! is open, OQ22): they are the ASSUMED constants below.
 
 use super::fw_shape::signed_phase;
+use super::fw_sine_hp::{shape_sine_hp_core, OutputHighPass};
 use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
 use super::gain_dezip::SY_FRAME_RATE_HZ;
 use super::hw_saw::{SAW_A, SAW_B, SAW_C};
@@ -33,6 +34,8 @@ pub enum FwStage {
     ShapeSineGain,
     /// SHAPE SINE wave 5 (stage `0x122F1F`, resonant sine).
     ShapeSineRes,
+    /// SHAPE SINE wave 4 (stage `0x120DAB`, folded sine with an output high pass).
+    ShapeSineHp,
 }
 
 impl FwStage {
@@ -47,6 +50,7 @@ impl FwStage {
             (4, 1) => Some(Self::ShapeSineFold),
             (4, 2) => Some(Self::ShapeSineGain),
             (4, 5) => Some(Self::ShapeSineRes),
+            (4, 4) => Some(Self::ShapeSineHp),
             _ => None,
         }
     }
@@ -140,6 +144,8 @@ pub struct FwStageState {
     pub noise: u32,
     /// Voice phases in cycles (SUPER uses 8, MULTI 3).
     pub phases: [f32; 8],
+    /// Output high pass of SHAPE SINE wave 4.
+    pub hp: OutputHighPass,
 }
 
 impl Default for FwStageState {
@@ -147,6 +153,7 @@ impl Default for FwStageState {
         Self {
             noise: NOISE_SEED,
             phases: [0.0; 8],
+            hp: OutputHighPass::default(),
         }
     }
 }
@@ -181,6 +188,7 @@ impl FwStageState {
             FwStage::ShapeSineFold => shape_sine_fold(t, i_sy, ctrl),
             FwStage::ShapeSineGain => shape_sine_gain(t, i_sy, ctrl),
             FwStage::ShapeSineRes => shape_sine_res(t, i_sy, ctrl),
+            FwStage::ShapeSineHp => self.hp.process(shape_sine_hp_core(t, i_sy, ctrl)),
             FwStage::Multi => {
                 let mut sum = 0.0;
                 for (ph, c) in self.phases.iter_mut().zip(MULTI_OCTAVES) {
@@ -274,6 +282,10 @@ mod tests {
             FwStage::from_category_wave(4, 5),
             Some(FwStage::ShapeSineRes)
         );
+        assert_eq!(
+            FwStage::from_category_wave(4, 4),
+            Some(FwStage::ShapeSineHp)
+        );
         assert_eq!(FwStage::from_category_wave(4, 3), None);
         assert_eq!(FwStage::from_category_wave(3, 0), None);
         assert_eq!(FwStage::from_category_wave(2, 1), None);
@@ -290,6 +302,7 @@ mod tests {
             FwStage::ShapeSineFold,
             FwStage::ShapeSineGain,
             FwStage::ShapeSineRes,
+            FwStage::ShapeSineHp,
         ] {
             let (mut a, mut b) = (FwStageState::default(), FwStageState::default());
             let dt = 220.0 / 48_000.0;

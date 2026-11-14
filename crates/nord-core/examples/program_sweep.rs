@@ -14,6 +14,7 @@ use nord_core::midi::MidiEvent;
 use nord_core::piano::NpnoSound;
 use nord_core::render::{render_timeline, TimedEvent};
 use nord_core::render_opts::FirmwareOptions;
+use nord_core::sinc::key_rule::kernel_for_key;
 use nord_core::sweep::{analyze, rms_delta_db};
 use nord_core::synth::SynthSampleSound;
 use serde_json::{json, Value};
@@ -35,6 +36,17 @@ fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a String> {
     args.iter()
         .position(|a| a == name)
         .and_then(|i| args.get(i + 1))
+}
+
+/// Kernel indices (`sinc::key_rule`) reachable over the key spans of a multisample's zones.
+fn sample_kernels(s: &SynthSampleSound) -> Vec<usize> {
+    let mut seen = [false; 6];
+    for z in &s.zones {
+        for key in z.key_low..=z.key_high {
+            seen[kernel_for_key(key)] = true;
+        }
+    }
+    (0..6).filter(|&k| seen[k]).collect()
 }
 
 fn events(notes: &[u8], velocity: u8, hold: usize) -> Vec<TimedEvent> {
@@ -223,6 +235,10 @@ fn main() -> Result<(), String> {
         let class =
             |r: &Option<String>| piano_of(&pianos, r).map_or(Value::Null, |(_, c)| json!(c));
         let sound = |r: &Option<String>, ok: bool| json!({ "ref": r.is_some(), "loaded": ok });
+        // SAMPLES layers: kernels the firmware key rule reaches over the key span of the zones.
+        let kernels = |r: &Option<String>| {
+            synth_of(&synths, r).map_or(Value::Null, |s| json!(sample_kernels(s)))
+        };
         let line = json!({
             "entry": name,
             "program": serde_json::from_str::<Value>(&prog.to_json().map_err(|e| e.to_string())?)
@@ -231,8 +247,11 @@ fn main() -> Result<(), String> {
                 "piano_a": sound(&refs.piano_a, piano_of(&pianos, &refs.piano_a).is_some()),
                 "piano_b": sound(&refs.piano_b, piano_of(&pianos, &refs.piano_b).is_some()),
                 "synth_a": sound(&refs.synth_a, synth_of(&synths, &refs.synth_a).is_some()),
+                "synth_a_kernels": kernels(&refs.synth_a),
                 "synth_b": sound(&refs.synth_b, synth_of(&synths, &refs.synth_b).is_some()),
+                "synth_b_kernels": kernels(&refs.synth_b),
                 "synth_c": sound(&refs.synth_c, synth_of(&synths, &refs.synth_c).is_some()),
+                "synth_c_kernels": kernels(&refs.synth_c),
                 "piano_a_class": class(&refs.piano_a),
                 "piano_b_class": class(&refs.piano_b),
             },
