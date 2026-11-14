@@ -10,7 +10,7 @@ from __future__ import annotations
 import bpy
 from proof_geom import box, loft
 
-# Shape EMPIRICAL, measured on the owner's purchased 3D model of the instrument (D17; the
+# Shape EMPIRICAL, measured on the owner's purchased 3D model of the instrument (D28; the
 # model stays in .reference/, never committed): one drawbar cap mesh, projected onto the
 # panel plane and scaled so its width is CAP_W (scratch command recorded in
 # docs/research/panel-blender-proof.md, eighth review). Mesh sampling error about 0.02 u.

@@ -5,12 +5,14 @@ use super::*;
 impl Stage4Engine {
     /// Handles a real-time MIDI event across the 4-zone split router, Morph matrix, and 7 layers.
     pub fn handle_midi(&mut self, event: MidiEvent) {
+        self.midi_in_count = self.midi_in_count.wrapping_add(1);
         let channel = match event {
             MidiEvent::NoteOn { channel, .. }
             | MidiEvent::NoteOff { channel, .. }
             | MidiEvent::ControlChange { channel, .. }
             | MidiEvent::ChannelAftertouch { channel, .. }
-            | MidiEvent::ProgramChange { channel, .. } => channel,
+            | MidiEvent::ProgramChange { channel, .. }
+            | MidiEvent::PitchBend { channel, .. } => channel,
         };
         if channel >= 16 {
             return;
@@ -18,27 +20,37 @@ impl Stage4Engine {
         match event {
             MidiEvent::NoteOn { note, velocity, .. } => {
                 let channel_idx = channel as usize;
+                let shift = self.incoming_transpose(channel);
+                let Some(sounding) = self.transposed_note_by(note, shift) else {
+                    return;
+                };
                 let mut recipients = 0u8;
-                let is_global_channel = self.global_midi_channel == Some(channel);
                 for layer in LayerId::ALL {
                     if !self.scene.is_layer_active(layer) {
                         continue;
                     }
-                    let is_layer_channel =
-                        self.layer_midi_channels[layer as usize] == Some(channel);
-                    if !is_global_channel && !is_layer_channel {
+                    let Some(route) = self.route_for(layer, channel) else {
                         continue;
-                    }
-                    let split_gain = if is_global_channel && !is_layer_channel {
-                        self.split_router.note_gain(layer, note)
+                    };
+                    let split_gain = if route == NoteRoute::Global {
+                        self.keybed_gain(layer, note)
                     } else {
                         1.0
                     };
-                    if split_gain <= 0.0 {
+                    if split_gain <= 0.0 || self.echo_blocks(layer, route) {
                         continue;
                     }
+                    let velocity = if route == NoteRoute::Aux {
+                        self.aux_kb.curve.map(velocity)
+                    } else {
+                        velocity
+                    };
                     recipients |= 1 << (layer as u8);
-                    self.layer_note_on(layer, note, velocity, split_gain);
+                    self.clear_held(layer, sounding);
+                    self.layer_note_on(layer, sounding, velocity, split_gain);
+                }
+                if recipients != 0 {
+                    self.held_transpose[channel_idx][note as usize] = shift;
                 }
                 for layer in LayerId::ALL {
                     if recipients & (1 << (layer as u8)) != 0 {
@@ -62,40 +74,58 @@ impl Stage4Engine {
                         .iter()
                         .any(|counts| counts[note as usize][layer as usize] > 0);
                     if !held_on_any_channel {
-                        self.layer_note_off(layer, note);
+                        let sounding = self.sounding_note(channel_idx, note);
+                        self.release_or_hold(layer, sounding);
                     }
                 }
             }
             MidiEvent::ControlChange {
                 controller, value, ..
             } => {
+                if self.aux_kb.listens_on(channel) && controller == cc::SUSTAIN_PEDAL {
+                    self.set_sustain_pedal(PedalSource::Aux, value);
+                }
                 if self.global_midi_channel != Some(channel) {
+                    return;
+                }
+                if !self.accept_global_cc(controller, value) {
                     return;
                 }
                 let norm = f32::from(value.min(127)) / 127.0;
                 match controller {
-                    cc::MOD_WHEEL => self.morph_controllers.mod_wheel = norm,
-                    cc::CONTROL_PEDAL => self.morph_controllers.control_pedal = norm,
+                    cc::MOD_WHEEL => {
+                        self.morph_controllers.mod_wheel = norm;
+                        self.extern_forward_device(ExternDevice::ModWheel, value);
+                    }
+                    cc::CONTROL_PEDAL => {
+                        self.set_control_pedal(norm);
+                        self.extern_forward_device(ExternDevice::ControlPedal, value);
+                    }
+                    cc::ORGAN_SWELL => {
+                        self.set_swell_pedal(norm);
+                        let device = if self.pedals.swell_func == SwellFunc::Volume {
+                            ExternDevice::VolumePedal
+                        } else {
+                            ExternDevice::SwellPedal
+                        };
+                        self.extern_forward_device(device, value);
+                    }
                     cc::DRAWBAR_1_16..=cc::DRAWBAR_9_1 => {
                         let idx = (controller - cc::DRAWBAR_1_16) as usize;
                         let step = ((norm * 8.0).round() as u8).min(8);
-                        self.organ_a.drawbars[idx] = step;
+                        // the physical bar always moves; the stored preset only follows in Preset mode
+                        self.organ_a.live_drawbars[idx] = step;
+                        if !self.organ_a.drawbar_live {
+                            self.organ_a.drawbars[idx] = step;
+                        }
                     }
-                    cc::SUSTAIN_PEDAL => {
-                        let down = value >= 64;
-                        self.piano_a.set_damper_pedal(down, value);
-                        self.piano_b.set_damper_pedal(down, value);
-                    }
+                    cc::SUSTAIN_PEDAL => self.set_sustain_pedal(PedalSource::Global, value),
+                    // CC66 / CC67 stand for the TP-2 Middle / Left pedals; the defaults
+                    // (Sostenuto / Una Corda) behave exactly as the direct piano calls did.
                     cc::SOSTENUTO_PEDAL => {
-                        let down = value >= 64;
-                        self.piano_a.set_sostenuto_pedal(down, value);
-                        self.piano_b.set_sostenuto_pedal(down, value);
+                        self.triple_pedal(TripleUnit::Tp2, TriplePedal::Middle, value)
                     }
-                    cc::SOFT_PEDAL => {
-                        let down = value >= 64;
-                        self.piano_a.set_soft_pedal(down, value);
-                        self.piano_b.set_soft_pedal(down, value);
-                    }
+                    cc::SOFT_PEDAL => self.triple_pedal(TripleUnit::Tp2, TriplePedal::Left, value),
                     cc::SYNTH_FILTER_CUTOFF => {
                         for m in &mut self.synth_cutoff_morph {
                             m.base = norm;
@@ -120,16 +150,36 @@ impl Stage4Engine {
                 }
             }
             MidiEvent::ChannelAftertouch { pressure, .. } => {
-                if self.global_midi_channel == Some(channel) {
+                if self.global_midi_channel == Some(channel) && self.midi_menu.dev.receives() {
                     self.morph_controllers.aftertouch = f32::from(pressure.min(127)) / 127.0;
+                    self.extern_forward_device(ExternDevice::Aftertouch, pressure.min(127));
                 }
             }
-            MidiEvent::ProgramChange { .. } => {}
+            MidiEvent::ProgramChange { program, .. } => {
+                if self.global_midi_channel == Some(channel) {
+                    self.receive_program_change(program);
+                }
+            }
+            MidiEvent::PitchBend { value, .. } => {
+                if self.aux_kb.listens_on(channel) {
+                    self.set_pitch_bend(PedalSource::Aux, value);
+                }
+                if self.global_midi_channel == Some(channel) && self.midi_menu.dev.receives() {
+                    self.set_pitch_bend(PedalSource::Global, value);
+                }
+            }
         }
     }
 
-    fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
+    pub(super) fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
+        if let Some(i) = self.extern_index(layer) {
+            // Crossfade gain scales the transmitted velocity; exactly 1.0 outside crossfades.
+            let v = (f32::from(velocity) * gain).round().clamp(1.0, 127.0) as u8;
+            self.extern_note_on(i, note, v);
+            return;
+        }
         match layer {
+            LayerId::OrganA | LayerId::OrganB if self.defer_organ_note(layer, note, gain) => {}
             LayerId::OrganA => self.organ_a.note_on_with_gain(note, gain),
             LayerId::OrganB => self.organ_b.note_on_with_gain(note, gain),
             LayerId::PianoA => self.piano_a.note_on_with_gain(note, velocity, gain),
@@ -140,7 +190,7 @@ impl Stage4Engine {
         }
     }
 
-    fn layer_note_off(&mut self, layer: LayerId, note: u8) {
+    pub(super) fn layer_note_off(&mut self, layer: LayerId, note: u8) {
         match layer {
             LayerId::OrganA => self.organ_a.note_off(note),
             LayerId::OrganB => self.organ_b.note_off(note),

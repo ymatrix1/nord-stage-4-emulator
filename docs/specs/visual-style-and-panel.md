@@ -100,18 +100,61 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
 ### 4.5 Dual Monochrome OLED Displays (`ProgramOledWidget` & `SynthOledWidget`)
 1. **Central Program OLED (`128×64` aspect):**
    - Top row: Bank & Location (`A:11`) + Program Title (`Nord Stage 4`) + Category icon.
+   - Edited marker: a boxed `E` follows the location while the program differs from what was loaded or stored (VERIFIED, course footage and manual p.13). The panel counts the sound edits it sends (`AudioHandle::edit_count`, `AudioCommand::is_program_edit`) and compares the count with its value at the last load, program change or STORE (`bay_program/edited.rs`). Setters sent with the same value still count (ASSUMED). In Live Mode the title is `Live N` and no `E` shows (ASSUMED: Live programs auto-store).
+   - Section rows (Layers view): one row per section with a layer on (`Organ B3`, `Piano ...`, `Synth ...`). Hardware also prints the preset id (`1:05`) or source name with a size letter and mini drawbars; those are not modelled yet.
    - Bottom 3 rows: Active Organ model/drawbar preview (`888000000`), active Piano model (`White Grand XL`), and active Synth patch (`Vista Pad WH`) with `A/B/C` layer badges.
 2. **Synth Section Graphic OLED (`128×64` aspect):**
    - Header: `OSC WAVEFORM`
    - Center graphic: Real-time anti-aliased waveform / wavetable / FM operator visualization + primary parameter readout (`Super Saw`, `DETUNE: 3.4`).
    - Bottom bar: 4 inverted/outlined soft-label tabs (`ANALOG`, `SUPER`, `1 (6)`, `WAVE`) controlled by the 3 encoders below the screen.
 
+#### Parameter hint line (`ns4-wxly`)
+
+While a knob moves, both OLEDs show `<label> <value>` (`LFO Rate 0.08 Hz`, `LFO Amount 7.1`, `Filter Frequency 1.2 kHz`) for 1.5 s after the last movement (hold time `ASSUMED`, no timing measured).
+
+| Display | Where the hint goes | Source |
+|---|---|---|
+| Synth OLED | replaces the page title in the header row (right-hand layer letter stays) | LFO course video 0:27-0:45 (EMPIRICAL) |
+| Program OLED | replaces the rows below the separator on the home screen; menus, STORE, LIST and split screens keep their text | manual p.42 (VERIFIED) |
+
+Data: `panel/param_hint/table.rs` maps an inventory control id to label and value formatter (`fmt.rs`); every `widgets::knob` drag records `(id, position)` in the egui context (`param_hint::touch`), owners with a non-linear value (Master Clock divisions, stored layer value, per-type mod rate) refine it with `touch_value`. The LFO DEST button taps raise `LFO Destination <Filter|Osc Pitch|OscCtrl|Off>`.
+
+| Item | Status |
+|---|---|
+| Labels `Oscillator Ctrl`, `Oscillator Env Amount`, `Filter Frequency`, `Filter Resonance`, `Filter Env Amount`, `LFO Destination`, `LFO Rate`, `LFO Amount`, `Glide Rate`, `Arpeggiator Rate`, `Arpeggiator Range`, `Filter`, `Osc Pitch`, `OscCtrl` | VERIFIED in the firmware pool, `tools/tests/test_ns4_oled_strings.py::test_param_hint_labels_are_in_the_firmware` |
+| Effects and Master labels (`Amp Bass`, `Delay Feedback`, `Master Level`, ...), `Off` | ASSUMED: not firmware strings; built from the panel silkscreen |
+| Hz precision (2 decimals below 1 Hz, 1 below 10 Hz, 0 above) | EMPIRICAL: LFO clip overlay readings, [dsoundman-synth-lfo](../research/dsoundman-synth-lfo.md) section 2 |
+| `dB` with one decimal, `bpm` integer | VERIFIED unit strings (`%.1f dB`, `%d bpm`, `0x2CA110..`) |
+| Panel-unit scale `0..10` (osc ctrl, resonance, LFO amount), `-10..10` (env amounts) | EMPIRICAL for LFO amount (`7.1`, one reading); ASSUMED for the others |
+| Knob laws (log or linear sweeps and their ranges) | ASSUMED, as in `ui_state/synth/pots.rs` |
+| Open | The hardware LFO RATE table (`LFO_RATE_HZ_TABLE`, 128 steps) is not used for the hint: it shows the emulator's own rate (log 0.05..40 Hz); moving the knob law to the table is a separate change |
+
+#### 4.5.1 Firmware messages and toasts (`bay_program/fw_messages.rs`, bean `ns4-0u5u`)
+
+The Program OLED shows short messages ("toasts") for events. They use the firmware's own strings; every offset is a file offset in `bank0_CODE.bin` (OS v1.66, local only), checked by `tools/tests/test_ns4_oled_strings.py::test_message_strings_are_in_the_firmware`.
+
+| Message | Offset | Shown when | Status |
+|---|---|---|---|
+| `Piano not found` | `0x2CA180` | a program load finds an enabled piano layer whose model the opened `.ns4b` lacks, or a piano is requested with no archive open | string `VERIFIED`, trigger `ASSUMED` |
+| `Sample not found` | `0x2CA198` | same for an enabled synth layer in Sample mode | string `VERIFIED`, trigger `ASSUMED` |
+| `Please wait...` | `0x2C75D0` | a piano / sample decode is running (`pending_jobs > 0`); removed when it ends, never hides another message | string `VERIFIED`, trigger `ASSUMED` |
+| `Pasted` / `Swapped` | `0x283758` / `0x283760` | Paste / Swap soft buttons with a filled clipboard | `VERIFIED` |
+| `Nothing to Paste` / `Nothing to Swap with` | `0x28377D` / `0x2837E5` | Paste / Swap soft button with an empty clipboard | `VERIFIED` |
+| `Are you sure?` | `0x2C0E38` | first press of System > Reset all settings (`0x2C0E08`, the string right before it); a second press within 2 s runs it | string `VERIFIED`, pairing with Reset `ASSUMED` (neighbouring strings, caller not traced) |
+| `Unable to Paste` + `Memory Protected` | `0x283790` (one string with `\n%c Memory Protected`) | pasting a whole program while Memory Protect is on | string `VERIFIED`, use `ASSUMED` |
+| `Memory Protected` | `0x2837A0` (`%c Memory Protected`) | STORE / Organize blocked by Memory Protect | `VERIFIED` |
+
+`%c` in `%c Memory Protected` is the character code `0x89` (`mov r3, #0x89` before the print call at `0xC003D32C` and `0xC003D344`, `VERIFIED` by `python tools/arm_xref.py dis target/fw_unpacked/bank0_CODE.bin 0xC003D2E0 0xC003D360`), a glyph of the panel's OLED font. Its shape is not decoded (a padlock is `ASSUMED` from context); the emulator font has no such glyph, so only `Memory Protected` is drawn.
+
+Mechanism: `ProgramUi::set_message` / `show(FwMessage)` store `(text, end_ms)` and `begin_frame(now_ms, ..)` drops the message at `end_ms`, so the lifetime follows the injected frame clock and tests pass a time instead of sleeping. The lifetime `TOAST_MS = 2000` is `ASSUMED`. A message with a line break is drawn as one OLED row per line. `ProgramUi::confirm(Confirm)` is the two-press prompt: the first press shows `Are you sure?` and arms the action for `TOAST_MS`, the same action again inside the window returns `true`. Library loads queue `FwMessage`s in `BackupLibraryState` and the panel poll turns them into toasts.
+
 ### 4.6 Known discrepancies (open, Phase 6b `ns4-xc5n`)
 
 | Item | This spec says | Manual / evidence | Status |
 |---|---|---|---|
 | Morph target display (§4.4) | Amber glowing arc around the knob | Manual p.11: green Morph LEDs at the bottom-left of the knob show morph assignment | Spec wrong; renderer to follow the manual (B8, [D15](../DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering)) |
-| Fader LED ladder (§4.1) | 11 segments | Not yet checked against manual p.11 | `ASSUMED`; verify in B2 ([control inventory](control-inventory.md)) |
+| Fader LED ladder (§4.1) | 11 segments | Manual text does not state the LED count (p.18, 23, 27 only say "LED graph"); the drawbar ladders are 8 LEDs (p.21) | `ASSUMED`; needs a panel-photo count ([control inventory](control-inventory.md)) |
+| Split-point LEDs (§3, keybed) | 3 red LEDs | Manual p.15: green LEDs above the keyboard, plus L/M/H LEDs above the SPLIT ON/SET button | Spec wrong; inventory records both (`keybed.split_leds`, `split.leds`) |
 
 ---
 
@@ -120,13 +163,25 @@ Every custom UI widget in `crates/nord-gui` / `crates/nord-plugin` must render t
 To keep every label legible on standard 1080p/1440p/4K monitors and inside DAW plugin windows:
 1. **Full Panorama View (`1600×520` aspect, scalable `0.75x..2.0x`):** Shows the entire Nord Stage 4 top panel + 88-key interactive keyboard with split-zone color overlays and pitch/mod wheels.
 2. **Focused Rack View (`1100×640` compact DAW mode):** Keeps the Top Master/Program/Morph/Scene bar + 88-key Split bar permanently visible while allowing large, zoomed-in inspection of `[ORGAN + PIANO]` or `[SYNTH + LAYER EFFECTS]` at full 1:1 readability.
+   **Implemented (B12):** the overview scale-to-fits the window; the panorama is the `P` mode below, not a separate fixed-size layout. The rack view is the focus view (`Z`, `1`-`5`).
+
+   | Key / gesture | Effect |
+   |---|---|
+   | `P` | Panorama on (viewport opens on the focused section, else a centred 2x window) / off |
+   | strip drag or click | Centre the viewport on the pointer (`panel/panorama.rs`) |
+   | wheel over the strip, `+` / `-` | Zoom the viewport about its centre (scale 0.25..1 of the panel; the egui zoom caps at 4x) |
+   | arrows | Pan by 15 % of the viewport |
+   | `Esc` | Leave the panorama (then focus, as before) |
+   | `Z`, `1`-`5`, section header | Focus a section; clears the panorama |
+
+   The strip (56 logical px high, panel aspect) sits under the detailed view and draws section outlines only. State is `ViewState::panorama: Option<Rect>` in logical panel px; the default view is unchanged. Not persisted: the app persists no view settings (no eframe storage), so a new session starts in the overview with the drawer closed. The library drawer slides in and out (`SidePanel::show_animated`), `L` toggles it; library logic is unchanged.
 3. **Docked `.ns4b` Archive Browser & Knob Recall Mode:** The `.ns4b` library drawer docks as a resizable left `SidePanel` before the front-panel `CentralPanel` (never overlapping hardware controls), with an `Auto-close` toggle (enabled by default) that dismisses the browser upon selecting a Program, Piano, or Sample so the full top panel remains unobstructed. `Sync Knobs on Preset` defaults to `false` to match authentic non-motorized Nord Stage 4 hardware behavior (where OLEDs, `A:11..H:88` location, LED button rings, `fx_focus`, and layer/drawbar LED meters update while potentiometer caps keep their physical angle).
 
 ---
 
 ## 6. Baked sprite proof (B7, Phase 6b)
 
-Measured output of the D15 baker (v4, matched feature by feature to the owner's private Organ section render; since [D17](../DECISIONS.md#d17-panel-proof-sprites-may-be-derived-from-the-reference-render) buttons, triangle selectors, knob bodies, the DRIVE scale and plate tiles are cut from the reference by `tools/panel_refbake.py`, tagged `REFERENCE-DERIVED (D17)`): a knob filmstrip with two separate overlay layers (arc ring, numbered DRIVE scale), drawbar caps (black, white) with one shared shadow, a grey layer-fader cap with its own shadow, grey and black pill buttons in their wells, three seamless plate tiles (red leather, slate, silver header) and the slotted slate plate. Rendered by `assets/blender/build_proof.py`, committed under `assets/panel/proof/` with SHA-256 hashes in `manifest.json` (`python tools/panel_assets.py verify`). Colours and proportions are numbers measured on the reference, stored in [`assets/panel/theme_samples.json`](../../assets/panel/theme_samples.json) (no pixels, D16). Details, method, sizes and what still differs: [panel-blender-proof.md](../research/panel-blender-proof.md).
+Measured output of the D15 baker (v4, matched feature by feature to the owner's private Organ section render; since [D28](../DECISIONS.md#d28-panel-proof-sprites-may-be-derived-from-the-reference-render) buttons, triangle selectors, knob bodies, the DRIVE scale and plate tiles are cut from the reference by `tools/panel_refbake.py`, tagged `REFERENCE-DERIVED (D28)`): a knob filmstrip with two separate overlay layers (arc ring, numbered DRIVE scale), drawbar caps (black, white) with one shared shadow, a grey layer-fader cap with its own shadow, grey and black pill buttons in their wells, three seamless plate tiles (red leather, slate, silver header) and the slotted slate plate. Rendered by `assets/blender/build_proof.py`, committed under `assets/panel/proof/` with SHA-256 hashes in `manifest.json` (`python tools/panel_assets.py verify`). Colours and proportions are numbers measured on the reference, stored in [`assets/panel/theme_samples.json`](../../assets/panel/theme_samples.json) (no pixels, D16). Details, method, sizes and what still differs: [panel-blender-proof.md](../research/panel-blender-proof.md).
 
 | Item | Value | Tag |
 |---|---|---|
@@ -135,13 +190,33 @@ Measured output of the D15 baker (v4, matched feature by feature to the owner's 
 | Light | one top-left sun (elevation about 61 deg, soft, diffuse only, the only shadow caster); uniform diffuse ambient; glossy-only ring softbox for edge highlights | sun `ASSUMED` (D15), ambient `EMPIRICAL` |
 | Knob filmstrip | 64 frames, 8x8 grid, frame 96 px (1x) / 192 px (2x), transparent, pointer -135 to +135 deg clockwise; 20 flutes, bent tapered pointer | rotation and proportions `EMPIRICAL` |
 | Knob arc ring | own layer, 270 deg, outer 1.31 x cap radius, thickness 3 to 15 reference px | `EMPIRICAL` (circle fit) |
-| Reference knobs | Master Level and DRIVE: cap body from the reference (pointer removed), Blender pointer filmstrip (64 frames, cap holdout) and shadow at each knob's lean; DRIVE numeral scale layer from the reference | `REFERENCE-DERIVED (D17)` body and scale, pointer `EMPIRICAL` |
+| Reference knobs | Master Level and DRIVE: cap body from the reference (pointer removed), Blender pointer filmstrip (64 frames, cap holdout) and shadow at each knob's lean; DRIVE numeral scale layer from the reference | `REFERENCE-DERIVED (D28)` body and scale, pointer `EMPIRICAL` |
 | Drawbar caps | black (16'), white (8'); 96 x 160 px (1x); one shared 3D part (full-width base, block with tapered sides and sloped front, lower nose with a steep right wall, low base band in front), same camera for both colours, calibrated materials, Blender shadow | shape from the owner's photos of the real part, size `EMPIRICAL` |
 | Layer-fader cap | grey; 96 x 96 px (1x); 3D rounded frustum, calibrated material, own Blender shadow | shape from the owner's photo, size `EMPIRICAL` |
-| Buttons | all 15 buttons of the reference (black and grey pills, octave pair), up state with well, one sprite per instance (about 68 x 38 px at 1x) | `REFERENCE-DERIVED (D17)` |
-| Triangle selectors | ORGAN MODEL and VIB/CHORUS matrices, unlit base plus lit overlay (left, up; right and down mirrored) | `REFERENCE-DERIVED (D17)` |
-| Plate tiles | red, slate, silver; 128 px (1x), seamless, quilted from clean reference patches shifted to the measured colours | `REFERENCE-DERIVED (D17)` |
+| Buttons | all 15 buttons of the reference (black and grey pills, octave pair), up state with well, one sprite per instance (about 68 x 38 px at 1x) | `REFERENCE-DERIVED (D28)` |
+| Triangle selectors | ORGAN MODEL and VIB/CHORUS matrices, unlit base plus lit overlay (left, up; right and down mirrored) | `REFERENCE-DERIVED (D28)` |
+| Plate tiles | red, slate, silver; 128 px (1x), seamless, quilted from clean reference patches shifted to the measured colours | `REFERENCE-DERIVED (D28)` |
 | Size, whole proof set | 824 KB (1x), 2.76 MB (2x) PNG | measured |
 | Full-panel estimate (6 knob, 15 button styles) | 2.16 MB (1x), 6.64 MB (2x) PNG | counts `ASSUMED` until B2 |
 
 Note: the sampled colours differ from the §2 tokens (red (130, 27, 38) vs `#8E1B1F`; slate (55, 64, 76) vs `#323D47`; silver (179, 191, 205) vs `#A3AFB9`). The sprites follow the samples; which one becomes the theme token is open for B8. Still different from the reference (summary): buttons and selectors match up to resampling. The knobs differ in the ring (full track vs lit value), the static fluted body and a slightly softer pointer bend. Each cap colour is one sprite, so it keeps the lean of the drawbar it was cut from. Full per-style list in the research note.
+
+## Label legibility rules (B8)
+
+Printed text never goes below 7.5 px (`widgets::MIN_FONT_PX`) and must not touch anything it does
+not describe. The headless audit in `crates/nord-gui/src/panel/legibility_*.rs` enforces it per
+rule (overlap and 0.9 px gap, control bezel, clipping, section edge, group frame, knob ring; table
+in [GUI testing](../gui-testing.md)). Layout decisions it led to:
+
+- Rotary Speaker box: the frame extends 52 px left of the button column (the Master area is empty
+  there) and 30 px right, capped 3 px inside the Master section. Wide legends (`SLOW/STOP - FAST`,
+  title) are centred on the frame, narrow ones on their button. The `rotary.speed_leds` rectangle
+  (`ESTIMATED`) is widened from 20 to 33 photo px so the row holds `LED SLOW   LED FAST`.
+- Shift legends place their state LED after the measured text, not at a character-count guess.
+- Effects captions start 6.5 px below the control (clear of knob shadow and button bezel) with
+  8.5 px between stacked lines.
+- The Synth ON button prints SOLO to its right (the OLED sits right below it); the OLED soft
+  labels use two 9.5 px lines and are kept inside the glass; the vibrato selector no longer repeats
+  the VIBRATO heading (SELECT).
+- Two-word percussion names (`VOLUME SOFT`, `HARMONIC 3RD`) stack when the neighbour is closer
+  than the full name.

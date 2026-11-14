@@ -24,6 +24,12 @@ impl Core {
     /// device store (ASSUMED: peripherals and the external bus behave like plain memory until
     /// they are modelled, `device_reads` counts these accesses).
     pub fn dm_read(&mut self, addr: u32) -> Result<u32, u32> {
+        if self.rwatch_on
+            && addr.wrapping_sub(self.rwatch) < self.rwatch_len
+            && self.rwatch_hits.len() < self.watch_limit
+        {
+            self.rwatch_hits.push((self.pc, addr));
+        }
         if self.periph.is_some() {
             if let Some(v) = self.periph_read(addr) {
                 return Ok(v);
@@ -187,6 +193,20 @@ mod tests {
             c.dm_write(a, 1).unwrap();
         }
         assert_eq!(c.watch_addrs, vec![0x9_0011, 0x9_0013]);
+    }
+
+    #[test]
+    fn rwatch_logs_loads_only_while_enabled() {
+        let mut c = Core::new(&[]);
+        (c.rwatch, c.rwatch_len) = (0x9_0010, 2);
+        c.pc = 0x77;
+        c.dm_read(0x9_0010).unwrap();
+        assert!(c.rwatch_hits.is_empty(), "host reads are not core loads");
+        c.rwatch_on = true;
+        for a in [0x9_0010, 0x9_0011, 0x9_0012] {
+            c.dm_read(a).unwrap();
+        }
+        assert_eq!(c.rwatch_hits, vec![(0x77, 0x9_0010), (0x77, 0x9_0011)]);
     }
 
     /// A write to `Bn` also loads `In` (the SMP voice loop `B1 = DM(rec-26)` then reads through `I1`);

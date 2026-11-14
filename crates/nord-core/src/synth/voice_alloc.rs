@@ -10,11 +10,12 @@ impl SynthLayer {
 
     pub fn note_on_with_gain(&mut self, note: u8, velocity: u8, gain: f32) {
         let note_idx = (note as usize).min(127);
+        self.on_key_down(note_idx);
         self.held_keys[note_idx] = true;
         self.held_velocities[note_idx] = velocity.clamp(1, 127);
         self.held_gains[note_idx] = gain.clamp(0.0, 1.0);
 
-        if self.arp_mode != ArpMode::Off {
+        if self.arp_consumes_notes() {
             return;
         }
 
@@ -114,7 +115,10 @@ impl SynthLayer {
             gate: true,
             note,
             velocity: vel_norm,
+            pan: self.perf.voice_pan,
             gain: gain.clamp(0.0, 1.0),
+            gain_target: gain.clamp(0.0, 1.0),
+            gain_state: self.voices[idx].gain_state,
             freq_hz: glide_from,
             target_freq_hz: freq,
             fenv: 0.0,
@@ -130,9 +134,13 @@ impl SynthLayer {
             mod_feedback_state: 0.0,
             mod_env: 1.0,
             supersaw_phases: SUPERSAW_PHASE_INITS,
+            stage: FwStageState::default(),
             amp_env: 0.01,
             filter: self.voices[idx].filter,
             filter_right: self.voices[idx].filter_right,
+            fw_filter: self.voices[idx].fw_filter,
+            fw_filter_right: self.voices[idx].fw_filter_right,
+            strip: StripVoice::default(),
             sample_zone_idx,
             sample_pos: 0.0,
             sample_step,
@@ -144,9 +152,15 @@ impl SynthLayer {
     /// Releases a held note across the polyphonic voices.
     pub fn note_off(&mut self, note: u8) {
         let note_idx = (note as usize).min(127);
+        self.perf.phys_keys[note_idx] = false;
+        if self.hold_active() {
+            // KB Hold: the key stays logically held until a new chord replaces it.
+            self.perf.hold_latched = true;
+            return;
+        }
         self.held_keys[note_idx] = false;
 
-        if self.arp_mode != ArpMode::Off {
+        if self.arp_consumes_notes() {
             return;
         }
 

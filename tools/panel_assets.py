@@ -4,7 +4,7 @@
 Pipeline (Blender is a development dependency only; CI never renders):
 
     python tools/panel_assets.py render      # headless Blender -> assets/panel/proof/_raw
-    python tools/panel_refbake.py --ref <reference.png>   # reference-derived sprites (D17)
+    python tools/panel_refbake.py --ref <reference.png>   # reference-derived sprites (D28)
     python tools/panel_assets.py pack        # stitch filmstrips, manifest, sizes
     python tools/panel_assets.py preview     # assets/panel/proof/preview_2x.png
     python tools/panel_assets.py verify      # check committed PNGs against the manifest (CI-safe)
@@ -70,7 +70,7 @@ SPRITES = {
     "knob_shadow_master": (96, 96),  # shadow of the reference-derived Master Level cap
     "knob_shadow_drive": (96, 96),
     "plate_slate_slot": (128, 256),  # drawbar slot on slate, not a tile
-    # caps: 3D geometry textured by projecting the reference from the cap's camera (D17)
+    # caps: 3D geometry textured by projecting the reference from the cap's camera (D28)
     "drawbar_cap_black": (96, 160),
     "drawbar_shadow_black": (96, 160),
     "drawbar_cap_white": (96, 160),
@@ -78,7 +78,7 @@ SPRITES = {
     "layer_cap_grey": (96, 96),
     "layer_shadow_grey": (96, 96),
 }
-# Knobs whose cap body is cut from the reference (D17); each gets a Blender pointer filmstrip.
+# Knobs whose cap body is cut from the reference (D28); each gets a Blender pointer filmstrip.
 REF_KNOBS = ("master", "drive")
 FILMSTRIPS = ("knob_filmstrip", *(f"pointer_{k}" for k in REF_KNOBS))
 TILES = ("plate_red", "plate_slate", "plate_silver")  # reference-derived, seamless
@@ -86,7 +86,7 @@ REF_CROPS = ROOT / "assets" / "panel" / "ref_crops.json"
 
 
 def ref_sprites(crops: dict | None = None) -> list[str]:
-    """Names of the sprites `tools/panel_refbake.py` cuts from the reference (D17)."""
+    """Names of the sprites `tools/panel_refbake.py` cuts from the reference (D28)."""
     crops = crops or json.loads(REF_CROPS.read_text(encoding="utf-8"))
     names = [f"button_{b}" for b in crops["buttons"]]
     names += [f"tri_{t}" for t in crops["triangles"]]
@@ -96,7 +96,7 @@ def ref_sprites(crops: dict | None = None) -> list[str]:
 
 
 DRAWBAR_COLORS = ("black", "white")
-# Cap frames (1x px); the caps are cut from the reference (D17), see ref_crops.json "caps".
+# Cap frames (1x px); the caps are cut from the reference (D28), see ref_crops.json "caps".
 CAP_FRAMES = {
     "drawbar_cap_black": (96, 160),
     "drawbar_cap_white": (96, 160),
@@ -265,7 +265,7 @@ def render(raw: Path = RAW_DIR) -> None:
 
 def retexture_slot(render, tile, target, slot_lum: float = 40.0):
     """Keep the Blender slot (dark pixels and their 1 px edge) and replace the rendered slate
-    around it with the reference slate tile (D17), shifted to the measured slate colour of the
+    around it with the reference slate tile (D28), shifted to the measured slate colour of the
     drawbar area, so the plate behind the caps has the reference grain."""
     import numpy as np
     from PIL import Image, ImageFilter

@@ -4,7 +4,7 @@
 
 Defines the binary file formats used by the Nord Stage 4 (`product_id=46`) for programs, engine presets, system settings, factory/user backups (`.ns4b`), and OS firmware updates (`Update Nord Stage 4 OS v1.66`).
 
-Implemented in [`crates/nord-core/src/cbin.rs`](../../crates/nord-core/src/cbin.rs), [`crates/nord-core/src/firmware.rs`](../../crates/nord-core/src/firmware.rs), and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py).
+Implemented in [`crates/nord-core/src/cbin/`](../../crates/nord-core/src/cbin/mod.rs), [`crates/nord-core/src/firmware/`](../../crates/nord-core/src/firmware/mod.rs), and [`tools/ns4_inspect.py`](../../tools/ns4_inspect.py).
 
 ---
 
@@ -34,7 +34,7 @@ The bit-level streaming codecs in [`crates/nord-core/src/cbin/bitstream.rs`](../
 
 | Directory | Extension | Count | Exact Size (Bytes) | Description |
 |---|---|---:|---:|---|
-| `Program/Bank A..H/` | `.ns4p` | 384 | `868` | Full 7-layer Stage 4 Programs (8 Banks × 48 Programs) |
+| `Program/Bank A..F/` | `.ns4p` | 384 | `868` | Full 7-layer Stage 4 Programs (6 full banks x 64; header `bank_index` `0..5`, `location_index` `0..63`; banks G and H are empty user banks) |
 | `Live/Bank 1/` | `.ns4l` | 8 | `868` | Live buffer slots (`Live 0.ns4l` .. `Live 7.ns4l`) |
 | `Synth Preset/Bank 1..8/` | `.ns4y` | 384 | `541` | Single-layer Synth Engine + Synth FX presets |
 | `Piano Preset/Bank 1..2/` | `.ns4n` | 96 | `195` | Single-layer Piano Engine + Piano FX presets |
@@ -56,12 +56,15 @@ Every `.ns4p`, `.ns4l`, `.ns4y`, `.ns4n`, `.ns4o`, and `.ns4t` file begins with 
 | `0x08` | 4 B | ASCII | `tag` | 4-char type tag: `"ns4p"`, `"ns4l"`, `"ns4y"`, `"ns4n"`, `"ns4o"`, `"ns4t"`, `"npno"`, `"nsmp"` |
 | `0x0C` | 2 B | `u16` LE | `bank_index` | Zero-based bank index (`0` = Bank A / Bank 1) |
 | `0x0E` | 2 B | `u16` LE | `location_index` | Zero-based program/preset index within the bank (`0..47`) |
-| `0x10` | 4 B | `u32` LE | `category_id` | Musical category enum (`0x00` = None/Live, `0x12` = Organ, `0x16` = Upright/Grand, `0x17` = EPiano, `0x2C` = Bass, `0x2D` = Synth, `0x2E` = Pad, `0x2F` = Pluck/Acoustic) |
+| `0x10` | 4 B | `u32` LE | `category_id` | Category id. `.ns4p` programs: 18 distinct ids over the 384 factory programs, `1, 2, 3, 6, 7, 9, 11, 13, 23, 30, 40, 42, 44, 45, 46, 47, 49, 52` (VERIFIED, [synth-wave-categories](../research/synth-wave-categories.md) s5); by program names `1` Bass, `2` Brass, `3` tuned percussion, `6` lead, `7` Organ, `9` Piano, `11` Strings, `13` Choir, `23` EPiano, `40` Effects, `42` Guitar, `44` Synth Bass, `45` Synth, `46` Pad, `47` Wind solo, `49` Analog strings, `52` Synth brass (ASSUMED reading). It is **not** the index of the 26-name firmware category table (`0xC02BF3C8`); the mapping is open (OQ26). Other types: `0x00` None/Live, `0x2D` Synth (`.ns4y`) |
 | `0x14` | 4 B | `u32` LE | `schema_id_le` | Payload schema version (matches big-endian repeat at `0x2E`) |
 | `0x18` | 4 B | `u32` LE | `checksum` | 32-bit payload checksum / CRC over `+0x2E..EOF` |
 | `0x1C` | 18 B | `[u8; 18]` | `reserved` | All zeros (`0x00`) in preset files |
+
 | `0x2E` | 2 B | `u16` BE | `schema_id_be` | Big-endian repeat of `schema_id` (`0x0139` for `ns4p`/`ns4l`, `0x00D0` for `ns4y`, `0x00CD` for `ns4o`, `0x00CB` for `ns4n`, `0x006C` for `ns4t`) |
 | `0x30` | `N` B | Bitstream | `payload` | Bit-packed preset state (`820` B for `ns4p`/`ns4l`, `493` B for `ns4y`, `147` B for `ns4n`, `135` B for `ns4o`, `76` B for `ns4t`) |
+
+**`.npno` piano models:** `bank_index` is the piano **type** (`0` Grand, `1` Upright, `2` Electric, `3` Clav, `4` Digital, `5` Misc; the TYPE LED order and the `.ns4p` piano layer `category` field) and `location_index` is the position of the model inside its type on the hardware. VERIFIED on the 38 models of `Nord Stage 4 Factory Restore RevK v1.66.ns4b`: type equals the archive folder and positions run `0..N-1` without gaps per type (`python tools/npno_types.py <backup>`; [piano-types](../research/piano-types.md)).
 
 ### Schema ID Table
 
@@ -112,18 +115,18 @@ Morphable parameters of bit width `W` occupy `4W + 3` bits:
 - `0..8`: `0x11`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`.
 - `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
 - `80`: `rotary_enabled` (1b); `81..83`: `leslie_speed` (`0|2=Stop, 1=Slow, 3=Fast`); `92..99`: `rotary_drive` (7b); `130..133`: `VibratoTypeB3` (`0..5 -> V1, C1, V2, C2, V3, C3`).
-- `0x03` Layers at bit `144` (A) and `392` (B): `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2`); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
+- `0x03` Layers at bit `144` (A) and `392` (B): `+8..+12` `kb_zone` (4b, `Edt_Org_kKbZone`, 12 values, default 5; read-only, [morph-and-zones](morph-and-zones.md) section 6); `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2, 5=B3 Bass`; 5 decodes to `B3` with `b3_bass_a` / `b3_bass_b` set and is written back as 5; before the sweep it fell into Pipe2, 4 factory programs use it, [program-coverage](../research/program-coverage.md)); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
 - Bytes `80..135`: `0x36` Organ FX chain.
 
 #### Piano Block (`0x0C`, `147` Bytes = 2×`0x0B` + 2×`0x36`)
 - `0..8`: `0x0C`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`; `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
-- `0x0B` Layers at bit `104` (A) and `200` (B): `+12..+16` signed 4b `octave`; `+18..+21` `category` (`0..5`: Grand, Upright, Electric, Clav, Digital, Misc); `+21..+26` `model_id`; `+28..+60` 32b `name_hash` (OS v1.66 `ARM0 @ 0x0a5a44` big-endian-chunk MurmurHash2 over the `.npno` stem); `+60..+62` `variation`; `+62..+64` `acoustic_level` bitmask (`bit 1 = string_res`, `bit 0 = soft_release`); `+64` `pedal_noise`; `+65..+67` `unison`; `+67..+69` `dyn_comp`; `+69` reserved pad bit; `+70..+73` `timbre` (`0=Off, 1=Soft, 2=Mid, 3|6|7=Bright, 4=Dyno1, 5=Dyno2`); `+73..+75` `kb_touch` (`0=Medium`, `1=Light`, `2=Heavy`, factory `MED` default `0` verified against OS v1.66 `.ns4p` files & 4K hardware LED captures).
+- `0x0B` Layers at bit `104` (A) and `200` (B): `+8..+12` `kb_zone` (4b, read-only); `+12..+16` signed 4b `octave`; `+18..+21` `category` (`0..5`: Grand, Upright, Electric, Clav, Digital, Misc); `+21..+26` `model_id`; `+28..+60` 32b `name_hash` (OS v1.66 `ARM0 @ 0x0a5a44` big-endian-chunk MurmurHash2 over the `.npno` stem); `+60..+62` `variation`; `+62..+64` `acoustic_level` bitmask (`bit 1 = string_res`, `bit 0 = soft_release`); `+64` `pedal_noise`; `+65..+67` `unison`; `+67..+69` `dyn_comp`; `+69` reserved pad bit; `+70..+73` `timbre` (`0=Off, 1=Soft, 2=Mid, 3|6|7=Bright, 4=Dyno1, 5=Dyno2`); `+73..+75` `kb_touch` (`0=Medium`, `1=Light`, `2=Heavy`, factory `MED` default `0` verified against OS v1.66 `.ns4p` files & 4K hardware LED captures).
 - Bytes `37..92` & `92..147`: `0x36` Piano FX chains A & B.
 
 #### Synth Block (`0x1E`, `493` Bytes = 3×`0x32` + 3×`0x2F` + 3×`0x36`)
 - `0..8`: `0x1E`; `10..13`: `enable_i[C:B:A]`; `15..18`: `enable_ii[C:B:A]`.
 - `18, 49, 80`: `level_{a,b,c}` (`W=7` morphs); `111, 142, 173`: `pan_{a,b,c}` (7b).
-- `0x32` Layer blocks (`248, 656, 1064`, stride `408`), block-relative bits: `+8` `is_osc_mode` (1=Osc, 0=Sample); `+26..+58` 32b `sample_id` (`nord_name_hash` over `.nsmp4` stem); `+62..+66` `octave` (4b two's complement, `-2..+2`); `+72..+75` `vibrato_mode` (`0 none, 1 ON, 2 DLY, 3 WHL, 4 A.T., 5 PED`); `+77` `legato`; `+78` `mono`; `+79..+81` `voice_priority` (`0 none, 1 LO, 2 HI`); `+81..+88` `glide` (7b, panel `0..10` = `raw*10/127`); `+135` `arp_run`; `+175..+206` `arp_rate` (`W=7` morph, `30..300 BPM`); `+306..+308` `unison` (`0..3`); `+372..+377` `vibrato_delay` (5b, `0.1 + 2.9*raw/29` s).
+- `0x32` Layer blocks (`248, 656, 1064`, stride `408`), block-relative bits: `+8` `is_osc_mode` (1=Osc, 0=Sample); `+26..+58` 32b `sample_id` (`nord_name_hash` over `.nsmp4` stem); `+58..+62` `kb_zone` (4b, `Edt_Syn_kKbZone`, read-only); `+62..+66` `octave` (4b two's complement, `-2..+2`); `+72..+75` `vibrato_mode` (`0 none, 1 ON, 2 DLY, 3 WHL, 4 A.T., 5 PED`); `+77` `legato`; `+78` `mono`; `+79..+81` `voice_priority` (`0 none, 1 LO, 2 HI`); `+81..+88` `glide` (7b, panel `0..10` = `raw*10/127`); `+135` `arp_run`; `+175..+206` `arp_rate` (`W=7` morph, `30..300 BPM`); `+306..+308` `unison` (`0..3`); `+372..+377` `vibrato_delay` (5b, `0.1 + 2.9*raw/29` s).
 - `0x2F` Sound blocks (`1472, 1856, 2240`, stride `384`), block-relative bits: `+10..+12` `osc_type` (`0 ANALOG, 1 FM-H, 2 FM-I, 3 WAVE`); `+15..+18` `osc_category` (ANALOG: `PURE, SUB OSC, SYNC, SHAPE, SHAPE SINE, MULTI, SUPER, MISC`; WAVE: `BELLS/TINES, ACOUSTIC, DIGITAL, ORGAN, KEYS`; FM: letters); `+19..+25` `osc_wave` (6b, index inside the category; FM-H = ratio, FM-I = `raw-12`); `+25..+56` `osc_ctrl` (`W=7` morph); `+56..+63` `pitch_fine` (7b signed, cents); `+63..+69` `pitch_coarse` (6b signed, semitones); `+71/+78/+85` osc env A/D/R (`3×7b`); `+92..+99` `osc_env_amt` (7b signed, `/6` = panel `-10..10`) + `+99/+107/+115` wheel/A.T./pedal deltas (8b); `+123` `osc_env_to_pitch`; `+124` `osc_env_velocity`; `+127..+129` `lfo_target` (`0 off, 1 OSC CTRL, 2 PITCH, 3 FILTER`); `+129..+132` `lfo_shape` (`0 triangle, 1 saw (ramp down), 2 inv saw (ramp up), 3 square, 4 S/H`); `+132` `lfo_mst_clk`; `+133..+164` `lfo_rate` (`W=7` morph, `LFO_RATE_HZ_TABLE`: `0.03 Hz..523 Hz`); `+164..+195` `lfo_amount` (`W=7` morph); `+195/+202/+209` amp ADR (`3×7b`, OS v1.66 curves `ENV_ATTACK_MS_TABLE` `0.5 ms..45 s`, `ENV_DECAY_MS_TABLE` `3 ms..43 s / 127=Hold`, release shares the decay table); `+216..+218` `amp_velocity` (`0..3`); `+218..+221` `filter_type` (`0 LP12, 1 LP24, 2 LPM, 3 LPHP, 4 BP, 5 HP`); `+221..+252` `filter_freq` (`W=7` morph, `FILTER_CUTOFF_HZ_TABLE`: `14 Hz..32 kHz`); `+252..+283` `filter_res` (`W=7` morph); `+283..+285` `kb_track`; `+285..+287` `filter_drive`; `+287..+318` `filter_env_amt` (`W=7` morph, **unipolar** `0..10`); `+318/+325/+332` filter ADR (`3×7b`, same curves as amp); `+339` `filter_velocity`; `+340` `filter_on`; `+341..+348` `vibrato_rate` (7b, `2 + 6*raw/127` Hz); `+348..+354` `vibrato_amount` (6b, `10*raw/50`).
 - **Provenance (order/widths VERIFIED against firmware, absolute offsets EMPIRICAL):** `python tools/ns4_fw_order_check.py target/fw_unpacked/bank0_CODE.bin` checks our field order and widths against the firmware `Buffer_kSynLay` / `Buffer_kSynSnd` name tables (0 problems). Absolute offsets: the offsets above come from the third-party ns4decode map (MIT, Randy 2024) converted with `bit = (byte-1)*8 + (bit-1) - 3000 - block_base`. Evidence: `python tools/ns4_crosscheck.py --program regressionTest.ns4p --csv regressionTest_synth.csv --corpus <factory>.ns4b` reports 75/75 fields equal to ns4decode's CSV for the regression program and 0 range violations over 1152 factory layers; `tools/ns4_bitscan.py` independently located the filter ADR (`+318`), osc ADR (`+71`), amp velocity (`+216`) and unison (`0x32 +306`) from the data alone; the firmware confirms the wave-name lists and their order (`docs/research/synth-0x2f-ns4decode-crosscheck.md`). Value scales for glide, vibrato, osc env amount and the unison cents are ASSUMED. Round trip stays lossless: `pack()` rewrites only the fields above and keeps every other bit from the raw payload.
 - **Backup Hash Resolution (`backup.rs`, `engine.rs`, `nord-gui/src/library.rs`):** `nord_name_hash(stem)` and `Ns4BackupArchive::resolve_program_sounds(&prog)` auto-resolve Piano A/B `.npno` and Synth A/B/C `.nsmp4` banks from `.ns4b` archives when opening a `.ns4p` program (`find_piano_by_hash`, `find_sample_by_id`, `load_program_from_backup`).
@@ -151,6 +154,22 @@ ns4 convert patch.json --to-ns4p patch.ns4p
 # Inspect presets with decoded fields:
 ns4 inspect patch.ns4p --json
 python tools/ns4_inspect.py patch.ns4p --decode
+```
+
+### 4.3 Engine export: `.ns4p` store and Live slots
+
+Code: `engine/program_export.rs`, `cbin/program_file.rs`, `store_cli.rs`.
+
+- `Stage4Engine::export_program(&base)`, `ProgramState::export_into` and `LiveSlots::export_slot(slot, &base)` patch the engine state onto a base `ProgramDecoded`. A field is written only when the engine value differs from what `apply_program` would derive from the base value, so `apply_program(base)` then `export_program(base)` returns `base` and unedited bytes stay identical (tests `unedited_export_equals_the_base_and_is_byte_identical`, `edits_survive_encode_parse_apply`).
+- Mapped fields: tempo, split points / crossfades / zone enables, Organ model, drawbars, octave, percussion, rotary, layer levels with Wheel / A.T. / Ctrl Pedal deltas for all 7 layers, Piano category / timbre / touch / string resonance / pedal noise / soft release / unison / dynamic compression / octave, Synth octave. Not mapped (kept from the base): per-layer FX chains, deep Synth parameters, scene enables, transpose and master compressor (no packed bit position is known), Organ vibrato / scanner, name and category.
+- `ProgramDecoded::to_cbin_file_like(&template)` keeps the template header (format version, kind, bank, location, 18 reserved bytes) and its checksum when the payload is unchanged; otherwise the checksum is the wrapping byte sum (`ASSUMED` hardware rule, identical to `to_cbin_file`). `to_live_cbin_file(slot)` writes kind `ns4l` with bank 0 and location = slot (`VERIFIED`: all 8 `Live/Bank 1/Live N.ns4l` headers of the Factory Restore archive have `bank_index 0`, `location_index N`, read with a header dump of the archive entries).
+- `LiveSlots::import_program(slot, &prog, sample_rate)` loads a decoded program into a slot through a scratch engine. `LiveSlots::import_live_file` / `import_live_bytes` load an `.ns4l` back into the slot its header names (`location_index`, `0..7`; other kinds and out-of-range slots are refused; test `import_live_files_fill_the_slot_named_by_the_header`).
+
+```bash
+# Re-store a program through the engine (byte-identical without edits), optionally editing:
+ns4 store-program base.ns4p out.ns4p [--tempo 97] [--bank N] [--loc N]
+# Build the Live slots from programs ('-' = empty) and write live-1.ns4l .. live-8.ns4l:
+ns4 export-live out_dir a.ns4p - c.ns4p
 ```
 
 ---
@@ -187,7 +206,7 @@ Within the decompressed `CODE` payload of Image 0 (and mirrored references in th
 
 ### 5.1 Clavia LZO1X Stream Compression (`CODE` Segments)
 
-The `CODE` segments inside OS firmware images are compressed using standard **LZO1X** (`crates/nord-core/src/firmware.rs`), verified bit-exact against both OS v1.66 banks:
+The `CODE` segments inside OS firmware images are compressed using standard **LZO1X** (`crates/nord-core/src/firmware/lz.rs`), verified bit-exact against both OS v1.66 banks:
 - **Bank 0 `CODE`:** `0x358D45` compressed bytes &rarr; `5,499,504` (`0x53EA70`) decompressed bytes, checksum `0xDE902503` (`OK`).
 - **Bank 1 `CODE`:** `0x0642D1` compressed bytes &rarr; `798,912` (`0x0C30C0`) decompressed bytes, checksum `0xFBB813F8` (`OK`).
 
@@ -206,7 +225,7 @@ checksum = 0xFFFFFFFF - (sum(segment_bytes) & 0xFFFFFFFF)
 ```
 For uncompressed segments (`SRAM`, `ARM0`), the checksum matches the raw file segment payload. For compressed segments (`CODE`), the checksum is computed over the fully decompressed memory image at runtime (`target_address = 0xC0000000`).
 
-#### Rust API (`crates/nord-core/src/firmware.rs`) & CLI
+#### Rust API (`crates/nord-core/src/firmware/lz.rs`) & CLI
 - `calculate_checksum(bytes: &[u8]) -> u32`
 - `decompress_clavia_lz(input: &[u8], max_output_size: usize) -> Result<Vec<u8>, String>`
 - `compress_clavia_lz(input: &[u8]) -> Vec<u8>`
@@ -266,3 +285,37 @@ Recognized chunks and layout:
 ### 5.4 `.ns4b` Backup Archive Reader (`crates/nord-core/src/cbin/backup.rs`)
 
 `.ns4b` archives are standard PKZIP files whose entries use method `0` (`ZIP_STORED`). `Ns4BackupArchive` parses ZIP central-directory/local-header records without external runtime dependencies so users can list and load `.npno`, `.nsmp4`, and `.ns4p` entries directly from a legally owned `.ns4b` archive or extracted folder.
+
+### 5.5 `.ns4b` Backup Writer (`cbin/backup_writer.rs`, `cbin/backup_store.rs`, `cbin/crc32.rs`)
+
+`rewrite_backup(archive, reader, writer, edits)` streams an archive (the Factory Restore backup is 3.14 GB, never loaded whole) and applies `EntryEdit::Put { name, data }` (replace in place, or append when the name is new) and `EntryEdit::Remove { name }`.
+
+| Part | Behaviour |
+|---|---|
+| No edits | verbatim copy, ZIP64 archives included |
+| Untouched entry | its local-file region (header, data, any descriptor) is copied byte for byte; its central record is copied with only the local-header offset patched |
+| Replaced entry | new `ZIP_STORED` local header (version, time and date kept from the central record, data-descriptor flag cleared, CRC-32 and sizes recomputed), central record patched in place (flags, method, CRC, sizes) |
+| Added entry | appended after the last local entry; version 20, DOS date 1980-01-01, UTF-8 flag only for non-ASCII names |
+| Removed entry | local region and central record dropped |
+| Central directory and end record | original records in original order (minus removed, plus added); entry counts, size and offset patched; the archive comment and the one-byte central extra field of the real archive are kept |
+| `meta.xml` | an ordinary entry: stays byte-identical unless the caller puts a new one. `ASSUMED`: the manifest only names product, OS and Sound Manager versions (section 2), so storing programs does not change it; confirm by restoring an edited backup on hardware |
+| Refused | ZIP64 archives with edits, offsets or sizes over 4 GB, duplicate or conflicting edits, removing a missing name, a rewrite onto the input path (a failed write removes the partial output) |
+
+`SlotIndex::read` maps programs and Live slots to their entries by header (`bank_index` at `0x0C`, `location_index` at `0x0E`). **Program names are not in the payload, only in the entry file name.** `store_edits(index, programs, cleared, lives)` turns "program P at (bank, loc)" into edits: it replaces whatever entry sits at that location; the entry path is `Program/Bank <A-H>/<name>.ns4p`; a name clash with another entry gets ` (2)`; paths the new set no longer uses are removed, so a Swap or Move of programs inside one bank is a set of plain replaces. Live slots replace the entry whose header names the slot, else `Live/Bank 1/Live <slot>.ns4l` is added.
+
+Evidence (Factory Restore RevK v1.66, 3 143 490 731 B, 1171 entries, all `ZIP_STORED`, no data descriptors):
+
+| Check | Result |
+|---|---|
+| `ns4 backup-store in out` (no edits) | `cmp` identical, SHA-256 equal |
+| `ns4 backup-store in out --program <that program's own bytes> --bank A --loc 38` (replace path, every offset recomputed) | `cmp` identical |
+| same with `ns4 store-program ... --tempo 141` applied first | 15 bytes differ: 4 local-header CRC, 4 central-record CRC, 7 inside the one 868 B entry; `meta.xml` and all other entries equal |
+| header scan of the archive entries | 384 programs in banks A-F, 64 locations each (`0..63`); 8 Live entries with location = slot |
+
+```bash
+# Write one program (and/or a Live slot file) into a copy of a backup; other entries stay identical:
+ns4 backup-store in.ns4b out.ns4b --program edited.ns4p --bank A --loc 38 [--name "Program name"]
+ns4 backup-store in.ns4b out.ns4b --live live-1.ns4l --slot 0
+```
+
+GUI: the library top bar has **Export backup** (path field, default `<name>-edited.ns4b`) and **Load Live slots**. Export applies the program library (STORE, Organize) and the Live slots to a copy: a stored program is patched onto the archive program of the same cell (`export_into`, so FX chains and deep Synth data come from that program; `ASSUMED` limitation: a stored program does not remember which program it was edited from), a moved archive program only gets its header location rewritten (payload bit-identical), emptied locations lose their entry. See [midi-and-control.md](midi-and-control.md) section 5.2 for the Organize flow.

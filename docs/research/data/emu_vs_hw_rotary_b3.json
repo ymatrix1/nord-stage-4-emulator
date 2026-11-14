@@ -1,0 +1,42 @@
+{
+  "video": "_zksT69H30c",
+  "note": "B3 segment with the opt-in unity rotary drive law (--rotary-drive unity), docs/research/fx-type-map.md s11.",
+  "segments": [
+    {
+      "id": "organ_b3",
+      "entry": "Program/Bank A/B3 Chords n Solo.ns4p",
+      "engine": "organ B3 (A: 80808 2 oct+2, B: 888635 1 5, rotary slow, vibrato 5, reverb 0.22)",
+      "at_s": 238,
+      "duration_s": 25,
+      "variants": [
+        {
+          "label": "default",
+          "flags": []
+        },
+        {
+          "label": "bw_tail",
+          "flags": [
+            "--tone-source",
+            "b3wheels"
+          ]
+        },
+        {
+          "label": "bw_tail_unity",
+          "flags": [
+            "--tone-source",
+            "b3wheels",
+            "--rotary-drive",
+            "unity"
+          ]
+        },
+        {
+          "label": "default_unity",
+          "flags": [
+            "--rotary-drive",
+            "unity"
+          ]
+        }
+      ]
+    }
+  ]
+}

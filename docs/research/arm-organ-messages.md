@@ -193,8 +193,103 @@ Checked 2026-11-12. Sources: `bank0_CODE.bin` v1.66 disassembly, `unicorn` runs.
 | 0.43 B to 0.48 B | still running real boot code (`0xC0228B68`, `0xC00EBBA8..0xC00EBBC4`); the earlier 3-instruction wait loop at `0xC0075D40..D48` (`ldr r3,[r4,#0x1c]; cmp r3,#0; bne`, a join on a worker task flag that no scheduler clears) was seen by the probe `p3` only before the SPI count fix; with the fix the boot moves on |
 | beyond 0.5 B | not reached within the session time (the run is slow after 0.4 B: roughly 1 M instructions/s) |
 
-The boot has therefore **not been shown to reach its steady state**; it passes the former stop and is still executing real code at 0.48 B. The RTOS task scheduler, AINTC and SPI are not modelled; the likeliest next blockers are task-join wait loops of the form above (model: clear the flag word, or run the worker).
+**Superseded by section 10.1: the boot does reach its steady state (main loop, 433 M instructions).** What follows is the state of the earlier session. The boot has therefore **not been shown to reach its steady state**; it passes the former stop and is still executing real code at 0.48 B. The RTOS task scheduler, AINTC and SPI are not modelled; the likeliest next blockers are task-join wait loops of the form above (model: clear the flag word, or run the worker).
 
 **Sweep (`tools/arm_sweep.py`, `docs/research/arm-sweep.csv`).** 116 ids (`Edt_Org*`, Leslie, `Edt_Pno*`, rotary, `Edt_Effects*`) x values 1 and 2 through `0xC00D051C(layer + 0x5AB4, 0, &{id, 1}, v)` at 0.47 B instructions: **0 messages and 0 null calls**, the same silence as section 8 at the `0xC00FC9F4` state. So the vibrato/percussion/model/Leslie/Effects clients are still not constructed at 0.47 B; the sweep has to be re-run once the boot goes further (`python tools/arm_sweep.py <bank0_CODE.bin> <bank0_SRAM.bin> --boot-insns N`).
 
 **Organ vs piano (PNO core 1):** not decided. No new evidence beyond section 7 (organ drawbar record path and bank programmer both write PNO comm 1 core 1); the piano layer edit store was not located.
+
+
+## 10. Steady state, timer interrupt and the edit-id capture (VERIFIED runs, `tools/arm_steady.py`, `tools/arm_edit_capture.py`)
+
+Checked 2026-11-13. Sources: `bank0_CODE.bin` / `bank0_SRAM.bin` v1.66 disassembly (capstone), `unicorn` runs, firmware-derived values only as addresses and message words. Question: does the boot reach a steady state, and which ARM to DSP messages do the organ, piano and effects ids produce there.
+
+### 10.1 The boot does reach the main loop (corrects section 9)
+
+| Item | Result | Status |
+|---|---|---|
+| Speed | 15 to 20 M instructions/s for the whole run (3.0 B instructions in 201 s). The "1 M/s after 0.4 B" of section 9 does not reproduce; it came from running extra Python hooks during sweeps. No speed work was needed. | VERIFIED (run) |
+| Main loop reached | `arm_steady.boot_to_main_loop` stops at `0xC00A0248` after **433 M instructions (36 s)**; no further stub than section 9 | VERIFIED (run) |
+| Dispatcher clients at that point | 10 layer clients registered in `[0xC055B160] + 0x150 + 4 n` (count at `+0x14C`): the organ layer constructor `0xC0019BAC` ran at 393 M, the piano one at 394 M | VERIFIED (run) |
+| "Join on a worker task" `0xC0075D40` | entered 4 times, **with `r4 = 0`**: the flag is `[0 + 0x1C]` in the null-call guard page, and the loop (about 60 000 iterations each) ends only because the harness re-zeroes low memory every chunk. It is an artefact of an object that was never built, not a worker task | VERIFIED (run, hook on `0xC0075D40` and a write watch on `0x1C`) |
+
+**There is no preemptive scheduler to model.** The firmware is a cooperative event loop (routine containing `0xC00A0248`, started from `0xC024AE3C`): `ring = [0xC05613F4 + 4 * ([0x8000C000] + [0xC0539570])]`; head `[ring]`, tail `[ring + 4]`, mask `[ring + 0xC]`, 64-byte messages at `[ring + 0x10]`; an empty ring falls through to the tick branch (`0xC00A03CC`), which compares the 64-bit tick `0x80001DC0` with the last value `[0xC0598640]` and, when it changed, pops and calls the next entry of the tick queue (`0xC0052AA4`). A post (`0xC00A05D4`) increments the pending count and writes `0x80000000 | level` to `0xFFFEF104` around the update; that address is `AINTC + 0x1104`, the host interrupt nesting level register of the AM1705 AINTC, so it is an interrupt-level critical section and not a context switch.
+
+**Interrupts.** The AINTC attach routine `0xC005012C(dev, handler, channel)` (irq = `[dev + 4]`) fills the handler table `0xC055F674`. After the boot: irq 14 -> `0x80000AD8`, irq 22 -> `0x800007D8`, irq 58 -> `0x80000770`, irq 61 -> `0x80000434` (the SRAM image holds the handlers). Irq 22 is the 1 kHz timer (`0xC005019C` programs `24 MHz / 0x5DC0` = 1 ms; Timer0 `0x01C20000`): `0x800007D8` does `tick64 += 1`, sets the context index `[0x8000C000] = 3` and drains the context 3 ring. Irq 61's handler stores received bytes into a ring (ASSUMED: MIDI input UART).
+
+**Harness.** `arm_steady.run_ticking` runs the main loop in chunks of `INSNS_PER_TICK = 200 000` instructions (ASSUMED: about 200 MIPS, one virtual millisecond per chunk) and calls the registered irq 22 handler between chunks (`call_preserving`: registers and CPSR are restored, the stack below sp is used). `enable_real_timer` switches off the +5000-per-read tick hack of `arm_boot.install_tick` once the real tick runs.
+
+**Initial DSP push.** In the first 140 M instructions after the main loop starts the firmware sends its whole initial state to every DSP, then goes silent (messages per 20 M-instruction window): 4402, 6486, 3059, 1014, 12, 320, 3, 0. `arm_steady.settle` runs until a window is silent (8 windows) and `arm_steady.snapshot` saves the result (`target/settled.snap`, 3.6 MB compressed, restore 2 s). An idle window still emits 3 words (PNO core 1 DM `0xB2F25`, `0xB2F26`, `0xB2FA1`) every 28 M instructions; `arm_edit_capture.baseline_keys` collects them (12 windows) and drops them.
+
+### 10.2 Layers, stores and where the values live
+
+The 10 clients of the dispatcher (`[0xC055B160] + 0x150 + 4 n`, client = layer + `0x8788`) are the layers; the layer vtable `[layer]` and the ids each layer owns identify them (EMPIRICAL, counted with `value_cell`):
+
+| Clients | `[layer]` | Owns (value cells) | Role |
+|---|---|---|---|
+| 0, 1 | `0xC027AD8C` | 12 `Edt_OrgCom`, 4 `Edt_Org`, 14 `Edt_Org_Preset`, 3 `Edt_Effects` + `Fnc/Kbd/Morph/Edt_Com` | organ A / B (constructor `0xC0019BAC`) |
+| 2, 3 | `0xC027ACA0` | 7 `Edt_PnoCom`, 15 `Edt_Pno`, 5 `Edt_Effects` | piano A / B (constructor `0xC00194B8`) |
+| 4, 5, 6 | `0xC02B7C4C` | 65 `Edt_Syn`, 10 `Edt_SynCom`, 5 `Edt_Effects` | synth (store class `0xC011AED0`, vtable `0xC02BC9FC`) |
+| 7, 8, 9 | `0xC027A80C` | 17 `Edt_Sys`, 15 `Edt_Ext`, 11 `Edt_Syn`, 9 `Edt_SynCom` | not decoded (ASSUMED system / external controller layers) |
+
+**Effects are not here.** Of the 37 `Edt_Effects_*` ids only `Fx1Enable`, `Fx1ClkEnable`, `Fx1Type`, `AmpEnable` and `AmpTypeNew` have a value cell, and no client owns any Fx2, Dly, Rvb, Cmp, Leslie (`Edt_OrgCom_kEffectsLeslie*`, `Edt_Sys_kLeslie*`) or `Edt_Com_kEffects*Global` id. Their client is not in the dispatcher's list at the main loop (not found; needs a search for a second registry or a later constructor).
+
+**Why section 8 saw nothing.** Each layer has two store objects (`layer + 0x56C8 / 0x56CC` and the following slots); the setter `0xC00D051C` only accepts the ids that the store's flag array (`[store + 0x3C]`, byte per id, mask 6) marks: 11 ids (`0xB1, 0xB2, 0x16D..0x175`) in the organ store, 2 in the piano store. The other ids never pass the setter. The client dispatch `0xC00CC4F0(store, 0, id, &value)` does reach every handler, but the handlers ignore the pointer: they read the value with the store getter `0xC00D04D0`, which forwards to the parent object's getter `0xC00CE594`, i.e. to a value table: **value of id `i`, index `k` = `[[[[P] + 4i]] + 4k]`** with `P = [[store + 0x14] - 0x9C]` (VERIFIED: 64 to 85 of the registry defaults per layer read back through this path, only `Fnc_*` and the key position differ). `arm_edit_capture.apply_value` writes the cell and then dispatches.
+
+### 10.3 Captured messages (118 658 messages from 34 of the 116 swept ids)
+
+```bash
+python tools/arm_edit_capture.py target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin \
+    --cache target/settled.snap --csv full.csv --summary summary.csv   # about 25 minutes
+```
+
+Method: from the settled snapshot, each value of each id (every value of a range of up to 12, else minimum, quartiles, maximum) is applied to every layer that owns the id, from the settled state (the state is restored after any value that spoke); the main loop then runs 4 M instructions with the timer. Idle traffic (3 PNO core 1 words) is removed. "call" = sent during the dispatch, "tick" = sent by the following window. Tables: [data/arm-edit-capture-summary.csv](data/arm-edit-capture-summary.csv) (all ids, per value), [data/arm-edit-capture-detail.csv](data/arm-edit-capture-detail.csv) (every message for the organ ids of this section on organ layer 0 and the piano ids on piano layer 2; addresses and values only).
+
+| Id (value range) | Destination | DM words | Messages (VERIFIED run) |
+|---|---|---|---|
+| `Edt_Org_kModel` `0x166` (0..5) | PNO comm 1 core 1 | `0x955B6..0x9566D` (the 184 bank increments), `0x951F1..0x95C6B`, `0xC27D6/7` | model 3 and 4: 1504 messages each, 1484 non-zero, **all 184 bank words equal to the exact 12-TET column of [data/arm-bank-increments.csv](data/arm-bank-increments.csv)** (8 rounds x 184, 1472 of 1472 match, 0 match the detuned column); model 2: 2 words at `0xC27D6/7`; model 5: 4 zero words at `0xB44AE..0xB4530`; model 0 (default): 350 messages, 30 non-zero (a re-apply); model 1: none |
+| `Edt_Org_Preset_kDb1..9` `0x16D..0x175` (0..8) | PNO comm 1 core 1 | `0x951F1..0xB44CB` (160 words) or `..0xB454B` (320 words), by the tick | **every value is 0 for every drawbar value 0..8** (same words for k = 1..9) |
+| `Edt_Org_Preset_kVibratoEnable` `0x16C` (0, 1) | PNO comm 1 core 1 | value 1: `0xB44AE`, `0xB452E`; value 0: 160 words `0x95331..0xB454B` | all zero |
+| `Edt_OrgCom_kVibratoTypeB3/Vox/Farfisa` `0x168..0x16A` | PNO comm 1 core 1 | `0xB44AE, 0xB44B0, 0xB452E, 0xB4530` | all zero (4 words, 2 for the last value) |
+| `Edt_Org_Preset_kB3PercEnable/Harmonic/Speed/Level` `0x16B, 0x177..0x179` (0, 1) | PNO comm 1 core 1 | `0x951F1..0xB4540` (about 250 words) | 30 to 36 non-zero values per value (`0x3F800000` = 1.0, `0x3A694800`, `0x3F7FC654`) |
+| `Edt_OrgCom_kPolyPercEnable_revB` `0xE1` | PNO comm 1 core 1 | `0x95241..0x953CF` (158 words) | all zero |
+| `Edt_OrgCom_kLayerFocus/EnableOrg_I/II_private`, `kOrgPStickEnable`, `Edt_Org_kSustainEnable`, `Edt_OrgCom_kAuxKbdControl` | PNO comm 1 core 1 | 4 words `0xB33B8..0xE20E0` | 12 per value |
+| `Edt_Pno_kPosStatus, kBank, kEntry, kVariation, kPedalNoise, kEq` `0x152..0x155, 0x158, 0x15C` | **SMP comm 4, path 1** | `0x9403E`, `0x94046` | 2 per value, **always `0x3F800000` (1.0) whatever the value** (a trigger, not the parameter) |
+| `Edt_Pno_kUnison` `0x15D`, `kAcoustic`, `kDynComp`, `kKbdTouch`, `kSustainEnable`, `kKbZone`, `kOctaveShift`, `kNameHash_Private`, `Edt_PnoCom_*` | none | none | silent in this state |
+| `Edt_Effects_kAmpEnable` `0x19E` (0, 1), `kAmpTypeNew` `0x1A7` (0..9) | PNO comm 1 core 1 (+ SMP path 1) | the same 184 bank words `0x955B6..0x9566D`, the `0x95xxx` block up to `0xC2CB7`, SMP `0x94086..0x9408D` | 6208 / 31 040 messages on the piano layers (9312 / 46 560 on the synth layers); the bank words equal the exact 12-TET column in 100 % (2944 of 2944 per type); this is the part routing `0xC0236410` re-programming every part |
+| The 82 other ids of the filter (Leslie, `Edt_Effects` Fx2 / Dly / Rvb / Cmp / Amp tone controls, `Edt_PnoCom_*`, `Edt_Org_kKbZone`, ...) | none | none | silent: no layer owns them (effects, Leslie) or the handler sends nothing here |
+
+Statuses: destinations, DM words, counts and the bank equality are **VERIFIED** (reproducible with the command above). The **meaning** of the zero drawbar / vibrato words is **ASSUMED**: the record update `0xC00BE348` forms products whose weight tables come from data the harness does not load (the SPI downloads are stubbed), so every product is 0. The drawbar encoding (7-bit curve, section 7) therefore still cannot be read from a message.
+
+### 10.4 Organ versus piano, and the PNO core 1 bank
+
+| Question | Evidence | Verdict |
+|---|---|---|
+| Do organ and piano address the same comm / core? | All 25 482 organ messages go to **PNO (comm 1) core 1 over path 2**. All 56 messages of the piano ids `Edt_Pno_*` go to **SMP (comm 4) over path 1** (`0x9403E`, `0x94046`). | **No.** The piano layer does not talk to PNO core 1 at all in this capture. |
+| Does the organ program the oscillator bank (`0x122620`)? | `Edt_Org_kModel` = 3 or 4 writes the 184 phase increments `0x955B6..0x9566D` (the table that `0x122620` consumes, [organ-tonewheel-bank](organ-tonewheel-bank.md)) with the exact 12-TET values: 1472 of 1472 words equal the firmware table. | **Yes** (VERIFIED: ARM organ id to bank table). |
+| Is the bank exclusive to the organ? | The same 184 words are rewritten by `Edt_Effects_kAmpEnable` / `kAmpTypeNew` on the piano and synth layers (part routing). | **No**: other layers re-program it through routing. |
+| Is the bank therefore the organ tone engine? | Organ ids reach only PNO core 1; the piano ids reach only SMP; model 3/4 select the bank tuning. The string-resonance reading of [pno-module-chain](pno-module-chain.md) would need piano ids to address PNO core 1, and none does (`kUnison`, `kAcoustic`, `kDynComp` are silent here). | **Supported, not proven.** ASSUMED that the bank is the organ tonewheel source; a loaded preset giving non-zero drawbar words, or the audio path from the bank to the output, would confirm it. |
+
+### 10.5 Replay into the PNO core 1 image (`sharc-bank --script`, VERIFIED run)
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DSP
+python tools/ns4_dsp_ldr.py DSP/dsp_image_1_PNO.bin --sram SRAM
+cargo build --release -p nord-sharc --bin sharc-bank
+target/release/sharc-bank SRAM/core1_sram.bin --calls 4 --out base.out --dump 0x955B6:184
+target/release/sharc-bank SRAM/core1_sram.bin --calls 4 --script docs/research/data/arm-replay-organ-model3.script --out m3.out --dump 0x955B6:184
+```
+
+| Script | Pokes | DM words that change | Oscillator output (4 calls, 736 words each) |
+|---|---|---|---|
+| [arm-replay-organ-drawbar-vibrato.script](data/arm-replay-organ-drawbar-vibrato.script): drawbar 1 set to 4 (160 words, before call 1), vibrato on (before call 2), vibrato off (before call 3) | 322 (321 words) | **1**: `0xB44AE` goes from `0x3F800000` (1.0) to 0; the 320 other words are 0 in the image already | 0 of 736 words differ in every call |
+| [arm-replay-organ-model3.script](data/arm-replay-organ-model3.script): organ model 3 (before call 1) | 752 (200 words) | **194**: the bank increments `0x955B6..0x9566D` go from 0 to the exact 12-TET table (`0x00635300, 0x00635300, 0x00693B00, ...`) plus 10 further words | **736 of 736 words differ in each call after the poke** (the bank is silent with zero increments and runs with them) |
+
+So the one message burst that changes the bank output is the model selection (it installs the increments); the drawbar and vibrato bursts only write zeros in this state and change one flag word.
+
+### 10.6 Limits and next steps
+
+- The 10 clients are the ones the boot builds by 433 M instructions; the effects / Leslie client (Fx2, Dly, Rvb, Cmp, Leslie ids) is not among them. Next: find where it is constructed (a second registry? the owners of `Edt_Com_kEffects*Global`) and add it to `LAYER_KINDS`.
+- **Resolved in [organ-weights](organ-weights.md):** the zero drawbar words were not missing SPI tables. The per-note tables are in RAM already; the weights are sums over *active keys* x drawbars, so with no key down every word is 0. The bank weights `a`, `b`, `wB` (92 per set) are sent by four bank engine objects (`0xC022C3A8` key down, `0xC022AFB8` update); `wA` is DSP state. The `Edt_Org_Preset_kDb` ids feed a different (79-wheel) record family.
+- `INSNS_PER_TICK` (200 000) is ASSUMED. The captured messages do not depend on it except for the idle words and the time at which "tick" messages appear; a 4 M-instruction window is 20 ticks.
+- The role of clients 7, 8, 9 and the meaning of the SMP words `0x9403E / 0x94046` are not decoded.

@@ -1,7 +1,7 @@
 """Headless Blender scene for the Phase 6b B7 proof: generic knob + ring, pointer and shadow
 layers for the reference knobs, the slotted plate. Buttons, triangle
 selectors, knob bodies, caps, the DRIVE scale and plate tiles come from tools/panel_refbake.py
-(D17).
+(D28).
 
 Run (Blender 5.2, no GUI, no add-ons):
 
@@ -15,7 +15,7 @@ proof_materials.py (materials), parts_*.py (geometry).
 Original art (D16) for everything rendered here: geometry from primitives, procedural
 materials, nothing imported. Proportions and colours are numbers measured on the owner's
 reference (assets/panel/theme_samples.json); reference-derived pixels are only used by
-tools/panel_refbake.py under D17.
+tools/panel_refbake.py under D28.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ def render_knob(out: Path, scale: int) -> None:
 
 
 def render_ref_knobs(out: Path, scale: int) -> None:
-    """Per reference knob (D17): the cap body is cut from the reference by panel_refbake, so
+    """Per reference knob (D28): the cap body is cut from the reference by panel_refbake, so
     Blender renders only what turns, the pointer (cap as holdout, so it hides behind the cap),
     and the cap's shadow on the plate, both at that knob's own lean."""
     for name in P.REF_KNOBS:
@@ -105,7 +105,7 @@ CAPS = {
 def render_caps(out: Path, scale: int) -> None:
     """Caps as real parts: one geometry per part (both drawbar colours share it), seen from
     the camera where that cap sits on the reference (`LEAN[<cap>]`), coloured by the
-    reference crop projected from that camera (D17, `proj_<cap>.png` from panel_refbake), so
+    reference crop projected from that camera (D28, `proj_<cap>.png` from panel_refbake), so
     the outline comes from the geometry and the colour exactly from the reference. Then the
     cap's shadow from the same geometry."""
     for name, (shadow, make) in CAPS.items():
@@ -123,7 +123,7 @@ def render_caps(out: Path, scale: int) -> None:
 
 
 def render_plates(out: Path, scale: int) -> None:
-    """Only the slotted slate plate; the tiles are cut from the reference (D17)."""
+    """Only the slotted slate plate; the tiles are cut from the reference (D28)."""
     C.plate_slot(fresh(scale, "plate_slate_slot", "plate"))
     S.render(out / f"plate_slate_slot_{scale}x.png")
 

@@ -4,9 +4,35 @@ use super::fw_coeffs::{amp_fw_case_for, amp_fw_sets};
 use super::*;
 
 impl LayerFxChain {
+    /// Runs the firmware drive stage on `(l, r)` when `firmware_fx.amp` is on and the amp has one;
+    /// returns whether it did (the caller then skips the engine drive and cabinet).
+    fn process_fw_amp(&mut self, l: &mut f32, r: &mut f32) -> bool {
+        let kind = fw_amp_types::type_for(self.amp_cabinet, self.amp_variation);
+        let (Some(kind), true) = (kind, self.firmware_fx.amp) else {
+            self.fw_amp = None;
+            return false;
+        };
+        let drive_ui = fw_map::unit_to_ui(self.drive_amount);
+        match &mut self.fw_amp {
+            Some(st) if st.kind() == kind => st.set_drive(drive_ui),
+            slot => *slot = fw_amp_stage::FwAmpStage::new(kind, drive_ui),
+        }
+        match &mut self.fw_amp {
+            Some(st) => {
+                [*l, *r] = st.process_frame([*l, *r]);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub(super) fn process_amp_eq_comp(&mut self, mut l: f32, mut r: f32, inv_fs: f32) -> [f32; 2] {
+        // Opt-in firmware drive stage (`FirmwareFx::amp`): replaces the tube drive and the cabinet
+        // voicing below for the amps whose type switch installs drive stage words.
+        let fw_amp = self.process_fw_amp(&mut l, &mut r);
+
         // Soft-clipping tube drive
-        if self.drive_amount > 0.001 {
+        if !fw_amp && self.drive_amount > 0.001 {
             let drv = 1.0 + 4.0 * self.drive_amount.clamp(0.0, 1.0);
             l = (drv * l).tanh();
             r = (drv * r).tanh();
@@ -20,7 +46,7 @@ impl LayerFxChain {
         // see docs/research/hardware-audio-reference-fx.md).
         // Optional firmware path: the two cascaded biquad sets of the ARM Amp type switch replace the
         // RBJ voicing for the modes `fw_coeffs::amp_fw_case_for` maps (default off, output unchanged).
-        let fw = if self.amp_fw_coeffs {
+        let fw = if self.amp_fw_coeffs && !fw_amp {
             amp_fw_case_for(self.amp_cabinet, self.amp_variation).and_then(amp_fw_sets)
         } else {
             None
@@ -34,6 +60,7 @@ impl LayerFxChain {
             }
         }
         let cab = fw.is_none()
+            && !fw_amp
             && matches!(
                 self.amp_cabinet,
                 AmpCabinet::Small | AmpCabinet::Jc | AmpCabinet::Twin
@@ -155,6 +182,25 @@ impl LayerFxChain {
             l = self.eq_treble.process(0, l);
             r = self.eq_treble.process(1, r);
         }
+
+        // Opt-in firmware gain computer with the `kCmpAmt` words (latency 4 frames). It runs even
+        // while `comp_enabled` is false (amount 0, unity) so the layer latency does not change.
+        if self.firmware_fx.compressor {
+            let amount = if self.comp_enabled {
+                fw_map::unit_to_ui(self.comp_amount)
+            } else {
+                0.0
+            };
+            let stage = self.fw_comp.get_or_insert_with(|| {
+                fw_stage::FwCompressorStage::new(fw_params::compressor_for_amount(amount))
+            });
+            if amount != self.fw_comp_amount {
+                fw_params::set_compressor_amount(stage.compressor_mut(), amount, false);
+            }
+            self.fw_comp_amount = amount;
+            return stage.process_frame([l, r]);
+        }
+        self.fw_comp = None;
 
         // Per-layer compressor (`comp_enabled`, `comp_fast` 1.5 ms vs 12 ms attack)
         if self.comp_enabled && self.comp_amount > 0.001 {

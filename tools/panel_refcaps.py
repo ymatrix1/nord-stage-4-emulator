@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reference textures for the 3D drawbar and layer-fader caps (D17).
+"""Reference textures for the 3D drawbar and layer-fader caps (D28).
 
 Used by `tools/panel_refbake.py`: the cap is found in the reference crop, and everything
 around it is filled with the cap's own colour, so that when Blender projects the crop onto the
@@ -170,7 +170,7 @@ def cap_mask(a: np.ndarray, kind: str) -> np.ndarray:
 
 
 def projection_texture(ref: Image.Image, centre, size, kind: str) -> Image.Image:
-    """Reference pixels to project onto the 3D cap from its camera (D17): the cap as in the
+    """Reference pixels to project onto the 3D cap from its camera (D28): the cap as in the
     reference, and everything around it filled with the cap's own edge colour, so the rendered
     silhouette (which comes from the geometry) never picks up slate, labels or LEDs."""
     a = ref_window(ref, centre, size)

@@ -1,0 +1,9 @@
+run,chain,state,event,kind,chan,slot,routine
+boot,0x90fff660,1,2,6,1,0,0x122a71
+boot,0x90ffca80,1,0,6,0,1,0x121bbe
+boot,0x9101f310,1,0,6,2,2,0x121b33
+boot,0x9101f310,1,0,6,2,3,0x121b33
+boot,0x90fff660,2,2,6,1,5,0x122b85
+boot,0x91021e90,2,2,6,3,7,0x122b85
+boot,0x90ffca80,2,0,6,0,4,0x121e2b
+boot,0x9101f310,2,0,6,2,6,0x121e2b

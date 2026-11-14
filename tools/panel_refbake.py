@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Cut reference-derived panel sprites from the owner's Organ section render (decision D17).
+"""Cut reference-derived panel sprites from the owner's Organ section render (decision D28).
 
     python tools/panel_refbake.py --ref <NS4-Panel-organ.png>   # writes assets/panel/proof/*.png
 
-D17 narrows D16 for the panel proof: buttons, triangle selectors, knob bodies, the DRIVE scale
+D28 narrows D16 for the panel proof: buttons, triangle selectors, knob bodies, the DRIVE scale
 and the plate textures are taken from the reference pixels, because the goal is the closest
 possible match. Crop boxes and centres are data in `assets/panel/ref_crops.json`. The reference
 file itself stays in the git-ignored `.reference/`; only the derived sprites are committed, with

@@ -16,6 +16,8 @@
 //! --wav FILE --rate R write the captured channels as a float WAV (default 48000 Hz)
 //! --csv FILE          write pass,channel,index,address,raw,value rows
 //! --watch LO:LEN[:LIMIT]  list the store sites (pc, count, address span) inside the window
+//! --rwatch LO:LEN[:LIMIT]  list the load sites (pc, count, address span) inside the window
+//! --trace LO:HI[:LIMIT]  log R/S/I/M before every step with pc in LO..=HI (per pass)
 //! --boot-stores      with --watch, also list the store sites of the boot phase
 //! --coverage         list the program-counter ranges each pass executed
 //! --dump ADDR:COUNT   print data words after the last pass
@@ -28,17 +30,12 @@
 //! `docs/research/org-dsp-map.md`.
 #[path = "sharc_org/args.rs"]
 mod args;
-#[path = "sharc_org/audio.rs"]
-mod audio;
-#[path = "sharc_org/msg.rs"]
-mod msg;
-#[path = "sharc_org/pass.rs"]
-mod pass;
 
 use args::parse_args;
-use audio::{capture, wav_bytes};
 use nord_sharc::core::Core;
-use pass::{pc_ranges, run_pass, run_steps, runs, store_sites, PassEnd};
+use nord_sharc::runner::audio::{capture, wav_bytes};
+use nord_sharc::runner::msg;
+use nord_sharc::runner::pass::{self, pc_ranges, run_pass, run_steps, runs, store_sites, PassEnd};
 use std::fmt::Write as _;
 use std::process::ExitCode;
 
@@ -62,6 +59,10 @@ fn run(args: &[String]) -> Result<String, String> {
     if let Some((lo, len, limit)) = o.watch {
         (core.watch, core.watch_len, core.watch_limit) = (lo, len, limit);
     }
+    if let Some((lo, len, limit)) = o.rwatch {
+        (core.rwatch, core.rwatch_len, core.watch_limit) = (lo, len, limit);
+    }
+    core.trace = None;
     let mut out = String::new();
     if let Some(f) = run_steps(&mut core, o.boot) {
         return Err(format!("boot faulted: {}", pass::fault_text(&f)));
@@ -87,7 +88,9 @@ fn run(args: &[String]) -> Result<String, String> {
     }
     let mut channels: Vec<Vec<f32>> = vec![Vec::new(); o.bufs.len()];
     let mut csv = String::from("pass,channel,index,address,raw,value\n");
+    core.trace = o.trace;
     for p in 0..o.passes {
+        core.trace_log.clear();
         for &(_, a, v) in o.pokes.iter().filter(|q| q.0 == p) {
             core.dm_write(a, v)
                 .map_err(|a| format!("bad --poke address 0x{a:x}"))?;
@@ -143,6 +146,19 @@ fn run(args: &[String]) -> Result<String, String> {
                 let _ = writeln!(
                     out,
                     "  store pc 0x{pc:x}: {n} stores, DM(0x{lo:x})..DM(0x{hi:x})"
+                );
+            }
+        }
+        for l in &core.trace_log {
+            let _ = writeln!(out, "  trace {l}");
+        }
+        if o.rwatch.is_some() {
+            let loads: Vec<(u32, u32, u32)> =
+                core.rwatch_hits.iter().map(|&(pc, a)| (pc, a, 0)).collect();
+            for (pc, n, lo, hi) in store_sites(&loads) {
+                let _ = writeln!(
+                    out,
+                    "  load pc 0x{pc:x}: {n} loads, DM(0x{lo:x})..DM(0x{hi:x})"
                 );
             }
         }

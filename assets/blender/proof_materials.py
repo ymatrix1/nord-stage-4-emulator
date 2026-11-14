@@ -194,7 +194,7 @@ def mats() -> dict[str, bpy.types.Material]:
 
 def projected(name: str, image_path) -> bpy.types.Material:
     """Unlit material showing `image_path` in screen space (window coordinates), i.e. the
-    reference crop projected from the render camera onto whatever geometry it hits (D17)."""
+    reference crop projected from the render camera onto whatever geometry it hits (D28)."""
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     nt = mat.node_tree

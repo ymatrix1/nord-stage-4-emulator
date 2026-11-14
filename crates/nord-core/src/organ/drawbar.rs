@@ -6,9 +6,11 @@ use super::types::NUM_TONEWHEELS;
 
 /// Semitone offsets relative to fundamental (`8'`) for the 9 drawbar buses.
 ///
-/// ASSUMED: textbook Hammond footage layout (16', 5 1/3', 8', 4', 2 2/3', 2', 1 3/5', 1 1/3', 1').
-/// The firmware weight writer (`0x9566E..0x95949`) is not decoded
-/// (`docs/research/organ-tonewheel-bank.md` section 6).
+/// VERIFIED: the footage layout (16', 5 1/3', 8', 4', 2 2/3', 2', 1 3/5', 1 1/3', 1') equals the
+/// wheel the booted ARM key engine picks for each drawbar: `wheel = note - 24 + offset` for all
+/// 128 notes x 9 drawbars (1152 of 1152 indices), read from the engine item tables and confirmed
+/// by the `wB` messages (`python tools/arm_organ_weights.py keymap|verify`,
+/// `docs/research/organ-weights.md` section 3), max err 0.
 pub(super) const DRAWBAR_OFFSETS: [i32; 9] = [-12, 7, 0, 12, 19, 24, 28, 31, 36];
 
 /// Drawbar level law selector.
@@ -49,7 +51,9 @@ pub fn drawbar_gain_law(level: u8, law: DrawbarLaw) -> f32 {
 
 /// Maps a target MIDI pitch with B3 top/bottom octave foldback into tonewheel `0..90`.
 ///
-/// ASSUMED: tonewheel 0 = MIDI 24 and octave foldback at both ends (Hammond practice).
+/// VERIFIED: tonewheel 0 = MIDI 24, wheels below 0 move up and wheels above 90 move down by whole
+/// octaves; identical to the firmware key tables for all 128 x 9 entries (`FOLD_TOP = 90` is the
+/// only threshold that fits, `docs/research/organ-weights.md` section 3). Wheel 91 is never used.
 pub(super) fn foldback_tonewheel(target_midi: i32) -> usize {
     let mut m = target_midi;
     while m < 24 {
@@ -72,6 +76,26 @@ mod tests {
         assert_eq!(foldback_tonewheel(69), 45);
         assert!(foldback_tonewheel(120) < NUM_TONEWHEELS);
         assert!(foldback_tonewheel(-40) < NUM_TONEWHEELS);
+    }
+
+    /// Rows of `docs/research/data/organ-key-wheel-map.csv` (wheel per drawbar of the firmware key
+    /// engine) for the lowest, a middle and the highest note.
+    #[test]
+    fn matches_the_firmware_key_tables() {
+        let rows: [(i32, [usize; 9]); 3] = [
+            (0, [0, 7, 0, 0, 7, 0, 4, 7, 12]),
+            (60, [24, 43, 36, 48, 55, 60, 64, 67, 72]),
+            (127, [79, 86, 79, 79, 86, 79, 83, 86, 79]),
+        ];
+        for (note, wheels) in rows {
+            for (j, &want) in wheels.iter().enumerate() {
+                assert_eq!(
+                    foldback_tonewheel(note + DRAWBAR_OFFSETS[j]),
+                    want,
+                    "note {note} drawbar {j}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -24,6 +24,8 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
    │      └──► Phase 6b: 1:1 Hardware Parity (every control bound) & 2.5D Panel Renderer
    │
    └──► Phase 7 (Track B): Full Firmware LZ Decompression & `CNSP` Sample Codec Reverse Engineering
+          │
+          └──► Phase 7b (Track B): SHARC Oracle, ARM Firmware Emulation & Firmware Parity (opt-in paths in `nord-core`)
 ```
 
 ---
@@ -61,6 +63,8 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 ## Phase 2: Organ Engine DSP (`DSPO` High-Level Emulation) (`ns4-orgn`)
 
 **Goal:** 100% mathematical physical modeling of the 2-layer Nord Stage 4 Organ section and Model 122 Vintage Rotary Speaker.
+
+The ticks below mean the model exists and is tested. Which parts match the firmware (Pipe bank, B3 wheels, weights) and which stay `ASSUMED` is tracked in [Phase 7b.3](#phase-7b-track-b-sharc-oracle-arm-firmware-emulation--firmware-parity-ns4-trkb) and [organ-engine](specs/organ-engine.md) s3.1.
 
 - [x] `crates/nord-core/src/organ/`: B3 91-tonewheel frequency & phase generator (firmware oscillator-bank parity), 9-drawbar (`16'` to `1'`) harmonic bus mixer with octave foldback, single-triggered 2nd/3rd harmonic percussion envelope (`Soft`/`Fast`), key-click transient, and Model 122 Rotary Speaker (800 Hz crossover + Slow/Fast ballistics + stereo Doppler)
 - [x] Exact 196-tooth Hammond drive/driven integer gear ratio table and per-tonewheel pickup calibration curve (`B3` vs `B3 Bass` mode)
@@ -100,6 +104,11 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 - [x] Polyphony steal priority algorithm (recycling decaying released voices and quietest sustaining voices before active sounding notes)
 - [x] Hardware-parity sampler interpolation: exact SMP 6-tap x 256-phase Q31 kernel (`piano/q31_kernel.rs`, Hamming-windowed sinc, bit-exact closed form) behind `SampleInterp`, plus the SMP unpacker/predictor model (`piano/smp_unpack.rs`)
 - [x] SMP compressed-voice replay on the oracle: record layout of the `0x1C07D8` loop decoded, real `.npno` pages (mono and stereo, widths 5..12, orders 1..3) played through the SMP image and equal to the Rust model bit for bit (`piano/smp_voice.rs`, `piano/smp_page.rs`, `docs/research/smp-voice.md`); `SmpKernel::interpolate_hw` is the integer-exact variant
+- [x] Firmware velocity -> level law traced by running the real firmware with a stubbed sound library (`tools/arm_piano_load.py`): `n = rec[0x5E] + 2X + 60 - sum(b)`, `X(velocity)` table and `level_q23` verified; opt-in model `piano/velocity_level.rs` (not in the default render; [research](research/piano-sound-load.md))
+- [x] Level of any note/velocity computed from the parsed `.npno` (`piano/npno_level.rs`): stroke selection, `rec[0x5E]`, `b1..b3`, `X`; 96 of 96 random main-voice cases on four sounds; `PianoLayer::firmware_velocity_level` is the default for `.npno` sounds (D23; `ns4 render-patch --legacy-piano-level` restores the touch curve; extra voices played by `piano/extra_voice.rs`; gain word verified 12 of 12; [research](research/piano-sound-load.md))
+- [x] Downstream level audit of the piano (`piano/downstream.rs`, [piano-downstream-level](research/piano-downstream-level.md), D24): SMP bus word `(y << 17) * gain >> 31` tied to the engine unit, layer level, master, string resonance, dyn comp and unison checked at 0 dB; opt-in `firmware_bus_scale` (`--firmware-piano-bus`, 0.5 against the legacy 0.55, -0.83 dB); the +12 dB of the video segment is the fixed replay velocity (+4.8 dB at velocity 64, +2.4 dB against the Pipe yardstick), not an engine stage
+- [x] Per-note replay velocity of the Velvet Grand clip (`tools/piano_velocity.py`, `render-patch` per-event `velocity`, [piano-note-velocity](research/piano-note-velocity.md)): per-note inversion is not identified (worse than uniform); a uniform replay velocity of about 88 matches the spectrum (all bands within 2.7 dB, brilliance +0.5 dB) and its +7.3 dB RMS gap equals the Pipe yardstick; piano layer level law `(v / 127)^2` read from handler `0xC011A7A4`
+- [ ] Decode the receiver of the SMP bus (first consumer found: `FLOAT BY -29` at pc `0x1C0940`; the ring consumer and the master scale are open) to promote `firmware_bus_scale` to default (OQ20)
 
 ---
 
@@ -131,6 +140,8 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
   - [ ] **Bay 6 — Layer Effects Section (`#323D47`):** Crimson `FX FOCUS` layer selector (`ORGAN A/B`, `PIANO A/B`, `SYNTH A/B/C`, `GROUP`), `MOD 1`, `MOD 2`, `AMP SIM / EQ`, `DELAY`, `COMP`, and `REVERB` boxes
   - [x] **Bottom 88-Key Interactive Keybed:** Triple-sensor velocity click/drag, 3 red Split-Point LEDs with visual crossfade shading, and live MIDI note-on highlights
 - [x] Update `.github/workflows/ci.yml` and `.github/workflows/release.yml` to build and package Standalone executables + `.clap` + `.vst3` bundles for Windows, Linux, and macOS (`crates/xtask` `nih_plug_xtask`)
+- [x] Release pipeline hardened and dry-runnable: `tools/release_package.py` / `release_verify.py`, tag-vs-`Cargo.toml` check, per-OS install README, SHA256 files, no repeated test suite ([RELEASING.md](RELEASING.md))
+- [ ] First tagged release published (`v0.1.0`); needs a maintainer-run dry run, then the tag
 
 ---
 
@@ -138,18 +149,19 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 
 **Goal:** Every front-panel control in the Nord Stage 4 manual (ch. 3-9) exists in the emulator with a layout rect, a renderer and a binding (`Bound(param_id)`, `UiOnly(reason)` or `Unsupported(bean)`), drawn as one 2.5D panel (`crates/nord-panel`) shared by the standalone app and the plugin editor ([control inventory](specs/control-inventory.md), [D15](DECISIONS.md#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering), [D16](DECISIONS.md#d16-phase-6b-scope-original-art-functional-or-stub-controls-ha88-first-additive-host-ids), OQ13 in [OPEN-QUESTIONS](OPEN-QUESTIONS.md)). Host parameter IDs already shipped are a stable contract: additive changes only.
 
-- [ ] **B1** Docs correction: reopen Phase 6 bays, control-inventory spec, visual-spec discrepancies, D15 (`ns4-7ky2`)
-- [ ] **B2** Control inventory data: every control from manual ch. 3-9 with page and provenance; counts match manual and photo (`ns4-3n0d`, after B1)
-- [ ] **B3** Host parameter-ID stability test: committed snapshot of ID/type/range/default; remove/rename fails, add passes (`ns4-xhbf`)
-- [ ] **B4** Split oversized `nord-gui` files (`panel.rs`, `library.rs`, `audio.rs`, `widgets.rs`) and add `crates/nord-panel` skeleton; behaviour unchanged (`ns4-r7vt`)
-- [ ] **B5** Host and behaviour layer: `PanelHost`, `PanelAction`, Shift / hold / double-tap / selector cycling / pot snap / Live Mode with unit tests (`ns4-q6p7`, after B4)
+- [x] **B1** Docs correction: reopen Phase 6 bays, control-inventory spec, visual-spec discrepancies, D15 (`ns4-7ky2`; delivered with the planning PR and kept current since)
+- [ ] **B2** Control inventory data: every control from manual ch. 3-9 with page and provenance; counts match manual and photo (`ns4-3n0d`, after B1). **Partly delivered 2026-11-13:** `crates/nord-panel` lists 273 controls checked against the manual text; photo check covers headline counts only, so the box stays open
+- [x] **B3** Host parameter-ID stability test: committed snapshot of ID/type/range/default; remove/rename fails, add passes (`ns4-xhbf`, `crates/nord-plugin/param-ids.snapshot`, 755 ids now, additive only)
+- [x] **B4** Split oversized `nord-gui` files (`panel.rs`, `library.rs`, `audio.rs`, `widgets.rs`) and add `crates/nord-panel` skeleton; behaviour unchanged (`ns4-r7vt`; `panel/`, `library/`, `audio/`, `widgets/` are directory modules, every file under 400 lines, frame hash byte-identical)
+- [x] **B5** Host and behaviour layer: `PanelHost`, `PanelAction`, Shift / hold / double-tap / selector cycling / pot snap / Live Mode with unit tests (`ns4-q6p7`; `crates/nord-panel/src/behaviour/`, timings `ASSUMED` except the 500 ms hold)
 - [ ] **B6** Headless golden-image harness: CPU raster via `tiny-skia`, per-pixel tolerance + error budget, goldens at 0.5x; optional local-only photo comparison skipped without `.reference/` (`ns4-7cv6`, after B4)
 - [ ] **B7** Asset baker (`xtask bake-panel`) and material/shadow system: Blender-rendered sprites and filmstrips from our own models, committed renders with content hashes, `tiny-skia` for flat vector layers, theme tokens; first proves one knob filmstrip and one fader cap and measures atlas size (D15, `ns4-77s9`, after B1, B4)
-- [ ] **B8a-g** Section renderers with a golden image each and every section control bound: master/rotary/wheels (`ns4-0sud`), organ (`ns4-9h25`), piano (`ns4-otuf`), program + both OLEDs (`ns4-z6fi`), synth (`ns4-irgv`), effects (`ns4-hcuh`), keybed (`ns4-jpgx`) (after B2, B5, B6, B7)
-- [ ] **B9a-d** Parameter and engine parity, additive IDs only: synth per layer (`ns4-4w9l`), effects (`ns4-e3zs`), organ/piano per layer (`ns4-h7he`), program/menus/Extern (`ns4-ymci`) (after B3)
-- [ ] **B10** Lock-free telemetry engine to GUI; test proves `process_block` does not allocate; LED ladders show morphed level (`ns4-gjy2`, after B5)
-- [ ] **B11** Plugin editor (`nih_plug_egui`): resizable fixed aspect, HiDPI, size saved; loads in Reaper and Bitwig (`ns4-hud1`, after B5, B8)
-- [ ] **B12** Standalone integration: panorama view, focused rack view, library drawer (`ns4-vip1`, after B5, B8)
+- [x] Program OLED boxed `E` edited marker, `Live N` title and per-section rows (`ns4-ow85`; preset ids, size letters and mini drawbars still open)
+- [ ] **B8a-g** Section renderers with a golden image each and every section control bound: master/rotary/wheels (`ns4-0sud`), organ (`ns4-9h25`), piano (`ns4-otuf`), program + both OLEDs (`ns4-z6fi`), synth (`ns4-irgv`), effects (`ns4-hcuh`), keybed (`ns4-jpgx`) (after B2, B5, B6, B7). **Status 2026-11-14:** every one of the 274 inventory controls is drawn at its layout rectangle (`crates/nord-panel/src/layout/`, mm rects from the 2000 px photo, 36 estimated, `ASSUMED`) by the bays under `crates/nord-gui/src/panel/` (master, organ, piano, program + keybed, synth with the OLED page machine, effects) and every wired control sends an `AudioCommand::{Organ,Piano,Synth,Fx,Program}` edit; the Program OLED shows the 8 menus (58 pages) from `nord_panel::menus`. Controls whose engine feature is still missing are drawn dimmed with a tooltip naming it (inventory `Unsupported`, 76 at last count: see [control inventory](specs/control-inventory.md)). Label legibility (2026-11-14, `ns4-` label legibility audit): the headless audit now also checks clipped text, section and group-frame crossings, knob rings and a 0.9 px gap, and passes with an empty allow-list after the fixes (Rotary Speaker box widened leftwards, fit-aware labels, OLED soft labels, SOLO legend, caption spacing; see [GUI testing](gui-testing.md)). Open: golden images (B6) and the 2.5D look (B7, deferred by decision).
+- [ ] **B9a-d** Parameter and engine parity, additive IDs only: synth per layer (`ns4-4w9l`), effects (`ns4-e3zs`), organ/piano per layer (`ns4-h7he`), program/menus/Extern (`ns4-ymci`) (after B3). **Status 2026-11-14:** delivered per-layer params for piano, synth (voice, LFO, arp incl. gate, pattern edit, KB hold, clock sync), organ (poly percussion, Drawbar Live, vibrato, rotary), FX (variations, sharing, A-WAH, PUMP, SPIN, Ensemble, reverb variation), Aux KB, pedals incl. Triple Pedal, Extern MIDI out, program ops (transpose, panic, layer init, undo/redo, copy/paste), system/sound/output settings and the menu model. Remaining: output routing, MIDI filters and Program Change, Organize swap/move, Extern devices and velocity, organ key trigger point, Foot Switch B, the factory arpeggiator patterns (not decoded), Live slots inside `.ns4b`, pitch bend on organ/piano layers
+- [x] **B10** Lock-free telemetry engine to GUI; test proves `process_block` does not allocate; LED ladders show morphed level (`ns4-gjy2`, after B5). Delivered: seqlock `TelemetryCell` + 34-word `Telemetry` snapshot ([telemetry spec](specs/telemetry.md)); `crates/nord-core/tests/no_alloc_audio_path.rs` counts 0 allocator calls over 400 blocks with publishing; the organ / piano / synth ladders, organ drawbar ladders, Aux KB LEDs, MIDI / EXTERN LEDs, split LEDs, rotary LEDs and the UNDO / REDO soft buttons read the snapshot. Per-layer focus stays panel-only; drawbar morph and an arpeggiator do not exist in the engine yet (those fields are `ASSUMED`)
+- [ ] **B11** Plugin editor (`nih_plug_egui`): resizable (letterboxed, no hard aspect lock), HiDPI, size saved; implemented and headless-tested, loading in Reaper and Bitwig still unverified, see `docs/plugin-editor.md` (`ns4-hud1`, after B5, B8)
+- [ ] **B12** Standalone integration: panorama view, focused rack view, library drawer (`ns4-vip1`, after B5, B8). Delivered 2026-11-14: library drawer (docked, now slides, `L`), focused section view (`Z`, `1`-`5`), panorama strip with a draggable viewport (`P`, `crates/nord-gui/src/panel/panorama.rs`); headless-tested, not checked on a real display. Open: `PanelHost over AudioHandle`, and the strip draws section outlines, not a live thumbnail
 - [ ] **B13** Performance and host verification: 2x-scale frame < 4 ms on the reference machine; host smoke test with evidence (`ns4-4ok5`, after B11, B12)
 
 ---
@@ -170,13 +182,121 @@ Phase 0: Reverse Engineering, Hardware Teardown & Full Specification Suite  [DON
 
 ---
 
+## Phase 7b (Track B): SHARC Oracle, ARM Firmware Emulation & Firmware Parity (`ns4-trkb`)
+
+**Goal:** Use the firmware's own DSP code as a test oracle ([D18](DECISIONS.md#d18-rust-sharc-oracle-validated-against-the-adi-cycle-accurate-simulator)) and the host firmware as the parameter-stream source ([D19](DECISIONS.md#d19-arm-firmware-emulation-harness-unicorn-as-the-parameter-stream-source)), then move proven constants and algorithms into `nord-core` as opt-in paths ([D22](DECISIONS.md#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end)). Specs: [sharc-core](specs/sharc-core.md), [organ-engine](specs/organ-engine.md), [effects-and-routing](specs/effects-and-routing.md), [piano-engine](specs/piano-engine.md), [synth-engine](specs/synth-engine.md). Policy: derived values only ([D20](DECISIONS.md#d20-derived-values-only-no-firmware-bytes-in-the-repository)).
+
+### 7b.1 SHARC oracle (`crates/nord-sharc`)
+
+- [x] M1 decoder: `visa/` ports `tools/sharc_visa.py`; `sharc-disasm` output equals the Python listing on about 970,000 instruction lines ([sharc-core](specs/sharc-core.md) s5)
+- [x] M2 core model: registers, DAGs, loops, calls, SIMD, shifter, bit FIFO, float and fixed ALU/multiplier, long-word moves, interrupts, timer, PC/loop/status stacks. Each behaviour is checked against the ADI simulator ([float](research/sharc-float.md), [fixed](research/sharc-fixed.md), [simd](research/sharc-simd.md), [stacks](research/sharc-stacks.md), [loops](research/sharc-loops.md), [type 2c](research/sharc-type2c.md), [bit FIFO](research/sharc-bitfifo.md), [sequencer](research/sharc-sequencer.md), [leftovers](research/sharc-leftovers.md))
+- [x] Census diff: every instruction form in the firmware images run on the simulator and the model, 12 model gaps fixed ([sharc-census-diff](research/sharc-census-diff.md)); SHARC+ flag masks measured on the ADSP-21571 simulator ([sharc-plus](research/sharc-plus.md))
+- [x] Headless CCES simulator runner (`TpsdkServer`, `docs/research/sharc-seq/sim_run.py`, `sim_batch.py`, 21489 and 21571 targets)
+- [x] Chip identity and peripherals: FX/PNO/ORG on ADSP-2157x, SY1SY2/SMP on ADSP-2148x ([sharc-chip-identity](research/sharc-chip-identity.md), [D17](DECISIONS.md#d17-chip-identity-fx-pno-and-org-run-on-adsp-2157x-sharc-sy1sy2-and-smp-on-adsp-2148x)); `core/periph/` models SEC0, SPI2 peek port, descriptor DMA, TRU, LP1, L2 and the 2148x SPI-slave boot
+- [x] M3 start-up of FX, ORG, SY1SY2 and SMP to their idle loops; PNO core 1 runs the complete pass (`sharc-pass`, [pno-full-pass](research/pno-full-pass.md))
+- [x] Routine-level diff: PNO bank `0x122620` and mix stage `0x12268F` bit-exact against the ADSP-21571 simulator ([sharc-routine-diff](research/sharc-routine-diff.md); audio chain in [organ-oracle-audio](research/organ-oracle-audio.md))
+- [x] Binaries: `sharc-run`, `sharc-org`, `sharc-bank`, `sharc-organ`, `sharc-chain`, `sharc-pass`, `sharc-fx`, `sharc-ref`, `sharc-census-run`, `sharc-disasm` ([ARCHITECTURE](ARCHITECTURE.md) s4)
+- [ ] Simulator probes P1..P8 (L2 size, SEC0 `CSID`/`END`, memory DMA, 2D DMA, peek-port descriptor timing, SPI2 status, reset values; [sharc-chip-identity](research/sharc-chip-identity.md) s7): promote or correct the ASSUMED peripheral behaviours
+- [ ] Model the `0x28xxxxxx` core aliases, SPORT/DAI audio DMA and wire `--sc57x` into `sharc-org`
+- [ ] Oracle speed: long passes (`sharc-pass`, census diff on the 21571 target, about 140 s start-up per run) need profiling and a faster step loop before the oracle can sit in CI
+- [ ] M5 host protocol and M6 engine comparison for every effect (the oracle plus the ARM harness make this one routine at a time; see 7b.4)
+
+### 7b.2 ARM firmware emulation (`tools/arm_*.py`, [arm-fw-emulation](research/arm-fw-emulation.md))
+
+- [x] `unicorn` harness runs real host-firmware functions and captures every ARM to DSP message as `(target, address, value)` ([arm-dsp-protocol](research/arm-dsp-protocol.md), [arm-param-messages](research/arm-param-messages.md))
+- [x] Boot to the main event loop with timer interrupt injection and snapshots (`arm_steady.py`); edit registry of 422 parameters ([arm-edit-params.csv](research/arm-edit-params.csv)); edit ids driven through the real layer clients (`arm_edit_capture.py`)
+- [x] Captured streams replay into the DSP images (`sharc-org --msg-script`, `sharc-pass --script`, `sharc-chain --script`)
+- [x] ARM-side maps: organ weights and key to wheel map ([organ-weights](research/organ-weights.md)), model to slot table ([organ-model-paths](research/organ-model-paths.md), [b3-tone-source](research/b3-tone-source.md)), PNO module chain ([pno-module-chain](research/pno-module-chain.md)), FX chain install, type map and contexts ([fx-chain-install](research/fx-chain-install.md), [fx-type-map](research/fx-type-map.md), [fx-contexts](research/fx-contexts.md)), piano path ([piano-dsp-path](research/piano-dsp-path.md))
+- [ ] Key-down capture: the keybed link (UART2 ring consumer) is not emulated, so no key event reaches the DSP messages (piano velocity law and organ key-down remain open; [piano-dsp-path](research/piano-dsp-path.md) follow-up 1)
+- [x] Boot message log: every ARM to DSP store from reset (80,815 boot messages, real EMIFA ports) kept, fingerprinted and replayed into `sharc-pass` / `sharc-org` (PNO core 1 8,300 / 8,306 words, ORG 12,102 / 12,102); census of the stubbed SPI routines ([arm-bulk-tables](research/arm-bulk-tables.md), `tools/arm_bulk_tables.py`)
+- [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
+- [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
+- [x] Corrected B3 tail ported with regenerated chord tests, oracle chords within 0.54 dB and video mid -1.1 dB ([b3-tail-bootstate](research/b3-tail-bootstate.md)); `B3Wheels` stays opt-in (RMS +8.0 dB)
+- [x] Engine layer routing: section / layer enables VERIFIED on the ARM (`tools/arm_program_routing.py`), per-layer KB zone codes decoded, opt-in `FirmwareRouting` / `--firmware-routing`; B3 clip sub +16.5 to -1.6 dB, crest 12.8 to 17.2 dB, RMS +8.0 to +3.8 dB ([engine-routing](research/engine-routing.md))
+- [ ] Firmware map from the `kKbZone` code to the key range (OQ23), then flip `FirmwareRouting` to the default with a `render_hash` re-baseline
+- [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] B3 clip gap decomposed: layer B (section II off in the program) and notes outside the zone cause the sub and most of the RMS gap; Farfisa sounds in the oracle with the key-down words ([organ-output-level](research/organ-output-level.md))
+- [x] Engine rotary drive scale: preset unit 0..10 reaches the tube law unscaled (gain 8.3 instead of 1.73); opt-in `--rotary-drive scaled` ([b3-rotary](research/b3-rotary.md)); B3 clip with routing: presence -12 dB still fails, flip not made
+- [ ] Engine: honour section I / II and zone flags for organ layers, then re-run `emu_vs_hw.py --only organ_b3`; Farfisa processor port; layer level law; Vox level word; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+
+### 7b.3 Organ
+
+- [x] Firmware bank, mix stage, weights with smoothing, vibrato link, stereo lanes in `organ/`: Pipe1 / Pipe2 use the 92-wheel bank by default; weights are opt-in `WeightMode::Firmware` ([organ-engine](specs/organ-engine.md) s3.1.1 to 3.1.5)
+- [x] Model to path map: B3 = generator `0x121BBE` + processor `0x121E2B`, Vox = `0x12272D` + `0x1229B3`, Pipe = `0x122620` + `0x12268F` ([D21](DECISIONS.md#d21-organ-model-to-dsp-path-map), [b3-generator](research/b3-generator.md), [organ-post-stage](research/organ-post-stage.md))
+- [x] B3 pitch ladder (bit exact) and wheel tables as opt-in `ToneWheelSource::B3Wheels` ([organ-engine](specs/organ-engine.md) s3.1.6)
+- [x] Vox chord end to end in the oracle (`sharc-pass`)
+- [x] B3: per-key footage weights and per-wheel amplitudes from the captured key-down, frame rate settled ([organ-keydown-weights](research/organ-keydown-weights.md))
+- [x] Pipe video gap: Pipe2 lines match the oracle to 0.00 dB on three chords in both weight modes (`organ/pipe_lines.rs`); the Space Drama II clip is synth-dominated (`tools/mix_fit.py`), default and `render_hash` unchanged ([pipe-video-gap](research/pipe-video-gap.md))
+- [ ] Pipe-only hardware clip, organ level `L` and the Pipe weight scale (Legacy bus +14.4 dB over the ARM weight unit), wheel steps from the ARM increment words ([pipe-video-gap](research/pipe-video-gap.md) follow-ups)
+- [x] B3: processor tail as an oracle-measured amplitude response (`b3_tail.rs`, [organ-b3-tail](research/organ-b3-tail.md))
+- [ ] B3: dry gain writer, tail phase, multi-write `A`, drawbar sweep; then make `B3Wheels` the B3 default (3 chords: 10 / 8 / 6 of 13 / 13 / 11 lines within 1 dB; hardware clip mid band -11.9 dB)
+- [x] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with the captured key-down weights (four footage rows per key, no velocity), 9.9 cent offset explained ([organ-keydown-weights](research/organ-keydown-weights.md))
+- [x] Vox oracle criterion: image start phases, 36-sine bank, instant weights; three chords within 0.34 dB on every line ([organ-vox-start-state](research/organ-vox-start-state.md))
+- [x] Vox key-down timeline (replaces the click, crest 16.1 dB), drawbar value law and slot wiring, boot gain word ([organ-vox-click](research/organ-vox-click.md))
+- [ ] Vox default: organ output level stage (RMS -13.7 dB) and the 1.5 to 8 kHz deficit (mid +7.8, presence -7.3, brilliance -9.5 dB) (`ns4-58cz`)
+- [x] B3 / Vox presence-gap diagnosis: per-clip bands, stage ablations, tonal-peakiness and note-register tools (`tools/organ_gap.py`); no firmware stage found, no default flipped ([organ-presence-gap](research/organ-presence-gap.md))
+- [ ] B3 / Vox presence: Twin amp type 289 port (Vox residual 7.5 / 9.7 dB) and a right-hand note list for the B3 clip, then re-run the D22 comparison
+- [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
+- [x] Oracle chords of the Farfisa and B3 Bass processors with the corrected boot log and key-down words (`tools/organ_proc_oracle.py`, `sharc-pass --rec`, [organ-farfisa-bass](research/organ-farfisa-bass.md) s7)
+- [x] Farfisa key stage (`--farfisa-processor on`: key-down weights `1/48` x measured per-sum line gain, chord a peak within 0.2 dB, [organ-farfisa-bass](research/organ-farfisa-bass.md) s9)
+- [x] `--firmware-routing`: an enabled section with no layer on plays layer A (OQ25, the 9 silent programs become audible)
+- [ ] Farfisa processor `0x122B85` bit-exact (lattice, phase) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust (inputs known, OQ18)
+- [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
+
+### 7b.4 Effects
+
+- [x] Firmware Amp biquad sets, master 4-section IIR, compressor gain computer `0x120630` as opt-in paths (`fx/fw_*.rs`)
+- [x] Routine models with opt-in Rust ports: delay `0x1206B0`, table LFO `0x1228CF`, all-pass `0x122C39`, resonant `0x1243F4` / `0x124497` ([fx-routine-models](research/fx-routine-models.md))
+- [x] FX type map: 28 modules own all 100 routines; Amp type is data plus a mode word ([fx-type-map](research/fx-type-map.md)); client and context words with measured scalings ([fx-contexts](research/fx-contexts.md))
+- [x] FX delay time law: `kDlyRateClkDiv` to the tap word and the oracle echo law, opt-in `FirmwareFx::delay_time` ([fx-delay-time](research/fx-delay-time.md))
+- [x] FX Amp type words (`kAmpTypeNew` 1..6) decoded, the Amp drive stage and cabinet verified against the oracle and default (`FirmwareFx::amp`, Vox score 3.98 to 1.30); Leslie drive found to be `v / 127` into a null-stub row ([fx-type-map](research/fx-type-map.md) s8, s9)
+- [x] Amp cabinet `0x122A1D` as a measured impulse response (`fx/fw_cabinet.rs`), unity rotary drive flag
+- [ ] Organ unit EQ routines (`0x124344`, `0x124270`), routine `0x122B1D`, cabinet bank transliteration, JC / Small recordings; Leslie rotor: processor `0x1256AD` ported word for word (`fx::FwLeslieE40`, opt-in `--leslie firmware`; [fx-leslie](research/fx-leslie.md) s8); open: fast speed words, ramp, level hand-over
+- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); the reverb of types 0 and 1 (wrapper `0x12417E` / `0x12435C` plus core `0x123F61`) is ported to Rust from the instruction model by `tools/fx_rvbcore_gen.py` and is bit exact against the oracle on 3000-call impulse and noise runs (`FwReverb`, opt-in `FirmwareFx::reverb`, `ns4 --firmware-reverb`; oracle responses T60 4.3 s and 5.4 s); types 2..11: instance found static in the image (piano and synth rows), oracle responses and golden fingerprints committed (`tools/fx_rvbmulti.py`, [fx-reverb-leslie](research/fx-reverb-leslie.md) s13), model and Rust port still open; Leslie ported separately
+- [x] FX Mod 1 A-PAN (`0x122D93`, oracle verified) and TREM (`0x122C39` at mix 0) ported and wired behind `FirmwareFx::mod1` ([fx-mod-types](research/fx-mod-types.md), D26); open: RM, A-WAH, WAH, PUMP, the Mod 2 types, the delay feedback-effect types, tempo sync and loop period
+- [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); the reverb tables (`ns4-ca0i`); the delay time law (`kDlyRateClkDiv`, [fx-delay-time](research/fx-delay-time.md)) is decoded and wired behind `FirmwareFx::delay_time`
+- [ ] Enable gating and the command consumer ([fx-contexts](research/fx-contexts.md) s7; wiring plan s8), then sweep the four type ids with the effects enabled
+
+### 7b.5 Piano
+
+- [x] SMP 6-tap Q31 kernel (bit exact, default), SMP voice loop bit-exact on real `.npno` pages ([smp-voice](research/smp-voice.md), [smp-kernel-fit](research/smp-kernel-fit.md))
+- [x] Pitch law helper `piano/step_q32.rs` (1,201-entry cents table VERIFIED against ARM `0xC02A6168`) and level law helper `piano/level_q23.rs` (61-entry table VERIFIED against ARM `0xC02A1A08`) ([piano-dsp-path](research/piano-dsp-path.md) s7)
+- [ ] Wire the pitch (cents) and level (60 steps per octave) laws into `PianoLayer`
+- [ ] Piano velocity law: the call-frame word `X` of the level procedure is not traced (needs the key-down capture); the engine keeps `VelocityTouch` power laws until then
+- [ ] Edge handling of the sample stream and the step limit of one decoded sample per frame
+
+### 7b.6 Synth
+
+- [x] Firmware saw `0x12501F` and SY gain de-zipper as opt-in (`synth/hw_saw.rs`, `synth/gain_dezip.rs`, [synth-voice-control](research/synth-voice-control.md)); sinc kernels within 1 ulp ([oracle-vs-engine](research/oracle-vs-engine.md), [sy-smp-audio](research/sy-smp-audio.md))
+- [x] Core2 filter stage `0x12566E` (two 4-pole sections, table-interpolated coefficients) reproduced bit-exact in Python ([synth-stage-equations](research/synth-stage-equations.md), `tools/synth_filter_model.py`)
+- [x] Firmware filter family `0x12566E` / `0x125913` / `0x125A50` (LP4, BP4, HP4) and the envelope rate tables as opt-in Rust (`synth/fw_filter.rs`, `synth/fw_env_rates.rs`, `SynthLayer::filter_engine`, spec [synth-engine](specs/synth-engine.md) 4.1); defaults and `render_hash` unchanged
+- [x] Firmware strip chain as one opt-in switch (`SynthLayer::chain = FirmwareStrip`: firmware saw, ADR record chain with the rate tables, strip word 3 cutoff law, firmware filter, gain de-zipper; `synth/strip_path.rs`, `strip_map.rs`, `render-patch --synth-chain strip`, spec [synth-engine](specs/synth-engine.md) 4.2); stage words checked against the oracle (`tools/synth_strip_e2e.py`), Smooth Lead presence gap -16.5 -> -9.0 dB ([synth-strip-path](research/synth-strip-path.md))
+- [x] Synth key-down velocity series `g(vel)` (VERIFIED table, EMPIRICAL S-curve) wired into the strip chain voice level (`synth/key_velocity.rs`, `tools/synth_velocity.py`); Wave edit ids probed in the ARM harness: they do not change strip word 0 (`tools/synth_wave_probe.py`, [synth-strip-path](research/synth-strip-path.md) s6); strip default stays off (presence -9.0 dB, RMS +3.8 dB)
+- [x] DSoundman course clips, synth side: LFO rate (OLED Hz = real Hz within 2 %, table VERIFIED), shape order (VERIFIED), filter-LFO depth bound (EMPIRICAL: hardware much deeper than the emulator, octave scale open) and the piano + pad balance (within 1 dB, linear synth layer level favoured) in [dsoundman-synth-lfo](research/dsoundman-synth-lfo.md) and [dsoundman-piano-pad-layer](research/dsoundman-piano-pad-layer.md); no emulator default changes, tests `synth::tests_osc_lfo::lfo_*`; pending clips in `emu_vs_hw_segments.json` (`pending_segments`, spec only)
+- [x] ANALOG wave to strip stage table (45 waves, 34 stage routines, `data/synth-wave-types.csv`, [synth-wave-stages](research/synth-wave-stages.md)); Smooth Lead SHAPE wave 0 = stage `0x1212D3`
+- [x] Stage `0x1212D3` (ANALOG SHAPE) bit exact in Python (40-bit registers, 320 of 320 oracle words), Rust `synth/fw_shape.rs`, opt-in `strip_shape` ([synth-wave-models](research/synth-wave-models.md))
+- [x] Saw `0x1215FB` and square / pulse `0x121B99` stages bit exact in Python (320 of 320 oracle words each); preset category / wave == edit-id domain verified on 578 factory layers
+- [x] Sine `0x120CD0`, triangle `0x121183`, Shape Saw `0x12169D` stages bit exact in Python (320 of 320 oracle words each)
+- [x] Empirical oscillator P block for the strip chain (`synth/p_block.rs`, `--synth-p fitted`, `tools/synth_p_fit.py`): fit to the Smooth Lead clip with a half-clip hold-out, Pure Saw / Pure Square harmonic checks; Smooth Lead presence -9.0 -> -0.8 dB, RMS +3.8 -> +0.2 dB; default stays `Legacy` (one program, [synth-p-fit](research/synth-p-fit.md))
+- [ ] Remaining stage models ( then SAW / SQUARE / TRIANGLE / SUB / SYNC stages) bit exact in Python, then opt-in Rust; synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
+- [x] 12 dB low pass `0x1253BD` (Lp12, 218 layers) and SHAPE SINE wave 0 `0x123427` bit exact in Python and opt-in Rust (`FwFilterType::Lp2`, `FwStage::ShapeSine`); `kFltType` = table index (filter off = 6), [synth-filter-type-map](research/synth-filter-type-map.md), [synth-stage-models-2](research/synth-stage-models-2.md): 80 % of ANALOG layers, 85 % of filter layers modelled
+- [x] SHAPE SINE waves 1, 2, 5 (`0x1235C9`, `0x1232A5`, `0x122F1F`, 15 layers) bit exact in Python and opt-in Rust (`synth/fw_sine_warps.rs`): 85 % of ANALOG layers modelled ([synth-stage-models-3](research/synth-stage-models-3.md))
+- [x] SHAPE SINE wave 4 (`0x120DAB`, 4 layers incl. its output high pass) bit exact in Python and opt-in Rust (`synth/fw_sine_hp.rs`): 86 % of ANALOG layers modelled (269 of 312, [synth-stage-models-4](research/synth-stage-models-4.md))
+- [ ] Remaining stage models (SHAPE SINE 3, SYNC, MISC, SUPER 1..4, SHAPE 3 / 4, SUB OSC, SAMPLE / WAVE banks) bit exact in Python, then opt-in Rust; synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
+- [x] Synth default flip (D22): strip chain + stage oscillators + EMPIRICAL per-wave P table (`synth/p_table.rs`, `--synth-p table`) validated on 15 hardware clips (`tools/synth_validate.py`, [synth-validation](research/synth-validation.md)); `render_hash` re-baselined; program sweep clean (0 NaN, 0 newly silent, clipping 18 to 9 programs)
+- [ ] Pulse and triangle shapes, amp envelope smoothing
+- [ ] Hardware sweeps for the remaining ASSUMED scales ([synth-hardware-sweep-plan](research/synth-hardware-sweep-plan.md), OQ7)
+
+---
+
 ## Parallel Lanes & Bean Dependency Graph
 
 | Lane | Active Beans | Blocked By | Scope |
 |---|---|---|---|
 | **Lane A — Format & Preset Bitmaps** | `ns4-2ih2` | `ns4-3387` (done) | Decode all bit offsets in `.ns4o`, `.ns4n`, `.ns4y`, `.ns4p` + JSON patch converter |
-| **Lane B — Organ, Piano & Synth DSP** | `ns4-yaip` | `ns4-3387` (done) | Complete Vox/Farfisa/Pipe/Scanner, Wave 2 SuperSaw/Wavetable/Arp, SFZ loader, FDN Reverb |
+| **Lane B — Organ, Piano & Synth DSP** | `ns4-yaip` (done) | `ns4-3387` (done) | Complete Vox/Farfisa/Pipe/Scanner, Wave 2 SuperSaw/Wavetable/Arp, SFZ loader, FDN Reverb (firmware parity continues in Lane E) |
 | **Lane C — 1:1 Panel GUI, Standalone & DAW Plugin** | `ns4-707f` | `ns4-3387` (done) | `crates/nord-plugin` (`nih-plug` CLAP + VST3 + Standalone) & 1:1 front-panel UI ([spec](specs/visual-style-and-panel.md)) |
 | **Lane C2 — Phase 6b Hardware Parity & 2.5D Panel** | `ns4-xc5n` | `ns4-707f` | Control inventory, `crates/nord-panel`, baked-sprite renderer, parameter parity, plugin editor ([control inventory](specs/control-inventory.md)) |
 | **Lane D — Track B Firmware & `CNSP` Codec** | `ns4-trkb` | `ns4-3387` (done) | Full custom LZ firmware unpacker + `CNSP` (`.npno` / `.nsmp4`) sample codec decoder |
+| **Lane E — Track B Oracle & Firmware Parity (Phase 7b)** | `ns4-36hw`, `ns4-doy1`, `ns4-vnp2`, `ns4-qll9`, `ns4-ca0i`, `ns4-af6y`, `ns4-wzyz` | `ns4-trkb` | SHARC oracle, ARM harness, key-down capture, FX wiring, Vox / Farfisa / B3 Rust paths, synth filter and envelope parity, simulator probes |
 

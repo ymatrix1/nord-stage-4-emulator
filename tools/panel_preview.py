@@ -58,7 +58,7 @@ REF_KNOB_LAYER = {"master": "knob_ring", "drive": "knob_scale"}
 
 
 def composed_ref_knob(proof: Path, name: str, frame: int, scale: int = 2) -> Image.Image:
-    """Reference knob (D17): red plate, ring or scale, Blender shadow, the cap body cut from
+    """Reference knob (D28): red plate, ring or scale, Blender shadow, the cap body cut from
     the reference, then the Blender pointer frame on top."""
     e = P.KNOB_FRAME_PX * scale
     bg = tiled(_open(proof, "plate_red", scale), e, e)

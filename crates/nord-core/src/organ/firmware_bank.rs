@@ -78,18 +78,38 @@ pub const DEFAULT_TUNE_WORD: u32 = 0x4000_0000;
 ///
 /// VERIFIED: `phase += fracmul(inc, tune)` per frame (oracle, 29,440 words); with a frame rate
 /// `fs` this is `f = fs * v / 2^25` for `inc = v << 8`. The frame rate itself is not known from
-/// the image, see [`implied_frame_rate`].
+/// the image; it is `FIRMWARE_FRAME_RATE_HZ` (`docs/research/dsp-frame-rate.md`).
 pub fn cycles_per_frame(inc: u32, tune: u32) -> f64 {
     f64::from(fracmul(inc, tune) as i32) / 4_294_967_296.0
 }
 
-/// Frame rate at which element 0 of the exact ARM table (`0x00635300`) sounds at `wheel0_hz`.
+/// Rate factor the ARM writes to `DM(0xC27C5)` (and `DM(0xB33B8)` for the B3 generator) at the
+/// default Fine Tune: `table[0x1F3] << 8` of the ARM table at `0xC027D9D8`, 0.4970 = -10.16 cent
+/// against [`DEFAULT_TUNE_WORD`].
 ///
-/// Open: the absolute pitch needs the real frame rate and tune index. At 48 kHz and the default
-/// tune, wheel 0 is 36.37 Hz (D1 minus 16 cent); with the engine's ASSUMED wheel 0 = C1
-/// (32.703 Hz) the implied frame rate is 43,156.4 Hz.
+/// VERIFIED: `tools/organ_bank_ref.py defaults` prints `tune index 0x1f3: DM(0xC27C5) =
+/// 0x3fa02a00`; index = `cents * 64 / 100 + DM(0xC05A0464) + 0x1F3` with both terms 0 at the
+/// default (`docs/research/organ-tone-source.md` section 2.3). With it, wheel 0 of the exact table
+/// is C1 at the DSP frame rate (`docs/research/dsp-frame-rate.md`).
+pub const ARM_DEFAULT_TUNE_WORD: u32 = 0x3FA0_2A00;
+
+/// Frame rate at which element 0 of the exact ARM table (`0x00635300`) sounds at `wheel0_hz`
+/// with rate factor `tune`.
+///
+/// With the image's unity tune ([`DEFAULT_TUNE_WORD`]) and wheel 0 = C1 this gives the old 43,156.4
+/// Hz; with the factor the ARM actually writes ([`ARM_DEFAULT_TUNE_WORD`]) it gives the DSP frame
+/// rate within the 1 cent jitter of the ladder (see [`implied_frame_rate`]).
+pub fn implied_frame_rate_at(wheel0_hz: f64, tune: u32) -> f64 {
+    wheel0_hz / cycles_per_frame(0x0063_5300, tune)
+}
+
+/// Frame rate implied by wheel 0 = `wheel0_hz` at the ARM's default Fine Tune word.
+///
+/// VERIFIED: for `wheel0_hz` = C1 (32.7032 Hz, the Hammond-style bottom wheel) this is within 1
+/// cent of `FIRMWARE_FRAME_RATE_HZ` (`tests::frame_rate_follows_from_the_arm_fine_tune_word`); at
+/// 48 kHz wheel 0 would be 36.37 Hz at unity tune, a quarter tone off any note.
 pub fn implied_frame_rate(wheel0_hz: f64) -> f64 {
-    wheel0_hz / cycles_per_frame(0x0063_5300, DEFAULT_TUNE_WORD)
+    implied_frame_rate_at(wheel0_hz, ARM_DEFAULT_TUNE_WORD)
 }
 
 /// 92 wheels x 2 copies of free-running u32 phase accumulators sharing one x table.
@@ -192,6 +212,16 @@ impl ToneBank {
         }
     }
 
+    /// Advances one frame and writes the raw outputs of copy 0 (`a`) and copy 1 (`b`, zero while
+    /// the second copy is not running) of the first 91 wheels, for the smoothed lane mixer
+    /// (`lane_mix::LaneMixer`) which applies the group gains itself.
+    pub fn advance_copies(&mut self, a: &mut [f32; NUM_TONEWHEELS], b: &mut [f32; NUM_TONEWHEELS]) {
+        let (mut fa, mut fb) = ([0.0; BANK_WHEELS], [0.0; BANK_WHEELS]);
+        self.step_all(&mut fa, &mut fb);
+        a.copy_from_slice(&fa[..NUM_TONEWHEELS]);
+        b.copy_from_slice(&fb[..NUM_TONEWHEELS]);
+    }
+
     /// Advances one frame and writes the two output lanes of the firmware mix stage per wheel:
     /// `x_lane = g5 a + g8 b`, `y_lane = g6 b + g7 a` with the lane matrix of the current vibrato
     /// table (`vibrato_bank::lane_matrix`). Summing `weight[w] * lane[w]` over the 92 wheels and
@@ -228,6 +258,7 @@ impl Default for ToneBank {
 
 #[cfg(test)]
 mod tests {
+    use super::super::lane_mix::FIRMWARE_FRAME_RATE_HZ;
     use super::*;
 
     fn harmonic_db(h: usize) -> f64 {
@@ -362,8 +393,25 @@ mod tests {
         // f = fs * v / 2^25 with v = inc >> 8
         let f = 48_000.0 * f64::from(0x6353u32) / 33_554_432.0;
         assert!((c * 48_000.0 - f).abs() < 1e-9);
-        // the engine's wheel 0 (C1) implies a 43.156 kHz frame rate
-        assert!((implied_frame_rate(32.703_195_66) - 43_156.4).abs() < 1.0);
+        // wheel 0 = C1 at the image's unity tune would imply 43.156 kHz (the old assumption)
+        assert!((implied_frame_rate_at(32.703_195_66, DEFAULT_TUNE_WORD) - 43_156.4).abs() < 1.0);
+    }
+
+    #[test]
+    fn frame_rate_follows_from_the_arm_fine_tune_word() {
+        // The ARM writes table[0x1F3] << 8 = 0x3FA02A00 (-10.16 cent), so wheel 0 = C1 implies the
+        // ARM's sample-rate literal 43,402.34 Hz within 1 cent (the ladder jitter).
+        let cents = |a: f64, b: f64| 1200.0 * (a / b).log2();
+        let f = implied_frame_rate(32.703_195_66);
+        assert!(cents(f, FIRMWARE_FRAME_RATE_HZ).abs() < 1.0, "{f}");
+        let tune_cents = cents(
+            f64::from(ARM_DEFAULT_TUNE_WORD),
+            f64::from(DEFAULT_TUNE_WORD),
+        );
+        assert!((tune_cents + 10.16).abs() < 0.01, "{tune_cents}");
+        // the old 43,156.4 is the new rate times that tune offset (to the ladder jitter)
+        let old = FIRMWARE_FRAME_RATE_HZ * (tune_cents / 1200.0).exp2();
+        assert!(cents(old, 43_156.4).abs() < 0.5, "{old}");
     }
 
     #[test]

@@ -28,3 +28,4 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
+- GUI rewire (feat/gui-rewire-organ-piano): Organ/Piano section ON, Organ POLY percussion, Preset/Drawbar Live + SYNC, per-layer KB ZONE (`engine/zone_assign.rs`), Aux KB LEDs, Rotary ORGAN/ANGLE now sent to the engine and bound in the inventory. Still open: `piano.select_dial`, the Synth strip ON / KB ZONE / Aux LEDs.

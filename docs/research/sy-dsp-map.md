@@ -124,6 +124,8 @@ Not in the image (VERIFIED by census): biquad filters (0 `fA=fB*fY, fA+1=fB+1*fY
 | The parameter-slewing math of step 3 | shape only (`RECIPS`, `FUNPACK`, `CLIP`) |
 | 16-bit unpacker | not found |
 
+**Update 2026-11-13 ([synth-voice-control](synth-voice-control.md)):** the synth edit ids do not talk to this image (except the tune ids, which write `b[20], b[21]` of the 28 pair blocks); they write the Core2 channel strips on ORG and PNO. The voice gain smoother of step 4 is measured: `s' = t + 0.979 (s - t)` per frame.
+
 ## Implications
 
 - TD-08 reduces to a window swap in `sinc.rs` (Kaiser 8.5) plus a kernel selector. The selector cannot be decoded from the DSP; it is an ARM-side decision.

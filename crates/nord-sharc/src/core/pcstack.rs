@@ -21,6 +21,22 @@ use crate::visa::{bits, classify};
 const LADDR_LCE: u32 = 0x0F;
 
 impl Core {
+    /// Number of return addresses on the PC stack (harness use).
+    pub fn return_depth(&self) -> usize {
+        self.call_stack.len()
+    }
+
+    /// Pushes a return address, as a `CALL` would (harness use: `sharc-fx` makes the stop pc of
+    /// a routine the return address, so a delayed `RTS (DB)` ends the call at that pc).
+    pub fn push_return_address(&mut self, addr: u32) {
+        self.call_stack.push(addr & 0xFF_FFFF);
+    }
+
+    /// Drops return addresses until `depth` remain (harness use).
+    pub fn truncate_returns(&mut self, depth: usize) {
+        self.call_stack.truncate(depth);
+    }
+
     /// Whether the top of the PC stack is the top-of-loop address of the innermost loop.
     fn loop_on_top(&self) -> bool {
         self.loops
@@ -159,6 +175,20 @@ impl Core {
 mod tests {
     use super::super::support::{core_at_zero, decoded};
     use super::*;
+
+    #[test]
+    fn harness_return_addresses_push_and_truncate() {
+        let mut c = core_at_zero(&[]);
+        assert_eq!(c.return_depth(), 0);
+        c.push_return_address(0x123456);
+        c.push_return_address(0xFFFF_FFFF);
+        assert_eq!(c.return_depth(), 2);
+        assert_eq!(c.pcstk(), 0xFF_FFFF, "return addresses are 24 bits");
+        c.truncate_returns(1);
+        assert_eq!(c.pcstk(), 0x123456);
+        c.truncate_returns(0);
+        assert_eq!(c.return_depth(), 0);
+    }
 
     /// ADI: `1780 0000 0000` is `push loop`, `1708` `push pcstk`, `1740` `pop loop`, `1704`
     /// `pop pcstk`.
