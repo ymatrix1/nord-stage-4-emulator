@@ -38,13 +38,29 @@ impl ProgramUi {
         !self.library.presets.occupied(kind.section()).is_empty()
     }
 
+    /// Names the browser lists (display order), or `None` to list the models of the old browser.
+    pub fn preset_browser_names(&self, kind: PresetKind) -> Option<Vec<String>> {
+        let section = kind.section();
+        let lib = &self.library.presets;
+        let names: Vec<String> = lib
+            .occupied(section)
+            .into_iter()
+            .filter_map(|l| lib.name_at(section, l))
+            .collect();
+        (!names.is_empty()).then_some(names)
+    }
+
     /// Cursor position when the browser opens: the loaded preset, else the first one.
     pub(super) fn preset_start_cursor(&self, kind: PresetKind) -> usize {
         let section = kind.section();
         let lib = &self.library.presets;
         let cells = lib.occupied(section);
         lib.loaded(section)
-            .and_then(|e| cells.iter().position(|&l| lib.entry_at(section, l) == Some(e)))
+            .and_then(|e| {
+                cells
+                    .iter()
+                    .position(|&l| lib.entry_at(section, l) == Some(e))
+            })
             .unwrap_or(0)
     }
 
@@ -55,10 +71,19 @@ impl ProgramUi {
         let last = cells.len().saturating_sub(1) as i32;
         self.preset_cursor = (self.preset_cursor as i32 + delta).clamp(0, last) as usize;
         let loc = cells[self.preset_cursor.min(cells.len() - 1)];
-        let Some(entry) = self.library.presets.entry_at(section, loc).map(String::from) else {
+        let Some(entry) = self
+            .library
+            .presets
+            .entry_at(section, loc)
+            .map(String::from)
+        else {
             return;
         };
-        let name = self.library.presets.name_at(section, loc).unwrap_or_default();
+        let name = self
+            .library
+            .presets
+            .name_at(section, loc)
+            .unwrap_or_default();
         self.set_message(format!("{} {name}", preset_label(loc)));
         self.library.presets.mark_loaded(section, &entry);
         let single = self.single_target(kind);
@@ -115,9 +140,14 @@ mod tests {
                 single: None
             }
         );
-        assert!(matches!(&reqs[1], LoadRequest::Preset { entry, .. } if entry.ends_with("Gamma.ns4y")));
+        assert!(
+            matches!(&reqs[1], LoadRequest::Preset { entry, .. } if entry.ends_with("Gamma.ns4y"))
+        );
         assert_eq!(u.message.as_ref().unwrap().0, "2:07 Gamma");
-        assert_eq!(u.library.presets.loaded(Synth), Some("Synth Preset/Bank 2/Gamma.ns4y"));
+        assert_eq!(
+            u.library.presets.loaded(Synth),
+            Some("Synth Preset/Bank 2/Gamma.ns4y")
+        );
         assert_eq!(u.preset_start_cursor(PresetKind::Synth), 2);
     }
 

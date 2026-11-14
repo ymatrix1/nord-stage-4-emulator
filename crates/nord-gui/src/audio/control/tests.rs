@@ -209,6 +209,33 @@ fn snapshot_replies_from_the_shadow_and_recall_swaps_the_program_in() {
 }
 
 #[test]
+fn a_preset_load_runs_on_the_control_thread_and_undo_brings_the_section_back() {
+    use nord_core::cbin::{OrganPresetDecoded, SectionPreset};
+    let mut r = Rig::new();
+    let before = r.live.organ_a.drawbars;
+    let mut o = OrganPresetDecoded::default();
+    o.drawbars_a = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+    o.layer_a_level = 0.5;
+    let edit = ProgramEdit::LoadPreset {
+        preset: Box::new(SectionPreset::Organ(Box::new(o))),
+        single: None,
+    };
+    assert!(edit.is_control_op());
+    r.edit(edit);
+    assert_eq!(
+        r.delivered,
+        ["swap"],
+        "one allocation-free swap, no control op"
+    );
+    assert_eq!(r.live.organ_a.drawbars, [1, 2, 3, 4, 5, 6, 7, 8, 0]);
+    assert_eq!(r.level(0), 0.5);
+    assert_eq!(r.control.shadow().organ_a.drawbars, r.live.organ_a.drawbars);
+    assert_eq!(r.control.undo_status().0, Some(UndoOp::LoadPreset));
+    r.edit(ProgramEdit::Undo);
+    assert_eq!(r.live.organ_a.drawbars, before);
+}
+
+#[test]
 fn a_stale_answer_is_dropped_and_a_new_operation_clears_redo() {
     let mut r = Rig::new();
     r.send(AudioCommand::SetPianoLevel(0.3_f32));

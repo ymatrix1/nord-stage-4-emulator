@@ -348,6 +348,23 @@ mod tests {
     }
 
     #[test]
+    fn load_preset_applies_undoably_on_a_control_thread_engine() {
+        use nord_core::cbin::SectionPreset;
+        let mut e = engine();
+        let before = e.piano_b.category;
+        let mut p = nord_core::cbin::PianoPresetDecoded::default();
+        p.layer_a.category = nord_core::piano::PianoCategory::Clav;
+        let edit = ProgramEdit::LoadPreset {
+            preset: Box::new(SectionPreset::Piano(Box::new(p))),
+            single: Some(LayerId::PianoB),
+        };
+        edit.apply(&mut e);
+        assert_eq!(e.piano_b.category, nord_core::piano::PianoCategory::Clav);
+        assert!(e.undo().is_some());
+        assert_eq!(e.piano_b.category, before);
+    }
+
+    #[test]
     fn split_scene_and_snapshot_round_trip() {
         let mut e = engine();
         let cfg = SplitCfg {

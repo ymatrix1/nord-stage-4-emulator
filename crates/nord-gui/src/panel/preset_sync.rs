@@ -43,26 +43,24 @@ impl Stage4PanelState {
                 self.pedal_noise = p.layer_a.pedal_noise;
             }
             SectionPreset::Synth(s) => {
-                let layers = [
-                    (&s.layer_a, LayerId::SynthA),
-                    (&s.layer_b, LayerId::SynthB),
-                    (&s.layer_c, LayerId::SynthC),
-                ];
-                for (i, (dec, id)) in layers.into_iter().enumerate() {
-                    let target = single.is_none() || single == Some(id);
-                    if !target {
-                        continue;
-                    }
-                    let on = single.is_some() || dec.enabled;
-                    let (active, level) = match i {
-                        0 => (&mut self.synth_a_active, &mut self.synth_a_level),
-                        1 => (&mut self.synth_b_active, &mut self.synth_b_level),
-                        _ => (&mut self.synth_c_active, &mut self.synth_c_level),
+                // A single-layer load takes layer A of the file into the chosen layer.
+                let layers = match single {
+                    Some(id) => vec![(id, &s.layer_a, true)],
+                    None => vec![
+                        (LayerId::SynthA, &s.layer_a, s.layer_a.enabled),
+                        (LayerId::SynthB, &s.layer_b, s.layer_b.enabled),
+                        (LayerId::SynthC, &s.layer_c, s.layer_c.enabled),
+                    ],
+                };
+                for (id, dec, on) in layers {
+                    let (active, level) = match id {
+                        LayerId::SynthB => (&mut self.synth_b_active, &mut self.synth_b_level),
+                        LayerId::SynthC => (&mut self.synth_c_active, &mut self.synth_c_level),
+                        _ => (&mut self.synth_a_active, &mut self.synth_a_level),
                     };
                     *active = on;
                     *level = dec.level;
                 }
-                // A single-layer load takes layer A of the file; the section controls follow A.
                 if single.is_none() || single == Some(LayerId::SynthA) {
                     self.synth_osc_mode = s.layer_a.osc_mode;
                     self.synth_waveform = s.layer_a.waveform;
@@ -99,8 +97,10 @@ mod tests {
         d.layer_a.category = PianoCategory::Clav;
         d.layer_a.level = 0.3;
         let preset = SectionPreset::Piano(Box::new(d));
-        let mut p = Stage4PanelState::default();
-        p.piano_cat = PianoCategory::Grand;
+        let mut p = Stage4PanelState {
+            piano_cat: PianoCategory::Grand,
+            ..Default::default()
+        };
         p.apply_section_preset(&preset, Some(LayerId::PianoB));
         assert_eq!(p.piano_cat, PianoCategory::Grand);
         assert!(p.piano_b_active && (p.piano_b_level - 0.3).abs() < 1e-6);

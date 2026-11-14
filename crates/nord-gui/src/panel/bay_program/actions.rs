@@ -195,9 +195,17 @@ impl ProgramUi {
     pub fn store_press(&mut self) -> Vec<AudioCommand> {
         match self.store.stage {
             StoreStage::Idle => {
+                // A Preset Library button first, then STORE, also stores a preset (manual p.42).
+                let from_browser = match self.screen {
+                    Screen::Preset { kind, .. } => Some(kind),
+                    _ => None,
+                };
                 self.store.begin(&self.title, self.loc);
                 self.screen = Screen::StoreTo;
-                Vec::new()
+                match from_browser {
+                    Some(kind) => self.preset_store_begin(kind),
+                    None => Vec::new(),
+                }
             }
             StoreStage::Naming => {
                 self.store.finish_naming();

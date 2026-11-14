@@ -155,7 +155,10 @@ mod tests {
             .unwrap();
         assert_eq!(lib.entry_at(PresetSection::Organ, 3), Some(p1.as_str()));
         assert!(lib.is_user(&p1) && p1.starts_with(USER_PREFIX) && p1.ends_with("Mine.ns4o"));
-        assert_eq!(lib.name_at(PresetSection::Organ, 3).as_deref(), Some("Mine"));
+        assert_eq!(
+            lib.name_at(PresetSection::Organ, 3).as_deref(),
+            Some("Mine")
+        );
         assert_eq!(lib.occupied(PresetSection::Organ), [0, 3]);
         assert_eq!(lib.loaded(PresetSection::Organ), Some(p1.as_str()));
         let p2 = lib
@@ -182,7 +185,10 @@ mod tests {
         let p = lib
             .store_user(5, preset("U", PresetSection::Synth))
             .unwrap();
-        assert_eq!(lib.base_entry(&p).as_deref(), Some("Organ Preset/Bank 1/B3.ns4o"));
+        assert_eq!(
+            lib.base_entry(&p).as_deref(),
+            Some("Organ Preset/Bank 1/B3.ns4o")
+        );
         assert_eq!(lib.base_entry("~user/none"), Some("~user/none".to_string()));
     }
 }
