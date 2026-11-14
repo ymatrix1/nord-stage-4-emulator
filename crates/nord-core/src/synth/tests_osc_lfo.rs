@@ -168,3 +168,47 @@ fn test_three_operator_fm_with_feedback_and_mod_env() {
         "FM mod envelope must decay smoothly during note sustain"
     );
 }
+
+/// Rates the hardware OLED showed in the DSoundman LFO lesson (`docs/research/dsoundman-synth-lfo.md`).
+/// VERIFIED: every value read from the clip frames is an entry of the firmware rate table.
+const DSOUNDMAN_LFO_RATES_HZ: [f32; 26] = [
+    0.15, 0.16, 0.51, 0.55, 0.95, 1.0, 1.5, 2.2, 3.0, 4.1, 4.4, 5.6, 7.6, 8.2, 10.0, 13.0, 16.0,
+    21.0, 24.0, 30.0, 38.0, 45.0, 48.0, 56.0, 82.0, 305.0,
+];
+
+#[test]
+fn lfo_rate_table_contains_every_rate_read_off_the_hardware_oled() {
+    use crate::cbin::presets::LFO_RATE_HZ_TABLE;
+    for hz in DSOUNDMAN_LFO_RATES_HZ {
+        assert!(
+            LFO_RATE_HZ_TABLE.contains(&hz),
+            "{hz} Hz is not a table entry"
+        );
+    }
+    assert_eq!(LFO_RATE_HZ_TABLE[0], 0.03);
+    assert_eq!(LFO_RATE_HZ_TABLE[127], 523.0);
+    assert!(LFO_RATE_HZ_TABLE.windows(2).all(|w| w[0] <= w[1]));
+}
+
+#[test]
+fn lfo_runs_at_the_displayed_rate() {
+    // Hardware: 8.2 Hz read 8.14 Hz and 16 Hz read 16.36 Hz from the audio sidebands (2 %).
+    for hz in [8.2f32, 16.0] {
+        let mut s = SynthLayer::new(48_000.0);
+        s.lfo_rate_hz = hz;
+        let mut prev = s.lfo_phase;
+        let mut wraps = 0;
+        for _ in 0..96_000 {
+            s.render_frame();
+            if s.lfo_phase < prev {
+                wraps += 1;
+            }
+            prev = s.lfo_phase;
+        }
+        let measured = wraps as f32 / 2.0;
+        assert!(
+            (measured - hz).abs() <= 0.5,
+            "{hz} Hz gave {measured} cycles per second"
+        );
+    }
+}
