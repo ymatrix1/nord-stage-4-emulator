@@ -19,9 +19,11 @@ pub const CHARSET: &str = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
 /// sits at `@0x53E014`), checked by
 /// `python tools/ns4_oled_strings.py pointers` (`tools/tests/test_ns4_oled_strings.py`); the getter
 /// `0xC017B4C8(this, i, short)` indexes it as `table[2 i + short]`.
-/// ASSUMED: this table is the one the STORE `Cat:` field and the LIST Cat view show (the getter is
-/// a list-model virtual method that was not traced to the store screen); confirm with the OLED
-/// render of `docs/research/oled-strings-vs-firmware.md` section 4.
+/// VERIFIED: the table is the name getter of the firmware's category list model (vtable
+/// `0xC02D4238`, slot `0x30`), read by the LIST screen; the STORE `Cat:` caption is
+/// `0xC014D4EC`. ASSUMED: that the STORE value shows this list (the value comes from a model
+/// object `[this+8]` that was not resolved) and that a program's header `category_id` indexes it:
+/// factory ids run `1..52`, so it does not (`docs/research/synth-wave-categories.md` s5, OQ26).
 pub const CATEGORIES: [&str; 26] = [
     "Accordion/Harm",
     "Bass",

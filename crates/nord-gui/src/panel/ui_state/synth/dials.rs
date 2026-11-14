@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn category_and_wave_dials_pick_an_analog_waveform() {
         let mut s = SynthUi::new();
-        s.turn_dial(1, 5, false); // SUPER
+        s.turn_dial(1, 6, false); // SUPER
         assert_eq!(s.layer().cat_name(), "SUPER");
         s.take_edits();
         s.turn_dial(2, -5, false);
@@ -238,7 +238,8 @@ mod tests {
         s.turn_dial(0, 2, false);
         s.turn_dial(1, 1, false);
         s.turn_dial(2, 3, false);
-        assert!(params(&mut s).contains(&SynthParam::WavetableIndex(11)));
+        // ACOUSTIC (second category) wave 4: six BELLS/TINES waves come first, flat index 6 + 3.
+        assert!(params(&mut s).contains(&SynthParam::WavetableIndex(9)));
     }
 
     #[test]
