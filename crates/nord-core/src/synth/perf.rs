@@ -113,12 +113,23 @@ pub struct PerfState {
     /// Pattern on: Arp / Poly / Gate steps follow `pattern_preset`.
     pub pattern_on: bool,
     pub pattern_preset: u8,
+    /// Use `custom` (PATTERN EDIT / ACCENT / PAN pages) instead of the preset.
+    pub pattern_custom: bool,
+    pub custom: CustomPattern,
+    /// ZIG ZAG direction: jump two steps, then back one (Arp only).
+    pub zigzag: bool,
+    /// Fractional RANGE in thirds of an octave (`0..=2`) on top of `arp_octave_range`.
+    pub range_extra_thirds: u8,
     /// Set when a KB Sync reset should also reset the Master Clock; the engine consumes it.
     pub clock_reset_pending: bool,
     pub(super) gate_counter: f32,
     pub(super) gate_step: usize,
     pub(super) gate_level: f32,
     pub(super) cur_len: u8,
+    pub(super) cur_accent: bool,
+    pub(super) cur_pan: PatternPan,
+    /// Pan handed to the voice the arpeggiator is triggering (`0` for every other note).
+    pub(super) voice_pan: f32,
     pub(super) phys_keys: [bool; 128],
     pub(super) hold_latched: bool,
 }
@@ -137,11 +148,18 @@ impl Default for PerfState {
             gate_env: 0.5,
             pattern_on: false,
             pattern_preset: 0,
+            pattern_custom: false,
+            custom: CustomPattern::default(),
+            zigzag: false,
+            range_extra_thirds: 0,
             clock_reset_pending: false,
             gate_counter: 0.0,
             gate_step: 0,
             gate_level: 1.0,
             cur_len: PLAIN_GATE_EIGHTHS,
+            cur_accent: false,
+            cur_pan: PatternPan::Center,
+            voice_pan: 0.0,
             phys_keys: [false; 128],
             hold_latched: false,
         }
@@ -180,10 +198,39 @@ impl SynthLayer {
 
     /// Takes the next pattern step (gate length in eighths) and advances the pattern.
     fn next_pattern_len(&mut self) -> u8 {
+        if self.perf.pattern_custom {
+            let c = self.perf.custom;
+            let len = usize::from(c.len.clamp(2, 16));
+            let idx = self.perf.gate_step % len;
+            self.perf.gate_step = (idx + 1) % len;
+            self.perf.cur_accent = c.accent[idx];
+            self.perf.cur_pan = c.pan[idx];
+            return c.gate[idx];
+        }
         let p = PATTERN_PRESETS[usize::from(self.perf.pattern_preset) % PATTERN_PRESET_COUNT];
         let idx = self.perf.gate_step % usize::from(p.len);
         self.perf.gate_step = (idx + 1) % usize::from(p.len);
+        self.perf.cur_accent = false;
+        self.perf.cur_pan = PatternPan::Center;
         p.steps[idx]
+    }
+
+    /// Velocity of an arp/poly note: boosted on an accented pattern step.
+    pub(super) fn accent_velocity(&self, velocity: u8) -> u8 {
+        if self.perf.pattern_on && self.perf.cur_accent {
+            velocity.saturating_add(ACCENT_VELOCITY_BOOST).min(127)
+        } else {
+            velocity
+        }
+    }
+
+    /// Pan position of the current pattern step (`0` unless a pattern is on).
+    pub(super) fn step_pan(&self) -> f32 {
+        if self.perf.pattern_on {
+            self.perf.cur_pan.position()
+        } else {
+            0.0
+        }
     }
 
     /// Arp/Poly: advances the pattern at a step boundary; `true` when this step is a rest.
