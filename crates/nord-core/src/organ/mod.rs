@@ -167,6 +167,11 @@ pub struct OrganLayer {
     pub key_click_enabled: bool,
     /// Global Sound/System menu settings (defaults are exact no-ops).
     pub globals: OrganGlobals,
+    /// Pitch stick bend in cents (manual p.18 PSTICK), set with [`Self::set_bend_cents`]. Default
+    /// `0.0` and ratio `1.0` are exact no-ops.
+    bend_cents: f32,
+    /// `2^(bend_cents / 1200)`, the Legacy wheel phase step factor.
+    bend_ratio: f32,
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
     synced_fine_cents: f32,
@@ -255,6 +260,8 @@ impl OrganLayer {
             output_level: OutputLevel::default(),
             key_click_enabled: true,
             globals: OrganGlobals::default(),
+            bend_cents: 0.0,
+            bend_ratio: 1.0,
             tonewheel_freqs: freqs,
             tonewheel_freqs_hz: freqs_hz,
             synced_fine_cents: 0.0,

@@ -43,8 +43,9 @@ impl Stage4Engine {
     }
 
     /// Note after transpose, or `None` when it leaves the MIDI range.
-    pub(super) fn transposed_note(&self, note: u8) -> Option<u8> {
-        let n = i16::from(note) + i16::from(self.effective_transpose());
+    /// Note shifted by `shift` semitones, or `None` when it leaves the MIDI range.
+    pub(super) fn transposed_note_by(&self, note: u8, shift: i8) -> Option<u8> {
+        let n = i16::from(note) + i16::from(shift);
         (0..=127).contains(&n).then_some(n as u8)
     }
 
@@ -76,6 +77,7 @@ impl Stage4Engine {
             piano.set_soft_pedal(false, 0);
         }
         self.morph_controllers = MorphControllers::default();
+        self.organ_trigger.clear();
     }
 }
 

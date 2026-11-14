@@ -4,8 +4,8 @@
 //! "8-12" for the five Device MIDI entries; their order (Mod Wheel, Aftertouch, Control Pedal,
 //! Swell Pedal, Volume Pedal) follows the list in the text and is `ASSUMED`.
 
-use super::{Menu, MenuItem as I, MenuPage, GAP};
-use crate::types::Binding::{Bound, Unsupported as U};
+use super::{Menu, MenuItem as I, MenuPage};
+use crate::types::Binding::Bound;
 
 const VELOCITY: &[&str] = &["Soft", "Mid", "Hard"];
 /// Bank select values; -1 is "--" (Off).
@@ -56,7 +56,7 @@ macro_rules! device_toggles {
                 concat!($label, " A"),
                 true,
                 64,
-                U(GAP),
+                Bound("engine:extern_menu.devices"),
             )
             .assumed(DEVICE_ORDER),
             I::toggle(
@@ -64,7 +64,7 @@ macro_rules! device_toggles {
                 concat!($label, " B"),
                 true,
                 64,
-                U(GAP),
+                Bound("engine:extern_menu.devices"),
             )
             .assumed(DEVICE_ORDER),
             I::toggle(
@@ -72,7 +72,7 @@ macro_rules! device_toggles {
                 concat!($label, " C"),
                 true,
                 64,
-                U(GAP),
+                Bound("engine:extern_menu.devices"),
             )
             .assumed(DEVICE_ORDER),
         ]
@@ -116,11 +116,21 @@ macro_rules! per_layer_int {
 static ECHO: [I; 1] = [I::toggle(
     "extern.1.echo_global",
     "Echo Global To Extern Ch",
-    false,
+    true,
     63,
-    U(GAP),
+    Bound("engine:extern_menu.echo_global"),
+)
+.assumed(
+    "manual default is Off; the emulator feeds the keybed and MIDI In through one path, so On keeps Extern layers playable from MIDI In (engine/extern_menu.rs)",
 )];
-static VEL: [I; 3] = per_layer!("2", "velocity", "Keyboard Velocity", VELOCITY, 1, U(GAP));
+static VEL: [I; 3] = per_layer!(
+    "2",
+    "velocity",
+    "Keyboard Velocity",
+    VELOCITY,
+    1,
+    Bound("engine:extern_menu.velocity")
+);
 static MSB: [I; 3] = per_layer_int!(
     "3",
     "bank_msb",
