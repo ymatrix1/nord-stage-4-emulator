@@ -12,7 +12,7 @@ mod knob;
 mod support;
 mod wheels;
 
-pub use basic::{group_frame, label, led, nord_button, section_frame};
+pub use basic::{group_frame, label, led, nord_button, section_frame, MIN_FONT_PX};
 pub use display::{oled, triangle_matrix_selector};
 pub use faders::{drawbar, layer_strip};
 pub use knob::knob;

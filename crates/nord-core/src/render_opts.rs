@@ -158,6 +158,9 @@ pub struct FirmwareOptions {
     pub b3_tail: Option<bool>,
     /// `--firmware-fx`: every `FirmwareFx` port on every FX chain.
     pub firmware_fx: bool,
+    /// `--firmware-reverb`: only the firmware Spring reverb (`FirmwareFx::reverb`) on every chain,
+    /// on top of whatever `firmware_fx` selects.
+    pub firmware_reverb: bool,
     /// `--firmware-piano-level`: `PianoLayer::firmware_velocity_level`.
     pub piano_firmware_level: bool,
     /// `--firmware-piano-bus`: `PianoLayer::firmware_bus_scale` (opt-in, ASSUMED receiver scale).
@@ -186,6 +189,7 @@ impl Default for FirmwareOptions {
             synth_chain: None,
             b3_tail: None,
             firmware_fx: false,
+            firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
             measured_laws: false,
@@ -214,6 +218,7 @@ impl FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             firmware_fx: true,
+            firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
             measured_laws: false,
@@ -254,6 +259,7 @@ impl FirmwareOptions {
             o.b3_tail = Some(parse_on_off("--b3-tail", v)?);
         }
         o.firmware_fx |= has("--firmware-fx");
+        o.firmware_reverb |= has("--firmware-reverb");
         o.piano_firmware_level |= has("--firmware-piano-level");
         if has("--legacy-piano-level") {
             o.piano_firmware_level = false;
@@ -294,10 +300,20 @@ impl FirmwareOptions {
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
+        if self.firmware_reverb {
+            self.set_reverb(engine);
+        }
         if self.firmware_routing {
             engine.set_firmware_routing(FirmwareRouting::On);
         }
         self.set_organ_level(engine);
+    }
+
+    /// The firmware Spring reverb on every chain (`reverb` switch only).
+    fn set_reverb(&self, engine: &mut Stage4Engine) {
+        for c in engine.fx_chains.iter_mut() {
+            c.firmware_fx.reverb = true;
+        }
     }
 
     /// Sets every path to exactly this value, including back to the engine default. Runs on
@@ -324,6 +340,9 @@ impl FirmwareOptions {
         };
         for c in engine.fx_chains.iter_mut() {
             c.firmware_fx = fx;
+        }
+        if self.firmware_reverb {
+            self.set_reverb(engine);
         }
         engine.piano_a.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
@@ -373,6 +392,9 @@ impl FirmwareOptions {
         }
         if self.firmware_fx {
             parts.push("fx".into());
+        }
+        if self.firmware_reverb {
+            parts.push("reverb".into());
         }
         if !self.piano_firmware_level {
             parts.push("legacy-piano".into());
@@ -519,6 +541,24 @@ mod tests {
         assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
         FirmwareOptions::legacy_all().apply_exact(&mut e);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
+    }
+
+    #[test]
+    fn firmware_reverb_flag_switches_only_the_reverb() {
+        let o = FirmwareOptions::from_args(&args(&["--firmware-reverb"])).unwrap();
+        assert!(o.firmware_reverb && !o.firmware_fx);
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert!(e.fx_chains.iter().all(|c| c.firmware_fx.reverb));
+        assert!(e.fx_chains.iter().all(|c| !c.firmware_fx.delay_laws));
+        assert!(o.summary().contains("reverb"));
+        o.apply_exact(&mut e);
+        assert!(e
+            .fx_chains
+            .iter()
+            .all(|c| c.firmware_fx.reverb && !c.firmware_fx.compressor));
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert!(e.fx_chains.iter().all(|c| !c.firmware_fx.reverb));
     }
 
     #[test]

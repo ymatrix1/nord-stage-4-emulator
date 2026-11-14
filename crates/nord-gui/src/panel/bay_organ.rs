@@ -62,9 +62,10 @@ fn render_model(
         state.organ_ui.b3_bass = b3_bass;
         audio.send_command(AudioCommand::Organ(OrganEdit::Model { model, b3_bass }));
     }
-    tag(painter, btn, "ORGAN MODEL", 25.0);
-    // Six LEDs, two columns of three, with the model names beside them.
+    // Above the model LEDs and their names, not over them.
     let leds = rect_or_empty("organ.model_leds", origin);
+    tag(painter, btn, "ORGAN MODEL", btn.top() - leds.top() + 6.0);
+    // Six LEDs, two columns of three, with the model names beside them.
     let names = [("B3", "BASS"), ("VOX", "FARF"), ("PIPE1", "PIPE2")];
     for i in 0..MODELS.len() {
         let c = pos2(

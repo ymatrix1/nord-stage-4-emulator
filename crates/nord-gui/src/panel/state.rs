@@ -11,6 +11,8 @@ pub struct Stage4PanelState {
     pub synth_ui: super::ui_state::SynthUi,
     pub fx_ui: super::ui_state::FxUi,
     pub program_ui: super::ui_state::ProgramUi,
+    /// Focus / zoom view (B12).
+    pub view: super::view::ViewState,
 
     // Master & Controllers (Bay 1)
     pub master_volume: f32,
@@ -115,6 +117,7 @@ impl Default for Stage4PanelState {
             synth_ui: Default::default(),
             fx_ui: Default::default(),
             program_ui: Default::default(),
+            view: Default::default(),
             master_volume: 0.85,
             pitch_stick: 0.0,
             mod_wheel: 0.0,

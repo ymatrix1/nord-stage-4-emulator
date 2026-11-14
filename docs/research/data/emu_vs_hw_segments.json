@@ -7,6 +7,7 @@
        {"label": "default", "flags": []},
        {"label": "b3wheels", "flags": ["--tone-source", "b3wheels"]},
        {"label": "firmware-fx", "flags": ["--firmware-fx"]},
+       {"label": "fw-reverb", "flags": ["--firmware-reverb"]},
        {"label": "routing", "flags": ["--firmware-routing"]},
        {"label": "b3wheels+routing", "flags": ["--tone-source", "b3wheels", "--firmware-routing"]}]},
     {"id": "organ_vox", "entry": "Program/Bank A/Vintage Vox J3.ns4p", "engine": "organ Vox + Twin amp", "at_s": 2360, "duration_s": 11,
@@ -48,6 +49,11 @@
      "variants": [
        {"label": "default", "flags": []},
        {"label": "firmware-fx", "flags": ["--firmware-fx"]},
-       {"label": "routing", "flags": ["--firmware-routing"]}]}
+       {"label": "fw-reverb", "flags": ["--firmware-reverb"]},
+       {"label": "routing", "flags": ["--firmware-routing"]}]},
+    {"id": "fx_reverb", "entry": "Program/Bank A/B3 Old Forest.ns4p", "engine": "organ B3 + Spring reverb 0.62 (kRvbType 0)", "at_s": 2078, "duration_s": 20,
+     "variants": [
+       {"label": "default", "flags": []},
+       {"label": "fw-reverb", "flags": ["--firmware-reverb"]}]}
   ]
 }

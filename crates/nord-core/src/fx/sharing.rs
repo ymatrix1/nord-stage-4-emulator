@@ -39,6 +39,7 @@ impl LayerFxChain {
         self.reverb_variation = src.reverb_variation;
         self.reverb_mix = src.reverb_mix;
         self.firmware_fx.reverb_mix = src.firmware_fx.reverb_mix;
+        self.firmware_fx.reverb = src.firmware_fx.reverb;
         self.morph.reverb_amount = src.morph.reverb_amount;
     }
 
