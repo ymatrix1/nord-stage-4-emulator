@@ -1,6 +1,7 @@
 //! Asynchronous `.npno` / `.nsmp4` / dropped-file loading for the library drawer.
 
 use super::{short_name, BackupLibraryState, LibraryLoadOutcome};
+use crate::panel::FwMessage;
 use nord_core::cbin::CbinFile;
 use nord_core::piano::NpnoSound;
 use nord_core::synth::SynthSampleSound;
@@ -35,6 +36,7 @@ impl BackupLibraryState {
         }
         let (Some(path), Some(archive)) = (self.backup_path.clone(), self.archive.clone()) else {
             self.error_message = Some("Open an .ns4b archive first".to_string());
+            self.notices.push(FwMessage::PianoNotFound);
             return;
         };
         let entry = entry_name.to_string();
@@ -98,6 +100,7 @@ impl BackupLibraryState {
         }
         let (Some(path), Some(archive)) = (self.backup_path.clone(), self.archive.clone()) else {
             self.error_message = Some("Open an .ns4b archive first".to_string());
+            self.notices.push(FwMessage::SampleNotFound);
             return;
         };
         let entry = entry_name.to_string();
@@ -266,6 +269,9 @@ mod tests {
             lib.error_message.as_deref(),
             Some("Open an .ns4b archive first")
         );
+        assert_eq!(lib.notices, vec![FwMessage::PianoNotFound]);
+        lib.request_sample_entry("Samp Lib/x.nsmp4");
+        assert_eq!(lib.notices[1], FwMessage::SampleNotFound);
         assert_eq!(lib.pending_jobs, 0);
 
         lib.error_message = None;

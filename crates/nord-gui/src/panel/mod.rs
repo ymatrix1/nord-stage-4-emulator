@@ -61,6 +61,7 @@ mod prelude {
 }
 
 pub use bay_program::catalog::LoadRequest;
+pub use bay_program::fw_messages::FwMessage;
 pub use state::Stage4PanelState;
 
 use bay_effects::render_bay_effects;

@@ -15,6 +15,7 @@ mod support;
 mod ui;
 
 use crate::panel::bay_program::store::PER_BANK;
+use crate::panel::FwMessage;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded, SlotIndex};
 use nord_core::piano::{NpnoSound, PianoCategory};
@@ -73,6 +74,9 @@ pub struct BackupLibraryState {
     pub piano_slot_b: bool,
     pub synth_layer_idx: usize,
     pub pending_jobs: usize,
+    /// Firmware messages for the Program OLED raised by loads (`Piano not found`, ...); the panel
+    /// poll turns them into toasts.
+    notices: Vec<FwMessage>,
     pub status_message: String,
     pub error_message: Option<String>,
     /// Where Export backup writes (empty: `<name>-edited.ns4b` next to the opened backup).
@@ -117,6 +121,7 @@ impl BackupLibraryState {
             piano_slot_b: false,
             synth_layer_idx: 0,
             pending_jobs: 0,
+            notices: Vec::new(),
             status_message: "No .ns4b backup loaded".to_string(),
             error_message: None,
             export_path: String::new(),

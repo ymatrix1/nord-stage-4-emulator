@@ -16,6 +16,7 @@ pub mod controls;
 #[cfg(test)]
 mod coverage_tests;
 pub mod frame;
+pub mod fw_messages;
 pub mod interact;
 pub mod list;
 pub mod menu_actions;
