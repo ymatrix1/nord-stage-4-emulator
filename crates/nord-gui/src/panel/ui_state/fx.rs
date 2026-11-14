@@ -8,6 +8,7 @@
 
 mod chain;
 mod echo;
+mod section;
 mod tables;
 mod tap;
 mod unit_edits;
@@ -82,6 +83,9 @@ pub struct FxUi {
     pub tap: TapTempo,
     /// Gesture tracker per button id (tap / hold-to-shift).
     pub trackers: Trackers,
+    /// SECTION EDIT is active (manual p.43): a unit edit reaches the section's other chains.
+    /// The bay copies `ProgramUi::section_edit_active()` here each frame.
+    pub section_edit: bool,
     echo: Option<StateEcho>,
 }
 
@@ -222,6 +226,7 @@ impl FxUi {
             out.push(FxEdit::Sharing(self.sharing()));
         }
         out.extend(self.chains[slot].edits(unit, slot as u8));
+        out.extend(self.section_edits(slot, unit));
         out
     }
 

@@ -4,10 +4,8 @@
 //! s10. The ARM key-down of `Edt_Org_kModel = 5` (`tools/organ_bass_keys.py`, the real firmware code
 //! in the emulator, drawbars `888888888`, velocity 100) writes the bass weight of key `n` into
 //! window 2 of the processor, `DM 0x95241 + (n - 24)`, which multiplies the generator ring note `n`
-//! (slot `0xB32F4 + n - 24`); the drawbar item writes window 1, which is inaudible in the oracle
-//! (zeroing it leaves the chord output bit-identical, `tools/organ_bass_proc.py chain --zero 1`).
-//! Only the weight table lives here: the bass output also depends on per-key lattice words the
-//! key-down writes (`DM 0x954E6..0x95529`), so the stage is **not wired** (section 10 of the research).
+//! (slot `0xB32F4 + n - 24`). Only the first-write weight table lives here; the accumulated state
+//! (window 1 is audible, `G`) is in `b3_bass_state.rs` (research s11) and nothing is wired.
 
 /// First key with a window 2 weight.
 #[allow(dead_code)] // not wired yet (research s10)

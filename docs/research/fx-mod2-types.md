@@ -14,11 +14,12 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 |---|---|---|---|---|
 | 4 CHOR | `0x122E24` / `0x122F55` | `0xC0443740` | **model VERIFIED, ported** | 93 (with 5) |
 | 5 CHOR variation | `0x122F77` / `0x1230AC` | `0xC0443694` | **model VERIFIED, ported** | (above) |
-| 0, 1 PHAS | `0x12379B`, `0x1238FC` | `0xC02BB1E8`, `0xC02BB2C4` | **model VERIFIED, ported (routine only)** | 11 |
-| 2, 3 FLANG | `0x12348D` / `0x123539` | `0xC02BB3A0` | **model VERIFIED, ported (routine only)** | 9 |
+| 0 PHAS | `0x12379B` | `0xC02BB1E8` | **model VERIFIED, ported, wired (s8)** | 11 (with 1) |
+| 1 PHAS | `0x1238FC` | `0xC02BB2C4` | model VERIFIED, ported; **not wired** (s8.3) | (above) |
+| 2, 3 FLANG | `0x12348D` / `0x123539` | `0xC02BB3A0` | **model VERIFIED, ported, wired (s8)** | 9 |
 | 6, 7 VIBE | `0x123C84` / `0x123DB4` | `0xC0279128` | **model VERIFIED, ported, wired** | 45 |
-| 8, 9 ENS | `0x123A7B`, `0x123BD0` | `0xC0441558` | not modelled | 3 |
-| 10, 11 SPIN | `0x123557`, `0x12377D` | `0xC0278FAC` | not modelled | 11 |
+| 8, 9 ENS | `0x123A7B`, `0x123BD0` | `0xC0441558` | model VERIFIED 500/500, ported; **not wired** (s8.3) | 3 |
+| 10, 11 SPIN | `0x123557`, `0x12377D` | `0xC0278FAC` | model VERIFIED 500/500, ported; **not wired** (s8.3) | 11 |
 
 CHOR is used by **93 of 156 programs with Mod 2 enabled (60 %)** and 153 of 255 occurrences (`program-coverage` s6). The wiring is opt-in (`FirmwareFx::mod2`, D22; D32): `ALL` includes it, `DEFAULT` does not.
 
@@ -99,11 +100,13 @@ cargo test -p nord-core --lib fx::fw_mod2_run fx::fw_vibe_stage
 | Routine | pc range | Instructions per call (trace, 1 block) | Oracle check | Rust |
 |---|---|---|---|---|
 | `vibe` (types 6, 7) | `0x123C84..0x123DB3` | 162 | 500/500 (seeds 5 and 7), trace identical | `fw_vibe.rs`, wired (`fw_vibe_stage.rs`) |
-| `flang` (types 2, 3) | `0x12348D..0x123538` | 113 | 100/100, trace identical | `fw_flang.rs`, not wired |
-| `phas0` (type 0) | `0x12379B..0x1238FB` | 206 | 300/300, trace identical | `fw_phas0.rs`, not wired |
-| `phas1` (type 1) | `0x1238FC..0x1239CF` | 149 | 100/100, trace identical | `fw_phas1.rs`, not wired |
+| `flang` (types 2, 3) | `0x12348D..0x123538` | 113 | 100/100, trace identical | `fw_flang.rs`, wired (s8.2) |
+| `phas0` (type 0) | `0x12379B..0x1238FB` | 206 | 300/300, trace identical | `fw_phas0.rs`, wired (s8.2) |
+| `phas1` (type 1) | `0x1238FC..0x1239CF` | 149 | 100/100, trace identical | `fw_phas1.rs`, not wired (s8.3) |
+| `ens` (types 8, 9) | `0x123A7B..0x123BCF` | 147 | 500/500 twice, trace identical | `fw_ens.rs`, not wired (s8) |
+| `spin` (types 10, 11) | `0x123557..0x12377C` | 251 | 500/500 twice, trace identical | `fw_spin.rs`, not wired (s8) |
 
-The translator is `tools/fx_leslie_gen.py`, extended for `lshift`, `max` / `min`, `recips`, `IF EQ / AV / AC`, a conditional exchange and, with the `AVAC` switch, the AV / AC flags of a fixed add or subtract and the AZ / AN flags of float results; `tools/fx_listing_gen.py` selects the routines and sets the switch. The harness (`tools/fx_model_mod2.py`) fills the context window around `I1`, the 0x400 word ring, the self pointer of the phase word and 1 to 3 blocks; scenarios whose float state would overflow (the models have no infinity) are redrawn. One scenario in six zeroes the PHAS 1 phase so that the `IF NE` branch is taken. `ENS` (`0x123A7B`, table reads at `0xC0BD4`, two rings) and `SPIN` (`0x123557`, scratch words `0xC2861..0xC286B`, a second ring `L7 = 0x26C`) are in the listing but their scenarios are not written: **not verified, not ported**.
+The translator is `tools/fx_leslie_gen.py`, extended for `lshift`, `max` / `min`, `recips`, `IF EQ / AV / AC`, a conditional exchange and, with the `AVAC` switch, the AV / AC flags of a fixed add or subtract and the AZ / AN flags of float results; `tools/fx_listing_gen.py` selects the routines and sets the switch. The harness (`tools/fx_model_mod2.py`) fills the context window around `I1`, the 0x400 word ring, the self pointer of the phase word and 1 to 3 blocks; scenarios whose float state would overflow (the models have no infinity) are redrawn. One scenario in six zeroes the PHAS 1 phase so that the `IF NE` branch is taken. `ENS` (`0x123A7B`, table reads at `0xC0BD4`) and `SPIN` (`0x123557`, scratch words `0xC2861..0xC286B`, a second ring `L7 = 0x26C`) have their scenarios since s8: verified and ported.
 
 ### 7.1 VIBE
 
@@ -116,7 +119,7 @@ Structure (EMPIRICAL roles, VERIFIED data flow): a phase accumulator `c[-0x19] +
 
 Words (`fx-type-words.csv`, piano row): `c[-3] = 0`, `c[-8] = 0xBF751DD9`, `c[-9] = 0x3CAE2280`, `c[-12] = 0x3F53D8A3`, `c[-13] = 0x3F69EC52`, `c[-18] = 0xBF53D8A3`, `c[-19] = 0x3F751DD9`, `c[-20] = 0x3DB09D72`, `c[-21] = 0x3F7A8EEC`, `c[3] = 0x3FC9006A`; image row (core 1 SRAM `0xC17A0`, `0xC16FE`): `c[-5] = 1.0`, `c[-4] = -1.0`, `c[-1] = 0x3D800000`, `c[0] = 0x3D9FFF79`, `c[2] = 0x3FBE0029`, `c[-0x20] = 0xFFFFFDA8`. The phase increment word gives `word F / (4 2^32)` Hz: `0.032 Hz` at `v = 0` to `5.2 Hz` at 127 (EMPIRICAL: no recording).
 
-Open: type 7 writes only 3 of the 12 words (`c[-2]`, `c[-23]`, `c[3]`); the stage uses the type 6 words for both (**ASSUMED**). The tap word `c[-0x20]` comes from the image row; the ARM writer at run time is not decoded. Amounts and rates between the 11 samples follow the closed forms (EMPIRICAL). Organ and synth rows are not compared.
+Open: type 7 writes only 3 of the 12 words (`c[-2]`, `c[-23]`, `c[3]`); the stage uses the type 6 words for both (EMPIRICAL, module delta: s8.2). The tap word `c[-0x20]` comes from the image row; the ARM writer at run time is not decoded. Amounts and rates between the 11 samples follow the closed forms (EMPIRICAL). Organ and synth rows are not compared.
 
 ### 7.2 Rust
 
@@ -128,6 +131,63 @@ Open: type 7 writes only 3 of the 12 words (`c[-2]`, `c[-23]`, `c[3]`); the stag
 | `fx/fw_vibe_stage.rs` | 4-frame adapter, the words and laws above; `FirmwareFx::mod2` dispatches types 6, 7; tests |
 
 
+
+## 8. FLANG and PHAS 0 wired; ENS and SPIN verified and ported
+
+Checked 2026-11-14. Commands (SRAM images from `tools/ns4_dsp_images.py` + `tools/ns4_dsp_ldr.py --sram`):
+
+```bash
+python tools/fx_models.py check ens  SRAM/core2_sram.bin --scenarios 500 --seed 5   # 500/500 bit-identical
+python tools/fx_models.py check ens  SRAM/core2_sram.bin --scenarios 500 --seed 7   # 500/500
+python tools/fx_models.py trace ens  SRAM/core2_sram.bin                            # 147 instructions identical
+python tools/fx_models.py check spin SRAM/core2_sram.bin --scenarios 500 --seed 5   # 500/500
+python tools/fx_models.py check spin SRAM/core2_sram.bin --scenarios 500 --seed 7   # 500/500
+python tools/fx_models.py trace spin SRAM/core2_sram.bin                            # 251 instructions identical
+python tools/fx_mod2_tables.py extract SRAM/core2_sram.bin   # ENS / PHAS tables to data/fx-mod2-tables.csv
+python tools/fx_mod2_laws.py rows SRAM/core1_sram.bin        # instance rows to data/fx-mod2-rows.csv
+python tools/fx_mod2_laws.py rust && python tools/fx_mod2_tables.py rust   # fw_mod2_data.rs, fw_mod2_tables.rs
+python tools/fx_mod2_rust_gen.py && python tools/fx_golden_mod2_rest.py > crates/nord-core/src/fx/tests_mod2_golden.rs
+cargo test -p nord-core --lib fx::
+```
+
+### 8.1 Verified models (ENS, SPIN)
+
+| Routine | pc range | Scenario (tools/fx_model_mod2.py) | Oracle check | Rust |
+|---|---|---|---|---|
+| `ens` (types 8, 9) | `0x123A7B..0x123BCF` | phase `c[-8] += c[-6]` read back through `c[-5]`; ring base `c[-0x20]`, pointer `c[-0x1E]` (`L6 = 0x200`); table `0xC0BD4` (1025 words, `docs/research/data/fx-mod2-tables.csv`); `c[0x11]` blocks | 500/500 twice, trace identical | `fw_ens.rs`, golden |
+| `spin` (types 10, 11) | `0x123557..0x12377C` | phase pointer `c[-8]`; ring 1 `L6 = 0xC8` (pointer `c[-0x1D]`, base `c[-0x1C]`); ring 2 `L7 = 0x26C` (base `c[0x1D]`, pointer `c[0x1B]`, modifier `c[0x1E]`); scratch words `0xC2861..0xC286B` (written before read); `c[0x21]` blocks | 500/500 twice, trace identical | `fw_spin.rs`, golden |
+
+Two harness findings. (1) A pre-modify address `dm(m6, i6)` wraps in a circular buffer exactly like the post-modify (`dag_next`); the translator treated it as a plain add, which only mattered once a routine used `m6 = 0x202` with `L6 = 0x200` (ENS). `fx_leslie_ops.plain` and `Pe::plain` now wrap (VIBE, FLANG, PHAS re-checked 60/60). (2) The scenarios redraw a context whose float state turns NaN as well as one that overflows (the models have neither). `fext` / `fdep` / `max` / `min` / the PEx-PEy exchange are new ops of `fw_pe_ops.rs`.
+
+### 8.2 Wired stage: PHAS 0 and FLANG (`fx/fw_mod2_law_stage.rs`)
+
+`FwLawStage` (types 0, 2, 3; same 4 frame buffering as VIBE, latency 4 frames) takes its words from three derived sources, all generated into `fx/fw_mod2_data.rs` by `tools/fx_mod2_laws.py`: the **instance row** of the synth / piano unit in the static FX image (`fx-mod2-rows.csv`, rows at `I1 = 0xB024C` FLANG, `0xB0348` PHAS 0; the ring and self pointers are placeholders that the stage replaces), the **type words** (`fx-type-words.csv`, piano) and the **laws**: the 11 samples of every `kFx2Amt` / `kFx2Rate` write (`fx-param-fits.csv`, piano rows), linear between the samples.
+
+| Type | Words written by a law | Notes |
+|---|---|---|
+| 0 PHAS 0 | Amt: `c[-28]` (table), `c[-27] = 92.84 + 0.2593 v`, `c[-26] = v / 128`; Rate: `c[-32]` phase increment (`0x27CF` at 0, 1 to `0x256145` at 127), `c[-28] = 3.413 + 0.6258 v` | `c[-28]` is written by both ids: `A(amt) R(rate) / R(64)` (ASSUMED, the captures vary one id at a time; 64 is the value of the type switch, which the two laws reproduce within 0.6) |
+| 2, 3 FLANG | Amt: `c[-32]` (feedback, 0 below 47 to `-0.85`), `c[-16]` (swing), `c[-15]`; Rate: `c[-20]` increment (quadratic: `19791 - 0.011 v + 146.02 v^2`), `c[-16]`, `c[-15]` | `c[-16] + c[-15] = -100` at all 22 samples (VERIFIED, `flang_center_plus_swing_is_constant`), so `c[-15] = -100 - c[-16]`; `c[-16]` is `A(amt) R(rate) / R(64)` (the type switch value `-14.285 = -100 / 7` is both laws at 64); type 3 starts from the type 2 words (the capture switched inside module `0xC02BB3A0`: 8 words, then 4) |
+
+PHAS 0 reads a 129 entry gain table through `c[0x1A]` (`0xE3D81`; two tables of 129 values, `fx-mod2-tables.csv`); the stage copies it into the ring array and points `c[0x1A]` there. The self pointers (`c[-0x1F]`, `c[-0x11]`) are set by the stage.
+
+**Engine-rate rescale.** `scale = FIRMWARE_FRAME_RATE_HZ / fs`: the phase increment words are multiplied by `scale`, the FLANG swing and centre (delays in DSP frames) by `1 / scale`, the VIBE tap word (`-600` words, now even and rescaled) by `1 / scale`, so a delay keeps its duration in seconds and an LFO its frequency (tests `phase_increments_scale_with_the_rate_and_delays_with_the_inverse`, `the_tap_keeps_its_duration_when_the_engine_rate_changes`). The coefficients of the biquads and all-passes stay those of 43.4 kHz (**ASSUMED**: a 10 % shift in cutoff at 48 kHz, no resampling). The CHOR stage keeps its DSP frame delays (not rescaled in this change: its ring is 256 frames and the ARM written delays of the soft type are the verified words).
+
+**VIBE type 7.** The type switch to 7 writes 3 words (`c[-2]`, `c[-23]`, `c[3]`) because the capture switched from type 6 inside the same module `0xC0279128` (`fx-type-modules.csv`: 12 words for type 6, 3 for type 7); the other nine (`c[-3]`, the biquad coefficients) are the type 6 words, which the stage uses for both. EMPIRICAL (module-delta reading); a capture of a direct load of type 7 from another module would close it.
+
+### 8.3 Not wired, and why
+
+| Type | State | Blocker |
+|---|---|---|
+| 1 PHAS 1 | routine verified and ported | the instance row holds only the sine polynomial; the all-pass gains `c[-26..-16]` are not written by the type switch or by `kFx2Amt` / `kFx2Rate` (2 words), and the module `0xC02BB2C4` is shared with Amp types 1 to 9, so it is not established that the words come from the Fx2 path. With the words zero the output is silent. |
+| 8, 9 ENS | routine verified and ported | with the image row and the type words the stage output is exactly 0 at every amount: the gain state words (`c[12]` is a smoothed copy of `c[-3]`, but the taps read the ring that the ARM sizes, and the wet path needs words that no capture lists). Not wired rather than guessed. |
+| 10, 11 SPIN | routine verified and ported | the rotor phase word is read through `c[-8]` but never written by the routine; the driver that advances it and the speed ramp (`c[-15] = 42` steps, `c[-17]` / `c[-16]` clamp) are outside it. A stage that advances the phase by `c[-16]` itself diverges (`1e26` at rate 64, bounded only at rate 1): the instance words are incomplete. |
+
+The 11 PHAS programs, 9 FLANG programs and (with 4 to 7) the CHOR / VIBE programs run the firmware stage under `FirmwareFx::mod2`; ENS (3 programs), SPIN (11) and PHAS 1 stay on the engine. Counts from [program-coverage](program-coverage.md) s6: `fx.mod2=PHAS` 12 programs (PHAS 0 is the share with `kFx2Type` 0), `FLANG` 10, `CHOR` 93, `VIBE` 45, `ENS` 3, `SPIN` 11.
+
+### 8.4 Hardware clips
+
+`tools/emu_vs_hw.py` and `docs/research/data/emu_vs_hw_*.json` hold one clip with a Mod 2 firmware type: the organ Vox program of `emu_vs_hw_amp_vox.json` (mod2 type 6, VIBE, with delay and reverb on). No clip isolates FLANG or PHAS 0, none has ENS or SPIN. The only other source in `.reference/` is the demo video of the presets (webm, whole programs, not isolated effects). The wired stages are therefore compared with the oracle (word for word) and not with hardware.
+
 ## Implications
 
 * The engine's chorus (`9 ms`, `4.5 ms` depth, assumed) is not the firmware's: the firmware delays of the soft type are about `2.7 .. 4.2 ms` (`117 .. 180` DSP frames) and its LFO runs at `0.03 .. 1.35 Hz`.
@@ -135,7 +195,7 @@ Open: type 7 writes only 3 of the 12 words (`c[-2]`, `c[-23]`, `c[3]`); the stag
 
 ## Follow-ups
 
-1. ENS and SPIN: write the scenarios of `tools/fx_model_mod2.py` (tables, scratch words, second ring) and add them to `tools/fx_listing_gen.py`; wire FLANG and PHAS (type words, `kFx2Amt` / `kFx2Rate` laws, as in s7.1); the Mod 1 routines RM, A-WAH, PUMP are not started.
+1. Wire ENS, SPIN and PHAS 1 (s8.3: the instance words that no capture lists); the Mod 1 routines RM (`0xC02BB10C`, `0x1239D0`), A-WAH (`0x123E9B`), PUMP (`0x124374` / `0x122D2C`) are not started.
 2. Capture the missing amounts `v = 64 .. 78` and the organ / synth type-switch words.
 3. Compare a hardware recording of a chorus program against `ns4 render-patch --firmware-fx`.
 

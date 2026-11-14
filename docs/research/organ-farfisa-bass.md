@@ -187,7 +187,57 @@ Tools: `tools/organ_bass_keys.py capture` (the real ARM key-down of `Edt_Org_kMo
 
 Consequence: a Rust port that meets the 1 dB line criterion against the oracle needs the per-key section words (`0x954E6..`, `0x955B0..`) and the A-word accumulation rule, not a per-sum gain table. The weight table of this section is exact and committed (`b3_bass_keys.rs`) but **not wired**: `b3_bass_mode` keeps its ASSUMED pickup table, defaults and `render_hash` are unchanged, and no hardware clip comparison (`emu_vs_hw.py`) was made.
 
-Follow-ups: (1) decode the section words the key-down writes per key (slot allocation by key order, pointer pairs, coefficient closed form) from the same ARM capture; (2) the A-word accumulation (several footages and keys onto one ring note, `keydown-zones.md` s6.2); (3) then the per-key response, the Rust stage and chord goldens within 1 dB.
+Follow-ups (superseded by s11: the section words are not the cause; s12 closes the ring weights): (1) decode the section words the key-down writes per key (slot allocation by key order, pointer pairs, coefficient closed form) from the same ARM capture; (2) the A-word accumulation (several footages and keys onto one ring note, `keydown-zones.md` s6.2); (3) then the per-key response, the Rust stage and chord goldens within 1 dB.
+
+## 11. B3 Bass state: the "section words" are not the cause, `G` is (2026-11-14)
+
+Tools: `tools/organ_bass_state.py capture` (the ARM key-down for keys 24..108, [bass-state.csv](data/bass-state.csv) = per-key increments of window 1 / 2 words and the step of `S`), `tools/organ_bass_proc.py measure` (now with `G` pinned to 0; [bass-proc-gain.csv](data/bass-proc-gain.csv)), `sharc-chain` chords with the ring recorded (goldens [bass-chord-goldens.csv](data/bass-chord-goldens.csv): 1, 3 and 10 keys, 3 key orders). Rust: `organ/b3_bass_state.rs` (not wired).
+
+| Finding | Result | Tag |
+|---|---|---|
+| Section words `DM 0x954E6..0x9552F`, `0x9559C..0x955AF`, `0xB4246..` | Not the cause of the state dependence: zeroing `0x954E6..0x95530` changes the chord output by 4 % rms (0.3 dB), `0x9559C..` and `0xB4246..` by 2 %. They are per-key voice records (5 pair groups per key, a second key takes `0x95518..0x95549`, later keys rewrite group 0); the processor listing never addresses them. Correction of s10 | VERIFIED (run, `target` scripts of the commands below) |
+| What flips the gain by 13.4 dB (3-key against 85-key script, ring slot 48) | One word, `DM 0xB44C9` (`G`): copying only that word of the 85-key state into the 3-key state reproduces it (-2.70 to -16.13 dB); `0xB44CA`, `0xB44CB` do not matter | VERIFIED (bisect over the 281 differing words) |
+| Output law | output = `(1 - 0.84 G)` x linear part, to 0.01 at G = 0.2 .. 0.95 and at three ring slots (sweep of the word, G = 0.4 is -3.55 dB) | VERIFIED (run) |
+| Accumulation of `G` | `G = phi(S)`, `S` = plain sum of per-key steps `inc0(key)` (0.0257 for keys 24..36, 0.0262 / 0.0258 / 0.0261 for 60 / 64 / 67), `phi` piecewise linear with slope `2^-n` on `S` in `[n/2, (n+1)/2)` (the ARM halves the step above `G` = 0.5, quarters it above 0.75, ...; a step that crosses a breakpoint is split, key 43 of the ascending run). Order independent. Six replays (1, 3 keys both orders, 10 keys, 85 keys): max error 5e-7 | VERIFIED (run), steps of keys 24..108 derived from one ascending run |
+| Weight windows | **Additive** over the held keys, increments per key in `bass-state.csv` (reproduces every window word of 5 replays exactly). Window 1 is **audible** (zeroing it leaves 36 % of the output rms in the 3-key script; s10 claimed bit-identical, that held only for its script) | VERIFIED (run) |
+| Generator weights `DM 0x95122..` (the ring is `wheel x weight`) | **State dependent and not additive**: a wheel written by a second key keeps a smaller value (0.5465 to 0.4367, 0.3532 to 0.2436, ratios 0.69 to 0.82); the ring amplitude of slot 48 is 0.262 after 3 keys and 0.061 after 85. The rule is not decoded, so the full stage cannot be built | VERIFIED (run), rule OPEN |
+| Processor line gain at G = 0 | Per window a smooth function of the line frequency (bin spread 0.0 to 1.5 dB): window 1 +8.4 dB at 74 Hz, -5.9 at 260 Hz, -29.6 at 1.2 kHz; window 2 +9.1, -2.1, -15.6 | EMPIRICAL (1/6 octave bins) |
+| Processor part against the oracle | `line = ring_amp x (W1 g1(f) + W2 g2(f)) x (1 - 0.84 G)` with the oracle's own ring line amplitudes: 45 lines of 6 chords (1, 3 and 10 keys, press orders ascending, descending, shuffled), max 1.45 dB, rms 0.4 to 0.65 dB, 42 of 45 within 1 dB; coherent sum of the two windows (power sum: 3.1 dB) | VERIFIED (run, `b3_bass_state` test `chord_goldens_match_the_oracle_lines_within_1p5_db`) |
+
+```bash
+python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out target/DSP
+python tools/ns4_dsp_ldr.py target/DSP/dsp_image_1_PNO.bin --sram target/PNO
+uv run --with unicorn --with capstone --with numpy python tools/organ_bass_state.py capture     target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin docs/research/data/bass-state.csv
+python tools/organ_bass_proc.py measure target/PNO/core1_sram.bin <script> out.csv --exe target/release/sharc-chain
+cargo test -p nord-core --lib b3_bass_state
+```
+
+**Not met: the <= 1 dB criterion on a full Bass stage.** The processor half (weights, `G`, line gain) is exact to 1.45 dB given the ring; the ring needs the generator weight rule above. Nothing is wired, `render_hash` is unchanged, and `emu_vs_hw.py` was not run (a stage that is not in the render path cannot change the clip; the bass band delta is therefore 0.00 dB).
+
+## 12. B3 Bass: generator weight rule, key-up, and the wired opt-in stage (2026-11-14)
+
+Tools: `tools/organ_bass_gen.py capture` (ARM key-down of keys 24..108, drawbars `888888888`; data [bass-gen-weights.csv](data/bass-gen-weights.csv) = table `T` and writes per wheel and key), `cap` scripts for the real MIDI path (`arm_zone_capture.prepare` + note-on / note-off, local only). Rust: `organ/b3_bass_gen.rs` (rule), `organ/b3_bass_stage.rs` (stage), `organ/gain_fir.rs` (FIR design shared with the Farfisa stage).
+
+| Finding | Result | Tag |
+|---|---|---|
+| Rule of the generator weights `DM 0x95122 + (note - 36)` | The word of a wheel is a **pure function of the number `n` of earlier writes to that wheel still held**: `weight(note, n) = T[note][n]`, `T[note][0]` = the first-write amplitude `A`. Not additive; not dependent on the key, the footage item (drawbar or percussion), the press order or the drawbar levels (a zero drawbar still writes). 297 of 297 writes of 9 sequences (single key, 60 + 60, 60 + 72, 60 + 67, 67 + 60, 60 64 67, 8 keys, all 85 keys) match `T` bit for bit | VERIFIED (run, `tools/organ_bass_gen.py`, test `chord_words_match_the_arm_key_down`) |
+| Size of the table | 79 wheels (notes 36..114), up to 27 writes per wheel at the top of the keyboard; the words of notes 12..35 stay 0 in the image, so ring slots 0..23 are silent | VERIFIED (image, run) |
+| Shape of `T[note]` | falls monotonically; ratio `T[1]/T[0]` is 0.78 to 0.82 on wheels 60 to 96 and 0.94 to 0.96 on wheels 36 and 48, the ratios of one wheel approach 1 (wheel 79: 0.785, 0.820, 0.841, ...). No closed form found (reciprocal, power and exponential forms leave 0.3 to 1.3 % residual); the table is committed | VERIFIED (table), law OPEN |
+| Key-up (real MIDI path, notes 60 64 67, key-up of 64) | The key's writes are removed one by one and the word becomes `T[note][held - 1]` (wheel 88 back to 0.54649, wheel 83 passes 0.37065 and ends at 0.46984, wheel 76 with no other holder returns to `T[0]` = 0.39976). Window words go back to the sum of the remaining keys (the burst of tick 117 rewrites them with float residues of 2e-5). `G` first drops by the step of the key (0.01346 to 0.00897) and then an idle rebuild sets 0.01071, 19 % above the replay (0.01 dB of output scale) | VERIFIED (one run), rebuild ASSUMED to be a resync |
+| Real MIDI path against the direct item call | Same weights per wheel (first writes and the table agree), but the real path uses the default program's drawbars (8 footages written for key 60, `G` steps 0.0045 instead of 0.0262, 5 1/3' of key 64 at wheel 59). The key tables of s10 / s11 are the `888888888` direct call; the stage uses them for every drawbar setting | VERIFIED (run), consequence ASSUMED |
+| Ring check | wheel 60 after 85 keys is 0.2313 of its first write (11 writes); with 0.262 after 3 keys this gives the 0.061 of s11 | VERIFIED (test `all_keys_pull_the_weights_down_by_the_arm_table`) |
+
+**Stage** (`--b3-bass-processor on`, `OrganLayer::set_b3_bass_processor`): `ring[s] = wheel(note s + 12) * T`, `x1 = sum W1[k] ring[k]`, `x2 = sum W2[k] ring[12 + k]`, two 511-tap linear-phase FIRs from the measured window gains (`bass-proc-gain.csv`), output `* (1 - 0.84 G)`, folded into one coefficient per wheel and window and ramped over 2 ms. It needs `ToneWheelSource::B3Wheels` on a B3 Bass layer; turning it on selects the wheel tables without the B3 tail.
+
+| Check | Result |
+|---|---|
+| Chord 60 64 67 against `bass-chord-goldens.csv` rows `g3` (6 lines, 1 s render at 48 kHz, Goertzel at the stage frequencies, `cargo test -p nord-core --lib chord_lines_follow_the_oracle_goldens`) | +1.06, +1.42, +1.55, +2.50, +1.67, +1.57 dB (stage louder). Mean +1.6 dB: the oracle values are 8192-point Hann lines and read up to 1.4 dB low (scalloping, the ring line of slot 48 reads 0.262 where `A x table` is 0.289, -0.85 dB); the rest is the magnitude-only FIR and the project tuning. **Not within the 1 dB bar** for slot 48 (2.5 dB) |
+| Key-up, octave shift, ring-down | tests `release_rings_down_to_silence_and_stays_finite`, `octave_shift_registers_the_transposed_key_and_releases_it` |
+| Default render | `render_hash` unchanged (flag off by default, no code path changes when off) |
+
+**Clip comparison and default (D22, D41).** The B3 clip of [organ-presence-gap](organ-presence-gap.md) (`B3 Chords n Solo`) plays the **B3** model, not B3 Bass: the stage requires `b3_bass_mode`, so the bass band delta of `emu_vs_hw.py` with and without `--b3-bass-processor on` is **0.00 dB by construction**; no hardware clip of a B3 Bass program is available, and the chord check above is 1.1 to 2.5 dB. No default is flipped.
+
+Still open: the stage does not model the drawbar and percussion settings (the key tables are the `888888888` key-down; the real default program writes smaller window steps, so levels differ), the bit-exact `0x122296` model (with the 1.45 dB residual of the processor part), the scanner inside the processor, the closed form of `T`, the `G` resync after a key-up, and a B3 Bass hardware clip.
 
 ## Implications
 

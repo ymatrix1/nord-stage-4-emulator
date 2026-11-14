@@ -57,6 +57,15 @@ pub fn trigger(g: Gesture, shift: bool, has_shift_fn: bool, hold_shifts: bool) -
     }
 }
 
+/// Legend ink: full, or the dimmed colour that keeps the legibility floor.
+fn legend_ink(c: Color32, dim: bool) -> Color32 {
+    if dim {
+        dim_legend(c)
+    } else {
+        c
+    }
+}
+
 fn tone(c: Color32, dim: bool) -> Color32 {
     if dim {
         c.gamma_multiply(DIM)
@@ -87,7 +96,7 @@ pub fn legend(p: &Painter, rect: Rect, text: &str, dim: bool) {
         pos2(rect.center().x, rect.bottom() + 7.0),
         text,
         6.0,
-        tone(Color32::from_gray(225), dim),
+        legend_ink(Color32::from_gray(225), dim),
         Align2::CENTER_CENTER,
     );
 }

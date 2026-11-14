@@ -24,15 +24,19 @@ mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_table_d;
 mod fw_filter_tables;
+mod fw_misc;
 mod fw_shape;
 mod fw_sine3;
 mod fw_sine_hp;
 mod fw_sine_warps;
 mod fw_stages;
 mod fw_strip_cutoff;
+mod fw_sub;
 mod fw_super1;
 mod fw_sync;
+mod fw_sync1;
 mod fw_sync3;
+mod fw_sync6;
 mod fw_sync_table;
 mod gain_dezip;
 mod hw_saw;
@@ -106,6 +110,10 @@ mod tests_fw_stage_golden4;
 mod tests_fw_stage_golden5;
 #[cfg(test)]
 mod tests_fw_stage_golden6;
+#[cfg(test)]
+mod tests_fw_stage_golden7;
+#[cfg(test)]
+mod tests_fw_stage_golden8;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
@@ -229,8 +237,10 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
-    /// `SAMPLES` oscillator only, opt-in (default off): pick the 12-tap kernel with the firmware
-    /// key rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
+    /// `SAMPLES` oscillator only (default on, D40): pick the 12-tap kernel with the firmware key
+    /// rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
+    /// VERIFIED: the voice update stores the played key (`[voice + 8]`) and sends the kernel base
+    /// `0x9243B = 0xE4000 + 0xC00 k` for `k = key rule(key)` (`tools/arm_sy_voice.py`).
     pub sample_kernel_by_key: bool,
     /// `SAMPLES` oscillator only, opt-in (default off): the note-to-step ratio follows the firmware
     /// exponent tables (`sinc::pitch_law::key_ratio`) instead of exact `2^(n/12)`.
@@ -383,7 +393,7 @@ impl SynthLayer {
             p_wave: PWave::Other,
             strip_stage: None,
             strip_stages: true,
-            sample_kernel_by_key: false,
+            sample_kernel_by_key: true,
             sample_pitch_fw: false,
             osc_shape_category: false,
             strip_cache: None,

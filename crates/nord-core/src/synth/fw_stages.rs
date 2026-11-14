@@ -9,13 +9,17 @@
 //! from the program P block (voice ratios, weights, spread word) are not known (the P-block writer
 //! is open, OQ22): they are the ASSUMED constants below.
 
+use super::fw_misc::{fm_core, fm_ratio, lowpass_sample, pink_sample, PINK_ROWS};
 use super::fw_shape::signed_phase;
 use super::fw_sine3::shape_sine3_core;
 use super::fw_sine_hp::{shape_sine_hp_core, OutputHighPass};
 use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
+use super::fw_sub::sub_core;
 use super::fw_super1::super1_sample;
 use super::fw_sync::sync2_core;
+use super::fw_sync1::sync1_core;
 use super::fw_sync3::sync3_core;
+use super::fw_sync6::{sync6_core, sync7_core, sync8_core};
 use super::gain_dezip::SY_FRAME_RATE_HZ;
 use super::hw_saw::{SAW_A, SAW_B, SAW_C};
 
@@ -40,14 +44,30 @@ pub enum FwStage {
     ShapeSineGain,
     /// SHAPE SINE wave 5 (stage `0x122F1F`, resonant sine).
     ShapeSineRes,
+    /// SYNC wave 1 (stage `0x1226DD`, saw-family helpers on a table-ratio phase, high pass).
+    Sync1,
     /// SYNC wave 2 (stage `0x122A32`, hard-sync saw pair with a table-driven ratio).
     Sync2,
     /// SYNC waves 3..5 (stage `0x122C5C`, square edges on a table-driven sync phase, high pass).
     Sync3,
+    /// SYNC wave 6 (stage `0x1239BE`, `Sync3` family without pulse word and high pass).
+    Sync6,
+    /// SYNC wave 7 (stage `0x123C7C`, three stacked edges and the SYNC 6 ramp).
+    Sync7,
+    /// SYNC wave 8 (stage `0x123FE9`, the same family with a doubled ratio).
+    Sync8,
     /// SHAPE SINE wave 3 (stage `0x12377D`, warp plus two band-limited cubes).
     ShapeSine3,
     /// SHAPE SINE wave 4 (stage `0x120DAB`, folded sine with an output high pass).
     ShapeSineHp,
+    /// SUB OSC wave 0 (stage `0x12179A`, a saw plus a square one octave down).
+    SubOsc,
+    /// MISC wave 0 (stage `0x122030`, pink noise with an output high pass).
+    MiscPink,
+    /// MISC wave 1 (stage `0x122151`, low-passed noise).
+    MiscLowpass,
+    /// MISC wave 2 (stage `0x122417`, sine with a cubed phase-modulated level).
+    MiscFm,
 }
 
 impl FwStage {
@@ -55,8 +75,16 @@ impl FwStage {
     pub fn from_category_wave(category: u8, wave: u8) -> Option<Self> {
         match (category, wave) {
             (0, 6) => Some(Self::Noise),
+            (1, 0) => Some(Self::SubOsc),
+            (7, 0) => Some(Self::MiscPink),
+            (7, 1) => Some(Self::MiscLowpass),
+            (7, 2) => Some(Self::MiscFm),
+            (2, 1) => Some(Self::Sync1),
             (2, 2) => Some(Self::Sync2),
             (2, 3..=5) => Some(Self::Sync3),
+            (2, 6) => Some(Self::Sync6),
+            (2, 7) => Some(Self::Sync7),
+            (2, 8) => Some(Self::Sync8),
             (3, 2) => Some(Self::ShapeSquare),
             (6, 0) => Some(Self::Super),
             (6, 1) => Some(Self::Super1),
@@ -160,8 +188,14 @@ pub struct FwStageState {
     pub noise: u32,
     /// Voice phases in cycles (SUPER uses 8, MULTI 3).
     pub phases: [f32; 8],
-    /// Output high pass of SHAPE SINE wave 4.
+    /// Output high pass of SHAPE SINE wave 4, SYNC 1 / 3 and MISC 0 / 2.
     pub hp: OutputHighPass,
+    /// MISC 0 pink noise rows.
+    pub pink: [f32; PINK_ROWS],
+    /// MISC 0 frame counter.
+    pub counter: u32,
+    /// MISC 1 low-pass state.
+    pub lp: f32,
 }
 
 impl Default for FwStageState {
@@ -170,6 +204,9 @@ impl Default for FwStageState {
             noise: NOISE_SEED,
             phases: [0.0; 8],
             hp: OutputHighPass::default(),
+            pink: [0.0; PINK_ROWS],
+            counter: 0,
+            lp: 0.0,
         }
     }
 }
@@ -206,8 +243,28 @@ impl FwStageState {
             FwStage::ShapeSineRes => shape_sine_res(t, i_sy, ctrl),
             FwStage::Sync2 => sync2_core(t, i_sy, ctrl),
             FwStage::Sync3 => self.hp.process(sync3_core(t, i_sy, ctrl)),
+            FwStage::Sync1 => self.hp.process(sync1_core(t, i_sy, ctrl)),
+            FwStage::Sync6 => sync6_core(t, i_sy, ctrl),
+            FwStage::Sync7 => sync7_core(t, i_sy, ctrl),
+            FwStage::Sync8 => sync8_core(t, i_sy, ctrl),
             FwStage::ShapeSine3 => shape_sine3_core(t, i_sy, ctrl),
             FwStage::ShapeSineHp => self.hp.process(shape_sine_hp_core(t, i_sy, ctrl)),
+            FwStage::SubOsc => {
+                // the firmware phase advances at half the pitch increment (saw at `2 u`)
+                let y = sub_core(self.phases[0], dt, i_sy, ctrl);
+                self.phases[0] = (self.phases[0] + 0.5 * dt) % 1.0;
+                y
+            }
+            FwStage::MiscPink => {
+                let x = pink_sample(&mut self.pink, &mut self.counter, &mut self.noise);
+                self.hp.process(x)
+            }
+            FwStage::MiscLowpass => lowpass_sample(&mut self.lp, &mut self.noise),
+            FwStage::MiscFm => {
+                let y = fm_core(t, self.phases[0], i_sy, ctrl);
+                self.phases[0] = (self.phases[0] + dt * fm_ratio(i_sy, ctrl)) % 1.0;
+                self.hp.process(y)
+            }
             FwStage::Super1 => super1_sample(&mut self.phases, dt, i_sy, ctrl),
             FwStage::Multi => {
                 let mut sum = 0.0;
@@ -311,10 +368,22 @@ mod tests {
         assert_eq!(FwStage::from_category_wave(4, 6), None);
         assert_eq!(FwStage::from_category_wave(3, 0), None);
         assert_eq!(FwStage::from_category_wave(2, 2), Some(FwStage::Sync2));
-        assert_eq!(FwStage::from_category_wave(2, 1), None);
         assert_eq!(FwStage::from_category_wave(2, 3), Some(FwStage::Sync3));
         assert_eq!(FwStage::from_category_wave(2, 5), Some(FwStage::Sync3));
-        assert_eq!(FwStage::from_category_wave(2, 6), None);
+        assert_eq!(FwStage::from_category_wave(2, 6), Some(FwStage::Sync6));
+        assert_eq!(FwStage::from_category_wave(2, 8), Some(FwStage::Sync8));
+        assert_eq!(FwStage::from_category_wave(2, 7), Some(FwStage::Sync7));
+        assert_eq!(FwStage::from_category_wave(2, 1), Some(FwStage::Sync1));
+        assert_eq!(FwStage::from_category_wave(2, 0), None);
+        assert_eq!(FwStage::from_category_wave(1, 0), Some(FwStage::SubOsc));
+        assert_eq!(FwStage::from_category_wave(1, 1), None);
+        assert_eq!(FwStage::from_category_wave(7, 0), Some(FwStage::MiscPink));
+        assert_eq!(
+            FwStage::from_category_wave(7, 1),
+            Some(FwStage::MiscLowpass)
+        );
+        assert_eq!(FwStage::from_category_wave(7, 2), Some(FwStage::MiscFm));
+        assert_eq!(FwStage::from_category_wave(7, 3), None);
     }
 
     #[test]
@@ -326,6 +395,10 @@ mod tests {
             FwStage::Super1,
             FwStage::Sync2,
             FwStage::Sync3,
+            FwStage::Sync1,
+            FwStage::Sync6,
+            FwStage::Sync7,
+            FwStage::Sync8,
             FwStage::Multi,
             FwStage::ShapeSine,
             FwStage::ShapeSineFold,
@@ -333,6 +406,10 @@ mod tests {
             FwStage::ShapeSineRes,
             FwStage::ShapeSine3,
             FwStage::ShapeSineHp,
+            FwStage::SubOsc,
+            FwStage::MiscPink,
+            FwStage::MiscLowpass,
+            FwStage::MiscFm,
         ] {
             let (mut a, mut b) = (FwStageState::default(), FwStageState::default());
             let dt = 220.0 / 48_000.0;

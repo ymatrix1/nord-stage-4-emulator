@@ -21,6 +21,8 @@ pub(super) struct Sim {
     pub(super) full: bool,
     /// Area the detailed view occupied in the last full-panel frame.
     pub(super) visible: Rect,
+    /// Size of the egui screen (the full panel at zoom 1 is 3120 x 840 px).
+    pub(super) screen: egui::Vec2,
 }
 
 impl Sim {
@@ -36,6 +38,7 @@ impl Sim {
             shapes: Vec::new(),
             full: false,
             visible: Rect::NOTHING,
+            screen: vec2(1700.0, 600.0),
         };
         s.frame(vec![], Modifiers::NONE);
         s
@@ -54,7 +57,7 @@ impl Sim {
     pub(super) fn frame(&mut self, events: Vec<Event>, modifiers: Modifiers) {
         self.time += 0.04;
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1700.0, 600.0))),
+            screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.screen)),
             time: Some(self.time),
             events,
             modifiers,

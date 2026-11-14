@@ -31,6 +31,7 @@ pub(super) fn render_bay_piano(
     let shift = ui.input(|i| i.modifiers.shift) || state.piano_ui.shift_latch;
 
     section_frame(painter, to_px(section_rect(Section::Piano), o), "PIANO");
+    super::frames::paint_frames(painter, o, Section::Piano);
     draw_shift_latch(ui, painter, o, state);
     draw_strip(ui, painter, o, state, shift, &mut out);
     render_select(ui, painter, o, state, shift, &mut out);

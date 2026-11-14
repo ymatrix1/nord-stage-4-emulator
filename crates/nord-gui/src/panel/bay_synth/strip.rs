@@ -1,7 +1,7 @@
 //! Layer strip of the Synth section: ON, layer buttons, focus / aux LEDs, faders, ladders,
 //! OCTAVE SHIFT, KB ZONE LEDs (manual p.27-28).
 
-use super::widgets::{dot, fader, gesture_of, ladder, pad, tiny, LEGEND, LEGEND_DIM};
+use super::widgets::{dot, fader, gesture_of, ladder, legend_dim, pad, tiny, LEGEND};
 use crate::audio::SynthEdit;
 use crate::panel::aux_flag::{aux_flag_from_telemetry, aux_led};
 use crate::panel::layout_px::rect_or_empty;
@@ -74,7 +74,7 @@ fn layer_pad(
         let why = unsupported_reason(sid);
         let lit = if i == 0 { sui.sustped } else { sui.pstick };
         let col = match (why.is_some(), lit) {
-            (true, _) => LEGEND_DIM,
+            (true, _) => legend_dim(),
             (false, true) => LED_AMBER,
             (false, false) => LEGEND,
         };
@@ -140,7 +140,12 @@ pub(super) fn paint_strip(
         let fr = rect_or_empty(FADERS[i], o);
         sui.mark(FADERS[i]);
         if fader(ui, p, FADERS[i], fr, &mut levels[i]) {
-            send_layer(audio, i, levels[i], on);
+            // SECTION EDIT: the other Synth layers take the same level.
+            let moved = levels[i];
+            for j in crate::panel::section_edit::layers_for(i, 3, sui.section_edit) {
+                levels[j] = moved;
+                send_layer(audio, j, moved, active[j] && sui.section_on);
+            }
         }
         sui.mark(LADDERS[i]);
         ladder(

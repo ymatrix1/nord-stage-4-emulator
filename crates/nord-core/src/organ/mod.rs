@@ -5,7 +5,10 @@
 //! `vibrato_bank` (12-TET ladder, detune table, group gains), `tonewheel` (91-wheel
 //! generator), `keyclick`, `scanner`, `rotary`.
 
+mod b3_bass_gen;
 mod b3_bass_keys;
+mod b3_bass_stage;
+mod b3_bass_state;
 mod b3_keys;
 mod b3_tail;
 mod b3_weights;
@@ -16,6 +19,7 @@ mod farfisa_keys;
 mod farfisa_proc_gain;
 mod farfisa_wheels;
 mod firmware_bank;
+mod gain_fir;
 mod globals;
 mod keyclick;
 mod lane_mix;
@@ -206,6 +210,9 @@ pub struct OrganLayer {
     farfisa_wheels: FarfisaWheels,
     farfisa_synced: (f32, f32),
     farfisa_keys: farfisa_keys::FarfisaKeys,
+    /// Opt-in B3 Bass processor stage (`set_b3_bass_processor`, `b3_bass_stage.rs`).
+    b3_bass_processor: bool,
+    b3_bass: Option<Box<b3_bass_stage::B3BassStage>>,
     lane_mixer: LaneMixer,
     weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
@@ -300,6 +307,8 @@ impl OrganLayer {
             farfisa_synced: (0.0, f32::NAN),
             farfisa_keys: farfisa_keys::FarfisaKeys::new(),
             farfisa_processor: false,
+            b3_bass_processor: false,
+            b3_bass: None,
             lane_mixer: LaneMixer::new(sample_rate),
             weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
@@ -362,6 +371,7 @@ impl OrganLayer {
             self.held_notes[idx] = true;
             self.note_gains[idx] = gain.clamp(0.0, 1.0);
             self.b3_weights.mark();
+            self.b3_bass_key(idx, true);
             let drawbars = *self.active_drawbars();
             self.weight_state.key_down(
                 idx as u8,
@@ -387,6 +397,7 @@ impl OrganLayer {
         if self.held_notes[idx] {
             self.held_notes[idx] = false;
             self.b3_weights.mark();
+            self.b3_bass_key(idx, false);
             self.weight_state.key_up(idx as u8);
             self.active_key_count = self.active_key_count.saturating_sub(1);
             let click_scale = match self.model {
@@ -415,6 +426,7 @@ impl OrganLayer {
             && !(self.firmware_weights() && self.weight_state.active())
             && !(self.b3_weights_active() && self.b3_weights.active())
             && !(self.farfisa_keys_active() && self.farfisa_keys.active())
+            && !self.b3_bass_sounding()
             && self.click_env < 1e-6
             && self.click_bp_state[0].abs() < 1e-6
         {
