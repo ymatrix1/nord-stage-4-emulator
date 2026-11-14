@@ -9,6 +9,7 @@
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
 pub mod aux_pedal_params;
+pub mod editor;
 pub mod fx_extra_params;
 pub mod fx_params;
 pub mod fx_selectors;
@@ -41,14 +42,21 @@ pub struct NordStage4Plugin {
     pub params: Arc<Stage4Params>,
     pub engine: Stage4Engine,
     pub sample_rate: f32,
+    /// Producer end of the keybed queue, handed to the editor.
+    pub note_tx: editor::notes::NoteSender,
+    /// Consumer end, drained at the start of every `process()` block.
+    pub note_rx: editor::notes::NoteReceiver,
 }
 
 impl Default for NordStage4Plugin {
     fn default() -> Self {
+        let (note_tx, note_rx) = editor::notes::note_queue(editor::notes::NOTE_QUEUE_CAPACITY);
         Self {
             params: Arc::new(Stage4Params::default()),
             engine: Stage4Engine::new(44100.0),
             sample_rate: 44100.0,
+            note_tx,
+            note_rx,
         }
     }
 }
@@ -78,6 +86,10 @@ impl Plugin for NordStage4Plugin {
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        editor::create(self.params.clone(), self.note_tx.clone())
     }
 
     fn initialize(
@@ -112,12 +124,18 @@ impl Plugin for NordStage4Plugin {
             self.engine.master_clock.bpm = transport as f32;
         }
 
+        let mode = self.params.midi_mode.value();
+
+        // On-screen keybed events queued by the editor (lock-free, no allocation).
+        while let Some(ev) = self.note_rx.pop() {
+            editor::notes::apply_to_engine(&mut self.engine, &self.params, mode, ev);
+        }
+
         // Process incoming MIDI and note events
         let mut next_event = context.next_event();
         let num_samples = buffer.samples();
         let mut sample_idx = 0;
 
-        let mode = self.params.midi_mode.value();
         let channels = buffer.as_slice();
 
         while sample_idx < num_samples {
@@ -225,6 +243,55 @@ mod tests {
         fn send_event(&mut self, _event: NoteEvent<()>) {}
         fn set_latency_samples(&self, _samples: u32) {}
         fn set_current_voice_capacity(&self, _capacity: u32) {}
+    }
+
+    #[test]
+    fn test_editor_keybed_note_reaches_process_output() {
+        let mut plugin = NordStage4Plugin::default();
+        let mut init_ctx = MockInitContext;
+        plugin.initialize(
+            &NordStage4Plugin::AUDIO_IO_LAYOUTS[0],
+            &BufferConfig {
+                sample_rate: 48000.0,
+                min_buffer_size: None,
+                max_buffer_size: 512,
+                process_mode: ProcessMode::Realtime,
+            },
+            &mut init_ctx,
+        );
+        assert!(plugin.note_tx.push(nord_core::midi::MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 100,
+        }));
+
+        let mut peak = 0.0f32;
+        let mut transport: Transport = unsafe { MaybeUninit::zeroed().assume_init() };
+        transport.sample_rate = 48000.0;
+        let mut context = MockProcessContext { transport };
+        for _ in 0..32 {
+            let mut left_buf = [0.0f32; 128];
+            let mut right_buf = [0.0f32; 128];
+            let channel_slices: Vec<&mut [f32]> = vec![&mut left_buf[..], &mut right_buf[..]];
+            let mut buffer = Buffer::default();
+            unsafe {
+                buffer.set_slices(128, |output| {
+                    *output = channel_slices;
+                });
+            }
+            let mut aux = AuxiliaryBuffers {
+                inputs: &mut [],
+                outputs: &mut [],
+            };
+            plugin.process(&mut buffer, &mut aux, &mut context);
+            peak = buffer
+                .as_slice()
+                .iter()
+                .flat_map(|c| c.iter())
+                .fold(peak, |m, v| m.max(v.abs()));
+        }
+        assert!(plugin.note_rx.is_empty(), "process() must drain the queue");
+        assert!(peak > 0.0, "queued key press produced no audio");
     }
 
     #[test]

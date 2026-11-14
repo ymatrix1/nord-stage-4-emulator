@@ -8,6 +8,7 @@ mod command;
 mod edits;
 mod frame;
 mod handle;
+#[cfg(feature = "app")]
 mod io;
 
 pub use apply::apply_audio_command;
@@ -18,6 +19,7 @@ pub use edits::{
 };
 pub use frame::{f32_to_i16, render_frame_to_f32, render_frame_to_i16};
 pub use handle::AudioHandle;
+#[cfg(feature = "app")]
 pub use io::{handle_midi_bytes, start_audio_and_midi};
 
 #[cfg(test)]

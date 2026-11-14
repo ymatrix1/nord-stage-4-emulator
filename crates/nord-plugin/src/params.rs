@@ -146,6 +146,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fxy", group = "Layer FX Sharing")]
     pub layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank,
 
+    /// Editor window size, persisted with the plugin state (not a host parameter).
+    #[persist = "editor-state"]
+    pub editor_state: std::sync::Arc<nih_plug_egui::EguiState>,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -377,6 +381,7 @@ impl Default for Stage4Params {
             piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
             layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
             layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank::default(),
+            editor_state: crate::editor::default_editor_state(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
