@@ -37,6 +37,8 @@
        {"label": "piano-bus", "flags": ["--firmware-piano-bus"]},
        {"label": "vel-64", "velocity": 64, "flags": []},
        {"label": "vel-64-piano-bus", "velocity": 64, "flags": ["--firmware-piano-bus"]},
+       {"label": "vel-88", "velocity": 88, "flags": []},
+       {"label": "vel-88-piano-bus", "velocity": 88, "flags": ["--firmware-piano-bus"]},
        {"label": "routing", "flags": ["--firmware-routing"]}]},
     {"id": "synth_lead", "entry": "Program/Bank A/Smooth Lead.ns4p", "engine": "synth Triangle LP24", "at_s": 2420, "duration_s": 22,
      "variants": [

@@ -21,6 +21,13 @@ impl SynthUi {
             .and_then(|d| d.unsupported)
     }
 
+    /// The Waveform button is held: KEEP EDITS while browsing samples (manual p.29).
+    pub fn keep_edits(&self) -> bool {
+        self.trackers
+            .get("synth.waveform")
+            .is_some_and(|t| t.is_down())
+    }
+
     /// Turn dial `dial` (0 left, 1 middle, 2 right) by `steps` clicks. `shift` is SHIFT held.
     pub fn turn_dial(&mut self, dial: usize, steps: i32, shift: bool) {
         if steps == 0 || dial > 2 {
@@ -66,7 +73,11 @@ impl SynthUi {
                         |l| l.sample_bright = on,
                     );
                 }
-                _ => {} // CAT / SAMPLE: the Sample Library is not wired (dial_defs says so).
+                // CAT / SAMPLE: browse the opened backup's samples and queue the load. Holding
+                // Waveform while turning is KEEP EDITS (manual p.29): the engine only swaps the
+                // audio and never overwrites the layer's edits, so it holds in both cases.
+                1 => self.samples.turn_cat(self.focus.min(2), steps),
+                _ => self.samples.turn_sample(self.focus.min(2), steps),
             }
             return;
         }
@@ -245,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn sample_bright_dial_sets_the_timbre_and_cat_sample_dials_do_nothing() {
+    fn sample_bright_dial_sets_the_timbre_and_cat_sample_dials_browse_the_library() {
         let mut s = SynthUi::new();
         s.layer_mut().sample_mode = true;
         s.turn_dial(0, 1, false);
@@ -253,9 +264,48 @@ mod tests {
         assert!(params(&mut s).contains(&SynthParam::SampleTimbre(SampleTimbre::Bright)));
         s.turn_dial(1, 3, false);
         s.turn_dial(2, 3, false);
-        assert!(s.take_edits().is_empty());
-        assert!(s.dial_unsupported(1).is_some());
+        assert!(s.take_edits().is_empty(), "no library, nothing queued");
+        assert!(s.samples.take_requests().is_empty());
         assert!(s.dial_unsupported(0).is_none());
+        assert!(s.dial_unsupported(1).is_none());
+        assert!(s.dial_unsupported(2).is_none());
+    }
+
+    #[test]
+    fn sample_dials_queue_loads_for_the_focused_layer() {
+        let mut s = SynthUi::new();
+        s.samples.set_catalog(&[
+            "Samp Lib/Bass/Fretless.nsmp4".into(),
+            "Samp Lib/Bass/Slap.nsmp4".into(),
+            "Samp Lib/Choir/Aahs.nsmp4".into(),
+        ]);
+        s.focus_layer(1);
+        s.layer_mut().sample_mode = true;
+        s.turn_dial(2, 1, false);
+        s.turn_dial(2, 1, false);
+        assert_eq!(
+            s.samples.take_requests(),
+            vec![(1, "Samp Lib/Bass/Slap.nsmp4".to_string())]
+        );
+        s.turn_dial(1, 1, false);
+        assert_eq!(s.samples.category(1), Some("Choir"));
+        assert_eq!(s.samples.take_requests()[0].0, 1);
+        assert!(s.samples.entry(0).is_none(), "layer A untouched");
+    }
+
+    #[test]
+    fn keep_edits_holds_with_and_without_the_waveform_button() {
+        let mut s = SynthUi::new();
+        s.samples.set_catalog(&["Samp Lib/Bass/Slap.nsmp4".into()]);
+        s.layer_mut().sample_mode = true;
+        s.layer_mut().amp_env.release = 2.5;
+        s.turn_dial(2, 1, false);
+        assert!(!s.keep_edits());
+        s.tracker("synth.waveform").press(0);
+        assert!(s.keep_edits());
+        s.turn_dial(2, -1, false);
+        assert_eq!(s.layer().amp_env.release, 2.5);
+        assert!(s.layer().sample_mode);
     }
 
     #[test]

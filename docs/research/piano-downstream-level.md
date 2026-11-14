@@ -79,3 +79,5 @@ uv run python tools/emu_vs_hw.py --video <Part A .webm> --backup <factory .ns4b>
 2. Trace the float-to-Q31 gain conversion in the SMP interrupt (the oracle runs use `0x7FFFFFFF` for unity).
 3. Decode the layer-level mapping `v -> gain` (`0xC023195C`) for the piano ids `0xB7/0xB8` with a program that stores a level below 127.
 4. Replay per-note velocities estimated from the audio and compare the spectrum and the level together.
+
+Update (2026-11-13, [piano-note-velocity](piano-note-velocity.md)): follow-up 4 is done and inconclusive per note (worse than uniform); a uniform velocity of about 88 reproduces the spectrum and leaves +7.3 dB RMS, equal to the Pipe yardstick. Follow-up 1 is partly decoded (first reader of the bus converts with `FLOAT BY -29`, rest open), follow-up 2 is a conversion loop with `FIX BY 31` (not tied to the piano record), follow-up 3 is read from the listing: `(v / 127)^2` (handler `0xC011A7A4`).

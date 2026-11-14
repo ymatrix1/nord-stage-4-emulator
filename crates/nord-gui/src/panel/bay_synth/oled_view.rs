@@ -69,29 +69,41 @@ pub fn view_of(sui: &SynthUi, sample_name: Option<&str>) -> OledView {
     let dim = |i: usize| defs[i].is_some_and(|d| d.unsupported.is_some());
     let label = |i: usize| defs[i].map_or("", |d| d.label);
     let on = |i: usize, v: String| defs[i].and_then(|_| soft(v, label(i), dim(i)));
-    let name = sample_name.unwrap_or("No .nsmp4 loaded");
+    // Library browsing state of the focused layer; layer A falls back to the name the app loaded.
+    let lib = &sui.samples;
+    let picked = lib.name(sui.focus);
+    let name = picked
+        .clone()
+        .or_else(|| sample_name.filter(|_| sui.focus == 0).map(str::to_string))
+        .unwrap_or_else(|| "No .nsmp4 loaded".to_string());
+    let cat = lib.category(sui.focus).unwrap_or("-").to_string();
+    let pos = lib
+        .position(sui.focus)
+        .map_or_else(|| "-".to_string(), |(p, n)| format!("{p}({n})"));
+    let bright = if l.sample_bright { "ON" } else { "OFF" }.to_string();
     let (title, graphic, vals): (&'static str, Graphic, [String; 3]) = match sui.page {
         SynthPage::Waveform if l.sample_mode && sui.info_view => (
             "SAMPLE INFO",
-            Graphic::Lines(vec![name.to_string(), "Nord Sample Library 4".to_string()]),
-            [
-                if l.sample_bright { "ON" } else { "OFF" }.to_string(),
-                "-".to_string(),
-                name.to_string(),
-            ],
+            Graphic::Lines(vec![
+                name,
+                format!("Category: {cat}"),
+                "Nord Sample Library 4".to_string(),
+            ]),
+            [bright, cat, pos],
+        ),
+        SynthPage::Waveform if l.sample_mode && sui.list_view && picked.is_some() => (
+            "SAMPLE LIBRARY",
+            Graphic::List(lib.rows(sui.focus)),
+            [bright, cat, pos],
         ),
         SynthPage::Waveform if l.sample_mode => (
             "SAMPLE LIBRARY",
             Graphic::Wave {
-                name: name.to_string(),
+                name,
                 ctrl: String::new(),
                 icon: Icon::Sample,
             },
-            [
-                if l.sample_bright { "ON" } else { "OFF" }.to_string(),
-                "-".to_string(),
-                name.to_string(),
-            ],
+            [bright, cat, pos],
         ),
         SynthPage::Waveform if sui.list_view => (
             "OSC WAVEFORM",
@@ -237,17 +249,56 @@ mod tests {
     }
 
     #[test]
-    fn sample_mode_uses_bright_cat_sample_labels_and_dims_the_library_dials() {
+    fn sample_mode_uses_bright_cat_sample_labels_and_no_dial_is_dimmed() {
         let mut s = SynthUi::new();
         s.layer_mut().sample_mode = true;
         let v = view_of(&s, Some("Grand Piano"));
         assert_eq!(v.title, "SAMPLE LIBRARY");
         assert_eq!(soft_labels(&v), ["BRIGHT", "CAT", "SAMPLE"]);
-        assert!(!v.soft[0].as_ref().unwrap().dim);
-        assert!(v.soft[1].as_ref().unwrap().dim);
-        assert_eq!(v.soft[2].as_ref().unwrap().value, "Grand Piano");
+        assert!(v.soft.iter().flatten().all(|x| !x.dim));
+        assert!(
+            matches!(&v.graphic, Graphic::Wave { name, .. } if name == "Grand Piano"),
+            "layer A shows the sample the app loaded"
+        );
+        assert_eq!(v.soft[1].as_ref().unwrap().value, "-");
         s.info_view = true;
         assert_eq!(view_of(&s, None).title, "SAMPLE INFO");
+    }
+
+    #[test]
+    fn sample_pages_show_category_sample_list_and_info_from_the_library() {
+        let mut s = SynthUi::new();
+        s.samples.set_catalog(&[
+            "Samp Lib/Bass/Fretless.nsmp4".into(),
+            "Samp Lib/Bass/Slap.nsmp4".into(),
+            "Samp Lib/Bass/Upright.nsmp4".into(),
+        ]);
+        s.layer_mut().sample_mode = true;
+        s.turn_dial(2, 2, false);
+        let v = view_of(&s, Some("Stale"));
+        assert_eq!(v.soft[1].as_ref().unwrap().value, "Bass");
+        assert_eq!(v.soft[2].as_ref().unwrap().value, "2(3)");
+        assert!(matches!(&v.graphic, Graphic::Wave { name, .. } if name == "Slap"));
+        s.turn_dial(2, 0, false);
+        s.turn_dial(2, 1, true); // Shift+dial: LIST view
+        let v = view_of(&s, None);
+        assert_eq!(
+            v.graphic,
+            Graphic::List(["Slap".into(), "Upright".into(), String::new()])
+        );
+        s.list_view = false;
+        s.info_view = true;
+        let v = view_of(&s, None);
+        assert_eq!(v.title, "SAMPLE INFO");
+        assert!(
+            matches!(&v.graphic, Graphic::Lines(l) if l[0] == "Upright" && l[1].contains("Bass"))
+        );
+        s.focus_layer(1);
+        s.layer_mut().sample_mode = true;
+        s.info_view = true;
+        assert!(
+            matches!(&view_of(&s, Some("Stale")).graphic, Graphic::Lines(l) if l[0] == "No .nsmp4 loaded")
+        );
     }
 
     #[test]
