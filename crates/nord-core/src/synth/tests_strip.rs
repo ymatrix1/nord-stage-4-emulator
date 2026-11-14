@@ -164,3 +164,33 @@ fn shape_stage_replaces_the_saw_placeholder_only_when_enabled() {
     assert_ne!(saw, stage, "the stage changes the waveform");
     assert_eq!(render(None), saw, "the default stays the placeholder");
 }
+
+#[test]
+fn stage_oscillators_play_only_with_the_strip_chain_and_the_opt_in() {
+    use super::FwStage;
+    for stage in [
+        FwStage::Noise,
+        FwStage::ShapeSquare,
+        FwStage::Super,
+        FwStage::Multi,
+    ] {
+        let render = |chain: SynthChain, on: bool| {
+            let mut s = layer(chain);
+            s.strip_stage = Some(stage);
+            s.strip_stages = on;
+            s.note_on(57, 100);
+            render_n(&mut s, 2_400)
+        };
+        let base = render(SynthChain::FirmwareStrip, false);
+        let staged = render(SynthChain::FirmwareStrip, true);
+        assert!(staged.iter().all(|f| f[0].is_finite()), "{stage:?}");
+        assert!(energy(&staged) > 1e-4, "{stage:?} is silent");
+        assert_ne!(base, staged, "{stage:?} changes the waveform");
+        assert_eq!(render(SynthChain::FirmwareStrip, false), base);
+        // the legacy chain never reads the opt-in
+        assert_eq!(
+            render(SynthChain::Legacy, true),
+            render(SynthChain::Legacy, false)
+        );
+    }
+}
