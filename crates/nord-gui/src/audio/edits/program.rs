@@ -11,7 +11,7 @@
 //! control-thread engine (tests, offline hosts); the audio callback drops any that reach it.
 
 use crossbeam_channel::Sender;
-use nord_core::engine::{LayerInitTarget, ProgramState, Stage4Engine};
+use nord_core::engine::{LayerInitTarget, PanelFunc, ProgramState, Stage4Engine};
 use nord_core::morph::{CrossfadeWidth, LayerId, MorphParameter, MorphSource};
 
 /// What a clipboard operation acts on (manual p.43-44).
@@ -107,6 +107,9 @@ pub enum ProgramEdit {
     MasterBpm(f32),
     /// LAYER SCENE II.
     LayerScene2(bool),
+    /// PEDAL TAP (Shift+Mst Clk, manual p.40): a pedal set to "Panel Assigned" taps the Master
+    /// Clock tempo while on; off returns the panel-assigned function to Layer Scene II.
+    PedalTap(bool),
     /// STORE / Live auto-store: capture the program and send it back as `(ticket, state)`.
     Snapshot {
         ticket: u32,
@@ -207,6 +210,13 @@ impl ProgramEdit {
                 }
             }
             Self::LayerScene2(on) => engine.scene.scene_2_active = *on,
+            Self::PedalTap(on) => {
+                engine.pedals.triple.panel_assigned = if *on {
+                    PanelFunc::MstClkTap
+                } else {
+                    PanelFunc::LayerScene
+                };
+            }
             Self::Snapshot { ticket, reply } => {
                 let _ = reply.send((*ticket, engine.capture_state()));
             }
@@ -240,6 +250,42 @@ mod tests {
         ProgramEdit::MasterBpm(f32::NAN).apply(&mut e);
         assert_eq!(e.master_clock.bpm, 300.0, "non-finite ignored");
         ProgramEdit::Panic.apply(&mut e);
+    }
+
+    #[test]
+    fn pedal_tap_makes_a_panel_assigned_pedal_tap_the_master_clock() {
+        use nord_core::engine::{TripleFunc, TriplePedal, TripleUnit};
+        let mut e = engine();
+        e.pedals.triple.tp2_attached = true;
+        e.pedals.triple.set_func(
+            TripleUnit::Tp2,
+            TriplePedal::Left,
+            TripleFunc::PanelAssigned,
+        );
+        let press = |e: &mut Stage4Engine| {
+            e.triple_pedal(TripleUnit::Tp2, TriplePedal::Left, 127);
+            e.triple_pedal(TripleUnit::Tp2, TriplePedal::Left, 0);
+        };
+        // Off (default): the panel-assigned pedal is Layer Scene II, not a tap.
+        press(&mut e);
+        for _ in 0..30_000 {
+            e.render_frame_multi();
+        }
+        press(&mut e);
+        assert_eq!(e.master_clock.bpm, 120.0, "no tap while PEDAL TAP is off");
+        ProgramEdit::PedalTap(true).apply(&mut e);
+        press(&mut e);
+        for _ in 0..30_000 {
+            e.render_frame_multi();
+        }
+        press(&mut e); // 30000 frames at 48 kHz = 0.625 s -> 96 BPM
+        assert!(
+            (e.master_clock.bpm - 96.0).abs() < 0.5,
+            "{}",
+            e.master_clock.bpm
+        );
+        ProgramEdit::PedalTap(false).apply(&mut e);
+        assert_eq!(e.pedals.triple.panel_assigned, PanelFunc::LayerScene);
     }
 
     #[test]

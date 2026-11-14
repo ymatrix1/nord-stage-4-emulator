@@ -63,6 +63,7 @@ pub fn shift_state(pu: &ProgramUi, shift_id: &str) -> bool {
     match shift_id {
         "program.preset_name" => pu.preset_name,
         "program.num_pad" => pu.num_pad,
+        "mst_clk.pedal_tap" => pu.pedal_tap,
         _ => false,
     }
 }

@@ -10,6 +10,8 @@
 #![cfg_attr(test, allow(clippy::field_reassign_with_default))]
 
 pub mod actions;
+#[cfg(test)]
+mod binding_tests;
 pub mod catalog;
 pub mod clock;
 pub mod controls;

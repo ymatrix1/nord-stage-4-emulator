@@ -29,11 +29,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D21](#d21-organ-model-to-dsp-path-map) | 2026-11-13 | Organ model to DSP path map (B3, Vox, Pipe) | accepted |
 | [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
 | [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
-| [D29](#d29-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
-| [D30](#d30-the-smp-post-stage-is-unity-the-piano-defaults-stay-until-the-receiver-is-found) | 2026-11-14 | The SMP post stage is unity (`bus * 2^-29`); piano defaults stay until the receiver is found | accepted |
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
+| [D29](#d29-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
+| [D30](#d30-the-smp-post-stage-is-unity-the-piano-defaults-stay-until-the-receiver-is-found) | 2026-11-14 | The SMP post stage is unity (`bus * 2^-29`); piano defaults stay until the receiver is found | accepted |
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
+| [D32](#d32-fx-mod-2-chor-uses-the-firmware-routines-behind-firmwarefxmod2) | 2026-11-14 | FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2` | accepted |
+| [D35](#d35-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
 
 ---
 
@@ -219,7 +221,6 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Photo-derived art (rejected: rights); full menus before release (delays the visual goal); renaming per-layer IDs (breaks saved projects); all keybed variants up front (more layout work for no early benefit).
 - **Impact:** Unblocks B7 art direction, B8d/B9d scope, B8g layout and B9a-c parameter work. The remaining Phase 6b unknown is OQ13 (hardware behaviour).
 
-
 ### D17. Chip identity: FX, PNO and ORG run on ADSP-2157x (SHARC+), SY1SY2 and SMP on ADSP-2148x
 
 - **Status:** accepted 2026-11-12
@@ -356,6 +357,16 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Fit a presence shelf after the cabinet (rejected: the cabinet words are oracle exact, and the fit would hide the organ bank gap); flip `vox` on the clip score (rejected: D22 and D25 bars).
 - **Impact:** None on renders or `render_hash`; the same with the flag on.
 
+### D29. The piano layer level law is opt-in; the bus convention stays ASSUMED
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))
+- **Context:** OQ20 listed the SMP bus receiver convention and the piano layer level handler `0xC011A7A4` (law read from the listing, never run) as open. D22 requires end-to-end verification before a default changes.
+- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and the bus convention stays ASSUMED.
+- **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
+- **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 on an untraced path); flip the bus scale (0.83 dB on an assumption, and the true receiver scale is unknown by up to 12 dB).
+- **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
+
 ### D30. The SMP post stage is unity; the piano defaults stay until the receiver is found
 
 - **Status:** accepted 2026-11-14
@@ -367,14 +378,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Impact:** None on rendering. The oracle harness gains `break=PC`, `resume` and `NS4_IRQ_TRACE` for the next interrupt-level experiments.
 cabinet taps fingerprint response test.
 
-### D29. The piano layer level law is opt-in; the bus convention stays ASSUMED
-
-- **Status:** accepted 2026-11-14
-- **Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))
-- **Context:** OQ20 listed the SMP bus receiver convention and the piano layer level handler `0xC011A7A4` (law read from the listing, never run) as open. D22 requires end-to-end verification before a default changes.
-- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and response test.
-
-### D31. The multi-tap reverb (types 2..11) is opt-in; D32. FX Mod 2: CHOR uses the model to type map is ASSUMED
+### D31. The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (task `ns4-tc25` follow-up, D22 rule)
@@ -383,49 +387,6 @@ cabinet taps fingerprint response test.
 - **Why:** D22: the algorithm is VERIFIED, the mapping into it is a guess (size order of the type words), and the end-to-end comparison with the hardware is missing. Opting in costs nothing for existing renders.
 - **Alternatives:** Flip the default now (rejected: criteria 2 and 3 of D22 are not met); keep the port in the tools only (the engine could not use it).
 - **Impact:** TD-10 and OQ21 stay open for the comparison, type 6 and the organ rows. Flip the default only when a Part A program with a known type scores better than the FDN (s10 method, [fx-reverb-leslie](research/fx-reverb-leslie.md) s14).
-firmware routines behind `FirmwareFx::mod2`
-
-(PR `feat/fx-mod2-types`; evidence [fx-mod2-types](research/fx-mod2-types.md))
-renders Mod `CHOR` as an assumed `9 ms` modulated delay. firmware routines `0x122E24` (`kFx2Type` 4) `0x122F77` (5), circular stereo delay line an LFO driven fractional tap; CHOR used by 93 156 Mod programs.
-Model both routines instruction by instruction (`tools/fx_model_chorus.py`, 500/500 scenarios per per-instruction trace against oracle), them pair-register machine (`fx/fw_pe.rs`, `fw_chorus4.rs`, `fw_chorus5.rs`) wire them `fx/fw_mod2.rs` behind `FirmwareFx::mod2` (in `ALL`, `DEFAULT`).
-routines data flow VERIFIED; amount laws VERIFIED at 11 samples interpolated between them, delay DSP frames, rate hertz recording layer specific piano row, so keeps switch opt-in.
-Tune chorus by ear firmware available); wait all six Mod CHOR alone covers 60 % Mod programs).
-`ns4 render-patch --firmware-fx` `FirmwareFx::ALL` change CHOR programs (4 frame latency, firmware delay times rates); `render_hash` unchanged.
-bus convention ASSUMED.
-law verified, but path from stored word to SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, so absolute level verified end end.
-layer Flip law by (changes program level below 127 untraced path); flip bus scale (0.83 dB assumption, true receiver scale unknown up 12 dB).
-`render_hash` unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
-
-### D35. The SAMPLES kernel rule stays opt-in; D31. multi-tap reverb (types 2..11) is D32. FX Mod 2: CHOR uses the firmware pitch law is added opt-in
-
-- **Status:** accepted 2026-11-14
-- **Decided by:** Yuri Olive (PR for `feat/synth-sample-pitch-wave`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) sections 7 to 9)
-- **Context:** D22 flips a default only after an end-to-end check. The kernel rule (`--sample-kernel key`) needs `[voice + 8]` to be the played key; the harness cannot load a SAMPLES program (no sample-set download), so the kernel record write `0x9243B + 0x38 k` was not captured. The ARM pitch block `0xC01E14AC..0xC01E15A4` was run for the first time.
-- **Decision:** Keep `--sample-kernel key` opt-in (structure shows `[+8]` is the key before the `[+0x18]` transposition, but the event-record link was not run). Add `sinc::pitch_law` (bit-identical to the firmware block for 23 inputs) behind `SynthLayer::sample_pitch_fw` / `--sample-pitch fw`; default off.
-model type map ASSUMED
-
-(task `ns4-tc25` follow-up, rule)
-wrapper `0x120FDB` and packed core `0x120D8A` of reverb types 2..11 are ported (`FwReverbMulti`) and reproduce oracle word word on nine types. words of each type are captured, which UI reverb (Booth, Room, Stage, Hall, Cathedral and variation flag) selects which `kRvbType` never read from program, type 6 has no capture, and no hardware clip compared.
-`FirmwareFx::reverb` also drives Booth (2, 3), Room (4, 5), Stage (7 with variation flag), Hall (8, and Cathedral (10, 11) through `FwReverbMulti`; stays off and engine FDN stays path every model.
-**Why:** D22: algorithm VERIFIED, mapping into it guess (size order of type words), and comparison with hardware missing. Opting in costs nothing existing renders.
-**Alternatives:** Flip now (rejected: criteria 2 and 3 of are met); keep port in tools (the engine could use it).
-**Impact:** TD-10 and OQ21 stay open comparison, type 6 and organ rows. Flip when Part A with known type scores better than FDN (s10 method, [fx-reverb-leslie](research/fx-reverb-leslie.md) s14).
-routines `FirmwareFx::mod2`
-
-`feat/fx-mod2-types`; [fx-mod2-types](research/fx-mod2-types.md))
-renders Mod `CHOR` as assumed `9 ms` modulated delay. routines `0x122E24` (`kFx2Type` 4) `0x122F77` (5), circular stereo delay line LFO driven fractional tap; CHOR used by 93 156 Mod programs.
-Model both routines instruction by instruction (`tools/fx_model_chorus.py`, 500/500 scenarios per per-instruction trace against oracle), them pair-register machine (`fx/fw_pe.rs`, `fw_chorus4.rs`, `fw_chorus5.rs`) wire them `fx/fw_mod2.rs` `FirmwareFx::mod2` (in `ALL`, `DEFAULT`).
-routines data flow VERIFIED; amount laws VERIFIED at 11 samples interpolated between them, delay DSP frames, rate hertz recording layer specific piano row, keeps switch opt-in.
-Tune chorus by ear available); wait all six Mod CHOR alone covers 60 % Mod programs).
-`ns4 render-patch --firmware-fx` `FirmwareFx::ALL` change CHOR programs (4 frame latency, delay times rates); `render_hash` unchanged.
-bus convention ASSUMED.
-exponent law VERIFIED; place where root key and the sample rate enter the ARM word, and the DSP conversion of the pair-block word to Stage B step, are not traced, so the absolute step is not firmware-derived.
-- **Alternatives:** Flip the kernel default on the structural evidence (changes every SAMPLES program on an unrun field); replace the `2^(n/12)` step outright (the join with the DSP step table is open).
-- **Impact:** `render_hash` unchanged (both flags default off).
-bus convention ASSUMED.
-verified, path from stored SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, level verified end end.
-layer Flip by piano (changes program level below 127 untraced path); flip bus scale (0.83 dB assumption, true receiver scale unknown up 12 dB).
-`render_hash` unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
 
 ### D32. FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2`
 
@@ -440,6 +401,20 @@ bus convention stays ASSUMED.
 law verified, but path from stored word to SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, absolute level verified end to end.
 Flip law (changes every program level below 127 on untraced path); flip bus scale (0.83 dB on assumption, true receiver scale unknown up to 12 dB).
 unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
+
+### D35. The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-sample-pitch-wave`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) sections 7 to 9)
+- **Context:** D22 flips a default only after an end-to-end check. The kernel rule (`--sample-kernel key`) needs `[voice + 8]` to be the played key; the harness cannot load a SAMPLES program (no sample-set download), so the kernel record write `0x9243B + 0x38 k` was not captured. The ARM pitch block `0xC01E14AC..0xC01E15A4` was run for the first time.
+- **Decision:** Keep `--sample-kernel key` opt-in (structure shows `[+8]` is the key before the `[+0x18]` transposition, but the event-record link was not run). Add `sinc::pitch_law` (bit-identical to the firmware block for 23 inputs) behind `SynthLayer::sample_pitch_fw` / `--sample-pitch fw`; default off.
+- **Why:** The exponent law is VERIFIED; the place where the root key and the sample rate enter the ARM word, and the DSP conversion of the pair-block word to the Stage B step, are not traced, so the absolute step is not firmware-derived.
+- **Alternatives:** Flip the kernel default on the structural evidence (changes every SAMPLES program on an unrun field); replace the `2^(n/12)` step outright (the join with the DSP step table is open).
+- **Impact:** `render_hash` unchanged (both flags default off).
+bus convention ASSUMED.
+verified, path from stored SMP voice gains (`0xC023195C`) receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) found, no level verified end end.
+layer by piano level below 127 untraced path); flip bus scale (0.83 dB assumption, true receiver scale unknown by up 12 dB).
+Velvet Grand (level 127) reads same flag on.
 
 ### D36. The Amp EQ uses the firmware tone stack behind `FirmwareFx::eq`; the EQ gain stays 0.25 dB per count
 
