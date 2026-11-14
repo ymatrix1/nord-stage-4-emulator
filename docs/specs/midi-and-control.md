@@ -111,3 +111,41 @@ Implemented in [`crates/nord-gui/src/audio.rs`](../../crates/nord-gui/src/audio.
 - The `AudioHandle` provides a bounded queue (`bounded(1024)`) connecting MIDI/UI threads to the real-time audio thread.
 - **Non-critical events** (continuous controllers, pitch bend, note-on) use non-blocking `try_send` and drop on queue saturation to preserve real-time responsiveness and avoid latency spikes.
 - **Critical note-lifecycle events** (`NoteOff`, `AllNotesOff` / `CC123`, `AllSoundOff` / `CC120`, and `SustainPedal(0)` / `CC64=0`) use a retry timeout (`send_timeout`) allowing the audio thread to drain before delivery, ensuring keys and pedal states are never left permanently stuck.
+
+---
+
+## 5. Menu model (`ns4-yfht`)
+
+Manual OS v1.6x ch. 11 (p.57-63) plus Organize (p.45-46) is modelled as toolkit-free data in [`crates/nord-panel/src/menus/`](../../crates/nord-panel/src/menus/mod.rs), one file per menu. A `MenuPage { menu, page, title, items }` holds `MenuItem { id, label, kind, default, manual_page, provenance, binding, note }`; `kind` is `Toggle`, `Enum(choices)`, `Int`, `Float` or `Action`. Binding uses the control-inventory scheme: `Bound("<host id>")` (a `nord-plugin` parameter), `Bound("engine:<path>")` (an engine field without host parameter), `UiOnly(reason)`, `Unsupported(bean)`. Channels use `0 = Off`.
+
+| Menu (SHIFT + Program) | Pages | Items | Notes |
+|---|---:|---:|---|
+| System (1) | 6 | 6 | transpose, fine tune bound; memory protect, LED, reset, version `UiOnly` |
+| Sound (2) | 11 | 11 | all bound except Organ trigger point |
+| Organize (3) | 2 | 7 | Swap/Move: `Unsupported` |
+| Aux KB (4) | 3 | 5 | all bound to `auxkb_*` |
+| Output (5) | 6 | 21 | routing `Unsupported`; `sys_mono` is the emulator's Mono Output |
+| Pedal (6) | 7 | 19 | Func/Gain/Right/Rotor bound; jack types `UiOnly`; Triple Pedal Left/Middle `Unsupported` |
+| MIDI (7) | 10 | 23 | channels bound to engine fields; filters and PC modes `Unsupported` |
+| Extern (8) | 13 | 37 | Extern layer fields bound; Device toggles, velocity, Echo `Unsupported` |
+
+Totals: 58 pages, 129 items; 56 bound, 12 `UiOnly`, 61 `Unsupported` (bean `ns4-zb9o`). Tests (`menus/tests.rs`): unique ids, pages `1..n` per menu, defaults match the kind and lie in range, every `Bound` host id or engine path exists in the sources, every `Unsupported` bean exists in `.beans/`.
+
+Provenance: names, ranges, defaults and page numbers come from the manual text (`VERIFIED`). `ASSUMED`: Program Levels range, 0.5 dB step of the two piano levels, pedal gain default/step, foot switch defaults, Device page order, Preset Organize ranges. Web sources (names only, no values copied): Stage 3 Sound menu <https://manualshive.com/en/manual/nord/stage-3/1701214?page=20>, Stage 4 user forum <https://www.norduserforum.com/viewtopic.php?p=183703>; they did not change any value.
+
+### Engine-audible settings (`engine/settings.rs`)
+
+`GlobalSettings` (defaults equal the pre-menu hard-coded values) is applied by `Stage4Engine::set_global_settings` (idempotent, no allocation).
+
+| Setting | Effect | Status |
+|---|---|---|
+| Global Transpose +/-6 | added to the per-program transpose; held keys release at their start pitch | text `VERIFIED` |
+| Fine Tune +/-50 ct | Organ wheels (`fine_tune_cents` + master), Piano voices started afterwards, Synth pitch | range `VERIFIED`; mapping implemented, hardware cents unmeasured |
+| Piano Pedal Noise / String Res +/-6 dB | linear gain on the pedal thump / sympathetic resonance | range `VERIFIED` |
+| B3 Tonewheel Mode | crosstalk factor Clean 0, Vintage 1 1.0, Vintage 2 1.5 | factors `ASSUMED`; confirm with a hardware single-key spectrum |
+| B3 Click Level | High = 2x click amplitude | `ASSUMED` |
+| Rotary Bass/Horn | band gains `2 * share`, 50/50 = 1.0 | `ASSUMED` |
+| Rotor/Horn speed, acceleration | speed 0.85 / 1 / 1.15, time constant 1.5 / 1 / 0.67 | `ASSUMED`; confirm by timing a Slow-Fast change |
+| Mono output | both channels carry `(L+R)/2` | implemented |
+
+Program Levels (`prog_level_db`) and per-program Transpose already existed. Not honoured: Organ trigger point, LED intensity (`UiOnly`), output bus routing, MIDI filters, Local Control.

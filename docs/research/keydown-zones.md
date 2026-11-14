@@ -146,8 +146,8 @@ The voice event record handed to the engine is `(engine 0x90673190, descriptor 0
 |---|---|
 | Piano | `[core + 4]` is still 0 ([keydown-paths](keydown-paths.md) section 4): with the zone enabled the key object returns before the voice. No piano message |
 | Virtual channel map writer | not found; the `Edt_Sys_kMIDI*` ids do not write it in the harness. Virtual channel 16 (all) passes the mask test of every layer but no key handler is called for it (not decoded) |
-| Zone key range vs `Edt_*_kKbZone` | all 12 zone values and the split ids (`0xE7..0xF1`) leave the range at 21 .. 108; the range is written by `0xC00C84A4` from constants, the zone setters `0xC00C843C / 0xC00C83FC` are not reached by the id dispatch |
-| Exact enable expression | section 2.2 (`0xC0120100..0xC0120248`) |
+| Zone key range vs `Edt_*_kKbZone` | the 4-bit code of each layer is at `+8` (organ, piano) / `+58` (synth) of the layer block, the engine reads it ([engine-routing](engine-routing.md) s3); all 12 zone values and the split ids (`0xE7..0xF1`) leave the range at 21 .. 108; the range is written by `0xC00C84A4` from constants, the zone setters `0xC00C843C / 0xC00C83FC` are not reached by the id dispatch |
+| Exact enable expression | section 2.2 (`0xC0120100..0xC0120248`); the zone byte of layer `i` equals section enable AND layer-mask bit `i` in every view tried, and for 5 decoded factory programs in both scenes ([engine-routing](engine-routing.md) s2) |
 | Velocity curve selector `[manager + 0x134]` | 6 by default; writer not found |
 | Synth byte 1 formula | table only |
 | B3 value table vs drawbar state; the multi-write ramp of low wheels; voice packet fields | EMPIRICAL |

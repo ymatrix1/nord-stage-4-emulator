@@ -106,6 +106,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "pedx", group = "Pedal Assign")]
     pub pedal_assign: crate::pedal_assign_params::PedalAssignParams,
 
+    /// System / Sound / Output menu settings (global transpose, fine tune, rotary, mono).
+    #[nested(id_prefix = "sys", group = "System Menu")]
+    pub settings: crate::settings_params::SettingsParams,
+
     /// Aux KB enable, channel, curve and layer assignment.
     #[nested(id_prefix = "auxkb", group = "Aux KB")]
     pub aux_kb: crate::aux_pedal_params::AuxKbParams,
@@ -364,6 +368,7 @@ impl Default for Stage4Params {
             pedals: crate::aux_pedal_params::PedalBank::default(),
             pedal_assign: crate::pedal_assign_params::PedalAssignParams::default(),
             aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
+            settings: crate::settings_params::SettingsParams::default(),
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
             synth_pattern: crate::synth_pattern_params::SynthPatternBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
@@ -637,6 +642,7 @@ impl Stage4Params {
         self.synth_layers.sync_to_engine(engine);
         self.program.sync_to_engine(engine);
         self.synth_mod.sync_to_engine(engine);
+        self.settings.sync_to_engine(engine);
         self.aux_kb.sync_to_engine(engine);
         self.pedals.sync_to_engine(engine);
         self.pedal_assign.sync_to_engine(engine);

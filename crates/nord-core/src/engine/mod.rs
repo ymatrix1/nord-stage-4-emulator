@@ -38,12 +38,16 @@ mod program;
 mod program_export;
 mod program_fx;
 mod program_ops;
+mod routing;
 mod section_edit;
+mod settings;
 mod sharing;
 mod snapshot;
 mod sound_init;
 #[cfg(test)]
 mod tests_extern;
+#[cfg(test)]
+mod tests_firmware_routing;
 #[cfg(test)]
 mod tests_pedals;
 #[cfg(test)]
@@ -59,7 +63,12 @@ pub use layer_init::LayerInitTarget;
 pub use live_slots::{LiveSlots, LIVE_SLOT_COUNT};
 pub use morph_clip::MorphClip;
 pub use program_ops::{PROGRAM_LEVEL_DB_RANGE, TRANSPOSE_RANGE};
+pub use routing::{zone_leds, FirmwareRouting, ProgramRouting};
 pub use section_edit::Section;
+pub use settings::{
+    GlobalSettings, Level3, TonewheelMode, FINE_TUNE_RANGE_CENTS, GLOBAL_TRANSPOSE_RANGE,
+    PIANO_LEVEL_DB_RANGE,
+};
 pub use snapshot::ProgramState;
 pub use undo::UndoOp;
 #[cfg(test)]
@@ -94,6 +103,9 @@ pub struct Stage4Engine {
     pub morph_controllers: MorphControllers,
     pub scene: LayerSceneState,
     pub split_router: KeybedSplitRouter,
+    /// Opt-in firmware layer routing mode (default `Off`) and the routing facts of the applied program.
+    firmware_routing: FirmwareRouting,
+    routing: ProgramRouting,
     pub master_bus: MasterBus,
     pub master_clock: MasterClock,
     /// MIDI channel (0..15) used for global keybed, controller, and program input.
@@ -104,6 +116,8 @@ pub struct Stage4Engine {
     pub aux_kb: AuxKb,
     /// Pedals, pitch stick and per-layer SUSTPED / PSTICK routing.
     pub pedals: PedalState,
+    /// Global System/Sound/Output menu settings (apply with [`Self::set_global_settings`]).
+    settings: GlobalSettings,
     /// Extern layer settings and the outgoing MIDI queue.
     pub extern_out: ExternState,
     note_hold_counts: [[[u8; 7]; 128]; 16],
@@ -143,12 +157,15 @@ impl Stage4Engine {
             morph_controllers: MorphControllers::default(),
             scene: LayerSceneState::default(),
             split_router: KeybedSplitRouter::default(),
+            firmware_routing: FirmwareRouting::default(),
+            routing: ProgramRouting::default(),
             master_bus: MasterBus::default(),
             master_clock: MasterClock::default(),
             global_midi_channel: Some(0),
             layer_midi_channels: [None; 7],
             aux_kb: AuxKb::default(),
             pedals: PedalState::default(),
+            settings: GlobalSettings::default(),
             extern_out: ExternState::default(),
             note_hold_counts: [[[0; 7]; 128]; 16],
             transpose: 0,
@@ -240,7 +257,13 @@ impl Stage4Engine {
             mix_l *= volume;
             mix_r *= volume;
         }
-        self.master_bus.process_frame([mix_l, mix_r])
+        let out = self.master_bus.process_frame([mix_l, mix_r]);
+        if self.settings.mono_output {
+            let mid = 0.5 * (out[0] + out[1]);
+            [mid, mid]
+        } else {
+            out
+        }
     }
 
     /// Feeds the Master Clock tempo to the Synth layers and applies their KB Sync clock resets.

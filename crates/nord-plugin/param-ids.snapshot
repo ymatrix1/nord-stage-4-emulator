@@ -727,3 +727,15 @@ synthx_unison_3|3|0.000000
 synthx_voice_1|2|0.000000
 synthx_voice_2|2|0.000000
 synthx_voice_3|2|0.000000
+sys_click_high|1|0.000000
+sys_fine_tune|cont|0.500000
+sys_horn_acc|2|0.500000
+sys_horn_speed|2|0.500000
+sys_mono|1|0.000000
+sys_piano_noise_db|cont|0.500000
+sys_piano_res_db|cont|0.500000
+sys_rotary_balance|4|0.500000
+sys_rotor_acc|2|0.500000
+sys_rotor_speed|2|0.500000
+sys_tonewheel|2|0.500000
+sys_transpose|12|0.500000
