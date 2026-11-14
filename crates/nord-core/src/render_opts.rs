@@ -214,6 +214,8 @@ pub struct FirmwareOptions {
     pub piano_firmware_level: bool,
     /// `--firmware-piano-bus`: `PianoLayer::firmware_bus_scale` (opt-in, ASSUMED receiver scale).
     pub piano_bus_scale: bool,
+    /// `--firmware-piano-layer-law`: the piano layer fader follows `(v / 127)^2` (opt-in).
+    pub piano_layer_law: bool,
     /// `--measured-laws`: `SynthLayer::measured_laws` (EMPIRICAL, Audible Genius clips).
     pub measured_laws: bool,
     /// `--synth-shape <0..1>`: strip shape word of the SHAPE oscillator (`fw_shape.rs`) in
@@ -256,6 +258,7 @@ impl Default for FirmwareOptions {
             firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
+            piano_layer_law: false,
             measured_laws: false,
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
@@ -294,6 +297,7 @@ impl FirmwareOptions {
             firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
+            piano_layer_law: false,
             measured_laws: false,
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
@@ -344,6 +348,7 @@ impl FirmwareOptions {
             o.piano_firmware_level = false;
         }
         o.piano_bus_scale |= has("--firmware-piano-bus");
+        o.piano_layer_law |= has("--firmware-piano-layer-law");
         o.measured_laws |= has("--measured-laws");
         o.synth_stages |= has("--synth-stages");
         if has("--no-synth-stages") {
@@ -403,6 +408,8 @@ impl FirmwareOptions {
         apply_piano_level(engine, self.piano_firmware_level);
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_a.firmware_layer_law = self.piano_layer_law;
+        engine.piano_b.firmware_layer_law = self.piano_layer_law;
         apply_b3_tail(engine, self.b3_tail);
         apply_leslie_firmware(
             engine,
@@ -469,6 +476,8 @@ impl FirmwareOptions {
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_a.firmware_layer_law = self.piano_layer_law;
+        engine.piano_b.firmware_layer_law = self.piano_layer_law;
         self.set_rotary(engine);
         apply_b3_tail(engine, Some(self.b3_tail.unwrap_or(true)));
         self.set_measured_laws(engine);
@@ -560,6 +569,9 @@ impl FirmwareOptions {
         if self.piano_bus_scale {
             parts.push("piano-bus".into());
         }
+        if self.piano_layer_law {
+            parts.push("piano-layer-law".into());
+        }
         if let Some(m) = self.synth_shape_milli {
             parts.push(format!("shape={:.2}", f32::from(m) / 1000.0));
         }
@@ -630,6 +642,9 @@ mod tests {
         assert!(!o.piano_bus_scale, "the bus scale is opt-in");
         let bus = FirmwareOptions::from_args(&args(&["--firmware-piano-bus"])).unwrap();
         assert!(bus.piano_bus_scale);
+        assert!(!o.piano_layer_law, "the layer law is opt-in");
+        let law = FirmwareOptions::from_args(&args(&["--firmware-piano-layer-law"])).unwrap();
+        assert!(law.piano_layer_law && law.summary().contains("piano-layer-law"));
         let mut e = Stage4Engine::new(48_000.0);
         bus.apply_to(&mut e);
         assert!(e.piano_a.firmware_bus_scale && e.piano_b.firmware_bus_scale);
