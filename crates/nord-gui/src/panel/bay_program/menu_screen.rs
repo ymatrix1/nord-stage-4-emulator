@@ -125,13 +125,14 @@ mod tests {
     #[test]
     fn unsupported_rows_are_dimmed_and_name_their_bean() {
         let mut ui = ProgramUi::default();
-        ui.open_menu(MenuId::Output);
-        let t = compose(&ui, MenuId::Output);
+        ui.open_menu(MenuId::Organize);
+        let t = compose(&ui, MenuId::Organize);
         assert!(
             t.rows[0].starts_with(DIM) && t.rows[0].contains("ns4-"),
             "{:?}",
             t.rows
         );
+        ui.open_menu(MenuId::Output);
         ui.menu.step_page(1);
         ui.menu.soft(3); // More: bus_sub3 .. mono
         let t = compose(&ui, MenuId::Output);

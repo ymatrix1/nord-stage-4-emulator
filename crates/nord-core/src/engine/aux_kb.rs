@@ -92,8 +92,7 @@ impl Stage4Engine {
     /// Precedence: direct layer channel, then Aux KB channel (aux layers only), then the Global
     /// channel. A layer that is in Aux KB mode ignores the internal keybed (Global channel).
     pub fn route_for(&self, layer: LayerId, channel: u8) -> Option<NoteRoute> {
-        let idx = layer as usize;
-        if self.layer_midi_channels[idx] == Some(channel) {
+        if self.layer_channel(layer) == Some(channel) {
             return Some(NoteRoute::Layer);
         }
         let aux_layer = self.aux_kb.is_aux_layer(layer);

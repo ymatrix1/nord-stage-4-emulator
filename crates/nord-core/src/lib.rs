@@ -12,6 +12,7 @@ pub mod render;
 pub mod render_opts;
 pub mod sinc;
 pub mod store_cli;
+pub mod sweep;
 pub mod synth;
 pub mod synth_params;
 pub mod synth_sample;

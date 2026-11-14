@@ -204,11 +204,11 @@ mod tests {
     #[test]
     fn inventory_lookup_matches_the_binding() {
         assert!(!inventory_unsupported("piano.kb_zone_up"));
-        assert!(inventory_unsupported("piano.select_dial"));
+        assert!(!inventory_unsupported("piano.select_dial"));
         assert!(!inventory_unsupported("piano.sustped"));
         assert!(!inventory_unsupported("piano.unison"));
         let mut u = PianoUi::default();
-        assert!(u.mark_inv("piano.select_dial", "r"));
+        assert!(!u.mark_inv("piano.select_dial", "r"));
         assert!(!u.mark_inv("piano.zone_leds", "r"));
         assert!(!u.mark_inv("piano.unison", "r"));
     }

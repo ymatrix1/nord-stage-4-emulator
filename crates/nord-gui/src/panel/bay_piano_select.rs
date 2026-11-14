@@ -373,10 +373,9 @@ mod tests {
             assert!(ids.contains(&id), "{id}");
         }
         let d: Vec<_> = dims.iter().map(|d| d.0).collect();
-        assert_eq!(
-            d,
-            ["piano.select_dial"],
-            "only the inventory-unsupported dial"
+        assert!(
+            d.is_empty(),
+            "nothing in the select group is unsupported: {d:?}"
         );
     }
 
@@ -385,11 +384,8 @@ mod tests {
         let (_, ids, dims) = render(|s| s.piano_cat = PianoCategory::Clav);
         assert_eq!(ids.len(), 12);
         let d: Vec<_> = dims.iter().map(|d| d.0).collect();
-        assert_eq!(
-            d,
-            ["piano.select_dial", "piano.soft_release", "piano.timbre"]
-        );
-        assert!(dims[2].1.contains("Clav"));
+        assert_eq!(d, ["piano.soft_release", "piano.timbre"]);
+        assert!(dims[1].1.contains("Clav"));
     }
 
     #[test]
