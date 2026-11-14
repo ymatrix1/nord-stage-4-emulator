@@ -1,7 +1,7 @@
 ---
 # ns4-qdzu
 title: 'STORE flow details: default name suffix, program categories'
-status: todo
+status: completed
 type: task
 created_at: 2026-11-14T03:34:18Z
 updated_at: 2026-11-14T03:34:18Z
@@ -14,8 +14,16 @@ Store As on hardware proposes the current name with a number suffix (NS4 Palette
 Match hardware display behaviour.
 
 ## Acceptance Criteria
-- [ ] Behaviour implemented with tests
-- [ ] Spec and provenance tags updated
+- [x] STORE AS proposes `Name 2` (numbered) when the name exists in the library or opened archive
+- [x] Category list is the 26 firmware categories (already adopted, VERIFIED provenance)
+- [x] Behaviour implemented with tests
+- [x] Spec and provenance tags updated
 
 ## Out of Scope
 Engine changes unrelated to the display.
+
+## Summary of Changes
+- `name.rs`: pure `suggest_name(name, taken)` with unit tests.
+- `store.rs`: `UserLibrary::name_exists`, `StoreFlow::begin_as` takes a `taken` predicate.
+- `actions.rs`: `store_as` uses both and presets the category of the program at the current location.
+- Spec `midi-and-control.md` and `dsoundman-course-findings.md` updated.

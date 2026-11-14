@@ -49,6 +49,7 @@ impl ProgramUi {
         self.loc = loc;
         self.browse = loc;
         self.preset_name = false; // manual p.42: reset when a Program is loaded
+        self.mark_clean();
         self.extern_led_until = self.now_ms.saturating_add(700);
         if let Some(p) = self.library.get(loc) {
             self.title = p.name.clone();
