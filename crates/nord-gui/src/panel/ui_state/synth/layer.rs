@@ -6,7 +6,7 @@
 
 use super::tables::{self, ANALOG, FM_ALGOS};
 use crate::audio::SynthGroup;
-use nord_core::synth::{SynthOscMode, VaWaveform};
+use nord_core::synth::{SynthOscMode, VaWaveform, PATTERN_PRESETS};
 use nord_core::synth_types::ArpMode;
 
 /// Attack / Decay / Release times in seconds.
@@ -91,7 +91,7 @@ pub struct SynthLayerUi {
     pub arp_kind: u8,
     pub arp_dir: u8,
     pub zigzag: bool,
-    /// Range knob in octaves `0..=4`.
+    /// Range knob in octaves `1..=4`, in steps of 1/3 octave (manual p.35).
     pub arp_range: f32,
     pub gate_env: f32,
     pub arp_rate: f32,
@@ -99,15 +99,22 @@ pub struct SynthLayerUi {
     pub arp_div: u8,
     pub pattern_on: bool,
     pub pattern_preset: u8,
+    /// Pattern length `2..=16` (the preset's, or the custom one once edited).
     pub pattern_len: u8,
-    /// Cursor of the pattern edit pages (UI-only; custom patterns are not in the engine).
+    /// Cursor of the pattern edit pages (the step Gate / Accent / Pan edit).
     pub pattern_cursor: u8,
+    /// The custom pattern plays instead of preset `pattern_preset` (set by the first edit).
+    pub pattern_custom: bool,
+    /// Gate length per step in eighths of a step, `0` = rest.
+    pub step_gate: [u8; 16],
+    pub step_accent: [bool; 16],
+    /// Pan per step: 0 Left, 1 Center, 2 Right.
+    pub step_pan: [u8; 16],
     pub kb_sync: bool,
     pub kb_hold_exclude: bool,
     // Strip
     pub octave: i8,
     pub kb_zone: u8,
-    pub pstick: bool,
 }
 
 impl Default for SynthLayerUi {
@@ -164,11 +171,14 @@ impl Default for SynthLayerUi {
             pattern_preset: 0,
             pattern_len: 4,
             pattern_cursor: 0,
+            pattern_custom: false,
+            step_gate: PATTERN_PRESETS[0].steps,
+            step_accent: [false; 16],
+            step_pan: [1; 16],
             kb_sync: false,
             kb_hold_exclude: false,
             octave: 0,
             kb_zone: 0,
-            pstick: false,
         }
     }
 }
@@ -304,6 +314,12 @@ impl SynthLayerUi {
                 self.pattern_on = src.pattern_on;
                 self.pattern_preset = src.pattern_preset;
                 self.kb_sync = src.kb_sync;
+                self.zigzag = src.zigzag;
+                self.pattern_len = src.pattern_len;
+                self.pattern_custom = src.pattern_custom;
+                self.step_gate = src.step_gate;
+                self.step_accent = src.step_accent;
+                self.step_pan = src.step_pan;
             }
         }
     }

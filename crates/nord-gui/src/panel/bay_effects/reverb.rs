@@ -85,7 +85,7 @@ pub(super) fn reverb(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             "reverb.variation",
             text,
             c.rev_alt,
-            "VARIATION (Spring, Booth, Room) or CHORALE (Stage, Hall, Cathedral): Shift + selector",
+            "VARIATION (Spring: longer tail; Booth, Room: longer pre-delay) or CHORALE (Stage, Hall, Cathedral: more pitch modulation): Shift + selector",
             why,
         );
 

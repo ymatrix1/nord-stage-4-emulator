@@ -3,6 +3,8 @@
 use super::page::{SynthPage, ARP_PAGES};
 use super::tables::VIBRATO_DELAYS;
 use super::{Scope, SynthUi};
+#[cfg(test)]
+use crate::audio::PatternParam;
 use crate::audio::SynthParam;
 
 fn bump(v: u8, steps: i32, max: u8) -> u8 {
@@ -26,22 +28,16 @@ impl SynthUi {
                     l.arp_dir = dir
                 });
             }
-            (1, _) => self.layer_mut().zigzag = steps > 0,
+            (1, _) => self.set_zigzag(steps > 0),
             (2, 1) => {
                 let p = bump(self.layer().pattern_preset, steps, 7);
-                self.edit(Scope::Arp, SynthParam::PatternPreset(p), |l| {
-                    l.pattern_preset = p
-                });
+                self.choose_preset(p);
             }
-            (2, _) => {
-                let l = self.layer_mut();
-                l.pattern_len = (i32::from(l.pattern_len) + steps).clamp(2, 16) as u8;
-            }
-            (_, 1) => {
-                let l = self.layer_mut();
-                l.pattern_cursor = bump(l.pattern_cursor, steps, l.pattern_len - 1);
-            }
-            _ => {} // Gate / Accent / Pan step editing: not in the engine (dial_defs says so).
+            (2, _) => self.step_pattern_len(steps),
+            (_, 1) => self.move_cursor(steps),
+            (3, _) => self.step_gate(steps),
+            (4, _) => self.step_accent(steps),
+            _ => self.step_pan(steps),
         }
     }
 
@@ -130,19 +126,58 @@ mod tests {
         assert!(
             params(&mut s).contains(&SynthParam::ArpMode(nord_core::synth_types::ArpMode::Down))
         );
+        s.take_edits();
         s.turn_dial(2, 1, false);
         assert!(s.layer().zigzag);
+        assert_eq!(
+            params(&mut s),
+            vec![SynthParam::Pattern(PatternParam::Zigzag(true))]
+        );
+        s.turn_dial(2, -1, false);
+        assert!(!s.layer().zigzag);
         s.page = SynthPage::Arp(2);
         s.turn_dial(1, 3, false);
         assert_eq!(s.layer().pattern_preset, 3);
         assert!(params(&mut s).contains(&SynthParam::PatternPreset(3)));
         s.turn_dial(2, 4, false);
-        assert_eq!(s.layer().pattern_len, 8);
-        assert!(s.take_edits().is_empty(), "length is UI-only");
+        assert_eq!(s.layer().pattern_len, 12, "preset 4 has 8 steps, +4");
+        assert!(params(&mut s).contains(&SynthParam::Pattern(PatternParam::Len(12))));
+    }
+
+    #[test]
+    fn pattern_pages_edit_gate_accent_and_pan_of_the_cursor_step() {
+        let mut s = SynthUi::new();
         s.page = SynthPage::Arp(3);
         s.turn_dial(1, 2, false);
         assert_eq!(s.layer().pattern_cursor, 2);
-        assert!(s.dial_unsupported(1).is_some());
+        s.take_edits();
+        s.turn_dial(2, 2, false);
+        assert!(
+            params(&mut s).contains(&SynthParam::Pattern(PatternParam::Gate {
+                step: 2,
+                eighths: 6
+            }))
+        );
+        s.page = SynthPage::Arp(4);
+        s.turn_dial(2, 1, false);
+        assert!(
+            params(&mut s).contains(&SynthParam::Pattern(PatternParam::Accent {
+                step: 2,
+                on: true
+            }))
+        );
+        s.page = SynthPage::Arp(5);
+        s.turn_dial(2, -1, false);
+        assert!(
+            params(&mut s).contains(&SynthParam::Pattern(PatternParam::Pan {
+                step: 2,
+                pan: nord_core::synth::PatternPan::Left
+            }))
+        );
+        for n in 1..=5 {
+            s.page = SynthPage::Arp(n);
+            assert!(s.dial_unsupported(1).is_none() && s.dial_unsupported(2).is_none());
+        }
     }
 
     #[test]

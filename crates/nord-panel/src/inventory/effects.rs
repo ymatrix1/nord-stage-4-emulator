@@ -50,6 +50,15 @@ pub fn controls() -> Vec<ControlEntry> {
         e("mod1.rate", s, K::Knob, "MOD 1 RATE", 49)
             .morph()
             .bound("mod1_rate"),
+        e(
+            "mod1.mst_clk",
+            s,
+            K::Knob,
+            "MOD 1 MST CLK (Shift+turn Rate)",
+            50,
+        )
+        .shift()
+        .bound("fxz_mod1_beats_{n}"),
         e("mod1.amount", s, K::Knob, "MOD 1 AMOUNT", 49)
             .morph()
             .bound("fxx_mod1_amount_{n}"),
@@ -161,7 +170,7 @@ pub fn controls() -> Vec<ControlEntry> {
             52,
         )
         .shift()
-        .todo(bean),
+        .bound("fxz_rev_var_{n}"),
         e("reverb.dry_wet", s, K::Knob, "REVERB DRY/WET", 52)
             .morph()
             .bound("rev_mix"),
@@ -177,7 +186,7 @@ mod tests {
 
     #[test]
     fn effects_total() {
-        assert_eq!(controls().len(), 50);
+        assert_eq!(controls().len(), 51);
     }
 
     #[test]

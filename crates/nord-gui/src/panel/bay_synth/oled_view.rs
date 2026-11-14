@@ -5,8 +5,7 @@
 
 use super::oled_types::{Graphic, Icon, OledView, Soft};
 use crate::panel::ui_state::{
-    dial_defs, SynthPage, SynthUi, ARP_DIRECTIONS, FILTER_TYPES, LFO_SHAPES, VIBRATO_DELAYS,
-    WAVE_TYPES,
+    dial_defs, SynthPage, SynthUi, FILTER_TYPES, LFO_SHAPES, VIBRATO_DELAYS, WAVE_TYPES,
 };
 
 /// `103 ms`, `1.5 s`, `11 s`.
@@ -157,34 +156,7 @@ pub fn view_of(sui: &SynthUi, sample_name: Option<&str>) -> OledView {
                 String::new(),
             ],
         ),
-        SynthPage::Arp(n) => {
-            let pages = format!("{n}/5");
-            let gfx = match n {
-                1 => Graphic::Direction(l.arp_dir),
-                2 => Graphic::Pattern {
-                    preset: l.pattern_preset,
-                    len: l.pattern_len,
-                    cursor: None,
-                },
-                _ => Graphic::Pattern {
-                    preset: l.pattern_preset,
-                    len: l.pattern_len,
-                    cursor: Some(l.pattern_cursor),
-                },
-            };
-            let (v1, v2) = match n {
-                1 => (
-                    ARP_DIRECTIONS[usize::from(l.arp_dir) % 4].to_string(),
-                    if l.zigzag { "ON" } else { "OFF" }.to_string(),
-                ),
-                2 => (
-                    format!("{}", l.pattern_preset + 1),
-                    l.pattern_len.to_string(),
-                ),
-                _ => ((l.pattern_cursor + 1).to_string(), "-".to_string()),
-            };
-            (sui.page.title(), gfx, [pages, v1, v2])
-        }
+        SynthPage::Arp(n) => super::oled_arp::arp_page(sui, n),
         SynthPage::Vibrato => (
             "VIBRATO",
             Graphic::Vibrato {
@@ -316,24 +288,6 @@ mod tests {
             assert_eq!(v.soft[1].as_ref().unwrap().value, "300 ms");
             assert!(matches!(v.graphic, Graphic::Env { .. }));
         }
-    }
-
-    #[test]
-    fn arp_menu_has_five_pages_and_dims_pattern_editing() {
-        let mut s = SynthUi::new();
-        for n in 1..=5u8 {
-            s.page = SynthPage::Arp(n);
-            let v = view_of(&s, None);
-            assert_eq!(v.soft[0].as_ref().unwrap().value, format!("{n}/5"));
-            assert_eq!(v.soft[0].as_ref().unwrap().label, "PAGE");
-        }
-        s.page = SynthPage::Arp(3);
-        let v = view_of(&s, None);
-        assert!(v.soft[1].as_ref().unwrap().dim);
-        s.page = SynthPage::Arp(2);
-        let v = view_of(&s, None);
-        assert!(!v.soft[1].as_ref().unwrap().dim);
-        assert!(v.soft[2].as_ref().unwrap().dim);
     }
 
     #[test]

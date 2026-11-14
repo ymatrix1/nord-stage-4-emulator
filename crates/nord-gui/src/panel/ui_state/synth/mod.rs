@@ -15,6 +15,7 @@ mod layer_btn;
 mod layer_emit;
 mod legacy;
 mod page;
+mod pattern;
 mod pots;
 mod press;
 mod tables;
@@ -64,8 +65,10 @@ pub struct SynthUi {
     pub solo: bool,
     /// KB HOLD, shared by all layers (manual p.36).
     pub kb_hold: bool,
-    /// SUSTPED of the section (UI-only, no pedal routing yet).
+    /// SUSTPED of the section (Shift+Layer A): the layers follow the sustain pedal.
     pub sustped: bool,
+    /// PSTICK of the section (Shift+Layer B): the layers follow the pitch stick.
+    pub pstick: bool,
     pub group_filter: Latch,
     pub group_lfo: Latch,
     pub group_arp: Latch,
@@ -101,6 +104,7 @@ impl SynthUi {
             solo: false,
             kb_hold: false,
             sustped: false,
+            pstick: false,
             group_filter: Latch::default(),
             group_lfo: Latch::default(),
             group_arp: Latch::default(),
@@ -221,18 +225,22 @@ impl SynthUi {
     }
 }
 
+/// Why the Aux KB LEDs are inert: the engine routes aux layers (`engine/aux_kb.rs`), but the
+/// assignment is made in the Program area's Aux KB menu, which the panel does not drive yet.
+pub const AUX_WHY: &str =
+    "Aux KB layers are assigned in the Aux KB menu, which the panel does not drive yet (the engine routes them)";
+
+/// Why KB ZONE is inert: the engine reads a layer's zone code only from a loaded program and
+/// applies it only in the opt-in `FirmwareRouting::On` mode, which the standalone does not enable.
+pub const ZONE_WHY: &str =
+    "KB ZONE: the engine takes zones from loaded programs and honours them only in the opt-in firmware routing mode (not enabled in the standalone)";
+
 /// Reason a control has no engine effect (dimmed with a tooltip), `None` when it works.
 pub fn unsupported_reason(id: &str) -> Option<&'static str> {
     Some(match id {
         "synth.extern" => EXTERN_WHY,
-        "synth.aux_led.a" | "synth.aux_led.b" | "synth.aux_led.c" => {
-            "Aux KB assignment is not implemented (bean ns4-ymci)"
-        }
-        "synth.kb_zone_down" | "synth.kb_zone_up" | "synth.zone_leds" => {
-            "KB ZONE assignment is not wired to the engine split router (bean ns4-4w9l)"
-        }
-        "synth.sustped" => "Per-section sustain pedal routing is not implemented (bean ns4-4w9l)",
-        "synth.pstick" => "Per-layer pitch stick routing is not implemented (bean ns4-4w9l)",
+        "synth.aux_led.a" | "synth.aux_led.b" | "synth.aux_led.c" => AUX_WHY,
+        "synth.kb_zone_down" | "synth.kb_zone_up" | "synth.zone_leds" => ZONE_WHY,
         _ => return None,
     })
 }
@@ -329,11 +337,16 @@ mod tests {
         assert!(unsupported_reason("synth.extern")
             .unwrap()
             .contains("Extern"));
-        assert!(unsupported_reason("synth.aux_led.b").is_some());
+        assert!(unsupported_reason("synth.aux_led.b")
+            .unwrap()
+            .contains("Aux KB menu"));
         assert!(unsupported_reason("synth.kb_zone_up")
             .unwrap()
             .contains("KB ZONE"));
         assert!(unsupported_reason("synth.filter.freq").is_none());
+        for id in ["synth.sustped", "synth.pstick", "synth.sound_init"] {
+            assert!(unsupported_reason(id).is_none(), "{id} reaches the engine");
+        }
     }
 
     #[test]

@@ -96,7 +96,6 @@ const fn dim(label: &'static str, why: &'static str) -> Option<DialDef> {
 
 const NO_LIBRARY: &str =
     "Sample Library browsing is not wired to the panel dials; load a .nsmp4 from the library";
-const NO_PATTERN_EDIT: &str = "Custom pattern editing is not in the engine (8 fixed presets)";
 
 /// Dial table: `[left, middle, right]`, `None` = the dial is unused on this page.
 pub fn dial_defs(page: SynthPage, mode: SynthOscMode) -> [Option<DialDef>; 3] {
@@ -112,27 +111,11 @@ pub fn dial_defs(page: SynthPage, mode: SynthOscMode) -> [Option<DialDef>; 3] {
             [d("ATTACK"), d("DECAY"), d("RELEASE")]
         }
         SynthPage::LfoWave => [d("WAVE"), None, None],
-        SynthPage::Arp(1) => [
-            d("PAGE"),
-            d("DIRECTION"),
-            dim("ZIG ZAG", "Zig Zag is not in the arpeggiator engine"),
-        ],
-        SynthPage::Arp(2) => [d("PAGE"), d("PRESET"), dim("LENGTH", NO_PATTERN_EDIT)],
-        SynthPage::Arp(3) => [
-            d("PAGE"),
-            dim("POSITION", NO_PATTERN_EDIT),
-            dim("GATE", NO_PATTERN_EDIT),
-        ],
-        SynthPage::Arp(4) => [
-            d("PAGE"),
-            dim("POSITION", NO_PATTERN_EDIT),
-            dim("ACCENT", "Pattern accents are not in the engine"),
-        ],
-        SynthPage::Arp(_) => [
-            d("PAGE"),
-            dim("POSITION", NO_PATTERN_EDIT),
-            dim("PAN", "Per-step pan is not in the engine"),
-        ],
+        SynthPage::Arp(1) => [d("PAGE"), d("DIRECTION"), d("ZIG ZAG")],
+        SynthPage::Arp(2) => [d("PAGE"), d("PRESET"), d("LENGTH")],
+        SynthPage::Arp(3) => [d("PAGE"), d("POSITION"), d("GATE")],
+        SynthPage::Arp(4) => [d("PAGE"), d("POSITION"), d("ACCENT")],
+        SynthPage::Arp(_) => [d("PAGE"), d("POSITION"), d("PAN")],
         SynthPage::Vibrato => [d("RATE"), d("AMOUNT"), d("DLY TIME")],
         SynthPage::PitchSmp if mode == SynthOscMode::Sample => [
             d("PITCH"),
@@ -201,15 +184,21 @@ mod tests {
     }
 
     #[test]
-    fn arp_pages_navigate_with_the_left_dial_and_dim_pattern_editing() {
+    fn arp_pages_navigate_with_the_left_dial_and_every_pattern_dial_works() {
         for n in 1..=ARP_PAGES {
             let defs = dial_defs(SynthPage::Arp(n), SynthOscMode::Analog);
             assert_eq!(defs[0].unwrap().label, "PAGE");
         }
+        for n in 1..=ARP_PAGES {
+            let defs = dial_defs(SynthPage::Arp(n), SynthOscMode::Analog);
+            for d in defs.iter().flatten() {
+                assert!(d.unsupported.is_none(), "{n} {}", d.label);
+            }
+        }
         let p3 = dial_defs(SynthPage::Arp(3), SynthOscMode::Analog);
-        assert!(p3[1].unwrap().unsupported.is_some());
-        let p2 = dial_defs(SynthPage::Arp(2), SynthOscMode::Analog);
-        assert!(p2[1].unwrap().unsupported.is_none());
+        assert_eq!(p3.map(|x| x.unwrap().label), ["PAGE", "POSITION", "GATE"]);
+        let p5 = dial_defs(SynthPage::Arp(5), SynthOscMode::Analog);
+        assert_eq!(p5[2].unwrap().label, "PAN");
     }
 
     #[test]

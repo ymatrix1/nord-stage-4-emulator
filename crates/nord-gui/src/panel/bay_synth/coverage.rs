@@ -120,8 +120,6 @@ fn dimmed_controls_are_exactly_the_ones_without_engine_support() {
         "synth.extern",
         "synth.kb_zone_down",
         "synth.kb_zone_up",
-        "synth.pstick",
-        "synth.sustped",
         "synth.zone_leds",
     ];
     expected.sort();
@@ -209,4 +207,47 @@ fn program_load_values_in_the_old_fields_reach_layer_a() {
     run_frame(&ctx, &mut state, &audio, egui::RawInput::default());
     assert_eq!(state.synth_ui.layers[0].cutoff_hz, 3200.0);
     assert_eq!(state.synth_cutoff, 3200.0);
+}
+
+fn shift() -> egui::Modifiers {
+    egui::Modifiers {
+        shift: true,
+        ..egui::Modifiers::NONE
+    }
+}
+
+#[test]
+fn shift_click_on_waveform_runs_sound_init_on_the_engine_without_undo() {
+    let (ctx, mut state, audio, rx) = fresh();
+    let mut engine = Stage4Engine::new(48_000.0);
+    engine.synth_a.cutoff_hz = 321.0;
+    engine.synth_a.perf.zigzag = true;
+    click(&ctx, &mut state, &audio, "synth.sound_init", shift());
+    let edits = synth_edits(&rx);
+    assert_eq!(edits.first(), Some(&SynthEdit::SoundInit(0)));
+    let mut vol = 0.8;
+    for e in edits {
+        apply_audio_command(AudioCommand::Synth(e), &mut engine, &mut vol);
+    }
+    assert_ne!(engine.synth_a.cutoff_hz, 321.0);
+    assert!(!engine.synth_a.perf.zigzag);
+    assert_eq!(engine.undo_available(), None);
+}
+
+#[test]
+fn shift_clicking_layer_a_and_b_toggles_sustped_and_pstick_in_the_engine() {
+    let (ctx, mut state, audio, rx) = fresh();
+    click(&ctx, &mut state, &audio, "synth.layer.a", shift());
+    click(&ctx, &mut state, &audio, "synth.layer.b", shift());
+    let edits = synth_edits(&rx);
+    assert!(edits.contains(&SynthEdit::Sustped(true)));
+    assert!(edits.contains(&SynthEdit::Pstick(true)));
+    let mut engine = Stage4Engine::new(48_000.0);
+    let mut vol = 0.8;
+    for e in edits {
+        apply_audio_command(AudioCommand::Synth(e), &mut engine, &mut vol);
+    }
+    assert_eq!(engine.pedals.sustped[4..7], [true; 3]);
+    assert_eq!(engine.pedals.pstick[4..7], [true; 3]);
+    assert!(state.synth_ui.sustped && state.synth_ui.pstick);
 }
