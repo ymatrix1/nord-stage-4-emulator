@@ -153,6 +153,22 @@ ns4 inspect patch.ns4p --json
 python tools/ns4_inspect.py patch.ns4p --decode
 ```
 
+### 4.3 Engine export: `.ns4p` store and Live slots
+
+Code: `engine/program_export.rs`, `cbin/program_file.rs`, `store_cli.rs`.
+
+- `Stage4Engine::export_program(&base)`, `ProgramState::export_into` and `LiveSlots::export_slot(slot, &base)` patch the engine state onto a base `ProgramDecoded`. A field is written only when the engine value differs from what `apply_program` would derive from the base value, so `apply_program(base)` then `export_program(base)` returns `base` and unedited bytes stay identical (tests `unedited_export_equals_the_base_and_is_byte_identical`, `edits_survive_encode_parse_apply`).
+- Mapped fields: tempo, split points / crossfades / zone enables, Organ model, drawbars, octave, percussion, rotary, layer levels with Wheel / A.T. / Ctrl Pedal deltas for all 7 layers, Piano category / timbre / touch / string resonance / pedal noise / soft release / unison / dynamic compression / octave, Synth octave. Not mapped (kept from the base): per-layer FX chains, deep Synth parameters, scene enables, transpose and master compressor (no packed bit position is known), Organ vibrato / scanner, name and category.
+- `ProgramDecoded::to_cbin_file_like(&template)` keeps the template header (format version, kind, bank, location, 18 reserved bytes) and its checksum when the payload is unchanged; otherwise the checksum is the wrapping byte sum (`ASSUMED` hardware rule, identical to `to_cbin_file`). `to_live_cbin_file(slot)` writes kind `ns4l` with bank 0 and location = slot (`ASSUMED`: no real `.ns4l` header was inspected).
+- `LiveSlots::import_program(slot, &prog, sample_rate)` loads a decoded program into a slot through a scratch engine.
+
+```bash
+# Re-store a program through the engine (byte-identical without edits), optionally editing:
+ns4 store-program base.ns4p out.ns4p [--tempo 97] [--bank N] [--loc N]
+# Build the Live slots from programs ('-' = empty) and write live-1.ns4l .. live-8.ns4l:
+ns4 export-live out_dir a.ns4p - c.ns4p
+```
+
 ---
 
 ## 5. OS v1.66 Firmware Container Layout

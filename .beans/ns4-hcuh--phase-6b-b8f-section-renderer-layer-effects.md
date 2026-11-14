@@ -1,7 +1,7 @@
 ---
 # ns4-hcuh
 title: 'Phase 6b B8f: section renderer - layer effects'
-status: todo
+status: in-progress
 type: task
 created_at: 2026-11-12T21:36:09Z
 updated_at: 2026-11-12T21:36:09Z
@@ -22,7 +22,7 @@ Plan: `docs/ROADMAP.md` Phase 6b, `docs/specs/control-inventory.md`, decision D1
 Every Nord Stage 4 front-panel control from the manual exists in the emulator with a layout rect, a renderer and a binding (Bound, UiOnly or Unsupported), drawn as a 2.5D panel shared by the standalone app and the plugin editor.
 
 ## Acceptance Criteria
-- [ ] Every inventory control in the section has a layout rect, renderer and binding
+- [x] Every inventory control in the section has a layout rect, renderer and binding
 - [ ] Golden image for the section
 - [ ] No overlaps; controls inside section bounds
 
@@ -31,3 +31,4 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
+Standalone renderer in `crates/nord-gui/src/panel/bay_effects/` (`ctx`, `focus`, `modulation`, `delay`, `amp`, `reverb`, `ids`): all 50 `Effects` ids drawn at `layout_px` rectangles (headless test `every_inventory_id_has_a_painted_widget`), Shift and hold-to-shift through `nord_panel::behaviour`, FX focus / GROUP / GLOBAL, tap tempo, MST CLK. Engine edits: `FxEdit` (`audio/edits/fx.rs`). GUI chain mirror: `panel/ui_state/fx/`. Still open: golden image, plugin editor (B11).

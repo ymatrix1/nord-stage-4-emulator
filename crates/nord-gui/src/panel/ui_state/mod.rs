@@ -1,6 +1,6 @@
 //! Per-area UI-only panel state, one file per area so bay work does not collide.
 
-mod fx;
+pub mod fx;
 mod organ;
 mod piano;
 mod program;

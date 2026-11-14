@@ -12,6 +12,7 @@ pub mod organ_preset;
 pub mod piano_preset;
 pub mod piano_sample;
 pub mod presets;
+pub mod program_file;
 pub mod sample;
 pub mod synth_osc;
 pub mod synth_preset;

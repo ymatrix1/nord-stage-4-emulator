@@ -12,7 +12,7 @@ Tags follow `.agents/rules/provenance-in-code.md`. Only addresses, indices and d
 |---|---|---|
 | Who writes the stage type? | The synth layer apply function (`0xC00171B0`, value `(word + 0x8000) >> 16` stored at `[strip + 0x98]`) writes the **pending type index**; `0xC01CE7D8` copies the 40-byte block `[strip + 0x98 .. 0xC0)` to `[strip + 0xC8 ..)`; the sender `0xC01CC85C` builds strip word 0 = `((byte & 0x7F) << 24) \| table[[strip + 0xC8]]` (table `0xC02FA050`, 74 ids). Earlier note (s6 of synth-strip-path: "the edit ids do not change the type") was a read of the **applied** copy: `0xC01CE7D8` is reached from `0xC0019410` only for the state marker 0x39, so in the harness word 0 stays type 2 while `[strip + 0x98]` follows the edits | VERIFIED (write watch, code reads) |
 | Mapping category / wave to type | bank 0 (ANALOG), `kMode = 1`: table of section 2 (`data/synth-wave-types.csv`, 112 harness points); an out-of-range wave falls back to type 2; `kMode = 0` gives the marker 0x39; banks 1 and 2 give types 49 .. 53 (one per category 0..4) | VERIFIED (run) |
-| Smooth Lead (ANALOG cat 3, wave 0) | type **7** = stage `0x1212D3`, **not** the stage `0x1215FB` of cat 0 wave 2 and not a triangle | VERIFIED (run), ASSUMED that the preset category / wave fields equal the edit-id values |
+| Smooth Lead (ANALOG cat 3, wave 0) | type **7** = stage `0x1212D3`, **not** the stage `0x1215FB` of cat 0 wave 2 and not a triangle | VERIFIED (run), preset category / wave fields equal the edit-id domain: VERIFIED by range ([synth-wave-models](synth-wave-models.md) s7) |
 | Stage models | not written: `0x1212D3` is 200 instructions (`0x1212D3..0x12145D`, listing `0x2425A6..0x2428BA`), four calls of the helper `0x1251D4` (not `0x12501F`), reciprocal normalisation (`RECIPS`), a shape-dependent pulse width; its parameter block and the A-slot call frame are not set up | open |
 
 ## 2. Table (ANALOG, kOscBank 0, kMode 1)
@@ -43,4 +43,4 @@ Installing `0x1212D3` in slot 0 of the stage-A table (`--msg-script`: `0 0xC10B8
 
 1. Drive stage `0x1212D3` in `sharc-org` with a frame (pitch increment, shape word) and fit / derive the waveform; write the Python model and golden, then the Rust opt-in module (Smooth Lead first).
 2. Repeat for `0x120CD0 / 0x121183 / 0x1215FB / 0x121B99` (SAW, SQUARE, TRIANGLE of category 0) and the sub / sync stages.
-3. Confirm the category numbering of the preset field against the edit ids (decode a program with a known wave).
+3. Done in [synth-wave-models](synth-wave-models.md) s7: the category / wave domain of the preset fields equals the edit ids (sizes 7, 3, 9, 5, 7, 6, 5, 3 and 578 factory layers in range).

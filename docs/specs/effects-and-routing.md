@@ -122,6 +122,22 @@ Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant belo
 
 `Stage4Engine::apply_fx_sharing` runs at the start of `process_block` (field copies only). Callers that drive `render_frame` directly call it after changing settings. All modes default off, so default rendering is bit-identical (existing golden tests unchanged). Limitation: the TO ROTARY bus keeps its own rotor phase, independent of the organ's rotor.
 
+### 2.9 Standalone panel: Layer Effects bay (`ns4-hcuh`, B8f)
+
+`crates/nord-gui/src/panel/bay_effects/` draws all 50 inventory ids of the Effects section at their `nord_panel::layout` rectangles and edits the focused FX slot through `AudioCommand::Fx(FxEdit)` (`audio/edits/fx.rs`; allocation-free `apply`, every value clamped).
+
+| Item | Behaviour |
+|---|---|
+| FX slots | `0` Organ (engine chains 0 **and** 1: one shared chain, manual p.19), `1`/`2` Piano A/B (chains 2/3), `3`/`4`/`5` Synth A/B/C (chains 4/5/6). `Stage4PanelState::fx_focus` keeps its meaning (`0` Organ, `1` Piano, `2..=4` Synth A/B/C); `FxUi::piano_b` is the Piano layer |
+| FX FOCUS | ORGAN / PIANO / SYNTH buttons; pressing the focused Piano or Synth button again steps to its next Layer. LEDs: one per Layer (Organ, Piano A/B, Synth A/B/C); GROUP lights the whole Section |
+| ON buttons | The engine has no ON switch per unit: Mod 1 / Mod 2 send type `Off`, Amp sends cabinet `Off` with zero drive and EQ, Reverb sends model `Off`; LAYER EFFECTS ON gates all of them. TO ROTARY is a routing and survives Amp OFF |
+| Shift / hold | A button with a shifted function treats Shift (keyboard) + click, or a press held for 500 ms (`nord_panel::behaviour::HOLD_MS`), as the shifted press (VARIATION / PED, GLOBAL, GROUP, PING PONG, ANALOG). Shift + turn of TEMPO enters MST CLK (17 divisions, `DELAY_SYNC_BEATS`), Shift + turn of COMP AMOUNT sets FAST |
+| GROUP / GLOBAL | `FxUi` keeps the source slot of each mode and sends `FxEdit::Sharing`. Editing another Layer while a mode covers it re-points the source to that Layer, otherwise the engine copy would undo the edit |
+| Mod 1 PED | Wah only: Shift + selector toggles PED and the RATE knob becomes the static filter position (`mod1_ped_pos`) |
+| Filter RES | UI `0..1`, sent as `0..10` (`eq_filter_res`, engine range). The plugin parameter `fxx_filter_res_*` is `0..1` and is written unscaled, so it only reaches the lowest tenth of the range (plugin follow-up, not changed here) |
+| Not in the engine | Mod 1 A-WAH and PUMP, Mod 2 ENS and SPIN: the LED is drawn dark with a tooltip naming the gap, the selector skips them. Reverb VARIATION of Spring / Booth / Room (CHORALE exists for Stage / Hall / Cathedral and shares the engine's single colour setting with BRIGHT / DARK): legend dimmed, flag kept in the UI only. Amp VARIATION: stored by the engine without a distinct voicing (legend dimmed). TO ROTARY on the Organ slot: dimmed and inert (the Organ already feeds the Rotary) |
+| UI-only | Per-unit ON state, LAYER EFFECTS ON, focus, GROUP / GLOBAL sources and tap tempo live in `FxUi`; after a program load the legacy `mod1_type`, `delay_on`, `reverb_model` and knob fields are adopted into the focused chain (`StateEcho`), the other five slots keep their last panel view |
+
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
 After summing all 7 active layers:

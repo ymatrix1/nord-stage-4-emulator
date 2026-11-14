@@ -61,11 +61,42 @@ def script(keys: list[int]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# VERIFIED (keydown-organ-keys.csv, model 1, 24 notes): ticks after key-down at which the slots
+# 0, 2, 5, 10 are sent; ASSUMED grouping for the other slots (vox_timeline.rs).
+ON_TICKS = {0: 3, 1: 3, 2: 17, 3: 17, 4: 17, 5: 17}
+FRAME_RATE, TICK_SECONDS = 43402.34375, 0.001
+
+
+def on_tick(slot: int) -> int:
+    return ON_TICKS.get(slot, 47)
+
+
+def timeline_script(keys: list[int]) -> str:
+    """Install burst plus the key-down weights at the real tick of each footage slot.
+
+    One pass is two frames; a tick (ASSUMED 1 ms) is `TICK_SECONDS * FRAME_RATE / 2` passes.
+    """
+    lines = [ln for ln in INSTALL.read_text().splitlines() if ln.split()[0] == "0"]
+    ticks = sorted({on_tick(s) for s in DEFAULT_LEVELS})
+    prev: dict[int, float] = {}
+    for tick in ticks:
+        levels = {s: v for s, v in DEFAULT_LEVELS.items() if on_tick(s) <= tick}
+        now = weights(keys, levels)
+        pas = round(tick * TICK_SECONDS * FRAME_RATE / 2)
+        for row, w in sorted(now.items()):
+            if prev.get(row) != w:
+                lines.append(f"{pas} {WEIGHTS0 + row:#x} {f32_bits(w):#010x}  # tick {tick}")
+        prev = now
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("keys", help="comma separated MIDI keys")
+    ap.add_argument("--timeline", action="store_true", help="staggered key-down ticks")
     ns = ap.parse_args(argv)
-    sys.stdout.write(script([int(k) for k in ns.keys.split(",")]))
+    keys = [int(k) for k in ns.keys.split(",")]
+    sys.stdout.write(timeline_script(keys) if ns.timeline else script(keys))
     return 0
 
 

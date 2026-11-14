@@ -211,6 +211,9 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Engine layer routing: section / layer enables VERIFIED on the ARM (`tools/arm_program_routing.py`), per-layer KB zone codes decoded, opt-in `FirmwareRouting` / `--firmware-routing`; B3 clip sub +16.5 to -1.6 dB, crest 12.8 to 17.2 dB, RMS +8.0 to +3.8 dB ([engine-routing](research/engine-routing.md))
 - [ ] Firmware map from the `kKbZone` code to the key range (OQ23), then flip `FirmwareRouting` to the default with a `render_hash` re-baseline
 - [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] B3 clip gap decomposed: layer B (section II off in the program) and notes outside the zone cause the sub and most of the RMS gap; Farfisa sounds in the oracle with the key-down words ([organ-output-level](research/organ-output-level.md))
+- [x] Engine rotary drive scale: preset unit 0..10 reaches the tube law unscaled (gain 8.3 instead of 1.73); opt-in `--rotary-drive scaled` ([b3-rotary](research/b3-rotary.md)); B3 clip with routing: presence -12 dB still fails, flip not made
+- [ ] Engine: honour section I / II and zone flags for organ layers, then re-run `emu_vs_hw.py --only organ_b3`; Farfisa processor port; layer level law; Vox level word; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 
@@ -225,7 +228,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [ ] B3: dry gain writer, tail phase, multi-write `A`, drawbar sweep; then make `B3Wheels` the B3 default (3 chords: 10 / 8 / 6 of 13 / 13 / 11 lines within 1 dB; hardware clip mid band -11.9 dB)
 - [x] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with the captured key-down weights (four footage rows per key, no velocity), 9.9 cent offset explained ([organ-keydown-weights](research/organ-keydown-weights.md))
 - [x] Vox oracle criterion: image start phases, 36-sine bank, instant weights; three chords within 0.34 dB on every line ([organ-vox-start-state](research/organ-vox-start-state.md))
-- [ ] Vox default: video check (mid +4.2 dB, RMS -5.9 dB, crest 29.4 against 16.1 dB), drawbar edit value law, organ level `L` and the model's key click (`ns4-58cz`)
+- [x] Vox key-down timeline (replaces the click, crest 16.1 dB), drawbar value law and slot wiring, boot gain word ([organ-vox-click](research/organ-vox-click.md))
+- [ ] Vox default: organ output level stage (RMS -13.7 dB) and the 1.5 to 8 kHz deficit (mid +7.8, presence -7.3, brilliance -9.5 dB) (`ns4-58cz`)
 - [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
 - [ ] Farfisa processor `0x122B85` (ARM weights and filter tables, OQ19) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust
 - [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
@@ -259,7 +263,9 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Firmware strip chain as one opt-in switch (`SynthLayer::chain = FirmwareStrip`: firmware saw, ADR record chain with the rate tables, strip word 3 cutoff law, firmware filter, gain de-zipper; `synth/strip_path.rs`, `strip_map.rs`, `render-patch --synth-chain strip`, spec [synth-engine](specs/synth-engine.md) 4.2); stage words checked against the oracle (`tools/synth_strip_e2e.py`), Smooth Lead presence gap -16.5 -> -9.0 dB ([synth-strip-path](research/synth-strip-path.md))
 - [x] Synth key-down velocity series `g(vel)` (VERIFIED table, EMPIRICAL S-curve) wired into the strip chain voice level (`synth/key_velocity.rs`, `tools/synth_velocity.py`); Wave edit ids probed in the ARM harness: they do not change strip word 0 (`tools/synth_wave_probe.py`, [synth-strip-path](research/synth-strip-path.md) s6); strip default stays off (presence -9.0 dB, RMS +3.8 dB)
 - [x] ANALOG wave to strip stage table (45 waves, 34 stage routines, `data/synth-wave-types.csv`, [synth-wave-stages](research/synth-wave-stages.md)); Smooth Lead SHAPE wave 0 = stage `0x1212D3`
-- [ ] Stage models (`0x1212D3` first, then SAW / SQUARE / TRIANGLE / SUB / SYNC stages) bit exact in Python, then opt-in Rust; synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
+- [x] Stage `0x1212D3` (ANALOG SHAPE) bit exact in Python (40-bit registers, 320 of 320 oracle words), Rust `synth/fw_shape.rs`, opt-in `strip_shape` ([synth-wave-models](research/synth-wave-models.md))
+- [x] Saw `0x1215FB` and square / pulse `0x121B99` stages bit exact in Python (320 of 320 oracle words each); preset category / wave == edit-id domain verified on 578 factory layers
+- [ ] Remaining stage models ( then SAW / SQUARE / TRIANGLE / SUB / SYNC stages) bit exact in Python, then opt-in Rust; synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
 - [ ] Pulse and triangle shapes, amp envelope smoothing
 - [ ] Hardware sweeps for the remaining ASSUMED scales ([synth-hardware-sweep-plan](research/synth-hardware-sweep-plan.md), OQ7)
 
