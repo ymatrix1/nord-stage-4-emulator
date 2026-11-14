@@ -23,5 +23,13 @@ def test_distinct_values_and_csv() -> None:
     ]
     assert p.distinct_values(rows) == {"0x061215fb"}
     text = p.rows_csv(rows)
-    assert text.splitlines()[0] == "mode,bank,cat,wave,w0,w1,w59,w60"
+    assert text.splitlines()[0] == "mode,bank,cat,wave,type,stage,w0,w1,w59,w60"
     assert text.splitlines()[2].endswith("0x061215fb,,0x02000000,")
+
+
+def test_stage_of_maps_types_and_rejects_markers() -> None:
+    assert p.stage_of(2) == 0x1215FB
+    assert p.stage_of(7) == 0x1212D3
+    assert p.stage_of(0x39) is None
+    assert p.stage_of(-1) is None
+    assert len(p.STAGE_TABLE) == 74

@@ -211,6 +211,9 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Engine layer routing: section / layer enables VERIFIED on the ARM (`tools/arm_program_routing.py`), per-layer KB zone codes decoded, opt-in `FirmwareRouting` / `--firmware-routing`; B3 clip sub +16.5 to -1.6 dB, crest 12.8 to 17.2 dB, RMS +8.0 to +3.8 dB ([engine-routing](research/engine-routing.md))
 - [ ] Firmware map from the `kKbZone` code to the key range (OQ23), then flip `FirmwareRouting` to the default with a `render_hash` re-baseline
 - [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
+- [x] B3 clip gap decomposed: layer B (section II off in the program) and notes outside the zone cause the sub and most of the RMS gap; Farfisa sounds in the oracle with the key-down words ([organ-output-level](research/organ-output-level.md))
+- [x] Engine rotary drive scale: preset unit 0..10 reaches the tube law unscaled (gain 8.3 instead of 1.73); opt-in `--rotary-drive scaled` ([b3-rotary](research/b3-rotary.md)); B3 clip with routing: presence -12 dB still fails, flip not made
+- [ ] Engine: honour section I / II and zone flags for organ layers, then re-run `emu_vs_hw.py --only organ_b3`; Farfisa processor port; layer level law; Vox level word; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
 
@@ -259,7 +262,10 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Firmware filter family `0x12566E` / `0x125913` / `0x125A50` (LP4, BP4, HP4) and the envelope rate tables as opt-in Rust (`synth/fw_filter.rs`, `synth/fw_env_rates.rs`, `SynthLayer::filter_engine`, spec [synth-engine](specs/synth-engine.md) 4.1); defaults and `render_hash` unchanged
 - [x] Firmware strip chain as one opt-in switch (`SynthLayer::chain = FirmwareStrip`: firmware saw, ADR record chain with the rate tables, strip word 3 cutoff law, firmware filter, gain de-zipper; `synth/strip_path.rs`, `strip_map.rs`, `render-patch --synth-chain strip`, spec [synth-engine](specs/synth-engine.md) 4.2); stage words checked against the oracle (`tools/synth_strip_e2e.py`), Smooth Lead presence gap -16.5 -> -9.0 dB ([synth-strip-path](research/synth-strip-path.md))
 - [x] Synth key-down velocity series `g(vel)` (VERIFIED table, EMPIRICAL S-curve) wired into the strip chain voice level (`synth/key_velocity.rs`, `tools/synth_velocity.py`); Wave edit ids probed in the ARM harness: they do not change strip word 0 (`tools/synth_wave_probe.py`, [synth-strip-path](research/synth-strip-path.md) s6); strip default stays off (presence -9.0 dB, RMS +3.8 dB)
-- [ ] Synth parity remainder (the strip stage of SHAPE / SUB OSC / SYNC waves is written by the program-load path, not the edit ids): `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
+- [x] ANALOG wave to strip stage table (45 waves, 34 stage routines, `data/synth-wave-types.csv`, [synth-wave-stages](research/synth-wave-stages.md)); Smooth Lead SHAPE wave 0 = stage `0x1212D3`
+- [x] Stage `0x1212D3` (ANALOG SHAPE) bit exact in Python (40-bit registers, 320 of 320 oracle words), Rust `synth/fw_shape.rs`, opt-in `strip_shape` ([synth-wave-models](research/synth-wave-models.md))
+- [x] Saw `0x1215FB` and square / pulse `0x121B99` stages bit exact in Python (320 of 320 oracle words each); preset category / wave == edit-id domain verified on 578 factory layers
+- [ ] Remaining stage models ( then SAW / SQUARE / TRIANGLE / SUB / SYNC stages) bit exact in Python, then opt-in Rust; synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
 - [ ] Pulse and triangle shapes, amp envelope smoothing
 - [ ] Hardware sweeps for the remaining ASSUMED scales ([synth-hardware-sweep-plan](research/synth-hardware-sweep-plan.md), OQ7)
 
