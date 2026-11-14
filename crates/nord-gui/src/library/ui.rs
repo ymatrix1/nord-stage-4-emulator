@@ -83,16 +83,27 @@ impl BackupLibraryState {
         }
     }
 
-    /// Renders the docked `.ns4b` archive browser side panel when `drawer_open` is true.
+    /// L toggles the library drawer (like Z / P for the view). Ignored while a text field has
+    /// the keyboard. Returns `true` when it toggled.
+    pub fn handle_keys(&mut self, ctx: &egui::Context) -> bool {
+        if ctx.wants_keyboard_input() {
+            return false;
+        }
+        let l = ctx.input(|i| i.key_pressed(egui::Key::L) && !i.modifiers.any());
+        if l {
+            self.drawer_open = !self.drawer_open;
+        }
+        l
+    }
+
+    /// Renders the docked `.ns4b` archive browser side panel, sliding in and out with
+    /// `drawer_open` (egui's animated side panel; it takes no space once fully closed).
     pub fn render_drawer(
         &mut self,
         ctx: &egui::Context,
         panel: &mut Stage4PanelState,
         audio: &AudioHandle,
     ) {
-        if !self.drawer_open {
-            return;
-        }
         egui::SidePanel::left("ns4_library_panel")
             .resizable(true)
             .default_width(360.0)
@@ -103,7 +114,7 @@ impl BackupLibraryState {
                     .fill(Color32::from_rgb(36, 42, 48))
                     .inner_margin(egui::Margin::same(10)),
             )
-            .show(ctx, |ui| {
+            .show_animated(ctx, self.drawer_open, |ui| {
                 ui.horizontal(|ui| {
                     ui.strong(
                         RichText::new("Nord Stage 4 Backup & Sample Library")
@@ -244,5 +255,138 @@ mod tests {
             lib.render_drawer(ctx, &mut panel, &audio);
         });
         assert!(!lib.drawer_open);
+    }
+
+    /// Headless harness: drawer + a central button, frames 50 ms apart.
+    struct Rig {
+        ctx: egui::Context,
+        lib: BackupLibraryState,
+        panel: Stage4PanelState,
+        audio: AudioHandle,
+        time: f64,
+        left: f32,
+        button: egui::Rect,
+        clicks: u32,
+    }
+
+    impl Rig {
+        fn new() -> Self {
+            let mut rig = Self {
+                ctx: egui::Context::default(),
+                lib: BackupLibraryState::new(),
+                panel: Stage4PanelState::default(),
+                audio: AudioHandle::new().0,
+                time: 1.0,
+                left: 0.0,
+                button: egui::Rect::NOTHING,
+                clicks: 0,
+            };
+            rig.frame(vec![]);
+            rig
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) {
+            self.time += 0.05;
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(0.0, 0.0),
+                    egui::vec2(1200.0, 600.0),
+                )),
+                time: Some(self.time),
+                events,
+                ..Default::default()
+            };
+            let (lib, panel, audio) = (&mut self.lib, &mut self.panel, &self.audio);
+            let (mut left, mut button, mut clicks) = (self.left, self.button, self.clicks);
+            let _ = self.ctx.run(input, |ctx| {
+                lib.render_drawer(ctx, panel, audio);
+                left = ctx.available_rect().left();
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let r = ui.button("central control");
+                    button = r.rect;
+                    clicks += u32::from(r.clicked());
+                });
+            });
+            (self.left, self.button, self.clicks) = (left, button, clicks);
+        }
+
+        fn settle(&mut self) {
+            for _ in 0..12 {
+                self.frame(vec![]);
+            }
+        }
+
+        fn click(&mut self, at: egui::Pos2) {
+            let ev = |pressed| egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            self.frame(vec![egui::Event::PointerMoved(at)]);
+            self.frame(vec![ev(true)]);
+            self.frame(vec![ev(false)]);
+        }
+    }
+
+    #[test]
+    fn drawer_slides_in_and_out_and_takes_no_space_when_closed() {
+        let mut rig = Rig::new();
+        rig.settle();
+        assert_eq!(rig.left, 0.0, "closed drawer leaves the panel full width");
+        rig.lib.drawer_open = true;
+        rig.frame(vec![]);
+        let mid = rig.left;
+        rig.settle();
+        let open = rig.left;
+        assert!((260.0..=580.0).contains(&open), "open width {open}");
+        assert!(mid < open, "slides in over several frames ({mid} < {open})");
+        rig.lib.drawer_open = false;
+        rig.frame(vec![]);
+        assert!(rig.left < open, "slides out");
+        rig.settle();
+        assert_eq!(rig.left, 0.0);
+    }
+
+    #[test]
+    fn clicks_reach_the_panel_beside_the_drawer_and_not_through_it() {
+        let mut rig = Rig::new();
+        rig.lib.drawer_open = true;
+        rig.settle();
+        assert!(
+            rig.button.left() >= rig.left,
+            "button sits right of the drawer"
+        );
+        rig.click(rig.button.center());
+        assert_eq!(rig.clicks, 1, "the panel stays clickable beside the drawer");
+        let inside = egui::pos2(rig.left * 0.5, 300.0);
+        rig.click(inside);
+        assert_eq!(
+            rig.clicks, 1,
+            "a click inside the drawer never reaches the panel"
+        );
+        assert!(rig.lib.drawer_open);
+    }
+
+    #[test]
+    fn l_toggles_the_drawer() {
+        let mut rig = Rig::new();
+        let l = |pressed| egui::Event::Key {
+            key: egui::Key::L,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let mut toggled = false;
+        rig.time += 0.05;
+        let input = egui::RawInput {
+            time: Some(rig.time),
+            events: vec![l(true)],
+            ..Default::default()
+        };
+        let lib = &mut rig.lib;
+        let _ = rig.ctx.run(input, |ctx| toggled = lib.handle_keys(ctx));
+        assert!(toggled && rig.lib.drawer_open);
     }
 }

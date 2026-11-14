@@ -88,6 +88,14 @@ pub(super) fn map_synth(e: &SynthEdit, out: &mut Vec<W>) {
         }
         // GROUP copies and SOUND INIT have no host parameter; per-layer values stay independent.
         SynthEdit::Group { .. } | SynthEdit::SoundInit(_) => return,
+        // KB ZONE, Aux KB and Extern act on the engine only, like the Organ / Piano `Zone` and
+        // `AuxKb` edits: the host has no per-layer parameter for them (`auxkb_synth` is the Aux KB
+        // menu mask), so they are not mirrored.
+        SynthEdit::Zone { .. }
+        | SynthEdit::AuxKb { .. }
+        | SynthEdit::Extern { .. }
+        | SynthEdit::ExternCc { .. }
+        | SynthEdit::ExternProgram { .. } => return,
     };
     let per_layer = |out: &mut Vec<W>, family: &'static str, plain: f32| {
         for n in synth_layers(target) {
@@ -173,6 +181,31 @@ mod tests {
         for i in 0..4 {
             assert_eq!(lfo_dest_index(dest(i)), i as f32);
         }
+    }
+
+    #[test]
+    fn engine_only_synth_edits_write_no_host_parameter() {
+        let mut v = Vec::new();
+        for e in [
+            SynthEdit::Zone {
+                layer: 0,
+                leds: 0b0011,
+            },
+            SynthEdit::AuxKb { layer: 1, on: true },
+            SynthEdit::Extern { layer: 2, on: true },
+            SynthEdit::ExternCc {
+                layer: 0,
+                slot: 1,
+                value: 9,
+            },
+            SynthEdit::ExternProgram {
+                layer: 0,
+                program: 3,
+            },
+        ] {
+            map_synth(&e, &mut v);
+        }
+        assert!(v.is_empty());
     }
 
     #[test]

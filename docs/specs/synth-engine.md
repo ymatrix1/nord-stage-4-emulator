@@ -171,6 +171,7 @@ The firmware filter engine also runs `FwFilterType::Lp2` (stage `0x1253BD`, one 
 | `0x1235C9` | SHAPE SINE 1 | half-cycle magnitude stretched by `1 / (1 - w)`, clipped at 1 | `shape_sine_fold` (< 2e-6) | VERIFIED (idle shape word) |
 | `0x1232A5` | SHAPE SINE 2 | phase amplified by `rho` and clipped, offset `1 - 1/rho`, level `-g` | `shape_sine_gain` (< 2e-6) | VERIFIED (idle shape word) |
 | `0x122F1F` | SHAPE SINE 5 | `cos / (1 + k^2 + 2 k sin)` | `shape_sine_res` (< 2e-5) | VERIFIED (idle shape word) |
+| `0x120DAB` | SHAPE SINE 4 | `y = \|sine (1 + s5) + (1 - s5)\|`, cubic dip `w^3 k` where `y ir < 1`, offset `p(s5)`, saw fade `g`, then a one-pole output high pass `y_k = (x_k - x_(k-1)) + c y_(k-1)`, `c = 0x3F7F9DB2` | `shape_sine_hp_core` (< 2e-5) + `OutputHighPass` (`synth/fw_sine_hp.rs`) | VERIFIED (idle shape word; `c` idle value, writer not located: ASSUMED constant) |
 
 `FwStage::from_category_wave` maps the decoded category / wave; `synth_params.rs` sets `SynthLayer::strip_stage`; the strip chain plays it only with `strip_stages` (`--synth-stages`), otherwise the legacy waveform stays (default renders and `render_hash` unchanged). One lane per voice with the mix weights folded into one level; the real ratios and weights are P-block words of the unknown writer (OQ22). Evidence and the oracle method: [synth-stage-models](../research/synth-stage-models.md). The `kFltType` to filter stage map is partial: [synth-filter-type-map](../research/synth-filter-type-map.md).
 
@@ -233,3 +234,18 @@ Source: [audible-genius-synth-lessons](../research/audible-genius-synth-lessons.
 | Env To Pitch | 1 octave at 10 | 1.76 octave at 10 (one amount, +5.5) | EMPIRICAL |
 | Vibrato depth | 92 cents at 10 | x1.06 (98 cents) | EMPIRICAL |
 
+
+## Extern mode, KB ZONE and Aux KB of the Synth layers (manual p.27-28, p.43-47)
+
+Spec: [midi-and-control.md](midi-and-control.md) (Extern, Aux KB), [control-inventory.md](control-inventory.md) section 9b.
+
+| Behaviour | Engine path | Panel edit | Status |
+|---|---|---|---|
+| EXTERN (Shift+Mode) of Synth layer `i` | `Stage4Engine::set_layer_extern(i, on)`: on = release the internal voices (`note_off` 0..127, no allocation) and set `extern_out.layers[i].enabled`; off = `extern_all_notes_off(i)` then clear the flag; the volume poll restarts so CC7 is only sent on a fader move | `SynthEdit::Extern { layer, on }` | manual p.46; tests `set_layer_extern_*` (`engine/tests_extern.rs`), `extern_edits_enable_the_layer_and_transmit` |
+| CC VAL 1 / CC VAL 2 / PROGRAM dials | `extern_set_cc_value`, `extern_set_program` (Bank Select MSB, LSB, Program Change) | `SynthEdit::ExternCc`, `ExternProgram` | manual p.47 |
+| KB ZONE of Synth layer | `set_layer_zone_leds(SynthA..C, leds)` (legacy router mask and firmware `kKbZone`) | `SynthEdit::Zone { layer, leds }` | stepping order `ASSUMED` (`panel/kb_zone.rs`) |
+| Aux KB LED of Synth layer | `set_layer_aux(SynthA..C, on)` (`AuxKb::layers[4..7]`) | `SynthEdit::AuxKb { layer, on }` | enable-on-switch `ASSUMED` |
+
+An Extern layer renders nothing: `layer_note_on` routes to the Extern queue before any voice allocation, so the Synth DSP never runs for it. Everything above is a field write or a ring-buffer push, so `process_block` stays allocation and lock free.
+
+Not modelled here: the Extern channel and Extern menu settings (already in `engine/settings`), per-program storage of the Extern flag (the loaded program does not set `extern_out.layers[i].enabled`; `ASSUMED` that programs store it, the CBIN field is not located: open item).
