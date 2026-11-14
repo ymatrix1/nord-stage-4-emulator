@@ -230,6 +230,22 @@ Checked with `sharc-disasm` on the FX Core 2 flat image (byte offset = 2 x parce
 
 Next steps, in order: (1) hook the DSP-message writer while the harness enables a reverb of type 2 (`tools/fx_clients.py`, enable path) to capture the pointer words of `0xB0F28`; (2) model `0x120D8A` (about 120 instructions, forms already handled by `tools/fx_rvbcore_gen.py` plus `FPACK` / `FUNPACK` / `FDEP` / `FEXT`) and `0x120FDB`; (3) golden vectors, E40 port, then the response table and the video check; (4) D22 only after (1) to (3). Types 0, 1 stay the only firmware-ported pair; every other type keeps the engine FDN.
 
+## 12. Types 2..11: instance layout read from the code, capture attempt (fifth pass, 2026-11-14)
+
+The aim was the instance context of `0xC02BB44C` (ctx `0xB0F28`) so that `0x120FDB` plus `0x120D8A` can be modelled on a real instance as in s8. Result: **the layout is now read from the listing, the pointer words are still not obtainable**; no model, port or response table was produced.
+
+| Finding | Evidence | Tag |
+|---|---|---|
+| The module's third routine `0x120F7E` (`0xC02BB520`, run 40) is the **clear routine** of this instance: it loads `I4 = c[0]`, `I5 = c[1]` (two table pointers), `B2 L2 = c[-15] c[-14]` with `I2 = c[-4]`, zeroes 90 words of line 1, then `B2 L2 = c[-24] c[-23]` with `I2 = c[-6]` and zeroes 8 words of line 2, then `DM(-19, I4) = DM(-19, I5) = 0` and the words `c[2]`, `c[4]`, `c[18 .. 40]` (even); it stores `EMUCLK` at `c[6]`, `c[8]` | listing `0x241efc ..` (core 2) | VERIFIED (code) |
+| `I4` / `I5` point **behind** the two 16-word tap tables of the type block: the core reads `M6 = DM(-32, I4)` (the length word 262 / 1324 / ...), `M3 = DM(-31, I4)` (`-16`), `M5`, `M3`, `I10 = DM(-30 .. -28, I4)`, a state word `DM(-19, I4)` and `I1 = DM(-17, I4)` (the 7-tap FIR coefficient pointer, the seven words `0xB1C26 .. 0xB1C2C`). So `c[0] = 0x95033`, `c[1] = 0x95044` (organ; the piano and synth parts use `0x94405` / `0xC1C5D` ... blocks) is the consistent reading, not a measurement. The line and FIR pointer words in the tables (`0x95022`, ...) are sent as **zero** in the captured block | listing + `fx-type-words.csv` | EMPIRICAL |
+| The core loop structure: smoothing of the send word (`c[-32]` pole, `c[-31]` target, `c[-29]` state), two packed (16 bit float, 16:16) delay lines read and written through `I2` and `I6`, a 7-tap packed FIR (`DO ... LCNTR = 7`), and five all-pass-like stages with gains `c[-19 .. -7]`; outputs `R12`, `R14` | listing | EMPIRICAL |
+| The ARM harness runs (`uv run --with unicorn python tools/fx_clients.py ... --slots ... --slot Rvb`, about 3 minutes for one unit, snapshot `settled.snap`) and reproduces the same 54 words per type plus the module words; the enable ids queue a command in the part's list that the main loop never consumes in the window (fx-contexts s7), so no `0xC02BB44C` pointer, length or smoothing word appears: **the activation path is still not driven** | run | EMPIRICAL |
+| Static data: the only SDRAM line pointers in the FX images are the five type 0, 1 instances (`0xB2439 ..`, `0xC1A39 ..`, bases `0x08004000 ..` core 1, `0x08020000 ..` core 2); there is no static record for `0xC02BB44C` | scan of `0xB0000 .. 0xC4000`, both cores | VERIFIED (scan) |
+
+Why no response table: the model needs `c[0]`, `c[1]`, `c[-24 .. -13]`, `c[-6]`, `c[-4]`, the smoothing pole `c[-32]`, the mix words `c[-28]`, `c[42]`, `c[43]` and the FIR pointer. Ring lengths do not matter if they exceed the largest tap (a ring output is independent of its length), but the table pointers, the smoothing words and the FIR pointer change the data flow, and each would be a guess that a golden vector cannot check against the hardware. The reading above is the best one; it is recorded here as the starting point.
+
+Next steps (unchanged in order): (1) drive the part's command consumer (`[part + 0xC8]` list, node `{-1, counter}`) in the harness after `kRvbEnable` and capture the DSP messages of `0xC02BB44C` (hook `0xC006CA48`, `0xC001C6A0`); (2) model `0x120D8A`, `0x120FDB`, `0x120F7E` with `FPACK`/`FUNPACK`/`FDEP`/`FEXT` in `tools/fx_rvbcore_gen.py` and check word for word against `sharc-fx --trace`; (3) golden vectors, E40 port, response table, UI names, video check; D22 only after those.
+
 ## Implications
 
 - The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are not.
