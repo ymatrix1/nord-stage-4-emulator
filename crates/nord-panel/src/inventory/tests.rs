@@ -234,9 +234,9 @@ fn total_is_the_sum_of_sections() {
 fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
-    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 207);
+    assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 208);
     assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 67);
-    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 1);
+    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 0);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)
@@ -345,7 +345,10 @@ fn the_unsupported_set_is_pinned() {
             _ => None,
         })
         .collect();
-    assert_eq!(left, [("program.section_edit".to_string(), "ns4-fqym")]);
+    assert!(
+        left.is_empty(),
+        "no control is Unsupported any more: {left:?}"
+    );
 }
 
 /// Controls the classification pass (`ns4-lu50`) moved out of `Unsupported`, by binding kind.
@@ -357,8 +360,8 @@ fn classification_pass_totals_are_pinned() {
             .filter(|c| matches!(c.binding, Binding::Bound(b) if b.starts_with(prefix)))
             .count()
     };
-    assert_eq!(ui_bound("ui:program."), 29);
+    assert_eq!(ui_bound("ui:program."), 30);
     assert_eq!(ui_bound("ui:synth."), 18);
     assert_eq!(ui_bound("ui:fx."), 5);
-    assert_eq!(ui_bound("ui:"), 52);
+    assert_eq!(ui_bound("ui:"), 53);
 }

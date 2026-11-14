@@ -106,7 +106,8 @@ pub fn controls() -> Vec<ControlEntry> {
         e("program.undo", s, K::Button, "UNDO (Shift+Solo)", 42)
             .shift()
             .bound("ui:program.undo"),
-        e("program.section_edit", s, K::Button, "SECTION EDIT", 43).todo("ns4-fqym"),
+        e("program.section_edit", s, K::Button, "SECTION EDIT", 43)
+            .bound("ui:program.section_edit"),
         e(
             "program.layer_init",
             s,

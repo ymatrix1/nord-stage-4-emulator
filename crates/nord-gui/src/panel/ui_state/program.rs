@@ -180,7 +180,7 @@ impl Default for ProgramUi {
 
 impl ProgramUi {
     /// SECTION EDIT is active (held or sticky): edits should reach every Layer of the section.
-    /// Bays apply it with `Stage4Engine::section_edit_*` (see `nord_core::engine::section_edit`).
+    /// Each bay reads it once per frame: Organ / Piano loop over `Stage4PanelState::edit_layers`, Synth folds it into `SynthUi::edit`, Effects into `FxUi::after_edit` (`panel/section_edit.rs`).
     pub fn section_edit_active(&self) -> bool {
         self.section_held || self.section_latch.is_active()
     }
