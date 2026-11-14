@@ -285,7 +285,7 @@ pub(super) fn shift_legend(
 ) {
     let pos = pos2(base.center().x, base.bottom() + 1.5);
     let col = if dim.is_some() {
-        Color32::from_gray(150)
+        dim_legend(Color32::WHITE)
     } else {
         Color32::WHITE
     };
