@@ -15,6 +15,7 @@ use super::fw_sine_hp::{shape_sine_hp_core, OutputHighPass};
 use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
 use super::fw_super1::super1_sample;
 use super::fw_sync::sync2_core;
+use super::fw_sync3::sync3_core;
 use super::gain_dezip::SY_FRAME_RATE_HZ;
 use super::hw_saw::{SAW_A, SAW_B, SAW_C};
 
@@ -41,6 +42,8 @@ pub enum FwStage {
     ShapeSineRes,
     /// SYNC wave 2 (stage `0x122A32`, hard-sync saw pair with a table-driven ratio).
     Sync2,
+    /// SYNC waves 3..5 (stage `0x122C5C`, square edges on a table-driven sync phase, high pass).
+    Sync3,
     /// SHAPE SINE wave 3 (stage `0x12377D`, warp plus two band-limited cubes).
     ShapeSine3,
     /// SHAPE SINE wave 4 (stage `0x120DAB`, folded sine with an output high pass).
@@ -53,6 +56,7 @@ impl FwStage {
         match (category, wave) {
             (0, 6) => Some(Self::Noise),
             (2, 2) => Some(Self::Sync2),
+            (2, 3..=5) => Some(Self::Sync3),
             (3, 2) => Some(Self::ShapeSquare),
             (6, 0) => Some(Self::Super),
             (6, 1) => Some(Self::Super1),
@@ -201,6 +205,7 @@ impl FwStageState {
             FwStage::ShapeSineGain => shape_sine_gain(t, i_sy, ctrl),
             FwStage::ShapeSineRes => shape_sine_res(t, i_sy, ctrl),
             FwStage::Sync2 => sync2_core(t, i_sy, ctrl),
+            FwStage::Sync3 => self.hp.process(sync3_core(t, i_sy, ctrl)),
             FwStage::ShapeSine3 => shape_sine3_core(t, i_sy, ctrl),
             FwStage::ShapeSineHp => self.hp.process(shape_sine_hp_core(t, i_sy, ctrl)),
             FwStage::Super1 => super1_sample(&mut self.phases, dt, i_sy, ctrl),
@@ -307,6 +312,9 @@ mod tests {
         assert_eq!(FwStage::from_category_wave(3, 0), None);
         assert_eq!(FwStage::from_category_wave(2, 2), Some(FwStage::Sync2));
         assert_eq!(FwStage::from_category_wave(2, 1), None);
+        assert_eq!(FwStage::from_category_wave(2, 3), Some(FwStage::Sync3));
+        assert_eq!(FwStage::from_category_wave(2, 5), Some(FwStage::Sync3));
+        assert_eq!(FwStage::from_category_wave(2, 6), None);
     }
 
     #[test]
@@ -317,6 +325,7 @@ mod tests {
             FwStage::Super,
             FwStage::Super1,
             FwStage::Sync2,
+            FwStage::Sync3,
             FwStage::Multi,
             FwStage::ShapeSine,
             FwStage::ShapeSineFold,
