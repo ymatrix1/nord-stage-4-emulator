@@ -23,4 +23,4 @@ Bundles land in `target/bundled/` (`nord-plugin.clap`, `nord-plugin.vst3`). Copy
 
 ## What the editor automates
 
-See the Editor section of `docs/specs/daw-plugin.md`. Of the 119 inventory controls bound to a host id, 110 are live, 8 are Shift/Hold functions that share a rectangle with a live control (not separately automatable), and 1 is dimmed (`program.layer_scene_ii`).
+See the Editor section of `docs/specs/daw-plugin.md`. Of the 138 inventory controls bound to a host id (after merging main at the organ/piano rewire), 122 are live, 13 are Shift/Hold functions that share a rectangle with a live control (not separately automatable), and 3 are dimmed (`organ.zone_leds`, `piano.zone_leds`, `program.layer_scene_ii`).

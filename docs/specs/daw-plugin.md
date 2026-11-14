@@ -54,6 +54,6 @@
 | Dimming | Controls whose `Binding::Bound` host id is missing or not written by the sink get a translucent overlay and the tooltip "not automatable in the plugin yet". `UiOnly` / `Unsupported` controls stay as drawn. A control sharing its rectangle with a live or passive one (a Shift function) is not dimmed. |
 | Menus | Aux KB menu items map to `auxkb_*`; the synth choice order (`---`, `A--`, `-B-`, `--C`, `AB-`, `A-C`, `-BC`, `ABC`) is converted to the host layer bitmask explicitly (`map_settings.rs`). Other menu items are not mapped yet. |
 
-Known limits: `fxx_filter_res` has host range 0..1 while the engine accepts 0..10; the synth GROUP copies, oscillator shape/wavetable/sample/FM selectors, dedicated filter/osc envelopes and pattern steps have no host parameter; `layer_scene_ii` has no panel command mapped.
+Known limits: `fxx_filter_res` has host range 0..1 while the engine accepts 0..10; the synth GROUP copies, oscillator shape/wavetable/sample/FM selectors, dedicated filter/osc envelopes and pattern steps have no host parameter; `layer_scene_ii` has no panel command mapped; KB zones and Aux KB layer LEDs are engine-only (`engine:` bindings) and dimmed.
 
 Status: tested headlessly (frame shape count, sink mapping, coverage, persistence, queue to `process()`). **Not verified in a host**: no DAW was available; see `docs/plugin-editor.md` for the smoke test.

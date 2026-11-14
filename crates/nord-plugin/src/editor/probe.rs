@@ -102,6 +102,11 @@ pub fn probe_commands() -> Vec<C> {
             stop_mode: true,
         }),
         C::Organ(OrganEdit::CloseMic(true)),
+        C::Organ(OrganEdit::PercPoly(true)),
+        C::Organ(OrganEdit::DrawbarLive(true)),
+        C::Organ(OrganEdit::LiveDrawbars([8, 7, 6, 5, 4, 3, 2, 1, 0])),
+        C::Organ(OrganEdit::RotaryOrgan(false)),
+        C::Organ(OrganEdit::RotaryAngle { wide: true }),
         C::Organ(OrganEdit::Sustped { layer: 0, on: true }),
         C::Organ(OrganEdit::Pstick { layer: 1, on: true }),
         C::Piano(PianoEdit::Level {

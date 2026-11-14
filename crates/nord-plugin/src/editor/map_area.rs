@@ -9,7 +9,7 @@ use super::map::{
 };
 use super::write::ParamWrite as W;
 use nord_core::organ::ScannerMode;
-use nord_gui::audio::{OrganEdit, PianoEdit};
+use nord_gui::audio::{OrganEdit, PianoEdit, ANGLE_NARROW_DEG, ANGLE_WIDE_DEG};
 
 /// friends number only their own area (Organ 1..2, Piano 1..2, Synth 1..3).
 const ORGAN_FIRST: u8 = 1;
@@ -26,6 +26,26 @@ fn scanner_index(m: ScannerMode) -> f32 {
         ScannerMode::C1 => 4.0,
         ScannerMode::C2 => 5.0,
         ScannerMode::C3 => 6.0,
+    }
+}
+
+/// Host ids of the physical drawbar positions of the Drawbar Live mode, 16' first.
+const LIVE_DRAWBARS: [&str; 9] = [
+    "organz_live1",
+    "organz_live2",
+    "organz_live3",
+    "organz_live4",
+    "organz_live5",
+    "organz_live6",
+    "organz_live7",
+    "organz_live8",
+    "organz_live9",
+];
+
+/// Write `family` for both organ layers.
+fn both_organ(out: &mut Vec<W>, family: &'static str, plain: f32) {
+    for n in [ORGAN_FIRST, ORGAN_FIRST + 1] {
+        out.push(W::layer(family, n, plain));
     }
 }
 
@@ -57,6 +77,26 @@ pub(super) fn map_organ(e: &OrganEdit, out: &mut Vec<W>) {
             ORGAN_FIRST + layer.min(1),
             flag(on),
         )),
+        OrganEdit::PercPoly(on) => both_organ(out, "organz_poly_perc", flag(on)),
+        OrganEdit::DrawbarLive(on) => both_organ(out, "organz_drawbar_live", flag(on)),
+        OrganEdit::LiveDrawbars(d) => {
+            for (family, v) in LIVE_DRAWBARS.iter().zip(d) {
+                both_organ(out, family, f32::from(v));
+            }
+        }
+        OrganEdit::RotaryOrgan(on) => both_organ(out, "organy_rotary_on", flag(on)),
+        OrganEdit::RotaryAngle { wide } => both_organ(
+            out,
+            "organy_mic_angle",
+            if wide {
+                ANGLE_WIDE_DEG
+            } else {
+                ANGLE_NARROW_DEG
+            },
+        ),
+        // SYNC is a momentary trigger (`organz_sync_{n}`) and the zone / aux assignments are
+        // engine-only (`engine:` bindings); none has a writable host value, so they stay dimmed.
+        OrganEdit::SyncPreset | OrganEdit::Zone { .. } | OrganEdit::AuxKb { .. } => {}
         OrganEdit::Pstick { layer, on } => {
             out.push(W::layer("ped_pstick", ORGAN_FIRST + layer.min(1), flag(on)))
         }
@@ -111,6 +151,8 @@ pub(super) fn map_piano(e: &PianoEdit, out: &mut Vec<W>) {
         }
         // The scene mask has no host parameter (the host has per-layer enable switches only).
         PianoEdit::SceneMask(_) => {}
+        // KB zones and the aux-KB assignment are engine-only (`engine:` bindings).
+        PianoEdit::Zone { .. } | PianoEdit::AuxKb { .. } => {}
     }
 }
 
