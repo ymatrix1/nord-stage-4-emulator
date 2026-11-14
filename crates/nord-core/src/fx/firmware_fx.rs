@@ -39,6 +39,14 @@
 ///   modelled, so the engine's 3-band EQ still follows; To Rotary, LP24 and HP24 keep the engine
 ///   path (their type switch sends no drive stage words).
 ///
+/// * `mod1`: the Mod 1 types A-PAN (`kFx1Type` 0, 1) and TREM (2, 3) run the firmware routines
+///   `0x122D93` ([`super::FwAutoPan`]) and `0x122C39` ([`super::FwAllpass`] at mix 0) with the
+///   instance words of the FX image and the `kFx1Amt` / `kFx1RateClkDiv` words
+///   (`fw_mod1`; `docs/research/fx-mod-types.md`). Routines VERIFIED against the oracle, words
+///   VERIFIED, the TREM role EMPIRICAL. The LFO runs at the firmware frame rate (Hz equal), the
+///   rate scale is 0.03 .. 5.3 Hz. **Latency 4 frames** on that layer. Free running only
+///   (Master Clock sync keeps the engine path); RM, A-WAH, WAH and PUMP keep the engine models.
+///
 /// Not switchable yet, because the audio path needs words or tables that are not decoded: the
 /// tone stack (`FwToneStack2`, base words of the Amp type switch), the all-pass (`FwAllpass`, Fx1 type to engine `Mod1Type` map) and the
 /// delay line itself (`FwDelay` / the ring variant `0x120AB5`: ring length and routing words).
@@ -57,6 +65,9 @@ pub struct FirmwareFx {
     pub reverb: bool,
     /// Firmware Amp drive stage with the `kAmpTypeNew` words (Twin, JC, Small families).
     pub amp: bool,
+    /// Firmware A-PAN (Fx1 types 0, 1) and TREM (types 2, 3) with the `kFx1Amt` /
+    /// `kFx1RateClkDiv` words.
+    pub mod1: bool,
 }
 
 impl Default for FirmwareFx {
@@ -80,6 +91,7 @@ impl FirmwareFx {
         reverb_mix: false,
         reverb: false,
         amp: false,
+        mod1: false,
     };
 
     /// Every switch on.
@@ -90,6 +102,7 @@ impl FirmwareFx {
         reverb_mix: true,
         reverb: true,
         amp: true,
+        mod1: true,
     };
 }
 
@@ -110,8 +123,10 @@ mod tests {
                 && all.reverb_mix
                 && all.reverb
                 && all.amp
+                && all.mod1
         );
         assert!(!d.reverb, "the firmware reverb is opt-in");
+        assert!(!d.mod1 && all.mod1, "the firmware Mod 1 is opt-in");
         assert_ne!(all, FirmwareFx::OFF);
     }
 }
