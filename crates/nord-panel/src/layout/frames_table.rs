@@ -318,7 +318,7 @@ pub const FRAMES: &[FrameDef] = &[
         ],
         [1.2, 1.0, 4.0, 12.0],
     )
-    .at(0.0),
+    .at(0.06),
 ];
 
 #[cfg(test)]
