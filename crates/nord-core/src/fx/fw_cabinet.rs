@@ -166,19 +166,19 @@ impl FwCabinet {
         };
         let [chain_a, chain_b] = &mut sums;
         // taps below every split: all lanes extend their `a` chain
-        for k in 0..split0 {
+        for (k, &tk) in t.iter().enumerate().take(split0) {
             let x = lanes(k);
             for j in 0..4 {
-                chain_a[0][j] += x[0][j] * t[k];
-                chain_a[1][j] += x[1][j] * t[k];
+                chain_a[0][j] += x[0][j] * tk;
+                chain_a[1][j] += x[1][j] * tk;
             }
         }
         // the taps around the splits: each lane switches from `a` to `b` at its own tap
-        for k in split0..high {
+        for (k, &tk) in t.iter().enumerate().take(high).skip(split0) {
             let x = lanes(k);
             for j in 0..4 {
                 for ch in 0..2 {
-                    let p = x[ch][j] * t[k];
+                    let p = x[ch][j] * tk;
                     if k < split0 + j {
                         chain_a[ch][j] += p;
                     } else {
@@ -188,11 +188,11 @@ impl FwCabinet {
             }
         }
         // taps above every split: all lanes extend their `b` chain
-        for k in high..LEN {
+        for (k, &tk) in t.iter().enumerate().skip(high) {
             let x = lanes(k);
             for j in 0..4 {
-                chain_b[0][j] += x[0][j] * t[k];
-                chain_b[1][j] += x[1][j] * t[k];
+                chain_b[0][j] += x[0][j] * tk;
+                chain_b[1][j] += x[1][j] * tk;
             }
         }
         std::array::from_fn(|j| std::array::from_fn(|ch| sums[0][ch][j] + sums[1][ch][j]))
