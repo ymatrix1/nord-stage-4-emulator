@@ -106,30 +106,33 @@ Note (2026-11-14): the table used Mid = 65 (old 10-entry decode table). The firm
 | Criterion | Status |
 |---|---|
 | (1) algorithm verified | the rule (enable AND mask) is VERIFIED on the ARM; the region weights are the existing crossfade law (ASSUMED shape) |
-| (2) mapping verified, not assumed | **met for the key range** (2026-11-14): the code to key range map is read from the ARM tables and equals the zone objects of 384 / 384 factory programs ([zone-key-ranges](zone-key-ranges.md)). **Not met for the layer enables of some programs**: section 7 (OQ25) |
+| (2) mapping verified, not assumed | **met for the key range** (2026-11-14): the code to key range map is read from the ARM tables and equals the zone objects of 384 / 384 factory programs ([zone-key-ranges](zone-key-ranges.md)). **Not met for the layer enables of nine programs**: section 7 (OQ25, the empty-scene rule is ASSUMED) |
 | (3) re-baseline `render_hash` | not needed: the default stays `Off`, hash unchanged |
 
-`FirmwareRouting` therefore stays **opt-in** and is not part of `--firmware-all`. To flip the default: explain the nine programs whose scene I has no layer (section 7), re-run the sweep clean and re-baseline.
+`FirmwareRouting` therefore stays **opt-in** and is not part of `--firmware-all`. To flip the default: confirm the empty-scene rule of section 7 (ASSUMED, no loader run, no hardware clip), re-run the sweep clean and re-baseline.
 
-## 7. OQ25: programs with a section on and no layer enabled
+## 7. Empty layer enables (OQ25, 2026-11-14)
 
-Under `--firmware-routing` 9 of 384 programs render silent in scene I: `Vox Like Me`, `Vox Rising Sun`, `Vox Inna-Gadda`, `Vox Im Down`, `Vox DC5` (organ section on, `enable_i` = `enable_ii` = 0 for the organ, scene II section off), `Burning Lead` (synth section on, synth layers 0), `LoFi Piano` (synth section on, layers 0), `Farfisa II` (organ section on, scene I layers 0, scene II layer B), `70s CP Strings` (piano and synth sections on, scene I layers 0, scene II synth A). Bits are decoded as in section 2 (`python` one-liner in the reproduce section).
+Question: 9 programs decode to a silent scene I under `--firmware-routing`. Is the layer enable stored elsewhere?
 
-What the ARM says (VERIFIED, run): the zone enable byte is `section enable AND layer mask bit`, and the section table entry `(enable = 1, layer mask = 0, focus 0 / 1 / 2)` leaves **all** layers of the organ, piano and synth sections at 0 for every focus value. So if the loader copies the file's 2-bit `enable_i` to the layer mask, these programs are silent in scene I on the hardware too. The loader itself (the code that fills the section table scene A / B from the program) is not run by the harness, which is why this cannot be closed here.
+| Finding | Evidence | Tag |
+|---|---|---|
+| Layout of the section block header: bit 8 `kLayerFocusOrg_I` (1 bit, id `0xAD`), bits 9..10 `kLayerEnableOrg_I` (2 bits, `0xAE`), bit 11 `kLayerFocusOrg_II` (`0xAF`), bits 12..13 `kLayerEnableOrg_II` (`0xB0`); piano the same, synth 3-bit enables | names, ranges and widths of `arm-edit-params.csv` rows 205..208 match the decoded offsets exactly; bit 8 is set only in B3 split programs (focus) | VERIFIED (names, widths) |
+| The 9 programs have the section enable bit set and `enable = 0` in every layer of the sounding section; no other field (layer `PresetEnable` bit, zone code, focus bits) differs from sounding programs | decode of all 384 programs (`tools/arm_program_routing.py` decode side): 30 section-scenes with enable 1 and mask 0, 9 programs whose whole scene I is empty | VERIFIED (decode) |
+| The ARM layer-enable handlers give zone byte 0 for view (enable 1, mask 0), so the plain file field cannot make them sound | `arm_program_routing.py` run on `Vox Like Me`: scene I and II, organ / piano / synth, 0 mismatches against the decode, all zone bytes 0 | VERIFIED (run) |
+| The section table entry `(enable 1, layer mask 0)` stays silent for every focus value | `arm_program_routing`-style run (2026-11-14): organ, piano and synth sections, focus 0 / 1 / 2, mask 0: all zone bytes 0 (the focus word does not stand in for a missing layer) | VERIFIED (run) |
+| The section table writer (program load) is not executed by the harness; no plain `str` with offset `0x288` / `0x294` is it (candidates `0xC00B1844`, `0xC00B1874` store only the view byte), and the handler `0xC0120100..` additionally reads `[setup + 0x508]`, scene A `+0x294`, `[0xC055B144] + 4` and a section getter `0xC00F906C` | capstone scan of `bank0_CODE.bin` | EMPIRICAL (not decoded) |
+| Rule used by the engine: an enabled section with no layer on plays layer A, applied only when the whole scene would otherwise be silent | the piano section is on with mask 0 beside a sounding synth in `Tines Layer`, `Piano Soft Orch`, `Rising Sun`, `Piano Str Pad`, `Steam Piano`: programs whose names need the piano; the 9 silent programs are Vox / Farfisa / lead / piano programs whose names need the one enabled section | ASSUMED (names, no hardware clip) |
 
-| Hypothesis | Evidence |
-|---|---|
-| The factory files carry an empty scene I (author state, harmless on hardware because the hardware starts on a different scene or normalises) | the five Vox programs have both scenes empty, which would make them silent in either scene; unlikely for factory programs (ASSUMED, no recording) |
-| The loader normalises "section on, no layer" to layer A (or the focused layer) | not seen in the table-level run above; would need the loader |
-| The layer enable of these programs lives in other bits (focus bits `8` / `11` of the section block read as enables) | the focus bits of these programs are 0 as well (`kLayerFocusOrg_I`, bit 8 and 11 of the organ block) |
+Effect (`ns4 render-patch --firmware-routing --notes 48,55,64,72`, release build): `Vox Like Me`, `Burning Lead`, `LoFi Piano`, `Farfisa II`, `70s CP Strings` render audible (peak 1.00 / 1.00 / 0.35 / 1.00 / 0.72); they were silent before this change (the other four Vox programs take the same path). Default render unchanged (the rule only runs in `FirmwareRouting::On`). Tests: `routing::tests::empty_scene_plays_layer_a_of_each_enabled_section`, `scene_with_a_sounding_layer_keeps_its_mask`, `tests_firmware_routing::enabled_section_without_layers_plays_layer_a_with_firmware_routing`.
 
-Decision: keep `FirmwareRouting` opt-in (D22). Next step: run the program load path of the firmware in the harness (section table scene A written by the loader) or record `Vox Like Me` on the hardware.
+Not decided: whether layer A is also added in the 20 section-scenes with mask 0 beside a sounding section (`J3 Grand Layers`, `24 Frames J3`, `Windhoek B3 II`, ...). The engine leaves them as decoded; a hardware clip of `J3 Grand Layers` (organ section on, mask 0) would settle it.
 
 ## Implications
 
 - The B3 clip gap that looked like an output stage problem is the layer zone: with the routing the sub, the crest and the clipping match the hardware and the RMS is within 4 dB. `B3Wheels` (+ tail) with `--firmware-routing` is now the closest B3 path; the remaining B3 gap is presence / brilliance (-12.5 / -4.7 dB) and the level law `L` (OQ19).
 - Factory programs that split (48 of 384) now sound their layers only in their zone with `--firmware-routing`; programs that do not split are unchanged.
-- The legacy empty-mask fallback (`apply_program`) hid programs whose scene masks are all zero; with the routing on they are silent as on the hardware.
+- The legacy empty-mask fallback (`apply_program`) hid programs whose scene masks are all zero; with the routing on, a scene whose enabled sections have no layer on plays layer A of each (section 7, ASSUMED); a scene with no enabled section stays silent.
 
 ## Follow-ups
 

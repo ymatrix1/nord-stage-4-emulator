@@ -20,7 +20,7 @@ const PADS: [(Btn, &str); 17] = [
     (Btn::LfoDest, "DEST"),
     (Btn::VoiceMode, "VOICE"),
     (Btn::Unison, "UNISON"),
-    (Btn::VibratoSel, "VIBRATO"),
+    (Btn::VibratoSel, "SELECT"),
     (Btn::VibratoMenu, "MENU"),
     (Btn::ArpRun, "ARP RUN"),
     (Btn::ArpMode, "ARP/POLY/GATE"),

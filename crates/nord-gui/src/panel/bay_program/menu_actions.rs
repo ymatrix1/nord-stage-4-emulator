@@ -4,6 +4,7 @@
 //! Editing a `Bound` item sends `ProgramEdit::Settings`; a `UiOnly` item keeps its value in
 //! `ProgramUi::menu`; an `Unsupported` item does nothing (it is drawn dimmed).
 
+use super::fw_messages::{Confirm, FwMessage};
 use super::model::{MenuId, Screen};
 use super::nav::cmd;
 use crate::audio::{AudioCommand, ProgramEdit, SettingsEdit};
@@ -51,6 +52,9 @@ impl ProgramUi {
 
     /// Reset All Settings: every item back to its default, sent to the engine.
     fn menu_reset(&mut self) -> Vec<AudioCommand> {
+        if !self.confirm(Confirm::ResetAllSettings) {
+            return Vec::new();
+        }
         self.set_message("All settings reset");
         self.menu
             .reset_all()
@@ -65,7 +69,7 @@ impl ProgramUi {
         if !self.menu.memory_protect() {
             return false;
         }
-        self.set_message("Memory Protected");
+        self.show(FwMessage::MemoryProtected);
         true
     }
 }
@@ -129,6 +133,11 @@ mod tests {
         run(u.dial(5, false), &mut e);
         assert_eq!(e.global_settings().transpose, 5);
         u.page(3, false); // Reset All Settings
+        u.now_ms = 10;
+        assert!(u.menu_soft(1).is_empty(), "first press only asks");
+        assert_eq!(u.message.as_ref().unwrap().0, "Are you sure?");
+        assert!(!u.menu.memory_protect() && e.global_settings().transpose == 5);
+        u.now_ms = 500;
         let out = u.menu_soft(1);
         assert!(!out.is_empty());
         run(out, &mut e);

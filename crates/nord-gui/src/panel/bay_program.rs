@@ -17,6 +17,7 @@ pub mod controls;
 mod coverage_tests;
 pub mod edited;
 pub mod frame;
+pub mod fw_messages;
 pub mod interact;
 pub mod list;
 pub mod menu_actions;
@@ -28,6 +29,7 @@ pub mod morph;
 pub mod name;
 pub mod nav;
 pub mod oled;
+pub mod oled_hint;
 pub mod oled_home;
 pub mod oled_paint;
 pub mod organize;
@@ -152,7 +154,12 @@ pub(super) fn render_bay_program(
     let mut cmds = Vec::new();
 
     // Display: painted text plus a tooltip with the full text (the real OLED is tiny at 1:1).
-    let text = oled::compose(pu, &sum);
+    let mut text = oled::compose(pu, &sum);
+    oled_hint::apply(
+        &mut text,
+        pu.screen,
+        super::param_hint::active(ui.ctx()).as_deref(),
+    );
     let oled_rect = rect_or_empty("program.oled", origin);
     oled::paint(painter, oled_rect, &text, false);
     ui.interact(oled_rect, ui.id().with("program_oled"), Sense::hover())

@@ -22,7 +22,7 @@ fn is_unsupported(c: &ControlEntry) -> bool {
 
 #[test]
 fn bay_has_sixty_inventory_controls() {
-    assert_eq!(bay_controls().len(), 60);
+    assert_eq!(bay_controls().len(), 61);
 }
 
 #[test]
@@ -317,6 +317,17 @@ fn mod_wheel_drag_sends_cc1() {
     assert!(sim.state.mod_wheel > 0.0);
     assert!(sim.cmds().iter().any(|c| matches!(
         c,
-        AudioCommand::Midi(MidiEvent::ControlChange { controller: 1, .. })
+        AudioCommand::Keyboard(MidiEvent::ControlChange { controller: 1, .. })
+    )));
+}
+
+#[test]
+fn pitch_stick_drag_sends_keyboard_pitch_bend() {
+    let mut sim = Sim::new();
+    let r = rect_or_empty("master.pitch_stick", sim.origin);
+    sim.drag(r.center(), r.center() + vec2(r.width() * 0.4, 0.0));
+    assert!(sim.cmds().iter().any(|c| matches!(
+        c,
+        AudioCommand::Keyboard(MidiEvent::PitchBend { value, .. }) if *value > 8192
     )));
 }

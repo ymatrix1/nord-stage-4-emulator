@@ -24,3 +24,12 @@ Bundles land in `target/bundled/` (`nord-plugin.clap`, `nord-plugin.vst3`). Copy
 ## What the editor automates
 
 See the Editor section of `docs/specs/daw-plugin.md`. Of the 141 inventory controls bound to a host id (274 controls total, after merging main at the Synth/Effects rewire #221), 129 are live, 9 are Shift/Hold functions that share a rectangle with a live control (not separately automatable), and 3 are dimmed (`organ.zone_leds`, `piano.zone_leds`, `program.layer_scene_ii`).
+
+### Menu items
+
+The menus (SHIFT + Program 1..8 on the OLED) are automatable too. In the host's parameter list, `sys_*` (System, Sound, Output mono), `outx_*` (Output routing), `menx_*` (trigger point, SW B), `ped_*` / `pedx_*` (Pedal), `midix_*` (MIDI, Extern) and `auxkb_*` follow the OLED pages. Extra smoke steps for B11 / B13:
+
+1. Open System, turn the dial on Global Transpose: `sys_transpose` moves in the host list; arm write automation, edit again, play back: the OLED value follows the lane.
+2. Automate `pedx_tp1_left` or `ped_foot_func` from the host: Pedal page 3 / 6 shows the matching label.
+3. Items with no host parameter (Local Control, MIDI channels, Extern bank / program / CC) stay on the panel only; the list and reasons are in `crates/nord-plugin/src/editor/menu_ui_only.rs` (`UI_ONLY`).
+4. The panel opens with Sustain Pedal Type on SP-2: the engine and host default to it (continuous pedal), unlike the hardware's SP-1.

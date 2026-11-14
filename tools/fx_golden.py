@@ -61,6 +61,7 @@ def delay_setup(case: dict[int, int], rng: random.Random) -> None:
 
 def specs() -> dict[str, Spec]:
     import fx_model_allpass as ap
+    import fx_model_apan as pan
     import fx_model_delay as dm
     import fx_model_lfo as lf
 
@@ -74,6 +75,27 @@ def specs() -> dict[str, Spec]:
             8,
             per_call={ap.PHASE_PTR: (0, M32), ap.PHASE_PTR + 1: (0, M32)},
             fixed={4: 2},
+        ),  # fmt: skip
+        "apan": Spec(
+            "apan",
+            "PAN",
+            (-0x20, -1),
+            8,
+            fixed={
+                # the instance words of the FX image (static DM of core 1, Fx1 type 0 row):
+                -0x1B: pan.CTX - 0x1F,  # self pointer: the phase counter is c[-0x1F]
+                -0x1A: 1,
+                -0x19: 0x40000000,
+                -8: (-31) & M32,
+                -3: 2,
+                -0xB: 0x3FC90069,
+                -0xA: 0xBF245655,
+                -9: 0x3D92AA8A,
+                -7: fb.bits(0.99078),
+                -6: fb.bits(4.0),
+                -5: fb.bits(-1.0),
+                -4: fb.bits(0.5),
+            },
         ),  # fmt: skip
         "delay": Spec(
             "delay",

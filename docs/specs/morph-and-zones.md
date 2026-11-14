@@ -89,7 +89,7 @@ Not implemented: copying a single effect unit (Mod 1, Amp, Delay, ...) instead o
 
 Panel edit: `Stage4Engine::set_layer_zone_leds(layer, leds)` (`engine/zone_assign.rs`) writes a layer's LED zone set to the legacy router mask and, when the set has a `kKbZone` code, to the routing code, so the KB ZONE buttons act in both modes; defaults (all four zones) are unchanged. In the legacy router a non-empty zone set with no active split spans the whole keyboard (it was zone-1 only before; nothing set masks without bit 0 outside tests).
 
-Engine code: `crates/nord-core/src/engine/routing.rs`, decode `crates/nord-core/src/cbin/kb_zone.rs`; switch `ns4 render-patch --firmware-routing` (`FirmwareOptions::firmware_routing`), default **Off** ([D22](../DECISIONS.md#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end)); evidence and numbers: [engine-routing](../research/engine-routing.md).
+Engine code: `crates/nord-core/src/engine/routing.rs`, decode `crates/nord-core/src/cbin/kb_zone.rs`; switch `ns4 render-patch --firmware-routing` (`FirmwareOptions::firmware_routing`), default **Off** ([D22](../DECISIONS.md#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end)); evidence and numbers: [engine-routing](../research/engine-routing.md). A scene whose enabled sections have every layer enable at 0 plays layer A of each enabled section in `On` mode (OQ25, ASSUMED, [engine-routing](../research/engine-routing.md) s7; `routing::fill_empty_scene`).
 
 | Rule | Behaviour | Tag |
 |---|---|---|

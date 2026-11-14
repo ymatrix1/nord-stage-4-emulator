@@ -97,12 +97,12 @@ uv run --with unicorn python tools/arm_zone_programs.py $C/bank0_CODE.bin $C/ban
 | `[store + 0x80]` (the `sel` column) | 0 on all 14 layer stores; code 11 with `sel == 1` is an empty range. Likely the aux keyboard assignment; ASSUMED, no program stores code 11 |
 | Whether the zone test sees the transposed note | the note handler `0xC00D1F48` shifts by the channel profile before the zone test; the engine still gates with the unshifted key. Needs a run with a program transpose |
 | Who calls `0xC011AED4` in the program load | the edit-id dispatch calls it when the range changes (observed); the loader that fills the section table (OQ25) is still not executed |
-| Vox / Farfisa programs without an enabled layer | OQ25, see [engine-routing](engine-routing.md) section 7 |
+| Vox / Farfisa programs without an enabled layer | OQ25, see [engine-routing](engine-routing.md) section 7 (a table-level run shows that no focus value makes the entry `(1, 0, focus)` sound) |
 | Hardware clip of a 3 / 4-zone program | the clip comparison of [engine-routing](engine-routing.md) section 5 used Mid 65; with the corrected key (60) notes 60..64 move to the upper layer, a re-run needs the local video |
 
 ## Implications
 
-- The firmware, not a naming guess, now decides which layers play which keys; `--firmware-routing` is VERIFIED on both criteria of D22 (algorithm and mapping) for the key range. The default flip is still blocked by OQ25 (section 7 of [engine-routing](engine-routing.md)).
+- The firmware, not a naming guess, now decides which layers play which keys; `--firmware-routing` is VERIFIED on both criteria of D22 (algorithm and mapping) for the key range. The default flip is still blocked by OQ25 (section 7 of [engine-routing](engine-routing.md): the empty-scene rule that makes nine programs audible is ASSUMED).
 - Crossfades at splits are the firmware's sigmoid curves over 12 or 24 keys with a min() of the two bounds, not the linear 6 / 12 key ramp; programs with a width setting 1 or 2 (19 of the 48 split programs) change.
 
 ## Follow-ups

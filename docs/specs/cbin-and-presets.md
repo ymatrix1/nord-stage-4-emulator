@@ -56,7 +56,7 @@ Every `.ns4p`, `.ns4l`, `.ns4y`, `.ns4n`, `.ns4o`, and `.ns4t` file begins with 
 | `0x08` | 4 B | ASCII | `tag` | 4-char type tag: `"ns4p"`, `"ns4l"`, `"ns4y"`, `"ns4n"`, `"ns4o"`, `"ns4t"`, `"npno"`, `"nsmp"` |
 | `0x0C` | 2 B | `u16` LE | `bank_index` | Zero-based bank index (`0` = Bank A / Bank 1) |
 | `0x0E` | 2 B | `u16` LE | `location_index` | Zero-based program/preset index within the bank (`0..47`) |
-| `0x10` | 4 B | `u32` LE | `category_id` | Musical category enum (`0x00` = None/Live, `0x12` = Organ, `0x16` = Upright/Grand, `0x17` = EPiano, `0x2C` = Bass, `0x2D` = Synth, `0x2E` = Pad, `0x2F` = Pluck/Acoustic) |
+| `0x10` | 4 B | `u32` LE | `category_id` | Category id. `.ns4p` programs: 18 distinct ids over the 384 factory programs, `1, 2, 3, 6, 7, 9, 11, 13, 23, 30, 40, 42, 44, 45, 46, 47, 49, 52` (VERIFIED, [synth-wave-categories](../research/synth-wave-categories.md) s5); by program names `1` Bass, `2` Brass, `3` tuned percussion, `6` lead, `7` Organ, `9` Piano, `11` Strings, `13` Choir, `23` EPiano, `40` Effects, `42` Guitar, `44` Synth Bass, `45` Synth, `46` Pad, `47` Wind solo, `49` Analog strings, `52` Synth brass (ASSUMED reading). It is **not** the index of the 26-name firmware category table (`0xC02BF3C8`); the mapping is open (OQ26). Other types: `0x00` None/Live, `0x2D` Synth (`.ns4y`) |
 | `0x14` | 4 B | `u32` LE | `schema_id_le` | Payload schema version (matches big-endian repeat at `0x2E`) |
 | `0x18` | 4 B | `u32` LE | `checksum` | 32-bit payload checksum / CRC over `+0x2E..EOF` |
 | `0x1C` | 18 B | `[u8; 18]` | `reserved` | All zeros (`0x00`) in preset files |

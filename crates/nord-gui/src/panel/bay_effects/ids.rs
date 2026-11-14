@@ -5,6 +5,7 @@
 //! legend under the base control is their widget; three direct controls the layout puts into one
 //! rectangle (`amp.filter`, `amp.to_rotary`, `amp.res`) get a sub-rectangle next to it.
 
+use super::ctx::{CAPTION_DROP, CAPTION_LINE};
 use crate::panel::layout_px::rect_or_empty;
 use crate::panel::ui_state::fx::ChainUi;
 use egui::{pos2, vec2, Pos2, Rect};
@@ -88,7 +89,10 @@ const LEGENDS: [(&str, &str, usize); 15] = [
 pub(super) fn draw_rect(id: &str, origin: Pos2) -> Rect {
     if let Some(&(_, base, line)) = LEGENDS.iter().find(|(l, _, _)| *l == id) {
         let b = rect_or_empty(base, origin);
-        let c = pos2(b.center().x, b.bottom() + 5.0 + 7.5 * line as f32);
+        let c = pos2(
+            b.center().x,
+            b.bottom() + CAPTION_DROP + CAPTION_LINE * line as f32,
+        );
         return Rect::from_center_size(c, vec2(b.width().max(26.0), 7.0));
     }
     match id {
@@ -119,17 +123,14 @@ pub(super) const NO_CLOCK: &str =
 
 /// Why control `id` cannot be honoured by the engine right now (`None`: fully functional).
 ///
-/// Every Mod type and the Reverb VARIATION are in the engine; what is left dimmed is the Amp
-/// VARIATION (stored, no distinct voicing), TO ROTARY on the Organ slot and the Mod 1 MST CLK of
-/// Ring Mod and A-WAH.
+/// Every Mod type, the Reverb VARIATION and the Amp VARIATION (a separate cabinet voicing per
+/// model, `fx/amp_eq.rs`) are in the engine; what is left dimmed is TO ROTARY on the Organ slot
+/// and the Mod 1 MST CLK of Ring Mod and A-WAH.
 pub(super) fn dim_reason(id: &str, c: &ChainUi, slot: usize) -> Option<&'static str> {
     match id {
         "amp.to_rotary" if slot == 0 => {
             Some("Organ layers feed the Rotary Speaker directly; TO ROTARY routes Piano and Synth layers")
         }
-        "amp.variation" => Some(
-            "the engine stores the Amp VARIATION but has no separate voicing for it yet",
-        ),
         "mod1.mst_clk" if !c.mod1_has_clock() => Some(NO_CLOCK),
         _ => None,
     }
@@ -201,7 +202,12 @@ mod tests {
                 "VARIATION (left) and CHORALE (right) both reach the engine"
             );
         }
-        assert!(dim_reason("amp.variation", &c, 1).is_some());
+        for slot in [0, 1] {
+            assert!(
+                dim_reason("amp.variation", &c, slot).is_none(),
+                "the Amp VARIATION has its own cabinet voicing in the engine"
+            );
+        }
         c.mod1_sel = 2; // RM
         assert!(dim_reason("mod1.mst_clk", &c, 1).is_some());
         c.mod1_sel = 5; // PUMP

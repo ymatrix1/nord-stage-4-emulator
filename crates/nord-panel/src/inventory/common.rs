@@ -61,19 +61,14 @@ fn level_id(name: &str, l: Layer) -> &'static str {
 /// Engine path of the per-layer keyboard zone assignment (`Stage4Engine::set_layer_zone_leds`).
 const ZONE_PATH: &str = "engine:split_router.layer_zone_masks";
 
-/// Host id of the section's Aux KB layer mask (`auxkb_<section>`), when the engine honours it.
-fn aux_id(name: &str) -> Option<&'static str> {
+/// Host id of the section's Aux KB layer mask (`auxkb_<section>`; the Synth mask is the plain
+/// layer bitmask, `Stage4Engine::set_layer_aux` writes the same `AuxKb::layers` flags).
+fn aux_id(name: &str) -> &'static str {
     match name {
-        "organ" => Some("auxkb_organ"),
-        "piano" => Some("auxkb_piano"),
-        _ => None,
+        "organ" => "auxkb_organ",
+        "piano" => "auxkb_piano",
+        _ => "auxkb_synth",
     }
-}
-
-/// The Organ and Piano strips drive section ON (all layers), KB ZONE and the Aux KB flags; the
-/// Synth strip still lists them as unsupported.
-fn zones_wired(name: &str) -> bool {
-    matches!(name, "organ" | "piano")
 }
 
 /// Build the shared strip for one section.
@@ -85,11 +80,7 @@ pub fn layer_block(b: &BlockSpec) -> Vec<ControlEntry> {
             let on = ControlEntry::new(&id("on"), s, K::Button, "ON", p);
             // Section ON switches every layer of the section off, or back on, so it is bound to
             // the layer enable parameters.
-            if zones_wired(n) {
-                on.bound(enabled_id(n, Layer::A))
-            } else {
-                on.todo(b.bean)
-            }
+            on.bound(enabled_id(n, Layer::A))
         },
         ControlEntry::new(&id("solo"), s, K::Button, "SOLO (hold ON)", p)
             .hold()
@@ -127,11 +118,11 @@ pub fn layer_block(b: &BlockSpec) -> Vec<ControlEntry> {
             .assumed("LED count on the fader ladder is not stated in the manual text")
             .ui("shows the morphed level (telemetry, B10)"),
         );
-        let aux = ControlEntry::new(&id(&format!("aux_led.{t}")), s, K::Led, "AUX KB", 45).layer(l);
-        v.push(match aux_id(n) {
-            Some(host) => aux.bound(host),
-            None => aux.todo("ns4-ymci"),
-        });
+        v.push(
+            ControlEntry::new(&id(&format!("aux_led.{t}")), s, K::Led, "AUX KB", 45)
+                .layer(l)
+                .bound(aux_id(n)),
+        );
     }
     for (tail, label) in [
         ("octave_down", "OCTAVE SHIFT -"),
@@ -143,13 +134,7 @@ pub fn layer_block(b: &BlockSpec) -> Vec<ControlEntry> {
             None => e.todo(b.bean),
         });
     }
-    let zone = |e: ControlEntry| {
-        if zones_wired(n) {
-            e.bound(ZONE_PATH)
-        } else {
-            e.todo(b.bean)
-        }
-    };
+    let zone = |e: ControlEntry| e.bound(ZONE_PATH);
     v.push(zone(
         ControlEntry::new(&id("kb_zone_down"), s, K::Button, "KB ZONE -", p).shift(),
     ));
@@ -208,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn organ_and_piano_strips_are_bound_but_synth_is_not() {
+    fn organ_piano_and_synth_strips_are_all_bound() {
         use crate::types::Binding;
         let organ = BlockSpec {
             octave_id: Some("organx_octave_{n}"),
@@ -235,16 +220,8 @@ mod tests {
         assert!(unsupported(layer_block(&organ)).is_empty());
         assert!(unsupported(layer_block(&piano)).is_empty());
         let s = unsupported(layer_block(&synth));
-        for id in [
-            "synth.on",
-            "synth.kb_zone_down",
-            "synth.kb_zone_up",
-            "synth.zone_leds",
-            "synth.aux_led.a",
-            "synth.aux_led.c",
-        ] {
-            assert!(s.contains(&id.to_string()), "{id} stays unsupported");
-        }
+        // Only the Synth octave shift (no host octave parameter yet) is left.
+        assert_eq!(s, ["synth.octave_down", "synth.octave_up"]);
     }
 
     #[test]
