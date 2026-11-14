@@ -1,6 +1,6 @@
 //! Program locations, the in-memory user library and the STORE state machine (manual p.41-42).
 
-use super::name::NameEditor;
+use super::name::{suggest_name, NameEditor};
 use nord_core::engine::ProgramState;
 use std::collections::BTreeMap;
 
@@ -135,6 +135,14 @@ impl UserLibrary {
         self.programs.is_empty()
     }
 
+    /// A program of this exact name is stored or sits in the opened archive.
+    pub fn name_exists(&self, name: &str) -> bool {
+        self.programs.values().any(|p| p.name == name)
+            || self.factory.iter().any(|(i, f)| {
+                !self.programs.contains_key(i) && super::catalog::display_name(f) == name
+            })
+    }
+
     /// Live slot `0..8`.
     pub fn live(&self, slot: u8) -> Option<&ProgramState> {
         self.live.get(usize::from(slot))?.as_deref()
@@ -197,9 +205,10 @@ impl StoreFlow {
         self.stage = StoreStage::Choosing;
     }
 
-    /// STORE AS pressed: name first.
-    pub fn begin_as(&mut self, name: &str, here: ProgLoc) {
-        self.begin(name, here);
+    /// STORE AS pressed: name first, proposing `name` (numbered when `taken`, see
+    /// [`suggest_name`]).
+    pub fn begin_as(&mut self, name: &str, here: ProgLoc, taken: impl Fn(&str) -> bool) {
+        self.begin(&suggest_name(name, taken), here);
         self.stage = StoreStage::Naming;
     }
 
@@ -280,14 +289,36 @@ mod tests {
     }
 
     #[test]
+    fn name_exists_sees_stored_programs_and_archive_entries() {
+        let engine = nord_core::engine::Stage4Engine::new(48_000.0);
+        let mut lib = UserLibrary::default();
+        assert!(!lib.name_exists("Mine"));
+        lib.put(
+            ProgLoc::default(),
+            UserProgram {
+                name: "Mine".into(),
+                category: 0,
+                state: engine.capture_state(),
+            },
+        );
+        assert!(lib.name_exists("Mine") && !lib.name_exists("mine"));
+        lib.set_factory(&[(5, "Program/Bank A/Grand.ns4p".into())]);
+        let shown = lib.name_at(ProgLoc::from_index(5)).unwrap();
+        assert!(lib.name_exists(&shown));
+    }
+
+    #[test]
     fn store_flow_goes_idle_naming_choosing_and_cancels() {
         let mut f = StoreFlow::default();
         assert!(!f.is_active());
         f.begin("Rusty PWM", ProgLoc::parse("C:87").unwrap());
         assert_eq!(f.stage, StoreStage::Choosing);
         assert_eq!(f.bank_target().unwrap().label(), "C:87");
-        f.begin_as("Rusty PWM", ProgLoc::default());
+        f.begin_as("Rusty PWM", ProgLoc::default(), |_| false);
         assert_eq!(f.stage, StoreStage::Naming);
+        assert_eq!(f.editor.name(), "Rusty PWM");
+        f.begin_as("Rusty PWM", ProgLoc::default(), |n| n == "Rusty PWM");
+        assert_eq!(f.editor.name(), "Rusty PWM 2");
         f.finish_naming();
         assert_eq!(f.stage, StoreStage::Choosing);
         f.target = Some(StoreTarget::Live(2));

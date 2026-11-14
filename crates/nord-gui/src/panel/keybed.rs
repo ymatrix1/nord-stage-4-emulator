@@ -59,9 +59,23 @@ pub fn note_x(note: u8, white_w: f32) -> f32 {
     }
 }
 
+/// Key velocity of a mouse press on the on-screen keybed.
+const MOUSE_VELOCITY: u8 = 100;
+
+/// Sends a Note On of the on-screen keybed. It goes through the keyboard path
+/// (`AudioHandle::send_keyboard_midi`), so Local Control Off keeps the sound silent while the
+/// note is still transmitted.
+fn press_note(audio_handle: &AudioHandle, note: u8) {
+    audio_handle.send_keyboard_midi(MidiEvent::NoteOn {
+        channel: 0,
+        note,
+        velocity: MOUSE_VELOCITY,
+    });
+}
+
 fn release_held(state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
     if let Some(old) = state.mouse_held_note.take() {
-        audio_handle.send_midi(MidiEvent::NoteOff {
+        audio_handle.send_keyboard_midi(MidiEvent::NoteOff {
             channel: 0,
             note: old,
             velocity: 0,
@@ -96,11 +110,7 @@ pub(super) fn render_keybed(
                 release_held(state, audio_handle);
                 if let Some(n) = new {
                     state.mouse_held_note = Some(n);
-                    audio_handle.send_midi(MidiEvent::NoteOn {
-                        channel: 0,
-                        note: n,
-                        velocity: 100,
-                    });
+                    press_note(audio_handle, n);
                     for c in state.program_ui.key_pressed(n) {
                         audio_handle.send_command(c);
                     }
@@ -185,6 +195,59 @@ pub(super) fn render_keybed(
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    /// Peak of `frames` rendered frames.
+    fn peak(e: &mut Stage4Engine, frames: usize) -> f32 {
+        (0..frames).fold(0.0f32, |m, _| {
+            let [l, r] = e.render_frame();
+            m.max(l.abs()).max(r.abs())
+        })
+    }
+
+    /// Plays Middle C through the keybed press path and applies every queued command to `e`.
+    fn press_middle_c(e: &mut Stage4Engine) {
+        let (audio, rx) = AudioHandle::new();
+        press_note(&audio, 60);
+        let mut vol = 0.8;
+        for cmd in rx.try_iter() {
+            crate::audio::apply_audio_command(cmd, e, &mut vol);
+        }
+    }
+
+    #[test]
+    fn keybed_notes_are_keyboard_events_not_midi_in() {
+        let (audio, rx) = AudioHandle::new();
+        press_note(&audio, 60);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AudioCommand::Keyboard(MidiEvent::NoteOn { note: 60, .. }))
+        ));
+        let mut state = Stage4PanelState::default();
+        state.mouse_held_note = Some(60);
+        release_held(&mut state, &audio);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AudioCommand::Keyboard(MidiEvent::NoteOff { note: 60, .. }))
+        ));
+    }
+
+    #[test]
+    fn local_control_off_silences_the_on_screen_keybed() {
+        let mut off = Stage4Engine::new(48_000.0);
+        off.midi_menu.local_control = false;
+        press_middle_c(&mut off);
+        assert_eq!(peak(&mut off, 2048), 0.0, "keybed is disconnected");
+        // MIDI In still plays the instrument.
+        off.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 62,
+            velocity: 100,
+        });
+        assert!(peak(&mut off, 2048) > 1e-4);
+        let mut on = Stage4Engine::new(48_000.0);
+        press_middle_c(&mut on);
+        assert!(peak(&mut on, 2048) > 1e-4, "Local Control On sounds");
+    }
 
     #[test]
     fn keybed_paints_88_keys_and_three_leds() {

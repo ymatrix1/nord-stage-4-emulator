@@ -1,7 +1,7 @@
 ---
 # ns4-0u5u
 title: Adopt firmware messages and menu structure
-status: todo
+status: in-progress
 type: task
 created_at: 2026-11-14T04:01:14Z
 updated_at: 2026-11-14T04:01:14Z
@@ -18,10 +18,16 @@ The menus and OLED text read like the hardware.
 
 ## Acceptance Criteria
 
-- [ ] Show the firmware messages in the matching flows (swap, paste, missing piano / sample, init confirm, wait) with tests.
-- [ ] Decode what `%c` prints in `%c Memory Protected` and use the full message.
+- [x] Show the firmware messages in the matching flows (swap, paste, missing piano / sample, init confirm, wait) with tests.
+- [x] Decode what `%c` prints in `%c Memory Protected` and use the full message.
 - [ ] Output / MIDI menu pages and labels follow the firmware list (keep ids stable), with tests; `python tools/ns4_oled_strings.py check` affix count for `menu` drops.
 
 ## Out of Scope
 
 New engine behaviour behind the messages.
+
+## Summary of Changes
+
+Done (PR `feat/oled-firmware-messages`): firmware message table `fw_messages.rs` (`Piano not found`, `Sample not found`, `Please wait...`, `Pasted`, `Swapped`, `Nothing to Paste`, `Nothing to Swap with`, `Are you sure?`, `Unable to Paste`, `Memory Protected`, offsets cited, checked against the local firmware by `test_message_strings_are_in_the_firmware`); toast lifetime on the injected frame clock; library loads raise `Piano not found` / `Sample not found` and `Please wait...` while a decode runs; Paste / Swap use the firmware wording, with `Nothing to Swap with` for an empty clipboard; Reset all settings asks `Are you sure?` (second press confirms); `%c` decoded as `0x89` (font glyph, not drawn). Spec: `visual-style-and-panel.md` 4.5.1; research section 8.
+
+Still open in this bean: the Output / MIDI menu page structure (third criterion). No overwrite prompt was added for STORE: the firmware pairing is evidenced only for Reset all settings.

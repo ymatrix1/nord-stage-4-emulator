@@ -22,6 +22,7 @@ mod output_level;
 mod percussion_poly;
 mod preset_live;
 mod rotary;
+mod rotor_stop;
 mod scanner;
 #[cfg(test)]
 mod stereo_lanes;
@@ -81,6 +82,9 @@ pub use globals::OrganGlobals;
 pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
 pub use output_level::{
     layer_level_gain, swell_word, OutputLevel, LEGACY_BUS_OVER_UNIT, ORGAN_BUS_GAIN, SWELL_DEFAULT,
+};
+pub use rotor_stop::{
+    clamp_stop_angle, stop_angle_label, STOP_ANGLE_COUNT, STOP_ANGLE_LABELS, STOP_ANGLE_RAD,
 };
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
@@ -151,6 +155,8 @@ pub struct OrganLayer {
     pub rotary_mic_angle_deg: f32,
     /// When `true`, engages brake/stop mode regardless of `rotary_speed`.
     pub rotary_stop_mode: bool,
+    /// Rest position of horn and rotor in STOP MODE: `0` = Free, `1..=6` = `STOP_ANGLE_LABELS`.
+    pub rotary_stop_angle: u8,
     pub scanner_mode: ScannerMode,
     /// `B3` tonewheel waveform and phase arithmetic (default `Firmware`, role ASSUMED, about 70 %;
     /// `Legacy` stays selectable).
@@ -265,6 +271,7 @@ impl OrganLayer {
             rotary_close_mic: false,
             rotary_mic_angle_deg: 120.0,
             rotary_stop_mode: false,
+            rotary_stop_angle: 0,
             scanner_mode: ScannerMode::Off,
             tonewheel_source: ToneWheelSource::default(),
             detuned_copies: false,

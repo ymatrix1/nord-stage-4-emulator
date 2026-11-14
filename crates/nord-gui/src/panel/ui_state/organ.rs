@@ -42,6 +42,10 @@ pub struct OrganUi {
     pub close_mic: bool,
     /// Rotary ANGLE wide/narrow (Shift function of STOP MODE); wide is the engine default.
     pub rotary_angle_wide: bool,
+    /// Rotary stop ANGLE index (`0` = Free, `1..=6`, `nord_core::organ::STOP_ANGLE_LABELS`).
+    pub rotary_stop_angle: u8,
+    /// The stop ANGLE picker popup is open (toggled by Shift + STOP MODE).
+    pub stop_angle_open: bool,
     /// Rotary ORGAN routing button: the organ goes through the rotary speaker (engine default on).
     pub rotary_organ: bool,
     /// Per-button gesture state machines, keyed by control id.
@@ -67,6 +71,8 @@ impl Default for OrganUi {
             vib_on_b: false,
             close_mic: false,
             rotary_angle_wide: true,
+            rotary_stop_angle: 0,
+            stop_angle_open: false,
             rotary_organ: true,
             trackers: Trackers::new(),
         }
@@ -84,6 +90,10 @@ mod tests {
         assert!(!u.solo && !u.drawbar_live);
         assert_eq!(u.restore_layers, 0b01);
         assert!(u.rotary_angle_wide && u.rotary_organ, "engine defaults");
+        assert!(
+            u.rotary_stop_angle == 0 && !u.stop_angle_open,
+            "Free, closed"
+        );
         assert_eq!(u.kb_zone, [0, 0]);
         assert_eq!(u.vib_type_b, ScannerMode::C3);
         assert!(u.trackers.is_empty());

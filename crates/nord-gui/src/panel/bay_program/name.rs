@@ -54,6 +54,35 @@ pub const CATEGORIES: [&str; 26] = [
 /// Category of a program that was never given one: the last entry, `Undefined`.
 pub const UNDEFINED_CATEGORY: usize = CATEGORIES.len() - 1;
 
+/// Name proposed by STORE AS: `name` itself while `taken` says it is free, else the name with a
+/// number suffix (`NS4 Palette` -> `NS4 Palette 2` -> `NS4 Palette 3`).
+///
+/// EMPIRICAL: the DSoundman piano-pad video (`hR31DQrxfT4`, 5:40) shows STORE PROGRAM AS proposing
+/// `NS4 Palette 2` for the program `NS4 Palette`. ASSUMED: the counter starts at 2, an existing
+/// ` N` suffix is replaced rather than stacked, the base is cut so the whole name fits
+/// [`MAX_NAME`], and only exact names count as taken; the video shows one case only.
+pub fn suggest_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
+    let name = name.trim_end();
+    if name.is_empty() || !taken(name) {
+        return name.to_string();
+    }
+    let base = match name.rsplit_once(' ') {
+        Some((b, n)) if !b.is_empty() && !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => {
+            b
+        }
+        _ => name,
+    };
+    (2u32..1000)
+        .map(|n| {
+            let suffix = format!(" {n}");
+            let room = MAX_NAME.saturating_sub(suffix.chars().count());
+            let head: String = base.chars().take(room).collect();
+            format!("{}{suffix}", head.trim_end())
+        })
+        .find(|cand| !taken(cand))
+        .unwrap_or_else(|| name.to_string())
+}
+
 /// Cursor-based name editor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameEditor {
@@ -217,6 +246,31 @@ mod tests {
         e.press_abc(); // pads a blank past the end
         e.release_abc();
         assert_eq!(e.name(), "hi");
+    }
+
+    #[test]
+    fn suggest_name_keeps_a_free_name_and_numbers_a_taken_one() {
+        let taken = |n: &str| ["NS4 Palette", "NS4 Palette 2", "Solo"].contains(&n);
+        assert_eq!(suggest_name("Fresh", taken), "Fresh");
+        assert_eq!(suggest_name("", taken), "");
+        assert_eq!(suggest_name("Solo", taken), "Solo 2");
+        assert_eq!(suggest_name("NS4 Palette", taken), "NS4 Palette 3");
+        assert_eq!(suggest_name("NS4 Palette 2", taken), "NS4 Palette 3");
+        assert_eq!(
+            suggest_name("Solo  ", taken),
+            "Solo 2",
+            "trailing blanks ignored"
+        );
+    }
+
+    #[test]
+    fn suggest_name_cuts_the_base_to_fit_the_maximum() {
+        let long = "0123456789ABCDEF";
+        let s = suggest_name(long, |n| n == long);
+        assert_eq!(s, "0123456789ABCD 2");
+        assert_eq!(s.chars().count(), MAX_NAME);
+        assert_eq!(suggest_name("7", |n| n == "7"), "7 2");
+        assert_eq!(suggest_name("1 2", |_| true), "1 2", "all taken: keep it");
     }
 
     #[test]

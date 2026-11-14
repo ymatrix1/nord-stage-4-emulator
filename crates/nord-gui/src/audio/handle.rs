@@ -5,6 +5,7 @@ use super::AudioCommand;
 use crate::telemetry::TelemetryHandle;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use nord_core::midi::MidiEvent;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 /// Handle to communicate with the running audio background thread.
@@ -17,6 +18,9 @@ pub struct AudioHandle {
     control: Option<Arc<ControlLink>>,
     /// Lock-free engine to GUI telemetry; the audio thread publishes into it.
     pub telemetry: TelemetryHandle,
+    /// Counts the sound edits sent (see `AudioCommand::is_program_edit`); the Program display
+    /// compares it with the value at the last load / store to show the boxed `E`.
+    edits: Arc<AtomicU32>,
 }
 
 impl AudioHandle {
@@ -31,6 +35,7 @@ impl AudioHandle {
                 cmd_sender: tx,
                 control: None,
                 telemetry: TelemetryHandle::new(),
+                edits: Arc::new(AtomicU32::new(0)),
             },
             rx,
         )
@@ -49,13 +54,26 @@ impl AudioHandle {
         self.control.as_ref()
     }
 
-    /// Dispatches a MIDI event to the real-time audio thread.
+    /// Dispatches a MIDI event arriving from outside (a MIDI input port) to the audio thread.
+    /// It plays the sound engines regardless of Local Control (MIDI In always sounds).
     ///
     /// For non-critical events (e.g. continuous ModWheel, CC, NoteOn), if the event queue is full,
     /// the event is dropped to prevent unbounded latency. For critical note lifecycle events
     /// (`NoteOff`, `AllNotesOff`, `SustainPedal(0)`), this retries with a short timeout
     /// to ensure key releases are not silently dropped.
     pub fn send_midi(&self, event: MidiEvent) -> bool {
+        self.enqueue_midi(event, false)
+    }
+
+    /// Dispatches an event from the instrument's own keyboard or panel (the on-screen keybed,
+    /// mod wheel, pitch stick). The audio thread runs it through `handle_keyboard_midi`, the
+    /// Local Control gate: with Local Control Off it is only transmitted, never played
+    /// (manual p.61). Same queue policy as [`Self::send_midi`].
+    pub fn send_keyboard_midi(&self, event: MidiEvent) -> bool {
+        self.enqueue_midi(event, true)
+    }
+
+    fn enqueue_midi(&self, event: MidiEvent, keyboard: bool) -> bool {
         let is_critical = match event {
             MidiEvent::NoteOff { .. } => true,
             MidiEvent::ControlChange {
@@ -67,10 +85,18 @@ impl AudioHandle {
             }
             _ => false,
         };
+        let cmd = if keyboard {
+            AudioCommand::Keyboard(event)
+        } else {
+            AudioCommand::Midi(event)
+        };
         if let Some(link) = &self.control {
-            link.observe_midi(event);
+            if keyboard {
+                link.observe_keyboard_midi(event);
+            } else {
+                link.observe_midi(event);
+            }
         }
-        let cmd = AudioCommand::Midi(event);
         match self.cmd_sender.try_send(cmd) {
             Ok(()) => true,
             Err(crossbeam_channel::TrySendError::Full(returned_cmd)) => {
@@ -87,10 +113,18 @@ impl AudioHandle {
     }
 
     pub fn send_command(&self, cmd: AudioCommand) -> bool {
+        if cmd.is_program_edit() {
+            self.edits.fetch_add(1, Ordering::Relaxed);
+        }
         match &self.control {
             Some(link) => link.send(cmd, &self.cmd_sender),
             None => self.cmd_sender.try_send(cmd).is_ok(),
         }
+    }
+
+    /// Number of sound edits sent so far (wraps).
+    pub fn edit_count(&self) -> u32 {
+        self.edits.load(Ordering::Relaxed)
     }
 
     /// The telemetry reader the panel polls once per frame.
@@ -104,6 +138,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_sound_edits_move_the_edit_count_and_clones_share_it() {
+        let (handle, _rx) = AudioHandle::new();
+        let copy = handle.clone();
+        handle.send_command(AudioCommand::SetMasterVolume(0.3));
+        assert_eq!(copy.edit_count(), 0);
+        handle.send_command(AudioCommand::SetSynthCutoff(0.3));
+        assert_eq!(copy.edit_count(), 1);
+    }
+
+    #[test]
     fn handles_share_one_telemetry_cell() {
         let (handle, _rx) = AudioHandle::new();
         let copy = handle.clone();
@@ -111,6 +155,20 @@ mod tests {
         e.attach_telemetry(handle.telemetry().cell());
         e.publish_telemetry();
         assert!(copy.telemetry().latest().get().is_some());
+    }
+
+    #[test]
+    fn keyboard_and_midi_in_use_different_commands() {
+        let (handle, rx) = AudioHandle::new();
+        let ev = MidiEvent::NoteOn {
+            channel: 0,
+            note: 61,
+            velocity: 80,
+        };
+        assert!(handle.send_keyboard_midi(ev));
+        assert!(handle.send_midi(ev));
+        assert!(matches!(rx.try_recv(), Ok(AudioCommand::Keyboard(e)) if e == ev));
+        assert!(matches!(rx.try_recv(), Ok(AudioCommand::Midi(e)) if e == ev));
     }
 
     #[test]
