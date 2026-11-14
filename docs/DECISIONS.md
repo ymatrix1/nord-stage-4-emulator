@@ -371,7 +371,18 @@ cabinet taps fingerprint response test.
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))
 - **Context:** OQ20 listed the SMP bus receiver convention and the piano layer level handler `0xC011A7A4` (law read from the listing, never run) as open. D22 requires end-to-end verification before a default changes.
-- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and the bus convention stays ASSUMED.
-- **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
-- **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 on an untraced path); flip the bus scale (0.83 dB on an assumption, and the true receiver scale is unknown by up to 12 dB).
-- **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
+- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and response test.
+
+### D32. FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2`
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-mod2-types`; evidence [fx-mod2-types](research/fx-mod2-types.md))
+- **Context:** The engine renders Mod 2 `CHOR` as an assumed `9 ms` modulated delay. The firmware routines are `0x122E24` (`kFx2Type` 4) and `0x122F77` (5), a circular stereo delay line with an LFO driven fractional tap; CHOR is used by 93 of 156 Mod 2 programs.
+- **Decision:** Model both routines instruction by instruction (`tools/fx_model_chorus.py`, 500/500 scenarios per type and the per-instruction trace against the oracle), port them with a pair-register machine (`fx/fw_pe.rs`, `fw_chorus4.rs`, `fw_chorus5.rs`) and wire them through `fx/fw_mod2.rs` behind `FirmwareFx::mod2` (in `ALL`, not `DEFAULT`).
+- **Why:** The routines and the data flow are VERIFIED; the amount laws are VERIFIED at 11 samples and interpolated between them, the delay is in DSP frames, the rate in hertz has no hardware recording and the layer specific words use the piano row, so D22 keeps the switch opt-in.
+- **Alternatives:** Tune the engine chorus by ear (rejected: the firmware words are available); wait for all six Mod 2 types (rejected: CHOR alone covers 60 % of Mod 2 programs).
+- **Impact:** `ns4 render-patch --firmware-fx` and `FirmwareFx::ALL` change CHOR programs (4 frame latency, firmware delay times and rates); the default `render_hash` is unchanged.
+bus convention stays ASSUMED.
+law verified, but path from stored word to SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, absolute level verified end to end.
+Flip law (changes every program level below 127 on untraced path); flip bus scale (0.83 dB on assumption, true receiver scale unknown up to 12 dB).
+unchanged (both flags off). Velvet Grand (level 127) reads same flag on.

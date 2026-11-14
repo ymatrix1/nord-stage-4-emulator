@@ -100,7 +100,7 @@ Hence `g` sweeps `[1 - v/127, 1]`: **maximum level 1 at any amount, minimum `1 -
 | Item | State |
 |---|---|
 | Delay types (`kDlyFbFxType`) | module map only ([fx-contexts](fx-contexts.md) s4: types 2, 3 `0x123A7B / 0x123BD0`, 4, 5 `0x123BEE`, 7 `0x122F77`, 9 `0x1230CA`, 10, 11 packed multi-tap `0x12314A / 0x12329B / 0x123466`); the base words of those instances are not in the image (the Dly row of the synth unit holds only the delay itself) and the ring variant `0x120AB5` is not modelled, so a register check needs invented pointers |
-| Mod 2 types | module map only (Phaser `0x12379B`, 1 `0x1238FC`, Flanger / Chorus `0x12348D`, `0x123539`, ...); next candidates in program order: CHOR (93 programs), VIBE (45), PHAS (11), SPIN (11), FLANG (9) |
+| Mod 2 types | CHOR (types 4, 5, `0x122E24`, `0x122F77`) decoded, verified and ported: [fx-mod2-types](fx-mod2-types.md). Open: PHAS `0x12379B` / `0x1238FC`, FLANG `0x12348D` / `0x123539`, VIBE `0x123C84` / `0x123DB4`, ENS, SPIN |
 | Mod 1 RM, A-WAH, WAH, PUMP | 20 programs, routines named above, no model yet |
 | Tempo sync and loop period | not decoded (the stage only runs free) |
 
