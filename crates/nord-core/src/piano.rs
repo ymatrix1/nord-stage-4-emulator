@@ -825,6 +825,12 @@ pub struct PianoLayer {
     pub timbre: PianoTimbre,
     pub string_resonance_enabled: bool,
     pub pedal_noise_enabled: bool,
+    /// Sound menu "Piano Pedal Noise Level" as a linear gain (`1.0` = 0 dB, the default).
+    pub pedal_noise_gain: f32,
+    /// Sound menu "Piano String Res Level" as a linear gain (`1.0` = 0 dB, the default).
+    pub string_res_gain: f32,
+    /// System menu Fine Tune in cents, applied to voices started afterwards (default `0.0`).
+    pub master_tune_cents: f32,
     pub soft_release: bool,
     /// Piano Unison hammer/string detune spread (`0` = Off, `1..=3`).
     pub unison: u8,
@@ -916,6 +922,9 @@ impl PianoLayer {
             timbre: PianoTimbre::Off,
             string_resonance_enabled: true,
             pedal_noise_enabled: true,
+            pedal_noise_gain: 1.0,
+            string_res_gain: 1.0,
+            master_tune_cents: 0.0,
             soft_release: false,
             unison: 0,
             dyn_comp: 0,
@@ -1011,8 +1020,9 @@ impl PianoLayer {
             {
                 if let Some(st) = snd.strokes.get(idx) {
                     let root = st.root_key;
-                    let semitones =
-                        (f32::from(effective_note) - f32::from(root)) + (f32::from(cents) / 100.0);
+                    let semitones = (f32::from(effective_note) - f32::from(root))
+                        + (f32::from(cents) / 100.0)
+                        + self.master_tune_cents / 100.0;
                     let pitch_ratio = 2.0f32.powf(semitones / 12.0);
                     let step = (pitch_ratio as f64)
                         * ((st.sample_rate as f64) / (self.sample_rate as f64));
@@ -1099,7 +1109,9 @@ impl PianoLayer {
             return;
         };
 
-        let semitones = (f32::from(effective_note) - f32::from(root)) + (f32::from(cents) / 100.0);
+        let semitones = (f32::from(effective_note) - f32::from(root))
+            + (f32::from(cents) / 100.0)
+            + self.master_tune_cents / 100.0;
         let pitch_ratio = 2.0f32.powf(semitones / 12.0);
         let step = (pitch_ratio as f64) * ((st_sr as f64) / (self.sample_rate as f64));
         let slot = self.allocate_voice_slot(None);
@@ -1440,8 +1452,8 @@ impl PianoLayer {
                 + noise * self.pedal_brush_env * 0.25;
             let lp_a = (TAU * self.pedal_cutoff_hz * inv_fs).clamp(0.005, 0.35);
             self.pedal_lp_state += lp_a * (raw_thump - self.pedal_lp_state);
-            sum_l += self.pedal_lp_state;
-            sum_r += self.pedal_lp_state;
+            sum_l += self.pedal_lp_state * self.pedal_noise_gain;
+            sum_r += self.pedal_lp_state * self.pedal_noise_gain;
             brush_excite = self.pedal_brush_env * 0.18 * noise;
             self.pedal_noise_env *= (-inv_fs / 0.045).exp();
             self.pedal_brush_env *= (-inv_fs / 0.030).exp();
@@ -1516,7 +1528,10 @@ impl PianoLayer {
             }
         }
 
-        [shaped_l + res_l, shaped_r + res_r]
+        [
+            shaped_l + res_l * self.string_res_gain,
+            shaped_r + res_r * self.string_res_gain,
+        ]
     }
 }
 

@@ -35,6 +35,7 @@ mod program_fx;
 mod program_ops;
 mod routing;
 mod section_edit;
+mod settings;
 mod sharing;
 mod snapshot;
 mod sound_init;
@@ -58,6 +59,10 @@ pub use morph_clip::MorphClip;
 pub use program_ops::{PROGRAM_LEVEL_DB_RANGE, TRANSPOSE_RANGE};
 pub use routing::{zone_leds, FirmwareRouting, ProgramRouting};
 pub use section_edit::Section;
+pub use settings::{
+    GlobalSettings, Level3, TonewheelMode, FINE_TUNE_RANGE_CENTS, GLOBAL_TRANSPOSE_RANGE,
+    PIANO_LEVEL_DB_RANGE,
+};
 pub use snapshot::ProgramState;
 pub use undo::UndoOp;
 #[cfg(test)]
@@ -105,6 +110,8 @@ pub struct Stage4Engine {
     pub aux_kb: AuxKb,
     /// Pedals, pitch stick and per-layer SUSTPED / PSTICK routing.
     pub pedals: PedalState,
+    /// Global System/Sound/Output menu settings (apply with [`Self::set_global_settings`]).
+    settings: GlobalSettings,
     /// Extern layer settings and the outgoing MIDI queue.
     pub extern_out: ExternState,
     note_hold_counts: [[[u8; 7]; 128]; 16],
@@ -152,6 +159,7 @@ impl Stage4Engine {
             layer_midi_channels: [None; 7],
             aux_kb: AuxKb::default(),
             pedals: PedalState::default(),
+            settings: GlobalSettings::default(),
             extern_out: ExternState::default(),
             note_hold_counts: [[[0; 7]; 128]; 16],
             transpose: 0,
@@ -242,7 +250,13 @@ impl Stage4Engine {
             mix_l *= volume;
             mix_r *= volume;
         }
-        self.master_bus.process_frame([mix_l, mix_r])
+        let out = self.master_bus.process_frame([mix_l, mix_r]);
+        if self.settings.mono_output {
+            let mid = 0.5 * (out[0] + out[1]);
+            [mid, mid]
+        } else {
+            out
+        }
     }
 
     /// Feeds the Master Clock tempo to the Synth layers and applies their KB Sync clock resets.
