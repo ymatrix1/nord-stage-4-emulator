@@ -62,3 +62,20 @@ def test_only_the_strobe_register_changes_the_column() -> None:
     assert keys.strobe == 0
     keys.write(ak.STROBE_ADDRESS, 0x1FF)
     assert keys.strobe == 0xFF
+
+
+def test_encoder_steps_run_the_gray_cycle_in_both_directions() -> None:
+    fwd = ak.encoder_steps(2, 1)
+    assert fwd == [{(0x80, 1, 1)}, {(0x80, 1, 0), (0x80, 1, 1)}, {(0x80, 1, 0)}, set()]
+    back = ak.encoder_steps(2, -1)
+    assert back == [{(0x80, 1, 0)}, {(0x80, 1, 0), (0x80, 1, 1)}, {(0x80, 1, 1)}, set()]
+    assert len(ak.encoder_steps(0, 3)) == 12
+    assert ak.encoder_steps(0, 0) == []
+
+
+def test_every_encoder_bit_is_inside_the_scan_mask() -> None:
+    keys = ak.KeyMatrix()
+    for pair in range(len(ak.ENCODER_PAIRS)):
+        for held in ak.encoder_steps(pair, 1):
+            for key in held:
+                keys.press(*key)
