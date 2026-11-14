@@ -155,6 +155,7 @@ impl OrganLayer {
                 self.tone_bank.advance(&mut raw[0]);
             }
         } else {
+            let bend = self.bend_ratio;
             for (i, sig) in raw[0].iter_mut().enumerate() {
                 let p = self.tonewheel_phases[i];
                 *sig = match self.model {
@@ -171,7 +172,7 @@ impl OrganLayer {
                         0.7 * p.sin() + 0.3 * (2.0 * p).sin()
                     }
                 };
-                let next_p = p + TAU * self.tonewheel_freqs[i] * inv_fs;
+                let next_p = p + TAU * self.tonewheel_freqs[i] * bend * inv_fs;
                 self.tonewheel_phases[i] = if next_p >= TAU { next_p - TAU } else { next_p };
             }
         }

@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn unsupported_items_and_actions_never_change() {
-        let mut u = open(Menu::Output);
+        let mut u = open(Menu::Organize);
         assert!(matches!(u.focused_item().binding, Binding::Unsupported(_)));
         assert!(u.dial(1).is_none());
         let before = u.value(u.focused_item());

@@ -76,12 +76,14 @@ pub struct PedalState {
     pub right_pedal: RightPedal,
     pub rotor_func: RotorFunc,
     pub foot_switch: FootSwitchFunc,
+    /// Foot Switch SW B of a dual pedal (Pedal menu page 6), see `foot_switch.rs`.
+    pub foot_switch_b: super::foot_switch::FootSwitchB,
     /// Pedal gain `1.0..=10.0` (Pedal menu "GAIN").
     pub swell_gain: f32,
     pub control_gain: f32,
     /// Per-layer SUSTPED. Defaults keep the prior behaviour: only the pianos follow the pedal.
     pub sustped: [bool; 7],
-    /// Per-layer PSTICK (pitch stick). Honoured by Synth and Extern layers.
+    /// Per-layer PSTICK (pitch stick). Honoured by every layer (Extern layers forward it).
     pub pstick: [bool; 7],
     /// Per-layer bend range in semitones (default 2, PSTICK/RNG list, p.28).
     pub pstick_range: [u8; 7],
@@ -105,6 +107,7 @@ impl Default for PedalState {
             right_pedal: RightPedal::default(),
             rotor_func: RotorFunc::default(),
             foot_switch: FootSwitchFunc::default(),
+            foot_switch_b: super::foot_switch::FootSwitchB::default(),
             swell_gain: 1.0,
             control_gain: 1.0,
             sustped: [false, false, true, true, false, false, false],
@@ -333,7 +336,11 @@ impl Stage4Engine {
                 LayerId::SynthA => self.synth_a.bend_cents = cents,
                 LayerId::SynthB => self.synth_b.bend_cents = cents,
                 LayerId::SynthC => self.synth_c.bend_cents = cents,
-                _ => {}
+                // PSTICK on Organ / Piano layers bends them too (manual p.18).
+                LayerId::OrganA => self.organ_a.set_bend_cents(cents),
+                LayerId::OrganB => self.organ_b.set_bend_cents(cents),
+                LayerId::PianoA => self.piano_a.set_bend_cents(cents),
+                LayerId::PianoB => self.piano_b.set_bend_cents(cents),
             }
         }
     }
@@ -341,6 +348,9 @@ impl Stage4Engine {
     /// Note-off honouring the sustain pedal: Organ and Synth layers defer the release while their
     /// pedal is down (Pianos hold internally); Extern layers send the Note Off immediately.
     pub(super) fn release_or_hold(&mut self, layer: LayerId, note: u8) {
+        if self.cancel_pending_organ(layer, note) {
+            return;
+        }
         if let Some(i) = self.extern_index(layer) {
             self.extern_note_off(i, note);
             return;

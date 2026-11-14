@@ -201,7 +201,7 @@ impl Stage4Engine {
             .map(|_| i)
     }
 
-    fn extern_emit(&mut self, i: usize, make: impl FnOnce(u8) -> MidiOut) {
+    pub(super) fn extern_emit(&mut self, i: usize, make: impl FnOnce(u8) -> MidiOut) {
         if let Some(ch) = self.extern_out.layers[i].channel {
             self.extern_out.queue.push(make(ch));
         }
@@ -209,6 +209,7 @@ impl Stage4Engine {
 
     /// Sends a transposed Note On; the sent note is remembered so Note Off always matches it.
     pub(super) fn extern_note_on(&mut self, i: usize, note: u8, velocity: u8) {
+        let velocity = self.extern_velocity(i, velocity);
         let shifted = i16::from(note) + 12 * i16::from(self.extern_out.layers[i].octave_shift);
         if !(0..=127).contains(&shifted) {
             return;

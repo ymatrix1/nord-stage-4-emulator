@@ -831,6 +831,11 @@ pub struct PianoLayer {
     pub string_res_gain: f32,
     /// System menu Fine Tune in cents, applied to voices started afterwards (default `0.0`).
     pub master_tune_cents: f32,
+    /// Pitch stick bend in cents (manual p.18 PSTICK), applied live to every sounding voice; set
+    /// with [`Self::set_bend_cents`]. Default `0.0` leaves the render bit-identical.
+    bend_cents: f32,
+    /// `2^(bend_cents / 1200)`; exactly `1.0` at the default.
+    bend_ratio: f64,
     pub soft_release: bool,
     /// Piano Unison hammer/string detune spread (`0` = Off, `1..=3`).
     pub unison: u8,
@@ -925,6 +930,8 @@ impl PianoLayer {
             pedal_noise_gain: 1.0,
             string_res_gain: 1.0,
             master_tune_cents: 0.0,
+            bend_cents: 0.0,
+            bend_ratio: 1.0,
             soft_release: false,
             unison: 0,
             dyn_comp: 0,
@@ -1356,8 +1363,26 @@ impl PianoLayer {
         [sum_l + delta, sum_r + delta]
     }
 
+    /// Sets the pitch stick bend in cents (non-finite counts as 0); voices follow it live.
+    pub fn set_bend_cents(&mut self, cents: f32) {
+        let cents = if cents.is_finite() { cents } else { 0.0 };
+        self.bend_cents = cents;
+        self.bend_ratio = if cents == 0.0 {
+            1.0
+        } else {
+            (f64::from(cents) / 1200.0).exp2()
+        };
+    }
+
+    /// The pitch stick bend in cents.
+    pub fn bend_cents(&self) -> f32 {
+        self.bend_cents
+    }
+
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        let bend = self.bend_ratio;
+        let bend32 = bend as f32;
         let mut sum_l = 0.0f32;
         let mut sum_r = 0.0f32;
         let unison_on = self.unison > 0;
@@ -1377,7 +1402,7 @@ impl PianoLayer {
                     if let Some((ml, mr)) = Self::sample_stroke_stereo_at(
                         stroke,
                         &mut v.sample_pos,
-                        v.sample_step,
+                        v.sample_step * bend,
                         self.sample_interp,
                         self.kernel,
                     ) {
@@ -1385,7 +1410,7 @@ impl PianoLayer {
                             let (dl, dr) = Self::sample_stroke_stereo_at(
                                 stroke,
                                 &mut v.sample_pos_detune,
-                                v.sample_step_detune,
+                                v.sample_step_detune * bend,
                                 self.sample_interp,
                                 self.kernel,
                             )
@@ -1400,7 +1425,7 @@ impl PianoLayer {
                     }
                 } else {
                     let p = v.phase;
-                    v.phase = (p + TAU * v.freq * inv_fs) % TAU;
+                    v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
                     let m = p.sin()
                         + 0.45 * v.amp * (2.0 * p).sin()
                         + 0.20 * v.amp * v.amp * (3.0 * p).sin();
@@ -1409,13 +1434,14 @@ impl PianoLayer {
             } else {
                 // Harmonic piano wave model (fundamental + 2nd + 3rd partials with velocity brightness)
                 let p = v.phase;
-                v.phase = (p + TAU * v.freq * inv_fs) % TAU;
+                v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
                 let m = p.sin()
                     + 0.45 * v.amp * (2.0 * p).sin()
                     + 0.20 * v.amp * v.amp * (3.0 * p).sin();
                 if unison_on && !v.is_release_sample {
                     let pd = v.phase_detune;
-                    v.phase_detune = (pd + TAU * v.freq * unison_detune_ratio * inv_fs) % TAU;
+                    v.phase_detune =
+                        (pd + TAU * v.freq * bend32 * unison_detune_ratio * inv_fs) % TAU;
                     let d = pd.sin() + 0.45 * v.amp * (2.0 * pd).sin();
                     (0.75 * m + 0.25 * d, 0.25 * m + 0.75 * d)
                 } else {
@@ -1998,5 +2024,47 @@ mod tests {
             "held sampled stroke env must remain 1.0, got {}",
             hold.voices[0].env
         );
+    }
+
+    /// Mean frequency estimate from rising zero crossings of the left channel.
+    fn crossings(piano: &mut PianoLayer, frames: usize) -> usize {
+        let mut prev = 0.0f32;
+        let mut n = 0;
+        for _ in 0..frames {
+            let l = piano.render_frame()[0];
+            if prev < 0.0 && l >= 0.0 {
+                n += 1;
+            }
+            prev = l;
+        }
+        n
+    }
+
+    #[test]
+    fn pitch_stick_bend_defaults_to_a_bit_identical_render() {
+        let render = |bend: Option<f32>| {
+            let mut p = PianoLayer::new(48_000.0);
+            if let Some(c) = bend {
+                p.set_bend_cents(c);
+            }
+            p.note_on(60, 100);
+            (0..2048).map(|_| p.render_frame()).collect::<Vec<_>>()
+        };
+        assert_eq!(render(None), render(Some(0.0)));
+        assert_eq!(render(Some(f32::NAN)), render(None), "non-finite is 0");
+    }
+
+    #[test]
+    fn pitch_stick_bend_shifts_a_sounding_voice_live() {
+        let mut flat = PianoLayer::new(48_000.0);
+        flat.note_on(60, 100);
+        let mut up = PianoLayer::new(48_000.0);
+        up.note_on(60, 100);
+        up.set_bend_cents(1200.0); // one octave
+        let (a, b) = (crossings(&mut flat, 24_000), crossings(&mut up, 24_000));
+        assert!(a > 50, "{a}");
+        let ratio = b as f32 / a as f32;
+        assert!((ratio - 2.0).abs() < 0.1, "octave bend ratio {ratio}");
+        assert_eq!(up.bend_cents(), 1200.0);
     }
 }
