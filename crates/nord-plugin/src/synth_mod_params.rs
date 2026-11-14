@@ -10,7 +10,7 @@ use nord_core::synth_types::{ArpMode, LfoDestination, LfoShape, VibratoMode};
 
 use crate::synth_params::SYNTH_LAYERS;
 
-fn shape(i: i32) -> LfoShape {
+pub(crate) fn shape(i: i32) -> LfoShape {
     match i {
         1 => LfoShape::Saw,
         2 => LfoShape::Square,
@@ -20,7 +20,7 @@ fn shape(i: i32) -> LfoShape {
     }
 }
 
-fn dest(i: i32) -> LfoDestination {
+pub(crate) fn dest(i: i32) -> LfoDestination {
     match i {
         1 => LfoDestination::OscPitch,
         2 => LfoDestination::OscCtrl,
@@ -29,7 +29,7 @@ fn dest(i: i32) -> LfoDestination {
     }
 }
 
-fn arp(i: i32) -> ArpMode {
+pub(crate) fn arp(i: i32) -> ArpMode {
     match i {
         1 => ArpMode::Up,
         2 => ArpMode::Down,
@@ -40,7 +40,7 @@ fn arp(i: i32) -> ArpMode {
     }
 }
 
-fn vibrato(i: i32) -> VibratoMode {
+pub(crate) fn vibrato(i: i32) -> VibratoMode {
     match i {
         1 => VibratoMode::On,
         2 => VibratoMode::Delay,

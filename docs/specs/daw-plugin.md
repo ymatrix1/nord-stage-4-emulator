@@ -41,3 +41,20 @@
 - Pitch bend (`MidiPitchBend`) is decoded into `MidiEvent::PitchBend` and drives Synth layers with PSTICK on (range per layer, default 2 semitones) and Aux KB layers; Organ and Piano layers ignore it for now.
 - Automated unit tests verify conversion, routing, parameter synchronization, state JSON compatibility, and program import. DAW host compatibility remains unverified until the plugin is loaded and exercised in each host.
 - AUv2 is not exported or tested by this crate; external wrapper packaging is separate.
+
+## Editor (Phase 6b B11, `ns4-hud1`)
+
+`crates/nord-plugin/src/editor/` draws the same panel as the standalone app by calling `nord_gui::panel::render_stage4_panel` (`nord-gui` built with `default-features = false`, so no cpal, midir or eframe). `nih_plug_egui` and `nord-gui` both use egui 0.31.1, so the workspace has one egui.
+
+| Aspect | Behaviour |
+|---|---|
+| Edit path | The panel sends `AudioCommand`s into a channel. Each frame the GUI thread drains it into a `ParamSink` (`PanelSink`): `begin_set_parameter`, `set_parameter_normalized`, `end_set_parameter` through the host `GuiContext`. The engine is never touched from the editor. |
+| Read-back | Before each frame the panel state is refreshed from the parameter values (`readback.rs`: levels, layer enables, organ model/drawbars/percussion/rotary, piano selectors, global synth filter and envelope, mod wheel, FX knobs of the focused slot). Per-layer synth/organ detail kept in the panel's `ui_state` is not mirrored. |
+| Keybed | Keybed MIDI goes through a bounded `crossbeam_channel` (256 events, array queue: no lock, no allocation) to `process()`, which drains it at the start of each block and routes notes like host MIDI (both routing modes). Mod wheel CC 1 is written to `mod_wheel` instead. |
+| Size | Window size is persisted in `Stage4Params::editor_state` (`#[persist = "editor-state"]`, default 1170 x 315). The panel (1560 x 420 logical) scales with egui's zoom factor to fit and is centred; resizing uses the `nih_plug_egui` corner handle, which cannot enforce the aspect, so extra window area is letterboxed. HiDPI comes from the host scale factor. |
+| Dimming | Controls whose `Binding::Bound` host id is missing or not written by the sink get a translucent overlay and the tooltip "not automatable in the plugin yet". `UiOnly` / `Unsupported` controls stay as drawn. A control sharing its rectangle with a live or passive one (a Shift function) is not dimmed. |
+| Menus | Aux KB menu items map to `auxkb_*`; the synth choice order (`---`, `A--`, `-B-`, `--C`, `AB-`, `A-C`, `-BC`, `ABC`) is converted to the host layer bitmask explicitly (`map_settings.rs`). Other menu items are not mapped yet. |
+
+Known limits: `fxx_filter_res` has host range 0..1 while the engine accepts 0..10; the synth GROUP copies, oscillator shape/wavetable/sample/FM selectors, dedicated filter/osc envelopes and pattern steps have no host parameter; `layer_scene_ii` has no panel command mapped; KB zones and Aux KB layer LEDs are engine-only (`engine:` bindings) and dimmed.
+
+Status: tested headlessly (frame shape count, sink mapping, coverage, persistence, queue to `process()`). **Not verified in a host**: no DAW was available; see `docs/plugin-editor.md` for the smoke test.
