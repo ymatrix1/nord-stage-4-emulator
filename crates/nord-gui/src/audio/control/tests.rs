@@ -80,18 +80,37 @@ fn shadow_follows_plain_commands_and_layer_init_undo_redo_round_trips() {
     let mut r = Rig::new();
     r.send(AudioCommand::SetPianoLevel(0.33));
     assert_eq!(r.level(2), 0.33);
-    assert_eq!(r.control.shadow().layer_levels[2].base, 0.33, "shadow mirrors");
+    assert_eq!(
+        r.control.shadow().layer_levels[2].base,
+        0.33,
+        "shadow mirrors"
+    );
 
     r.edit(ProgramEdit::LayerInit(LayerInitTarget::PianoA));
-    assert_ne!(r.level(2), 0.33, "layer init reset the level on the live engine");
+    assert_ne!(
+        r.level(2),
+        0.33,
+        "layer init reset the level on the live engine"
+    );
     assert_eq!(r.control.undo_status(), (Some(UndoOp::LayerInit), None));
-    assert_eq!(r.live.undo_available(), Some(UndoOp::LayerInit), "hint reaches the audio engine");
+    assert_eq!(
+        r.live.undo_available(),
+        Some(UndoOp::LayerInit),
+        "hint reaches the audio engine"
+    );
 
     r.edit(ProgramEdit::Undo);
     assert_eq!(r.level(2), 0.33, "undo restored the old level");
-    assert_eq!(r.control.shadow().layer_levels[2].base, 0.33, "shadow follows undo");
+    assert_eq!(
+        r.control.shadow().layer_levels[2].base,
+        0.33,
+        "shadow follows undo"
+    );
     assert_eq!(r.control.undo_status(), (None, Some(UndoOp::LayerInit)));
-    assert_eq!((r.live.undo_available(), r.live.redo_available()), (None, Some(UndoOp::LayerInit)));
+    assert_eq!(
+        (r.live.undo_available(), r.live.redo_available()),
+        (None, Some(UndoOp::LayerInit))
+    );
 
     r.edit(ProgramEdit::Redo);
     assert_ne!(r.level(2), 0.33, "redo re-applied the init");
@@ -116,7 +135,9 @@ fn layer_init_leaves_other_layers_running_untouched() {
     }
     r.edit(ProgramEdit::LayerInit(LayerInitTarget::PianoB));
     assert_eq!(r.level(0), 0.5, "organ level untouched");
-    let out = (0..2048).map(|_| r.live.render_frame()[0].abs()).sum::<f32>();
+    let out = (0..2048)
+        .map(|_| r.live.render_frame()[0].abs())
+        .sum::<f32>();
     assert!(out > 0.0, "held note on the other layers still sounds");
 }
 
@@ -152,7 +173,10 @@ fn copy_paste_swap_and_clear_morph_go_through_the_shadow() {
     r.edit(ProgramEdit::ClearMorph(MorphSource::ModWheel));
     assert_eq!(r.live.layer_levels[3].delta_wheel, 0.0);
     r.edit(ProgramEdit::Undo);
-    assert_eq!(r.live.layer_levels[3].delta_wheel, 0.7, "undo of clear morph");
+    assert_eq!(
+        r.live.layer_levels[3].delta_wheel, 0.7,
+        "undo of clear morph"
+    );
 }
 
 #[test]
@@ -167,7 +191,10 @@ fn snapshot_replies_from_the_shadow_and_recall_swaps_the_program_in() {
     });
     let (ticket, state) = rx.try_recv().expect("reply is immediate");
     assert_eq!(ticket, 9);
-    assert!(r.delivered.iter().all(|d| *d == "other"), "no audio round trip");
+    assert!(
+        r.delivered.iter().all(|d| *d == "other"),
+        "no audio round trip"
+    );
 
     r.send(AudioCommand::SetPianoLevel(0.9));
     r.edit(ProgramEdit::Transpose(-2));
@@ -189,12 +216,18 @@ fn a_stale_answer_is_dropped_and_a_new_operation_clears_redo() {
     r.edit(ProgramEdit::Undo);
     assert!(r.control.undo_status().1.is_some());
     r.edit(ProgramEdit::LayerInit(LayerInitTarget::SynthA));
-    assert_eq!(r.control.undo_status(), (Some(UndoOp::LayerInit), None), "redo branch cleared");
+    assert_eq!(
+        r.control.undo_status(),
+        (Some(UndoOp::LayerInit), None),
+        "redo branch cleared"
+    );
     assert_eq!(r.live.redo_available(), None);
 
     // Two operations before the first answer is read: only the newest ticket may fill the slot.
-    r.control.control_op(ProgramEdit::LayerInit(LayerInitTarget::SynthB));
-    r.control.control_op(ProgramEdit::LayerInit(LayerInitTarget::SynthC));
+    r.control
+        .control_op(ProgramEdit::LayerInit(LayerInitTarget::SynthB));
+    r.control
+        .control_op(ProgramEdit::LayerInit(LayerInitTarget::SynthC));
     r.pump();
     r.control.drain();
     assert!(matches!(r.control.undo, Slot::Ready { .. }));
@@ -208,7 +241,8 @@ fn undo_with_nothing_stored_or_a_lost_answer_gives_up() {
     r.edit(ProgramEdit::Undo);
     assert!(r.delivered.is_empty(), "no snapshot, no swap");
     // The swap is sent but the audio thread never answers: Undo times out and does nothing.
-    r.control.control_op(ProgramEdit::LayerInit(LayerInitTarget::PianoA));
+    r.control
+        .control_op(ProgramEdit::LayerInit(LayerInitTarget::PianoA));
     let t0 = std::time::Instant::now();
     r.control.control_op(ProgramEdit::Undo);
     assert!(t0.elapsed() >= SETTLE_TIMEOUT);
@@ -219,18 +253,24 @@ fn undo_with_nothing_stored_or_a_lost_answer_gives_up() {
 #[test]
 fn midi_controllers_reach_the_shadow_but_notes_do_not() {
     let mut r = Rig::new();
-    r.control.observe(&AudioCommand::Midi(MidiEvent::ControlChange {
-        channel: 0,
-        controller: nord_core::midi::cc::MOD_WHEEL,
-        value: 127,
-    }));
+    r.control
+        .observe(&AudioCommand::Midi(MidiEvent::ControlChange {
+            channel: 0,
+            controller: nord_core::midi::cc::MOD_WHEEL,
+            value: 127,
+        }));
     assert!(r.control.shadow().morph_controllers.mod_wheel > 0.9);
     r.control.observe(&AudioCommand::Midi(MidiEvent::NoteOn {
         channel: 0,
         note: 60,
         velocity: 100,
     }));
-    assert_eq!(r.control.shadow().telemetry_free_held(), 0);
+    let mut shadow = r.control.shadow().clone();
+    let energy: f32 = (0..512).map(|_| shadow.render_frame()[0].abs()).sum();
+    assert_eq!(
+        energy, 0.0,
+        "a note-on is not replayed, the shadow stays silent"
+    );
 }
 
 #[test]
@@ -238,7 +278,10 @@ fn link_records_before_attach_then_replays_in_order() {
     let link = ControlLink::new();
     let (tx, rx) = bounded(64);
     assert!(!link.is_active());
-    assert!(link.send(AudioCommand::SetPianoLevel(0.25), &tx), "forwarded while waiting");
+    assert!(
+        link.send(AudioCommand::SetPianoLevel(0.25), &tx),
+        "forwarded while waiting"
+    );
     assert!(link.send(
         AudioCommand::Program(ProgramEdit::LayerInit(LayerInitTarget::SynthA)),
         &tx

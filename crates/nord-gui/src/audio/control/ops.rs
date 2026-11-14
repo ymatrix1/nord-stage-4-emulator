@@ -181,3 +181,28 @@ impl ProgramControl {
             .is_ok()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nord_core::morph::MorphSource;
+
+    #[test]
+    fn masks_select_exactly_what_an_edit_changes() {
+        let piano = init_mask(LayerInitTarget::PianoB);
+        assert!(piano.contains(StateMask::panel(LayerId::PianoB)));
+        assert!(!piano.contains(StateMask::panel(LayerId::PianoA)));
+        assert!(!piano.contains(StateMask::SCENE));
+        let organ = init_mask(LayerInitTarget::OrganAb);
+        assert!(organ.contains(StateMask::SCENE) && organ.contains(StateMask::fx(LayerId::OrganB)));
+        assert_eq!(init_mask(LayerInitTarget::All), StateMask::ALL);
+        assert_eq!(paste_mask(CopyItem::Program), StateMask::ALL);
+        assert_eq!(
+            paste_mask(CopyItem::Morph(MorphSource::ModWheel)),
+            StateMask::MORPH
+        );
+        let fx = paste_mask(CopyItem::Fx(LayerId::PianoA));
+        assert_eq!(fx, StateMask::fx(LayerId::PianoA));
+        assert!(!fx.contains(StateMask::panel(LayerId::PianoA)));
+    }
+}

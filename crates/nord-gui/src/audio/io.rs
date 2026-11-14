@@ -1,9 +1,9 @@
 //! CPAL audio output stream and MIDIR MIDI input listener.
 
+use super::control::ControlLink;
 use super::frame::{render_frame_to_f32, render_frame_to_i16};
 use super::{apply_audio_command, standalone_engine, AudioCommand, AudioHandle};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use super::control::ControlLink;
 use crossbeam_channel::{Receiver, Sender};
 use midir::{Ignore, MidiInput};
 use nord_core::engine::Stage4Engine;

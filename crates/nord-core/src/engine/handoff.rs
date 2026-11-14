@@ -177,13 +177,13 @@ impl Stage4Engine {
         self.undo_hint
     }
 
-    /// Counts a returned box the control thread could not take (queue full); the box is leaked
-    /// instead of freed on the audio thread.
+    /// Counts a box or command the audio thread had to leak instead of free (return queue full, or
+    /// a control operation that reached the callback); never free on the audio thread.
     pub fn note_retire_overflow(&mut self) {
         self.retire_overflow = self.retire_overflow.saturating_add(1);
     }
 
-    /// Boxes leaked because the return queue was full (should stay `0`).
+    /// Boxes and commands leaked instead of freed on the audio thread (should stay `0`).
     pub fn retire_overflow(&self) -> u32 {
         self.retire_overflow
     }

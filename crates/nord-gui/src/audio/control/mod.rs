@@ -32,7 +32,11 @@ enum Slot {
     #[default]
     Empty,
     /// The swap was sent; the old state is still on its way back from the audio thread.
-    Pending { ticket: u32, op: UndoOp, mask: StateMask },
+    Pending {
+        ticket: u32,
+        op: UndoOp,
+        mask: StateMask,
+    },
     Ready {
         op: UndoOp,
         mask: StateMask,
@@ -150,3 +154,19 @@ impl ProgramControl {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod slot_tests {
+    use super::*;
+
+    #[test]
+    fn slot_reports_its_operation_only_when_occupied() {
+        assert_eq!(Slot::default().op(), None);
+        let pending = Slot::Pending {
+            ticket: 1,
+            op: UndoOp::LayerInit,
+            mask: StateMask::NONE,
+        };
+        assert_eq!(pending.op(), Some(UndoOp::LayerInit));
+    }
+}

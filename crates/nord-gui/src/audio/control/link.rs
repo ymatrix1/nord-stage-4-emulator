@@ -72,8 +72,7 @@ impl ControlLink {
                 None => true,
             },
             State::Waiting(backlog) => {
-                let deferred =
-                    matches!(&cmd, AudioCommand::Program(e) if e.is_control_op());
+                let deferred = matches!(&cmd, AudioCommand::Program(e) if e.is_control_op());
                 if backlog.len() < BACKLOG_CAP {
                     backlog.push(cmd.clone());
                 }
@@ -98,10 +97,46 @@ impl ControlLink {
     }
 
     /// Undo / Redo the control thread currently holds.
-    pub fn undo_status(&self) -> (Option<nord_core::engine::UndoOp>, Option<nord_core::engine::UndoOp>) {
+    pub fn undo_status(
+        &self,
+    ) -> (
+        Option<nord_core::engine::UndoOp>,
+        Option<nord_core::engine::UndoOp>,
+    ) {
         match &*self.lock() {
             State::Active(c) => c.undo_status(),
             State::Waiting(_) => (None, None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_link_waits_and_reports_nothing_to_undo() {
+        let link = ControlLink::default();
+        assert!(!link.is_active());
+        assert_eq!(link.undo_status(), (None, None));
+    }
+
+    #[test]
+    fn note_events_are_not_recorded_but_controllers_are() {
+        let link = ControlLink::new();
+        link.observe_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 90,
+        });
+        link.observe_midi(MidiEvent::PitchBend {
+            channel: 0,
+            value: 9000,
+        });
+        let guard = link.lock();
+        let State::Waiting(b) = &*guard else {
+            panic!("never attached");
+        };
+        assert_eq!(b.len(), 1);
     }
 }
