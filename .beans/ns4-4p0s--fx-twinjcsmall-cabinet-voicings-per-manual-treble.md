@@ -14,7 +14,7 @@ Manual p.51-52: Twin and JC boost treble (non-variation especially); variations 
 
 ## Acceptance Criteria
 - [ ] Voicings match manual direction; fit to hardware clips (video_ref compare)
-- [ ] amp_variation modelled
+- [x] amp_variation modelled
 - [ ] TO ROTARY routes into the rotary DSP or is documented unsupported
 
 

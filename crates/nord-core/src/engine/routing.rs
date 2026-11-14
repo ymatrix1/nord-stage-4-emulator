@@ -37,7 +37,9 @@ pub enum FirmwareRouting {
 pub struct ProgramRouting {
     /// A program was applied (before that the engine keeps its own scene masks in both modes).
     pub loaded: bool,
-    /// Scene I / II masks as decoded (bit `i` = layer `i`), zero means silent.
+    /// Scene I / II masks as the firmware routing uses them (bit `i` = layer `i`): the decoded
+    /// masks, except that a scene whose enabled sections have no layer on plays layer A of each
+    /// ([`fill_empty_scene`], OQ25). Zero means silent (no section enabled).
     pub exact_masks: [u8; 2],
     /// Scene I / II masks of the legacy path (with the default-mask fallbacks).
     pub legacy_masks: [u8; 2],
@@ -45,6 +47,35 @@ pub struct ProgramRouting {
     pub kb_zone: [u8; 7],
     /// `split_enabled` and the Low / Mid / High point flag.
     pub split_active: [bool; 3],
+}
+
+/// Layer A of every enabled section when a scene would otherwise be silent (OQ25).
+///
+/// 9 of the 384 factory programs (`Vox Like Me`, `Vox Rising Sun`, `Vox Inna-Gadda`, `Vox Im Down`,
+/// `Vox DC5`, `Burning Lead`, `LoFi Piano`, `Farfisa II`, `70s CP Strings`) store an enabled
+/// section with an all-zero layer enable (`kLayerEnable*_I` = 0) and no other layer in scene I.
+/// The ARM zone handlers give byte 0 for that view (`tools/arm_program_routing.py`, VERIFIED run),
+/// so the program-load writer of the section table must differ from the plain file field.
+/// ASSUMED: the loader or the UI treats an enabled section without layers as layer A, because the
+/// names of these programs (and `Tines Layer`, `Piano Soft Orch`, `Rising Sun`: piano section on,
+/// mask 0, next to a sounding synth) only make sense with that layer audible. Applied only when the
+/// whole scene would be silent; a scene with sounding layers keeps its masks.
+pub(super) fn fill_empty_scene(section_enable: u8, mask: u8) -> u8 {
+    if mask != 0 {
+        return mask;
+    }
+    let bit = |layer: LayerId| 1u8 << layer as u8;
+    let mut filled = 0;
+    if section_enable & 0b100 != 0 {
+        filled |= bit(LayerId::OrganA);
+    }
+    if section_enable & 0b010 != 0 {
+        filled |= bit(LayerId::PianoA);
+    }
+    if section_enable & 0b001 != 0 {
+        filled |= bit(LayerId::SynthA);
+    }
+    filled
 }
 
 impl Default for ProgramRouting {
@@ -155,7 +186,10 @@ impl Stage4Engine {
     pub(super) fn record_program_routing(&mut self, prog: &crate::cbin::ProgramDecoded) {
         self.routing = ProgramRouting {
             loaded: true,
-            exact_masks: [prog.global.scene_1_mask, prog.global.scene_2_mask],
+            exact_masks: [
+                fill_empty_scene(prog.global.section_enable_i, prog.global.scene_1_mask),
+                fill_empty_scene(prog.global.section_enable_ii, prog.global.scene_2_mask),
+            ],
             legacy_masks: [self.scene.scene_1_mask, self.scene.scene_2_mask],
             kb_zone: prog.global.kb_zone,
             split_active: std::array::from_fn(|i| {
@@ -282,6 +316,23 @@ mod tests {
             assert!((lo + hi - 1.0).abs() < 1e-6, "note {note}");
         }
         assert!((r.zone_gain(LayerId::OrganA, 60, &pts) - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn empty_scene_plays_layer_a_of_each_enabled_section() {
+        let a = |l: LayerId| 1u8 << l as u8;
+        assert_eq!(fill_empty_scene(0b100, 0), a(LayerId::OrganA));
+        assert_eq!(
+            fill_empty_scene(0b011, 0),
+            a(LayerId::PianoA) | a(LayerId::SynthA)
+        );
+        assert_eq!(fill_empty_scene(0, 0), 0, "no section on stays silent");
+    }
+
+    #[test]
+    fn scene_with_a_sounding_layer_keeps_its_mask() {
+        let b = 1u8 << LayerId::OrganB as u8;
+        assert_eq!(fill_empty_scene(0b111, b), b);
     }
 
     #[test]

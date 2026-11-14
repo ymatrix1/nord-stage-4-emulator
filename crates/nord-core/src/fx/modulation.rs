@@ -20,9 +20,45 @@ impl LayerFxChain {
         }
     }
 
+    /// The firmware A-PAN / TREM stage (`FirmwareFx::mod1`): `None` when this program is not one
+    /// of `kFx1Type` 0..=3, runs in Master Clock sync, or has no raw values (engine path).
+    fn process_fw_mod1(&mut self, l: f32, r: f32) -> Option<[f32; 2]> {
+        let (ty, rate) = (self.mod1_type_raw?, self.mod1_rate_raw?);
+        if ty > 3 || self.mod1_sync_beats.is_some() {
+            self.fw_mod1 = None;
+            return None;
+        }
+        let shape = if ty < 2 {
+            fw_mod1::Mod1Shape::AutoPan
+        } else {
+            fw_mod1::Mod1Shape::Tremolo
+        };
+        let hard = ty & 1 == 1;
+        let amount = (self.mod1_amount.clamp(0.0, 1.0) * 127.0).round() as u32;
+        let rate = u32::from(rate);
+        match &mut self.fw_mod1 {
+            Some(st) if st.shape() == shape && st.hard() == hard => st.set_params(rate, amount),
+            slot => {
+                *slot = Some(fw_mod1::FwMod1Stage::new(
+                    shape,
+                    hard,
+                    rate,
+                    amount,
+                    self.sample_rate,
+                ));
+            }
+        }
+        self.fw_mod1.as_mut().map(|st| st.process_frame([l, r]))
+    }
+
     pub(super) fn process_mod1(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {
         if self.mod1_type == Mod1Type::Off {
             return [l, r];
+        }
+        if self.firmware_fx.mod1 {
+            if let Some(out) = self.process_fw_mod1(l, r) {
+                return out;
+            }
         }
         // Appended types with their own state (dynamics driven, no shared LFO phase).
         match self.mod1_type {
