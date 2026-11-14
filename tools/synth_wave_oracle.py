@@ -33,6 +33,7 @@ import synth_stage_shapes as shapes
 import synth_stage_super1 as super1
 import synth_stage_sync as sync
 import synth_stage_sync3 as sync3
+import synth_stage_sync6 as sync6
 import synth_stage_unison as unison
 import synth_wave_model as m
 
@@ -57,6 +58,8 @@ STAGE_SHAPE_SINE4 = 0x120DAB
 STAGE_SHAPE_SINE3 = 0x12377D
 STAGE_SYNC2 = 0x122A32
 STAGE_SYNC3 = 0x122C5C
+STAGE_SYNC6 = 0x1239BE
+STAGE_SYNC8 = 0x123FE9
 STAGE_MULTI = 0x121C54
 STAGE_SUPER1 = 0x121E9D
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1)
@@ -68,7 +71,7 @@ PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not d
 # `s5` = 0x3F4CCCCD, 3 of 3 values): the pass computes `DM(-5, I2) = clip(F0 + F8, 0.5) + 0.5` and
 # the word `DM(0xC271A + lane)` is its only persistent term (the others are rewritten by the pass).
 S5_SRC = 0xC271A
-S5_STAGES = (STAGE_SYNC2, STAGE_SYNC3)
+S5_STAGES = (STAGE_SYNC2, STAGE_SYNC3, STAGE_SYNC6, STAGE_SYNC8)
 EXTRA_BUF: list[str] = []
 # VERIFIED (listing `0x241E4E..0x241EA6`, dump after the pass): the SHAPE SINE 4 output high
 # pass reads its state words and coefficient at `DM(-32 / -30 / -28, I7)`,
@@ -101,6 +104,8 @@ MODELS = {
     STAGE_SHAPE_SINE3: shape_sine3.stage_shape_sine_3,
     STAGE_SYNC2: sync.stage_sync2,
     STAGE_SYNC3: sync3.stage_sync3,
+    STAGE_SYNC6: sync6.stage_sync6,
+    STAGE_SYNC8: sync6.stage_sync8,
     STAGE_MULTI: unison.stage_multi,
     STAGE_SUPER1: super1.stage_super1,
 }

@@ -18,6 +18,7 @@ import synth_stage_shapes as shapes  # noqa: E402
 import synth_stage_super1 as super1  # noqa: E402
 import synth_stage_sync as sync  # noqa: E402
 import synth_stage_sync3 as sync3  # noqa: E402
+import synth_stage_sync6 as sync6  # noqa: E402
 import synth_stage_unison as unison  # noqa: E402
 import synth_wave_model as m  # noqa: E402
 import synth_wave_oracle as o  # noqa: E402
@@ -39,6 +40,8 @@ MODELS = {
     "0x12377d": sine3.stage_shape_sine_3,
     "0x122a32": sync.stage_sync2,
     "0x122c5c": sync3.stage_sync3,
+    "0x1239be": sync6.stage_sync6,
+    "0x123fe9": sync6.stage_sync8,
 }
 
 
