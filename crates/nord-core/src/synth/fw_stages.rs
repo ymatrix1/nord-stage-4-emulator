@@ -10,6 +10,7 @@
 //! is open, OQ22): they are the ASSUMED constants below.
 
 use super::fw_shape::signed_phase;
+use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
 use super::gain_dezip::SY_FRAME_RATE_HZ;
 use super::hw_saw::{SAW_A, SAW_B, SAW_C};
 
@@ -26,6 +27,12 @@ pub enum FwStage {
     Multi,
     /// SHAPE SINE wave 0 (stage `0x123427`, a phase-warped sine).
     ShapeSine,
+    /// SHAPE SINE wave 1 (stage `0x1235C9`, folded half cycles).
+    ShapeSineFold,
+    /// SHAPE SINE wave 2 (stage `0x1232A5`, amplified and clipped phase).
+    ShapeSineGain,
+    /// SHAPE SINE wave 5 (stage `0x122F1F`, resonant sine).
+    ShapeSineRes,
 }
 
 impl FwStage {
@@ -37,6 +44,9 @@ impl FwStage {
             (6, 0) => Some(Self::Super),
             (5, _) => Some(Self::Multi),
             (4, 0) => Some(Self::ShapeSine),
+            (4, 1) => Some(Self::ShapeSineFold),
+            (4, 2) => Some(Self::ShapeSineGain),
+            (4, 5) => Some(Self::ShapeSineRes),
             _ => None,
         }
     }
@@ -101,41 +111,6 @@ pub fn saw_diff(p: f32, dt: f32) -> f32 {
     let xo = signed_phase(p + 0.5);
     let w = 1.0 - (xf.abs() * 0.25 / dt.max(1e-6)).min(1.0);
     (w * w).copysign(xo) - xo
-}
-
-/// VERIFIED (image words of the sine helper `0x12522E`): `t (c12 + q (c14 + q (c16 + q c18)))`.
-const SINE_C12: f32 = 1.570_790_8;
-const SINE_C14: f32 = -0.645_891_1;
-const SINE_C16: f32 = 0.079_430_89;
-const SINE_C18: f32 = -0.004_331_1;
-/// VERIFIED (listing `0x2468AE..0x2468DC`): the warp width closes as `1 - min(1, 5.5 a)`.
-const SSINE_FADE: f32 = 5.5;
-/// VERIFIED: fade of the sine stages `C (B + clip(A - a, +-B))` (`0x3F30F34B`, `0x3E6BEF0F`, `0x400AE2EB`).
-const SINE_FADE_A: f32 = 0.691_212_36;
-const SINE_FADE_B: f32 = 0.230_404_12;
-const SINE_FADE_C: f32 = 2.170_1;
-
-/// The sine polynomial of the helper `0x12522E` on `v = 2 y` (`y` = warped phase, -1..1).
-#[inline]
-fn sine_poly(v: f32) -> f32 {
-    let t = v.abs() - 1.0;
-    let q = t * t;
-    t * (SINE_C12 + q * (SINE_C14 + q * (SINE_C16 + q * SINE_C18)))
-}
-
-/// One sample of SHAPE SINE wave 0: the phase `t` (cycles) is warped by two slopes around the knee
-/// `-w` (`w = (1 - (1 - s5)^2) (1 - min(1, 5.5 a))`, `a = 2 i_sy`), then fed to the sine polynomial
-/// and the sine fade. `shape` is the spread word `s5` (idle 0.5).
-#[inline]
-pub fn shape_sine_wave(t: f32, i_sy: f32, shape: f32) -> f32 {
-    let a = 2.0 * i_sy;
-    let s = 1.0 - shape;
-    let w = (1.0 - s * s) * (1.0 - (a * SSINE_FADE).min(1.0));
-    let x = signed_phase(t);
-    let hi = (x + 1.0) / (1.0 - w).max(1e-3);
-    let y = if hi >= 1.0 { (x - 1.0) / (1.0 + w) } else { hi };
-    let g = SINE_FADE_C * (SINE_FADE_B + (SINE_FADE_A - a).clamp(-SINE_FADE_B, SINE_FADE_B));
-    sine_poly(2.0 * y) * g
 }
 
 /// Detune amount `u` of the SUPER / MULTI spread word `s5`.
@@ -203,6 +178,9 @@ impl FwStageState {
             }
             // ASSUMED: shape word = Osc Ctrl (idle 0.5 when the strip shape is unset).
             FwStage::ShapeSine => shape_sine_wave(t, i_sy, ctrl),
+            FwStage::ShapeSineFold => shape_sine_fold(t, i_sy, ctrl),
+            FwStage::ShapeSineGain => shape_sine_gain(t, i_sy, ctrl),
+            FwStage::ShapeSineRes => shape_sine_res(t, i_sy, ctrl),
             FwStage::Multi => {
                 let mut sum = 0.0;
                 for (ph, c) in self.phases.iter_mut().zip(MULTI_OCTAVES) {
@@ -275,19 +253,6 @@ mod tests {
     }
 
     #[test]
-    fn shape_sine_matches_the_python_model_golden_grid() {
-        let w = worst((0..gold2::SSINE_OUT.len()).map(|i| {
-            let (p, dt) = (
-                f32::from_bits(gold2::SSINE_PHASE[i]),
-                f32::from_bits(gold2::SSINE_DT[i]),
-            );
-            let got = shape_sine_wave(p, dt, f32::from_bits(gold2::SSINE_SHAPE[i]));
-            (got, f32::from_bits(gold2::SSINE_OUT[i]))
-        }));
-        assert!(w < 2e-6, "worst deviation {w}");
-    }
-
-    #[test]
     fn category_wave_map_selects_the_modelled_stages_only() {
         assert_eq!(FwStage::from_category_wave(0, 6), Some(FwStage::Noise));
         assert_eq!(
@@ -297,7 +262,19 @@ mod tests {
         assert_eq!(FwStage::from_category_wave(6, 0), Some(FwStage::Super));
         assert_eq!(FwStage::from_category_wave(5, 4), Some(FwStage::Multi));
         assert_eq!(FwStage::from_category_wave(4, 0), Some(FwStage::ShapeSine));
-        assert_eq!(FwStage::from_category_wave(4, 1), None);
+        assert_eq!(
+            FwStage::from_category_wave(4, 1),
+            Some(FwStage::ShapeSineFold)
+        );
+        assert_eq!(
+            FwStage::from_category_wave(4, 2),
+            Some(FwStage::ShapeSineGain)
+        );
+        assert_eq!(
+            FwStage::from_category_wave(4, 5),
+            Some(FwStage::ShapeSineRes)
+        );
+        assert_eq!(FwStage::from_category_wave(4, 3), None);
         assert_eq!(FwStage::from_category_wave(3, 0), None);
         assert_eq!(FwStage::from_category_wave(2, 1), None);
     }
@@ -310,6 +287,9 @@ mod tests {
             FwStage::Super,
             FwStage::Multi,
             FwStage::ShapeSine,
+            FwStage::ShapeSineFold,
+            FwStage::ShapeSineGain,
+            FwStage::ShapeSineRes,
         ] {
             let (mut a, mut b) = (FwStageState::default(), FwStageState::default());
             let dt = 220.0 / 48_000.0;

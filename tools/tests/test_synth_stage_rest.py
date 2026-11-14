@@ -26,6 +26,9 @@ MODELS = {
     "0x121d6d": unison.stage_super,
     "0x121c54": unison.stage_multi,
     "0x123427": shape_sine.stage_shape_sine,
+    "0x1235c9": shape_sine.stage_shape_sine_1,
+    "0x1232a5": shape_sine.stage_shape_sine_2,
+    "0x122f1f": shape_sine.stage_shape_sine_5,
 }
 
 
@@ -44,7 +47,11 @@ def test_rust_golden_files_are_what_the_generator_prints() -> None:
     import synth_stage_golden as g
 
     base = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
-    for part, name in ((1, "tests_fw_stage_golden.rs"), (2, "tests_fw_stage_golden2.rs")):
+    for part, name in (
+        (1, "tests_fw_stage_golden.rs"),
+        (2, "tests_fw_stage_golden2.rs"),
+        (3, "tests_fw_stage_golden3.rs"),
+    ):
         assert (base / name).read_text() == g.rust(part), f"regenerate part {part}"
 
 
