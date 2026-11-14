@@ -116,6 +116,8 @@ Scene II used by 213 programs, split enabled in 48, non-default key zone code on
 | `synth.wave=KEYS` | 2 | 2 |
 | `synth.wave=ORGAN` | 1 | 1 |
 | `synth.sample=loaded` | 119 | 215 |
+| `synth.sample.kernel=0` (keys <= 47 reachable) | 115 | 208 |
+| `synth.sample.kernel=1` .. `=5` (each) | 119 | 215 |
 | `synth.filter=BandPass` | 18 | 24 |
 | `synth.filter=HighPass` | 11 | 14 |
 | `synth.filter=Ladder24` | 52 | 69 |
@@ -130,6 +132,8 @@ Scene II used by 213 programs, split enabled in 48, non-default key zone code on
 | `synth.lfo_dest=OscPitch` | 33 | 38 |
 | `synth.arp` (enabled) | 32 | 49 |
 | `synth.mono` (enabled) | 34 | 48 |
+
+SAMPLE layer kernels (2026-11-14 re-run, 384 programs, 4,800 frames, `--frames 4800`): all 215 SAMPLES layers (119 programs) load their `.nsmp4`; over the key spans of their zones the firmware key rule ([synth-sample-kernel-rule](synth-sample-kernel-rule.md)) reaches kernels 1 to 5 in every layer and kernel 0 (keys up to 47) in 208 layers of 115 programs, so the six kernels are all in use and the ASSUMED ratio rule (which never picks kernels 0 and 1) differs from the firmware in every SAMPLES program. The 14 WAVE (Wavetable) layers in 12 programs (BELLS/TINES 3, DIGITAL 8, KEYS 2, ORGAN 1) stay unmodelled: no ARM path of the WAVE bank is decoded.
 
 ## 6. Effects
 
@@ -233,6 +237,12 @@ Uses count a path once per layer or enabled FX unit that needs it; one layer or 
 | `synth.osc=Analog` | 193 | 314 | assumed | assumed | synth-engine: VA waveforms approximate the strip stages |
 | `synth.osc=Fm` | 25 | 38 | assumed | assumed | synth-engine: FM ratio index decoded, wave audio ASSUMED |
 | `synth.osc=Sample` | 119 | 215 | verified | verified | synth-engine: .nsmp4 PCM played through the verified 12-tap sinc kernels (kernel choice ASSUMED) |
+| `synth.sample.kernel=0` | 115 | 208 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
+| `synth.sample.kernel=1` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
+| `synth.sample.kernel=2` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
+| `synth.sample.kernel=3` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
+| `synth.sample.kernel=4` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
+| `synth.sample.kernel=5` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule |
 | `synth.osc=Wavetable` | 12 | 14 | unmodelled | unmodelled | synth-engine: WAVE bank is a synthetic 64-table placeholder |
 
 | Configuration | verified | assumed | unmodelled |
