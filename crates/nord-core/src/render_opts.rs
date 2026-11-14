@@ -282,8 +282,8 @@ pub struct FirmwareOptions {
     /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
     pub synth_stages: bool,
     /// `--sample-kernel key|ratio`: the `SAMPLES` oscillator picks its 12-tap kernel with the
-    /// firmware key rule (`sinc::key_rule`, VERIFIED run, key field ASSUMED) instead of the ASSUMED
-    /// ratio rule. Off by default until a program level check against hardware exists.
+    /// firmware key rule (`sinc::key_rule`; VERIFIED run and key field, D40) instead of the
+    /// ASSUMED ratio rule. On by default; `ratio` (and `--legacy-all`) selects the old rule.
     pub sample_kernel_key: bool,
     /// `--sample-pitch fw|equal`: the `SAMPLES` oscillator step follows the ARM exponent tables
     /// (`sinc::pitch_law`, VERIFIED law; root and sample-rate fields ASSUMED). Off by default.
@@ -329,7 +329,7 @@ impl Default for FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
-            sample_kernel_key: false,
+            sample_kernel_key: true,
             sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
@@ -350,6 +350,7 @@ impl FirmwareOptions {
             synth_p: None,
             synth_stages: false,
             piano_firmware_level: false,
+            sample_kernel_key: false,
             ..Self::default()
         }
     }
@@ -372,7 +373,7 @@ impl FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
-            sample_kernel_key: false,
+            sample_kernel_key: true,
             sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
@@ -685,8 +686,8 @@ impl FirmwareOptions {
         if !self.synth_stages {
             parts.push("no-stages".into());
         }
-        if self.sample_kernel_key {
-            parts.push("sample-kernel=key".into());
+        if !self.sample_kernel_key {
+            parts.push("sample-kernel=ratio".into());
         }
         if self.sample_pitch_fw {
             parts.push("sample-pitch=fw".into());
@@ -806,15 +807,22 @@ mod tests {
 
     #[test]
     fn sample_kernel_flag_selects_the_firmware_key_rule_on_every_layer() {
-        assert!(!FirmwareOptions::default().sample_kernel_key);
+        assert!(FirmwareOptions::default().sample_kernel_key);
+        assert!(!FirmwareOptions::default()
+            .summary()
+            .contains("sample-kernel"));
         let o = FirmwareOptions::from_args(&["--sample-kernel".into(), "key".into()]).unwrap();
-        assert!(o.sample_kernel_key && o.summary().contains("sample-kernel=key"));
+        assert!(o.sample_kernel_key);
         let mut e = Stage4Engine::new(48_000.0);
         o.apply_to(&mut e);
         assert!(e.synth_a.sample_kernel_by_key && e.synth_b.sample_kernel_by_key);
         assert!(e.synth_c.sample_kernel_by_key);
         let r = FirmwareOptions::from_args(&["--sample-kernel".into(), "ratio".into()]).unwrap();
-        assert!(!r.sample_kernel_key);
+        assert!(!r.sample_kernel_key && r.summary().contains("sample-kernel=ratio"));
+        r.apply_to(&mut e);
+        assert!(!e.synth_a.sample_kernel_by_key && !e.synth_c.sample_kernel_by_key);
+        assert!(!FirmwareOptions::legacy_all().sample_kernel_key);
+        assert!(FirmwareOptions::firmware_all().sample_kernel_key);
         assert!(parse_sample_kernel("bogus").is_err());
     }
 

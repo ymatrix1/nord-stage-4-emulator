@@ -121,8 +121,8 @@ STATUS: dict[str, tuple[str, str, str]] = {
         f"synth.sample.kernel={k}": (
             A,
             A,
-            "synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain, key field"
-            " ASSUMED; opt-in `--sample-kernel key`, the default still uses the ASSUMED ratio rule",
+            "synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key"
+            " field (D40, default); zone pitch key and tune of the sample map ASSUMED",
         )
         for k in range(6)
     },
