@@ -115,6 +115,7 @@ impl SynthLayer {
             gate: true,
             note,
             velocity: vel_norm,
+            pan: self.perf.voice_pan,
             gain: gain.clamp(0.0, 1.0),
             gain_target: gain.clamp(0.0, 1.0),
             gain_state: self.voices[idx].gain_state,

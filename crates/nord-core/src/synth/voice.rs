@@ -9,6 +9,8 @@ pub struct SynthVoice {
     pub gate: bool,
     pub note: u8,
     pub velocity: f32,
+    /// Pattern pan `-1..=1` (`0` = unpanned, bit-identical mix).
+    pub pan: f32,
     pub gain: f32,
     /// Gain target latched at the control tick (`gain_dezip.rs`).
     pub gain_target: f32,
@@ -56,6 +58,7 @@ impl Default for SynthVoice {
             gate: false,
             note: 0,
             velocity: 0.8,
+            pan: 0.0,
             gain: 1.0,
             gain_target: 1.0,
             gain_state: 0.0,
