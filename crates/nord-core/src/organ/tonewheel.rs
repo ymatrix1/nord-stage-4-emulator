@@ -66,7 +66,7 @@ impl OrganLayer {
 
     /// Re-derives the `u32` phase steps if the sample rate, the vibrato table or Fine Tune changed.
     fn sync_bank(&mut self, copies: bool) {
-        let fine = clamp_fine_tune(self.fine_tune_cents);
+        let fine = clamp_fine_tune(self.effective_fine_cents());
         if self.tone_bank.sample_rate() != self.sample_rate
             || self.tone_bank.copies() != copies
             || self.synced_fine_cents != fine
@@ -119,14 +119,14 @@ impl OrganLayer {
         let mut lanes = 1;
         let source = self.effective_tone_source();
         if source == ToneWheelSource::B3Wheels {
-            let fine = clamp_fine_tune(self.fine_tune_cents);
+            let fine = clamp_fine_tune(self.effective_fine_cents());
             if self.b3_synced != (self.sample_rate, fine) {
                 self.b3_wheels.retune(self.sample_rate, fine);
                 self.b3_synced = (self.sample_rate, fine);
             }
             self.b3_wheels.advance(&mut raw[0]);
         } else if source == ToneWheelSource::FarfisaWheels {
-            let fine = clamp_fine_tune(self.fine_tune_cents);
+            let fine = clamp_fine_tune(self.effective_fine_cents());
             if self.farfisa_synced != (self.sample_rate, fine) {
                 self.farfisa_wheels.retune(self.sample_rate, fine);
                 self.farfisa_synced = (self.sample_rate, fine);
@@ -181,7 +181,7 @@ impl OrganLayer {
         }
 
         // Apply per-tonewheel pickup calibration and -42 dB generator bin crosstalk matrix.
-        let bleed = 0.008 * self.crosstalk_level.clamp(0.0, 2.0);
+        let bleed = 0.008 * (self.crosstalk_level * self.globals.crosstalk_scale).clamp(0.0, 2.0);
         let mut calibrated = [[0.0f32; NUM_TONEWHEELS]; 2];
         for (dst_lane, src_lane) in calibrated.iter_mut().zip(raw.iter()).take(lanes) {
             for (i, dst) in dst_lane.iter_mut().enumerate() {

@@ -46,7 +46,7 @@ impl OrganLayer {
             self.vox.set_sample_rate(self.sample_rate);
         }
         self.vox
-            .set_fine_cents(clamp_fine_tune(self.fine_tune_cents));
+            .set_fine_cents(clamp_fine_tune(self.effective_fine_cents()));
         // a key drives the rows `fold(key - 36 + SLOT_OFFSETS[slot])` of the default footage
         // slots with their level and no velocity (`vox_keys`, VERIFIED, keydown-zones.md s5)
         let shift = i32::from(self.octave_shift.clamp(-2, 2)) * 12;

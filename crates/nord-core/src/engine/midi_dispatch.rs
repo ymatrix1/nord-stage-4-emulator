@@ -48,7 +48,7 @@ impl Stage4Engine {
                     self.layer_note_on(layer, sounding, velocity, split_gain);
                 }
                 if recipients != 0 {
-                    self.held_transpose[channel_idx][note as usize] = self.transpose;
+                    self.held_transpose[channel_idx][note as usize] = self.effective_transpose();
                 }
                 for layer in LayerId::ALL {
                     if recipients & (1 << (layer as u8)) != 0 {
