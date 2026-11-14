@@ -72,8 +72,8 @@ const WHOLE: &str = "490e621874790a612d840a871e053c72943fb569dffe391413ba9f5705b
 /// Peak and RMS of little-endian f32 samples; `None` when one is not finite.
 fn stats(bytes: &[u8]) -> Option<(f64, f64)> {
     let (mut peak, mut sum, mut n) = (0f64, 0f64, 0usize);
-    for c in bytes.chunks_exact(4) {
-        let x = f64::from(f32::from_le_bytes([c[0], c[1], c[2], c[3]]));
+    for c in bytes.as_chunks::<4>().0 {
+        let x = f64::from(f32::from_le_bytes(*c));
         if !x.is_finite() {
             return None;
         }
