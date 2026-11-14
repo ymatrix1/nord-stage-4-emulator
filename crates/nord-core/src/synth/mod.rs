@@ -68,7 +68,7 @@ pub use measured::{
     SUPERSAW_VOICES, VIBRATO_DEPTH_SCALE_MEASURED,
 };
 pub use p_block::{PBlock, PSpec};
-pub use p_table::{PTable, PTableSpec, PWave, PWAVE_COUNT};
+pub use p_table::{type_cutoff_scale, PTable, PTableSpec, PWave, PWAVE_COUNT};
 pub use pattern::{pan_gains, CustomPattern, PatternPan, ACCENT_VELOCITY_BOOST, PATTERN_MAX_STEPS};
 pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
