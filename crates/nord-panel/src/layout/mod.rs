@@ -17,6 +17,8 @@
 
 mod effects;
 mod estimated;
+mod frames;
+mod frames_table;
 mod keybed;
 mod master;
 mod organ;
@@ -28,6 +30,7 @@ mod synth;
 use crate::types::Section;
 
 pub use estimated::ESTIMATED;
+pub use frames::{frame_def, frame_rect, frames_of, FrameDef, FrameKind, FRAMES};
 pub use shared::{shared_base, SHARED};
 
 /// Instrument width in mm (88-key model).

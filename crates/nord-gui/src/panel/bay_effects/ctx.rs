@@ -31,7 +31,9 @@ const DIM: Color32 = Color32::from_black_alpha(140);
 /// Caption colour (silkscreen white-grey).
 pub(super) const CAPTION: Color32 = Color32::from_gray(215);
 /// Shifted-function legend colour, lit while the shifted function is active.
-const LEGEND: Color32 = Color32::from_gray(150);
+fn legend() -> Color32 {
+    dim_legend(Color32::WHITE)
+}
 const LEGEND_ON: Color32 = Color32::from_rgb(0xFF, 0xB0, 0x20);
 
 /// Maps `v` in `min..=max` to `0..=1` on a log scale (rates, delay time).
@@ -127,7 +129,7 @@ impl Fx<'_> {
         dim: Option<&str>,
     ) {
         let r = self.rect(id);
-        let col = if active { LEGEND_ON } else { LEGEND };
+        let col = if active { LEGEND_ON } else { legend() };
         label(self.p, r.center(), text, 6.0, col, Align2::CENTER_CENTER);
         let full = match dim {
             Some(why) => format!("{tip}\nNot available: {why}"),

@@ -1,7 +1,7 @@
 //! Layer strip of the Synth section: ON, layer buttons, focus / aux LEDs, faders, ladders,
 //! OCTAVE SHIFT, KB ZONE LEDs (manual p.27-28).
 
-use super::widgets::{dot, fader, gesture_of, ladder, pad, tiny, LEGEND, LEGEND_DIM};
+use super::widgets::{dot, fader, gesture_of, ladder, legend_dim, pad, tiny, LEGEND};
 use crate::audio::SynthEdit;
 use crate::panel::aux_flag::{aux_flag_from_telemetry, aux_led};
 use crate::panel::layout_px::rect_or_empty;
@@ -74,7 +74,7 @@ fn layer_pad(
         let why = unsupported_reason(sid);
         let lit = if i == 0 { sui.sustped } else { sui.pstick };
         let col = match (why.is_some(), lit) {
-            (true, _) => LEGEND_DIM,
+            (true, _) => legend_dim(),
             (false, true) => LED_AMBER,
             (false, false) => LEGEND,
         };
