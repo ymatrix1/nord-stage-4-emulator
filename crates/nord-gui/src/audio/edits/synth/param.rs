@@ -7,6 +7,7 @@
 use nord_core::synth::{
     ClockDivision, FilterModel, SampleTimbre, SynthLayer, SynthOscMode, VaWaveform,
 };
+use super::pattern::PatternParam;
 use nord_core::synth_types::{ArpMode, LfoDestination, LfoShape, NotePriority, VibratoMode};
 
 /// Highest cutoff the filter accepts, as a fraction of the sample rate (`dsp-and-realtime.md`).
@@ -74,6 +75,8 @@ pub enum SynthParam {
     PatternOn(bool),
     PatternPreset(u8),
     KbSync(bool),
+    /// Zig Zag, Range fraction and the custom pattern (host `synthp_*`).
+    Pattern(PatternParam),
     ArpClockSync(bool),
     ArpDivision(u8),
     KbHold(bool),
@@ -150,6 +153,7 @@ impl SynthParam {
             P::PatternOn(b) => l.perf.pattern_on = b,
             P::PatternPreset(p) => l.perf.pattern_preset = p.min(7),
             P::KbSync(b) => l.perf.kb_sync = b,
+            P::Pattern(p) => p.apply(l),
             P::ArpClockSync(b) => l.perf.arp_clock_sync = b,
             P::ArpDivision(i) => l.perf.arp_division = ClockDivision::from_index(i32::from(i)),
             P::KbHold(b) => l.perf.kb_hold = b,

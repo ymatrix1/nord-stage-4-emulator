@@ -2,7 +2,7 @@
 
 use super::layer::SynthLayerUi;
 use super::SynthUi;
-use crate::audio::{SynthEdit, SynthGroup, SynthTarget};
+use crate::audio::{SynthEdit, SynthGroup, SynthParam, SynthTarget};
 
 impl SynthUi {
     /// GROUP (Shift+Type, Shift+Waveform, Shift+Menu): on = copy this layer's settings to all
@@ -26,8 +26,10 @@ impl SynthUi {
     }
 
     /// Sound Init (Shift+Waveform, manual p.37): every parameter except the Synth mode and the
-    /// selected waveform returns to its default. Resends the layer's whole state, so the engine
-    /// layer needs no reallocation (`engine.layer_init` allocates and is control-thread only).
+    /// selected waveform returns to its default. The engine does it in place with
+    /// `SynthLayer::sound_init` (no allocation, no undo snapshot); the panel then resends what the
+    /// engine does not keep itself: the selected waveform's oscillator values and the section-wide
+    /// KB HOLD.
     pub fn sound_init(&mut self) {
         let keep = self.layer().clone();
         let fresh = SynthLayerUi {
@@ -39,13 +41,14 @@ impl SynthUi {
             ..SynthLayerUi::default()
         };
         let layer = self.focus.min(2) as u8;
-        let mut v = Vec::new();
-        fresh.emit_all(&mut |p| v.push(p));
-        self.out.extend(
-            v.into_iter()
-                .map(|p| SynthEdit::Param(SynthTarget::Layer(layer), p)),
-        );
+        self.out.push(SynthEdit::SoundInit(layer));
         *self.layer_mut() = fresh;
+        self.resend_osc();
+        let hold = self.kb_hold;
+        self.out.push(SynthEdit::Param(
+            SynthTarget::Layer(layer),
+            SynthParam::KbHold(hold),
+        ));
         self.reset_pots();
     }
 }
@@ -54,18 +57,7 @@ impl SynthUi {
 mod tests {
     use super::super::buttons::Btn;
     use super::*;
-    use crate::audio::SynthParam;
     use nord_panel::behaviour::Trigger;
-
-    fn params(s: &mut SynthUi) -> Vec<SynthParam> {
-        s.take_edits()
-            .into_iter()
-            .filter_map(|e| match e {
-                SynthEdit::Param(_, p) => Some(p),
-                _ => None,
-            })
-            .collect()
-    }
 
     fn shifted(s: &mut SynthUi, b: Btn) {
         s.press(b, Trigger::Shifted);
@@ -107,12 +99,45 @@ mod tests {
         assert_eq!(l.cutoff_hz, 2400.0);
         assert_eq!(l.unison, 0);
         assert_eq!(l.amp_env.attack, 0.005);
-        let p = params(&mut s);
-        assert!(p.contains(&SynthParam::Cutoff(2400.0)));
-        assert!(p.contains(&SynthParam::Unison(0)));
+        let all = s.take_edits();
+        assert_eq!(all[0], SynthEdit::SoundInit(0), "the engine resets first");
+        let p: Vec<_> = all
+            .iter()
+            .filter_map(|e| match e {
+                SynthEdit::Param(_, p) => Some(*p),
+                _ => None,
+            })
+            .collect();
         assert!(p.contains(&SynthParam::Waveform(
             nord_core::synth::VaWaveform::SuperSaw
         )));
+        assert!(
+            !p.iter().any(|x| matches!(x, SynthParam::Cutoff(_))),
+            "plain values are not resent: the engine reset them"
+        );
         assert!(s.pots.is_engaged(super::super::Knob::FilterFreq));
+    }
+
+    #[test]
+    fn sound_init_applied_to_an_engine_matches_the_panel_state() {
+        use nord_core::synth::SynthLayer;
+        let mut s = SynthUi::new();
+        s.focus_layer(1);
+        s.layer_mut().cutoff_hz = 123.0;
+        s.layer_mut().zigzag = true;
+        s.kb_hold = true;
+        let mut e = nord_core::engine::Stage4Engine::new(48_000.0);
+        e.synth_b.cutoff_hz = 123.0;
+        e.synth_b.perf.zigzag = true;
+        shifted(&mut s, Btn::Waveform);
+        for edit in s.take_edits() {
+            edit.apply(&mut e);
+        }
+        let fresh = SynthLayer::new(48_000.0);
+        assert_eq!(e.synth_b.cutoff_hz, fresh.cutoff_hz);
+        assert!(!e.synth_b.perf.zigzag);
+        assert!(e.synth_b.perf.kb_hold, "section-wide KB HOLD is kept");
+        assert_eq!(s.layer().cutoff_hz, 2400.0);
+        assert!(!s.layer().zigzag);
     }
 }

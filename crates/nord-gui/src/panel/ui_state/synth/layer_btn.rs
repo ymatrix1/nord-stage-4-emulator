@@ -1,6 +1,7 @@
 //! Layer A/B/C buttons (manual p.27): focus, turn on / off, SUSTPED and PSTICK.
 
 use super::SynthUi;
+use crate::audio::SynthEdit;
 use nord_panel::behaviour::{resolve, Gesture, Trigger};
 
 /// What a Layer button press asks the bay to do with the layer's ON state.
@@ -30,10 +31,12 @@ impl SynthUi {
         match t {
             Trigger::Shifted if i == 0 => {
                 self.sustped = !self.sustped;
+                self.out.push(SynthEdit::Sustped(self.sustped));
                 LayerAction::None
             }
             Trigger::Shifted => {
-                self.layers[1].pstick = !self.layers[1].pstick;
+                self.pstick = !self.pstick;
+                self.out.push(SynthEdit::Pstick(self.pstick));
                 LayerAction::None
             }
             Trigger::Hold if active => LayerAction::Deactivate,
@@ -77,7 +80,13 @@ mod tests {
         s.layer_button(0, Gesture::Tap, true, true);
         assert!(s.sustped);
         s.layer_button(1, Gesture::Tap, true, true);
-        assert!(s.layers[1].pstick);
+        assert!(s.pstick);
+        assert_eq!(
+            s.take_edits(),
+            vec![SynthEdit::Sustped(true), SynthEdit::Pstick(true)]
+        );
+        s.layer_button(0, Gesture::Tap, true, true);
+        assert_eq!(s.take_edits(), vec![SynthEdit::Sustped(false)]);
         assert_eq!(s.focus, 0, "shifted taps do not move the focus");
         // Layer C has no shifted function: a shifted tap is a plain tap.
         assert_eq!(
