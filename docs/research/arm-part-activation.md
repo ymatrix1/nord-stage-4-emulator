@@ -45,6 +45,20 @@ Hz at the DSP frame rate: the words mean `(word >> 8) * 256 / 2^32 * (fs / 2)` w
 | Targets 7.0 / 6.4 written into the block, 400 ticks | one update at tick 136: speeds 0.86 / 0.74, words `0x28E00`, `0x17800`, `0x23300` |
 | `kRvbEnable = 1`, `kRvbType = 3`, 420 ticks | type words only (`0x9500A..`, `0xB0F0D..`, `0xB1C26..`), no pointer or length words |
 
+## 4. Is the -48 dB a scale artifact? (2026-11-14)
+
+Hypothesis (coordinator): the needed +48.2 dB is `2^8`, like the `<< 8` of the speed words, so a 24-bit-in-32 word format mismatch. Checked:
+
+| Check | Result |
+|---|---|
+| ARM conversion of the cabinet taps (`0xC0204C34..58`, `0xC0204D4C..6C`, sender `0xC0204E64`) | `clz`, normalise, mantissa `x >> 8`, exponent `0x87 - clz`: `float = int * 2^-23`. The taps `0x967FE..` (0.005 to 0.023) are Q23 fractions as intended; a Q31 source would make them 256 times **smaller** in the table, not the taps in the DSP too small. No factor 256 on the data path |
+| Constants of the processor `0x1256AD` | no `256.0`, `2^-8`, `2^8` immediate; the cabinet routine scales by `2^-7` in (`0x3C000000`) and `128` out (`0x43000000`), net 1 |
+| Where the level goes (trace, noise, 4,000 calls) | rotor stage about -8 dB, cabinet gain `c[-30]` 0.2016 (-14 dB) / 0.01375 (-37 dB), FIR taps of 0.005..0.023 over 370 + 32 taps (noise gain about -14 dB): the sum is the measured -50 dB. Every factor is a stored coefficient, none is a format shift |
+| Whole pass, real position | `sharc-pass` with the Pipe chord (`pno-pass-install-pipe1`, `pno-pass-keys-c4e4g4`, level word `0x95B42`) gives a lane rms of 0.0173 (peak 0.019). `0x1256AD` was inserted as the chain record at `0xC2E4A` (routine `0xC2E2A`, state `0xC2E2C = 0xB2F2A`, gain word `+0.5`): it is called (`--calls`), but the chain pair `0xC2E06` stays zero for the organ, so the lane is unchanged (rms 0.017343 with and without). The chain is not the organ path of this pass; the processor's real feed (the organ lane copy) was not found, so the ratio Leslie output to dry organ at the same point could not be measured |
+| Level of the B3 clip with a +48 dB gain | RMS gap -0.2 dB, crest 17.8 dB (hardware 18.6), but sub +6.5, mid +4.1, presence -7.8, brilliance +0.4 dB: the level is matched, **the criteria (sub, mid, presence within 3 dB) are not met**; a scale error could not repair them since they are re RMS |
+
+Conclusion: no format mismatch was found; the +48 dB gap stays an unexplained gain that the hardware makes up somewhere after the processor. Not done: the DSP read-back (`0xC0066E64` answered from the oracle's `DM(0xB2F23)`).
+
 ## Implications
 
 - The "consumer of the part command list" does not exist in the form assumed: activation is state driven (the default program's words are sent in `settle 2`); the module words seen at boot are the real ones for that program.
