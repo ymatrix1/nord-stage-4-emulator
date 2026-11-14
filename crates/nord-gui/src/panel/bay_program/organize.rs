@@ -260,6 +260,7 @@ pub fn compose(ui: &ProgramUi) -> OledText {
         },
         rows: vec![format!(">{}  {name}", cursor.label()), format!(" {action}")],
         soft: ["Swap", "Move", "Ok", "Undo"],
+        ..Default::default()
     }
 }
 
