@@ -4,7 +4,7 @@
 use crate::engine::{FirmwareRouting, Stage4Engine};
 use crate::fx::FirmwareFx;
 use crate::organ::{OutputLevel, ToneWheelSource};
-use crate::synth::{FilterEngine, PSpec, SynthChain};
+use crate::synth::{FilterEngine, PSpec, PTableSpec, SynthChain};
 
 /// Parses a `--tone-source` value: `default | legacy | firmware | vox | b3wheels`.
 pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
@@ -250,7 +250,7 @@ impl Default for FirmwareOptions {
         Self {
             tone_source: None,
             filter_engine: None,
-            synth_chain: None,
+            synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             firmware_fx: false,
             firmware_reverb: false,
@@ -258,8 +258,8 @@ impl Default for FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
-            synth_p: None,
-            synth_stages: false,
+            synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
+            synth_stages: true,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -274,6 +274,9 @@ impl FirmwareOptions {
     /// Every opt-in path off and the legacy piano velocity response (`--legacy-all`).
     pub fn legacy_all() -> Self {
         Self {
+            synth_chain: Some(SynthChain::Legacy),
+            synth_p: None,
+            synth_stages: false,
             piano_firmware_level: false,
             ..Self::default()
         }
@@ -293,8 +296,8 @@ impl FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
-            synth_p: None,
-            synth_stages: false,
+            synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
+            synth_stages: true,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -343,6 +346,9 @@ impl FirmwareOptions {
         o.piano_bus_scale |= has("--firmware-piano-bus");
         o.measured_laws |= has("--measured-laws");
         o.synth_stages |= has("--synth-stages");
+        if has("--no-synth-stages") {
+            o.synth_stages = false;
+        }
         o.firmware_routing |= has("--firmware-routing");
         if has("--legacy-routing") {
             o.firmware_routing = false;
@@ -376,7 +382,11 @@ impl FirmwareOptions {
             o.synth_shape_milli = Some((x.clamp(0.0, 1.0) * 1000.0).round() as u16);
         }
         if let Some(v) = value("--synth-p") {
-            o.synth_p = Some(PSpec::parse(v)?);
+            o.synth_p = if v.eq_ignore_ascii_case("off") {
+                None
+            } else {
+                Some(PSpec::parse(v)?)
+            };
         }
         Ok(o)
     }
@@ -430,7 +440,7 @@ impl FirmwareOptions {
     pub fn apply_exact(&self, engine: &mut Stage4Engine) {
         let tone = self.tone_source.unwrap_or(ToneWheelSource::ModelDefault);
         let filter = self.filter_engine.unwrap_or(FilterEngine::Zdf);
-        let chain = self.synth_chain.unwrap_or(SynthChain::Legacy);
+        let chain = self.synth_chain.unwrap_or(SynthChain::FirmwareStrip);
         engine.organ_a.tonewheel_source = tone;
         engine.organ_b.tonewheel_source = tone;
         for s in [
@@ -493,10 +503,16 @@ impl FirmwareOptions {
     }
 
     fn set_p_block(&self, engine: &mut Stage4Engine) {
-        let p = self.synth_p.map(PSpec::block);
-        engine.synth_a.p_block = p;
-        engine.synth_b.p_block = p;
-        engine.synth_c.p_block = p;
+        let table = self.synth_p.and_then(PSpec::table);
+        let p = self.synth_p.filter(|_| table.is_none()).map(PSpec::block);
+        for s in [
+            &mut engine.synth_a,
+            &mut engine.synth_b,
+            &mut engine.synth_c,
+        ] {
+            s.p_block = p;
+            s.p_table = table;
+        }
     }
 
     fn set_stages(&self, engine: &mut Stage4Engine) {
@@ -520,8 +536,8 @@ impl FirmwareOptions {
         if let Some(f) = self.filter_engine {
             parts.push(format!("filter={f:?}"));
         }
-        if let Some(c) = self.synth_chain {
-            parts.push(format!("chain={c:?}"));
+        if self.synth_chain != Self::default().synth_chain {
+            parts.push(format!("chain={:?}", self.synth_chain));
         }
         if let Some(b) = self.b3_tail {
             parts.push(format!("b3-tail={}", if b { "on" } else { "off" }));
@@ -547,11 +563,11 @@ impl FirmwareOptions {
         if let Some(m) = self.synth_shape_milli {
             parts.push(format!("shape={:.2}", f32::from(m) / 1000.0));
         }
-        if let Some(p) = self.synth_p {
-            parts.push(format!("synth-p={p:?}"));
+        if self.synth_p != Self::default().synth_p {
+            parts.push(format!("synth-p={:?}", self.synth_p));
         }
-        if self.synth_stages {
-            parts.push("stages".into());
+        if !self.synth_stages {
+            parts.push("no-stages".into());
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
@@ -664,14 +680,16 @@ mod tests {
     }
 
     #[test]
-    fn synth_stages_flag_sets_the_opt_in_stage_oscillators() {
-        let o = FirmwareOptions::from_args(&["--synth-stages".into()]).unwrap();
-        assert!(o.synth_stages && o.summary().contains("stages"));
+    fn no_synth_stages_flag_turns_the_stage_oscillators_off() {
+        let o = FirmwareOptions::from_args(&["--no-synth-stages".into()]).unwrap();
+        assert!(!o.synth_stages && o.summary().contains("no-stages"));
         let mut e = Stage4Engine::new(48_000.0);
+        assert!(e.synth_a.strip_stages, "the stages are the default (D22)");
         o.apply_to(&mut e);
-        assert!(e.synth_a.strip_stages && e.synth_c.strip_stages);
+        assert!(!e.synth_a.strip_stages && !e.synth_c.strip_stages);
         FirmwareOptions::default().apply_exact(&mut e);
-        assert!(!e.synth_b.strip_stages);
+        assert!(e.synth_b.strip_stages);
+        assert!(!FirmwareOptions::legacy_all().synth_stages);
     }
 
     #[test]
@@ -703,8 +721,27 @@ mod tests {
         );
         FirmwareOptions::default().apply_exact(&mut e);
         assert_eq!(e.synth_c.p_block, None);
+        assert_eq!(e.synth_c.p_table, Some(crate::synth::PTable::FITTED));
         assert!(FirmwareOptions::from_args(&["--synth-p".into(), "x".into()]).is_err());
-        assert_eq!(FirmwareOptions::firmware_all().synth_p, None);
+        assert_eq!(
+            FirmwareOptions::firmware_all().synth_p,
+            FirmwareOptions::default().synth_p,
+            "the table is the default"
+        );
+        let off = FirmwareOptions::from_args(&["--synth-p".into(), "off".into()]).unwrap();
+        assert_eq!(off.synth_p, None);
+        off.apply_to(&mut e);
+        assert_eq!((e.synth_a.p_block, e.synth_a.p_table), (None, None));
+        let table =
+            FirmwareOptions::from_args(&["--synth-p".into(), "table:saw=1/0/1/.5/1".into()])
+                .unwrap();
+        table.apply_to(&mut e);
+        let row = e
+            .synth_a
+            .p_table
+            .unwrap()
+            .block(crate::synth::PWave::PureSaw);
+        assert_eq!((row.gain, row.cutoff_scale), (1.0, 1.0));
     }
 
     #[test]
@@ -721,11 +758,14 @@ mod tests {
         FirmwareOptions::default().apply_exact(&mut e);
         assert_eq!(e.organ_a.tonewheel_source, ToneWheelSource::ModelDefault);
         assert_eq!(e.synth_a.filter_engine, FilterEngine::Zdf);
-        assert_eq!(e.synth_a.chain, SynthChain::Legacy);
+        assert_eq!(e.synth_a.chain, SynthChain::FirmwareStrip);
+        assert!(e.synth_a.strip_stages && e.synth_a.p_table.is_some());
         assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::DEFAULT);
         assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
         FirmwareOptions::legacy_all().apply_exact(&mut e);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
+        assert_eq!(e.synth_a.chain, SynthChain::Legacy);
+        assert!(!e.synth_a.strip_stages && e.synth_a.p_table.is_none());
     }
 
     #[test]
@@ -896,7 +936,18 @@ mod tests {
         assert_eq!(parse_synth_chain("Legacy"), Ok(SynthChain::Legacy));
         assert!(parse_synth_chain("x").is_err());
         let mut e = Stage4Engine::new(48_000.0);
+        assert_eq!(
+            e.synth_b.chain,
+            SynthChain::FirmwareStrip,
+            "the D22 default"
+        );
         apply_synth_chain(&mut e, None);
+        assert_eq!(
+            e.synth_b.chain,
+            SynthChain::FirmwareStrip,
+            "None leaves the engine default"
+        );
+        apply_synth_chain(&mut e, Some(SynthChain::Legacy));
         assert_eq!(e.synth_b.chain, SynthChain::Legacy);
         apply_synth_chain(&mut e, Some(SynthChain::FirmwareStrip));
         assert!(e.synth_a.strip_chain() && e.synth_b.strip_chain() && e.synth_c.strip_chain());

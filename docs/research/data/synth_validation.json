@@ -1,0 +1,290 @@
+{
+ "note": "Synth validation set (tools/synth_validate.py, docs/research/synth-validation.md). partA clips are segments of emu_vs_hw_segments.json; ag clips are steady notes of the Audible Genius lesson clips (hardware window in the clip audio, rendered with the ag_synth example). role: fit = used to fit the P table row of its wave, holdout = never used for a fit. Only derived numbers are committed, no audio. Variants: legacy = classic chain; strip = firmware strip chain with unit P and the legacy waveforms; strip+p = the single Smooth Lead block; st = firmware stage oscillators; tbl = per-wave P table. strip+st+tbl is the engine default since D22.",
+ "variants": [
+  {
+   "label": "legacy",
+   "flags": [
+    "--synth-chain",
+    "legacy"
+   ],
+   "ag": {
+    "chain": "legacy"
+   }
+  },
+  {
+   "label": "strip",
+   "flags": [
+    "--synth-chain",
+    "strip",
+    "--synth-p",
+    "off",
+    "--no-synth-stages"
+   ],
+   "ag": {
+    "chain": "strip"
+   }
+  },
+  {
+   "label": "strip+p",
+   "flags": [
+    "--synth-chain",
+    "strip",
+    "--synth-p",
+    "fitted",
+    "--no-synth-stages"
+   ],
+   "ag": {
+    "chain": "strip",
+    "p": "fitted"
+   }
+  },
+  {
+   "label": "strip+st",
+   "flags": [
+    "--synth-chain",
+    "strip",
+    "--synth-p",
+    "off"
+   ],
+   "ag": {
+    "chain": "strip",
+    "stages": "1"
+   }
+  },
+  {
+   "label": "strip+tbl",
+   "flags": [
+    "--synth-chain",
+    "strip",
+    "--synth-p",
+    "table",
+    "--no-synth-stages"
+   ],
+   "ag": {
+    "chain": "strip",
+    "p": "table"
+   }
+  },
+  {
+   "label": "strip+st+tbl",
+   "flags": [
+    "--synth-chain",
+    "strip",
+    "--synth-p",
+    "table"
+   ],
+   "ag": {
+    "chain": "strip",
+    "stages": "1",
+    "p": "table"
+   }
+  }
+ ],
+ "clips": [
+  {
+   "id": "lead_smooth",
+   "source": "partA",
+   "segment": "synth_lead",
+   "role": "fit",
+   "wave": "shape",
+   "what": "A:87 SHAPE triangle LP24"
+  },
+  {
+   "id": "lead_crunch",
+   "source": "partA",
+   "segment": "synth_crunch",
+   "role": "holdout",
+   "wave": "shape",
+   "what": "A:66 SHAPE triangle LP12"
+  },
+  {
+   "id": "pad_silk",
+   "source": "partA",
+   "segment": "synth_silkpad",
+   "role": "fit",
+   "wave": "super",
+   "what": "A:86 SUPER wave 0 LP12"
+  },
+  {
+   "id": "mega_line",
+   "source": "partA",
+   "segment": "synth_megaline",
+   "role": "holdout",
+   "wave": "multi+super",
+   "what": "A:48 MULTI + SUPER x2 LP12"
+  },
+  {
+   "id": "sci_fi_80s",
+   "source": "partA",
+   "segment": "synth_80s",
+   "role": "fit",
+   "wave": "multi",
+   "what": "A:44 MULTI Ladder24"
+  },
+  {
+   "id": "filter_bank",
+   "source": "partA",
+   "segment": "synth_filterbank",
+   "role": "fit",
+   "wave": "saw",
+   "what": "A:75 3 x Pure Saw band pass"
+  },
+  {
+   "id": "phat_3osc",
+   "source": "partA",
+   "segment": "synth_phat3",
+   "role": "holdout",
+   "wave": "saw",
+   "what": "A:67 3 x Pure Saw Ladder24 (filter not modelled)"
+  },
+  {
+   "id": "sweep_12db",
+   "source": "partA",
+   "segment": "synth_12db",
+   "role": "holdout",
+   "wave": "shapesq",
+   "what": "A:57 Shape Square x2 + Pure Saw LP12"
+  },
+  {
+   "id": "sine_pluck",
+   "source": "partA",
+   "segment": "synth_sineplk",
+   "role": "holdout",
+   "wave": "shapesine",
+   "what": "A:26 SHAPE SINE LP12"
+  },
+  {
+   "id": "ag_blip_saw",
+   "source": "ag",
+   "clip": "s0OhmMpbscU",
+   "window_s": [
+    20.65,
+    21.15
+   ],
+   "role": "fit",
+   "wave": "saw",
+   "ag": {
+    "note": "67",
+    "wf": "saw",
+    "filter": "off",
+    "cat": "0",
+    "wave": "2",
+    "hold": "0.5",
+    "len": "0.5"
+   },
+   "what": "Pitch blip clip, Pure Saw G4, filter open"
+  },
+  {
+   "id": "ag_blip_square",
+   "source": "ag",
+   "clip": "s0OhmMpbscU",
+   "window_s": [
+    26.5,
+    27.25
+   ],
+   "role": "fit",
+   "wave": "pulse",
+   "ag": {
+    "note": "67",
+    "wf": "pulse",
+    "filter": "off",
+    "cat": "0",
+    "wave": "3",
+    "hold": "0.75",
+    "len": "0.75"
+   },
+   "what": "Pitch blip clip, Pure Square G4, filter open"
+  },
+  {
+   "id": "ag_zap_saw",
+   "source": "ag",
+   "clip": "0NMvKWDc-Lo",
+   "window_s": [
+    55.75,
+    57.75
+   ],
+   "role": "holdout",
+   "wave": "saw",
+   "ag": {
+    "note": "67",
+    "wf": "saw",
+    "filter": "lp24",
+    "cutoff": "415",
+    "res": "1.0",
+    "fenv_amt": "7.7",
+    "fenv_dec": "2.07",
+    "cat": "0",
+    "wave": "2",
+    "hold": "2.0",
+    "len": "2.0"
+   },
+   "what": "Laser zap clip, Pure Saw G4, LPM 415 Hz Res 7.3 Env Amt 7.7 decay 2.07 s"
+  },
+  {
+   "id": "ag_supersaw_0",
+   "source": "ag",
+   "clip": "MjkV3qz8Gqk",
+   "window_s": [
+    0.5,
+    1.2
+   ],
+   "role": "holdout",
+   "wave": "super",
+   "ag": {
+    "note": "67",
+    "wf": "supersaw",
+    "filter": "off",
+    "detune": "0",
+    "cat": "6",
+    "wave": "0",
+    "hold": "0.7",
+    "len": "0.7"
+   },
+   "what": "Super Saw detune clip, Detune 0.0, G4"
+  },
+  {
+   "id": "ag_supersaw_3",
+   "source": "ag",
+   "clip": "MjkV3qz8Gqk",
+   "window_s": [
+    21.0,
+    22.2
+   ],
+   "role": "holdout",
+   "wave": "super",
+   "ag": {
+    "note": "67",
+    "wf": "supersaw",
+    "filter": "off",
+    "detune": "3",
+    "cat": "6",
+    "wave": "0",
+    "hold": "1.2",
+    "len": "1.2"
+   },
+   "what": "Super Saw detune clip, Detune 3.0, G4"
+  },
+  {
+   "id": "ag_supersaw_10",
+   "source": "ag",
+   "clip": "MjkV3qz8Gqk",
+   "window_s": [
+    46.5,
+    48.0
+   ],
+   "role": "holdout",
+   "wave": "super",
+   "ag": {
+    "note": "67",
+    "wf": "supersaw",
+    "filter": "off",
+    "detune": "10",
+    "cat": "6",
+    "wave": "0",
+    "hold": "1.5",
+    "len": "1.5"
+   },
+   "what": "Super Saw detune clip, Detune 10.0, G4"
+  }
+ ]
+}

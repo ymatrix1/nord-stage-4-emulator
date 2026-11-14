@@ -136,9 +136,9 @@ Evidence: `tests_fw_filter_golden.rs` (3 rows x 3 stages x 48 samples, generated
 
 Not done: `0x1257B2` and `0x1253BD`, the `kFltType` to stage selection (research section 9). The default stays `Zdf` (TD-11).
 
-### 4.2 Firmware strip chain (`SynthLayer::chain = FirmwareStrip`, opt-in)
+### 4.2 Firmware strip chain (`SynthLayer::chain = FirmwareStrip`, default since the D22 flip)
 
-Per voice, in the order of the Core2 strip ([synth-strip-path](../research/synth-strip-path.md)); default `SynthChain::Legacy` leaves every path above unchanged (`render_hash` `25baa387...e7b59a`).
+Per voice, in the order of the Core2 strip ([synth-strip-path](../research/synth-strip-path.md)); since the D22 flip ([synth-validation](../research/synth-validation.md)) `SynthLayer::new` selects this chain, the stage oscillators (`strip_stages`) and the per-wave P table (`p_table`); `SynthLayer::legacy` keeps the classic chain, which leaves every path above unchanged (`render_hash` of the classic chain `25baa387...e7b59a`, of the defaults `b1c91b53...c9aa`).
 
 | Stage | Rust | Law | Status |
 |---|---|---|---|
@@ -156,7 +156,9 @@ Oracle end to end (`tools/synth_strip_e2e.py`, example `synth_strip_e2e`, Smooth
 
 The firmware filter engine also runs `FwFilterType::Lp2` (stage `0x1253BD`, one section, damping table `D`, `synth/fw_filter_table_d.rs`) for `FilterModel::Lp12`; `kFltType` is the index of the word-1 stage table ([synth-filter-type-map](../research/synth-filter-type-map.md)).
 
-### 4.3 Firmware ANALOG stage oscillators (`synth/fw_stages.rs`, opt-in `SynthLayer::strip_stages`)
+**Per-wave P table (default, `synth/p_table.rs`, EMPIRICAL)**: one `PBlock` per stage family (`PWave::from_category_wave`: Pure Saw, Pure Square, SHAPE triangle / saw / square, SHAPE SINE waves 0, 1, 2, 5, MULTI, SUPER wave 0; every other wave plays at the idle block). The row scales the oscillator output (`gain`, applied before the filter on every path) and the displayed cutoff before the strip law (`cutoff_scale`); on SHAPE wave 0 the shape word is `shape x Osc Ctrl` (row value 1.0, no second oscillator). Rows: saw 0.4 / 0.9, pulse 0.27 / 0.9, SHAPE 0.6 / 1.75, MULTI 0.26 / 1.4, SUPER 2.0 / 1.5 (gain / cutoff factor), fit clips, hold-out clips and residuals in [synth-validation](../research/synth-validation.md). `--synth-p table[:wave=g/w2/r2/shape/cutoff;...]` overrides rows, `--synth-p off` removes the table, `--synth-p fitted` is the single Smooth Lead block of [synth-p-fit](../research/synth-p-fit.md) (`PBlock::FITTED`, explicit mode: gain only on the SHAPE stage). `--no-synth-stages` turns the stage oscillators off.
+
+### 4.3 Firmware ANALOG stage oscillators (`synth/fw_stages.rs`, `SynthLayer::strip_stages`, default since the D22 flip)
 
 | Stage | Wave | Model | Port | Tag |
 |---|---|---|---|---|
