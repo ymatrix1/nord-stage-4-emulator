@@ -4,6 +4,9 @@
 //! firmware mode tables in `docs/specs/effects-and-routing.md` (Mod 1: A-PAN, TREM, RM, A-WAH,
 //! WAH, PUMP; Mod 2: PHAS, FLANG, CHOR, VIBE, ENS, SPIN). The LED order is `ASSUMED` (the
 //! photo does not resolve the LED labels); the names and the count of six are manual text.
+//! Each LED maps to its engine type by name, not by position: the engine enums (`Mod1Type`,
+//! `Mod2Type`) and the host mirrors (`fx_selectors.rs`) append the later types, so their order
+//! differs from the panel's and must not be used for it.
 
 use nord_core::fx::{DelayFeedbackFx, Mod1Type, Mod2Type, ReverbModel, DELAY_SYNC_BEATS};
 
@@ -26,44 +29,26 @@ const fn ok<T>(label: &'static str, engine: T) -> Choice<T> {
     }
 }
 
-const fn missing<T>(label: &'static str, why: &'static str) -> Choice<T> {
-    Choice {
-        label,
-        engine: None,
-        missing: why,
-    }
-}
-
-/// Mod 1 selector (manual p.49). A-WAH and PUMP have no engine type yet (`effects-and-routing.md`).
+/// Mod 1 selector (manual p.49): A-WAH and PUMP are the engine's `AutoWah` and `Pump`
+/// (`fx/mod1_dynamic.rs`, `ASSUMED` DSP).
 pub const MOD1: [Choice<Mod1Type>; 6] = [
     ok("A-PAN", Mod1Type::AutoPan),
     ok("TREM", Mod1Type::Tremolo),
     ok("RM", Mod1Type::RingMod),
-    missing(
-        "A-WAH",
-        "A-WAH (envelope-follower wah) is not implemented in the engine",
-    ),
+    ok("A-WAH", Mod1Type::AutoWah),
     ok("WAH", Mod1Type::Wah),
-    missing(
-        "PUMP",
-        "PUMP (duck-and-recover amplitude modulation) is not implemented in the engine",
-    ),
+    ok("PUMP", Mod1Type::Pump),
 ];
 
-/// Mod 2 selector (manual p.50). ENS and SPIN have no engine type yet.
+/// Mod 2 selector (manual p.50): ENS and SPIN are the engine's `Ensemble` and `Spin`
+/// (`fx/mod2_spin.rs`, `ASSUMED` DSP).
 pub const MOD2: [Choice<Mod2Type>; 6] = [
     ok("PHAS", Mod2Type::Phaser),
     ok("FLANG", Mod2Type::Flanger),
     ok("CHOR", Mod2Type::Chorus),
     ok("VIBE", Mod2Type::Vibe),
-    missing(
-        "ENS",
-        "Mod 2 ENS (ensemble) is not implemented in the engine (only the delay feedback ENS is)",
-    ),
-    missing(
-        "SPIN",
-        "SPIN (rotating-speaker motion) is not implemented in the engine",
-    ),
+    ok("ENS", Mod2Type::Ensemble),
+    ok("SPIN", Mod2Type::Spin),
 ];
 
 /// Delay feedback effect selector (manual p.51); the first LED is Bypass.
@@ -127,21 +112,29 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_types_name_what_is_missing() {
-        let dim: Vec<_> = MOD1
-            .iter()
-            .filter(|c| c.engine.is_none())
-            .inspect(|c| assert!(!c.missing.is_empty()))
-            .map(|c| c.label)
-            .collect();
-        assert_eq!(dim, ["A-WAH", "PUMP"]);
-        let dim: Vec<_> = MOD2
-            .iter()
-            .filter(|c| c.engine.is_none())
-            .inspect(|c| assert!(!c.missing.is_empty()))
-            .map(|c| c.label)
-            .collect();
-        assert_eq!(dim, ["ENS", "SPIN"]);
+    fn every_selector_led_has_its_own_engine_type() {
+        let m1: Vec<_> = MOD1.iter().map(|c| c.engine.unwrap()).collect();
+        let want1 = [
+            Mod1Type::AutoPan,
+            Mod1Type::Tremolo,
+            Mod1Type::RingMod,
+            Mod1Type::AutoWah,
+            Mod1Type::Wah,
+            Mod1Type::Pump,
+        ];
+        assert_eq!(m1, want1);
+        let m2: Vec<_> = MOD2.iter().map(|c| c.engine.unwrap()).collect();
+        let want2 = [
+            Mod2Type::Phaser,
+            Mod2Type::Flanger,
+            Mod2Type::Chorus,
+            Mod2Type::Vibe,
+            Mod2Type::Ensemble,
+            Mod2Type::Spin,
+        ];
+        assert_eq!(m2, want2);
+        assert!(MOD1.iter().all(|c| c.missing.is_empty()));
+        assert!(MOD2.iter().all(|c| c.missing.is_empty()));
     }
 
     #[test]
@@ -156,13 +149,40 @@ mod tests {
     }
 
     #[test]
-    fn cycling_skips_unsupported_types_and_wraps() {
-        // WAH (4) -> A-PAN (0): PUMP (5) is skipped.
-        assert_eq!(next_supported(&MOD1, 4), 0);
-        // RM (2) -> WAH (4): A-WAH (3) is skipped.
-        assert_eq!(next_supported(&MOD1, 2), 4);
-        assert_eq!(next_supported(&MOD2, 3), 0);
+    fn selectors_cycle_through_all_six_types_and_wrap() {
+        fn walk<T: Copy>(t: &[Choice<T>]) -> (Vec<usize>, usize) {
+            let (mut seen, mut i) = (Vec::new(), 0);
+            for _ in 0..6 {
+                seen.push(i);
+                i = next_supported(t, i);
+            }
+            (seen, i)
+        }
+        for (seen, end) in [walk(&MOD1), walk(&MOD2)] {
+            assert_eq!(seen, [0, 1, 2, 3, 4, 5]);
+            assert_eq!(end, 0, "wraps back to the first LED");
+        }
+        assert_eq!(next_supported(&MOD1, 2), 3, "RM -> A-WAH");
+        assert_eq!(next_supported(&MOD1, 4), 5, "WAH -> PUMP");
+        assert_eq!(next_supported(&MOD2, 3), 4, "VIBE -> ENS");
         assert_eq!(next_supported(&REVERB, 5), 0);
+    }
+
+    #[test]
+    fn cycling_skips_a_type_the_engine_lacks() {
+        let t = [ok("A", 1u8), missing_for_test("B"), ok("C", 3u8)];
+        assert_eq!(next_supported(&t, 0), 2);
+        assert_eq!(next_supported(&t, 2), 0);
+        let none = [missing_for_test("X"), missing_for_test("Y")];
+        assert_eq!(next_supported(&none, 1), 1, "stays put");
+    }
+
+    fn missing_for_test(label: &'static str) -> Choice<u8> {
+        Choice {
+            label,
+            engine: None,
+            missing: "test",
+        }
     }
 
     #[test]

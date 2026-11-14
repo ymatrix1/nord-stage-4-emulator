@@ -2,6 +2,7 @@
 //! three synth layers 1..3; the cutoff, resonance, drive and envelope are global host params.
 
 use super::map::{flag, osc_mode_index};
+use super::map_pattern::map_pattern;
 use super::write::ParamWrite as W;
 use nord_core::synth_types::{ArpMode, LfoDestination, LfoShape, NotePriority, VibratoMode};
 use nord_gui::audio::{SynthEdit, SynthParam, SynthTarget};
@@ -63,8 +64,23 @@ fn synth_layers(t: SynthTarget) -> std::ops::RangeInclusive<u8> {
 }
 
 pub(super) fn map_synth(e: &SynthEdit, out: &mut Vec<W>) {
-    let SynthEdit::Param(target, p) = *e else {
-        return; // GROUP copies have no host parameter; the per-layer values stay independent.
+    let (target, p) = match *e {
+        SynthEdit::Param(target, p) => (target, p),
+        // SUSTPED / PSTICK of the three synth layers (`ped_*` counts all seven layers).
+        SynthEdit::Sustped(on) => {
+            for n in 5..=7 {
+                out.push(W::layer("ped_sustped", n, flag(on)));
+            }
+            return;
+        }
+        SynthEdit::Pstick(on) => {
+            for n in 5..=7 {
+                out.push(W::layer("ped_pstick", n, flag(on)));
+            }
+            return;
+        }
+        // GROUP copies and SOUND INIT have no host parameter; per-layer values stay independent.
+        SynthEdit::Group { .. } | SynthEdit::SoundInit(_) => return,
     };
     let per_layer = |out: &mut Vec<W>, family: &'static str, plain: f32| {
         for n in synth_layers(target) {
@@ -103,6 +119,15 @@ pub(super) fn map_synth(e: &SynthEdit, out: &mut Vec<W>) {
         P::VibratoRate(v) => per_layer(out, "synthm_vib_rate", v),
         P::VibratoDepth(v) => per_layer(out, "synthm_vib_depth", v),
         P::VibratoDelay(v) => per_layer(out, "synthm_vib_delay", v),
+        P::Pattern(pp) => {
+            for n in synth_layers(target) {
+                map_pattern(pp, n, out);
+            }
+        }
+        P::LfoDivision(i) => per_layer(out, "synthg_lfo_div", f32::from(i)),
+        P::ArpDivision(i) => per_layer(out, "synthg_arp_div", f32::from(i)),
+        P::GateEnv(v) => per_layer(out, "synthg_gate_env", v),
+        P::PatternPreset(i) => per_layer(out, "synthg_pat_preset", f32::from(i)),
         P::KbHold(on) => out.push(W::global("synthg_kb_hold", flag(on))),
         P::KbHoldExclude(on) => per_layer(out, "synthg_hold_excl", flag(on)),
         P::KbSync(on) => per_layer(out, "synthg_kb_sync", flag(on)),

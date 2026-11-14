@@ -7,17 +7,18 @@
 //! `probe_covers_every_fx_float_and_flag` pins the table-driven families.
 
 use super::map::map_command;
+use nord_core::engine::FxSharing;
 use nord_core::fx::{
     AmpCabinet, DelayFeedbackFx, DelayFilterMode, Mod1Type, Mod2Type, ReverbColor, ReverbModel,
 };
 use nord_core::midi::{cc, MidiEvent};
 use nord_core::organ::{OrganModel, RotarySpeed, ScannerMode};
 use nord_core::piano::{PianoCategory, PianoTimbre, VelocityTouch};
-use nord_core::synth::SynthOscMode;
+use nord_core::synth::{PatternPan, SynthOscMode};
 use nord_core::synth_types::{ArpMode, LfoDestination, LfoShape, NotePriority, VibratoMode};
 use nord_gui::audio::{
-    AudioCommand as C, FxEdit, FxFlag, FxFloat, OrganEdit, PianoEdit, ProgramEdit, SettingsEdit,
-    SynthEdit, SynthParam, SynthTarget,
+    AudioCommand as C, FxEdit, FxFlag, FxFloat, OrganEdit, PatternParam, PianoEdit, ProgramEdit,
+    SettingsEdit, SynthEdit, SynthParam, SynthTarget,
 };
 use nord_panel::menus::Value;
 use std::collections::BTreeSet;
@@ -157,6 +158,28 @@ pub fn probe_commands() -> Vec<C> {
         sp(SynthParam::VibratoDepth(30.0)),
         sp(SynthParam::VibratoDelay(0.2)),
         sp(SynthParam::KbHold(true)),
+        sp(SynthParam::LfoDivision(3)),
+        sp(SynthParam::ArpDivision(2)),
+        sp(SynthParam::GateEnv(0.5)),
+        sp(SynthParam::PatternPreset(3)),
+        sp(SynthParam::Pattern(PatternParam::Zigzag(true))),
+        sp(SynthParam::Pattern(PatternParam::RangeThirds(1))),
+        sp(SynthParam::Pattern(PatternParam::Custom(true))),
+        sp(SynthParam::Pattern(PatternParam::Len(10))),
+        sp(SynthParam::Pattern(PatternParam::Gate {
+            step: 4,
+            eighths: 6,
+        })),
+        sp(SynthParam::Pattern(PatternParam::Accent {
+            step: 4,
+            on: true,
+        })),
+        sp(SynthParam::Pattern(PatternParam::Pan {
+            step: 4,
+            pan: PatternPan::Left,
+        })),
+        C::Synth(SynthEdit::Sustped(true)),
+        C::Synth(SynthEdit::Pstick(true)),
         sp(SynthParam::KbHoldExclude(true)),
         sp(SynthParam::KbSync(true)),
         sp(SynthParam::LfoClockSync(true)),
@@ -210,6 +233,16 @@ pub fn probe_commands() -> Vec<C> {
             slot,
             cabinet: AmpCabinet::Twin,
         }),
+        C::Fx(FxEdit::Mod1Sync {
+            slot,
+            beats: Some(1.0),
+        }),
+        C::Fx(FxEdit::Sharing(FxSharing {
+            delay_global: Some(2),
+            piano_group: Some(2),
+            synth_group: Some(4),
+            ..FxSharing::default()
+        })),
         C::Fx(FxEdit::DelaySync {
             slot,
             beats: Some(0.5),
@@ -284,7 +317,7 @@ mod tests {
             assert!(fams.contains(out[0].family), "{p:?}");
             n += 1;
         }
-        assert_eq!(n, 26);
+        assert_eq!(n, FxFloat::ALL.len() + FxFlag::ALL.len());
     }
 
     #[test]

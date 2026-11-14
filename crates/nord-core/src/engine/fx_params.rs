@@ -40,7 +40,7 @@ fx_params! {
     delay_subdivision: DelaySubdivision, delay_sync_beats: Option<f32>,
     delay_analog: bool, delay_ping_pong: bool, delay_filter: DelayFilterMode,
     delay_fx: DelayFeedbackFx, delay_fx_variation: bool, delay_feedback: f32, delay_mix: f32,
-    reverb_model: ReverbModel, reverb_color: ReverbColor, reverb_mix: f32,
+    reverb_model: ReverbModel, reverb_color: ReverbColor, reverb_variation: bool, reverb_mix: f32,
     morph: FxMorphSet, delay_rate_raw: Option<u16>,
 }
 

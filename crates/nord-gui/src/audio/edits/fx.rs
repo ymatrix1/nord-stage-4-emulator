@@ -46,6 +46,8 @@ pub enum FxEdit {
     Cabinet { slot: u8, cabinet: AmpCabinet },
     /// Delay MST CLK division: `Some(beats)` locks to the Master Clock, `None` is free time.
     DelaySync { slot: u8, beats: Option<f32> },
+    /// Mod 1 MST CLK division (A-Pan, Trem, Wah, Pump): `Some(beats)` replaces the Rate knob.
+    Mod1Sync { slot: u8, beats: Option<f32> },
     /// Delay feedback filter LP / HP / BP.
     DelayFilter { slot: u8, mode: DelayFilterMode },
     /// Delay feedback effect (ENS / VIBE / CHOR / FLAM / SPACE).
@@ -94,6 +96,9 @@ impl FxEdit {
             Self::DelaySync { slot, beats } => for_slot(engine, slot, |fx| {
                 fx.delay_clock_sync = beats.is_some();
                 fx.delay_sync_beats = beats.filter(|b| b.is_finite() && *b > 0.0);
+            }),
+            Self::Mod1Sync { slot, beats } => for_slot(engine, slot, |fx| {
+                fx.mod1_sync_beats = beats.filter(|b| b.is_finite() && *b > 0.0);
             }),
             Self::DelayFilter { slot, mode } => for_slot(engine, slot, |fx| fx.delay_filter = mode),
             Self::DelayFx { slot, fx: kind } => for_slot(engine, slot, |fx| fx.delay_fx = kind),
@@ -207,6 +212,7 @@ mod tests {
                 FxFlag::DelayAnalog => c.delay_analog,
                 FxFlag::DelayPingPong => c.delay_ping_pong,
                 FxFlag::DelayFxVariation => c.delay_fx_variation,
+                FxFlag::ReverbVariation => c.reverb_variation,
             };
             assert!(v, "{p:?} not set");
             assert!(!e.fx_chains[2].comp_enabled);
@@ -298,6 +304,48 @@ mod tests {
         .apply(&mut e);
         assert!(!e.fx_chains[2].delay_clock_sync);
         assert_eq!(e.fx_chains[2].delay_sync_beats, None);
+    }
+
+    #[test]
+    fn mod1_sync_sets_the_beats_and_ignores_bad_values() {
+        let mut e = engine();
+        FxEdit::Mod1Sync {
+            slot: 4,
+            beats: Some(0.5),
+        }
+        .apply(&mut e);
+        assert_eq!(e.fx_chains[5].mod1_sync_beats, Some(0.5));
+        assert_eq!(e.fx_chains[4].mod1_sync_beats, None);
+        for bad in [Some(f32::NAN), Some(-1.0), Some(0.0), None] {
+            FxEdit::Mod1Sync {
+                slot: 4,
+                beats: bad,
+            }
+            .apply(&mut e);
+            assert_eq!(e.fx_chains[5].mod1_sync_beats, None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn new_mod_types_and_reverb_variation_reach_the_engine() {
+        use nord_core::fx::{Mod1Type, Mod2Type};
+        let mut e = engine();
+        for (k1, k2) in [
+            (Mod1Type::AutoWah, Mod2Type::Spin),
+            (Mod1Type::Pump, Mod2Type::Ensemble),
+        ] {
+            FxEdit::Mod1Type { slot: 3, kind: k1 }.apply(&mut e);
+            FxEdit::Mod2Type { slot: 3, kind: k2 }.apply(&mut e);
+            assert_eq!(e.fx_chains[4].mod1_type, k1);
+            assert_eq!(e.fx_chains[4].mod2_type, k2);
+        }
+        FxEdit::Flag {
+            slot: 3,
+            param: FxFlag::ReverbVariation,
+            on: true,
+        }
+        .apply(&mut e);
+        assert!(e.fx_chains[4].reverb_variation && !e.fx_chains[5].reverb_variation);
     }
 
     #[test]

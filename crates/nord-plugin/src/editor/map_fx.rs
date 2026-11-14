@@ -6,6 +6,8 @@ use super::write::ParamWrite as W;
 use crate::fx_selectors::{
     CabinetSel, DelayFilterSel, DelayFxSel, Mod1Sel, Mod2Sel, ReverbColorSel, ReverbModelSel,
 };
+use nord_core::engine::FxSharing;
+use nord_core::fx::DELAY_SYNC_BEATS;
 use nord_gui::audio::{chain_of_slot, FxEdit, FxFlag, FxFloat, FX_SLOTS};
 
 /// FX chain layer numbers a panel FX slot addresses (slot 0 is the shared Organ A+B chain).
@@ -54,6 +56,37 @@ fn fx_flag_family(p: FxFlag) -> &'static str {
         FxFlag::DelayAnalog => "fxx_delay_analog",
         FxFlag::DelayPingPong => "fxsel_delay_pp",
         FxFlag::DelayFxVariation => "fxx_delay_fx_variation",
+        FxFlag::ReverbVariation => "fxz_rev_var",
+    }
+}
+
+/// Host `SyncDivisionSel` index of a Master Clock division: `0` ("Use Division") when free,
+/// otherwise the 1-based position in `DELAY_SYNC_BEATS` (`fx_sharing_params::SyncDivisionSel`).
+fn sync_division_index(beats: Option<f32>) -> f32 {
+    beats
+        .and_then(|b| {
+            DELAY_SYNC_BEATS
+                .iter()
+                .position(|d| (d - b).abs() < 1e-4)
+                .map(|i| (i + 1) as f32)
+        })
+        .unwrap_or(0.0)
+}
+
+/// GLOBAL and GROUP sharing: one flag per layer, set on the source layer only.
+fn map_sharing(sh: &FxSharing, out: &mut Vec<W>) {
+    let on = |src: Option<usize>, i: usize| flag(src == Some(i));
+    for i in 0..7 {
+        let n = i as u8 + 1;
+        out.push(W::layer("fxy_glob_delay", n, on(sh.delay_global, i)));
+        out.push(W::layer("fxy_glob_comp", n, on(sh.comp_global, i)));
+        out.push(W::layer("fxy_glob_rev", n, on(sh.reverb_global, i)));
+    }
+    for i in 2..4 {
+        out.push(W::layer("fxy_group", i as u8 + 1, on(sh.piano_group, i)));
+    }
+    for i in 4..7 {
+        out.push(W::layer("fxy_group", i as u8 + 1, on(sh.synth_group, i)));
     }
 }
 
@@ -80,7 +113,11 @@ pub(super) fn map_fx(e: &FxEdit, out: &mut Vec<W>) {
             push(slot, "fxsel_cabinet", enum_index::<CabinetSel>(&cabinet))
         }
         FxEdit::DelaySync { slot, beats } => {
-            push(slot, "fxsel_delay_sync", Some(flag(beats.is_some())))
+            push(slot, "fxsel_delay_sync", Some(flag(beats.is_some())));
+            push(slot, "fxy_delay_beats", Some(sync_division_index(beats)));
+        }
+        FxEdit::Mod1Sync { slot, beats } => {
+            push(slot, "fxz_mod1_beats", Some(sync_division_index(beats)))
         }
         FxEdit::DelayFilter { slot, mode } => {
             push(slot, "fxsel_delay_flt", enum_index::<DelayFilterSel>(&mode))
@@ -96,9 +133,7 @@ pub(super) fn map_fx(e: &FxEdit, out: &mut Vec<W>) {
             "fxsel_rev_color",
             enum_index::<ReverbColorSel>(&color),
         ),
-        // FX sharing (global delay/comp/reverb, group) is a bank-level toggle with no panel edit
-        // that carries a layer; it stays dimmed.
-        FxEdit::Sharing(_) => {}
+        FxEdit::Sharing(sh) => map_sharing(&sh, out),
     }
 }
 
@@ -141,5 +176,57 @@ mod tests {
             &mut bad,
         );
         assert!(bad.is_empty());
+    }
+
+    #[test]
+    fn sync_division_uses_the_one_based_position_in_the_beat_table() {
+        assert_eq!(sync_division_index(None), 0.0);
+        assert_eq!(sync_division_index(Some(DELAY_SYNC_BEATS[0])), 1.0);
+        assert_eq!(sync_division_index(Some(DELAY_SYNC_BEATS[16])), 17.0);
+        assert_eq!(sync_division_index(Some(0.123)), 0.0);
+    }
+
+    #[test]
+    fn sharing_sets_only_the_source_layer_flags() {
+        let mut v = Vec::new();
+        map_fx(
+            &FxEdit::Sharing(FxSharing {
+                delay_global: Some(4),
+                synth_group: Some(5),
+                ..FxSharing::default()
+            }),
+            &mut v,
+        );
+        let on = |id: &str, n| {
+            v.iter()
+                .any(|w| w.family == id && w.layer == Some(n) && w.plain == 1.0)
+        };
+        assert!(on("fxy_glob_delay", 5));
+        assert!(!on("fxy_glob_delay", 4));
+        assert!(on("fxy_group", 6));
+        assert!(!on("fxy_group", 5));
+        assert_eq!(v.len(), 7 * 3 + 2 + 3);
+    }
+
+    #[test]
+    fn mod1_sync_and_reverb_variation_use_the_fxz_bank() {
+        let mut v = Vec::new();
+        map_fx(
+            &FxEdit::Mod1Sync {
+                slot: 3,
+                beats: Some(DELAY_SYNC_BEATS[4]),
+            },
+            &mut v,
+        );
+        map_fx(
+            &FxEdit::Flag {
+                slot: 3,
+                param: FxFlag::ReverbVariation,
+                on: true,
+            },
+            &mut v,
+        );
+        assert_eq!(v[0], W::layer("fxz_mod1_beats", 5, 5.0));
+        assert_eq!(v[1], W::layer("fxz_rev_var", 5, 1.0));
     }
 }

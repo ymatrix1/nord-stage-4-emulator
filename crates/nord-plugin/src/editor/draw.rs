@@ -77,10 +77,10 @@ pub fn draw_dim_overlay(ui: &mut Ui, origin: egui::Pos2, coverage: &Coverage) ->
             continue;
         };
         ui.painter()
-            .rect_filled(rect, 3.0, Color32::from_black_alpha(150));
+            .rect_filled(rect, 3.0_f32, Color32::from_black_alpha(150));
         ui.painter().rect_stroke(
             rect,
-            3.0,
+            3.0_f32,
             Stroke::new(1.0_f32, Color32::from_black_alpha(90)),
             StrokeKind::Inside,
         );
@@ -106,10 +106,10 @@ pub fn draw_editor<W: ParamWriter>(
     }
 
     ResizableWindow::new("nord-stage-4-editor")
-        .min_size(Vec2::splat(8.0))
+        .min_size(Vec2::splat(8.0_f32))
         .show(ctx, egui_state, |ui| {
             let avail = ui.max_rect();
-            ui.painter().rect_filled(avail, 0.0, CHASSIS_DARK);
+            ui.painter().rect_filled(avail, 0.0_f32, CHASSIS_DARK);
             let size = Vec2::new(PANEL_W, PANEL_H);
             let offset = ((avail.size() - size) * 0.5).max(Vec2::ZERO);
             let panel_rect = Rect::from_min_size(avail.min + offset, size);
@@ -211,7 +211,7 @@ mod tests {
         let mut n = usize::MAX;
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                n = draw_dim_overlay(ui, egui::pos2(0.0, 0.0), &empty);
+                n = draw_dim_overlay(ui, egui::pos2(0.0_f32, 0.0_f32), &empty);
             });
         });
         assert_eq!(n, 0);

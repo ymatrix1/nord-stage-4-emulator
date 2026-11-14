@@ -82,7 +82,7 @@ pub(super) fn norm_of(l: &SynthLayerUi, k: Knob) -> f32 {
         Knob::ArpRate if l.arp_sync => f32::from(l.arp_div) / 9.0,
         Knob::ArpRate => (l.arp_rate - 20.0) / 280.0,
         Knob::ArpRange if l.arp_kind == 2 => l.gate_env,
-        Knob::ArpRange => l.arp_range / 4.0,
+        Knob::ArpRange => (l.arp_range - 1.0) / 3.0,
     };
     n.clamp(0.0, 1.0)
 }
@@ -121,5 +121,10 @@ mod tests {
         assert_eq!(norm_of(&l, Knob::LfoRate), 1.0);
         assert_eq!(norm_of(&l, Knob::ArpRate), 0.0);
         assert_eq!(norm_of(&l, Knob::ArpRange), 0.25);
+        let r = SynthLayerUi {
+            arp_range: 2.0,
+            ..SynthLayerUi::default()
+        };
+        assert!((norm_of(&r, Knob::ArpRange) - 1.0 / 3.0).abs() < 1e-6);
     }
 }

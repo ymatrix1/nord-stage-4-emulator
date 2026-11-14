@@ -52,6 +52,10 @@ impl SynthGroup {
                 dst.perf.kb_sync = src.perf.kb_sync;
                 dst.perf.arp_clock_sync = src.perf.arp_clock_sync;
                 dst.perf.arp_division = src.perf.arp_division;
+                dst.perf.zigzag = src.perf.zigzag;
+                dst.perf.range_extra_thirds = src.perf.range_extra_thirds;
+                dst.perf.pattern_custom = src.perf.pattern_custom;
+                dst.perf.custom = src.perf.custom;
             }
         }
     }
@@ -105,5 +109,19 @@ mod tests {
         assert!(b.perf.pattern_on);
         assert_eq!(b.perf.pattern_preset, 3);
         assert!(!b.perf.kb_hold);
+    }
+
+    #[test]
+    fn arp_group_copies_zigzag_range_fraction_and_custom_pattern() {
+        let mut a = SynthLayer::new(48_000.0);
+        let mut b = SynthLayer::new(48_000.0);
+        a.perf.zigzag = true;
+        a.perf.range_extra_thirds = 2;
+        a.customize_preset(2);
+        a.set_step_gate(1, 7);
+        SynthGroup::Arp.copy(&a, &mut b);
+        assert!(b.perf.zigzag && b.perf.pattern_custom);
+        assert_eq!(b.perf.range_extra_thirds, 2);
+        assert_eq!(b.perf.custom, a.perf.custom);
     }
 }

@@ -1,6 +1,6 @@
 //! Bay 6: Layer Effects of the front panel (Phase 6b B8f, `ns4-hcuh`).
 //!
-//! Every control of the inventory section `Effects` (50 ids, `ids::HANDLED`) is placed with
+//! Every control of the inventory section `Effects` (51 ids, `ids::HANDLED`) is placed with
 //! `layout_px::rect_or_empty`; Shift / hold-to-shift functions share their base control's
 //! rectangle and appear as legends below it. The bay edits the chain of the focused FX slot
 //! (Organ, Piano A/B, Synth A/B/C) through `AudioCommand::Fx`; the GUI view of the six chains

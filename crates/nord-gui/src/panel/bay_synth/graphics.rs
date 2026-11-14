@@ -3,7 +3,6 @@
 
 use super::oled_types::{Graphic, Icon};
 use egui::{pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Stroke};
-use nord_core::synth::PATTERN_PRESETS;
 
 /// OLED pixel colour.
 pub(super) const FG: Color32 = Color32::from_rgb(150, 190, 230);
@@ -157,16 +156,11 @@ pub(super) fn paint_graphic(p: &Painter, area: Rect, g: &Graphic) {
             &filter_points(*ty, *cutoff, *res, 32),
         ),
         Graphic::Lfo(s) => poly(p, area.shrink2(vec2(4.0, 3.0)), &lfo_points(*s, 24)),
-        Graphic::Pattern {
-            preset,
-            len,
-            cursor,
-        } => {
-            let pat = PATTERN_PRESETS[usize::from(*preset) % PATTERN_PRESETS.len()];
+        Graphic::Pattern { steps, len, cursor } => {
             let len = usize::from((*len).clamp(2, 16));
             let w = area.width() / len as f32;
-            for i in 0..len {
-                let g = f32::from(pat.steps[i % usize::from(pat.len)]) / 8.0;
+            for (i, &step) in steps.iter().take(len).enumerate() {
+                let g = f32::from(step) / 8.0;
                 let x = area.left() + i as f32 * w;
                 let h = (area.height() - 2.0) * g.max(0.08);
                 let r = Rect::from_min_max(
@@ -327,7 +321,7 @@ mod tests {
             },
             Graphic::Lfo(0),
             Graphic::Pattern {
-                preset: 3,
+                steps: [4; 16],
                 len: 8,
                 cursor: Some(2),
             },

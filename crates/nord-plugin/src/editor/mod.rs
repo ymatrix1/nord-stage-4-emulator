@@ -25,6 +25,7 @@ pub mod index;
 pub mod map;
 mod map_area;
 mod map_fx;
+mod map_pattern;
 mod map_settings;
 mod map_synth;
 pub mod notes;

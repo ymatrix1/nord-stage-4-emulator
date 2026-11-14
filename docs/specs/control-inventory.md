@@ -1,6 +1,6 @@
 # Hardware Control Inventory Specification
 
-Status: B2 delivered (Phase 6b, `ns4-xc5n`, `ns4-3n0d`) · 273 controls checked against the OS v1.6x manual text (2026-11-13); panel-photo check limited to headline counts
+Status: B2 delivered (Phase 6b, `ns4-xc5n`, `ns4-3n0d`) · 274 controls checked against the OS v1.6x manual text (2026-11-13); panel-photo check limited to headline counts
 
 ## 1. Scope
 
@@ -14,7 +14,7 @@ Each control is one `ControlEntry` in `crates/nord-panel/src/inventory/` (one fi
 
 | Field | Type | Meaning |
 |---|---|---|
-| `id` | `String` | Stable dotted id `group.name[.layer]`, lowercase ASCII (e.g. `organ.drawbar.3`, `program.store`). Never renamed once shipped. A string, not an enum, keeps the 273 ids greppable and additive (D16). |
+| `id` | `String` | Stable dotted id `group.name[.layer]`, lowercase ASCII (e.g. `organ.drawbar.3`, `program.store`). Never renamed once shipped. A string, not an enum, keeps the 274 ids greppable and additive (D16). |
 | `section` | `Section` | `Master`, `Organ`, `Piano`, `Program`, `Synth`, `Effects`, `Keybed` |
 | `kind` | `ControlKind` | `Knob`, `Encoder`, `Fader`, `Drawbar`, `Button`, `Selector`, `Led`, `LedLadder`, `Oled`, `Wheel`, `Stick`, `Key` |
 | `layer` | `Option<Layer>` | `A`/`B`/`C` for per-layer controls; `None` for global |
@@ -64,17 +64,17 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Piano | 2 | 2 | 19 | 9 (7 LEDs + 2 ladders) | - | 32 |
 | Program & Morph | 2 | - | 50 | 3 | 1 (OLED) | 56 |
 | Synth | 17 (12 knobs + 5 encoders) | 3 | 41 | 11 (8 LEDs + 3 ladders) | 1 (OLED) | 73 |
-| Layer Effects | 16 | - | 33 | 1 | - | 50 |
+| Layer Effects | 17 | - | 33 | 1 | - | 51 |
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
-| **Total** | | | | | | **273** |
+| **Total** | | | | | | **274** |
 
-By binding: `Bound` 138, `UiOnly` 57, `Unsupported` 78. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 75 controls. Morphable: 35.
+By binding: `Bound` 141, `UiOnly` 57, `Unsupported` 76. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
 
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
 ## Gap list
 
-The old code-review gap list is replaced by the 78 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the 76 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 5b. Behaviour layer
 
@@ -104,12 +104,16 @@ Answered: trademark and art, parity scope, keybed variant, per-layer IDs and Pha
 | Source | one 2000 px product photo (`foto`, 2026-11-13), body x 67..1932 px, y 81..571 px | `ASSUMED` |
 | Scale | 1290 mm / 1865 px = **0.6917 mm per photo px** (single scale, straight-on render) | `ASSUMED`: body width taken from the product data, confirm by measurement |
 | Tables | authored in photo pixels, converted by `layout::px`; one file per section (`master`, `organ`, `piano`, `program`, `synth`, `effects`, `keybed`) | `ASSUMED`, accuracy about +-3 px (+-2 mm) |
-| Shared rects | 80 ids (all 75 Shift/Hold functions plus 5 direct ones) use the rect of the control they hang off (`layout::SHARED`, e.g. `organ.sync` -> `organ.preset`) | `ASSUMED` from printed labels |
+| Shared rects | 81 ids (all 76 Shift/Hold functions plus 5 direct ones) use the rect of the control they hang off (`layout::SHARED`, e.g. `organ.sync` -> `organ.preset`) | `ASSUMED` from printed labels |
 | Estimated | **36** ids listed in `layout::ESTIMATED`: layer/zone/focus LEDs a few pixels wide, LED groups drawn as one rect (`fx.focus.leds`, `split.leds`, `keybed.split_leds`), halves of one button (`organ.vibrato_on.a/b`), and unclear function mapping (`amp.res`, `amp.filter`, `amp.to_rotary`, `synth.voice.priority`, `synth.filter.res`, `synth.dial_list`) | `ASSUMED` |
 
 Conventions: a drawbar rect is its slot (8 px wide) and its LED ladder the 15 px column to its right; the three `keybed.split_leds` are one strip along the top of the keys; `program.shift.right` (the SHIFT rocker next to Layer Effects) is the only rect that lies outside its inventory section (listed in `OUTSIDE_OWN_SECTION` in the tests).
 
 What would confirm or replace the table: a higher-resolution front photo (at least 4000 px wide) or a tape measure on the instrument for the 36 estimated entries and the overall scale. The B8 renderers must not hard-code positions; they read these rects.
+
+## 7b. Engine bindings (`engine:<path>`)
+
+A control that has no host parameter but acts on the engine through the panel is `Bound("engine:<path>")`, as in `menus/`. `inventory/tests.rs` accepts the id when each dot-separated segment is a public field (`pub seg:`) or method (`pub fn seg(`) in the engine sources it lists (`engine/mod.rs`, `engine/zone_assign.rs`, `morph.rs`, `synth/sound_init.rs`). Used by `synth.sound_init` (`engine:synth_a.sound_init`). Rewired by the Synth / Effects bays: `synth.sound_init`, `reverb.variation` (`fxz_rev_var_{n}`) and the new `mod1.mst_clk` (`fxz_mod1_beats_{n}`, a Shift function of the Mod 1 RATE knob, shared rectangle). The three Synth OLED dials stay `Unsupported` in the inventory although the pages now work: one dial maps to many host ids, so it has no single binding.
 
 ## 8. Standalone Program area and keybed (`crates/nord-gui`, B8d / B8g)
 
