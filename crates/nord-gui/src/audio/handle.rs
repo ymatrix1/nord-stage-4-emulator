@@ -54,13 +54,26 @@ impl AudioHandle {
         self.control.as_ref()
     }
 
-    /// Dispatches a MIDI event to the real-time audio thread.
+    /// Dispatches a MIDI event arriving from outside (a MIDI input port) to the audio thread.
+    /// It plays the sound engines regardless of Local Control (MIDI In always sounds).
     ///
     /// For non-critical events (e.g. continuous ModWheel, CC, NoteOn), if the event queue is full,
     /// the event is dropped to prevent unbounded latency. For critical note lifecycle events
     /// (`NoteOff`, `AllNotesOff`, `SustainPedal(0)`), this retries with a short timeout
     /// to ensure key releases are not silently dropped.
     pub fn send_midi(&self, event: MidiEvent) -> bool {
+        self.enqueue_midi(event, false)
+    }
+
+    /// Dispatches an event from the instrument's own keyboard or panel (the on-screen keybed,
+    /// mod wheel, pitch stick). The audio thread runs it through `handle_keyboard_midi`, the
+    /// Local Control gate: with Local Control Off it is only transmitted, never played
+    /// (manual p.61). Same queue policy as [`Self::send_midi`].
+    pub fn send_keyboard_midi(&self, event: MidiEvent) -> bool {
+        self.enqueue_midi(event, true)
+    }
+
+    fn enqueue_midi(&self, event: MidiEvent, keyboard: bool) -> bool {
         let is_critical = match event {
             MidiEvent::NoteOff { .. } => true,
             MidiEvent::ControlChange {
@@ -72,10 +85,18 @@ impl AudioHandle {
             }
             _ => false,
         };
+        let cmd = if keyboard {
+            AudioCommand::Keyboard(event)
+        } else {
+            AudioCommand::Midi(event)
+        };
         if let Some(link) = &self.control {
-            link.observe_midi(event);
+            if keyboard {
+                link.observe_keyboard_midi(event);
+            } else {
+                link.observe_midi(event);
+            }
         }
-        let cmd = AudioCommand::Midi(event);
         match self.cmd_sender.try_send(cmd) {
             Ok(()) => true,
             Err(crossbeam_channel::TrySendError::Full(returned_cmd)) => {
@@ -134,6 +155,20 @@ mod tests {
         e.attach_telemetry(handle.telemetry().cell());
         e.publish_telemetry();
         assert!(copy.telemetry().latest().get().is_some());
+    }
+
+    #[test]
+    fn keyboard_and_midi_in_use_different_commands() {
+        let (handle, rx) = AudioHandle::new();
+        let ev = MidiEvent::NoteOn {
+            channel: 0,
+            note: 61,
+            velocity: 80,
+        };
+        assert!(handle.send_keyboard_midi(ev));
+        assert!(handle.send_midi(ev));
+        assert!(matches!(rx.try_recv(), Ok(AudioCommand::Keyboard(e)) if e == ev));
+        assert!(matches!(rx.try_recv(), Ok(AudioCommand::Midi(e)) if e == ev));
     }
 
     #[test]

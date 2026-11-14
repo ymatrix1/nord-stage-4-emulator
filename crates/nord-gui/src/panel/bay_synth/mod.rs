@@ -9,6 +9,8 @@ mod controls;
 #[cfg(test)]
 mod coverage;
 mod graphics;
+#[cfg(test)]
+mod hint_tests;
 mod oled;
 mod oled_arp;
 mod oled_types;
@@ -115,6 +117,7 @@ pub(super) fn render_bay_synth(
         o,
         &mut state.synth_ui,
         state.loaded_sample_name.as_deref(),
+        crate::panel::param_hint::active(ui.ctx()).as_deref(),
     );
     for i in 0..DIAL_COUNT {
         widgets::dial(ui, painter, o, &mut state.synth_ui, i);

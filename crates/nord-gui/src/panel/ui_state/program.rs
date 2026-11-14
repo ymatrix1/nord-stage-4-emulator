@@ -88,6 +88,8 @@ pub struct ProgramUi {
     pub prev_keys: [bool; 128],
     /// Transient OLED message and its end time (ms).
     pub message: Option<(String, u32)>,
+    /// Destructive action waiting for its second press (`Are you sure?`) and the end of that window.
+    pub confirming: Option<(crate::panel::bay_program::fw_messages::Confirm, u32)>,
     /// Button trackers by control id (hold / double tap recognition).
     pub trackers: BTreeMap<&'static str, ButtonTracker>,
     /// Frame time in ms.
@@ -155,6 +157,7 @@ impl Default for ProgramUi {
             redo_available: false,
             prev_keys: [false; 128],
             message: None,
+            confirming: None,
             trackers: BTreeMap::new(),
             now_ms: 0,
             shift_used: false,
