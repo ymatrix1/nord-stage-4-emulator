@@ -22,7 +22,7 @@ fn is_unsupported(c: &ControlEntry) -> bool {
 
 #[test]
 fn bay_has_sixty_inventory_controls() {
-    assert_eq!(bay_controls().len(), 60);
+    assert_eq!(bay_controls().len(), 61);
 }
 
 #[test]

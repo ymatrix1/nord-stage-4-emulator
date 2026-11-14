@@ -111,9 +111,66 @@ pub enum AudioCommand {
     SetFirmwareOptions(nord_core::render_opts::FirmwareOptions),
 }
 
+impl AudioCommand {
+    /// `true` when the command changes the sound of the program being played, so the display
+    /// marks the program as edited (boxed `E`). Loads, recalls, snapshots, copies, MIDI, global
+    /// settings and the master volume are not edits.
+    ///
+    /// ASSUMED: every panel setter of the sound areas counts, including no-op writes of the same
+    /// value; the hardware may filter unchanged values. Confirm with footage of a re-tapped button.
+    pub fn is_program_edit(&self) -> bool {
+        use ProgramEdit as P;
+        match self {
+            Self::Organ(_) | Self::Piano(_) | Self::Synth(_) | Self::Fx(_) => true,
+            Self::Program(p) => matches!(
+                p,
+                P::Transpose(_)
+                    | P::LayerInit(_)
+                    | P::Undo
+                    | P::Redo
+                    | P::Paste(_)
+                    | P::Swap(..)
+                    | P::ClearMorph(_)
+                    | P::MorphDepth { .. }
+                    | P::Split(_)
+                    | P::MasterBpm(_)
+                    | P::LayerScene2(_)
+            ),
+            Self::Midi(_)
+            | Self::SetMasterVolume(_)
+            | Self::LoadProgram(_)
+            | Self::LoadPianoSound { .. }
+            | Self::LoadSynthSample { .. }
+            | Self::SwapState(_)
+            | Self::SetFirmwareOptions(_) => false,
+            _ => true,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn edits_are_sound_changes_and_loads_are_not() {
+        assert!(AudioCommand::SetSynthCutoff(0.5).is_program_edit());
+        assert!(AudioCommand::SetLayerActive(2, true).is_program_edit());
+        assert!(AudioCommand::Program(ProgramEdit::Transpose(2)).is_program_edit());
+        assert!(!AudioCommand::SetMasterVolume(0.5).is_program_edit());
+        assert!(!AudioCommand::Program(ProgramEdit::Panic).is_program_edit());
+        assert!(
+            !AudioCommand::Program(ProgramEdit::Copy(crate::audio::CopyItem::Layer(
+                nord_core::morph::LayerId::PianoA
+            )))
+            .is_program_edit()
+        );
+        assert!(!AudioCommand::LoadPianoSound {
+            slot_b: false,
+            sound: None
+        }
+        .is_program_edit());
+    }
 
     #[test]
     fn test_command_is_clone_and_debug() {

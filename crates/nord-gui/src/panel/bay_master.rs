@@ -185,7 +185,7 @@ fn render_rotary_buttons(
         None,
     );
 
-    // STOP MODE with ANGLE on Shift.
+    // STOP MODE with the stop ANGLE picker (and the mic angle toggle) on Shift.
     let stop = rc("rotary.stop_mode");
     let face = Face {
         led: Some(state.rotary_stop),
@@ -205,10 +205,7 @@ fn render_rotary_buttons(
             send_rotary(state, audio);
         }
         Some(Trigger::Shifted) => {
-            state.organ_ui.rotary_angle_wide = !state.organ_ui.rotary_angle_wide;
-            audio.send_command(AudioCommand::Organ(OrganEdit::RotaryAngle {
-                wide: state.organ_ui.rotary_angle_wide,
-            }));
+            state.organ_ui.stop_angle_open = !state.organ_ui.stop_angle_open;
         }
         _ => {}
     }
@@ -216,11 +213,14 @@ fn render_rotary_buttons(
     shift_legend(
         ui,
         stop,
-        "rotary.angle",
+        "rotary.stop_angle",
         "ANGLE",
-        Some(state.organ_ui.rotary_angle_wide),
+        Some(state.organ_ui.rotary_stop_angle != 0),
         None,
     );
+    // The mic separation toggle is a row of the popup; the id is painted with the legend.
+    super::ctl::mark(ui, "rotary.angle");
+    super::rotor_angle::draw(ui, painter, stop, state, audio);
 
     // SLOW/STOP - FAST button and its two LEDs.
     let fast = matches!(state.rotary_speed, RotarySpeed::Fast);

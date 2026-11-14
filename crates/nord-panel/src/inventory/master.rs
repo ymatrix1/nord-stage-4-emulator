@@ -20,8 +20,12 @@ pub fn controls() -> Vec<ControlEntry> {
             .morph()
             .bound("rotary_speed_fast"),
         e("rotary.stop_mode", s, K::Button, "STOP MODE", 53).bound("organx_stop_mode"),
-        e("rotary.angle", s, K::Button, "ANGLE", 53)
+        e("rotary.stop_angle", s, K::Button, "ANGLE (rotor stop position)", 53)
             .shift()
+            .bound("organy_stop_angle_{n}"),
+        e("rotary.angle", s, K::Button, "ANGLE (mic separation)", 53)
+            .shift()
+            .assumed("manual p.53 names only the stop position list; wide/narrow mic is kept as a row of the ANGLE popup")
             .bound("organy_mic_angle_{n}"),
         e("rotary.organ", s, K::Button, "ORGAN (route to rotary)", 53)
             .bound("organy_rotary_on_{n}"),
@@ -39,8 +43,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn master_has_ten_controls() {
-        assert_eq!(controls().len(), 10);
+    fn master_has_eleven_controls() {
+        assert_eq!(controls().len(), 11);
     }
 
     #[test]

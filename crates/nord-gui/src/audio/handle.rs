@@ -5,6 +5,7 @@ use super::AudioCommand;
 use crate::telemetry::TelemetryHandle;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use nord_core::midi::MidiEvent;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 /// Handle to communicate with the running audio background thread.
@@ -17,6 +18,9 @@ pub struct AudioHandle {
     control: Option<Arc<ControlLink>>,
     /// Lock-free engine to GUI telemetry; the audio thread publishes into it.
     pub telemetry: TelemetryHandle,
+    /// Counts the sound edits sent (see `AudioCommand::is_program_edit`); the Program display
+    /// compares it with the value at the last load / store to show the boxed `E`.
+    edits: Arc<AtomicU32>,
 }
 
 impl AudioHandle {
@@ -31,6 +35,7 @@ impl AudioHandle {
                 cmd_sender: tx,
                 control: None,
                 telemetry: TelemetryHandle::new(),
+                edits: Arc::new(AtomicU32::new(0)),
             },
             rx,
         )
@@ -108,10 +113,18 @@ impl AudioHandle {
     }
 
     pub fn send_command(&self, cmd: AudioCommand) -> bool {
+        if cmd.is_program_edit() {
+            self.edits.fetch_add(1, Ordering::Relaxed);
+        }
         match &self.control {
             Some(link) => link.send(cmd, &self.cmd_sender),
             None => self.cmd_sender.try_send(cmd).is_ok(),
         }
+    }
+
+    /// Number of sound edits sent so far (wraps).
+    pub fn edit_count(&self) -> u32 {
+        self.edits.load(Ordering::Relaxed)
     }
 
     /// The telemetry reader the panel polls once per frame.
@@ -123,6 +136,16 @@ impl AudioHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_sound_edits_move_the_edit_count_and_clones_share_it() {
+        let (handle, _rx) = AudioHandle::new();
+        let copy = handle.clone();
+        handle.send_command(AudioCommand::SetMasterVolume(0.3));
+        assert_eq!(copy.edit_count(), 0);
+        handle.send_command(AudioCommand::SetSynthCutoff(0.3));
+        assert_eq!(copy.edit_count(), 1);
+    }
 
     #[test]
     fn handles_share_one_telemetry_cell() {
