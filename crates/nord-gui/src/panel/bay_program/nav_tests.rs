@@ -112,7 +112,7 @@ fn soft_buttons_drive_split_clock_undo_and_layer_init() {
     assert_eq!(u.clock.kbs, super::super::model::KbsMode::On);
     u.screen = Screen::Undo;
     assert!(matches!(
-        &u.soft_down(1)[0],
+        &u.soft_down(4)[0],
         AudioCommand::Program(ProgramEdit::Undo)
     ));
     assert_eq!(u.screen, Screen::Home);

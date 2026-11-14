@@ -4,11 +4,12 @@
 //! The preset is the section block of `ProgramState::export_into` (the fields the engine maps:
 //! Organ model, drawbars, percussion, rotary, octaves, levels; Piano type, timbre, touch,
 //! resonance, noise, release, unison, compression, octave, levels; Synth octave and levels) on
-//! top of a base preset, plus the Layer On/Off flags of the active Layer Scene. Everything the
-//! engine does not map back (effect chains, the Synth sound itself, reserved bits) comes from
-//! the base: the preset the section was loaded from, or the init preset. `ASSUMED` limitation,
-//! shared with stored programs (`docs/specs/cbin-and-presets.md` section 5.5); the open item is
-//! the inverse of `synth_params::apply_decoded_layer` (OQ30).
+//! top of a base preset, plus the Layer On/Off flags of the active Layer Scene. The Synth sound
+//! (`synth_params_export`) and the effect chains (`program_fx_export`) come back through the
+//! inverse of their engine mappings; what the engine cannot represent exactly
+//! (`LOSSY_FIELDS`, `LOSSY_FX_FIELDS`) and every reserved or collapsed bit (OQ31) comes from the
+//! base: the preset the section was loaded from, or the init preset
+//! (`docs/specs/cbin-and-presets.md` section 5.7).
 
 use super::{ProgramState, Stage4Engine};
 use crate::cbin::{PresetSection, ProgramDecoded, SectionPreset};
@@ -106,17 +107,60 @@ mod tests {
         let mut base = crate::cbin::SynthPresetDecoded::default();
         base.layer_a.filter_cutoff_hz = 1234.0;
         base.layer_a.level = 0.9;
-        let mut e = Stage4Engine::new(48_000.0);
+        base.layer_a.pan = 0.125;
+        base.layer_a.sample_id = 77;
+        let base = SectionPreset::Synth(Box::new(base));
+        let mut e = Box::new(Stage4Engine::new(48_000.0));
+        e.load_section_preset(&base, None);
         e.layer_levels[4].base = 0.3;
-        let preset = e.capture_section_preset(
-            PresetSection::Synth,
-            Some(&SectionPreset::Synth(Box::new(base))),
-        );
+        let preset = e.capture_section_preset(PresetSection::Synth, Some(&base));
         let SectionPreset::Synth(s) = preset else {
             panic!("synth expected")
         };
-        assert_eq!(s.layer_a.filter_cutoff_hz, 1234.0, "from the base");
+        assert_eq!(s.layer_a.filter_cutoff_hz, 1234.0, "unedited: the base");
+        assert_eq!(
+            (s.layer_a.pan, s.layer_a.sample_id),
+            (0.125, 77),
+            "not mapped"
+        );
         assert!((s.layer_a.level - 0.3).abs() < 1e-6, "from the panel");
+    }
+
+    #[test]
+    fn synth_sound_and_effect_edits_reach_the_stored_preset_and_reload() {
+        let mut base = crate::cbin::SynthPresetDecoded::default();
+        base.layer_b.enabled = true;
+        base.layer_b.filter_cutoff_hz = 3000.0;
+        base.layer_b.pan = 0.25;
+        let base = SectionPreset::Synth(Box::new(base));
+        let mut e = Box::new(Stage4Engine::new(48_000.0));
+        e.load_section_preset(&base, None);
+        e.synth_b.cutoff_hz = 800.0;
+        e.synth_b.attack_sec = 0.5;
+        e.synth_b.perf.zigzag = true;
+        e.fx_chains[5].reverb_model = crate::fx::ReverbModel::Cathedral;
+        e.fx_chains[5].reverb_mix = 0.6;
+        let stored = e.capture_section_preset(PresetSection::Synth, Some(&base));
+        let SectionPreset::Synth(s) = &stored else {
+            panic!("synth expected")
+        };
+        assert!((s.layer_b.filter_cutoff_hz / 800.0 - 1.0).abs() < 0.05);
+        assert!((s.layer_b.env_attack_ms - 500.0).abs() < 60.0);
+        assert!(s.layer_b.arp.zigzag);
+        assert!(s.fx_b.reverb_enabled && (s.fx_b.reverb_amount - 0.6).abs() < 0.01);
+        assert_eq!(s.layer_b.pan, 0.25, "not an engine field: from the base");
+        let SectionPreset::Synth(b) = &base else {
+            panic!("synth expected")
+        };
+        assert_eq!(s.layer_a, b.layer_a, "an untouched layer stays as it was");
+        // The stored preset reloads into the edited sound (and encodes within one bit merge).
+        let mut fresh = Box::new(Stage4Engine::new(48_000.0));
+        fresh.load_section_preset(&stored, None);
+        assert!((fresh.synth_b.cutoff_hz / 800.0 - 1.0).abs() < 0.05);
+        assert_eq!(
+            fresh.fx_chains[5].reverb_model,
+            crate::fx::ReverbModel::Cathedral
+        );
     }
 
     #[test]

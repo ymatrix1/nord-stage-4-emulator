@@ -32,3 +32,19 @@ def test_the_queue_merges_deltas_and_wraps_its_ring() -> None:
     assert ev.queue_depth(7, 8) == 1 and ev.queue_depth(8, 8) == 0
     assert ev.ring_slot(256, 0xFF) == 0 and ev.ring_slot(257, 0xFF) == 1
     assert ev.EVENT_BYTES == 64
+
+
+def test_the_key_id_table_names_the_undo_dialog_and_the_two_popups() -> None:
+    assert ev.KEY_IDS["undo"] == (21, 1)
+    assert ev.KEY_IDS["master_clock"] == (16, 0) and ev.KEY_IDS["transpose"] == (17, 0)
+    assert ev.KEY_IDS["program2"][0] == ev.KEY_IDS["program1"][0] + 1
+
+
+def test_patch_key_entry_rewrites_only_the_matching_key_event() -> None:
+    mem = {0: ev.TAG_KEY, 4: 0, 8: 146, 12: 1}
+    assert ev.patch_key_entry(mem.__getitem__, mem.__setitem__, 0, 146, 21, 1)
+    assert (mem[4], mem[8]) == (1, 21)
+    assert not ev.patch_key_entry(mem.__getitem__, mem.__setitem__, 0, 146, 5, 0)
+    other = {0: ev.TAG_ENCODER, 4: 0, 8: 146, 12: 1}
+    assert not ev.patch_key_entry(other.__getitem__, other.__setitem__, 0, 146, 21, 1)
+    assert other[8] == 146

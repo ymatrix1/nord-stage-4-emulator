@@ -12,8 +12,9 @@
 //! can write the new layout.
 
 use super::catalog::display_name;
-use super::model::MenuId;
 use super::oled::OledText;
+use super::oled_icons::ICON_LIST;
+use super::oled_lists::{entry_text, window_start, LIST_ROWS};
 use super::store::{ProgLoc, UserLibrary, UserProgram, TOTAL};
 use crate::audio::AudioCommand;
 use crate::panel::ui_state::ProgramUi;
@@ -234,32 +235,46 @@ fn label(op: OrganizeOp) -> &'static str {
     }
 }
 
-/// OLED text of the Program Organize page.
+/// OLED text of the Program Organize page: the program list from the cursor, the lit row first.
+///
+/// VERIFIED layout (ARM frame, research note s9 / s16.5): list icon and `Program` in the bar with
+/// `Organize` right-aligned, four rows `A:12 <name>` (10 px pitch), the selected row lit, soft
+/// buttons `Swap` `Move` `Ok` `Undo`. ASSUMED: the pending Swap / Move is shown by lighting its
+/// soft button (the source is the one the frame never shows), and a message replaces the last row.
 pub fn compose(ui: &ProgramUi) -> OledText {
     let cursor = ui.organize_cursor();
-    let name = ui
-        .library
-        .name_at(cursor)
-        .unwrap_or_else(|| "(empty)".to_string());
-    let action = match ui.organize.pending {
-        None => "Choose Swap or Move".to_string(),
-        Some((OrganizeOp::Swap, src)) => format!("Swap {} with {}", src.label(), cursor.label()),
-        Some((OrganizeOp::Move, src)) => format!("Move {} to {}", src.label(), cursor.label()),
-    };
     let page = ui.menu.page();
+    let total = usize::from(TOTAL);
+    let (start, sel) = window_start(total, usize::from(cursor.index()), 0);
+    let mut rows: Vec<String> = (start..total.min(start + LIST_ROWS))
+        .map(|i| {
+            let loc = ProgLoc::from_index(i as u16);
+            entry_text(loc, &ui.library.name_at(loc).unwrap_or_default())
+        })
+        .collect();
+    let sub = match &ui.message {
+        Some((msg, _)) => {
+            rows[LIST_ROWS - 1] = msg.clone();
+            msg.clone()
+        }
+        None => format!(
+            "{}/{} {}",
+            ui.menu.page_index() + 1,
+            ui.menu.page_count(),
+            page.title
+        ),
+    };
     OledText {
-        big: MenuId::Organize.title().into(),
-        sub: match &ui.message {
-            Some((msg, _)) => msg.clone(),
-            None => format!(
-                "{}/{} {}",
-                ui.menu.page_index() + 1,
-                ui.menu.page_count(),
-                page.title
-            ),
-        },
-        rows: vec![format!(">{}  {name}", cursor.label()), format!(" {action}")],
+        big: format!("{ICON_LIST}Program"),
+        bar: Some("Organize".into()),
+        sub,
+        rows,
+        sel: Some(sel),
         soft: ["Swap", "Move", "Ok", "Undo"],
+        soft_on: ui
+            .organize
+            .pending
+            .map(|(op, _)| usize::from(op != OrganizeOp::Swap)),
         ..Default::default()
     }
 }
@@ -267,7 +282,7 @@ pub fn compose(ui: &ProgramUi) -> OledText {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::panel::bay_program::model::Screen;
+    use crate::panel::bay_program::model::{MenuId, Screen};
     use nord_core::engine::Stage4Engine;
 
     fn prog(name: &str) -> UserProgram {
@@ -309,7 +324,11 @@ mod tests {
         assert!(u.on_organize_page() && u.screen == Screen::Menu(MenuId::Organize));
         u.organize_soft(1);
         goto(&mut u, "A:13");
-        assert!(compose(&u).rows[1].contains("Swap A:11 with A:13"));
+        assert_eq!(
+            compose(&u).soft_on,
+            Some(0),
+            "the picked Move/Swap button is lit"
+        );
         u.organize_soft(3);
         assert_eq!(u.message.as_ref().unwrap().0, "Swapped A:11 <> A:13");
         let want = [Some("Three"), Some("Two"), Some("One")];
@@ -425,12 +444,12 @@ mod tests {
         let mut u = ui();
         goto(&mut u, "A:12");
         let t = compose(&u);
-        assert_eq!(t.big, "Program Organize");
+        assert_eq!(t.bar.as_deref(), Some("Organize"));
+        assert!(t.big.ends_with("Program"));
         assert_eq!(t.sub, "1/2 Program Organize");
-        assert_eq!(t.rows[0], ">A:12  Two");
-        assert_eq!(t.rows[1], " Choose Swap or Move");
+        assert_eq!((t.rows[0].as_str(), t.sel), ("A:12 Two", Some(0)));
         goto(&mut u, "H:88");
-        assert!(compose(&u).rows[0].ends_with("(empty)"));
+        assert!(compose(&u).rows[0].ends_with("<empty>"));
         u.menu.step_page(1);
         assert!(!u.on_organize_page());
         u.organize.reset();

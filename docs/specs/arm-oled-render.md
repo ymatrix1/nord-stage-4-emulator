@@ -1,6 +1,6 @@
 # ARM OLED render (local research tooling)
 
-Status: v1.4 (2026-11-14) · Evidence: [research/arm-oled-render](../research/arm-oled-render.md) · Beans `ns4-2gdc`, `ns4-pyqg`
+Status: v1.5 (2026-11-14) · Evidence: [research/arm-oled-render](../research/arm-oled-render.md) · Beans `ns4-2gdc`, `ns4-pyqg`
 
 Purpose: run the OS v1.66 host firmware on the ARM harness with both OLED panels, the program-memory EEPROMs and a front-panel key matrix attached, press keys and capture the pixels and the widget text it produces, so the Program / Synth OLED layout of the GUI can be compared with the real screens. Local only: the firmware, the font bitmaps and every captured frame stay under `target/` or `.reference/` (git-ignored). The repo holds code, tests with synthetic fixtures and small derived numbers.
 
@@ -13,7 +13,7 @@ Purpose: run the OS v1.66 host firmware on the ARM harness with both OLED panels
 | `tools/arm_i2c.py` | `I2cBus`: register-level I2C0 model (`ICSTR` / `ICCNT` / `ICSAR` / `ICDXR` / `ICDRR` / `ICMDR`) with four 64 KB 24xx `Eeprom` slaves at `0x50..0x53`; `install_i2c` hooks it to the `0x01C22000` window |
 | `tools/arm_keys.py` | `KeyMatrix`: idle-high key matrix (strobe `0x60000015`, ports `0x60000010` / `0x60000020`), `all_keys()` (98 bits), `ENCODER_PAIRS` / `encoder_steps` (Gray sequences for strobe `0x80`) |
 | `tools/arm_screens.py` | `Session`: boot once, save / restore the machine plus EEPROMs, `load_eeproms`, `press` keys for N ticks, `turn` an encoder, `Capture` of frames and widget strings (`TextEvent`: widget, font, upper-case flag, text); CLI `boot [--eeprom image]` / `press` / `sweep [--shift]` |
-| `tools/arm_events.py` | Event chain of the panel (encoder counter -> queue entry `{tag, source, index, delta}` -> UI task -> screen -> value widget): constants, `decode_event`, `ENCODER_PAIR_OF_ID`, `trace_turn(session, pair, detents)` and a `turn` CLI that prints the dispatched events |
+| `tools/arm_events.py` | Event chain of the panel (encoder counter -> queue entry `{tag, source, index, delta}` -> UI task -> screen -> value widget): constants, `decode_event`, `ENCODER_PAIR_OF_ID`, `KEY_IDS` (router ids: Undo 21 with flags 1, Master Clock 16, Transpose 17), `patch_key_entry` / `press_as(session, key, id, flags)` (deliver a key event under another id), `trace_turn(session, pair, detents)` and `turn` / `key` CLIs |
 | `tools/arm_store.py` | Program-store record layout (`pack_clusters`, `unpack_clusters`, `unpack_record`, `set_name`, `join_image` / `split_image`) and `store_current`: Store key twice with Memory Protect forced off, then the storage task step by hand (`flush`); CLI `store` writes a 256 KB EEPROM image for `boot --eeprom` |
 | `tools/arm_menu_edit.py` | Edits every page of the seven menus (`MENUS`, `capture_menu`): Shift + Program n, Page key, `edit` up and down, strings to JSON and settled controller RAM (`save_screen`) to PNG / ASCII under `target/` |
 | `tools/arm_synth_dials.py` | Opens the Synth waveform page and turns pairs 2 to 4 (`SYNTH_DIAL_PAIRS`, `capture_dials`) |
@@ -54,7 +54,7 @@ Purpose: run the OS v1.66 host firmware on the ARM harness with both OLED panels
 ## Known limits
 
 - The store holds the default program only (renamed in the image); other locations need the directory entry format (device 3 `0xFE98`), Store As and the name entry need the encoders; the program body (824 bytes) is not decoded (research note s13).
-- Encoder events are delivered. Menu values are edited with the Program dial once the modifier word is cleared (`arm_screens.edit`; the word keeps bit 0 after a Shift release, cause not traced). PIANO SELECT needs a piano library (its list is empty). Store As name entry (dial = character) is not driven; Undo (Shift + Solo): the dialog object exists (`0x90EFD4F0`) but its screen id and the Solo key are not found (research s16.6); Page previous is not found in the 97 matrix keys (s12.1).
+- Encoder events are delivered. Menu values are edited with the Program dial once the modifier word is cleared (`arm_screens.edit`; the word keeps bit 0 after a Shift release, cause not traced). PIANO SELECT needs a piano library (its list is empty). Undo (Shift + Solo): reached through router id 21 with the modifier word set (`arm_events.press_as`, research s17.1), `Nothing to Undo` captured, `Undo to before <name>?` not (no edit history in the harness); the scan source of Solo is not found; the modifier word bit 0 means "Shift is up" (set by the release path `0xC007B79C`, s17.3); Store As: the Program dial moves the cursor and the category focus, typing a character is not reached (s17.2); Page previous is not found in the 97 matrix keys (s12.1).
 - Display 1 only shows the Synth section pages (they need the Synth page open first); it is blank on every other screen, as on the unit.
 - Title case: settled for the screens reached (title bars upper-case through the widget flag); `UNDO`, `FILTER`, `OSC PITCH`, arp `LEFT` / `RIGHT` still open (research note s14).
 - The row texts `B3` and `Pure Saw` of the home screen are set but not in the final frame (no DSP, sound not loaded: ASSUMED).
