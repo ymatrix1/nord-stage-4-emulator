@@ -6,8 +6,8 @@
 use crate::cbin::{cutoff_hz_to_norm, SynthLayerDecoded};
 use crate::morph::MorphParameter;
 use crate::synth::{
-    ArpMode, FwStage, NotePriority, PWave, SynthLayer, SynthOscMode, VaWaveform, VibratoMode,
-    FM_RATIOS, NUM_WAVETABLES,
+    FwStage, NotePriority, PWave, SynthLayer, SynthOscMode, VaWaveform, VibratoMode, FM_RATIOS,
+    NUM_WAVETABLES,
 };
 
 /// Envelope time floor/ceiling shared by every ADR: OS v1.66 table range `0.5 ms..45 s`.
@@ -123,11 +123,7 @@ fn apply_modulation(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
     synth.vibrato_delay_sec = dec.vibrato_delay_sec;
     synth.vibrato_rate_hz = dec.vibrato_rate_hz;
     synth.vibrato_depth_cents = (dec.vibrato_amount / 10.0).clamp(0.0, 1.0) * VIBRATO_MAX_CENTS;
-    synth.arp_mode = if dec.arp_enabled {
-        ArpMode::Up
-    } else {
-        ArpMode::Off
-    };
+    crate::synth_params_arp::apply_arp_modes(synth, dec);
     synth.arp_rate_bpm = dec.arp_bpm;
     apply_pattern(synth, dec);
 }
@@ -174,7 +170,7 @@ pub fn apply_decoded_layer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::synth::{LfoDestination, LfoShape};
+    use crate::synth::{ArpMode, LfoDestination, LfoShape};
 
     fn apply(dec: &SynthLayerDecoded) -> SynthLayer {
         let mut s = SynthLayer::new(48_000.0);

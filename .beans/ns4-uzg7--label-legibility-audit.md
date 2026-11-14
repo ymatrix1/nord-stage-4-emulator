@@ -73,3 +73,25 @@ Variation lists beside the effects rockers, numbered LEDs on UNISON / DYN COMP, 
 ### Summary of Changes
 `nord-panel/src/layout/frames.rs`; `nord-gui`: `panel/frames.rs`, `panel/bay_piano_names.rs`, `widgets/scale.rs`, `panel/layout_tweaks.rs` (group nudges), `style.rs` (contrast), edits in the organ, piano, synth, effects, program bays and the keybed.
 
+
+## Round 4 (fix/panel-numerals-variations)
+
+### Context
+The real panel prints numerals around each knob, the variation names beside the Effects selectors and numbers on the Piano LED rows; without them a user cannot read a control's meaning.
+
+### Higher Goal
+Every control can be read from what is printed on it; the legibility audit stays at 0 with an empty allow-list.
+
+### Acceptance Criteria
+- [x] Numerals around every Synth, Layer Effects and Rotary DRIVE knob (0-10, -15..15, -10..10, 200..8K); none where the photos print none
+- [x] Variation lists beside the Mod 1, Mod 2, Amp, Delay and Reverb selectors with the manual names
+- [x] 1 2 3 under UNISON / DYN COMP LEDs, H M L under KB TOUCH
+- [x] Program box clear of the PAGE / BANK buttons
+- [ ] SAMPLES / ANALOG and MONO / LEGATO LED names, PROGRAM title position, Rotary title tab (not done)
+- [x] Audit 0 before, 116 first run, 0 after; allow-list empty; docs and ROADMAP B8 updated; `bay_synth/widgets.rs` split (`pots.rs`)
+
+### Out of Scope
+OLED files, golden images, the `C2 V3 C3` vibrato matrix.
+
+### Summary of Changes
+`widgets/scale.rs`, `widgets/knob.rs`, `bay_effects/{lists,ctx,ids,amp,delay,modulation,reverb}.rs`, `bay_synth/pots.rs` (split from `widgets.rs`), `bay_master/rotary.rs`, `bay_piano_select.rs`, `layout_tweaks.rs`, `nord-panel` frame pads, `legibility_tests.rs` (own-numeral exemption).

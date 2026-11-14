@@ -1,9 +1,9 @@
 # Synth arpeggiator / gate pattern presets
 
-- **Checked:** 2026-11-14 (first pass 2026-11-13: table not found; second pass: table recovered; third pass: gate lengths, dial value 0, program import, preset-edited marker, section 7)
+- **Checked:** 2026-11-14 (first pass 2026-11-13: table not found; second pass: table recovered; third pass: gate lengths, dial value 0, program import, preset-edited marker, section 7; fourth pass: record player search, rate clock, arp mode bits, tie editor, section 8)
 - **Sources:**
   - Local, never committed: `.reference/Nord Stage 4 Factory Restore RevK v1.66.ns4b` (384 `.ns4y` synth presets), `target/fw_unpacked/bank0_CODE.bin` and `bank0_SRAM.bin` (OS v1.66), `.reference/ns4decode_pkg/ns4decode_pkg/ns4decode.py` and `ns4maps.py` (third party, MIT), `.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pdf`, `.reference/DSoundman-course/*.srt`.
-  - In repo: [arm-edit-params.csv](arm-edit-params.csv), [arp-preset-table.csv](arp-preset-table.csv) (result), `tools/arm_xref.py`, `tools/arm_emu.py`, `tools/ns4_arp_patterns.py`, `tools/ns4_arp_presets.py` (tests in `tools/tests/test_ns4_arp_presets.py`), `tools/ns4_arp_gate.py` (third pass, tests in `tools/tests/test_ns4_arp_gate.py`).
+  - In repo: [arm-edit-params.csv](arm-edit-params.csv), [arp-preset-table.csv](arp-preset-table.csv) (result), `tools/arm_xref.py`, `tools/arm_emu.py`, `tools/ns4_arp_patterns.py`, `tools/ns4_arp_presets.py` (tests in `tools/tests/test_ns4_arp_presets.py`), `tools/ns4_arp_gate.py` (third pass, `clock` command in the fourth, tests in `tools/tests/test_ns4_arp_gate.py`), `tools/ns4_arp_modes.py` (fourth pass, tests in `tools/tests/test_ns4_arp_modes.py`). Local only, fourth pass: `.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pdf` (p.36 arpeggiator rate) and ns4decode `interpretArpRate` / `ns4names.ArpMode` (`.reference/ns4decode_pkg/`).
   - Web (text not copied): https://www.nordkeyboards.com/products/nord-wave-2/specifications/ ("30+ editable presets"), https://www.norduserforum.com/viewtopic.php?t=25610 (search snippet only: the Stage 4 arp pattern "cannot be edited" beyond the factory patterns), a search for the preset names (`Alien Font`, `Ringaracka`, `RWGate`, found by step 2 below) returned no page that lists them.
 - **Question:** What are the real factory arpeggiator / gate pattern presets of the Nord Stage 4 synth (the engine's 8 presets in `synth/perf.rs` were `ASSUMED`), and how does a `.ns4y` store a pattern?
 
@@ -109,3 +109,63 @@ Limits: that **one slot is half a step in time** is structural (two slots per st
 
 - Factory programs reproduce their stored pattern; the pattern dial reads 0 for them.
 - Follow-ups: locate the record player to confirm the slot duration in time; show `pattern_dial_value()` in the OLED (GUI lane); decode the arp mode bits (`+136`, 2 bits) of a program so Poly / Gate programs load in their mode; the `q`-then-played-step records (type 1) only occur in user patterns and are played as a retrigger.
+
+## 8. Fourth pass: record player search, rate clock, mode bits, tie editor
+
+### 8.1 The record player was not found (negative result)
+
+What the records are and who reads them, from the ARM code image (`tools/arm_xref.py`, a capstone scan of every function for the field offsets of the arp object, `tools/arm_emu.py`):
+
+| Finding | Evidence |
+|---|---|
+| The per-layer arp pattern objects are built by one constructor (`0xC00FD740..0xC00FD858`): 6 clock objects (`0x58` bytes, vtable `0xC02B79EC`, table `0xC054CC10`) and 6 pattern objects (`0xE0` bytes, vtable `0xC02B79FC`, table `0xC054CBD0`). Each pattern object owns **32 records of 16 bytes** (`{type, tick, pan, acc}`, type initialised to 2 = hold), `[obj+0x2C]` = count, record pointers from `[obj+0x30]`, a step grid pointer at `[obj+0x10]` and a grid density at `[obj+0x08]` (default 4). | VERIFIED: `python tools/arm_xref.py dis target/fw_unpacked/bank0_CODE.bin 0xC00FD710 0xC00FD860`. |
+| After the compiler, the pattern object only **publishes two numbers to its listeners**: the tick count `[obj+0xB4]` and an "has accent" flag `[obj+0xB8] != 0`, through the generic node update (`0xC023C984`, inlined in `0xC0242070`, listener list at `[obj+0xC0]`). The records themselves are handed to nobody. | VERIFIED by reading `0xC0242070..0xC02421C4` and `0xC02424DC`. |
+| No other function reads the record array: the literal-pool scan finds the table `0xC054CBD0` only in the Glue constructor / update code (`0xC0119940`, `0xC011A520`, `0xC011C090`, `0xC011C510`, `0xC011DF68`, `0xC01232F0`); the OLED grid drawer reads the Dur / Pan registry words, not the records. | EMPIRICAL (negative: a function that reaches the object through a pointer copied elsewhere would not show up in a literal scan). |
+
+So the slot duration in time still has no firmware proof. Two readings stay open, see 8.3 and the open question in `docs/OPEN-QUESTIONS.md`. Tags in code are unchanged (`EMPIRICAL`, "one slot = half a step").
+
+### 8.2 The rate clock (VERIFIED, replayed)
+
+The free-running arp clock is `0xC01E6368` (a periodic update over the 6 clock objects, `0xC054CC10`): it multiplies the time since its start by a rate (double, `[clock+0x38]`), wraps at `2**36`, takes the integer part as the tick and notifies its listeners (vtable word 1) when it changes. The rate is computed by the Glue update `0xC011A51C` from the rate dial value `v` (0..127) and the table `R[v]` at `0xC02BBF98 + 0x458` (128 ints):
+
+`rate per time-base unit = R[v] / 60 * 524288 / 24000`
+
+| Constant | Meaning | Evidence |
+|---|---|---|
+| `524288` = `2**19` | phase units per firmware beat | literal `0x41200000` of the update (double) |
+| `24000` | time-base units per second of the counter at `0x80001DC0` | literal `0x40D77000`; every timeout added to the counter is a multiple of 24 (`+0x960` = 100 ms, `+0x258` = 25 ms, `+0x12C0` = 200 ms) |
+| `R[0..127]` | `32, 32, 36, 40, 48 ... 2400` (duplicates sit on the "N.A." raw values of ns4decode's list; `R / 2` equals the BPM list there: 16 bpm at raw 0, 990 bpm near the end, `Fast1..5` above) | `uv run --with unicorn python tools/ns4_arp_gate.py clock target/fw_unpacked/bank0_CODE.bin` replays the update for all 128 values: **all 128 equal the formula** |
+
+The step grid of the free-running arp (`0xC02BBF98`: count 8, entry k = `k * 2**18` phase units, `[arp+8]` = 2; the triplet table is `0xC02BC1A0`; the default object has 16 entries of `2**17` with `[arp+8]` = 4) is therefore **half a firmware beat per grid point = `15 / D` seconds** at the displayed BPM `D = R / 2` (dial 0: 0.9375 s, dial 127: 12.5 ms, printed by the tool).
+
+### 8.3 What this does and does not say about the step length
+
+- The engine (`SynthLayer::step_seconds`) plays one step per `15 / D` s (16th note at `arp_rate_bpm`). That equals the firmware grid spacing **if a grid point is a step**.
+- The manual (p.36) says the rate is shown as quarter-note BPM and that "the arpeggiator plays 1/8 notes in the given tempo, which also equals one step of a pattern" (`30 / D` s). That equals **two grid points**, i.e. a grid point would be a slot (half a step): then "one slot = half a step" is right and the engine's step is twice as fast as the hardware.
+- Without the consumer of the grid (the player) the two readings cannot be told apart. Needed: the player, or a hardware recording of the arp at a known dial value. Tracked in bean ns4-rwhu together with the rate mapping: the program decoder maps the stored 7-bit rate linearly to 30..300 BPM (`ASSUMED`) while the firmware table is exponential (16..1200 BPM displayed); the table itself is now VERIFIED by the replay.
+
+### 8.4 Arp mode bits of a program (decoded)
+
+`cbin/synth_arp.rs` reads the mode fields of the Layer block (offsets in the module doc, same base as the run switch `+135` and the rate `+175`): `+136` mode (2 bits: `0 Arp`, `1 Poly`, `2 Gate`), `+139` KB sync, `+140` range (7), `+171` direction (`0 UP`, `1 DOWN`, `2 UP/DOWN`, `3 RANDOM`), `+173` zig zag, `+174` Master Clock. `python tools/ns4_arp_modes.py "<backup>.ns4b"` over the factory backup (1152 layers):
+
+| Field | Values found |
+|---|---|
+| run | 1051 off, 101 on |
+| mode | 1099 Arp, 41 Poly, 12 Gate (no value 3) |
+| direction | 1114 UP, 1 DOWN, 29 UP/DOWN, 8 RANDOM |
+| zig zag / Master Clock / KB sync / pattern on | 17 / 86 / 4 / 41 layers |
+| (run, mode) | Poly and Gate occur with run on (25, 8) and off (16, 4) |
+| range | 0 on 1099 layers, 26 distinct values, max 127 on 5 |
+
+Status: offsets EMPIRICAL (ns4decode map ids; the run switch and rate positions that share the base are already used by the decoder, and the pattern fields 4 bits further on are matched by 5 exact firmware presets, section 3); the mode and direction names come from ns4names; the range scale (octaves in thirds, Gate envelope) is ASSUMED. Engine: `synth_params_arp::apply_arp_modes` sets `arp_mode` (Poly / Gate / direction, `Off` while RUN is off), zig zag, KB sync, Master Clock sync with the subdivision `floor(9 * raw / 128)` of the nine `1/2 .. 1/32` entries (EMPIRICAL, ns4decode), range and Gate envelope. Not decoded: KB HOLD (a global bit outside the layer block).
+
+### 8.5 Tie editor in the GUI
+
+`PatternParam::Tie { step, on }` writes `SynthLayer::set_step_tie`; the panel mirror has `SynthLayerUi::step_tie` (copied from the preset in `select_preset`) and the GATE dial of ARP page 3 has one more detent after 8 eighths: the tied full step `Q` (the hardware's `E q Q .` cycle). `emit_pattern` sends the tie after the gate of every step (a rest drops it). There is no host parameter for the tie words, so the plugin editor maps it to nothing; adding `synthp_step_tie_*` ids is left for a later change.
+
+### 8.6 Implications and follow-ups
+
+- Slot / step duration: still `EMPIRICAL`; the manual and the firmware grid pull in different directions (ns4-rwhu).
+- Rate mapping of programs: replace the linear 30..300 BPM by `R[v] / 2` (ns4-rwhu).
+- OLED: show dial value 0 after a gate edit and the tie mark (ns4-xo2v, other lane).
+- Find the player: the grid consumer is a listener of the clock objects (`0xC054CC10`); the listener registration is not in the literal scan, so look for the code that appends to the clock's list at `[clock+4]`.

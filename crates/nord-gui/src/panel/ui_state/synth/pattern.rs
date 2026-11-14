@@ -11,6 +11,8 @@ use nord_core::synth::{PatternPan, PATTERN_PRESETS};
 
 /// Longest custom pattern (the engine's `PATTERN_MAX_STEPS`).
 const MAX_LEN: u8 = 16;
+/// Last detent of the GATE dial: 0..=8 eighths, then 9 = a full step tied into the next (`Q`).
+const TIE_DETENT: u8 = 9;
 
 impl SynthLayerUi {
     /// Whole octaves of the Range knob (`1..=4`).
@@ -35,6 +37,7 @@ impl SynthLayerUi {
         self.pattern_custom = false;
         self.pattern_len = pat.len;
         self.step_gate = pat.steps;
+        self.step_tie = pat.tie;
         self.step_accent = [false; 16];
         self.step_pan = pat.pan.map(|p| match p {
             PatternPan::Left => 0,
@@ -59,6 +62,11 @@ impl SynthLayerUi {
             f(p(PatternParam::Gate {
                 step: i,
                 eighths: self.step_gate[k],
+            }));
+            // After the gate: a rest (gate 0) drops the tie in the engine.
+            f(p(PatternParam::Tie {
+                step: i,
+                on: self.step_tie[k],
             }));
             f(p(PatternParam::Accent {
                 step: i,
@@ -125,18 +133,28 @@ impl SynthUi {
         l.pattern_cursor = (i32::from(l.pattern_cursor) + steps).clamp(0, max) as u8;
     }
 
-    /// Page 3 GATE dial: gate length of the cursor step in eighths.
+    /// Page 3 GATE dial: gate length of the cursor step in eighths, `0` = rest, `8` = a full
+    /// step, and one more detent past 8 = a full step tied into the next one (gate code `Q`,
+    /// the hardware's `E q Q .` cycle). Turning back down from the tie detent returns to 8.
     pub(super) fn step_gate(&mut self, steps: i32) {
         self.ensure_custom();
-        let (i, g) = (self.layer().pattern_cursor, self.layer().step_gate);
-        let v = (i32::from(g[usize::from(i)]) + steps).clamp(0, 8) as u8;
+        let i = self.layer().pattern_cursor;
+        let k = usize::from(i);
+        let detent = i32::from(self.layer().step_gate[k]) + i32::from(self.layer().step_tie[k]);
+        let next = (detent + steps).clamp(0, i32::from(TIE_DETENT));
+        let (v, tie) = (next.min(8) as u8, next == i32::from(TIE_DETENT));
         self.edit(
             Scope::Arp,
             SynthParam::Pattern(PatternParam::Gate {
                 step: i,
                 eighths: v,
             }),
-            |l| l.step_gate[usize::from(i)] = v,
+            |l| l.step_gate[k] = v,
+        );
+        self.edit(
+            Scope::Arp,
+            SynthParam::Pattern(PatternParam::Tie { step: i, on: tie }),
+            |l| l.step_tie[k] = tie,
         );
     }
 
@@ -225,7 +243,13 @@ mod tests {
         assert_eq!(s.layer().step_gate[1], want, "preset 2 step 1 plus 3");
         s.step_gate(1);
         let again = params(&mut s);
-        assert_eq!(again.len(), 1, "already custom: only the step is sent");
+        assert!(
+            !again
+                .iter()
+                .any(|p| matches!(p, SynthParam::Pattern(PatternParam::Customize(_)))),
+            "already custom: the preset is not copied again"
+        );
+        assert_eq!(again.len(), 2, "only the step's gate and tie are sent");
     }
 
     #[test]
@@ -266,6 +290,74 @@ mod tests {
         assert_eq!(ui.step_pan[2], 2);
         assert!(ui.step_accent[2]);
         assert_eq!(ui.step_gate[3], 0);
+    }
+
+    #[test]
+    fn gate_dial_has_a_tie_detent_past_a_full_step() {
+        let mut s = SynthUi::new();
+        s.layer_mut().pattern_cursor = 3;
+        s.step_gate(100);
+        let l = s.layer();
+        assert_eq!(
+            (l.step_gate[3], l.step_tie[3]),
+            (8, true),
+            "top detent is Q"
+        );
+        let p = params(&mut s);
+        assert!(p.contains(&SynthParam::Pattern(PatternParam::Gate {
+            step: 3,
+            eighths: 8
+        })));
+        assert!(p.contains(&SynthParam::Pattern(PatternParam::Tie {
+            step: 3,
+            on: true
+        })));
+        // One click down: the full step stays, the tie goes.
+        s.step_gate(-1);
+        assert_eq!((s.layer().step_gate[3], s.layer().step_tie[3]), (8, false));
+        // One click up again toggles it back on; further clicks stay on the tie detent.
+        s.step_gate(1);
+        s.step_gate(5);
+        assert_eq!((s.layer().step_gate[3], s.layer().step_tie[3]), (8, true));
+        // All the way down: a rest, no tie.
+        s.step_gate(-100);
+        assert_eq!((s.layer().step_gate[3], s.layer().step_tie[3]), (0, false));
+    }
+
+    #[test]
+    fn tie_reaches_the_engine_and_the_panel_grid_matches_it() {
+        let mut s = SynthUi::new();
+        s.choose_preset(3);
+        s.layer_mut().pattern_cursor = 1;
+        s.take_edits();
+        s.step_gate(100);
+        let l = engine_of(&mut s);
+        assert!(l.perf.pattern_custom);
+        assert!(l.perf.custom.tie[1] && l.perf.custom.gate[1] == 8);
+        assert_eq!(l.perf.custom.tie, s.layer().step_tie);
+        assert_eq!(l.perf.custom.gate, s.layer().step_gate);
+    }
+
+    #[test]
+    fn a_preset_with_ties_shows_them_and_customizing_keeps_them() {
+        let mut s = SynthUi::new();
+        // Preset 13 has Q steps (`QEEEEEQE...`); the panel mirrors them.
+        s.choose_preset(13);
+        assert_eq!(s.layer().step_tie, PATTERN_PRESETS[13].tie);
+        assert!(s.layer().step_tie[0]);
+        s.take_edits();
+        s.layer_mut().pattern_cursor = 1;
+        s.step_accent(1);
+        let l = engine_of(&mut s);
+        assert_eq!(
+            l.perf.custom.tie, PATTERN_PRESETS[13].tie,
+            "ties survive customizing"
+        );
+        // Taking the tie off step 0 reaches the engine.
+        s.layer_mut().pattern_cursor = 0;
+        s.step_gate(-1);
+        assert!(!s.layer().step_tie[0]);
+        assert_eq!(s.layer().step_gate[0], 8);
     }
 
     #[test]
@@ -322,9 +414,12 @@ mod tests {
         assert_eq!(n, 3, "Zig Zag, Range fraction and Custom(false)");
         ui.pattern_custom = true;
         ui.step_gate[7] = 6;
+        ui.step_gate[8] = 8;
+        ui.step_tie[8] = true;
         let mut l = SynthLayer::new(48_000.0);
         ui.emit_pattern(&mut |p| p.apply(&mut l));
         assert!(l.perf.pattern_custom);
         assert_eq!(l.perf.custom.gate[7], 6);
+        assert!(l.perf.custom.tie[8] && !l.perf.custom.tie[7]);
     }
 }

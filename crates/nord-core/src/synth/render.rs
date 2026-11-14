@@ -481,7 +481,12 @@ impl SynthLayer {
                 (eff_cutoff * kb_track_scale * env_scale).clamp(14.0, 0.48 * self.sample_rate);
 
             // Firmware filter family: coefficients once per voice and sample (no allocation).
-            let fw_kind = FwFilterType::from_model(self.filter_model);
+            // ASSUMED (opt-in `strip_stages`): `Ladder24` runs the modelled stage `0x12549D`
+            let fw_kind = if strip.is_some() && self.strip_stages {
+                FwFilterType::from_model_stages(self.filter_model)
+            } else {
+                FwFilterType::from_model(self.filter_model)
+            };
             let fw_co =
                 (strip.is_some() || self.filter_engine == FilterEngine::Firmware).then(|| {
                     let fc = if strip.is_some() {

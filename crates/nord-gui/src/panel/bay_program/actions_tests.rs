@@ -194,11 +194,10 @@ fn solo_pedal_tap_set_key_and_presets_report_or_act() {
     );
     u.exit();
     u.store_press();
-    u.message = None;
     u.activate("preset_library.organ", Trigger::Primary);
     assert!(
-        u.message.is_some(),
-        "preset store is reported as unsupported"
+        u.preset_store_text().is_some(),
+        "a Preset Library button during STORE picks \"Store Preset To\""
     );
 }
 
