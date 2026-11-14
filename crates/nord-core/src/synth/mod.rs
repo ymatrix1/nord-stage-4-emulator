@@ -36,6 +36,7 @@ mod fw_stages;
 mod fw_strip_cutoff;
 mod fw_sub;
 mod fw_super1;
+mod fw_super2;
 mod fw_sync;
 mod fw_sync1;
 mod fw_sync3;
@@ -107,6 +108,8 @@ mod tests_fw_ladder_strip;
 mod tests_fw_shape_golden;
 #[cfg(test)]
 mod tests_fw_stage_golden;
+#[cfg(test)]
+mod tests_fw_stage_golden10;
 #[cfg(test)]
 mod tests_fw_stage_golden2;
 #[cfg(test)]
