@@ -46,6 +46,7 @@
        {"label": "fw-filter", "flags": ["--filter-engine", "firmware"]},
        {"label": "fw-filter+fx", "flags": ["--filter-engine", "firmware", "--firmware-fx"]},
        {"label": "strip", "flags": ["--synth-chain", "strip"]},
+       {"label": "strip+p", "flags": ["--synth-chain", "strip", "--synth-p", "fitted"]},
        {"label": "routing", "flags": ["--firmware-routing"]}]},
     {"id": "fx_amp", "entry": "Program/Bank A/Tiny Transistor.ns4p", "engine": "organ Farfisa + Small II amp + reverb", "at_s": 1812, "duration_s": 25,
      "variants": [
@@ -57,5 +58,46 @@
      "variants": [
        {"label": "default", "flags": []},
        {"label": "fw-reverb", "flags": ["--firmware-reverb"]}]}
-  ]
+  ],
+  "pending_segments_note": "SPEC ONLY (not run by tools/emu_vs_hw.py, which reads only 'segments'): DSoundman course clips, other video ids. Each needs a program (.ns4p) or an edits dict before it can be rendered; see the research notes.",
+  "pending_segments": [
+    {"id": "dsm_lfo_filter_8hz", "video": "7-7-synthsection-workingwithlfos (2160p).mp4", "engine": "synth filter LFO, held G4, Rate 8.2 Hz, Mod Amt 6..10",
+     "at_s": 53.0, "duration_s": 2.0, "program": null,
+     "edits": {"synth_a.waveform": "pure square", "synth_a.lfo_dest": "filter", "synth_a.lfo_shape": "triangle (assumed)", "synth_a.lfo_rate_hz": 8.2, "synth_a.lfo_amount": 0.8, "synth_a.cutoff_hz": 2600},
+     "ag_synth": "notes=67 wf=pulse cutoff=2600 lfo_rate=8.2 lfo_amt=8 filter=lp24",
+     "metrics": ["lfo_hz", "1-3 kHz swing dB", "floor fraction"], "doc": "docs/research/dsoundman-synth-lfo.md"},
+    {"id": "dsm_lfo_filter_16hz", "video": "7-7-synthsection-workingwithlfos (2160p).mp4", "engine": "synth filter LFO, held G4, Rate 16 Hz",
+     "at_s": 48.2, "duration_s": 1.1, "program": null,
+     "edits": {"synth_a.lfo_rate_hz": 16.0},
+     "ag_synth": "notes=67 wf=pulse cutoff=2600 lfo_rate=16 lfo_amt=8 filter=lp24",
+     "metrics": ["lfo_hz"], "doc": "docs/research/dsoundman-synth-lfo.md"},
+    {"id": "dsm_layer_piano_alone", "video": "hR31DQrxfT4", "engine": "piano White Grand + Reverb Stage + EQ + Dyn Comp, no synth",
+     "at_s": 223.6, "duration_s": 9.1, "program": null,
+     "edits": {"piano_a": "White Grand", "layer_levels.piano_a": 127, "layer_levels.synth_a": 0},
+     "metrics": ["rms_dbfs", "bands"], "doc": "docs/research/dsoundman-piano-pad-layer.md"},
+    {"id": "dsm_layer_pad_alone", "video": "hR31DQrxfT4", "engine": "synth Soft Pad 1 solo (attack 690 ms, release 1.94 s)",
+     "at_s": 844.0, "duration_s": 9.8, "program": null,
+     "edits": {"synth_a.waveform": "super saw", "synth_a.amp_attack_s": 0.69, "synth_a.amp_release_s": 1.94, "layer_levels.synth_a": 127, "layer_levels.piano_a": 0},
+     "metrics": ["rms_dbfs", "bands", "pad attack", "pad release"], "doc": "docs/research/dsoundman-piano-pad-layer.md"},
+    {"id": "dsm_layer_both", "video": "hR31DQrxfT4", "engine": "piano + synth pad, both faders full",
+     "at_s": 782.4, "duration_s": 14.9, "program": null,
+     "flags": ["--firmware-routing"],
+     "edits": {"layer_levels.piano_a": 127, "layer_levels.synth_a": 127},
+     "metrics": ["rms_dbfs", "pad_minus_piano_db"], "doc": "docs/research/dsoundman-piano-pad-layer.md"},
+    {"id": "dsm_layer_both_pad_lowered", "video": "hR31DQrxfT4", "engine": "piano + synth pad, pad fader about 0.7, Cloud reverb",
+     "at_s": 1054.5, "duration_s": 22.9, "program": null,
+     "flags": ["--firmware-routing"],
+     "edits": {"layer_levels.piano_a": 127, "layer_levels.synth_a": 89},
+     "metrics": ["rms_dbfs", "pad_level_law"], "doc": "docs/research/dsoundman-piano-pad-layer.md"}
+  ],
+  "dsoundman_segments": {
+    "note": "Spec only (not run by tools/emu_vs_hw.py yet). Videos are local and git-ignored in .reference/DSoundman-course/. Analysis: docs/research/dsoundman-course-organ-piano.md; partial levels by tools/dsm_partials.py.",
+    "segments": [
+      {"id": "dsm_b3_8", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 192.3, "to_s": 193.8, "drawbars": [0,0,8,0,0,0,0,0,0], "confidence": "high"},
+      {"id": "dsm_b3_8_4", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 198.4, "to_s": 199.0, "drawbars": [0,0,8,8,0,0,0,0,0], "confidence": "low (0.6 s window, speech)"},
+      {"id": "dsm_b3_8_4_2", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 202.6, "to_s": 203.8, "drawbars": [0,0,8,8,0,8,0,0,0], "confidence": "low (speech)"},
+      {"id": "dsm_piano_soft", "video": "NVMtX0epXog", "engine": "piano White Grand, no fx", "from_s": 152, "to_s": 168, "timbre": "soft", "confidence": "low (music, mixed notes)"},
+      {"id": "dsm_piano_normal", "video": "NVMtX0epXog", "engine": "piano White Grand, no fx", "from_s": 113, "to_s": 140, "timbre": "normal", "confidence": "low (music, mixed notes)"}
+    ]
+  }
 }

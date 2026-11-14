@@ -85,7 +85,7 @@
             "air_8000_20000": 33.49
           },
           "centroid_delta_hz": 1104.8,
-          "rms_delta_db": -8.23,
+          "rms_delta_db": -0.23,
           "width_hw": 0.4797,
           "width_emu": 0.4131,
           "centroid_hw_hz": 480.8,
@@ -93,8 +93,8 @@
           "attack_hw_ms": 80.5,
           "attack_emu_ms": 74.3,
           "t60_hw_s": null,
-          "t60_emu_s": 0.67,
-          "label": "leslie_firmware_plus40dB",
+          "t60_emu_s": 0.65,
+          "label": "leslie_firmware_plus48dB",
           "score": 4.51
         }
       ]

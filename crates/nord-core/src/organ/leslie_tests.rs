@@ -20,6 +20,38 @@ fn run(o: &mut OrganLayer, n: usize) -> Vec<[f32; 2]> {
         .collect()
 }
 
+/// Local maxima of the 20 ms block envelope of the left lane over `n` samples.
+fn envelope_peaks(o: &mut OrganLayer, n: usize) -> usize {
+    let out = run(o, n);
+    let env: Vec<f32> = out
+        .chunks(960)
+        .map(|c| (c.iter().map(|f| f[0] * f[0]).sum::<f32>() / c.len() as f32).sqrt())
+        .collect();
+    let mean = env.iter().sum::<f32>() / env.len() as f32;
+    env.windows(3)
+        .filter(|w| w[1] > w[0] && w[1] >= w[2] && w[1] > mean)
+        .count()
+}
+
+#[test]
+fn the_fast_speed_words_modulate_faster_than_the_slow_ones() {
+    use super::RotarySpeed;
+    let mk = |speed, horn, drum| {
+        let mut o = OrganLayer::new(FS);
+        o.leslie_fw = Some(Box::new(FwLeslie::new()));
+        o.rotary_speed = speed;
+        o.horn_rate_hz = horn;
+        o.drum_rate_hz = drum;
+        o
+    };
+    let slow = envelope_peaks(&mut mk(RotarySpeed::Slow, 0.8, 0.67), 96_000);
+    let fast = envelope_peaks(&mut mk(RotarySpeed::Fast, 6.85, 5.7), 96_000);
+    assert!(
+        fast > 2 * slow.max(1),
+        "slow {slow} fast {fast} envelope peaks in 2 s"
+    );
+}
+
 #[test]
 fn the_option_parses_and_applies_to_both_layers() {
     let o = FirmwareOptions::from_args(&["--leslie".into(), "firmware".into()]).unwrap();
