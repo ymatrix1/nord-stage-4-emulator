@@ -19,12 +19,13 @@ event loop. The chain (all addresses VERIFIED by hooks in `Session`, research no
    `[widget + 0x44]` / `[widget + 0x48]` and calls the step method of the bound parameter
    (`vtable[6]`, `0xC00EEEB0`) with the delta.
 
-Only the dial is wired on the screens reached so far (see `ENCODER_PAIR_OF_ID`): encoder index 6
-(pair 1) is the **Program dial** (paging the menus, the preset lists and the program list `Import
-into A:11`); index 7 (pair 0) reaches the value widget of the menu pages but its step method
-returns without a change (the value container `[param + 0x34]` is empty in the harness, the
-parameter store is not populated without the DSP); the other three (13, 14, 15) are dispatched
-and found no widget on any screen reached.
+Who gets which pair (fifth pass, `docs/research/arm-oled-render.md` s16): encoder index 6
+(pair 1) is the **Program dial**; with the modifier word cleared (`arm_screens.edit`) it edits
+the value of the selected menu item, with bit 0 set it pages (menus, preset lists, the program
+list `Import into A:11`). Index 7 (pair 0) is the **PIANO SELECT** dial: the widget above steps
+the piano list whose index vector `[view + 0x34]` is empty while no piano library is loaded
+(that was the "empty value container", not a menu parameter). Indices 15, 14, 13 (pairs 2 to 4)
+are the three **Synth dials**, active on the Synth waveform page only (`arm_synth_dials.py`).
 
     uv run --with unicorn python tools/arm_events.py turn target/fw_unpacked/bank0_CODE.bin \
         target/fw_unpacked/bank0_SRAM.bin --state target/oled/state.bin --pair 1 --detents 3

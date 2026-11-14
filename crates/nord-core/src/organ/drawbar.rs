@@ -55,6 +55,16 @@ pub fn drawbar_gain_law(level: u8, law: DrawbarLaw) -> f32 {
 /// octaves; identical to the firmware key tables for all 128 x 9 entries (`FOLD_TOP = 90` is the
 /// only threshold that fits, `docs/research/organ-weights.md` section 3). Wheel 91 is never used.
 pub(super) fn foldback_tonewheel(target_midi: i32) -> usize {
+    let idx = target_midi + FOLD_BIAS;
+    if (0..FOLD_LEN as i32).contains(&idx) {
+        usize::from(FOLD_TABLE[idx as usize])
+    } else {
+        foldback_search(target_midi)
+    }
+}
+
+/// The foldback by repeated octave steps (the definition; [`FOLD_TABLE`] caches it).
+const fn foldback_search(target_midi: i32) -> usize {
     let mut m = target_midi;
     while m < 24 {
         m += 12;
@@ -62,12 +72,44 @@ pub(super) fn foldback_tonewheel(target_midi: i32) -> usize {
     while m > 24 + (NUM_TONEWHEELS as i32 - 1) {
         m -= 12;
     }
-    (m - 24).clamp(0, NUM_TONEWHEELS as i32 - 1) as usize
+    let w = m - 24;
+    if w < 0 {
+        0
+    } else if w > NUM_TONEWHEELS as i32 - 1 {
+        NUM_TONEWHEELS - 1
+    } else {
+        w as usize
+    }
 }
+
+/// Offset of the foldback lookup: covers notes `0..=127` shifted by the octave range (`+-24`) and
+/// the drawbar / percussion offsets (`-12..=36`), i.e. targets `-36..=187`.
+const FOLD_BIAS: i32 = 64;
+/// Entries of [`FOLD_TABLE`].
+const FOLD_LEN: usize = 256;
+
+/// `foldback_search(i - FOLD_BIAS)` for every table index (compile time, same function, so the
+/// lookup equals the loop for each covered target; `tests::fold_table_equals_the_loop`).
+static FOLD_TABLE: [u8; FOLD_LEN] = {
+    let mut t = [0u8; FOLD_LEN];
+    let mut i = 0;
+    while i < FOLD_LEN {
+        t[i] = foldback_search(i as i32 - FOLD_BIAS) as u8;
+        i += 1;
+    }
+    t
+};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fold_table_equals_the_loop() {
+        for m in -200..300 {
+            assert_eq!(foldback_tonewheel(m), foldback_search(m), "target {m}");
+        }
+    }
 
     #[test]
     fn foldback_ranges() {

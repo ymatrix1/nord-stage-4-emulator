@@ -122,22 +122,27 @@ Workload (`crates/nord-core/src/bench.rs`): 7 layers sounding (Scene II), 88 key
 ```bash
 cargo build --release -p nord-core
 ./target/release/ns4 bench                     # worst case, 4 outputs (--stereo: process_block)
+./target/release/ns4 bench --scenario typical  # or idle; default worst
 ./target/release/ns4 bench --blocks 1000 --breakdown
 ```
 
-| Measure | Result (several runs) | PRD budget ([PRD](PRD.md) section 5) |
-|---|---|---|
-| Worst case, mean CPU per 128-frame block | 3.6 to 4.5 ms (p50 3.4 ms, p99 7 to 21 ms) | 0.8 ms: **not met** |
-| Realtime factor, worst case | 0.59x to 0.75x (one core overloaded by 33 to 70 percent) | 1.0x minimum |
-| Typical program (Scene I, 3 layers, 10 keys, default FX) | 0.95 to 1.2 ms per block (about 2.2x to 2.8x realtime) | 0.8 ms: **not met** |
-| 7 silent layers, no FX (idle floor) | about 0.5 ms (the 91 organ tonewheels run continuously) | |
-| One layer, 88 keys held, FX off | Organ 0.9 to 1.05 ms, Piano 0.66 to 1.0 ms, Synth 0.9 to 1.2 ms (each includes the 0.5 ms idle floor) | |
-| FX racks (7 chains, all on) | about 1.0 ms on top of the layers; the cabinet voicing (4 biquads per channel) is the largest part | |
-| Plugin `process()` incl. sync of 811 parameters (Scene I, 88 keys) | 1.6 ms per block (`PLUGIN_PROCESS_MS`, `host_lifecycle` test) | |
+Measured after the TD-14 optimisations (release, one Windows 11 machine with other jobs running, so several alternating runs; "before" is the source at the start of the perf task):
 
-Verdict: **the PRD figure of 0.8 ms per block is not met** on this machine, neither in the worst case (about 4.5x to 5.5x over) nor with a typical program (about 1.2x to 1.5x over). A typical program still runs at more than twice realtime. The worst case (every key of an 88-key keybed held on all 7 layers with every FX on) overloads one core; real playing holds 10 to 20 notes. No hotspot was found that is clearly wasteful: a `lto = "fat"` / `codegen-units = 1` build gave no gain, flushing denormals changed nothing (bit-identical output hash, same time), and the per-voice cost (about 140 ns per synth voice-frame) is the filter and oscillator model. Nothing was optimised in this change; see TD-14 in [TECH_DEBT](TECH_DEBT.md).
+| Measure | Before | After | PRD budget ([PRD](PRD.md) section 5) |
+|---|---|---|---|
+| Worst case, mean CPU per 128-frame block | 3.9 to 4.4 ms (p50 3.6 to 3.7, p99 8 to 16) | 2.2 to 2.5 ms (p50 2.1, p99 4 to 10) | 0.8 ms: **not met** |
+| Realtime factor, worst case | 0.6x to 0.7x | 1.1x to 1.2x | 1.0x minimum: met |
+| Typical program (`--scenario typical`: Scene I, 3 layers, 10 keys, default FX) | 1.05 to 1.1 ms | 0.67 to 0.70 ms (about 4x realtime) | 0.8 ms: **met** |
+| 7 layers and racks running, no key held (`--scenario idle`) | 1.5 to 1.9 ms | 0.8 to 0.9 ms | at the budget |
+| One layer, 88 keys held, FX off (includes the idle floor of the other six layers) | Organ 0.9 to 1.2, Piano 0.63 to 0.77, Synth 1.0 to 1.4 ms | Organ 0.53 to 0.59, Piano 0.28, Synth 0.39 to 0.43 ms | |
+| FX racks (7 chains, all on), worst case with and without | about 1.0 ms | about 0.65 ms | |
+| Plugin `process()` incl. sync of 811 parameters (Scene I, 88 keys) | 1.6 ms per block (`PLUGIN_PROCESS_MS`, `host_lifecycle` test) | not re-measured | |
 
-The output hash that `ns4 bench` prints is a pure function of the engine state (`bench::tests::the_hash_is_deterministic_and_the_output_finite_and_audible`), so an optimisation can be checked for bit-identical output by comparing it before and after: `ns4 bench` (2000 blocks, 4 outputs) prints `0xc7ee671ec250785e` at this commit. A quick budget guard runs in `cargo test` (`bench::tests::a_block_stays_within_a_generous_budget`: 20 ms in release, 500 ms in debug); it catches order-of-magnitude regressions only.
+Verdict: the worst case (every key of an 88-key keybed held on all 7 layers with every FX on) now runs in real time with 10 to 20 percent headroom but still misses the 0.8 ms figure by about 2.8x; a typical program is within the budget; real playing holds 10 to 20 notes. p99 is not a render figure on this host: with a quiet machine p99 was 4 to 6 ms (2 to 2.5 times p50), with other jobs running 10 to 16 ms.
+
+Where the time went, from a sampling profile of `ns4 bench` (a helper that suspends the bench thread every 100 us, reads the instruction pointer, resolves it through the PDB line table and, for samples inside the C runtime, through the nearest return address on the stack and the DLL exports; `samply` needs admin rights on Windows): per-voice repetition of pure functions (firmware filter coefficients with an f64 `tan` and `atan`, the strip cutoff law), the drawbar scan (division and foldback loops for 792 terms per layer), 91 sines per sample for both organ layers although the second layer's phases equal the first's, `fmodf` for every phase wrap, and the 400-tap cabinet FIR as four dependent float chains. All were removed without changing a bit; the output hash is the gate (below). Fat LTO with one codegen unit was measured again and gave no gain. What remains (TD-14): the organ drawbar sum is one 792-term dependent float chain per layer (about 0.25 ms for two layers, the summation order is part of the output), the FX racks (about 0.65 ms), the synth voice recursion and supersaw (about 0.15 ms per layer) and `sinf` (about 0.15 ms).
+
+Output hashes (FNV-1a of every output sample bit, Windows/UCRT, 2000 blocks, 4 outputs), identical for the source before the perf task and after it: worst `0xc7ee671ec250785e`, typical `0x64043873f4f68dd0`, idle `0xf65ba453b6c42325` (all zero samples, peak 0). They are a pure function of the engine state (`bench::tests::the_hash_is_deterministic_and_the_output_finite_and_audible`), so an optimisation is checked by comparing the hash before and after; they depend on the C library's `sin`, `exp`, `tan` and `powf`, so another platform prints other values. A quick budget guard runs in `cargo test` (`bench::tests::a_block_stays_within_a_generous_budget`: 20 ms in release, 500 ms in debug); it catches order-of-magnitude regressions only.
 
 ### 7.2 Zero allocations in the audio path
 

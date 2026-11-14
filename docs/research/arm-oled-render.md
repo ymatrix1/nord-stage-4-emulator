@@ -1,6 +1,6 @@
 # Rendering the real OLED screens from the ARM emulator
 
-- **Checked:** 2026-11-14 (third pass, bean `ns4-pyqg`)
+- **Checked:** 2026-11-14 (fifth pass, bean `ns4-2gdc`; s16)
 - **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` (OS v1.66 ARM0 image, load base `0xC0000000`) and `bank0_SRAM.bin`; the ARM harness (`tools/arm_boot_full.py`, `tools/arm_steady.py`, `unicorn` 2.1); tools `tools/arm_panel.py` (run + capture) and `tools/arm_oled.py` (fonts, panel stream, controllers), `tools/arm_i2c.py` (I2C0 and the four EEPROMs), `tools/arm_keys.py` (key matrix, encoders), `tools/arm_store.py` (program store), `tools/arm_screens.py` (boot once, press keys, capture frames and widget text); `tools/arm_xref.py dis` (capstone), `tools/ns4_oled_strings.py`. Prior notes: [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (the blockers), [arm-fw-emulation](arm-fw-emulation.md), [arm-organ-messages](arm-organ-messages.md) s10.
 - **Question:** the blockers of [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (display path stubbed, font undecoded, draw primitive unknown, panel link unidentified): can the ARM emulator draw the firmware's own screens so that our OLED layout can be compared with the real one? Second pass (bean `ns4-2gdc`): what device does the program load talk to, how do panel buttons reach the firmware, what do the real menu / Synth / popup screens look like, and what is the capitalisation of the 19 case-only strings?
 
@@ -300,7 +300,7 @@ Layout measurements are in section 9; strings below are the widget texts (`arm_s
 | Paste (empty) | popup `Nothing to Paste` | `Nothing to Paste` message | unchanged |
 | Layer Init | bar `LAYER INIT` ^, `Press to initialize`, letters `AB` `A` `A`, outlined `All` `Organ` `Piano` `Synth` | same text, no bar | bar added |
 | Preset screens | bar `ORGAN PRESET` ^, `1:01` 13 px, `<None>` / row `<empty>`, soft `Num` `Cat` `Cancel` | same text, no bar | bar added |
-| Store | bar `STORE PROGRAM TO`, `A:11`, `<empty>`, `As:Unnamed` | `STORE PROGRAM TO` text screen | unchanged (open) |
+| Store | bar `STORE PROGRAM TO`, `A:11`, `<empty>`, `As:Unnamed` | `STORE PROGRAM TO` text screen | fifth pass: bar, `A:11` / `<empty>` 13 px, `As:Unnamed`; `STORE PROGRAM AS` with the lit cursor cell and `Cat: <None>` (s16.3, `oled_store`) |
 | Sound pages | label `Volume Level Offset` (ours `Program Levels`), values `+0.0 dB` | page title only | unchanged; label differs: **open** |
 | Output pages | `Bus Output Channels`, `Organ Output Channel`, `Piano Output Channel`, `Synth Output Channel` | `Output Bus Channels (Per Program)`, `Organ/Rotary Output Channel/Bus`, ... | unchanged (model labels, **open**) |
 | Pedal pages | `Control Pedal Type`, `Swell Pedal Type`, `Sustain Pedal Type`, `Rotor Pedal Type`, `Foot Switch Type` | page titles `Control Pedal` ... with items `Type` `Func` `Gain` | unchanged (**open**) |
@@ -322,6 +322,8 @@ Layout measurements are in section 9; strings below are the widget texts (`arm_s
 ## 15. Fourth pass: the encoder event chain, the Program dial, Undo and Store As (VERIFIED unless marked)
 
 Bean `ns4-2gdc`. Hooks on a restored `Session`; reproduce with `uv run --with unicorn python tools/arm_events.py turn <CODE> <SRAM> --state target/oled/state.bin --pair 1 --detents 3` (`tools/arm_events.py`).
+
+**Corrected by section 16:** the System menu `Global Transpose` row below ("pair 0 reaches the value widget ... empty container") is wrong: pair 0 is PIANO SELECT and its empty container is the piano list; menu values are edited by the Program dial once the modifier word is cleared (16.1, 16.2); pairs 2 to 4 are the Synth dials (16.4).
 
 ### 15.1 Answer to blocker 2 (section 11): the encoders are read
 
@@ -368,6 +370,95 @@ Widget strings (font index `0xC029E07C` for the title and the location, `0xC029E
 - A frame right after a turn can be a partial update (the controller model shows only the rectangle written, for example a small keyboard icon in the top left): wait about 100 ticks and read `link.frames(d)[-1]`.
 - A key sweep that replays the opening keys costs about 25 s per key; a snapshot of an already opened screen (`state_bytes` then `load_state`) did not keep the screen interactive in the Store sweep (every key silent), so scripted sweeps must replay the opening keys.
 
+## 16. Fifth pass: menu value editing, Store As, the Synth dials (VERIFIED unless marked)
+
+Bean `ns4-2gdc`. Reproduce: boot once (`arm_screens.py boot`, section 8), then `uv run --with unicorn python tools/arm_menu_edit.py <CODE> <SRAM> --state target/oled/state.bin` (all seven menus, about 25 s per page), `tools/arm_synth_dials.py` (same arguments). Frames and strings stay under `target/oled/` (git-ignored).
+
+### 16.1 Answer to blocker 1 (s15.2): the menu values were never blocked by a parameter store
+
+The step method `0xC00EEEB0` of s15.2 is **not** the menu value path, and no DSP / SPI side is needed.
+
+| Finding | Evidence |
+|---|---|
+| Pair 0 (event id 7) is the **PIANO SELECT** dial (manual p.13: Shift + PIANO SELECT opens the LIST view). The widget `0xC0137CC4` (vtable `0xC02D4D60`, ids 7 / 6 at `[w + 0x44 / 0x48]`) steps the piano list view `0x90E2FC60` (vtable `0xC02D41F4`, the only instance) | hook on `0xC0137D5C`: manager `r0 = 0x90E2FC60`, id `{0, 0, 0, 1}` |
+| That view sits on a store of 6 x 20 x 4 = 480 cells of 0x40 bytes (`0x90E2FD10`, store name `Piano`); every cell reads `01 "<empty>"` (flag byte at `+0x10`, name at `+0x11`) | memory dump after the boot |
+| Its step needs the sorted index vector `[view + 0x34]` (begin / end / capacity `0x1E0` words, built by `0xC00ED984`, **empty**). The rebuild is `0xC00ED3B4` (filter predicate `0xC00E9AD4`: a cell whose flag byte is set joins the view only if view flag bit 1 `[view + 0x30]` is set; the Piano view has `0x3C`, so no `<empty>` cell qualifies). It is reached through vtable slot 5 `0xC00ED4BC`, which the observer thunk `0xC017BC54` runs only when `[0x8000C008] == 6` (another task) | disassembly; write watch on `0x90E37CB0..CC` during the boot: only the constructor writes |
+| So the "empty value container" means "no piano library is installed". Setting flag bit 1 and calling `0xC00ED3B4(view, 0)` fills 480 entries and pair 0 then steps the list (`Grand 1/80`, `Grand 2/80` ...) | `Session` experiment (EMPIRICAL, not a tool) |
+
+### 16.2 Menu value editing works with the Program dial (blocker 1)
+
+Chain for one detent (hooks): dial event id 6 -> menu screen handler `0xC014EEC8` -> page container `0xC012DEC0` (forwards `delta` to the item at `[this + 0x200]`) -> item adjust `0xC0134FA0` -> settings adjust `0xC00DFA00` (key `{id, index}` e.g. Memory Protect `{0x34, 0}`; range `min..max` from the table at `[0xC055B0A0 + 0x1C] + id * 4 -> [+0x8CC]`; `new = clamp(current + delta)`) -> set `0xC003B590` -> the item redraws its value text.
+
+**Why it paged in s15.2:** the handler tests bit 0 of the flags word of the event (`[entry + 4]`). The flags word is the *modifier word* `0xC05846AC` (cleared at `0xC007B590`, set at `0xC007B79C`, copied into every encoder event by `0xC007B0BC`). With bit 0 set the dial moves the page / slot selection (`0xC00DE894(slot, +-1)`), with bit 0 clear it edits the value. After **Shift is released** the word reads 1 and stays 1 (`Shift` held: 0; after release: 1; `Shift + Program 1`, release both: 1; EMPIRICAL, the clearing event was not traced), so every dial test of s15 ran in the paging mode. `arm_screens.edit(session, pair, detents)` writes 0 to `0xC05846AC` before turning; the menus open with Shift + Program n as before.
+
+Edited values (strings are the widget texts, three detents up then six down; `tools/arm_menu_edit.py`, full table in `target/oled/menus/menus.json`):
+
+| Menu page | Base | Up | Down |
+|---|---|---|---|
+| System 1 Memory Protect | `On` | (at the limit) | `Off` |
+| System 2 Global Transpose | `None` | `+1 semi`, `+3 semi` | `None`, `-3 semi`, `-6 semi` |
+| System 3 Fine Tune | `440.0Hz` + tab + `  0 cent` | `440.3Hz` / ` +1 cent`, `440.8Hz` / ` +3 cent` | `439.2Hz` / ` -3 cent`, `438.2Hz` / ` -7 cent`, `437.0Hz` / `-12 cent` |
+| System 4 LED Intensity | `High` | | `Low` |
+| System 6 Version | `OS v1.66` | `HW Rev 0.0-00`, `Revision B` | `OS v1.66` |
+| Sound 1 Volume Level Offset | `Adjust with Program dial` | | `-3.0 dB`, `-5.0 dB`, `-7.5 dB` |
+| Sound 2 / 3 Piano Pedal Noise / String Res Level | ` 0 dB` | `+1 dB`, `+3 dB` | ` 0 dB`, `-3 dB`, `-6 dB` |
+| Sound 4 / 5 / 6 | `High` / `Vintage 1` / `Normal` | `Vintage 2`, `High` | `Low`, `Clean`, `Normal` |
+| Sound 7 Rotary Bass/Horn level | `50/50` | `40/60`, `30/70` | `60/40`, `70/30` |
+| Sound 8 to 11 Rotary speeds / acc. | `Normal` | `High` | `Low` |
+| Output 3 to 5 (Organ / Piano / Synth Output Channel) | `12` | `34`, `2` | `1`, `12` |
+| Pedal 4 Triple Pedal Function | `Una Corda` | `Panel Assigned`, `Layer Scene Toggle` | `Layer Scene Hold`, `Una Corda` |
+| Pedal 5 Rotor Pedal Type | `Nord SP-1` | `Normally Open`, `Normally Closed` | `Half Moon` |
+| Pedal 6 Foot Switch Type | `Single Open` | `Single Closed`, `Dual Closed` | `Dual Open` |
+| Aux KB 1 / 2 / 3 | `Off` / `--` / `Medium` | `On` / `A-`, `AB` / `Hard` | `-B` / `Soft` |
+| Output 1 Output Routing Mode | `Global` | `Per Program` | `Global` |
+| MIDI 2 Global Channel | `1` | `2`, `4` | `3`, `1`, `Off` |
+| MIDI 3 to 5 Organ / Piano / Synth Channel | `Off` | `1`, `3` | `2`, `Off` |
+| MIDI 6 Extern Channel | `13` | `14`, `(14)`, `16` | `10`, `6`, `1` (a bracketed value shares the channel with another section) |
+| MIDI 7 / 8 / 9 | `CC & NRPN` / `Send & Receive` / `In` | `Out` (page 9) | `CC` / `Receive`, `Off` |
+| Extern 1, 2 | `Off` / `Medium` | `On` / `Hard` | `Soft` |
+| Extern 3 to 7 Program Change MSB / LSB / PC, MIDI CC #1 / #2 | `--`..., `2` | `0`, `2` / `3`, `5` | `1`, `--` / `4`, `2`, `Off` |
+| Extern 8 to 13 (ModWheel .. Volume Pedal MIDI, Send On Load), MIDI overview 10 | `On` / `Off` | no change seen | no change seen (three detents up, six down; not investigated) |
+
+Steps accelerate with the turn speed (`Fine Tune`: 1, 3, 7, 12, 17, 22, 27 cents for 3 + 6 detents), so a detent count is not a step count. The values show the same layout as s12.3: 8 px label (y = 15), 13 px value (y = 26); two-part values (`440.8Hz` / `+3 cent`) are one string with a tab between them (the second part right-aligned).
+
+### 16.3 STORE PROGRAM AS / STORE PROGRAM TO (blocker 4, frames measured)
+
+With Memory Protect switched off through the menu (16.2, `Off`), **Store pressed while the modifier word has bit 0 set** (a Shift tap before it) shows `STORE PROGRAM AS` while the key is down, and a plain Store release / press shows `STORE PROGRAM TO`. The gate of s15.5 (`Store Disabled` with Memory Protect on) stands. Frames (128 x 64 grid, ink rows):
+
+| Screen | Rows |
+|---|---|
+| `STORE PROGRAM AS` | inverted bar rows 0 to 10 (title unlit, 8 px); name `Unnamed` in 13 px, glyph ink from y = 19, the **cursor cell** a lit block 9 px wide (x 0 to 8) and 16 px tall (y 17 to 32) with the glyph unlit; `Cat: <None>` in 8 px, ink rows 39 to 45, starting at x = 2; soft buttons `Abc` `Cat` `Del` `Ins` (rows 53 to 63, outlined) |
+| `STORE PROGRAM TO` | inverted bar; `A:11` 13 px (ink y = 18); `<empty>` 13 px (ink y = 33); `As:Unnamed` 8 px (ink rows 51 to 57, **no space after the colon**) |
+| `Abc` held | a character row in 8 px replaces `Cat:`: `KLMNOPQRSTUVWXYZ01234` with the selected glyph (`U`) underlined; the `Abc` button lit |
+
+The four soft buttons are the Program keys 2 to 5 here: `(0x10, 0, 3)` Abc, `(0x08, 0, 2)` Cat, `(0x04, 0, 2)` Del, `(0x10, 0, 4)` Ins (lit-pixel count per button quarter; the lit state accumulates because the release does not redraw). Name editing itself (dial = character) was not driven further. A new program shows `Cat: <None>`; our `Undefined` is the last entry of the Cat list, not the caption (`oled_store::category_caption`).
+
+### 16.4 Pairs 2 to 4 (blocker 2): the three Synth dials
+
+| Pair | Event id | Widget | Effect on the Synth waveform page (key `(0x01, 1, 6)`, display 1) |
+|---|---|---|---|
+| 2 | 15 | left dial, soft label `TYPE` | steps the oscillator type: `Wave` / `Analog` / `Sub Osc` ... |
+| 3 | 14 | middle dial, `CAT` | steps the category: `Bells/Tines`, `Pure`, `Shape` ... |
+| 4 | 13 | right dial, `WAVE` | steps the wave inside the category: `1 (6)`, `3 (7)`; the page title line shows the wave name (`Bell`, `Pure Square`, `Shape Triangle`) |
+
+On every other screen (home, menus, Organ / Piano) these events are dispatched and ignored. The page is `OSC WAVEFORM` centred (not an inverted bar), the wave name in 13 px at the top (`Shape Triangle` + `SHAPE: 0.0`), then three columns `WAVE | BELLS/TINES | 1 (6)` in 8 px above the inverted soft labels `TYPE` / `CAT` / `WAVE` (drawn as small inverted tabs, not outlined boxes), with a wave picture on the right for shape waves. Reproduce: `arm_synth_dials.py`. The other Synth pages (Filter, Envelopes, LFO, Arp) are knob pages: the knobs are ADC inputs, not encoders, and are not driven.
+
+### 16.5 The Program dial on the home screen (the list `Import into A:11`, re-measured)
+
+With the modifier word clear or set, turning the dial on the home screen opens the program list. Settled frame (controller RAM, not a flush snapshot): an **inverted title bar** rows 0 to 10 with a list icon and `Import into A:11` (corrects s15.3: the bar is inverted), four rows in 8 px at y = 13, 23, 33, 43 (10 px pitch) of the form `A:26 <empty>`, the selected row a lit block rows 22 to 31 with unlit text, soft buttons `Ok` (first) and `Cancel` (fourth) outlined in rows 53 to 63. The location steps `A:11` -> `A:12` ... -> `A:18` -> `A:21` ... (one bank of 8 per page, `A:19` / `A:20` do not exist: the digits run 1 to 8). Display 1 is blank. Not in the GUI yet (follow-up).
+
+### 16.6 Undo (blocker 3): status
+
+| Fact | Evidence |
+|---|---|
+| The dialog **object exists after the boot**: vtable `0xC02D49B4` at `0x90EFD4F0`, registered in the screen table at `ctx + 0xC0` (`ctx = 0x90DF98C0`, vtable `0xC02D3FB4`), entry 16 (`0x90DF99C0`) | heap scan (`Session`, 16M words) |
+| Screens are shown by the manager's vtable slot 13 (`0xC00DC8E8`, `this = ctx`, `r1 = &{id, 0}`, `r2 = 1`); the key router is `0xC018ACDC` (modifier flags: bit 1 -> `0xC018A808`, bit 0 -> `0xC018BB08`) | disassembly, Layer Init stack trace `0xC0185370 -> 0xC00F221C -> 0xC018AD28 -> 0xC0189D64 -> 0xC0189324` |
+| Calling slot 13 for ids `0x100` to `0x1EF` (state restored each time) shows no `Undo` text and does not reach the refresh method `0xC01327BC` | scan, 240 calls |
+| Pressing every matrix key inside Program Organize (modifier word cleared, 96 keys): the Organize soft buttons (Program keys 2 to 5 as in 16.3) do not produce text and no key reaches `0xC01327BC` / the `Nothing to Undo` literal load `0xC0132868`; keys that do respond leave Organize for their own screen | `ex14`-style sweep (EMPIRICAL) |
+| The manual (p.42) puts Undo on **Shift + Solo**; Solo is among the 42 matrix bits that never produce text, so it is probably a key of the front panel controllers (SPI), outside the matrix | ASSUMED |
+
+**Undo remains unreached.** Next step: find the id of the Undo screen (`0xC02D49B4` objects carry no id; the id literals sit in the key router tables near `0xC018BB74`: `0x14A`, `0x1B9`, `0x1C6`) and call slot 13 with it, or post a key event (`0xC053F9D0`, `{tag, flags, key id, 1}`) with the Solo key id into the UI ring (`0xC007B5A8..0xC007B5B8` is the post sequence).
+
 ## Implications
 
 - The GUI's Program home uses the measured grid (`oled_paint::grid`): title y = 3, name y = 18 at the same 13 px size, rule y = 33, rows from y = 36 every 10 px in the 8 px font; section rows now start with an icon column and use the source name (`oled_icons`, `section_rows`).
@@ -386,4 +477,6 @@ Widget strings (font index `0xC029E07C` for the title and the location, `0xC029E
 3. GUI: menu body as one item per page (8 px label, 13 px value, optional 8 px hint) with the real labels of section 14 (`Volume Level Offset`, `Bus Output Channels`, `Control Pedal Type`, ...); Program Organize list with the inverted row; Master Clock and Octave Shift popups with their graphics (beans `ns4-9nj8`, `ns4-aivy`).
 4. GUI: a proportional bitmap font with the metrics of `arm_oled.font_table` (derived metrics only, never the bitmaps).
 5. Find Undo (Shift + Solo) and the remaining Synth / Arp pages to settle `UNDO`, `LEFT` / `RIGHT` and the real `LFO` title.
-6. Fourth pass: make the parameter step (`0xC00EEEB0`) succeed (populate the value container of the System settings, or call the settings setter directly) to edit menu values; find the constructor of the Undo dialog (15.4); wire the name encoder for Store As; GUI: the program list `Import into A:11` screen and the Master Clock / Octave Shift popup graphics.
+6. Fifth pass (done): menu values edited (the Program dial with the modifier word cleared, s16.2), Store As frame measured (s16.3), the three Synth dials identified (s16.4).
+7. Undo (Shift + Solo): find the Undo screen id for the manager's slot 13 or the Solo key id for a posted key event (s16.6); drive name entry in Store As (dial = character); find what clears bit 0 of the modifier word `0xC05846AC` after a Shift release.
+8. GUI: the program list `Import into A:11` (s16.5), the Synth `OSC WAVEFORM` page with the TYPE / CAT / WAVE columns (s16.4), two-part menu values (`440.8Hz` / `+3 cent`), the Master Clock / Octave Shift popup graphics.

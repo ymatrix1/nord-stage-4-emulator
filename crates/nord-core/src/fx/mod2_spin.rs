@@ -6,6 +6,7 @@
 //! lines, cross-connected), VARIATION = mono. No firmware DSP is decoded: every number is `ASSUMED`/`EMPIRICAL`.
 
 use super::*;
+use crate::phase_wrap::wrap_pos;
 
 /// ASSUMED: speed ramp time constant 0.8 s (exponential approach to the Rate knob). Rotary speaker cabinets take
 /// roughly 1-5 s between slow and fast (https://en.wikipedia.org/wiki/Leslie_speaker); confirm by recording a
@@ -61,7 +62,7 @@ impl LayerFxChain {
         // ramped rate change
         let s = &mut self.spin;
         s.rate_hz += (self.mod2_rate_hz - s.rate_hz) * (inv_fs / SPIN_RAMP_TAU_S).min(1.0);
-        self.mod2_phase = (self.mod2_phase + TAU * s.rate_hz * inv_fs) % TAU;
+        self.mod2_phase = wrap_pos(self.mod2_phase + TAU * s.rate_hz * inv_fs, TAU);
         if amt < 1e-4 {
             return [l, r];
         }
@@ -95,7 +96,7 @@ impl LayerFxChain {
         let mono = 0.5 * (l + r);
         self.mod2_buf_l[w] = mono;
         self.mod2_write_idx = (w + 1) % MOD2_LINE_LEN;
-        self.mod2_phase = (self.mod2_phase + TAU * self.mod2_rate_hz * inv_fs) % TAU;
+        self.mod2_phase = wrap_pos(self.mod2_phase + TAU * self.mod2_rate_hz * inv_fs, TAU);
         let fs = self.sample_rate;
         let ph = self.mod2_phase;
         let wr = self.mod2_write_idx;

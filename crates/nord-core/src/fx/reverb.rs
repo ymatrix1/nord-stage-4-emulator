@@ -1,6 +1,7 @@
 //! Reverb stage (FDN + chorale) of the per-layer FX chain.
 
 use super::*;
+use crate::phase_wrap::wrap_pos;
 
 impl LayerFxChain {
     /// The firmware Spring reverb (`firmware_fx.reverb`, `kRvbType` 0 or 1): the routine mixes dry
@@ -99,7 +100,8 @@ impl LayerFxChain {
         } else {
             (0.42, 1.5)
         };
-        self.reverb_chorale_phase = (self.reverb_chorale_phase + TAU * mod_rate_hz * inv_fs) % TAU;
+        self.reverb_chorale_phase =
+            wrap_pos(self.reverb_chorale_phase + TAU * mod_rate_hz * inv_fs, TAU);
         let mod_offset = (self.reverb_chorale_phase.sin() * mod_depth).round() as isize;
         let fs_scale = (self.sample_rate / 48_000.0).clamp(0.4, 4.0);
 
