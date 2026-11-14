@@ -6,10 +6,16 @@ mod bay_effects;
 mod bay_master;
 mod bay_organ;
 mod bay_piano;
+mod bay_piano_select;
 mod bay_program;
 mod bay_synth;
 mod keybed;
 pub mod layout_px;
+#[cfg(test)]
+mod piano_click_tests;
+mod piano_logic;
+mod piano_overlay;
+mod piano_widgets;
 mod state;
 #[cfg(test)]
 mod support;
