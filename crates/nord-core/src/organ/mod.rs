@@ -5,6 +5,7 @@
 //! `vibrato_bank` (12-TET ladder, detune table, group gains), `tonewheel` (91-wheel
 //! generator), `keyclick`, `scanner`, `rotary`.
 
+mod b3_bass_keys;
 mod b3_keys;
 mod b3_tail;
 mod b3_weights;

@@ -35,6 +35,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D36](#d36-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
 | [D37](#d37-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
+| [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
 
 ---
 
@@ -397,3 +398,41 @@ cabinet taps fingerprint response test.
 - **Why:** D22 needs the end-to-end run. The two claims to flip (key without transposition; the firmware step scale) are still structural or law-only, and the join found a mismatch between the ARM word target and the table the DSP reads, so the EMPIRICAL step model stays the only calibrated one.
 - **Alternatives:** Forge a sample slot object (rejected: proves nothing about the key field); flip `--sample-kernel key` on the structural evidence (rejected, as in D36); replace the step model by `word(key) / word(60)` (rejected: not joined).
 - **Impact:** None on renders or `render_hash`; one new tool and tests.
+
+- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and response test.
+
+### D31. The multi-tap reverb (types 2..11) is opt-in; D32. FX Mod 2: CHOR uses the model to type map is ASSUMED
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (task `ns4-tc25` follow-up, D22 rule)
+- **Context:** The wrapper `0x120FDB` and packed core `0x120D8A` of the reverb types 2..11 are ported (`FwReverbMulti`) and reproduce the oracle word for word on nine types. The ARM words of each type are captured, but which UI reverb (Booth, Room, Stage, Hall, Cathedral and the variation flag) selects which `kRvbType` was never read from a program, type 6 has no capture, and no hardware clip was compared.
+- **Decision:** `FirmwareFx::reverb` also drives Booth (2, 3), Room (4, 5), Stage (7 with the variation flag), Hall (8, 9) and Cathedral (10, 11) through `FwReverbMulti`; the default stays off and the engine FDN stays the default path for every model.
+- **Why:** D22: the algorithm is VERIFIED, the mapping into it is a guess (size order of the type words), and the end-to-end comparison with the hardware is missing. Opting in costs nothing for existing renders.
+- **Alternatives:** Flip the default now (rejected: criteria 2 and 3 of D22 are not met); keep the port in the tools only (the engine could not use it).
+- **Impact:** TD-10 and OQ21 stay open for the comparison, type 6 and the organ rows. Flip the default only when a Part A program with a known type scores better than the FDN (s10 method, [fx-reverb-leslie](research/fx-reverb-leslie.md) s14).
+firmware routines behind `FirmwareFx::mod2`
+
+(PR `feat/fx-mod2-types`; evidence [fx-mod2-types](research/fx-mod2-types.md))
+renders Mod `CHOR` as an assumed `9 ms` modulated delay. firmware routines `0x122E24` (`kFx2Type` 4) `0x122F77` (5), circular stereo delay line an LFO driven fractional tap; CHOR used by 93 156 Mod programs.
+Model both routines instruction by instruction (`tools/fx_model_chorus.py`, 500/500 scenarios per per-instruction trace against oracle), them pair-register machine (`fx/fw_pe.rs`, `fw_chorus4.rs`, `fw_chorus5.rs`) wire them `fx/fw_mod2.rs` behind `FirmwareFx::mod2` (in `ALL`, `DEFAULT`).
+routines data flow VERIFIED; amount laws VERIFIED at 11 samples interpolated between them, delay DSP frames, rate hertz recording layer specific piano row, so keeps switch opt-in.
+Tune chorus by ear firmware available); wait all six Mod CHOR alone covers 60 % Mod programs).
+`ns4 render-patch --firmware-fx` `FirmwareFx::ALL` change CHOR programs (4 frame latency, firmware delay times rates); `render_hash` unchanged.
+bus convention ASSUMED.
+law verified, but path from stored word to SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, so absolute level verified end end.
+layer Flip law by (changes program level below 127 untraced path); flip bus scale (0.83 dB assumption, true receiver scale unknown up 12 dB).
+`render_hash` unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
+
+### D32. FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2`
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-mod2-types`; evidence [fx-mod2-types](research/fx-mod2-types.md))
+- **Context:** The engine renders Mod 2 `CHOR` as an assumed `9 ms` modulated delay. The firmware routines are `0x122E24` (`kFx2Type` 4) and `0x122F77` (5), a circular stereo delay line with an LFO driven fractional tap; CHOR is used by 93 of 156 Mod 2 programs.
+- **Decision:** Model both routines instruction by instruction (`tools/fx_model_chorus.py`, 500/500 scenarios per type and the per-instruction trace against the oracle), port them with a pair-register machine (`fx/fw_pe.rs`, `fw_chorus4.rs`, `fw_chorus5.rs`) and wire them through `fx/fw_mod2.rs` behind `FirmwareFx::mod2` (in `ALL`, not `DEFAULT`).
+- **Why:** The routines and the data flow are VERIFIED; the amount laws are VERIFIED at 11 samples and interpolated between them, the delay is in DSP frames, the rate in hertz has no hardware recording and the layer specific words use the piano row, so D22 keeps the switch opt-in.
+- **Alternatives:** Tune the engine chorus by ear (rejected: the firmware words are available); wait for all six Mod 2 types (rejected: CHOR alone covers 60 % of Mod 2 programs).
+- **Impact:** `ns4 render-patch --firmware-fx` and `FirmwareFx::ALL` change CHOR programs (4 frame latency, firmware delay times and rates); the default `render_hash` is unchanged.
+bus convention stays ASSUMED.
+law verified, but path from stored word to SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, absolute level verified end to end.
+Flip law (changes every program level below 127 on untraced path); flip bus scale (0.83 dB on assumption, true receiver scale unknown up to 12 dB).
+unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
