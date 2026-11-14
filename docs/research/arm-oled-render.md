@@ -1,8 +1,8 @@
 # Rendering the real OLED screens from the ARM emulator
 
 - **Checked:** 2026-11-14
-- **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` (OS v1.66 ARM0 image, load base `0xC0000000`) and `bank0_SRAM.bin`; the ARM harness (`tools/arm_boot_full.py`, `tools/arm_steady.py`, `unicorn` 2.1); new tools `tools/arm_panel.py` (run + capture) and `tools/arm_oled.py` (fonts, panel stream, encoders); `tools/arm_xref.py dis` (capstone). Prior notes: [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (the blockers), [arm-fw-emulation](arm-fw-emulation.md), [arm-organ-messages](arm-organ-messages.md) s10.
-- **Question:** the blockers of [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (display path stubbed, font undecoded, draw primitive unknown, panel link unidentified): can the ARM emulator draw the firmware's own screens so that our OLED layout can be compared with the real one?
+- **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` (OS v1.66 ARM0 image, load base `0xC0000000`) and `bank0_SRAM.bin`; the ARM harness (`tools/arm_boot_full.py`, `tools/arm_steady.py`, `unicorn` 2.1); tools `tools/arm_panel.py` (run + capture) and `tools/arm_oled.py` (fonts, panel stream, controllers), `tools/arm_i2c.py` (I2C0 and the four EEPROMs), `tools/arm_keys.py` (key matrix), `tools/arm_screens.py` (boot once, press keys, capture frames and widget text); `tools/arm_xref.py dis` (capstone), `tools/ns4_oled_strings.py`. Prior notes: [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (the blockers), [arm-fw-emulation](arm-fw-emulation.md), [arm-organ-messages](arm-organ-messages.md) s10.
+- **Question:** the blockers of [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (display path stubbed, font undecoded, draw primitive unknown, panel link unidentified): can the ARM emulator draw the firmware's own screens so that our OLED layout can be compared with the real one? Second pass (bean `ns4-2gdc`): what device does the program load talk to, how do panel buttons reach the firmware, what do the real menu / Synth / popup screens look like, and what is the capitalisation of the 19 case-only strings?
 
 Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by the command shown, **EMPIRICAL** = measured, **ASSUMED** = reading.
 
@@ -15,8 +15,10 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 | Text measure / refresh queue | `TEXT_MEASURE` `0xC001B9D0` and `EVENT_INSERT` `0xC001B67C` run **unstubbed**: once the displays exist their objects and fonts are real. Boot still reaches the main loop `0xC00A0248` (700 M instructions, 6 timer interrupts injected in one wait loop). | VERIFIED (run) |
 | Font | Decoded (section 3); a 60-line reference rasteriser reproduces the firmware's own draw routine pixel for pixel on all 18 fonts. | VERIFIED (`arm_panel.py oracle`) |
 | Frame buffer / draw | Frame buffer `[display + 0x18]`, 1024 bytes, flushed by `0xC0076924`; the controller stream is captured directly from the bus, so no draw routine has to be called by hand. | VERIFIED (run) |
-| Screens captured | The OS boot splash (`Nord Stage 4` / `Compact` / progress bar / `OS v1.66`, 114 distinct frames on display 0) and the Program home screen in its error state (`A:11` + `Write error`). Display 1 stays blank. | VERIFIED (run) |
-| Real Program screen with a program name | **Not yet**: the program load ends in `Write error` because the storage back end is not modelled (section 6). | blocker |
+| Screens captured | Boot splash and Program home (first pass) plus, second pass: Program home with section rows, the edited marker `E`, parameter popups, the Organ / Piano / Synth Preset screens, Section Edit, Morph assign, Program Organize, the AUX KB / MIDI / EXTERN settings menus and the Synth `OSC WAVEFORM` page on display 1 (section 8). | VERIFIED (`arm_screens.py`) |
+| Real Program screen with a program name | **Not yet, but the error is gone**: the program store is four 64 KB I2C EEPROMs (`0x50..0x53`); modelled blank, the firmware formats them and the screen shows `A:11` + `<empty>` instead of `Write error` (section 6). A real name needs a populated store (record format not decoded). | partial |
+| Panel input | The scan reads `0x60000010` / `0x60000020` after a strobe at `0x60000015`; a pressed key reads 0 (section 7). `arm_keys.KeyMatrix` injects presses; 98 key bits swept, Shift and Program 3 / 4 / 7 / 8 identified, four menu screens opened. | VERIFIED (run) |
+| Case-only strings | Settled where a real screen exists: title bars upper-case mixed-case firmware strings through a per-widget flag, so `ORGAN PRESET` and `AUX KB SETTINGS` are right and `AUX KB` / `PROGRAM ORGANIZE` were wrong (section 10). | VERIFIED (hook) |
 
 ## 2. The panel link
 
@@ -86,26 +88,142 @@ Each text line was identified by pixel-exact comparison with the decoded fonts (
 | | progress bar | frame (1 px outline) | rows 41..46 | grows with load |
 | | `OS v1.66` | idx 3 (8 px) | (43, 50) | 41 px |
 | Program screen after the splash | `A:11` | idx 0 (13 px) | (1, 3) | |
-| | `Write error` | idx 0 (13 px) | (1, 18) | |
+| | `Write error` (first pass; with the EEPROM model of section 6 this line is `<empty>`, same font and position) | idx 0 (13 px) | (1, 18) | |
 
 So the location title is the **13 px text font at the top-left corner**, one line every 15 px; in the error state there is no name line and no section rows yet. `Compact` is the model name string at `0xC05296FC` (`Compact`, `73`, `88`), chosen from the key bed (the 73-note Compact model here).
 
-## 6. Blockers left (exact)
+## 6. Program storage: four I2C EEPROMs (blocker 1, VERIFIED)
 
-1. **Program storage.** The Program screen shows `A:11` and the status text `Write error`, an entry of the result-code string table at `0xC02B8198` (`No action`, `Not found`, `Read error`, `Write error` = index 3, `Version error`, `Format error`, `Out of range`; strings `0xC02B7E50..0xC02B7EA0`). The operation that fails is the program load / store of the storage layer, which talks to a device the harness does not model (flash / SD / USB; the I2C EEPROMs `0x50..0x53` of [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 are boot settings). Until that device answers, no program name, section rows or soft buttons are drawn. Next step: break on the writer of the status code (find who stores `3` for that table; the consumer of `0xC02B8198` has no literal pool reference, so look through the status object of `0xC01768xx`).
-2. **No input.** The front-panel scan (`0xC024DA6C`, EMIFA CS2 `0x60000015` strobe, `0x60000010` read; each answer bit is a button / encoder state, ASSUMED) still answers `0`; menus, the Synth page and the Organ page need panel events through that read.
-3. **Display 1 stays dark.** It belongs to the second panel board; its screen is only drawn once the layer it shows has content (ASSUMED).
-4. **The widget draw path is not hand-callable.** The UI draws through widget methods (`0xC0079C18` item draw, `0xC007BBF4` text item, region compositor `0xC007EA10`); the standalone `0xC004064C` is used by the crash-text screen only (no call in a full boot). That is fine for capture (the bus carries the result) but a "render this string like screen X" call needs the widget object graph from the main loop.
+The first pass stopped at `A:11` + `Write error`. The text is not a write failing: it is the status string of a failed **read**.
+
+**The failing call (VERIFIED, breakpoints in the boot, `tools/arm_screens.py boot`).**
+
+| Step | Address | What happens |
+|---|---|---|
+| Home screen row provider | `0xC0169DE8` (vtable `0xC02C86A8` slot `+0x18`) | asks the program model for the name text and shows the message it gets back |
+| Generic "read then map the status to text" | `0xC0106024` (`0xC0106540..0xC0106864`) | calls `0xC006E47C(fs, key, buf)` with the 8-byte entry key; maps the result code through `0xC02B810C[code]` (`0, 2, 2, 3, 4, 7, 4, 4, 4, 4, 4, 7, ...`) and then `0xC02B8194[index]` (the string table of the first pass) |
+| Stat of the program entry | `0xC0077DF4` (file layer object `0x90C7F680`, vtable `0xC0446054` slot `+0x4C`; directory walk `0xC0096264` / `0xC0095C0C`, a cluster-chain layout, ASSUMED reading) | returns the entry size in `[sp + 0x60]` |
+| The error | `0xC006E4B0` `movhs r4, #0xa` | size `0xFFFFFFDC` is `>= 0x2000`, code `0xA`, `0xC02B810C[10] = 4`, `0xC02B8194[4] = 0xC02B7E74` = `Write error` |
+
+The size is garbage because the layer below returns garbage. **That layer is I2C0 (`0x01C22000`) with four EEPROMs at slave addresses `0x50..0x53`**: the boot issues 43,641 transactions with 16-bit addresses spread over `0x0000..0xFFFF` on all four slaves, with 8,192 two-byte address writes per device and 4,100 zero-length ack-polling probes (consistent with a scan of four 64 KB devices in 8-byte units, ASSUMED). The old harness left the I2C registers as plain memory, so the poll breaker fed `0xFFFFFFFF` into every read. The first pass had classified these slaves as boot settings; they hold the program memory (ASSUMED from the layer: the entry keys are program slots; 256 KB is the order of the program banks).
+
+**The model (`tools/arm_i2c.py`).** `I2cBus` implements `ICSTR`, `ICCNT`, `ICSAR`, `ICDXR`, `ICDRR`, `ICMDR` as the driver `0xC005B09C..0xC005B2B0` uses them (`ARDY` `0x04`, `RRDY` `0x08`, `XRDY` `0x10`, `NACK` `0x02`, `BB` `0x1000`; `STT` `0x2000`, `STP` `0x0800`, `MST` `0x0400`, `TRX` `0x0200`); `Eeprom` is a 64 KB device with a 16-bit address pointer, sequential read and 128-byte page writes. A zero-length write completes at once: it is the ack poll the driver waits for in `0xC005B2A0`; without it the boot spins there.
+
+**Result (VERIFIED, `uv run --with unicorn python tools/arm_screens.py boot ...`).** The boot reaches the main loop `0xC00A0248` after 800 M instructions with 90,086 I2C transactions (it scans all four devices, then formats). It writes one header to the blank device 0, bytes `79 B8 F8 99 01 00 00 00` (magic `0x99F8B879`, then `1`), and leaves every other byte `0xFF`. The Program screen shows `A:11` and **`<empty>`**; `Write error` is gone.
+
+**What is not done.** A real program name needs records in the EEPROMs (all 7 sound sections of an `.ns4p`, its name, the entry keys of the directory layer). The record format is not decoded; the `.ns4b` restore image under `.reference/` writes them on a unit. The cheap way to get it is to capture the I2C writes of a Store (Shift + Program ..., Store menu, `Screen::StoreAs`) and replay them as an initial EEPROM image: follow-up 1.
+
+## 7. Front-panel input (blocker 2, VERIFIED)
+
+**The scan.** The step routine in SRAM `0x800014E8` (ROM twin `0xC024DA6C`; installed as phase hook slot 2 by `0xC024DB74`) runs once per phase. Table `0xC05298D8` has 11 entries of 5 words `{column id, strobe, kind, mask, destination}`; the call strobes column `n`, waits, reads `word = byte[0x60000020] | halfword[0x60000010] << 16`, masks it, stores `~word` and, when it changed, posts `(column id, word)` to a queue (`0x80001D20` -> `0xC0083138` for keys, `0x80001D40` -> `0xC00829E0` for kind 1) before it writes the next strobe to `0x60000015`.
+
+| Strobe | Column id | Kind | Mask | Bits (port `0x10` / `0x20`) |
+|---:|---:|---|---|---|
+| `0x01` | 0 | key | `0x003F007F` | 6 / 7 |
+| `0x02` | 1 | key | `0x00FF007F` | 8 / 7 |
+| `0x04`, `0x08`, `0x10` | 2, 3, 4 | key | `0x00FF00FF` | 8 / 8 |
+| `0x20` | 5 | key | `0x00FF003F` | 8 / 6 |
+| `0x40` | 6 | key | `0x00FF0000` | 8 / 0 |
+| `0x80` (4 times per 11-step sweep) | 0 | kind 1 (encoders, not driven yet) | `0x000F003F` | 4 / 6 |
+
+98 key bits. The inversion `~word` means **a pressed key reads 0**: the idle level is 1 (pull-ups). The old harness answered 0 everywhere, i.e. every key held down (ASSUMED polarity from the `mvn`; confirmed by the run: with idle `0xFF` the boot is quiet and a cleared bit produces exactly one screen event). `tools/arm_keys.py` `KeyMatrix` answers `0xFF`, clears the bits of held keys while their column is strobed, and `arm_panel.install_panel_link(emu, keys)` wires it to the reads and to the strobe stores; the presence read of the board bring-up keeps its `0x80` answer.
+
+**Sweep (EMPIRICAL, `tools/arm_screens.py sweep`: every key bit alone, 40 ticks down, 40 ticks up).** Selected results; a key is `(strobe, port, bit)`:
+
+| Key | Result | Note |
+|---|---|---|
+| `(0x02, 1, 4)` | none alone | **Shift**: with Program 8 it opens `EXTERN SETTINGS 1/13`, which the manual puts at Shift + Program 8 |
+| `(0x08, 0, 2)` + Shift | `Program Organize` list | Program 3 |
+| `(0x04, 0, 2)` + Shift | `AUX KB SETTINGS 1/3` | Program 4 (manual: Shift + Program 4) |
+| `(0x08, 0, 4)` + Shift | `MIDI SETTINGS 1/10` | Program 7 (manual: Shift + Program 7) |
+| `(0x04, 0, 4)` + Shift | `EXTERN SETTINGS 1/13` | Program 8 |
+| `(0x10, 0, 3)`, `(0x10, 0, 4)`, `(0x10, 0, 5)`, `(0x08, 0, 2)`, `(0x04, 0, 2)`, `(0x08, 0, 4)`, `(0x04, 0, 4)` | location `A:12`, `A:15`, `A:16`, `A:13`, `A:14`, `A:17`, `A:18` | Program buttons; they only act after 40 to 60 ticks down (a 40 tick press shows nothing) |
+| `(0x08, 0, 0)` / `(0x08, 0, 1)` / `(0x08, 0, 5)` | `ORGAN PRESET` / `PIANO PRESET` / `SYNTH PRESET` screens | Preset buttons of the three sections |
+| `(0x08, 0, 3)` | `SECTION EDIT: Section editing affects all enabled layers` | |
+| `(0x01, 0, 3)` | Program home with the section rows | |
+| `(0x01, 1, 6)`, `(0x04, 1, 6)` | Synth `OSC WAVEFORM` page on display 1 | |
+| `(0x02, 0, 0)`, `(0x02, 0, 1)`, `(0x04, 0, 1)` | `MORPH A.TOUCH / PEDAL / WHEEL ASSIGN` | |
+| `(0x01, 0, 0)`, `(0x01, 0, 1)`, `(0x02, 0, 4)`, `(0x04, 0, 5)` | popups `Master Clock Tempo`, `Transpose`, `Octave Shift +1` / `-1` | |
+| `(0x01, 1, 0..5)`, `(0x02, 1, 0..3, 5, 6)`, `(0x04, 1, 3, 4)` | effect popups (`Delay Feedback Effect`, `Mod 2 Type`, `Amp Type`, `Reverb Type`, `Compressor`, ...) | |
+| `(0x10, 0, 0)`, `(0x20, 0, 3..6)`, `(0x10, 1, 7)` | popups `Keyboard Touch`, `Acoustics`, `Unison`, `Dynamic Compression`, `Equalizer`, `Amp/EQ` | need a longer press |
+
+Not found: Program 1, 2, 5, 6 as menu keys (Shift + the `A:12` / `A:15` / `A:16` buttons only changes the location, so the System, Sound, Output and Pedal menus were not captured), the Page and Store keys, and every encoder (`0x80` columns).
+
+## 8. Captured screens (VERIFIED: `arm_screens.py boot` then `press` / `sweep`)
+
+Frames stay in `target/` (git-ignored, firmware font pixels). What each text widget was given is logged at `0xC007E43C` (after the upper-case pass of the set-text routine `0xC007E3AC`; widget `[+0x54]` text, `[+0x2C]` font, `[+0x88]` upper-case flag), so the strings below are exactly what the OLED draws.
+
+| Screen | Strings the widgets got (font index; `^` = upper-case flag) | Reached by |
+|---|---|---|
+| Program home, empty program | `A:11` (0) / `<empty>` (0) / rows `As:`, `B3`, `!Piano not found`, `Pure Saw` (3) / drawbar digits `88AA09009` (their own font object `0xC02C3BA8`) | `(0x01, 0, 3)` |
+| Edited marker | the boxed `E` after `A:11` is drawn once the program counts as edited | seen after `(0x01, 0, 2)` and `(0x02, 1, 0)` |
+| Parameter popup | label + value, 8 px (3), both mixed case: `Delay Tempo`, `250 ms`, `Octave Shift`, `Reverb Type` / `Hall`, `Master Clock Tempo` / `120 bpm`; a right-aligned graphic (4 boxes for the clock, `+1` slider for the octave) | `(0x01, 1, 2)` ... |
+| `ORGAN PRESET` / `PIANO PRESET` / `SYNTH PRESET` | title ^3; `1:01` (5), `<None>`, soft buttons `Num` `Cat` `Cancel`, a letter column `A` `B` (`C` for Synth), row ` <empty>` | `(0x08, 0, 0 / 1 / 5)` |
+| `SECTION EDIT` | `SECTION EDIT` ^3, `Section editing affects` / `all enabled layers` (3) | `(0x08, 0, 3)` |
+| `MORPH A.TOUCH ASSIGN` | `Change param to morph` (3), `MORPH A.TOUCH ASSIGN` ^3 | `(0x02, 0, 0)` |
+| `AUX KB SETTINGS 1/3` | `AUX KB SETTINGS<TAB>1/3` ^3 (the tab right-aligns the page counter), `Aux Keyboard Enable` (3), `Off` (0, 13 px) | Shift + Program 4 |
+| `MIDI SETTINGS 1/10` | `MIDI SETTINGS<TAB>1/10` ^3, `Local Control`, `On` | Shift + Program 7 |
+| `EXTERN SETTINGS 1/13` | `EXTERN SETTINGS<TAB>1/13` ^3, `Echo Global to Extern Ch`, `Off` | Shift + Program 8 |
+| Program Organize | `Program<TAB>Organize` (4, not upper-cased), rows `A:11 <empty>` ... `A:14` (4 + 3), soft buttons `Swap` `Move` | Shift + Program 3 |
+| Synth `OSC WAVEFORM` (display 1) | `OSC WAVEFORM` (3, literal capitals), `Pure Saw` (6, 11 px), `Analog` / `Pure` / `3 (7)` (8, 5 px), the three boxed soft labels (glyph codes `@` `B` `C` of the 7 px wide-glyph font `0xC029E01C`, drawn as `TYPE` `CAT` `WAVE`) and the waveform graphic | `(0x01, 1, 6)` |
+
+The first screens after a key press can take 40 to 100 ticks to appear (debounce); `Session.press` runs 20 ticks before and the hold / after ticks around the press. **A latch detail the frames need:** after a snapshot restore a new `PanelLink` has to start from the stored latch byte `0x60000025` and from horizontal addressing, because the firmware skips latch and command stores that its shadow says are redundant; otherwise the data bytes are taken for commands and the frame is garbage (`Session.sync_panels`).
+
+## 9. Real layout against the GUI (VERIFIED measurements, 128 x 64 grid)
+
+Rows measured on the frames (bounding boxes of lit pixels; text boxes are the firmware's, glyph tops are 1 to 3 px lower).
+
+| Element | Real screen | `crates/nord-gui` before | Action |
+|---|---|---|---|
+| Home title (`A:11`) | 13 px font idx 0, text box y = 3 (glyph rows 3 to 12), x = 1 | `h * 0.19` monospace at y = 1 | fixed: y = 3 |
+| Home name line | **13 px, same font as the title**, text box y = 18 (15 px pitch) | `h * 0.16`, smaller than the title | fixed: same size, y = 18 |
+| Home rule | 1 px, full width, y = 33 | at about y = 27 | fixed: y = 33 (`oled_paint::grid`) |
+| Home rows | 8 px font idx 3, from y = 36, pitch 10, an 8 px icon column at x = 0 to 7 and text from x = 12 | pitch `1.15 * 0.12 h` = 8.8, no icons | pitch fixed: 10; icons: follow-up 3 |
+| Section row text | `B3` / `!Piano not found` / `Pure Saw`: the source name (not `Organ B3`), a warning glyph when the sound is missing; the organ row ends with the mini drawbar digits | `Organ B3` ... | follow-up 3 |
+| Popup | the lower half under the rule: label at y = 45, value at y = 55 (8 px), graphic right-aligned | none: ours replaces the whole screen (`TRANSPOSE`, ...) | follow-up 4 |
+| Title bar | inverted: rows 0 to 10 fully lit, text 8 px unlit at y = 2, page counter right-aligned with a tab | plain text line | follow-up 2 |
+| Menu body | label 8 px at y = 15, **value 13 px at y = 26** | `1/7 Control Pedal` sub line, rows | follow-up 2 |
+| Soft buttons | rows 53 to 63 (11 px), outlined boxes `Num` `Cat` `Cancel`, the active one inverted | filled rectangles in the lowest rows | follow-up 2 |
+| Synth page | bar 0 to 10 with the centred title; name 11 px at y = 14; `Analog` 5 px at y = 49 and boxed labels at y = 57 to 63 | similar structure | follow-up 2 |
+| Program Organize | bar with the list icon, `Program` left / `Organize` right; selected row inverted (rows 12 to 21), others at 23 / 33 / 43 (pitch 10); soft `Swap` `Move` at 53 | `>A:12  Two` text rows | follow-up 2 |
+
+The **fonts are proportional bitmaps** (glyph advance = width incl. the gap column, section 3), so only the heights above carry over to the monospace egui painter; widths need a proportional font with the metrics of `arm_oled.font_table` (follow-up 5).
+
+## 10. Capitalisation of the 19 case-only strings (VERIFIED where a screen exists)
+
+**The mechanism.** The text widget (`0xC007E3AC`) copies its text into a 0x40 byte buffer and, when the flag `[widget + 0x88]` is set, subtracts 0x20 from every `a..z` (`0xC007E3F4..0xC007E43C`). Title bars set the flag, so the **firmware keeps `Aux Kb Settings`, `Organ Preset` ... in mixed case in its string pool and the display shows capitals**. Popups, labels, values and list rows do not set it (mixed case). A few strings are literally capitals in the pool (`OSC WAVEFORM` `0xC02BE9B4`, `SAMPLE LIBRARY` `0xC02BE9D6`, `EXTERN SETTINGS` `0xC02BEA44`, `SYSTEM SETTINGS` `0xC02C1FEC`) and are drawn without the flag.
+
+| Ours | Firmware string | Real screen | Verdict |
+|---|---|---|---|
+| `ORGAN PRESET`, `PIANO PRESET`, `SYNTH PRESET` | `Organ Preset` ... | title bar, flag set: capitals | ours right |
+| `OSC WAVEFORM` | `OSC WAVEFORM` | capitals, flag clear | ours right |
+| `SAMPLE LIBRARY` (x2) | `  SAMPLE LIBRARY` (literal) | not captured; literal capitals | ours right (pool) |
+| `PROGRAM ORGANIZE` | `Program Organize` | `Program` left, `Organize` right, mixed case | **wrong, fixed** to `Program Organize` |
+| `AUX KB` | `Aux Kb Settings` | `AUX KB SETTINGS 1/3` | **wrong, fixed** |
+| `MIDI MENU`, `EXTERN MENU`, `PEDAL MENU`, `SYSTEM MENU`, `SOUND MENU`, `OUTPUT MENU` (not in the 19) | `... Settings` table `0xC02D3584..0xC02D35E4` | `MIDI SETTINGS 1/10`, `EXTERN SETTINGS 1/13` | **wrong, fixed** (`SYSTEM`, `SOUND`, `OUTPUT`, `PEDAL` follow the table: ASSUMED) |
+| `UNDO` / `REDO` soft labels, `TRANSPOSE`, `Layer Init`, `FILTER`, `VIBRATO`, `OSC PITCH`, `LEFT` / `RIGHT` (arp), `Reset All Settings`, `G#`, `II` | mixed case in the pool | no screen reached (Undo, Layer Init, the other Synth pages, the Arp page) or the real screen is a popup (`Transpose` mixed case, 8 px) | **open**, see section 11. By analogy the soft labels are mixed case (`Num`, `Cat`, `Cancel`, `Swap`, `Move`), not applied without a screen |
+
+## 11. Remaining blockers (exact)
+
+1. **A populated program store.** The EEPROM record format and directory keys are not decoded, so the home screen shows `<empty>` rather than a name. Capturing the I2C writes of a Store (the Store flow needs the Store key, not identified) would give it.
+2. **Keys not identified:** Program 1, 2, 5, 6 as menu keys (System, Sound, Output, Pedal menus), Page / Store / Undo / Layer Init, every encoder and dial (`0x80` kind 1 reads and the dial inputs behind SPI / ADC are not driven). The sweep presses single keys and Shift pairs; menu pages beyond page 1 need the Page keys.
+3. **Display 1** only shows the Synth page (it is blank on every other screen, as on the unit).
+4. **The widget draw path is still not hand-callable** (`0xC004064C` is used by the crash text only); every screen is reached by input, which is the faithful route.
+5. **Timing:** a tick is 200,000 instructions of virtual time (ASSUMED 1 ms); popups time out in the firmware (not measured).
 
 ## Implications
 
-- The OLED geometry of the real unit is now measurable offline: 128 x 64 per panel, fonts and metrics of section 3, text origins of section 5. Compared with `bay_program/oled_paint.rs` / `oled_home.rs` (monospace `FontId`, big title + name line + section rows): the real big title is the **13 px proportional font at x = 1, y = 3**, the next line starts at y = 18 (15 px pitch); our monospace scale should use 128 x 64 as the reference grid with a 13 px line.
-- The 8 px fonts have 11 px wide icons at `0x80..0xBF`; the `%c` of `Memory Protected` is a font icon, ASSUMED to be the 4 x 4 box of the 13 px font (section 3.1), not a padlock.
-- `Write error` is a firmware status text; our GUI has nothing to compare for it. It does show that a status message replaces the name line and section rows (the screen has only the location and the message).
-- The "titles in capitals" question (follow-up 2 of [oled-strings-vs-firmware](oled-strings-vs-firmware.md)) is still open: no menu screen was reached (blocker 2).
+- The GUI's Program home can use the measured grid (`oled_paint::grid`): title y = 3, name y = 18 at the same 13 px size, rule y = 33, rows from y = 36 every 10 px in the 8 px font. Applied.
+- The settings menus are titled `... SETTINGS` with a right-aligned page counter; ours said `... MENU`. Applied to the titles; the counter and the label / value layout are follow-up 2.
+- Titles are capitals because the title bar upper-cases the pool strings: ours were right for the Preset screens, `OSC WAVEFORM` and (pool) `SAMPLE LIBRARY`; the case-only list of [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s3 is settled for those and open for the screens listed in section 10.
+- The program memory is not a file card: it is 256 KB of I2C EEPROM behind a cluster-chain file layer. Anything that wants real program names (the Program view, Organize, Store) has to start from a captured store image.
+- The panel matrix gives a way to drive the firmware as a user would, which also lets later work check parameter popups (label / value / graphic) against ours.
 
 ## Follow-ups
 
-1. Model the program storage (blocker 1) so the load succeeds, then capture the Program screen with a name and compare rows with `oled_home.rs` (bean `ns4-2gdc`).
-2. Model the panel scan read `0x60000010` / `0x60000020` as a button matrix and inject the MENU / PAGE buttons to capture a menu page (System page 1) and the Synth / Organ screens.
-3. Decode which font index each widget class uses (callers of `0xC001C9EC` pass the font in the config struct `{x, y, w, h, font, ...}`, e.g. `0xC0154D7C` uses idx 3 with `(0, 0, 128, 8)`) to document the row structure of every screen offline, without running the firmware.
+1. Capture the I2C writes of a Store and replay them as an initial EEPROM image to get a real program name, the section rows with sources and the Organize list (blocker 1).
+2. GUI: inverted title bar with a right-aligned page counter, menu body (8 px label, 13 px value), outlined soft buttons, Organize list with the inverted row (one bean each, with the measurements of section 9).
+3. GUI: Program home section rows with an icon column, source names (`B3`, `Pure Saw`), the warning glyph and the mini drawbar digits.
+4. GUI: parameter popups in the lower half of the home screen (label, value, graphic) instead of full-screen pages (`TRANSPOSE`, tempo).
+5. GUI: a proportional bitmap font with the metrics of `arm_oled.font_table` (derived metrics only, never the bitmaps).
+6. Identify Program 1, 2, 5, 6, Page, Store, Undo and Layer Init keys and the dial inputs; capture the System, Sound, Output and Pedal menus and the other Synth pages to settle the rest of the case-only list.
