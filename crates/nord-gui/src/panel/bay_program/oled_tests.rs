@@ -97,3 +97,17 @@ fn clock_transpose_morph_numpad_and_message_text() {
     assert_eq!(name_at(&u, ProgLoc::default()), "");
     assert!(compose(&u, &sum()).plain().contains("A:11"));
 }
+
+/// VERIFIED: `Nothing to Undo` and `Nothing to Paste` occur in `bank0_CODE.bin` (OS v1.66,
+/// `0x2BFB3C`, `0x28377D`); `tools/tests/test_ns4_oled_strings.py::test_fixed_wording_is_in_the_firmware`.
+#[test]
+fn undo_and_paste_messages_use_the_firmware_wording() {
+    let mut u = ProgramUi::default();
+    u.screen = Screen::Undo;
+    u.undo_blocked = true;
+    assert_eq!(compose(&u, &sum()).sub, "Nothing to Undo");
+    u.screen = Screen::Paste;
+    u.copied = None;
+    u.soft_down(1);
+    assert_eq!(u.message.as_ref().unwrap().0, "Nothing to Paste");
+}

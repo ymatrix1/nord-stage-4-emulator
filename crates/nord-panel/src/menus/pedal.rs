@@ -6,9 +6,16 @@
 use super::{Menu, MenuItem as I, MenuPage};
 use crate::types::Binding::{Bound, UiOnly};
 
-const EXPR: &[&str] = &["Nord EP", "Roland", "Yamaha", "Korg", "Fatar"];
-const CTRL_TYPE: &[&str] = &["Nord EP", "Roland", "Yamaha", "Korg", "Fatar", "Nord SP-2"];
-const CTRL_FUNC: &[&str] = &["Control", "Ctrl + Swell"];
+const EXPR: &[&str] = &["Nord EP", "Roland EV7", "Yamaha FC7", "Korg", "Fatar SL"];
+const CTRL_TYPE: &[&str] = &[
+    "Nord EP",
+    "Roland EV7",
+    "Yamaha FC7",
+    "Korg",
+    "Fatar SL",
+    "Nord SP-2",
+];
+const CTRL_FUNC: &[&str] = &["Control", "Control+Swell"];
 const SWELL_FUNC: &[&str] = &["Swell", "Volume", "Wheel Morph"];
 const SUSTAIN_TYPE: &[&str] = &[
     "Nord SP-1",
@@ -17,14 +24,14 @@ const SUSTAIN_TYPE: &[&str] = &[
     "Normally Open",
     "Normally Closed",
 ];
-const RIGHT: &[&str] = &["Sustain", "Sus+Rotor Hold", "Sus+Rotor Toggle"];
+const RIGHT: &[&str] = &["Sustain", "Sustain+Rotor Hold", "Sustain+Rotor Toggle"];
 const LEFT: &[&str] = &[
     "Una Corda",
     "Panel Assigned",
     "Layer Scene Hold",
     "Layer Scene Toggle",
     "Pump",
-    "Mst Clk Tap",
+    "MstClock Tap",
     "Synth Vibrato",
     "Program Up",
     "Program Down",
@@ -38,7 +45,7 @@ const MIDDLE: &[&str] = &[
     "Layer Scene Hold",
     "Layer Scene Toggle",
     "Pump",
-    "Mst Clk Tap",
+    "MstClock Tap",
     "Synth Vibrato",
     "Program Up",
     "Program Down",
@@ -59,7 +66,7 @@ const FS_FUNC: &[&str] = &[
     "Layer Scene Hold",
     "Layer Scene Toggle",
     "Pump",
-    "Mst Clk Tap",
+    "MstClock Tap",
     "Synth Vibrato",
     "Program Up",
     "Program Down",
@@ -172,12 +179,12 @@ pub(super) const PAGES: &[MenuPage] = &[
         items: &[
             I::choice("pedal.6.fs_type", "Type", FS_TYPE, 0, 61, UiOnly(JACK))
                 .assumed("manual lists the choices without a default; first assumed"),
-            I::choice("pedal.6.fs_a", "SW A", FS_FUNC, 0, 61, Bound("ped_foot_func")).assumed(
+            I::choice("pedal.6.fs_a", "Sw A", FS_FUNC, 0, 61, Bound("ped_foot_func")).assumed(
                 "default not stated; ped_foot_func acts on 4 of the 10 choices (Layer Scene Hold/Toggle, Rotor Hold/Toggle)",
             ),
             I::choice(
                 "pedal.6.fs_b",
-                "SW B",
+                "Sw B",
                 FS_FUNC,
                 0,
                 61,
@@ -191,7 +198,7 @@ pub(super) const PAGES: &[MenuPage] = &[
     MenuPage {
         menu: Menu::Pedal,
         page: 7,
-        title: "Pedal Overview",
+        title: "PEDAL OVERVIEW",
         items: &[I::action(
             "pedal.7.focus",
             "Focus a pedal setting",

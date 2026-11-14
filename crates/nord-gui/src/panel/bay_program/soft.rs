@@ -114,7 +114,7 @@ impl ProgramUi {
 
     fn paste_choice(&mut self, n: u8) -> Vec<AudioCommand> {
         let Some(item) = self.copied else {
-            self.set_message("Nothing copied");
+            self.set_message("Nothing to Paste");
             return Vec::new();
         };
         self.screen = Screen::Home;
