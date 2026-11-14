@@ -4,13 +4,12 @@
 //! (`vox_keys`: four footage rows per key at the default program's level, no velocity), the
 //! vibrato / chorus setting selects the vibrato depth of the bank's pitch LFO (the bank has no
 //! delay-line scanner), and the key click and the rotary speaker stay as in the other paths.
-//! The drawbars and the percussion do not act on this source (the ARM map from the Vox footage
-//! edits to the level slots was not captured).
+//! The drawbars and the percussion do not act on this source (see `docs/research/organ-vox-start-state.md`
+//! section 4 for the state of the footage edit map).
 
 use super::types::ScannerMode;
 use super::vibrato_bank::clamp_fine_tune;
-use super::vox_bank::NOTES;
-use super::vox_keys;
+use super::vox_keys::{self, ROWS};
 use super::{OrganLayer, ToneWheelSource};
 
 /// VERIFIED: the three vibrato depth words the ARM writes to `DM(0xE20E3)` for the Vox vibrato
@@ -50,9 +49,10 @@ impl OrganLayer {
         // a key drives the rows `fold(key - 36 + SLOT_OFFSETS[slot])` of the default footage
         // slots with their level and no velocity (`vox_keys`, VERIFIED, keydown-zones.md s5)
         let shift = i32::from(self.octave_shift.clamp(-2, 2)) * 12;
-        let mut targets = [0.0f32; NOTES];
+        let levels = vox_keys::default_levels();
+        let mut targets = [0.0f32; ROWS];
         for (note, _) in self.held_notes.iter().enumerate().filter(|(_, &h)| h) {
-            vox_keys::add_key(&mut targets, note as i32 + shift);
+            vox_keys::add_key(&mut targets, note as i32 + shift, &levels);
         }
         for t in &mut targets {
             *t *= self.weight_level;
@@ -154,13 +154,14 @@ mod tests {
     }
 
     #[test]
-    fn keys_fold_by_octaves_and_the_unported_sine_rows_stay_silent() {
-        // note 120: every default slot lands on rows 84..95 (the unported sine bank)
+    fn keys_fold_by_octaves_and_the_top_keys_sound_the_sine_bank() {
+        // note 120: every default slot lands on rows 84..95, the 36-sine bank buckets
         let mut o = vox_layer();
         o.note_on(120);
-        for _ in 0..4000 {
-            assert_eq!(o.render_frame(), [0.0, 0.0]);
-        }
+        let peak = (0..24_000)
+            .map(|_| o.render_frame()[0].abs())
+            .fold(0.0f32, f32::max);
+        assert!(peak > 0.001, "{peak}");
         // note 10 folds its rows up by octaves onto note oscillators and sounds
         let mut o = vox_layer();
         o.note_on(10);

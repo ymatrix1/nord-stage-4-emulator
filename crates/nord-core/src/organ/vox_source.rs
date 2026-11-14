@@ -2,46 +2,50 @@
 //! output stage (`vox_output`).
 //!
 //! Spec: `docs/specs/organ-engine.md` section 3.1.7. The output stage `0x1229B3` forms
-//! `T = sum_k w_k Y_k` over the 84 note signals (the 12 sine buckets carry weight 0 here, see the
-//! spec) and passes it through the three sections. The weights are delivered by the ARM
+//! `T = sum_k w_k Y_k` over the 84 note signals and the 12 sine buckets (`vox_sines`) and passes it
+//! through the three sections. The weights are delivered by the ARM
 //! (`0xC0224468`, `docs/research/pno-full-pass.md` section 6); the key to row map and the per-key
 //! weights are `vox_keys` (VERIFIED against the captured key-down, `docs/research/keydown-zones.md`
 //! section 5): a held key `n` drives the rows `fold(n - 36 + I[slot])` with the default level
 //! slots and no velocity.
 
 use super::vox_bank::{VoxBank, NOTES};
+use super::vox_keys::ROWS;
 use super::vox_output::VoxOutput;
-
-/// ASSUMED: weights ramp linearly to their targets in 2 ms (the firmware weight writes are
-/// instantaneous; the ramp only avoids a click, the oscillators run freely in both).
-const WEIGHT_RAMP_SECONDS: f32 = 0.002;
+use super::vox_sines::{VoxSines, BUCKETS};
 
 /// Vox tone source state (all arrays preallocated).
+///
+/// The weights are applied the way the firmware writes them: instantly (VERIFIED: the output
+/// stage `0x1229B3` reads `DM(0x95E46 + row)` as it is, no routine smooths it), so a key-down is
+/// a step of the weight on a free-running oscillator.
 #[derive(Debug, Clone)]
 pub struct VoxSource {
     bank: VoxBank,
+    sines: VoxSines,
     output: VoxOutput,
-    weights: [f32; NOTES],
     block: [f32; NOTES],
-    ramp_step: f32,
+    buckets: [f32; BUCKETS],
+    active: bool,
     fine_cents: f32,
     pitch: f32,
 }
 
 impl VoxSource {
-    /// Source for engine rate `fs`.
+    /// Source for engine rate `fs`, oscillators at the image start phases.
     pub fn new(fs: f32) -> Self {
-        let mut s = Self {
-            bank: VoxBank::new(fs),
+        let mut bank = VoxBank::new(fs);
+        bank.load_start_state();
+        Self {
+            bank,
+            sines: VoxSines::new(fs),
             output: VoxOutput::new(fs),
-            weights: [0.0; NOTES],
             block: [0.0; NOTES],
-            ramp_step: 0.0,
+            buckets: [0.0; BUCKETS],
+            active: false,
             fine_cents: 0.0,
             pitch: 1.0,
-        };
-        s.set_sample_rate(fs);
-        s
+        }
     }
 
     /// Engine sample rate the source was set for.
@@ -52,8 +56,8 @@ impl VoxSource {
     /// Re-derives the rate dependent parts (states kept).
     pub fn set_sample_rate(&mut self, fs: f32) {
         self.bank.set_sample_rate(fs);
+        self.sines.set_sample_rate(fs);
         self.output.set_sample_rate(fs);
-        self.ramp_step = 1.0 / (WEIGHT_RAMP_SECONDS * fs.max(8000.0));
     }
 
     /// Fine Tune in cents (`DM(0xE20E0)`): pitch factor `2^(cents / 1200)`.
@@ -64,32 +68,21 @@ impl VoxSource {
         }
     }
 
-    /// One sample for the target weights of the 84 oscillators and the vibrato depth (pitch
-    /// fraction, `DM(0xE20E3)`).
-    pub fn render(&mut self, targets: &[f32; NOTES], depth: f32) -> f32 {
-        self.bank.step(depth, self.pitch, &mut self.block);
-        let mut sum = 0.0f32;
-        for ((w, &target), &y) in self.weights.iter_mut().zip(targets).zip(&self.block) {
-            let d = target - *w;
-            *w = if d.abs() <= self.ramp_step {
-                target
-            } else {
-                *w + self.ramp_step.copysign(d)
-            };
-            sum += *w * y;
-        }
-        self.output.process(sum)
+    /// One sample for the weights of the 96 block words (84 oscillators, 12 sine buckets) and the
+    /// vibrato depth (pitch fraction, `DM(0xE20E3)`).
+    pub fn render(&mut self, weights: &[f32; ROWS], depth: f32) -> f32 {
+        let two_m = self.bank.step(depth, self.pitch, &mut self.block);
+        self.sines.step(two_m, &mut self.buckets);
+        let (notes, buckets) = weights.split_at(NOTES);
+        let dot = |w: &[f32], y: &[f32]| w.iter().zip(y).map(|(a, b)| a * b).sum::<f32>();
+        self.active = weights.iter().any(|&w| w != 0.0);
+        self.output
+            .process(dot(notes, &self.block) + dot(buckets, &self.buckets))
     }
 
-    /// Current weight of oscillator `k` (test view).
-    #[cfg(test)]
-    pub(super) fn weight(&self, k: usize) -> f32 {
-        self.weights[k]
-    }
-
-    /// `true` when every weight is zero and the output sections have decayed.
+    /// `true` when the last weights were all zero and the output sections have decayed.
     pub fn is_idle(&self) -> bool {
-        self.weights.iter().all(|&w| w == 0.0) && self.output.is_idle()
+        !self.active && self.output.is_idle()
     }
 
     /// The note bank (test view).
@@ -103,60 +96,80 @@ impl VoxSource {
 mod tests {
     use super::*;
 
-    fn run(src: &mut VoxSource, targets: &[f32; NOTES], n: usize) -> Vec<f32> {
-        (0..n).map(|_| src.render(targets, 0.0)).collect()
+    fn run(src: &mut VoxSource, w: &[f32; ROWS], n: usize) -> Vec<f32> {
+        (0..n).map(|_| src.render(w, 0.0)).collect()
     }
 
     #[test]
     fn silence_without_weights() {
         let mut s = VoxSource::new(48_000.0);
-        let out = run(&mut s, &[0.0; NOTES], 5000);
+        let out = run(&mut s, &[0.0; ROWS], 5000);
         assert!(out.iter().all(|&v| v == 0.0));
         assert!(s.is_idle());
     }
 
     #[test]
-    fn weights_ramp_in_two_milliseconds_and_release_to_exact_silence() {
+    fn weights_act_instantly_and_release_to_exact_silence() {
         let mut s = VoxSource::new(48_000.0);
-        let mut t = [0.0f32; NOTES];
-        t[36] = 1.0;
-        run(&mut s, &t, 47);
-        assert!(s.weight(36) < 1.0);
-        run(&mut s, &t, 100);
-        assert_eq!(s.weight(36), 1.0);
+        let mut w = [0.0f32; ROWS];
+        w[36] = 1.0;
+        // a step on a free-running oscillator: the first sample after the step is already weighted
+        let first = s.render(&w, 0.0);
+        assert!(first != 0.0, "weights are not ramped");
+        run(&mut s, &w, 100);
         assert!(!s.is_idle());
-        let out = run(&mut s, &[0.0; NOTES], 300_000);
+        let out = run(&mut s, &[0.0; ROWS], 300_000);
         assert!(out.iter().all(|v| v.is_finite()));
         assert!(out[out.len() - 1000..].iter().all(|&v| v == 0.0));
         assert!(s.is_idle());
     }
 
     #[test]
+    fn bucket_weights_sound_the_sine_bank() {
+        let mut s = VoxSource::new(48_000.0);
+        let mut w = [0.0f32; ROWS];
+        w[NOTES] = 1.0; // bucket 0 only
+        let out = run(&mut s, &w, 4000);
+        let peak = out.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak > 1e-4 && peak < 0.5, "{peak}"); // the 4 kHz sines pass the 1.1 kHz low-passes at -50 dB
+    }
+
+    #[test]
+    fn oscillators_start_at_the_image_phases() {
+        let s = VoxSource::new(48_000.0);
+        let k = 40;
+        let want = f64::from(super::super::vox_image::NOTE_START[k] as i32) / 2_147_483_648.0;
+        assert!((f64::from(s.bank().signed_phase(k)) - want).abs() < 1e-6);
+        assert!(s.bank().signed_phase(k) != 0.0);
+    }
+
+    #[test]
     fn fine_tune_scales_the_phase_advance() {
         let mut s = VoxSource::new(48_000.0);
         s.set_fine_cents(100.0);
-        let p0 = s.bank().signed_phase(40);
-        s.render(&[0.0; NOTES], 0.0);
-        let p1 = s.bank().signed_phase(40);
-        let mut s2 = VoxSource::new(48_000.0);
-        s2.render(&[0.0; NOTES], 0.0);
-        let q1 = s2.bank().signed_phase(40);
-        assert_eq!(p0, 0.0);
-        let ratio = f64::from(p1) / f64::from(q1);
-        assert!((ratio - 2.0f64.powf(1.0 / 12.0)).abs() < 1e-4, "{ratio}");
+        let advance = |src: &mut VoxSource| {
+            let p0 = src.bank().signed_phase(40);
+            src.render(&[0.0; ROWS], 0.0);
+            let d = f64::from(src.bank().signed_phase(40)) - f64::from(p0);
+            d.rem_euclid(2.0)
+        };
+        let a = advance(&mut s);
+        let b = advance(&mut VoxSource::new(48_000.0));
+        let ratio = a / b;
+        assert!((ratio - 2.0f64.powf(1.0 / 12.0)).abs() < 1e-3, "{ratio}");
     }
 
     #[test]
     fn a_chord_has_its_three_fundamentals_at_twelve_tet_ratios() {
         let fs = 48_000.0f32;
         let mut s = VoxSource::new(fs);
-        let mut t = [0.0f32; NOTES];
+        let mut t = [0.0f32; ROWS];
         for n in [60usize, 64, 67] {
             t[n - 24] = 1.0;
         }
         let out = run(&mut s, &t, 48_000 * 2);
         let tail = &out[48_000..];
-        let base = 261.6256 * 2.0f64.powf(-9.9 / 1200.0);
+        let base = 261.6256 * 2.0f64.powf(0.0);
         let level = |hz: f64| {
             let (mut re, mut im) = (0.0, 0.0);
             let n = tail.len();
@@ -168,7 +181,7 @@ mod tests {
             }
             re.hypot(im)
         };
-        // the bank is 9.9 cents flat of 12-TET C (docs/research/pno-full-pass.md section 4)
+        // the bank is on C1 at the firmware frame rate (docs/research/dsp-frame-rate.md)
         let peak = |center: f64| {
             (-30..=30)
                 .map(|d| center * (1.0 + f64::from(d) * 0.0004))
