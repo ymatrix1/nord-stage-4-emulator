@@ -174,7 +174,10 @@ impl SynthLayer {
         if self.perf.arp_clock_sync {
             self.perf.arp_division.beats() * 60.0 / self.perf.master_bpm.clamp(30.0, 300.0)
         } else {
-            // Arp speed: 16th note division at arp_rate_bpm
+            // Arp speed: 16th note division at arp_rate_bpm.
+            // ASSUMED: one step = a 16th at the rate (`15 / D` s, the firmware's free-running grid
+            // spacing, `tools/ns4_arp_gate.py clock`). The manual (p.36) says a step is a 1/8 note
+            // (`30 / D` s); which one holds is open (OQ28, bean ns4-rwhu).
             60.0 / (self.arp_rate_bpm.max(30.0) * 4.0)
         }
     }
