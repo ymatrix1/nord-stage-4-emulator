@@ -21,14 +21,15 @@ pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
     }
 }
 
-/// Parses an `--organ-level` value: `default | legacy | firmware`.
+/// Parses an `--organ-level` value: `default | legacy | firmware | chain`.
 pub fn parse_organ_level(v: &str) -> Result<OutputLevel, String> {
     match v.to_ascii_lowercase().as_str() {
         "default" | "model" => Ok(OutputLevel::ModelDefault),
         "legacy" => Ok(OutputLevel::Legacy),
         "firmware" => Ok(OutputLevel::Firmware),
+        "chain" => Ok(OutputLevel::Chain),
         _ => Err(format!(
-            "invalid --organ-level '{v}' (expected default|legacy|firmware)"
+            "invalid --organ-level '{v}' (expected default|legacy|firmware|chain)"
         )),
     }
 }
@@ -268,6 +269,9 @@ pub struct FirmwareOptions {
     pub piano_firmware_level: bool,
     /// `--firmware-piano-bus`: `PianoLayer::firmware_bus_scale` (opt-in, ASSUMED receiver scale).
     pub piano_bus_scale: bool,
+    /// `--firmware-piano-chain`: `PianoLayer::receiver_chain_scale` (verified FX path 0.7464 per
+    /// `y / 8192`; opt-in, engine unit = DAC fraction ASSUMED).
+    pub piano_chain_scale: bool,
     /// `--firmware-piano-layer-law`: the piano layer fader follows `(v / 127)^2` (opt-in).
     pub piano_layer_law: bool,
     /// `--measured-laws`: `SynthLayer::measured_laws` (EMPIRICAL, Audible Genius clips).
@@ -324,6 +328,7 @@ impl Default for FirmwareOptions {
             firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
+            piano_chain_scale: false,
             piano_layer_law: false,
             measured_laws: false,
             synth_shape_milli: None,
@@ -367,6 +372,7 @@ impl FirmwareOptions {
             firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
+            piano_chain_scale: false,
             piano_layer_law: false,
             measured_laws: false,
             synth_shape_milli: None,
@@ -424,6 +430,7 @@ impl FirmwareOptions {
             o.piano_firmware_level = false;
         }
         o.piano_bus_scale |= has("--firmware-piano-bus");
+        o.piano_chain_scale |= has("--firmware-piano-chain");
         o.piano_layer_law |= has("--firmware-piano-layer-law");
         o.measured_laws |= has("--measured-laws");
         o.synth_stages |= has("--synth-stages");
@@ -493,6 +500,8 @@ impl FirmwareOptions {
         apply_piano_level(engine, self.piano_firmware_level);
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_a.receiver_chain_scale = self.piano_chain_scale;
+        engine.piano_b.receiver_chain_scale = self.piano_chain_scale;
         engine.piano_a.firmware_layer_law = self.piano_layer_law;
         engine.piano_b.firmware_layer_law = self.piano_layer_law;
         apply_b3_tail(engine, self.b3_tail);
@@ -564,6 +573,8 @@ impl FirmwareOptions {
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
         engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_a.receiver_chain_scale = self.piano_chain_scale;
+        engine.piano_b.receiver_chain_scale = self.piano_chain_scale;
         engine.piano_a.firmware_layer_law = self.piano_layer_law;
         engine.piano_b.firmware_layer_law = self.piano_layer_law;
         self.set_rotary(engine);
@@ -673,6 +684,9 @@ impl FirmwareOptions {
         if self.piano_bus_scale {
             parts.push("piano-bus".into());
         }
+        if self.piano_chain_scale {
+            parts.push("piano-chain".into());
+        }
         if self.piano_layer_law {
             parts.push("piano-layer-law".into());
         }
@@ -752,6 +766,14 @@ mod tests {
         assert!(!o.piano_bus_scale, "the bus scale is opt-in");
         let bus = FirmwareOptions::from_args(&args(&["--firmware-piano-bus"])).unwrap();
         assert!(bus.piano_bus_scale);
+        assert!(!o.piano_chain_scale, "the receiver chain scale is opt-in");
+        let chain = FirmwareOptions::from_args(&args(&["--firmware-piano-chain"])).unwrap();
+        assert!(chain.piano_chain_scale && chain.summary().contains("piano-chain"));
+        let mut e = Stage4Engine::new(48_000.0);
+        chain.apply_to(&mut e);
+        assert!(e.piano_a.receiver_chain_scale && e.piano_b.receiver_chain_scale);
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert!(!e.piano_a.receiver_chain_scale);
         assert!(!o.piano_layer_law, "the layer law is opt-in");
         let law = FirmwareOptions::from_args(&args(&["--firmware-piano-layer-law"])).unwrap();
         assert!(law.piano_layer_law && law.summary().contains("piano-layer-law"));
@@ -945,6 +967,8 @@ mod tests {
     fn organ_level_flag_selects_the_output_level_law() {
         let o = FirmwareOptions::from_args(&args(&["--organ-level", "firmware"])).unwrap();
         assert_eq!(o.organ_level, OutputLevel::Firmware);
+        let c = FirmwareOptions::from_args(&args(&["--organ-level", "chain"])).unwrap();
+        assert_eq!(c.organ_level, OutputLevel::Chain);
         assert_eq!(
             FirmwareOptions::default().organ_level,
             OutputLevel::ModelDefault
