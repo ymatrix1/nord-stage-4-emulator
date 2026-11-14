@@ -14,7 +14,7 @@ use super::fw_pe::{
 
 /// Runs the routine once on the machine: the loop count is the block word of the context.
 pub(super) fn run(m: &mut Pe<ChorusMem<'_>>) {
-    let mut az = [false; 2];
+    let mut az: [bool; 2];
     m.apply(&[Di(3, m.i[1])]);
     m.apply(&[Di(2, m.rd(m.a(1, -0x16)))]);
     m.apply(&[W(2, m.ldb(m.a(1, -0x18)))]);

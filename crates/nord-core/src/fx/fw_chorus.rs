@@ -123,11 +123,13 @@ impl FwChorus {
     }
 
     /// The context words including the written-back state.
+    #[cfg(test)]
     pub(super) fn words(&self) -> &[u32; CTX_N] {
         &self.ctx
     }
 
     /// The delay ring words.
+    #[cfg(test)]
     pub(super) fn ring(&self) -> &[u32; RING_N] {
         &self.ring
     }
@@ -229,7 +231,7 @@ mod tests {
     #[test]
     fn the_golden_vectors_are_not_silent() {
         assert!(g::CH4_FRAMES_IN != g::CH4_FRAMES_OUT && g::CH5_FRAMES_IN != g::CH5_FRAMES_OUT);
-        assert!(g::CH4_CTX_IN != g::CH4_CTX_OUT && !g::CH5_RING_DIFF.is_empty());
+        assert!(g::CH4_CTX_IN != g::CH4_CTX_OUT && g::CH5_RING_DIFF.len() > 1);
     }
 
     #[test]

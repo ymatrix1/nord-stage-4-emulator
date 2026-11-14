@@ -40,6 +40,7 @@ mod fw_leslie_main_e;
 mod fw_leslie_ops;
 pub mod fw_map;
 mod fw_mod1;
+mod fw_mod2;
 mod fw_params;
 mod fw_pe;
 mod fw_reverb;
@@ -98,6 +99,8 @@ mod tests_fw_leslie_golden_data;
 mod tests_fw_map;
 #[cfg(test)]
 mod tests_fw_mod1_chain;
+#[cfg(test)]
+mod tests_fw_mod2_chain;
 #[cfg(test)]
 mod tests_fw_reverb_chain;
 #[cfg(test)]
@@ -246,7 +249,13 @@ pub struct LayerFxChain {
     /// Raw `kFx1Type` (`0..=11`) of the program; the firmware Mod 1 runs for 0..=3 only (the
     /// engine's `Mod1Type` folds the Pump types 10, 11 into `Tremolo`). `None`: engine path.
     pub mod1_type_raw: Option<u8>,
+    /// 7 bit `kFx2RateClkDiv` value (`0..=127`) of the program; read only with `firmware_fx.mod2`.
+    pub mod2_rate_raw: Option<u8>,
+    /// Raw `kFx2Type` (`0..=11`) of the program; the firmware Mod 2 runs for 4 and 5 (`CHOR`).
+    pub mod2_type_raw: Option<u8>,
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
+    /// The firmware chorus (`firmware_fx.mod2`), boxed: the ring is 4 KB.
+    fw_mod2: Option<Box<fw_mod2::FwMod2Stage>>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
     /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
@@ -352,7 +361,10 @@ impl LayerFxChain {
             delay_rate_raw: None,
             mod1_rate_raw: None,
             mod1_type_raw: None,
+            mod2_rate_raw: None,
+            mod2_type_raw: None,
             fw_mod1: None,
+            fw_mod2: None,
             fw_comp: None,
             fw_amp: None,
             fw_reverb: None,
