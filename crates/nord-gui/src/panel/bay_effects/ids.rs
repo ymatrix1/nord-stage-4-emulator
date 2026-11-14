@@ -5,7 +5,7 @@
 //! legend under the base control is their widget; three direct controls the layout puts into one
 //! rectangle (`amp.filter`, `amp.to_rotary`, `amp.res`) get a sub-rectangle next to it.
 
-use super::ctx::{CAPTION_DROP, CAPTION_LINE};
+use super::ctx::{caption_drop, CAPTION_LINE};
 use crate::panel::layout_px::rect_or_empty;
 use crate::panel::ui_state::fx::ChainUi;
 use egui::{pos2, vec2, Pos2, Rect};
@@ -85,13 +85,18 @@ const LEGENDS: [(&str, &str, usize); 15] = [
     ("reverb.variation", "reverb.type", 0),
 ];
 
+/// Offset of the RES trimmer from the FREQ knob column centre (px, right).
+pub(super) const RES_DX: f32 = 6.0;
+/// Distance from the bottom of the FREQ knob to the centre of the trimmer and the FREQ / RES names.
+pub(super) const RES_DROP: f32 = 12.5;
+
 /// Where control `id` is drawn, in screen pixels (`origin` is the panel's top-left corner).
 pub(super) fn draw_rect(id: &str, origin: Pos2) -> Rect {
     if let Some(&(_, base, line)) = LEGENDS.iter().find(|(l, _, _)| *l == id) {
         let b = rect_or_empty(base, origin);
         let c = pos2(
             b.center().x,
-            b.bottom() + CAPTION_DROP + CAPTION_LINE * line as f32,
+            b.bottom() + caption_drop(base) + CAPTION_LINE * line as f32,
         );
         return Rect::from_center_size(c, vec2(b.width().max(26.0), 7.0));
     }
@@ -100,18 +105,20 @@ pub(super) fn draw_rect(id: &str, origin: Pos2) -> Rect {
         // (layout `SHARED`); the two extra buttons sit above it, clear of the LED row.
         "amp.filter" | "amp.to_rotary" => {
             let m = rect_or_empty("amp.model", origin);
-            let half = m.width() * 0.5;
-            let x = if id == "amp.filter" {
-                m.left()
+            let y = if id == "amp.to_rotary" {
+                m.top() + 1.0
             } else {
-                m.left() + half
+                m.top() + 13.0
             };
-            Rect::from_min_size(pos2(x, m.top() - 15.0), vec2(half - 1.0, 7.0))
+            Rect::from_min_size(pos2(m.right() + 4.0, y), vec2(19.0, 7.0))
         }
-        // RES is printed under the FREQ knob.
+        // RES is a small trimmer printed in the open gap under the FREQ knob, right of its name.
         "amp.res" => {
             let f = rect_or_empty("amp.mid_freq", origin);
-            Rect::from_center_size(pos2(f.center().x, f.bottom() + 8.0), vec2(10.0, 10.0))
+            Rect::from_center_size(
+                pos2(f.center().x + RES_DX, f.bottom() + RES_DROP),
+                vec2(8.0, 8.0),
+            )
         }
         _ => rect_or_empty(id, origin),
     }

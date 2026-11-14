@@ -11,6 +11,7 @@ mod ctx;
 mod delay;
 mod focus;
 mod ids;
+mod lists;
 mod modulation;
 mod reverb;
 #[cfg(test)]

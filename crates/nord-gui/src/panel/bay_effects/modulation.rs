@@ -96,7 +96,9 @@ fn unit(f: &mut Fx, st: &mut Stage4PanelState, slot: usize, s: &Spec) {
             .enumerate()
             .map(|(i, (name, missing))| (*name, *v.on && i == *v.sel, *missing))
             .collect();
-        f.led_row(s.selector, sel_rect, &leds);
+        // Printed as on the panel: the left column runs from the third LED (top) down to the
+        // first, the right column continues downwards from the fourth.
+        f.led_list(s.selector, sel_rect, &leds, &[2, 1, 0], &[3, 4, 5]);
         let shifted = if v.ped.is_some() && v.has_ped {
             "PED"
         } else {
