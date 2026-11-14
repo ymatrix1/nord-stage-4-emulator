@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn arpeggiator_uses_allocator_without_overwriting_an_active_voice() {
-        let mut synth = SynthLayer::new(48_000.0);
+        let mut synth = SynthLayer::legacy(48_000.0);
         synth.note_on(40, 100);
         synth.note_off(40);
         synth.arp_mode = ArpMode::Up;

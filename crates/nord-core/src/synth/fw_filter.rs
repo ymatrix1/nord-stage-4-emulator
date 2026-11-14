@@ -477,7 +477,7 @@ mod tests {
     }
 
     fn layer(engine: FilterEngine, model: FilterModel, cutoff: f32) -> Vec<f32> {
-        let mut s = super::super::SynthLayer::new(FS);
+        let mut s = super::super::SynthLayer::legacy(FS);
         s.filter_engine = engine;
         s.filter_model = model;
         s.cutoff_hz = cutoff;
@@ -496,7 +496,7 @@ mod tests {
         let s = super::super::SynthLayer::new(FS);
         assert_eq!(s.filter_engine, FilterEngine::Zdf);
         let a = layer(FilterEngine::Zdf, FilterModel::Ladder24, 2400.0);
-        let mut d = super::super::SynthLayer::new(FS);
+        let mut d = super::super::SynthLayer::legacy(FS);
         d.cutoff_hz = 2400.0;
         d.resonance = 0.2;
         d.attack_sec = 0.0005;

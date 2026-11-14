@@ -9,11 +9,11 @@
 //! `fenv_atk`/`fenv_dec`/`fenv_rel` (seconds, displayed values), `detune` (panel 0..10),
 //! `unison` (0..3), `oenv_amt` (-1..1), `oenv_dec` (s), `to_pitch` (0|1), `vib`
 //! (off|on|delay|wheel|aftertouch), `vib_rate` (Hz), `vib_amt` (panel 0..10), `vib_delay` (s),
-//! `vib_ctrl` (0..1), `lfo` (tri|saw|sawdown|square|sh), `lfo_dest` (filter|pitch|ctrl), `lfo_rate` (Hz), `lfo_amt` (panel 0..10), `chain` (legacy|strip), `engine` (zdf|firmware), `measured` (0|1), `amp_dec` (s, 45 = hold).
+//! `vib_ctrl` (0..1), `lfo` (tri|saw|sawdown|square|sh), `lfo_dest` (filter|pitch|ctrl), `lfo_rate` (Hz), `lfo_amt` (panel 0..10), `chain` (legacy|strip), `cat`/`wave` (ANALOG stage), `stages` (0|1), `p` (fitted|table|g,w2,r2,shape,cutoff), `engine` (zdf|firmware), `measured` (0|1), `amp_dec` (s, 45 = hold).
 
 use nord_core::synth::{
-    FilterEngine, FilterModel, LfoDestination, LfoShape, SynthChain, SynthLayer, VaWaveform,
-    VibratoMode,
+    FilterEngine, FilterModel, FwStage, LfoDestination, LfoShape, PSpec, PWave, SynthChain,
+    SynthLayer, VaWaveform, VibratoMode,
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -87,6 +87,22 @@ fn configure(kv: &HashMap<String, String>) -> SynthLayer {
     s.lfo_rate_hz = num(kv, "lfo_rate", 3.5);
     s.lfo_amount = num(kv, "lfo_amt", 0.0) / 10.0;
     s.measured_laws = num(kv, "measured", 0.0) > 0.5;
+    // Strip-chain oscillator switches: `cat` / `wave` pick the ANALOG stage, `stages=1` plays the
+    // modelled stages, `p=fitted|table|g,w2,r2,shape,cutoff` sets the P block (`PSpec::parse`).
+    if kv.contains_key("cat") {
+        let (cat, wave) = (num(kv, "cat", 0.0) as u8, num(kv, "wave", 0.0) as u8);
+        s.p_wave = PWave::from_category_wave(cat, wave);
+        s.strip_stage = FwStage::from_category_wave(cat, wave);
+        s.osc_shape_category = cat == 3;
+    }
+    s.strip_stages = num(kv, "stages", 0.0) > 0.5;
+    // the lesson scenarios start from unit P (the engine default is the per-wave table)
+    s.p_table = None;
+    s.p_block = None;
+    if let Some(spec) = kv.get("p").map(|v| PSpec::parse(v).expect("bad p=")) {
+        s.p_table = spec.table();
+        s.p_block = spec.table().is_none().then(|| spec.block());
+    }
     s.chain = if kv.get("chain").map(String::as_str) == Some("strip") {
         SynthChain::FirmwareStrip
     } else {

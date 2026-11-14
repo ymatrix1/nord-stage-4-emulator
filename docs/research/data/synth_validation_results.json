@@ -1,0 +1,1310 @@
+{
+ "note": "derived numbers of tools/synth_validate.py (no audio); variants as in synth_validation.json",
+ "clips": [
+  {
+   "id": "lead_smooth",
+   "source": "partA",
+   "role": "fit",
+   "wave": "shape",
+   "what": "A:87 SHAPE triangle LP24",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 4.93,
+     "presence_db": -16.47,
+     "brilliance_db": -6.88,
+     "rms_db": -6.44,
+     "centroid_hz": -231.7,
+     "attack_hw_ms": 19.8,
+     "attack_emu_ms": 42.3,
+     "bands_db": {
+      "sub_20_120": 0.38,
+      "low_120_400": -0.27,
+      "mid_400_1500": 0.65,
+      "presence_1500_3000": -16.47,
+      "brilliance_3000_8000": -6.88,
+      "air_8000_20000": 31.21
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 4.05,
+     "presence_db": -9.01,
+     "brilliance_db": -7.64,
+     "rms_db": 3.81,
+     "centroid_hz": -112.6,
+     "attack_hw_ms": 19.8,
+     "attack_emu_ms": 32.6,
+     "bands_db": {
+      "sub_20_120": -0.88,
+      "low_120_400": -1.23,
+      "mid_400_1500": 1.51,
+      "presence_1500_3000": -9.01,
+      "brilliance_3000_8000": -7.64,
+      "air_8000_20000": 28.23
+     }
+    },
+    {
+     "variant": "strip+p",
+     "score": 0.97,
+     "presence_db": -0.83,
+     "brilliance_db": -2.89,
+     "rms_db": 0.22,
+     "centroid_hz": 13.5,
+     "attack_hw_ms": 19.8,
+     "attack_emu_ms": 35.1,
+     "bands_db": {
+      "sub_20_120": -0.05,
+      "low_120_400": -0.77,
+      "mid_400_1500": 0.33,
+      "presence_1500_3000": -0.83,
+      "brilliance_3000_8000": -2.89,
+      "air_8000_20000": 28.98
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 4.05,
+     "presence_db": -9.01,
+     "brilliance_db": -7.64,
+     "rms_db": 3.81,
+     "centroid_hz": -112.6,
+     "attack_hw_ms": 19.8,
+     "attack_emu_ms": 32.6,
+     "bands_db": {
+      "sub_20_120": -0.88,
+      "low_120_400": -1.23,
+      "mid_400_1500": 1.51,
+      "presence_1500_3000": -9.01,
+      "brilliance_3000_8000": -7.64,
+      "air_8000_20000": 28.23
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 0.69,
+     "presence_db": -2.01,
+     "brilliance_db": 0.23,
+     "rms_db": -0.94,
+     "centroid_hz": -38.4,
+     "attack_hw_ms": 19.8,
+     "attack_emu_ms": 35.0,
+     "bands_db": {
+      "sub_20_120": 0.31,
+      "low_120_400": -0.46,
+      "mid_400_1500": 0.42,
+      "presence_1500_3000": -2.01,
+      "brilliance_3000_8000": 0.23,
+      "air_8000_20000": 29.79
+     }
+    }
+   ]
+  },
+  {
+   "id": "lead_crunch",
+   "source": "partA",
+   "role": "holdout",
+   "wave": "shape",
+   "what": "A:66 SHAPE triangle LP12",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 8.33,
+     "presence_db": -14.97,
+     "brilliance_db": -18.47,
+     "rms_db": 5.63,
+     "centroid_hz": -246.3,
+     "attack_hw_ms": 65.5,
+     "attack_emu_ms": 63.7,
+     "bands_db": {
+      "sub_20_120": 0.82,
+      "low_120_400": 0.27,
+      "mid_400_1500": -7.14,
+      "presence_1500_3000": -14.97,
+      "brilliance_3000_8000": -18.47,
+      "air_8000_20000": -22.21
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 2.07,
+     "presence_db": 3.06,
+     "brilliance_db": 3.44,
+     "rms_db": 6.77,
+     "centroid_hz": 247.1,
+     "attack_hw_ms": 65.5,
+     "attack_emu_ms": 65.8,
+     "bands_db": {
+      "sub_20_120": -0.36,
+      "low_120_400": -2.21,
+      "mid_400_1500": 1.26,
+      "presence_1500_3000": 3.06,
+      "brilliance_3000_8000": 3.44,
+      "air_8000_20000": -2.66
+     }
+    },
+    {
+     "variant": "strip+p",
+     "score": 5.04,
+     "presence_db": -8.01,
+     "brilliance_db": -12.45,
+     "rms_db": 2.92,
+     "centroid_hz": -130.6,
+     "attack_hw_ms": 65.5,
+     "attack_emu_ms": 66.1,
+     "bands_db": {
+      "sub_20_120": 2.36,
+      "low_120_400": -1.16,
+      "mid_400_1500": 1.22,
+      "presence_1500_3000": -8.01,
+      "brilliance_3000_8000": -12.45,
+      "air_8000_20000": -16.75
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 2.07,
+     "presence_db": 3.06,
+     "brilliance_db": 3.44,
+     "rms_db": 6.77,
+     "centroid_hz": 247.1,
+     "attack_hw_ms": 65.5,
+     "attack_emu_ms": 65.8,
+     "bands_db": {
+      "sub_20_120": -0.36,
+      "low_120_400": -2.21,
+      "mid_400_1500": 1.26,
+      "presence_1500_3000": 3.06,
+      "brilliance_3000_8000": 3.44,
+      "air_8000_20000": -2.66
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 1.18,
+     "presence_db": 2.33,
+     "brilliance_db": 0.42,
+     "rms_db": 2.33,
+     "centroid_hz": 146.6,
+     "attack_hw_ms": 65.5,
+     "attack_emu_ms": 65.4,
+     "bands_db": {
+      "sub_20_120": 0.04,
+      "low_120_400": -2.01,
+      "mid_400_1500": 1.09,
+      "presence_1500_3000": 2.33,
+      "brilliance_3000_8000": 0.42,
+      "air_8000_20000": -8.42
+     }
+    }
+   ]
+  },
+  {
+   "id": "pad_silk",
+   "source": "partA",
+   "role": "fit",
+   "wave": "super",
+   "what": "A:86 SUPER wave 0 LP12",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 6.53,
+     "presence_db": 12.3,
+     "brilliance_db": 14.37,
+     "rms_db": -11.4,
+     "centroid_hz": 20.9,
+     "attack_hw_ms": 61.2,
+     "attack_emu_ms": 100.9,
+     "bands_db": {
+      "sub_20_120": 2.55,
+      "low_120_400": 0.0,
+      "mid_400_1500": 3.41,
+      "presence_1500_3000": 12.3,
+      "brilliance_3000_8000": 14.37,
+      "air_8000_20000": 16.39
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 6.24,
+     "presence_db": 11.25,
+     "brilliance_db": 13.48,
+     "rms_db": -11.91,
+     "centroid_hz": 23.2,
+     "attack_hw_ms": 61.2,
+     "attack_emu_ms": 97.0,
+     "bands_db": {
+      "sub_20_120": 2.41,
+      "low_120_400": 0.41,
+      "mid_400_1500": 3.64,
+      "presence_1500_3000": 11.25,
+      "brilliance_3000_8000": 13.48,
+      "air_8000_20000": 16.43
+     }
+    },
+    {
+     "variant": "strip+p",
+     "score": 9.17,
+     "presence_db": 17.25,
+     "brilliance_db": 21.82,
+     "rms_db": -11.48,
+     "centroid_hz": 87.2,
+     "attack_hw_ms": 61.2,
+     "attack_emu_ms": 97.0,
+     "bands_db": {
+      "sub_20_120": 2.01,
+      "low_120_400": 0.13,
+      "mid_400_1500": 4.62,
+      "presence_1500_3000": 17.25,
+      "brilliance_3000_8000": 21.82,
+      "air_8000_20000": 18.96
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 5.39,
+     "presence_db": 8.73,
+     "brilliance_db": 9.54,
+     "rms_db": -5.07,
+     "centroid_hz": -52.9,
+     "attack_hw_ms": 61.2,
+     "attack_emu_ms": 42.6,
+     "bands_db": {
+      "sub_20_120": 5.78,
+      "low_120_400": 0.76,
+      "mid_400_1500": 2.12,
+      "presence_1500_3000": 8.73,
+      "brilliance_3000_8000": 9.54,
+      "air_8000_20000": 11.64
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 7.63,
+     "presence_db": 13.2,
+     "brilliance_db": 15.8,
+     "rms_db": 1.13,
+     "centroid_hz": -34.8,
+     "attack_hw_ms": 61.2,
+     "attack_emu_ms": 42.4,
+     "bands_db": {
+      "sub_20_120": 5.66,
+      "low_120_400": 0.7,
+      "mid_400_1500": 2.79,
+      "presence_1500_3000": 13.2,
+      "brilliance_3000_8000": 15.8,
+      "air_8000_20000": 14.93
+     }
+    }
+   ]
+  },
+  {
+   "id": "mega_line",
+   "source": "partA",
+   "role": "holdout",
+   "wave": "multi+super",
+   "what": "A:48 MULTI + SUPER x2 LP12",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 2.98,
+     "presence_db": -0.13,
+     "brilliance_db": -4.76,
+     "rms_db": -18.51,
+     "centroid_hz": 127.6,
+     "attack_hw_ms": 59.1,
+     "attack_emu_ms": 63.6,
+     "bands_db": {
+      "sub_20_120": -4.73,
+      "low_120_400": 2.37,
+      "mid_400_1500": 2.9,
+      "presence_1500_3000": -0.13,
+      "brilliance_3000_8000": -4.76,
+      "air_8000_20000": 3.16
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 3.22,
+     "presence_db": 0.36,
+     "brilliance_db": -5.24,
+     "rms_db": -18.05,
+     "centroid_hz": 150.5,
+     "attack_hw_ms": 59.1,
+     "attack_emu_ms": 58.8,
+     "bands_db": {
+      "sub_20_120": -5.08,
+      "low_120_400": 2.19,
+      "mid_400_1500": 3.25,
+      "presence_1500_3000": 0.36,
+      "brilliance_3000_8000": -5.24,
+      "air_8000_20000": 3.84
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 3.64,
+     "presence_db": -5.66,
+     "brilliance_db": -9.45,
+     "rms_db": -5.51,
+     "centroid_hz": -74.5,
+     "attack_hw_ms": 59.1,
+     "attack_emu_ms": 31.8,
+     "bands_db": {
+      "sub_20_120": 0.14,
+      "low_120_400": 0.83,
+      "mid_400_1500": -2.11,
+      "presence_1500_3000": -5.66,
+      "brilliance_3000_8000": -9.45,
+      "air_8000_20000": 2.9
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 2.03,
+     "presence_db": -1.5,
+     "brilliance_db": -3.39,
+     "rms_db": -5.72,
+     "centroid_hz": 7.6,
+     "attack_hw_ms": 59.1,
+     "attack_emu_ms": 30.8,
+     "bands_db": {
+      "sub_20_120": -1.75,
+      "low_120_400": 1.38,
+      "mid_400_1500": -2.15,
+      "presence_1500_3000": -1.5,
+      "brilliance_3000_8000": -3.39,
+      "air_8000_20000": -0.67
+     }
+    }
+   ]
+  },
+  {
+   "id": "sci_fi_80s",
+   "source": "partA",
+   "role": "fit",
+   "wave": "multi",
+   "what": "A:44 MULTI Ladder24",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 2.03,
+     "presence_db": 1.68,
+     "brilliance_db": -2.04,
+     "rms_db": -0.44,
+     "centroid_hz": -91.5,
+     "attack_hw_ms": 97.1,
+     "attack_emu_ms": 113.0,
+     "bands_db": {
+      "sub_20_120": -4.83,
+      "low_120_400": -0.62,
+      "mid_400_1500": 0.99,
+      "presence_1500_3000": 1.68,
+      "brilliance_3000_8000": -2.04,
+      "air_8000_20000": -26.75
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 2.01,
+     "presence_db": 2.21,
+     "brilliance_db": -0.98,
+     "rms_db": 3.19,
+     "centroid_hz": -31.5,
+     "attack_hw_ms": 97.1,
+     "attack_emu_ms": 131.0,
+     "bands_db": {
+      "sub_20_120": -5.38,
+      "low_120_400": -0.73,
+      "mid_400_1500": 0.74,
+      "presence_1500_3000": 2.21,
+      "brilliance_3000_8000": -0.98,
+      "air_8000_20000": -30.19
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 0.83,
+     "presence_db": 0.86,
+     "brilliance_db": -2.84,
+     "rms_db": 11.82,
+     "centroid_hz": -246.6,
+     "attack_hw_ms": 97.1,
+     "attack_emu_ms": 80.7,
+     "bands_db": {
+      "sub_20_120": -0.03,
+      "low_120_400": -0.35,
+      "mid_400_1500": 0.05,
+      "presence_1500_3000": 0.86,
+      "brilliance_3000_8000": -2.84,
+      "air_8000_20000": -32.21
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 0.24,
+     "presence_db": 0.43,
+     "brilliance_db": -0.11,
+     "rms_db": 0.0,
+     "centroid_hz": -159.1,
+     "attack_hw_ms": 97.1,
+     "attack_emu_ms": 77.6,
+     "bands_db": {
+      "sub_20_120": 0.08,
+      "low_120_400": -0.31,
+      "mid_400_1500": -0.27,
+      "presence_1500_3000": 0.43,
+      "brilliance_3000_8000": -0.11,
+      "air_8000_20000": -17.07
+     }
+    }
+   ]
+  },
+  {
+   "id": "filter_bank",
+   "source": "partA",
+   "role": "fit",
+   "wave": "saw",
+   "what": "A:75 3 x Pure Saw band pass",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 3.15,
+     "presence_db": -3.4,
+     "brilliance_db": -2.28,
+     "rms_db": 3.8,
+     "centroid_hz": -436.6,
+     "attack_hw_ms": 11.0,
+     "attack_emu_ms": 20.8,
+     "bands_db": {
+      "sub_20_120": 5.52,
+      "low_120_400": 2.87,
+      "mid_400_1500": -1.7,
+      "presence_1500_3000": -3.4,
+      "brilliance_3000_8000": -2.28,
+      "air_8000_20000": -12.19
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 3.82,
+     "presence_db": -4.26,
+     "brilliance_db": 0.38,
+     "rms_db": 5.26,
+     "centroid_hz": -274.9,
+     "attack_hw_ms": 11.0,
+     "attack_emu_ms": 10.5,
+     "bands_db": {
+      "sub_20_120": -11.45,
+      "low_120_400": 2.25,
+      "mid_400_1500": -0.78,
+      "presence_1500_3000": -4.26,
+      "brilliance_3000_8000": 0.38,
+      "air_8000_20000": -16.77
+     }
+    },
+    {
+     "variant": "strip+p",
+     "score": 6.65,
+     "presence_db": 2.04,
+     "brilliance_db": 1.57,
+     "rms_db": 4.0,
+     "centroid_hz": 290.9,
+     "attack_hw_ms": 11.0,
+     "attack_emu_ms": 8.5,
+     "bands_db": {
+      "sub_20_120": -17.82,
+      "low_120_400": -11.57,
+      "mid_400_1500": 0.27,
+      "presence_1500_3000": 2.04,
+      "brilliance_3000_8000": 1.57,
+      "air_8000_20000": -13.81
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 3.82,
+     "presence_db": -4.26,
+     "brilliance_db": 0.38,
+     "rms_db": 5.26,
+     "centroid_hz": -274.9,
+     "attack_hw_ms": 11.0,
+     "attack_emu_ms": 10.5,
+     "bands_db": {
+      "sub_20_120": -11.45,
+      "low_120_400": 2.25,
+      "mid_400_1500": -0.78,
+      "presence_1500_3000": -4.26,
+      "brilliance_3000_8000": 0.38,
+      "air_8000_20000": -16.77
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 4.46,
+     "presence_db": -2.59,
+     "brilliance_db": -4.35,
+     "rms_db": 1.63,
+     "centroid_hz": -425.0,
+     "attack_hw_ms": 11.0,
+     "attack_emu_ms": 24.7,
+     "bands_db": {
+      "sub_20_120": -10.7,
+      "low_120_400": 3.21,
+      "mid_400_1500": -1.43,
+      "presence_1500_3000": -2.59,
+      "brilliance_3000_8000": -4.35,
+      "air_8000_20000": -31.4
+     }
+    }
+   ]
+  },
+  {
+   "id": "phat_3osc",
+   "source": "partA",
+   "role": "holdout",
+   "wave": "saw",
+   "what": "A:67 3 x Pure Saw Ladder24 (filter not modelled)",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 3.21,
+     "presence_db": 3.64,
+     "brilliance_db": 2.56,
+     "rms_db": 12.1,
+     "centroid_hz": 563.0,
+     "attack_hw_ms": 26.1,
+     "attack_emu_ms": 87.2,
+     "bands_db": {
+      "sub_20_120": -3.85,
+      "low_120_400": -3.53,
+      "mid_400_1500": 2.46,
+      "presence_1500_3000": 3.64,
+      "brilliance_3000_8000": 2.56,
+      "air_8000_20000": 2.76
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 2.91,
+     "presence_db": 3.51,
+     "brilliance_db": 1.44,
+     "rms_db": 8.89,
+     "centroid_hz": 486.7,
+     "attack_hw_ms": 26.1,
+     "attack_emu_ms": 66.3,
+     "bands_db": {
+      "sub_20_120": -3.77,
+      "low_120_400": -3.22,
+      "mid_400_1500": 2.61,
+      "presence_1500_3000": 3.51,
+      "brilliance_3000_8000": 1.44,
+      "air_8000_20000": -3.33
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 2.91,
+     "presence_db": 3.51,
+     "brilliance_db": 1.44,
+     "rms_db": 8.89,
+     "centroid_hz": 486.7,
+     "attack_hw_ms": 26.1,
+     "attack_emu_ms": 66.3,
+     "bands_db": {
+      "sub_20_120": -3.77,
+      "low_120_400": -3.22,
+      "mid_400_1500": 2.61,
+      "presence_1500_3000": 3.51,
+      "brilliance_3000_8000": 1.44,
+      "air_8000_20000": -3.33
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 2.91,
+     "presence_db": 3.51,
+     "brilliance_db": 1.44,
+     "rms_db": 1.02,
+     "centroid_hz": 486.3,
+     "attack_hw_ms": 26.1,
+     "attack_emu_ms": 66.2,
+     "bands_db": {
+      "sub_20_120": -3.76,
+      "low_120_400": -3.22,
+      "mid_400_1500": 2.61,
+      "presence_1500_3000": 3.51,
+      "brilliance_3000_8000": 1.44,
+      "air_8000_20000": -3.53
+     }
+    }
+   ]
+  },
+  {
+   "id": "sweep_12db",
+   "source": "partA",
+   "role": "holdout",
+   "wave": "shapesq",
+   "what": "A:57 Shape Square x2 + Pure Saw LP12",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 21.38,
+     "presence_db": -26.22,
+     "brilliance_db": -36.11,
+     "rms_db": 18.99,
+     "centroid_hz": -652.4,
+     "attack_hw_ms": 46.8,
+     "attack_emu_ms": 0.0,
+     "bands_db": {
+      "sub_20_120": 5.29,
+      "low_120_400": -17.63,
+      "mid_400_1500": -21.65,
+      "presence_1500_3000": -26.22,
+      "brilliance_3000_8000": -36.11,
+      "air_8000_20000": -44.65
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 12.5,
+     "presence_db": -13.53,
+     "brilliance_db": -19.06,
+     "rms_db": 15.44,
+     "centroid_hz": -608.2,
+     "attack_hw_ms": 46.8,
+     "attack_emu_ms": 21.0,
+     "bands_db": {
+      "sub_20_120": 5.07,
+      "low_120_400": -11.41,
+      "mid_400_1500": -13.44,
+      "presence_1500_3000": -13.53,
+      "brilliance_3000_8000": -19.06,
+      "air_8000_20000": -35.69
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 4.85,
+     "presence_db": -4.15,
+     "brilliance_db": -10.76,
+     "rms_db": 8.27,
+     "centroid_hz": -414.9,
+     "attack_hw_ms": 46.8,
+     "attack_emu_ms": 90.9,
+     "bands_db": {
+      "sub_20_120": 6.08,
+      "low_120_400": 0.78,
+      "mid_400_1500": -2.49,
+      "presence_1500_3000": -4.15,
+      "brilliance_3000_8000": -10.76,
+      "air_8000_20000": -34.55
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 4.59,
+     "presence_db": -3.5,
+     "brilliance_db": -10.07,
+     "rms_db": 7.58,
+     "centroid_hz": -408.3,
+     "attack_hw_ms": 46.8,
+     "attack_emu_ms": 95.2,
+     "bands_db": {
+      "sub_20_120": 6.25,
+      "low_120_400": 1.07,
+      "mid_400_1500": -2.04,
+      "presence_1500_3000": -3.5,
+      "brilliance_3000_8000": -10.07,
+      "air_8000_20000": -32.5
+     }
+    }
+   ]
+  },
+  {
+   "id": "sine_pluck",
+   "source": "partA",
+   "role": "holdout",
+   "wave": "shapesine",
+   "what": "A:26 SHAPE SINE LP12",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 5.99,
+     "presence_db": -19.04,
+     "brilliance_db": 2.81,
+     "rms_db": 2.03,
+     "centroid_hz": -89.1,
+     "attack_hw_ms": 77.8,
+     "attack_emu_ms": 58.8,
+     "bands_db": {
+      "sub_20_120": 3.85,
+      "low_120_400": 0.72,
+      "mid_400_1500": -3.55,
+      "presence_1500_3000": -19.04,
+      "brilliance_3000_8000": 2.81,
+      "air_8000_20000": 16.8
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 6.54,
+     "presence_db": -20.58,
+     "brilliance_db": 3.12,
+     "rms_db": -1.23,
+     "centroid_hz": -101.7,
+     "attack_hw_ms": 77.8,
+     "attack_emu_ms": 46.1,
+     "bands_db": {
+      "sub_20_120": 3.33,
+      "low_120_400": -1.07,
+      "mid_400_1500": -4.61,
+      "presence_1500_3000": -20.58,
+      "brilliance_3000_8000": 3.12,
+      "air_8000_20000": 17.16
+     }
+    },
+    {
+     "variant": "strip+p",
+     "score": 5.15,
+     "presence_db": -19.25,
+     "brilliance_db": 1.82,
+     "rms_db": -0.29,
+     "centroid_hz": -13.7,
+     "attack_hw_ms": 77.8,
+     "attack_emu_ms": 42.2,
+     "bands_db": {
+      "sub_20_120": 2.51,
+      "low_120_400": -1.01,
+      "mid_400_1500": 1.18,
+      "presence_1500_3000": -19.25,
+      "brilliance_3000_8000": 1.82,
+      "air_8000_20000": 15.88
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 7.03,
+     "presence_db": -17.03,
+     "brilliance_db": 7.08,
+     "rms_db": 4.76,
+     "centroid_hz": -89.7,
+     "attack_hw_ms": 77.8,
+     "attack_emu_ms": 57.4,
+     "bands_db": {
+      "sub_20_120": 5.4,
+      "low_120_400": 2.82,
+      "mid_400_1500": -2.81,
+      "presence_1500_3000": -17.03,
+      "brilliance_3000_8000": 7.08,
+      "air_8000_20000": 21.09
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 7.03,
+     "presence_db": -17.03,
+     "brilliance_db": 7.08,
+     "rms_db": 4.76,
+     "centroid_hz": -89.7,
+     "attack_hw_ms": 77.8,
+     "attack_emu_ms": 57.4,
+     "bands_db": {
+      "sub_20_120": 5.4,
+      "low_120_400": 2.82,
+      "mid_400_1500": -2.81,
+      "presence_1500_3000": -17.03,
+      "brilliance_3000_8000": 7.08,
+      "air_8000_20000": 21.09
+     }
+    }
+   ]
+  },
+  {
+   "id": "ag_blip_saw",
+   "source": "ag",
+   "role": "fit",
+   "wave": "saw",
+   "what": "Pitch blip clip, Pure Saw G4, filter open",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 5.28,
+     "presence_db": 0.07,
+     "brilliance_db": 0.24,
+     "rms_db": -5.84,
+     "centroid_hz": 72.3,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -25.99,
+      "low_120_400": -0.01,
+      "mid_400_1500": -0.07,
+      "presence_1500_3000": 0.07,
+      "brilliance_3000_8000": 0.24,
+      "air_8000_20000": 1.66
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 5.31,
+     "presence_db": 0.02,
+     "brilliance_db": -0.5,
+     "rms_db": -6.11,
+     "centroid_hz": -75.4,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -25.94,
+      "low_120_400": 0.09,
+      "mid_400_1500": 0.02,
+      "presence_1500_3000": 0.02,
+      "brilliance_3000_8000": -0.5,
+      "air_8000_20000": -3.24
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 5.31,
+     "presence_db": 0.02,
+     "brilliance_db": -0.5,
+     "rms_db": -6.11,
+     "centroid_hz": -75.4,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -25.94,
+      "low_120_400": 0.09,
+      "mid_400_1500": 0.02,
+      "presence_1500_3000": 0.02,
+      "brilliance_3000_8000": -0.5,
+      "air_8000_20000": -3.24
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 5.31,
+     "presence_db": 0.02,
+     "brilliance_db": -0.5,
+     "rms_db": -14.07,
+     "centroid_hz": -75.3,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -25.94,
+      "low_120_400": 0.09,
+      "mid_400_1500": 0.02,
+      "presence_1500_3000": 0.02,
+      "brilliance_3000_8000": -0.5,
+      "air_8000_20000": -3.24
+     }
+    }
+   ]
+  },
+  {
+   "id": "ag_blip_square",
+   "source": "ag",
+   "role": "fit",
+   "wave": "pulse",
+   "what": "Pitch blip clip, Pure Square G4, filter open",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 3.29,
+     "presence_db": 0.07,
+     "brilliance_db": 0.24,
+     "rms_db": -2.42,
+     "centroid_hz": 49.0,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -16.11,
+      "low_120_400": -0.02,
+      "mid_400_1500": 0.0,
+      "presence_1500_3000": 0.07,
+      "brilliance_3000_8000": 0.24,
+      "air_8000_20000": 1.52
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 3.29,
+     "presence_db": 0.07,
+     "brilliance_db": 0.24,
+     "rms_db": -2.59,
+     "centroid_hz": 49.0,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -16.12,
+      "low_120_400": -0.01,
+      "mid_400_1500": 0.01,
+      "presence_1500_3000": 0.07,
+      "brilliance_3000_8000": 0.24,
+      "air_8000_20000": 1.53
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 3.29,
+     "presence_db": 0.07,
+     "brilliance_db": 0.24,
+     "rms_db": -2.59,
+     "centroid_hz": 49.0,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -16.12,
+      "low_120_400": -0.01,
+      "mid_400_1500": 0.01,
+      "presence_1500_3000": 0.07,
+      "brilliance_3000_8000": 0.24,
+      "air_8000_20000": 1.53
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 3.29,
+     "presence_db": 0.07,
+     "brilliance_db": 0.24,
+     "rms_db": -13.97,
+     "centroid_hz": 49.0,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -16.11,
+      "low_120_400": -0.01,
+      "mid_400_1500": 0.01,
+      "presence_1500_3000": 0.07,
+      "brilliance_3000_8000": 0.24,
+      "air_8000_20000": 1.53
+     }
+    }
+   ]
+  },
+  {
+   "id": "ag_zap_saw",
+   "source": "ag",
+   "role": "holdout",
+   "wave": "saw",
+   "what": "Laser zap clip, Pure Saw G4, LPM 415 Hz Res 7.3 Env Amt 7.7 decay 2.07 s",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 8.99,
+     "presence_db": -1.4,
+     "brilliance_db": -7.04,
+     "rms_db": -7.2,
+     "centroid_hz": -625.0,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -34.5,
+      "low_120_400": 0.59,
+      "mid_400_1500": 1.41,
+      "presence_1500_3000": -1.4,
+      "brilliance_3000_8000": -7.04,
+      "air_8000_20000": -13.38
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 7.27,
+     "presence_db": 2.79,
+     "brilliance_db": 1.49,
+     "rms_db": -4.86,
+     "centroid_hz": 605.7,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -26.12,
+      "low_120_400": -5.25,
+      "mid_400_1500": 0.72,
+      "presence_1500_3000": 2.79,
+      "brilliance_3000_8000": 1.49,
+      "air_8000_20000": 1.29
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 7.27,
+     "presence_db": 2.79,
+     "brilliance_db": 1.49,
+     "rms_db": -4.86,
+     "centroid_hz": 605.7,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -26.12,
+      "low_120_400": -5.25,
+      "mid_400_1500": 0.72,
+      "presence_1500_3000": 2.79,
+      "brilliance_3000_8000": 1.49,
+      "air_8000_20000": 1.29
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 6.93,
+     "presence_db": -0.28,
+     "brilliance_db": -2.46,
+     "rms_db": -3.41,
+     "centroid_hz": -415.7,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -30.97,
+      "low_120_400": 0.24,
+      "mid_400_1500": 0.72,
+      "presence_1500_3000": -0.28,
+      "brilliance_3000_8000": -2.46,
+      "air_8000_20000": -7.71
+     }
+    }
+   ]
+  },
+  {
+   "id": "ag_supersaw_0",
+   "source": "ag",
+   "role": "holdout",
+   "wave": "super",
+   "what": "Super Saw detune clip, Detune 0.0, G4",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 11.31,
+     "presence_db": 5.33,
+     "brilliance_db": 8.95,
+     "rms_db": -20.14,
+     "centroid_hz": 2296.1,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -26.94,
+      "low_120_400": -12.61,
+      "mid_400_1500": -2.74,
+      "presence_1500_3000": 5.33,
+      "brilliance_3000_8000": 8.95,
+      "air_8000_20000": 10.62
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 11.36,
+     "presence_db": 5.66,
+     "brilliance_db": 8.7,
+     "rms_db": -20.83,
+     "centroid_hz": 1663.3,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -28.12,
+      "low_120_400": -12.1,
+      "mid_400_1500": -2.24,
+      "presence_1500_3000": 5.66,
+      "brilliance_3000_8000": 8.7,
+      "air_8000_20000": 6.33
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 4.38,
+     "presence_db": 0.97,
+     "brilliance_db": 0.78,
+     "rms_db": -13.89,
+     "centroid_hz": 110.7,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -17.78,
+      "low_120_400": -1.14,
+      "mid_400_1500": -1.24,
+      "presence_1500_3000": 0.97,
+      "brilliance_3000_8000": 0.78,
+      "air_8000_20000": -1.59
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 4.38,
+     "presence_db": 0.97,
+     "brilliance_db": 0.78,
+     "rms_db": -7.87,
+     "centroid_hz": 110.8,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -17.79,
+      "low_120_400": -1.14,
+      "mid_400_1500": -1.24,
+      "presence_1500_3000": 0.97,
+      "brilliance_3000_8000": 0.78,
+      "air_8000_20000": -1.59
+     }
+    }
+   ]
+  },
+  {
+   "id": "ag_supersaw_3",
+   "source": "ag",
+   "role": "holdout",
+   "wave": "super",
+   "what": "Super Saw detune clip, Detune 3.0, G4",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 6.83,
+     "presence_db": 1.45,
+     "brilliance_db": 1.97,
+     "rms_db": -12.55,
+     "centroid_hz": 445.9,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -28.53,
+      "low_120_400": -2.05,
+      "mid_400_1500": -0.14,
+      "presence_1500_3000": 1.45,
+      "brilliance_3000_8000": 1.97,
+      "air_8000_20000": 3.53
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 6.62,
+     "presence_db": 1.48,
+     "brilliance_db": 1.31,
+     "rms_db": -12.89,
+     "centroid_hz": 201.7,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -28.4,
+      "low_120_400": -1.88,
+      "mid_400_1500": 0.01,
+      "presence_1500_3000": 1.48,
+      "brilliance_3000_8000": 1.31,
+      "air_8000_20000": -1.3
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 6.0,
+     "presence_db": -1.54,
+     "brilliance_db": -1.55,
+     "rms_db": -10.84,
+     "centroid_hz": -185.8,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -24.94,
+      "low_120_400": 0.32,
+      "mid_400_1500": -1.65,
+      "presence_1500_3000": -1.54,
+      "brilliance_3000_8000": -1.55,
+      "air_8000_20000": -3.68
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 6.02,
+     "presence_db": -1.54,
+     "brilliance_db": -1.55,
+     "rms_db": -4.82,
+     "centroid_hz": -185.7,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -25.06,
+      "low_120_400": 0.32,
+      "mid_400_1500": -1.65,
+      "presence_1500_3000": -1.54,
+      "brilliance_3000_8000": -1.55,
+      "air_8000_20000": -3.68
+     }
+    }
+   ]
+  },
+  {
+   "id": "ag_supersaw_10",
+   "source": "ag",
+   "role": "holdout",
+   "wave": "super",
+   "what": "Super Saw detune clip, Detune 10.0, G4",
+   "variants": [
+    {
+     "variant": "legacy",
+     "score": 4.96,
+     "presence_db": 0.2,
+     "brilliance_db": 0.72,
+     "rms_db": -11.87,
+     "centroid_hz": 114.0,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -23.51,
+      "low_120_400": -0.14,
+      "mid_400_1500": 0.24,
+      "presence_1500_3000": 0.2,
+      "brilliance_3000_8000": 0.72,
+      "air_8000_20000": 2.15
+     }
+    },
+    {
+     "variant": "strip",
+     "score": 4.79,
+     "presence_db": 0.15,
+     "brilliance_db": -0.03,
+     "rms_db": -12.14,
+     "centroid_hz": -36.0,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -23.41,
+      "low_120_400": -0.04,
+      "mid_400_1500": 0.33,
+      "presence_1500_3000": 0.15,
+      "brilliance_3000_8000": -0.03,
+      "air_8000_20000": -2.74
+     }
+    },
+    {
+     "variant": "strip+st",
+     "score": 4.95,
+     "presence_db": -0.66,
+     "brilliance_db": -0.25,
+     "rms_db": -12.66,
+     "centroid_hz": -68.9,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -21.76,
+      "low_120_400": -0.04,
+      "mid_400_1500": -2.06,
+      "presence_1500_3000": -0.66,
+      "brilliance_3000_8000": -0.25,
+      "air_8000_20000": -2.94
+     }
+    },
+    {
+     "variant": "strip+st+tbl",
+     "score": 4.96,
+     "presence_db": -0.66,
+     "brilliance_db": -0.25,
+     "rms_db": -6.64,
+     "centroid_hz": -68.8,
+     "attack_hw_ms": null,
+     "attack_emu_ms": null,
+     "bands_db": {
+      "sub_20_120": -21.78,
+      "low_120_400": -0.04,
+      "mid_400_1500": -2.06,
+      "presence_1500_3000": -0.66,
+      "brilliance_3000_8000": -0.25,
+      "air_8000_20000": -2.94
+     }
+    }
+   ]
+  }
+ ]
+}
