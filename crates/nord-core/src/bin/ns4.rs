@@ -211,6 +211,30 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 other => Err(format!("unknown convert mode '{other}' (expected --to-json or --to-ns4p)")),
             }
         }
+        "bench" => {
+            use nord_core::bench::{format_report, run, BenchConfig};
+            let mut cfg = BenchConfig::default();
+            let num = |flag: &str, default: usize| -> usize {
+                args.iter()
+                    .position(|a| a == flag)
+                    .and_then(|i| args.get(i + 1))
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(default)
+            };
+            cfg.blocks = num("--blocks", cfg.blocks);
+            cfg.warmup_blocks = num("--warmup", cfg.warmup_blocks);
+            cfg.multi_out = !args.iter().any(|a| a == "--stereo");
+            let mut out = format_report(cfg, &run(cfg));
+            if args.iter().any(|a| a == "--breakdown") {
+                out.push_str("
+breakdown (mean ms per block):");
+                for (label, ms) in nord_core::bench::breakdown(cfg) {
+                    out.push_str(&format!("
+  {ms:8.3}  {label}"));
+                }
+            }
+            Ok(out)
+        }
         "render-demo" => {
             let mut engine = Stage4Engine::new(48_000.0);
             engine.handle_midi(MidiEvent::NoteOn {
@@ -439,7 +463,7 @@ Wrote {wav_path} ({} bytes, 32-bit float stereo)", wav.len()));
         "backup-store" => nord_core::store_cli::backup_store(&args[2..]),
         "preset-check" => nord_core::preset_cli::preset_check(&args[2..]),
         other => Err(format!(
-            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | store-program <base> <out> | export-live <dir> <slots...> | backup-store <in.ns4b> <out.ns4b> [--program ...] [--live ...] | preset-check <backup.ns4b> | render-demo | render-patch <path>)"
+            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | store-program <base> <out> | export-live <dir> <slots...> | backup-store <in.ns4b> <out.ns4b> [--program ...] [--live ...] | preset-check <backup.ns4b> | render-demo | bench [--blocks N] [--warmup N] [--stereo] [--breakdown] | render-patch <path>)"
         )),
     }
 }
