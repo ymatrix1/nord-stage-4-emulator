@@ -16,6 +16,7 @@ pub mod store_cli;
 pub mod sweep;
 pub mod synth;
 pub mod synth_params;
+pub mod synth_params_arp;
 pub mod synth_sample;
 pub mod synth_tables;
 pub mod synth_types;

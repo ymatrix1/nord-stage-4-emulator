@@ -16,6 +16,8 @@ pub fn knob(
     name: &str,
 ) -> bool {
     let hit = Rect::from_center_size(center, vec2(radius * 2.4, radius * 2.4));
+    // Knobs that print numerals draw a smaller body; the hit area keeps the layout size.
+    let radius = super::scale::body_radius(id, radius);
     let resp = ui.interact(hit, ui.id().with(id), Sense::click_and_drag());
     let mut changed = false;
     if resp.dragged() {

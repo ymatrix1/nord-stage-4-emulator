@@ -20,6 +20,10 @@ pub enum PatternParam {
     Len(u8),
     /// Gate length of `step` in eighths of a step, `0` = rest (ARP page 3).
     Gate { step: u8, eighths: u8 },
+    /// Tie of `step` (gate code `Q`): the step's note is held into the next step. Only a full
+    /// step (`8` eighths) can tie; the engine keeps the flag as given, the UI sends it after the
+    /// gate. No host parameter carries it yet (the plugin editor ignores it).
+    Tie { step: u8, on: bool },
     /// Accent of `step` (ARP page 4).
     Accent { step: u8, on: bool },
     /// Pan of `step` (ARP page 5).
@@ -36,6 +40,7 @@ impl PatternParam {
             Self::Customize(n) => l.customize_preset(usize::from(n)),
             Self::Len(n) => l.set_pattern_length(n),
             Self::Gate { step, eighths } => l.set_step_gate(usize::from(step), eighths),
+            Self::Tie { step, on } => l.set_step_tie(usize::from(step), on),
             Self::Accent { step, on } => l.set_step_accent(usize::from(step), on),
             Self::Pan { step, pan } => l.set_step_pan(usize::from(step), pan),
         }
@@ -86,6 +91,29 @@ mod tests {
             eighths: 1,
         }
         .apply(&mut l);
+    }
+
+    #[test]
+    fn tie_edits_land_on_their_step_and_a_rest_drops_them() {
+        let mut l = fresh();
+        PatternParam::Gate {
+            step: 2,
+            eighths: 8,
+        }
+        .apply(&mut l);
+        PatternParam::Tie { step: 2, on: true }.apply(&mut l);
+        assert!(l.perf.custom.tie[2] && !l.perf.custom.tie[1]);
+        PatternParam::Tie { step: 2, on: false }.apply(&mut l);
+        assert!(!l.perf.custom.tie[2]);
+        PatternParam::Tie { step: 2, on: true }.apply(&mut l);
+        PatternParam::Gate {
+            step: 2,
+            eighths: 0,
+        }
+        .apply(&mut l);
+        assert!(!l.perf.custom.tie[2], "a rest drops the tie");
+        // An out-of-range step is ignored, not a panic.
+        PatternParam::Tie { step: 99, on: true }.apply(&mut l);
     }
 
     #[test]
