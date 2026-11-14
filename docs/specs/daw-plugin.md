@@ -20,6 +20,10 @@
 - Parameter IDs are stable strings declared on `Stage4Params`; parameter ranges provide clamping in the host parameter system.
 - `sync_to_engine()` maps split crossfade values 0, 1, and 2 to Off, Small, and Large. Split note values are MIDI notes 0–127.
 
+## Appended FX enum variants and the param snapshot
+
+`Mod1Sel` gained `Auto Wah` and `Pump`, `Mod2Sel` gained `Spin` and `Ensemble` (appended; `Mod1Type` / `Mod2Type` in `nord_core::fx` grew the same way). Growing an enum raises the `step_count` of `fxsel_mod1_type_1..7` and `fxsel_mod2_type_1..7` from 4 to 6 in `param-ids.snapshot` (regenerated with `UPDATE_PARAM_SNAPSHOT=1`). No id was removed or renamed and defaults stay at index 0 (Off); existing variants keep their index, only the normalized spacing of stored automation changes (hosts that store normalized values see Tremolo..Wah shift, unavoidable when appending to an `EnumParam`).
+
 ## Preset and state handling
 
 - `PluginStateSnapshot` is a JSON serialization format. New fields use defaults so older version-1 snapshots remain readable.
