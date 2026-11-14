@@ -417,6 +417,8 @@ impl SynthLayer {
                                 &mut v.sample_pos,
                                 v.sample_step * f64::from(pitch_mod),
                                 &mut v.active,
+                                self.sample_kernel_by_key
+                                    .then(|| crate::sinc::key_rule::kernel_for_key(v.note)),
                             );
                             let fl = Self::apply_sample_timbre(
                                 self.sample_timbre,
