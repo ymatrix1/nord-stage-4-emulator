@@ -363,3 +363,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
 - **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 on an untraced path); flip the bus scale (0.83 dB on an assumption, and the true receiver scale is unknown by up to 12 dB).
 - **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
+
+### D30. The Amp EQ uses the firmware tone stack behind `FirmwareFx::eq`; the EQ gain stays 0.25 dB per count
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-comp-eq-wiring`; evidence [fx-eq-words](research/fx-eq-words.md))
+- **Context:** TD-10 asked whether the EQ gain count indexes the `2^(1/24)` ladder (0.25086 dB per count); the compressor and EQ ports were not wired to the preset fields, and `kCmpResponse` and the tables `0x2f730c` / `0x2ae5b4` were open.
+- **Decision:** (1) Keep `EQ_GAIN_DB_PER_COUNT = 0.25`: the ARM shelf words give `1 + F = 10^(c / 80)` on the cut side to five digits. (2) Wire the already oracle-verified tone stack `0x1243F4` with the ARM words of `kAmpTreble`, `kAmpBass`, `kAmpMid`, `kAmpMidFreq` as the opt-in `FirmwareFx::eq` (in `ALL`, not in `DEFAULT`, 2 frame latency). (3) `kCmpResponse` stays closed (no DSP effect) and the compressor stays opt-in; `0x2f730c` is not the EQ.
+- **Why:** The words and the routine are VERIFIED, but the joint mid gain by frequency law, the interpolation between 11 captured indices, the organ unit's routine layout and the engine versus 43,402 Hz rate are not, and no hardware clip isolates an EQ setting, so D22 does not allow a default switch.
+- **Alternatives:** Switch the EQ gain to the ladder (rejected: refuted by the words); flip the default (rejected: no end to end check); rescale the words to the engine rate (rejected: loses the bit-for-bit words, deferred until the full capture exists).
+- **Impact:** `render_hash` unchanged (flag default off). With the flag the layer gains 2 frames of latency, the boost side tops out at 14.77 dB, and the mid band has a firmware width and centre (frequencies 1.106 times higher at 48 kHz).

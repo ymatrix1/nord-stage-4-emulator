@@ -28,8 +28,6 @@ use super::fw_tone_stack::{ctx, FwToneStack2, CTX_WORDS};
 const SMOOTH_K: f32 = f32::from_bits(0x3F7D_A3C2);
 /// ASSUMED: clip bound and output reference `L` of the tone stack (1.0 in the oracle golden).
 const LIMIT: f32 = 1.0;
-/// Default of `kAmpMidFreq` (`arm-edit-params.csv`).
-pub(super) const DEFAULT_FREQ_INDEX: f32 = 64.0;
 
 /// The tone stack context words of a setting: `(offset, word)` target pairs and their smoothed
 /// state copies (`+2` words above the target for the five smoothed pairs).
@@ -78,8 +76,7 @@ impl FwEqStage {
             self.stack.set_value(off, v);
             // smoothed copies: A -0x1E, B -0x1D, E -0x1A, F -0x19, C -0x15, D -0x16
             let copy = match off {
-                -0x20 | -0x1F | -0x1C | -0x1B => Some(off + 2),
-                -0x17 | -0x18 => Some(off + 2),
+                -0x20 | -0x1F | -0x1C | -0x1B | -0x17 | -0x18 => Some(off + 2),
                 _ => None,
             };
             if let (true, Some(c)) = (settle, copy) {
