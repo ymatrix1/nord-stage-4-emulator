@@ -469,8 +469,6 @@ impl FirmwareOptions {
         });
         self.set_shape(engine);
         self.set_p_block(engine);
-    }
-
         self.set_stages(engine);
         self.set_organ_level(engine);
     }
@@ -499,7 +497,8 @@ impl FirmwareOptions {
         engine.synth_a.p_block = p;
         engine.synth_b.p_block = p;
         engine.synth_c.p_block = p;
-        }
+    }
+
     fn set_stages(&self, engine: &mut Stage4Engine) {
         engine.synth_a.strip_stages = self.synth_stages;
         engine.synth_b.strip_stages = self.synth_stages;
@@ -550,6 +549,7 @@ impl FirmwareOptions {
         }
         if let Some(p) = self.synth_p {
             parts.push(format!("synth-p={p:?}"));
+        }
         if self.synth_stages {
             parts.push("stages".into());
         }
