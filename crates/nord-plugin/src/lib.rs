@@ -27,6 +27,7 @@ pub mod state;
 pub mod synth_gate_params;
 pub mod synth_mod_params;
 pub mod synth_params;
+pub mod synth_pattern_params;
 
 use nih_plug::prelude::*;
 use nord_core::engine::Stage4Engine;
