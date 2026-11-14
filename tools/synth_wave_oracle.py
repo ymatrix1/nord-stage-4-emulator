@@ -28,6 +28,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import synth_stage_misc as misc
 import synth_stage_noise as noise
+import synth_stage_shape3 as shape3
+import synth_stage_shape4 as shape4
 import synth_stage_shape_sine as shape_sine
 import synth_stage_shape_sine2 as shape_sine2
 import synth_stage_shape_sine3 as shape_sine3
@@ -73,6 +75,8 @@ STAGE_MISC2 = 0x122417
 STAGE_SUB_OSC = 0x12179A
 STAGE_MULTI = 0x121C54
 STAGE_SUPER1 = 0x121E9D
+STAGE_SHAPE3 = 0x120F55
+STAGE_SHAPE4 = 0x12145E
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1)
 PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
 NOISE_STATE = 0xB2EF9  # DM state word of lane x (lane y one above)
@@ -91,6 +95,8 @@ S5_STAGES = (
     STAGE_SYNC6,
     STAGE_SYNC7,
     STAGE_SYNC8,
+    STAGE_SHAPE3,
+    STAGE_SHAPE4,
     STAGE_SHAPE_SINE0,
     STAGE_SHAPE_SINE1,
     STAGE_SHAPE_SINE2,
@@ -113,6 +119,8 @@ PITCH_STAGES = (
     STAGE_SYNC6,
     STAGE_SYNC7,
     STAGE_SYNC8,
+    STAGE_SHAPE3,
+    STAGE_SHAPE4,
 )
 PITCH_SEMITONES = (-24.0, 48.0)
 IDLE_PITCH = 0.006028  # pitch word with `DM(0xC2716) = 0`
@@ -164,6 +172,8 @@ MODELS = {
     STAGE_SUB_OSC: sub_osc.stage_sub_osc,
     STAGE_MULTI: unison.stage_multi,
     STAGE_SUPER1: super1.stage_super1,
+    STAGE_SHAPE3: shape3.stage_shape3,
+    STAGE_SHAPE4: shape4.stage_shape4,
 }
 
 

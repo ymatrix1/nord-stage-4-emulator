@@ -21,7 +21,7 @@ use super::gain_dezip::SY_FRAME_RATE_HZ;
 use super::hw_saw::{SAW_A, SAW_B, SAW_C};
 
 /// VERIFIED: `0x3FAAAA8F` of the helper `0x1251D4` (`F6 = F6 * F11`), 4/3 to float32.
-const FOUR_THIRDS: f32 = 1.333_333_4;
+pub(super) const FOUR_THIRDS: f32 = 1.333_333_4;
 
 /// Signed phase `x` of the helper (`FLOAT R0 BY -31`, -1..1) for a phase in cycles.
 #[inline]
@@ -33,7 +33,7 @@ pub(super) fn signed_phase(p: f32) -> f32 {
 /// One helper sample: band-limited parabola for the phase `p` (cycles), increment `inc` at the
 /// render rate (cycles per sample) and the coefficient `k a`.
 #[inline]
-fn parabola(p: f32, inc: f32, ka: f32) -> f32 {
+pub(super) fn parabola(p: f32, inc: f32, ka: f32) -> f32 {
     let xf = signed_phase(p);
     let xo = signed_phase(p + 0.5);
     let w = 1.0 - (xf.abs() * 0.25 / inc).min(1.0);

@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import synth_stage_misc as misc  # noqa: E402
 import synth_stage_noise as noise  # noqa: E402
 import synth_stage_record as rec  # noqa: E402
+import synth_stage_shape3 as shape3  # noqa: E402
+import synth_stage_shape4 as shape4  # noqa: E402
 import synth_stage_shape_sine as shape_sine  # noqa: E402
 import synth_stage_shape_sine2 as sine2  # noqa: E402
 import synth_stage_shape_sine3 as sine3  # noqa: E402
@@ -52,6 +54,8 @@ MODELS = {
     "0x122151": misc.stage_misc1,
     "0x122417": misc.stage_misc2,
     "0x12179a": sub.stage_sub_osc,
+    "0x120f55": shape3.stage_shape3,
+    "0x12145e": shape4.stage_shape4,
 }
 
 
