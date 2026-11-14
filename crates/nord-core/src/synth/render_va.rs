@@ -1,5 +1,6 @@
 //! Analog oscillator waveforms of `SynthLayer` (`Saw`, `SuperSaw`, `Pulse`, `Triangle`, `Sine`).
 
+use super::fw_shape::fw_shape_wave;
 use super::hw_saw::saw_wave;
 use super::*;
 
@@ -9,6 +10,7 @@ impl SynthLayer {
     pub(super) fn render_va(
         waveform: VaWaveform,
         saw_model: SawModel,
+        shape_stage: Option<f32>,
         supersaw_detune: f32,
         measured: bool,
         pulse_width: f32,
@@ -55,7 +57,10 @@ impl SynthLayer {
                 let base = if t < pw { 1.0 } else { -1.0 };
                 base + poly_blep(t, dt) - poly_blep((t + 1.0 - pw) % 1.0, dt)
             }
-            VaWaveform::Triangle => 1.0 - 4.0 * (t - 0.5).abs(),
+            VaWaveform::Triangle => match shape_stage {
+                Some(shape) => fw_shape_wave(t, dt, eff_freq, shape),
+                None => 1.0 - 4.0 * (t - 0.5).abs(),
+            },
             VaWaveform::Sine => (TAU * t).sin(),
         }
     }
@@ -70,6 +75,7 @@ mod tests {
         SynthLayer::render_va(
             w,
             model,
+            None,
             0.3,
             false,
             0.5,

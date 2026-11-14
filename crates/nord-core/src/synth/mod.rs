@@ -22,6 +22,7 @@ mod fw_adr_chain;
 mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_tables;
+mod fw_shape;
 mod fw_strip_cutoff;
 mod gain_dezip;
 mod hw_saw;
@@ -43,6 +44,7 @@ pub use fw_filter::{
     cutoff_to_r, FilterEngine, FwCoefs, FwFilter, FwFilterType, TablePos, FW_CLIP_LIMIT,
     FW_CUTOFF_MAX_FRACTION, FW_CUTOFF_MIN_HZ,
 };
+pub use fw_shape::{fw_shape_wave, fw_shape_width};
 pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
 pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
 pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
@@ -67,6 +69,8 @@ pub use voice::SynthVoice;
 mod tests_envelope;
 #[cfg(test)]
 mod tests_fw_filter_golden;
+#[cfg(test)]
+mod tests_fw_shape_golden;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
@@ -168,6 +172,10 @@ pub struct SynthLayer {
     /// Strip chain only: voice level from the key-down velocity series `g(vel) / 127` instead of the
     /// linear velocity (`key_velocity.rs`, default on; no effect on the legacy chain).
     pub strip_key_velocity: bool,
+    /// Strip chain only: the ANALOG SHAPE category plays as the firmware stage `0x1212D3` with this
+    /// shape word (`fw_shape.rs`; the idle frame holds 0.5, the knob scale is open); `None` keeps
+    /// the ASSUMED saw placeholder.
+    pub strip_shape: Option<f32>,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -296,6 +304,7 @@ impl SynthLayer {
             gain_dezipper: false,
             chain: SynthChain::Legacy,
             strip_key_velocity: true,
+            strip_shape: None,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,
