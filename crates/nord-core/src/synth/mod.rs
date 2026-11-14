@@ -36,6 +36,7 @@ mod measured;
 mod p_block;
 mod p_table;
 mod pattern;
+mod pattern_presets;
 mod perf;
 mod render;
 mod render_va;
@@ -70,7 +71,10 @@ pub use measured::{
 pub use p_block::{PBlock, PSpec};
 pub use p_table::{type_cutoff_scale, PTable, PTableSpec, PWave, PWAVE_COUNT};
 pub use pattern::{pan_gains, CustomPattern, PatternPan, ACCENT_VELOCITY_BOOST, PATTERN_MAX_STEPS};
-pub use perf::{ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT};
+pub use perf::{
+    ClockDivision, GatePattern, PerfState, PATTERN_PRESETS, PATTERN_PRESET_COUNT,
+    PATTERN_PRESET_MAX,
+};
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
 use strip_map::strip_cutoff_hz;
 pub use strip_map::{

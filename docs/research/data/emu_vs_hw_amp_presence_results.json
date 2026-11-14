@@ -1,0 +1,201 @@
+{
+  "video": "_zksT69H30c",
+  "segments": [
+    {
+      "id": "organ_vox",
+      "entry": "Program/Bank A/Vintage Vox J3.ns4p",
+      "engine": "organ Vox (Twin amp 289 drive 1.1)",
+      "at_s": 2360,
+      "duration_s": 11,
+      "notes": 36,
+      "variants": [
+        {
+          "bands_delta_db": {
+            "sub_20_120": -3.2,
+            "low_120_400": -0.2,
+            "mid_400_1500": 8.13,
+            "presence_1500_3000": -1.31,
+            "brilliance_3000_8000": 2.33,
+            "air_8000_20000": 6.47
+          },
+          "centroid_delta_hz": 292.0,
+          "rms_delta_db": 8.92,
+          "width_hw": 0.4968,
+          "width_emu": 0.19,
+          "centroid_hw_hz": 1467.9,
+          "rms_hw_dbfs": -26.76,
+          "attack_hw_ms": 86.0,
+          "attack_emu_ms": 23.2,
+          "t60_hw_s": 3.12,
+          "t60_emu_s": 1.03,
+          "label": "default",
+          "score": 3.03
+        },
+        {
+          "bands_delta_db": {
+            "sub_20_120": 2.73,
+            "low_120_400": 3.17,
+            "mid_400_1500": 7.53,
+            "presence_1500_3000": -7.51,
+            "brilliance_3000_8000": -9.71,
+            "air_8000_20000": -25.18
+          },
+          "centroid_delta_hz": -1107.7,
+          "rms_delta_db": -0.64,
+          "width_hw": 0.4968,
+          "width_emu": 0.1958,
+          "centroid_hw_hz": 1467.9,
+          "rms_hw_dbfs": -26.76,
+          "attack_hw_ms": 86.0,
+          "attack_emu_ms": 63.6,
+          "t60_hw_s": 3.12,
+          "t60_emu_s": 1.01,
+          "label": "vox_fwamp",
+          "score": 6.13
+        },
+        {
+          "bands_delta_db": {
+            "sub_20_120": 1.04,
+            "low_120_400": 3.04,
+            "mid_400_1500": 10.84,
+            "presence_1500_3000": -12.79,
+            "brilliance_3000_8000": -19.89,
+            "air_8000_20000": -22.34
+          },
+          "centroid_delta_hz": -1135.7,
+          "rms_delta_db": 1.29,
+          "width_hw": 0.4968,
+          "width_emu": 0.1977,
+          "centroid_hw_hz": 1467.9,
+          "rms_hw_dbfs": -26.76,
+          "attack_hw_ms": 86.0,
+          "attack_emu_ms": 65.4,
+          "t60_hw_s": 3.12,
+          "t60_emu_s": 1.01,
+          "label": "vox_engineamp",
+          "score": 9.52
+        },
+        {
+          "bands_delta_db": {
+            "sub_20_120": 2.68,
+            "low_120_400": 2.38,
+            "mid_400_1500": 10.9,
+            "presence_1500_3000": -14.96,
+            "brilliance_3000_8000": -24.94,
+            "air_8000_20000": -29.53
+          },
+          "centroid_delta_hz": -1170.7,
+          "rms_delta_db": -0.21,
+          "width_hw": 0.4968,
+          "width_emu": 0.1909,
+          "centroid_hw_hz": 1467.9,
+          "rms_hw_dbfs": -26.76,
+          "attack_hw_ms": 86.0,
+          "attack_emu_ms": 66.7,
+          "t60_hw_s": 3.12,
+          "t60_emu_s": 1.03,
+          "label": "vox_noamp",
+          "score": 11.17
+        },
+        {
+          "bands_delta_db": {
+            "sub_20_120": 2.2,
+            "low_120_400": 2.58,
+            "mid_400_1500": 7.54,
+            "presence_1500_3000": -6.13,
+            "brilliance_3000_8000": -7.59,
+            "air_8000_20000": -17.87
+          },
+          "centroid_delta_hz": -1012.5,
+          "rms_delta_db": 3.51,
+          "width_hw": 0.4968,
+          "width_emu": 0.2074,
+          "centroid_hw_hz": 1467.9,
+          "rms_hw_dbfs": -26.76,
+          "attack_hw_ms": 86.0,
+          "attack_emu_ms": 42.2,
+          "t60_hw_s": 3.12,
+          "t60_emu_s": 1.0,
+          "label": "vox_fwamp_drive5",
+          "score": 5.21
+        }
+      ]
+    },
+    {
+      "id": "organ_b3",
+      "entry": "Program/Bank A/B3 Chords n Solo.ns4p",
+      "engine": "organ B3",
+      "at_s": 238,
+      "duration_s": 25,
+      "notes": 101,
+      "variants": [
+        {
+          "bands_delta_db": {
+            "sub_20_120": 17.69,
+            "low_120_400": 0.05,
+            "mid_400_1500": -0.36,
+            "presence_1500_3000": -7.65,
+            "brilliance_3000_8000": -1.93,
+            "air_8000_20000": 19.09
+          },
+          "centroid_delta_hz": -226.3,
+          "rms_delta_db": 6.1,
+          "width_hw": 0.4797,
+          "width_emu": 0.2466,
+          "centroid_hw_hz": 480.8,
+          "rms_hw_dbfs": -20.53,
+          "attack_hw_ms": 106.7,
+          "attack_emu_ms": 86.2,
+          "t60_hw_s": 5.24,
+          "t60_emu_s": 0.65,
+          "label": "default",
+          "score": 5.54
+        },
+        {
+          "bands_delta_db": {
+            "sub_20_120": 16.68,
+            "low_120_400": 1.37,
+            "mid_400_1500": -1.03,
+            "presence_1500_3000": -9.02,
+            "brilliance_3000_8000": -5.61,
+            "air_8000_20000": 21.76
+          },
+          "centroid_delta_hz": -225.6,
+          "rms_delta_db": 1.71,
+          "width_hw": 0.4797,
+          "width_emu": 0.233,
+          "centroid_hw_hz": 480.8,
+          "rms_hw_dbfs": -20.53,
+          "attack_hw_ms": 106.7,
+          "attack_emu_ms": 88.2,
+          "t60_hw_s": 5.24,
+          "t60_emu_s": 0.65,
+          "label": "bw_fwamp",
+          "score": 6.74
+        },
+        {
+          "bands_delta_db": {
+            "sub_20_120": 16.68,
+            "low_120_400": 1.37,
+            "mid_400_1500": -1.03,
+            "presence_1500_3000": -9.02,
+            "brilliance_3000_8000": -5.61,
+            "air_8000_20000": 21.76
+          },
+          "centroid_delta_hz": -225.6,
+          "rms_delta_db": 1.71,
+          "width_hw": 0.4797,
+          "width_emu": 0.233,
+          "centroid_hw_hz": 480.8,
+          "rms_hw_dbfs": -20.53,
+          "attack_hw_ms": 106.7,
+          "attack_emu_ms": 88.2,
+          "t60_hw_s": 5.24,
+          "t60_emu_s": 0.65,
+          "label": "bw_engineamp",
+          "score": 6.74
+        }
+      ]
+    }
+  ]
+}
