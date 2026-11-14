@@ -28,6 +28,7 @@
 pub mod ext40;
 pub mod key_rule;
 mod model;
+pub mod pitch_law;
 
 pub use model::kernel_value;
 
