@@ -106,7 +106,7 @@ Morphable parameters of bit width `W` occupy `4W + 3` bits:
 #### Global Program Header (`0x2C`, `45` Bytes)
 - `0..8`: block tag `0x2C`.
 - `8`: `split_enabled` (1b); `9..12`: `split_zone_enabled[0..3]` (3×1b).
-- `12..24`: 3×4b split note indices (`[41, 48, 53, 60, 65, 72, 77, 84, 89, 96]`).
+- `12..24`: 3×4b split position settings `0..10` -> keys `[36, 41, 48, 53, 60, 65, 72, 77, 84, 89, 96]` (VERIFIED: firmware data `0xC02D8370`; the decode used a 10-entry table without 36 until 2026-11-14, [zone-key-ranges](../research/zone-key-ranges.md)).
 - `24..30`: 3×2b crossfade width (`0=Off, 1=Small, 2=Large`).
 - `35..43`: `MasterClockRate` (8b; BPM = `30 + val`).
 - `284..287`: `SectionEnable_I` (`bit2=Org, bit1=Pno, bit0=Syn`); `287..290`: `SectionEnable_II`.

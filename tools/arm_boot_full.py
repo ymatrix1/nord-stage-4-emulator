@@ -63,9 +63,17 @@ def run_init_array(emu: ae.ArmEmu, per_call: int = 300_000_000) -> None:
     emu.install_dsp_ports()  # the initialisers zero BSS words that the fake comm objects use
 
 
-def install_ui_stubs(emu: ae.ArmEmu, extra: tuple[int, ...] = ()) -> None:
-    """No-op the display / timer-queue routines whose objects hang off unmodelled hardware."""
-    emu.add_stub(EVENT_INSERT, lambda _e: 0)
+def install_ui_stubs(
+    emu: ae.ArmEmu, extra: tuple[int, ...] = (), display_stubs: bool = True
+) -> None:
+    """No-op the display / timer-queue routines whose objects hang off unmodelled hardware.
+
+    `display_stubs=False` leaves `EVENT_INSERT` and `TEXT_MEASURE` running for real: it is the
+    mode of `tools/arm_panel.py`, where the panel link exists so the display objects and fonts the
+    two routines read are built (`docs/research/arm-oled-render.md` s4).
+    """
+    if display_stubs:
+        emu.add_stub(EVENT_INSERT, lambda _e: 0)
 
     def spi_transfer(e: ae.ArmEmu) -> int:
         out = e.read32(e.reg(13))  # fifth argument: result pointer
@@ -80,7 +88,7 @@ def install_ui_stubs(emu: ae.ArmEmu, extra: tuple[int, ...] = ()) -> None:
         begin=SPI_COUNT_CHECK,
         end=SPI_COUNT_CHECK,
     )
-    for addr in (*TEXT_MEASURE, *extra):
+    for addr in (*TEXT_MEASURE, *extra) if display_stubs else extra:
         emu.add_stub(addr, lambda _e: 0)
     # A null font table dereference computes `0xFFFFFFFC`; give it a zero page instead of a fault.
     emu.uc.mem_map(HIGH_PAGE, 0x10000)
@@ -127,11 +135,11 @@ def boot_full(emu: ae.ArmEmu, max_insns: int = 3_000_000_000, chunk: int = 50_00
     return FullBoot(pc, emu.reg(14), done, error, len(emu.null_calls), hot)
 
 
-def prepare(code: Path, sram: Path | None) -> ae.ArmEmu:
+def prepare(code: Path, sram: Path | None, display_stubs: bool = True) -> ae.ArmEmu:
     """Firmware image + peripheral stubs + real static initialisers + UI stubs."""
     emu = ae.load_firmware(code, sram)
     ab.install_boot_stubs(emu)
-    install_ui_stubs(emu)
+    install_ui_stubs(emu, display_stubs=display_stubs)
     run_init_array(emu)
     return emu
 
