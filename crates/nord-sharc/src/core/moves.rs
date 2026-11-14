@@ -193,12 +193,15 @@ impl Core {
                 let bank = Self::dag_bank(bits(w, 32, 32));
                 let ii = bits(w, 43, 41) as usize + bank;
                 let mi = bits(w, 40, 38) as usize + bank;
-                let modified = self.modified(ii, mi);
-                // post-modify: access at I and update it; pre-modify: access at I + M
+                // post-modify: access at I and update it (circular wrap applies); pre-modify:
+                // access at I + M, no write-back and **no wrap** (the immediate form already
+                // behaves so; the FX reverb core `0x123F61` relies on it: it stores a pair at
+                // `I6` and at `I6 + L6` as two copies of its all-pass buffer, which only works
+                // if the pre-modified address is not folded back by `L6`)
                 let (addr, update) = if bits(w, 44, 44) == 1 {
-                    (self.dag_out(ii, self.i[ii]), Some(modified))
+                    (self.dag_out(ii, self.i[ii]), Some(self.modified(ii, mi)))
                 } else {
-                    (self.dag_out(ii, modified), None)
+                    (self.dag_out(ii, self.i[ii].wrapping_add(self.m[mi])), None)
                 };
                 let ureg = bits(w, 29, 23) as u8;
                 let captured = self.capture(ureg);
