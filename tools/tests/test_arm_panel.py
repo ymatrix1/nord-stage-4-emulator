@@ -67,3 +67,37 @@ def test_firmware_width_calls_the_measure_routine() -> None:
     buf[ao.TEXT_MEASURE - ae.LOAD_BASE : ao.TEXT_MEASURE - ae.LOAD_BASE + 8] = code
     emu = ae.ArmEmu(bytes(buf))
     assert ap.firmware_width(emu, 0xC0000000, "x") == 42
+
+
+def test_panel_block_answers_present_in_detection_idle_high_otherwise() -> None:
+    import arm_keys as ak
+
+    keys = ak.KeyMatrix()
+    keys.press(0x04, 0, 2)
+    keys.write(ak.STROBE_ADDRESS, 0x04)
+    inside = ap.DETECT_RANGE[0] + 8
+    assert ap.panel_block(inside, 0x60000010, keys) == bytes([0x80, 0, 0, 0])
+    assert ap.panel_block(0xC0100000, 0x60000010, keys) == bytes([0xFF & ~4, 0xFF, 0xFF, 0xFF])
+    assert ap.panel_block(0xC0100000, 0x60000020, keys)[0] == 0xFF
+    assert ap.panel_block(0xC0100000, 0x60000010, None) == bytes(4)
+
+
+def test_install_panel_link_with_keys_answers_the_matrix_and_tracks_the_strobe() -> None:
+    import arm_keys as ak
+
+    emu = ae.ArmEmu(bytes(BIG))
+    keys = ak.KeyMatrix()
+    keys.press(0x08, 1, 0)
+    ap.install_panel_link(emu, keys)
+    code = struct.pack(
+        "<6I",
+        0xE3A02008,  # mov r2, #8 (strobe column 3)
+        0xE59F100C,  # ldr r1, [pc, #0xc] -> strobe register
+        0xE5C12000,  # strb r2, [r1]
+        0xE59F3008,  # ldr r3, [pc, #8] -> port 1
+        0xE5D30000,  # ldrb r0, [r3]
+        BX_LR,
+    ) + struct.pack("<2I", ak.STROBE_ADDRESS, 0x60000020)
+    emu.uc.mem_write(ae.LOAD_BASE + 0x1000, code)
+    assert emu.call(ae.LOAD_BASE + 0x1000) == 0xFE
+    assert keys.strobe == 8

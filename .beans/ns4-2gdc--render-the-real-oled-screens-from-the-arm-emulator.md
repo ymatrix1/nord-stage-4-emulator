@@ -25,18 +25,24 @@ Compare our Program / Synth OLED geometry (rows, fonts, widths, title case) with
 - [x] The link from the host firmware to the panel boards is identified and documented with addresses (EMIFA CS2: presence `0x60000010/20`, latch `0x60000025`, ports `0x60000017/27`).
 - [x] TEXT_MEASURE and EVENT_INSERT run unstubbed with real font objects (`arm_boot_full.prepare(display_stubs=False)`); font object layout decoded and validated against the firmware draw routine on 18 fonts (`arm_panel.py oracle`).
 - [x] The frame buffer / flush found (`0xC0076924`, `[display + 0x18]`, 1024 bytes) and the boot splash and the Program screen (`A:11`) captured as PNG in `target/oled/` (local only).
-- [ ] The Program screen with a program name (blocked: program storage ends in `Write error`).
-- [ ] One menu page (e.g. System page 1) captured by injecting the panel event (blocked: no panel input model).
+- [x] The Program screen no longer ends in `Write error`: the store is four 64 KB I2C EEPROMs (`0x50..0x53`), modelled in `tools/arm_i2c.py`; the blank store is formatted and the screen shows `A:11` + `<empty>`.
+- [ ] The Program screen with a real program name (needs a populated store: record format not decoded; follow-up 1 of the research note).
+- [x] Menu pages captured by injecting panel events (`tools/arm_keys.py`, `tools/arm_screens.py`): Shift + Program 4 / 7 / 8 (`AUX KB` / `MIDI` / `EXTERN SETTINGS`), Program Organize, the three Preset screens, Section Edit, Morph assign and the Synth `OSC WAVEFORM` page. System, Sound, Output and Pedal menus: keys not identified (research note s11).
 - [x] Findings (fonts, row structure) recorded in the research note; compared with `bay_program/oled_home.rs`: the real big title is the 13 px font at (1, 3), next line at y = 18.
-- [ ] Case-only differences of the note (s3, 19 literals) settled (needs a menu / Synth screen).
+- [x] Case-only differences settled where a screen was reached: title bars upper-case through a widget flag (`ORGAN PRESET`, `AUX KB SETTINGS` right; `AUX KB`, `PROGRAM ORGANIZE`, `... MENU` wrong and fixed). Open: `UNDO`, `TRANSPOSE`, `Layer Init`, `FILTER`, `VIBRATO`, `OSC PITCH`, `LEFT` / `RIGHT` (research note s10).
+- [x] Real title / row layout (13 px at the top left, 15 px pitch, rule y = 33, rows from y = 36) compared with `oled_home.rs` / `oled_paint.rs`; every difference recorded in `docs/research/arm-oled-render.md` s9.
 
 ## Out of Scope
 
-Shipping any firmware-derived pixel data (frames, font bitmaps); changing the GUI layout before the comparison exists (`crates/nord-gui` untouched).
+Shipping any firmware-derived pixel data (frames, font bitmaps, EEPROM images); GUI changes beyond the measured Program home grid and the settings menu titles (the other differences are follow-up beans: inverted title bar, menu body, popups, section row icons, proportional font).
 
 ## Summary of Changes
 
 - `tools/arm_oled.py`, `tools/arm_panel.py` (+ tests): font parser and reference rasteriser, controller / panel-link model, harness glue and CLI (`fonts`, `oracle`, `capture`).
 - `tools/arm_boot_full.py`: `display_stubs` switch.
 - `docs/research/arm-oled-render.md`, `docs/specs/arm-oled-render.md`, update banner in `docs/research/oled-strings-vs-firmware.md`.
-- Left: program storage model, panel scan input, display 1 content (research note s6).
+- Second pass: `tools/arm_i2c.py` (I2C0 + four EEPROMs; found as the program memory), `tools/arm_keys.py` (key matrix, 98 bits), `tools/arm_screens.py` (Session: boot once, save / restore, press keys, capture frames and widget text; CLI `boot` / `press` / `sweep`), `arm_panel.install_panel_link(emu, keys)` + `panel_block`, tests for each.
+- `crates/nord-gui` (small, verified): `oled_paint::grid` (title y = 3, name line at the title's 13 px size, y = 18, rule y = 33, rows pitch 10); settings menu titles `AUX KB SETTINGS`, `MIDI SETTINGS`, `EXTERN SETTINGS`, ... and `Program Organize` (`MenuId::title`).
+- `docs/research/arm-oled-render.md` s6 to s11, `docs/specs/arm-oled-render.md` v1.1, banner and follow-up 2 of `docs/research/oled-strings-vs-firmware.md`.
+- Follow-up beans: `ns4-9nj8` (GUI title bar / menu body / popups), `ns4-aivy` (home rows), `ns4-pyqg` (populate the program store).
+- Left: populated program store (record format), keys for Program 1 / 2 / 5 / 6, Page, Store, Undo, Layer Init, encoders; GUI follow-ups 2 to 5 of the research note.

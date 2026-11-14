@@ -19,6 +19,7 @@ those two reads inside the routine, records every store to `0x6000....` and feed
     python tools/arm_panel.py fonts target/fw_unpacked/bank0_CODE.bin
 
 Frames and fonts are copyrighted firmware output: write them under `target/` (git-ignored) only.
+Key presses, the saved machine and the widget-text log live in `tools/arm_screens.py`.
 Evidence and limits: `docs/research/arm-oled-render.md`.
 """
 
@@ -29,6 +30,7 @@ import sys
 from pathlib import Path
 
 import arm_oled as ao
+from arm_keys import KeyMatrix
 
 # VERIFIED (disassembly `0xC024D648..0xC024D70C`): panel presence read. Panel 0 answers on
 # `0x60000010`, panel 1 on `0x60000020` (bit 7 = present, bit 6 selects the second answer value).
@@ -53,8 +55,12 @@ def in_wait_loop(pc: int) -> bool:
     return WAIT_LOOP[0] <= pc <= WAIT_LOOP[1]
 
 
-def install_panel_link(emu) -> ao.PanelLink:  # noqa: ANN001 - ArmEmu, needs unicorn
-    """Attach both panels: detection answers, store capture, controller model."""
+def install_panel_link(emu, keys: KeyMatrix | None = None) -> ao.PanelLink:  # noqa: ANN001
+    """Attach both panels: detection answers, store capture, controller model.
+
+    With `keys`, the panel status ports answer the key matrix outside the detection routine
+    (idle high, held keys low) and the strobe stores are fed to it; without it they answer 0.
+    """
     link = ao.PanelLink()
     try:
         emu.uc.mem_map(CS2_BASE, CS2_SIZE)
@@ -62,14 +68,29 @@ def install_panel_link(emu) -> ao.PanelLink:  # noqa: ANN001 - ArmEmu, needs uni
         pass
 
     def on_read(uc, _access, address, _size, _value, _user) -> None:  # noqa: ANN001
-        uc.mem_write(address, bytes([panel_answer(emu.reg(15), address)]))
+        base = address & ~3
+        if base not in PANEL_STATUS:
+            return
+        block = panel_block(emu.reg(15), base, keys)
+        uc.mem_write(base, block)
 
     def on_write(_uc, _access, address, _size, value, _user) -> None:  # noqa: ANN001
         link.write(address, value)
+        if keys is not None:
+            keys.write(address, value)
 
     emu.uc.hook_add(emu._u.UC_HOOK_MEM_READ, on_read, begin=CS2_BASE, end=CS2_BASE + CS2_SIZE - 1)
     emu.uc.hook_add(emu._u.UC_HOOK_MEM_WRITE, on_write, begin=CS2_BASE, end=CS2_BASE + CS2_SIZE - 1)
     return link
+
+
+def panel_block(pc: int, base: int, keys: KeyMatrix | None) -> bytes:
+    """The four bytes of the panel status port at `base` for a read executed at `pc`."""
+    answer = panel_answer(pc, base)
+    if answer or keys is None:
+        return bytes([answer, 0, 0, 0])
+    first = keys.read(base)
+    return bytes([0 if first is None else first, 0xFF, 0xFF, 0xFF])
 
 
 def boot_with_panels(emu, max_insns: int = 1_500_000_000) -> tuple[int, int, int]:  # noqa: ANN001
@@ -153,10 +174,12 @@ def cmd_oracle(code: Path) -> int:
 
 def cmd_capture(code: Path, sram: Path, out: Path, steady: int, stubs: bool) -> int:
     import arm_boot_full as bf
+    import arm_i2c as ai
     import arm_steady as st
 
     emu = bf.prepare(code, sram, display_stubs=stubs)
-    link = install_panel_link(emu)
+    link = install_panel_link(emu, KeyMatrix())  # idle matrix: no key held
+    ai.install_i2c(emu)  # program memory: without it the Program screen shows `Write error`
     pc, n, irqs = boot_with_panels(emu)
     print(f"boot: pc={pc:#x} after {n} instructions, {irqs} timer interrupts in the wait loop")
     if pc == st.MAIN_LOOP and steady:
