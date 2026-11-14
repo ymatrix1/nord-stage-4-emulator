@@ -13,7 +13,7 @@
 | Unused location shows `<empty>` | BG 19:35 (`G:82`), PP 5:45 | was `(empty)` (`nav.rs`) | differed | fixed, test |
 | Boxed `E` after the location once edited; cleared after STORE and on load | BG 17:10, PP 5:30 vs 6:20 and 6:30, ORG 5:30 | `bay_program/edited.rs` edit counter (`AudioHandle::edit_count`) | matches | fixed, tests `edited::tests`, `oled_home::tests` |
 | Live Mode shows `Live 1` as the big title | BG 19:45 | `oled_home::location_title` | matches | fixed, test `live_mode_titles_the_slot_and_drops_the_mark` |
-| Home rows: section icon, preset id `1:05` or source name plus size (`White Grand XL`, `Silver Grand M`), organ model plus mini drawbars | PL 11:25, BG 17:10, SG 8:40, ORG 5:30 | `oled_home::section_rows`: section name rows only | partly | names done; preset id, size letter, mini drawbars open (bean ns4-ow85 out of scope) |
+| Home rows: section icon, preset id `1:05` or source name plus size (`White Grand XL`, `Silver Grand M`), organ model plus mini drawbars | PL 11:25, BG 17:10, SG 8:40, ORG 5:30 | `oled_home::section_rows`: section name rows only | partly | names, piano size letter and B3 drawbar digits done (ns4-bjvn); preset id open: no data source |
 | Piano dial changes the piano row in place (no overlay) | SG 8:38-8:55 | `piano_overlay.rs` LIST/INFO overlay | unknown (other lane) | note to piano lane |
 | Preset screen titled `LOAD SYNTH PRESET`, id `1:12`, only `Cancel` soft button | PL 5:22 | `PIANO PRESET`, Num/Cat/Cancel (matches manual p.42) | differs from video, matches v1.6x manual | none; OS differs |
 | Preset entry shows boxed `E` until the dial loads it | PL 5:22, manual p.42 | edited mark after any preset load through the browser (loading is an edit) | unknown | ASSUMED, same counter |
