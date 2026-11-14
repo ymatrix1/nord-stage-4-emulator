@@ -6,7 +6,6 @@ use crate::types::{ControlEntry, ControlKind as K, Section};
 pub fn controls() -> Vec<ControlEntry> {
     let s = Section::Synth;
     let e = ControlEntry::new;
-    let bean = "ns4-4w9l";
     vec![
         // LFO
         e("synth.lfo.waveform", s, K::Button, "LFO WAVEFORM", 34).bound("synthm_lfo_shape_{n}"),
@@ -34,7 +33,7 @@ pub fn controls() -> Vec<ControlEntry> {
             35,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:synth.group_lfo"),
         // Voice
         e("synth.voice.mode", s, K::Button, "VOICE MONO/LEGATO", 34).bound("synthx_voice_{n}"),
         e("synth.voice.priority", s, K::Button, "LO / HI PRIORITY", 34)
@@ -53,9 +52,9 @@ pub fn controls() -> Vec<ControlEntry> {
         .bound("synthm_vib_mode_{n}"),
         e("synth.vibrato.menu", s, K::Button, "VIBRATO MENU", 37)
             .assumed("menu entry point is not described in the manual text")
-            .todo(bean),
+            .bound("ui:synth.page.vibrato"),
         // Arpeggiator / Gate
-        e("synth.arp.run", s, K::Button, "ARP RUN", 35).todo(bean),
+        e("synth.arp.run", s, K::Button, "ARP RUN", 35).bound("ui:synth.arp_run"),
         e("synth.arp.mode", s, K::Button, "ARP / POLY / GATE", 35).bound("synthm_arp_mode_{n}"),
         e(
             "synth.arp.pattern",
@@ -88,7 +87,7 @@ pub fn controls() -> Vec<ControlEntry> {
         .shift()
         .bound("synthg_arp_sync_{n}"),
         e("synth.arp.range", s, K::Knob, "ARP RANGE / GATE ENV", 36).bound("synthm_arp_range_{n}"),
-        e("synth.arp.menu", s, K::Button, "ARP MENU", 36).todo(bean),
+        e("synth.arp.menu", s, K::Button, "ARP MENU", 36).bound("ui:synth.page.arp"),
         e(
             "synth.arp.group",
             s,
@@ -97,7 +96,7 @@ pub fn controls() -> Vec<ControlEntry> {
             36,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:synth.group_arp"),
         // KB Hold
         e("synth.kb_hold", s, K::Button, "KB HOLD", 36).bound("synthg_kb_hold"),
         e(
@@ -110,7 +109,7 @@ pub fn controls() -> Vec<ControlEntry> {
         .shift()
         .bound("synthg_hold_excl_{n}"),
         // Amp envelope
-        e("synth.amp.envelope", s, K::Button, "AMP ENVELOPE", 33).todo(bean),
+        e("synth.amp.envelope", s, K::Button, "AMP ENVELOPE", 33).bound("ui:synth.page.env_amp"),
         e(
             "synth.amp.velocity",
             s,
@@ -119,7 +118,7 @@ pub fn controls() -> Vec<ControlEntry> {
             33,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:synth.amp_velocity"),
     ]
 }
 

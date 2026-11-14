@@ -67,6 +67,8 @@ pub struct ProgramUi {
     pub clock: ClockUi,
     pub transp: TransposeUi,
     pub scene2: bool,
+    /// PEDAL TAP (Shift+Mst Clk): a panel-assigned pedal taps the Master Clock (manual p.40).
+    pub pedal_tap: bool,
     /// What MON/COPY copied last (the engine holds the data).
     pub copied: Option<CopyItem>,
     /// Layer the Copy / Paste / Single-layer screens act on.
@@ -145,6 +147,7 @@ impl Default for ProgramUi {
             clock: ClockUi::default(),
             transp: TransposeUi::default(),
             scene2: false,
+            pedal_tap: false,
             copied: None,
             focus: LayerId::PianoA,
             catalog: Catalog::default(),

@@ -86,8 +86,13 @@ impl ProgramUi {
                 None => Vec::new(),
             },
             "mst_clk.pedal_tap" => {
-                self.set_message("Pedal tap: no pedal input yet");
-                Vec::new()
+                self.pedal_tap = !self.pedal_tap;
+                self.set_message(if self.pedal_tap {
+                    "Pedal Tap: on"
+                } else {
+                    "Pedal Tap: off"
+                });
+                vec![cmd(ProgramEdit::PedalTap(self.pedal_tap))]
             }
             "transp.on_set" if hold => self.open(Screen::Transpose),
             "transp.on_set" => {

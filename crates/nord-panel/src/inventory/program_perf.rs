@@ -3,16 +3,19 @@
 
 use crate::types::{ControlEntry, ControlKind as K, Section};
 
+/// The three Morph Assign buttons share one GUI path (`MorphUi`: hold or latch, dial = depth).
+const ASSIGN: &str = "ui:program.morph_assign";
+/// The Preset Library buttons share the Preset browser screen.
+const PRESETS: &str = "ui:program.preset_library";
+
 pub fn controls() -> Vec<ControlEntry> {
     let s = Section::Program;
     let e = ControlEntry::new;
-    let bean = "ns4-ymci";
-    let beh = "ns4-q6p7";
     vec![
         // Morph Assign (p.38-39)
-        e("morph.wheel", s, K::Button, "MORPH ASSIGN WHEEL", 38).todo(beh),
-        e("morph.at", s, K::Button, "MORPH ASSIGN A.T.", 38).todo(beh),
-        e("morph.ctrlped", s, K::Button, "MORPH ASSIGN CTRLPED", 38).todo(beh),
+        e("morph.wheel", s, K::Button, "MORPH ASSIGN WHEEL", 38).bound(ASSIGN),
+        e("morph.at", s, K::Button, "MORPH ASSIGN A.T.", 38).bound(ASSIGN),
+        e("morph.ctrlped", s, K::Button, "MORPH ASSIGN CTRLPED", 38).bound(ASSIGN),
         e(
             "morph.clear",
             s,
@@ -21,12 +24,12 @@ pub fn controls() -> Vec<ControlEntry> {
             39,
         )
         .shift()
-        .todo(beh),
+        .bound("ui:program.morph_clear"),
         // Split (p.15, p.39)
         e("split.on_set", s, K::Button, "SPLIT ON/SET", 39).bound("split_enabled"),
         e("split.set_key", s, K::Button, "SET KEY (Shift+Split)", 39)
             .shift()
-            .todo(bean),
+            .bound("ui:program.split_set_key"),
         e("split.leds", s, K::Led, "SPLIT L / M / H LEDs", 15)
             .ui("show which split points are active"),
         // Master Clock (p.40)
@@ -39,12 +42,12 @@ pub fn controls() -> Vec<ControlEntry> {
             40,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:program.pedal_tap"),
         // Transpose (p.40)
         e("transp.on_set", s, K::Button, "TRANSP ON/SET", 40).bound("prog_transpose"),
         e("transp.panic", s, K::Button, "PANIC (Shift+Transp)", 40)
             .shift()
-            .todo(bean),
+            .bound("ui:program.panic"),
         // Preset Library (p.19, p.41-42)
         e(
             "preset_library.organ",
@@ -53,7 +56,7 @@ pub fn controls() -> Vec<ControlEntry> {
             "PRESET LIBRARY ORGAN",
             41,
         )
-        .todo(bean),
+        .bound(PRESETS),
         e(
             "preset_library.piano",
             s,
@@ -61,7 +64,7 @@ pub fn controls() -> Vec<ControlEntry> {
             "PRESET LIBRARY PIANO",
             41,
         )
-        .todo(bean),
+        .bound(PRESETS),
         e(
             "preset_library.synth",
             s,
@@ -69,7 +72,7 @@ pub fn controls() -> Vec<ControlEntry> {
             "PRESET LIBRARY SYNTH",
             41,
         )
-        .todo(bean),
+        .bound(PRESETS),
         e(
             "preset_library.single_piano",
             s,
@@ -78,7 +81,7 @@ pub fn controls() -> Vec<ControlEntry> {
             42,
         )
         .shift()
-        .todo(bean),
+        .bound(PRESETS),
         e(
             "preset_library.single_synth",
             s,
@@ -87,7 +90,7 @@ pub fn controls() -> Vec<ControlEntry> {
             42,
         )
         .shift()
-        .todo(bean),
+        .bound(PRESETS),
     ]
 }
 
