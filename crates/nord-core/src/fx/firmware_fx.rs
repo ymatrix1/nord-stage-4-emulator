@@ -19,6 +19,13 @@
 /// * `reverb_mix`: the reverb send and dry gains follow `kRvbAmt` (`fw_map::reverb_send` / `reverb_dry`,
 ///   equal power; words VERIFIED on all 128 values, role EMPIRICAL). Only the mix: the engine's
 ///   reverb network keeps its own taps, decay and damping (the multi-tap routines are not ported).
+/// * `reverb`: the Spring reverbs (`kRvbType` 0 and 1, `ReverbModel::Spring` and its variation)
+///   run the firmware routine `0x12417E` with the ported core `0x123F61` ([`super::FwReverb`],
+///   bit exact against the `sharc-fx` oracle, `tests_fw_rvb_golden.rs`) instead of the engine FDN.
+///   The routine does the dry/wet mix itself (`kRvbAmt` words), so `reverb_mix` is not applied on
+///   top. **Latency 4 frames** while it runs; the other reverb types keep the engine FDN (their
+///   routines are not ported). Default off: see `docs/research/fx-reverb-leslie.md` s10 for the
+///   comparison with the video.
 /// * `compressor`: the layer compressor is the firmware gain computer ([`super::FwCompressor`])
 ///   with the `kCmpAmt` words. Algorithm VERIFIED, `kCmpAmt` words VERIFIED, slope and log gain
 ///   ASSUMED. **Latency 4 frames (83 us at 48 kHz)** on that layer; the stage runs even when
@@ -46,6 +53,8 @@ pub struct FirmwareFx {
     pub delay_time: bool,
     /// Reverb mix law of `kRvbAmt`.
     pub reverb_mix: bool,
+    /// Firmware reverb routine for the Spring types (`kRvbType` 0, 1); other types use the FDN.
+    pub reverb: bool,
     /// Firmware Amp drive stage with the `kAmpTypeNew` words (Twin, JC, Small families).
     pub amp: bool,
 }
@@ -69,6 +78,7 @@ impl FirmwareFx {
         compressor: false,
         delay_time: false,
         reverb_mix: false,
+        reverb: false,
         amp: false,
     };
 
@@ -78,6 +88,7 @@ impl FirmwareFx {
         compressor: true,
         delay_time: true,
         reverb_mix: true,
+        reverb: true,
         amp: true,
     };
 }
@@ -92,7 +103,15 @@ mod tests {
         let d = std::hint::black_box(FirmwareFx::DEFAULT);
         assert!(d.amp && !d.delay_laws && !d.compressor);
         let all = std::hint::black_box(FirmwareFx::ALL);
-        assert!(all.delay_laws && all.compressor && all.delay_time && all.reverb_mix && all.amp);
+        assert!(
+            all.delay_laws
+                && all.compressor
+                && all.delay_time
+                && all.reverb_mix
+                && all.reverb
+                && all.amp
+        );
+        assert!(!d.reverb, "the firmware reverb is opt-in");
         assert_ne!(all, FirmwareFx::OFF);
     }
 }

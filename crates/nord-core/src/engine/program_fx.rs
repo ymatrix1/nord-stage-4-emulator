@@ -81,6 +81,7 @@ impl Stage4Engine {
             0.0
         };
         fx.reverb_model = dec.reverb_model();
+        fx.reverb_variation = dec.reverb_variation();
         // Reverb Color: 0 none, 1 DARK, 2 BRIGHT (EMPIRICAL, `ns4decode`; the string `Dark` is in the
         // firmware at 0x2cc938). The variation of Stage/Hall/Cathedral is `Chorale` (VERIFIED names).
         fx.reverb_color = match dec.reverb_color {

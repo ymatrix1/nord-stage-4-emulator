@@ -91,6 +91,22 @@ pub const ROTARY: SwitchInfo = sw(
     Empirical,
     "Engine tanh(g x), unity tanh(g x)/g, or scaled (preset unit 0..10 to engine 0..1).",
 );
+/// Organ output level law (`--organ-level`).
+pub const ORGAN_LEVEL: SwitchInfo = sw(
+    "Organ",
+    "--organ-level",
+    "Level",
+    Mixed,
+    "Organ output level: model default, legacy bus scale, or firmware swell word (docs/research/organ-output-law.md).",
+);
+/// Firmware Spring reverb (`--firmware-reverb`).
+pub const REVERB: SwitchInfo = sw(
+    "FX",
+    "--firmware-reverb",
+    "Firmware reverb",
+    Mixed,
+    "Firmware Spring reverb routine on every chain (Spring types only, 4 frames latency).",
+);
 /// Synth chain (`--synth-chain`).
 pub const CHAIN: SwitchInfo = sw(
     "Synth",
@@ -165,10 +181,11 @@ pub const ROUTING: SwitchInfo = sw(
 );
 
 /// All switches in bar order.
-pub const ALL: [SwitchInfo; 12] = [
+pub const ALL: [SwitchInfo; 14] = [
     TONE,
     B3_TAIL,
     ROTARY,
+    ORGAN_LEVEL,
     CHAIN,
     FILTER,
     MEASURED,
@@ -177,6 +194,7 @@ pub const ALL: [SwitchInfo; 12] = [
     PIANO_BUS,
     AMP,
     FX_PORTS,
+    REVERB,
     ROUTING,
 ];
 

@@ -33,10 +33,10 @@ one-line meaning) and an `Engine: ...` status line with the active set (also in 
 
 | Group | Controls |
 |---|---|
-| Organ | Source, B3 tail (enabled with B3 wheels), Rotary drive |
+| Organ | Source, B3 tail (enabled with B3 wheels), Rotary drive, Level |
 | Synth | Chain, Filter, Measured laws, Shape (checkbox + slider) |
 | Piano | Level, SMP bus scale |
-| FX | Amp path, Firmware FX |
+| FX | Amp path, Firmware FX, Firmware reverb |
 | Global | Firmware routing |
 
 Changes are sent as `AudioCommand::SetFirmwareOptions` and `FirmwareOptions::apply_exact` runs on
@@ -54,6 +54,44 @@ nord-stage4 --measured-laws --dump-options       # prints the active set
 The self-test prints peak, RMS and the RMS difference to the default engine (0 for defaults) and
 exits non-zero on non-finite samples. The window itself needs a display and an audio device.
 
+## Screenshots, focus view and the legibility check
+
+```bash
+# One PNG per section at 2x (builds once, writes target/shots/<section>.png)
+python tools/gui_shots.py [--out DIR] [--scale 2] [--sections organ,synth] [--no-build]
+# One shot by hand; sections: organ piano program synth effects master keybed (default: whole panel)
+nord-stage4 --screenshot out.png --screenshot-section synth --screenshot-scale 2
+```
+
+`--screenshot-scale N` is physical px per logical panel px. The window opens off-screen without
+taking focus or a taskbar entry, is resized to the region, the frame is cropped to it, and the
+process exits 0 after saving (`std::process::exit`; the normal close path ends with
+`0xcfffffff` on Windows). A 20 s watchdog exits 3 when no PNG arrives; `gui_shots.py` also kills
+a child that runs over 30 s. A whole-panel shot is limited by the OS window size (the keybed
+is capped at 1x for that reason). F12 still saves the live window to `screenshot.png`. Code:
+`crates/nord-gui/src/screenshot.rs`.
+
+Focus view (B12): click a section header or press `Z` (section under the pointer, else the last
+one) to zoom that section to fill the window (up to 4x, crisp text: the egui zoom factor, not a
+bitmap scale); `Esc` returns, `1`-`5` jump to Organ, Piano, Program, Synth, Layer Effects. In the
+overview the window scale-to-fits the panel. Code: `crates/nord-gui/src/panel/view.rs`.
+
+Scale: the panel is drawn at `LAYOUT_SCALE` = 2 (3120 x 840 logical px, `panel/layout_px.rs`) so
+that 7.5 px labels fit between neighbours. A 1900 px window therefore shows the overview at about
+0.6x: read labels in the focus view or in `gui_shots.py` output.
+
+`panel/legibility_tests.rs` renders the real panel headless and fails on: any text under
+`MIN_FONT_PX` (7.5), two overlapping labels, or a label overlapping a control rectangle it
+does not belong to. `legibility_allow.txt` lists tolerated collisions (empty now; the test also
+fails on stale entries). Nudges for tight neighbours live in `panel/layout_tweaks.rs`, never in
+the `ASSUMED` photo tables. Before/after: `docs/img/gui/`.
+
+| State | Labels >= 7.5 px | Collisions |
+|---|---|---|
+| Before (original fonts 4.5-7 px, 1560 px panel) | no (smallest 4.5) | 33 |
+| 7.5 px minimum at 1560 px | yes | 98 (with the stricter 1 px-gap rule: more) |
+| 7.5 px minimum at 3120 px plus 6 nudges | yes | 0 |
+
 ## What each switch changes
 
 | Switch (flag / bar control) | Changes | Status |
@@ -61,6 +99,7 @@ exits non-zero on non-finite samples. The window itself needs a display and an a
 | `--tone-source` (Organ: Source) | `firmware` pipe bank VERIFIED vs SHARC oracle; `b3wheels` ladder VERIFIED 2.5e-11, per-key weights not modelled; `vox`, `farfisa` partial; `legacy` ASSUMED | MIXED per choice |
 | `--b3-tail on\|off` (Organ: B3 tail) | B3 processor-tail response (`docs/research/b3-vox-video-gap.md`) | EMPIRICAL |
 | `--rotary-drive engine\|unity\|scaled` (Organ: Rotary drive) | `tanh(g x)`, `tanh(g x)/g`, or drive/10 (`docs/research/b3-rotary.md`) | EMPIRICAL |
+| `--organ-level default\|legacy\|firmware` (Organ: Level) | Organ output level law: legacy bus scale, or firmware swell word and squared layer level (`docs/research/organ-output-law.md`) | MIXED per choice |
 | `--synth-chain legacy\|strip` (Synth: Chain) | Firmware per-voice strip chain, ADR/R laws open (OQ22) | MIXED (partly VERIFIED) |
 | `--filter-engine zdf\|firmware` (Synth: Filter) | Firmware synth filter (`synth-engine.md`) | VERIFIED vs oracle |
 | `--measured-laws` (Synth: Measured laws) | 16-voice Super Saw, envelope depth, decay, pitch, vibrato (`audible-genius-synth-lessons.md`) | EMPIRICAL |
@@ -69,6 +108,7 @@ exits non-zero on non-finite samples. The window itself needs a display and an a
 | `--firmware-piano-bus` (Piano: SMP bus scale) | Sample path scaled 0.5 instead of 0.55 (Q31 receiver convention) | ASSUMED |
 | `--amp-path engine\|firmware` (FX: Amp path) | Firmware drive stage (engine default) or engine tanh drive and RBJ cabinet; 4 frames latency | VERIFIED (`tests_amp_golden.rs`) |
 | `--firmware-fx` (FX: Firmware FX) | Every `FirmwareFx` port (delay laws, delay time, reverb mix, compressor), see `effects-and-routing.md` | MIXED per port |
+| `--firmware-reverb` (FX: Firmware reverb) | Firmware Spring reverb routine on every chain, Spring types only, 4 frames latency | MIXED (see `fx-reverb-leslie.md`) |
 | `--firmware-routing` (Global: Firmware routing) | Section/layer enables and per-layer KB zones as stored (D22); zone codes open | ASSUMED |
 | `--firmware-all` / `--legacy-all` | Presets: verified paths on (not measured laws, routing, Vox/Farfisa/B3) / all defaults | - |
 

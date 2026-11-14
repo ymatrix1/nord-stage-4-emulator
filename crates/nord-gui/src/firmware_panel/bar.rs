@@ -1,7 +1,7 @@
 //! egui widgets of the firmware engine-path bar: one row of dropdowns / checkboxes per engine.
 
 use super::info::{self, SwitchInfo};
-use nord_core::organ::ToneWheelSource;
+use nord_core::organ::{OutputLevel, ToneWheelSource};
 use nord_core::render_opts::{FirmwareOptions, RotaryDrive};
 use nord_core::synth::{FilterEngine, SynthChain};
 
@@ -44,6 +44,19 @@ const ROTARIES: [Choice<RotaryDrive>; 3] = [
     ),
     (RotaryDrive::Unity, "Unity", "tanh(g x) / g, EMPIRICAL"),
     (RotaryDrive::Scaled, "Scaled /10", "drive / 10, EMPIRICAL"),
+];
+const ORGAN_LEVELS: [Choice<OutputLevel>; 3] = [
+    (
+        OutputLevel::ModelDefault,
+        "Model default",
+        "firmware for Pipe, legacy otherwise",
+    ),
+    (OutputLevel::Legacy, "Legacy", "bus scale 0.08"),
+    (
+        OutputLevel::Firmware,
+        "Firmware",
+        "swell word, EMPIRICAL gain K",
+    ),
 ];
 const CHAINS: [Choice<Option<SynthChain>>; 2] = [
     (None, "Classic", "engine chain"),
@@ -143,6 +156,7 @@ pub fn show(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
                         dropdown(ui, &info::B3_TAIL, &mut o.b3_tail, &TAILS);
                     });
                     dropdown(ui, &info::ROTARY, &mut o.rotary_drive, &ROTARIES);
+                    dropdown(ui, &info::ORGAN_LEVEL, &mut o.organ_level, &ORGAN_LEVELS);
                 });
                 group(ui, "Piano", false, |ui| {
                     dropdown(ui, &info::PIANO_LEVEL, &mut o.piano_firmware_level, &LEVELS);
@@ -151,6 +165,7 @@ pub fn show(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
                 group(ui, "FX", false, |ui| {
                     dropdown(ui, &info::AMP, &mut o.amp_path, &AMPS);
                     checkbox(ui, &info::FX_PORTS, &mut o.firmware_fx);
+                    checkbox(ui, &info::REVERB, &mut o.firmware_reverb);
                 });
             });
             ui.horizontal(|ui| {
@@ -213,7 +228,7 @@ mod tests {
 
     #[test]
     fn dropdown_names_are_unique_and_cover_every_variant() {
-        assert!(unique(&TONES) && unique(&TAILS) && unique(&ROTARIES));
+        assert!(unique(&TONES) && unique(&TAILS) && unique(&ROTARIES) && unique(&ORGAN_LEVELS));
         assert!(unique(&CHAINS) && unique(&FILTERS) && unique(&LEVELS) && unique(&AMPS));
         assert_eq!(ROTARIES.len(), 3);
         assert_eq!(TONES.len(), 6);

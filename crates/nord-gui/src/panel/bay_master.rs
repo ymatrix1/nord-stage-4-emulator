@@ -31,7 +31,7 @@ pub(super) fn render_bay_master(
     // Rotary Speaker group frame behind the rotary controls.
     let (top, bottom) = (rc("rotary.drive"), rc("rotary.speed"));
     let frame = Rect::from_min_max(
-        pos2(top.left() - 16.0, top.top() - 14.0),
+        pos2(top.left() - 16.0, top.top() - 26.0),
         pos2(top.right() + 7.0, bottom.bottom() + 12.0),
     );
     painter.rect_filled(frame, 4.0, Color32::from_rgb(110, 20, 24));

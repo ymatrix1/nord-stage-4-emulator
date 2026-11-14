@@ -3,7 +3,7 @@
 
 use crate::engine::{FirmwareRouting, Stage4Engine};
 use crate::fx::FirmwareFx;
-use crate::organ::ToneWheelSource;
+use crate::organ::{OutputLevel, ToneWheelSource};
 use crate::synth::{FilterEngine, SynthChain};
 
 /// Parses a `--tone-source` value: `default | legacy | firmware | vox | b3wheels`.
@@ -17,6 +17,18 @@ pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
         "farfisa" | "farfisawheels" => Ok(ToneWheelSource::FarfisaWheels),
         _ => Err(format!(
             "invalid --tone-source '{v}' (expected default|legacy|firmware|vox|b3wheels|farfisa)"
+        )),
+    }
+}
+
+/// Parses an `--organ-level` value: `default | legacy | firmware`.
+pub fn parse_organ_level(v: &str) -> Result<OutputLevel, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "default" | "model" => Ok(OutputLevel::ModelDefault),
+        "legacy" => Ok(OutputLevel::Legacy),
+        "firmware" => Ok(OutputLevel::Firmware),
+        _ => Err(format!(
+            "invalid --organ-level '{v}' (expected default|legacy|firmware)"
         )),
     }
 }
@@ -182,6 +194,9 @@ pub struct FirmwareOptions {
     pub b3_tail: Option<bool>,
     /// `--firmware-fx`: every `FirmwareFx` port on every FX chain.
     pub firmware_fx: bool,
+    /// `--firmware-reverb`: only the firmware Spring reverb (`FirmwareFx::reverb`) on every chain,
+    /// on top of whatever `firmware_fx` selects.
+    pub firmware_reverb: bool,
     /// `--firmware-piano-level`: `PianoLayer::firmware_velocity_level`.
     pub piano_firmware_level: bool,
     /// `--firmware-piano-bus`: `PianoLayer::firmware_bus_scale` (opt-in, ASSUMED receiver scale).
@@ -199,6 +214,10 @@ pub struct FirmwareOptions {
     pub amp_path: Option<bool>,
     /// `--rotary-drive engine|unity|scaled`.
     pub rotary_drive: RotaryDrive,
+    /// `--organ-level firmware|legacy`: the organ output level law ([`OutputLevel`]): the swell
+    /// word, the squared layer level and the bus gain `ORGAN_BUS_GAIN` on the firmware organ
+    /// paths.
+    pub organ_level: OutputLevel,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -211,6 +230,7 @@ impl Default for FirmwareOptions {
             synth_chain: None,
             b3_tail: None,
             firmware_fx: false,
+            firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
             measured_laws: false,
@@ -218,6 +238,7 @@ impl Default for FirmwareOptions {
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
+            organ_level: OutputLevel::ModelDefault,
         }
     }
 }
@@ -240,6 +261,7 @@ impl FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             firmware_fx: true,
+            firmware_reverb: false,
             piano_firmware_level: true,
             piano_bus_scale: false,
             measured_laws: false,
@@ -247,6 +269,7 @@ impl FirmwareOptions {
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
+            organ_level: OutputLevel::ModelDefault,
         }
     }
 
@@ -281,6 +304,7 @@ impl FirmwareOptions {
             o.b3_tail = Some(parse_on_off("--b3-tail", v)?);
         }
         o.firmware_fx |= has("--firmware-fx");
+        o.firmware_reverb |= has("--firmware-reverb");
         o.piano_firmware_level |= has("--firmware-piano-level");
         if has("--legacy-piano-level") {
             o.piano_firmware_level = false;
@@ -296,6 +320,9 @@ impl FirmwareOptions {
         }
         if let Some(v) = value("--rotary-drive") {
             o.rotary_drive = parse_rotary_drive(v)?;
+        }
+        if let Some(v) = value("--organ-level") {
+            o.organ_level = parse_organ_level(v)?;
         }
         if let Some(v) = value("--synth-shape") {
             let x: f32 = v
@@ -324,11 +351,22 @@ impl FirmwareOptions {
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
+        if self.firmware_reverb {
+            self.set_reverb(engine);
+        }
         if self.firmware_routing {
             engine.set_firmware_routing(FirmwareRouting::On);
         }
         apply_amp_path(engine, self.amp_path);
         self.set_rotary(engine);
+        self.set_organ_level(engine);
+    }
+
+    /// The firmware Spring reverb on every chain (`reverb` switch only).
+    fn set_reverb(&self, engine: &mut Stage4Engine) {
+        for c in engine.fx_chains.iter_mut() {
+            c.firmware_fx.reverb = true;
+        }
     }
 
     /// Sets every path to exactly this value, including back to the engine default. Runs on
@@ -359,6 +397,9 @@ impl FirmwareOptions {
         for c in engine.fx_chains.iter_mut() {
             c.firmware_fx = fx;
         }
+        if self.firmware_reverb {
+            self.set_reverb(engine);
+        }
         engine.piano_a.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
@@ -372,6 +413,12 @@ impl FirmwareOptions {
             FirmwareRouting::Off
         });
         self.set_shape(engine);
+        self.set_organ_level(engine);
+    }
+
+    fn set_organ_level(&self, engine: &mut Stage4Engine) {
+        engine.organ_a.output_level = self.organ_level;
+        engine.organ_b.output_level = self.organ_level;
     }
 
     fn set_rotary(&self, engine: &mut Stage4Engine) {
@@ -412,6 +459,9 @@ impl FirmwareOptions {
         if self.firmware_fx {
             parts.push("fx".into());
         }
+        if self.firmware_reverb {
+            parts.push("reverb".into());
+        }
         if !self.piano_firmware_level {
             parts.push("legacy-piano".into());
         }
@@ -432,6 +482,9 @@ impl FirmwareOptions {
         }
         if self.rotary_drive != RotaryDrive::Engine {
             parts.push(format!("rotary={:?}", self.rotary_drive));
+        }
+        if self.organ_level != OutputLevel::ModelDefault {
+            parts.push(format!("organ-level={:?}", self.organ_level));
         }
         if parts.is_empty() {
             "defaults".into()
@@ -566,6 +619,41 @@ mod tests {
         assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
         FirmwareOptions::legacy_all().apply_exact(&mut e);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
+    }
+
+    #[test]
+    fn firmware_reverb_flag_switches_only_the_reverb() {
+        let o = FirmwareOptions::from_args(&args(&["--firmware-reverb"])).unwrap();
+        assert!(o.firmware_reverb && !o.firmware_fx);
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert!(e.fx_chains.iter().all(|c| c.firmware_fx.reverb));
+        assert!(e.fx_chains.iter().all(|c| !c.firmware_fx.delay_laws));
+        assert!(o.summary().contains("reverb"));
+        o.apply_exact(&mut e);
+        assert!(e
+            .fx_chains
+            .iter()
+            .all(|c| c.firmware_fx.reverb && !c.firmware_fx.compressor));
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert!(e.fx_chains.iter().all(|c| !c.firmware_fx.reverb));
+    }
+
+    #[test]
+    fn organ_level_flag_selects_the_output_level_law() {
+        let o = FirmwareOptions::from_args(&args(&["--organ-level", "firmware"])).unwrap();
+        assert_eq!(o.organ_level, OutputLevel::Firmware);
+        assert_eq!(
+            FirmwareOptions::default().organ_level,
+            OutputLevel::ModelDefault
+        );
+        assert!(FirmwareOptions::from_args(&args(&["--organ-level", "x"])).is_err());
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert_eq!(e.organ_b.output_level, OutputLevel::Firmware);
+        assert!(o.summary().contains("organ-level=Firmware"));
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert_eq!(e.organ_a.output_level, OutputLevel::ModelDefault);
     }
 
     #[test]
