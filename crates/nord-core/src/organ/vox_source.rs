@@ -17,8 +17,10 @@ use super::vox_sines::{VoxSines, BUCKETS};
 /// VERIFIED: gain word `DM(0x95FD1)` = `DM(G + 0xB)` of record 0 (`0x3F1EB100`, 0.61989) written by the
 /// ARM boot for the default program. Found by bisecting the 29,758 boot words of the PNO core 1
 /// state: with it the oracle chord is 4.15 dB below the install-only chord (RMS ratio 0.6199),
-/// without it equal (`docs/research/organ-vox-click.md` section 3). That it follows the layer
-/// level (about `(level / 127)^2`) is ASSUMED: only the default level was captured.
+/// without it equal (`docs/research/organ-vox-click.md` section 3). It is the **swell word** of
+/// the default pedal value `Fnc_Swell = 100`: sender `0xC0223B90` writes `520 v^2 * 2^-23`
+/// (`output_level::swell_word`, `docs/research/organ-output-law.md` section 2), not the layer
+/// level. The engine's own pedal (neutral = full) replaces it under `OutputLevel::Firmware`.
 pub(super) const OUTPUT_LEVEL: f32 = 0.619_89;
 
 /// Vox tone source state (all arrays preallocated).

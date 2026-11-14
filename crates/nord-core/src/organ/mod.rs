@@ -16,6 +16,7 @@ mod firmware_bank;
 mod globals;
 mod keyclick;
 mod lane_mix;
+mod output_level;
 mod percussion_poly;
 mod preset_live;
 mod rotary;
@@ -73,6 +74,9 @@ pub use firmware_bank::{
 };
 pub use globals::OrganGlobals;
 pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
+pub use output_level::{
+    layer_level_gain, swell_word, OutputLevel, LEGACY_BUS_OVER_UNIT, ORGAN_BUS_GAIN, SWELL_DEFAULT,
+};
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
     ROTARY_BASS_HORN_BALANCES, ROTARY_CROSSOVER_HZ,
@@ -151,6 +155,9 @@ pub struct OrganLayer {
     /// Output level `L` of the mix stage (`0x95B42`) applied in `WeightMode::Firmware`.
     /// ASSUMED 1.0: no ARM message sets it.
     pub weight_level: f32,
+    /// Output level law of the firmware paths (`Firmware` weights, `B3Wheels`, Vox): `Legacy`
+    /// keeps their built-in levels, `Firmware` applies [`ORGAN_BUS_GAIN`] ([`OutputLevel`]).
+    pub output_level: OutputLevel,
     /// Key-click transient on key-down / key-up (default on; off for oracle comparisons).
     pub key_click_enabled: bool,
     /// Global Sound/System menu settings (defaults are exact no-ops).
@@ -237,6 +244,7 @@ impl OrganLayer {
             drawbar_law: DrawbarLaw::default(),
             weight_mode: WeightMode::default(),
             weight_level: 1.0,
+            output_level: OutputLevel::default(),
             key_click_enabled: true,
             globals: OrganGlobals::default(),
             tonewheel_freqs: freqs,
@@ -358,7 +366,7 @@ impl OrganLayer {
         let (tw_buses, lanes) = self.render_tonewheel_lanes(inv_fs);
 
         if self.active_key_count == 0
-            && !(self.weight_mode == WeightMode::Firmware && self.weight_state.active())
+            && !(self.firmware_weights() && self.weight_state.active())
             && !(self.b3_weights_active() && self.b3_weights.active())
             && self.click_env < 1e-6
             && self.click_bp_state[0].abs() < 1e-6

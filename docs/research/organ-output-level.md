@@ -76,3 +76,7 @@ Documented Vox chord (`pno-pass-install-vox.script` + the 12 key weights) with t
 1. Make the engine honour section I / II for organ layers (`section_enable_ii`, organ `enable_ii_mask`) and the zone flags for organ notes, then re-run `emu_vs_hw.py --only organ_b3`; flip B3Wheels (+tail) only if RMS lands within 3 dB.
 2. Find the per-layer controller object whose `[this + 0x64]` selects the `0xB1` / `0xB2` cases and record the 127-to-gain law.
 3. Port the Farfisa processor against the oracle chord of section 4.
+
+## Update 2026-11-13 (output law)
+
+The Vox word `0x3F1EB100` is the swell word of the default pedal (`Fnc_Swell = 100`), the layer level law is `(v / 127)^2`, and the program rotary drive is now imported in the firmware unit (`preset / 10`): see [organ-output-law](organ-output-law.md) and D25.

@@ -3,7 +3,7 @@
 
 use crate::engine::{FirmwareRouting, Stage4Engine};
 use crate::fx::FirmwareFx;
-use crate::organ::ToneWheelSource;
+use crate::organ::{OutputLevel, ToneWheelSource};
 use crate::synth::{FilterEngine, SynthChain};
 
 /// Parses a `--tone-source` value: `default | legacy | firmware | vox | b3wheels`.
@@ -17,6 +17,18 @@ pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
         "farfisa" | "farfisawheels" => Ok(ToneWheelSource::FarfisaWheels),
         _ => Err(format!(
             "invalid --tone-source '{v}' (expected default|legacy|firmware|vox|b3wheels|farfisa)"
+        )),
+    }
+}
+
+/// Parses an `--organ-level` value: `default | legacy | firmware`.
+pub fn parse_organ_level(v: &str) -> Result<OutputLevel, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "default" | "model" => Ok(OutputLevel::ModelDefault),
+        "legacy" => Ok(OutputLevel::Legacy),
+        "firmware" => Ok(OutputLevel::Firmware),
+        _ => Err(format!(
+            "invalid --organ-level '{v}' (expected default|legacy|firmware)"
         )),
     }
 }
@@ -158,6 +170,10 @@ pub struct FirmwareOptions {
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
+    /// `--organ-level firmware|legacy`: the organ output level law ([`OutputLevel`]): the swell
+    /// word, the squared layer level and the bus gain `ORGAN_BUS_GAIN` on the firmware organ
+    /// paths.
+    pub organ_level: OutputLevel,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -175,6 +191,7 @@ impl Default for FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             firmware_routing: false,
+            organ_level: OutputLevel::ModelDefault,
         }
     }
 }
@@ -202,6 +219,7 @@ impl FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             firmware_routing: false,
+            organ_level: OutputLevel::ModelDefault,
         }
     }
 
@@ -246,6 +264,9 @@ impl FirmwareOptions {
         if has("--legacy-routing") {
             o.firmware_routing = false;
         }
+        if let Some(v) = value("--organ-level") {
+            o.organ_level = parse_organ_level(v)?;
+        }
         if let Some(v) = value("--synth-shape") {
             let x: f32 = v
                 .parse()
@@ -276,6 +297,7 @@ impl FirmwareOptions {
         if self.firmware_routing {
             engine.set_firmware_routing(FirmwareRouting::On);
         }
+        self.set_organ_level(engine);
     }
 
     /// Sets every path to exactly this value, including back to the engine default. Runs on
@@ -313,6 +335,12 @@ impl FirmwareOptions {
             FirmwareRouting::Off
         });
         self.set_shape(engine);
+        self.set_organ_level(engine);
+    }
+
+    fn set_organ_level(&self, engine: &mut Stage4Engine) {
+        engine.organ_a.output_level = self.organ_level;
+        engine.organ_b.output_level = self.organ_level;
     }
 
     fn set_shape(&self, engine: &mut Stage4Engine) {
@@ -354,6 +382,9 @@ impl FirmwareOptions {
         }
         if self.firmware_routing {
             parts.push("routing".into());
+        }
+        if self.organ_level != OutputLevel::ModelDefault {
+            parts.push(format!("organ-level={:?}", self.organ_level));
         }
         if parts.is_empty() {
             "defaults".into()
@@ -488,6 +519,23 @@ mod tests {
         assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
         FirmwareOptions::legacy_all().apply_exact(&mut e);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
+    }
+
+    #[test]
+    fn organ_level_flag_selects_the_output_level_law() {
+        let o = FirmwareOptions::from_args(&args(&["--organ-level", "firmware"])).unwrap();
+        assert_eq!(o.organ_level, OutputLevel::Firmware);
+        assert_eq!(
+            FirmwareOptions::default().organ_level,
+            OutputLevel::ModelDefault
+        );
+        assert!(FirmwareOptions::from_args(&args(&["--organ-level", "x"])).is_err());
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert_eq!(e.organ_b.output_level, OutputLevel::Firmware);
+        assert!(o.summary().contains("organ-level=Firmware"));
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert_eq!(e.organ_a.output_level, OutputLevel::ModelDefault);
     }
 
     #[test]
