@@ -4,7 +4,7 @@
 Reproduces `docs/research/piano-receiver-scale.md`: the SMP serial stream (SPORT3B, 10-word frames
 at `DM(0xC0234)`, `DM(0xC023E)` in the `0xC01BC` buffer set) and the PNO 2D buffers (`DM(0xC01BC)`
 ..) reach the master output words `DM(0xC04D8)` with the same gain, `DM(0xB651A)` = 0.1866 once the
-master level word `DM(0xB6518)` is 1.0 (it is 0 in the image and no writer was found).
+master level word `DM(0xB6518)` is 1.0 (it is 0 in the image; the ARM writer is `tools/arm_master_level.py`).
 
     python tools/fx_input_path.py FX/core1_sram.bin smp          # SMP words -> output
     python tools/fx_input_path.py FX/core1_sram.bin pno          # PNO 2D words -> output
