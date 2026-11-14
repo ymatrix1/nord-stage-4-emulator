@@ -477,7 +477,7 @@ impl LayerFxChain {
     ///
     /// Allocation-free; parameters with all-zero deltas are left untouched.
     pub fn apply_morph(&mut self, ctrl: &MorphControllers) {
-        let m = self.morph;
+        let m = &self.morph;
         if morph_active(&m.mod1_rate) {
             self.mod1_rate_hz = 0.1 + m.mod1_rate.evaluate(ctrl) * 14.9;
         }

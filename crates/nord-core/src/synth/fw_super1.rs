@@ -10,6 +10,7 @@
 
 use super::fw_shape::signed_phase;
 use super::fw_stages::{fade, spread_u, SUPER_RATIOS, SUPER_SPREAD_MAX};
+use crate::phase_wrap::wrap_pos;
 
 /// VERIFIED (listing `0x243E52`, `LCNTR = 7`): voices of the loop.
 pub const SUPER1_VOICES: usize = 7;
@@ -33,7 +34,7 @@ pub fn super1_sample(phases: &mut [f32; 8], dt: f32, i_sy: f32, ctrl: f32) -> f3
     for (ph, rho) in phases.iter_mut().zip(SUPER_RATIOS).take(SUPER1_VOICES) {
         let dt_j = dt * (rho * u + 1.0 - u);
         sum += fold_diff(*ph, dt_j);
-        *ph = (*ph + dt_j) % 1.0;
+        *ph = wrap_pos(*ph + dt_j, 1.0);
     }
     // ASSUMED: equal voice weights summing to one (the P-block weights are open, OQ22)
     sum * g / SUPER1_VOICES as f32

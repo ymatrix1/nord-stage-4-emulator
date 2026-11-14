@@ -48,6 +48,7 @@ mod vox_source;
 mod vox_timeline;
 mod weight_state;
 mod weights;
+mod wheel_cache;
 
 #[cfg(test)]
 mod b3_source_tests;
@@ -99,6 +100,7 @@ pub use vibrato_bank::{
     gain_value, lane_matrix, smooth, wheel_hz, BANK_WHEELS, DETUNE_CENTS, GAINS_DETUNED,
     GAINS_EXACT,
 };
+pub use wheel_cache::WheelCache;
 
 pub use vibrato_link::{level_for_scanner, VibratoLevel, VibratoLink};
 pub use weights::{
@@ -216,6 +218,8 @@ pub struct OrganLayer {
     lane_mixer: LaneMixer,
     weight_state: WeightState,
     tonewheel_phases: [f32; NUM_TONEWHEELS],
+    /// Legacy waveforms of the last rendered sample, shareable with another layer.
+    wheel_cache: WheelCache,
     pickup_b3: [f32; NUM_TONEWHEELS],
     pickup_b3_bass: [f32; NUM_TONEWHEELS],
     held_notes: [bool; 128],
@@ -312,6 +316,7 @@ impl OrganLayer {
             lane_mixer: LaneMixer::new(sample_rate),
             weight_state: WeightState::new(sample_rate, [8, 8, 8, 0, 0, 0, 0, 0, 0]),
             tonewheel_phases: [0.0; NUM_TONEWHEELS],
+            wheel_cache: WheelCache::new(),
             pickup_b3,
             pickup_b3_bass,
             held_notes: [false; 128],
@@ -413,23 +418,36 @@ impl OrganLayer {
 
     /// Renders a single stereo frame `[left, right]` with zero heap allocations.
     pub fn render_frame(&mut self) -> [f32; 2] {
+        self.render_frame_sharing(None)
+    }
+
+    /// The legacy tonewheel waveforms of the last rendered sample, for
+    /// [`Self::render_frame_sharing`] of another layer.
+    pub fn wheel_cache(&self) -> &WheelCache {
+        &self.wheel_cache
+    }
+
+    /// [`Self::render_frame`], taking the legacy tonewheel waveforms from `shared` (the other
+    /// layer's [`Self::wheel_cache`] of the same sample) when they are the ones this layer would
+    /// compute (same model and bit-identical phases); the output is bit-identical either way.
+    pub fn render_frame_sharing(&mut self, shared: Option<&WheelCache>) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        self.wheel_cache.invalidate();
         if self.vox_active() {
             return self.render_vox_frame(inv_fs);
         }
 
         // 1. Advance all 91 spinning tonewheels continuously (two lanes while the detuned
         //    ensemble's stereo blend is active, otherwise one)
-        let (tw_buses, lanes) = self.render_tonewheel_lanes(inv_fs);
-
-        if self.active_key_count == 0
+        let idle = self.active_key_count == 0
             && !(self.firmware_weights() && self.weight_state.active())
             && !(self.b3_weights_active() && self.b3_weights.active())
             && !(self.farfisa_keys_active() && self.farfisa_keys.active())
             && !self.b3_bass_sounding()
             && self.click_env < 1e-6
-            && self.click_bp_state[0].abs() < 1e-6
-        {
+            && self.click_bp_state[0].abs() < 1e-6;
+        let (tw_buses, lanes) = self.render_tonewheel_lanes_sharing(inv_fs, shared, !idle);
+        if idle {
             return [0.0, 0.0];
         }
 

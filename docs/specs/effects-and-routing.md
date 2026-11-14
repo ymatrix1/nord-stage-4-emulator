@@ -294,3 +294,7 @@ stays finite, bounded by the makeup and free of denormals, for amounts 0, 0.3, 1
 0.250858 dB` (`VERIFIED`, closed form). They differ by 0.34 %, which is 0.05 dB at +-60 counts (15.00 against 15.05 dB). The
 link from a preset count to the ladder is not decoded, so the Rust step stays 0.25 dB and the factory range stays +-15 dB
 exactly; switching is a one-line change (TD-10).
+
+## 5. Implementation note: cabinet evaluation order (TD-14)
+
+The firmware amp cabinet (`fx/fw_cabinet.rs`) is a 400-tap FIR per channel. Its output for frame `n` is `a + b`: `a` the sequential float sum over taps `k < LEN - slot` and `b` over `k >= LEN - slot`, where `slot` is the position of the newest sample in a 400-slot circular history that moves down by one per frame. The split and the addition order are part of the output (float addition is not associative), so the optimised code keeps them: the history is linear and time ordered, both channels advance in one pass, and the four frames of a drive block (`FwAmpStage` releases four frames at once, so the cabinet input of the next four frames is known) run as four lanes of one pass. Tests in `fx/fw_cabinet.rs` compare frame, block and mixed use bit for bit with the plain iterator-sum formulation over every ring phase; the `ns4 bench` output hashes are unchanged (`HOST_COMPATIBILITY` 7.1). Latency is unchanged (none in the cabinet, 4 frames in the drive stage).

@@ -1,6 +1,7 @@
 //! FX enums, `MasterClock` and the per-chain morph set.
 
 use super::*;
+use crate::phase_wrap::wrap_pos;
 
 /// Modulation Slot 1 modes (`Mod 1`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,7 +147,7 @@ impl Default for MasterClock {
 impl MasterClock {
     pub fn advance(&mut self, sample_rate: f32) {
         let beats_per_sec = self.bpm.clamp(30.0, 300.0) / 60.0;
-        self.beat_phase = (self.beat_phase + beats_per_sec / sample_rate) % 1.0;
+        self.beat_phase = wrap_pos(self.beat_phase + beats_per_sec / sample_rate, 1.0);
     }
 }
 

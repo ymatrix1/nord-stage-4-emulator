@@ -15,6 +15,7 @@
 
 use super::p_table::{PTable, PTableSpec};
 use super::SUPERSAW_VOICES;
+use crate::phase_wrap::wrap_pos;
 
 /// Free parameters of the oscillator stage.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -95,7 +96,7 @@ impl PBlock {
         let dt2 = (dt * self.ratio2).clamp(1e-5, 0.49);
         let t2 = phases[0];
         let s2 = second(t2, dt2, freq * self.ratio2);
-        phases[0] = (t2 + dt2) % 1.0;
+        phases[0] = wrap_pos(t2 + dt2, 1.0);
         self.gain * (first + self.weight2 * s2)
     }
 }

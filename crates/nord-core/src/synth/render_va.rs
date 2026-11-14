@@ -4,6 +4,7 @@ use super::fw_shape::fw_shape_wave;
 use super::hw_saw::saw_wave;
 use super::p_block::PBlock;
 use super::*;
+use crate::phase_wrap::wrap_pos;
 
 impl SynthLayer {
     #[allow(clippy::too_many_arguments)]
@@ -45,7 +46,7 @@ impl SynthLayer {
                     let f_osc = eff_freq * supersaw_voice_ratio(i, d);
                     let dt_i = (f_osc * inv_fs).clamp(1e-5, 0.49);
                     sum += saw_wave(saw_model, *ph, dt_i, inv_fs);
-                    *ph = (*ph + dt_i) % 1.0;
+                    *ph = wrap_pos(*ph + dt_i, 1.0);
                 }
                 sum * (1.0 / SUPERSAW_VOICES as f32)
             }
@@ -58,7 +59,7 @@ impl SynthLayer {
                     let p_i = supersaw_phases[i];
                     let saw = saw_wave(saw_model, p_i, dt_i, inv_fs);
                     sum += saw;
-                    supersaw_phases[i] = (p_i + dt_i) % 1.0;
+                    supersaw_phases[i] = wrap_pos(p_i + dt_i, 1.0);
                 }
                 sum * (1.0 / 7.0)
             }
