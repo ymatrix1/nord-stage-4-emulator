@@ -40,8 +40,12 @@ pub(super) enum Eff {
     Dm(usize, u32),
     Dl(usize, u32),
     Db(usize, u32),
+    /// Condition flags `(AN, AZ)` of a compute (per element).
+    Fl2([bool; 2], [bool; 2]),
+    /// Condition flags `(AN, AZ, AV, AC)` of a fixed add or subtract.
+    Fl4([bool; 2], [bool; 2], [bool; 2], [bool; 2]),
 }
-pub(super) use Eff::{Db, Di, Dl, Dm, St, Wx, Wy, W};
+pub(super) use Eff::{Db, Di, Dl, Dm, Fl2, Fl4, St, Wx, Wy, W};
 
 /// Registers, DAG registers and the memory of one routine.
 pub(super) struct Pe<M: Mem> {
@@ -51,6 +55,11 @@ pub(super) struct Pe<M: Mem> {
     pub(super) m: [u32; 8],
     pub(super) l: [u32; 8],
     pub(super) b: [u32; 8],
+    /// `ASTAT` flags per element: negative, zero, overflow, carry (`fw_pe_ops.rs` reads them).
+    pub(super) an: [bool; 2],
+    pub(super) az: [bool; 2],
+    pub(super) av: [bool; 2],
+    pub(super) ac: [bool; 2],
     pub(super) mem: M,
 }
 
@@ -63,6 +72,10 @@ impl<M: Mem> Pe<M> {
             m: [0; 8],
             l: [0; 8],
             b: [0; 8],
+            an: [false; 2],
+            az: [false; 2],
+            av: [false; 2],
+            ac: [false; 2],
             mem,
         };
         (pe.i[0], pe.i[1]) = (i0, i1);
@@ -126,6 +139,8 @@ impl<M: Mem> Pe<M> {
                 Dm(n, v) => self.m[n] = v,
                 Dl(n, v) => self.l[n] = v,
                 Db(n, v) => (self.b[n], self.i[n]) = (v, v),
+                Fl2(an, az) => (self.an, self.az) = (an, az),
+                Fl4(an, az, av, ac) => (self.an, self.az, self.av, self.ac) = (an, az, av, ac),
             }
         }
     }

@@ -31,6 +31,10 @@ SREG = re.compile(r"^s(\d+)$")
 DAGREG = re.compile(r"^([imlb])(\d+)$")
 
 
+#: Track AV / AC of fixed add and subtract (`tools/fx_listing_gen.py`; the Leslie model needs neither).
+AVAC = False
+
+
 class Unsupported(Exception):
     pass
 
@@ -126,6 +130,15 @@ def is_float(tok: str) -> bool:
 
 
 def compute(rhs: str, dst: str, stp: Step) -> bool:
+    """`dst = rhs` as a compute; with `AVAC` a float result also sets AZ / AN (`IF NE` reads it)."""
+    done = _compute(rhs, dst, stp)
+    md = DREG.match(dst)
+    if AVAC and done and md and dst[0] == "f" and stp.fl is None and int(md.group(1)) in stp.w:
+        stp.fl = f"flags_val({stp.w[int(md.group(1))]})"
+    return done
+
+
+def _compute(rhs: str, dst: str, stp: Step) -> bool:
     """Handle a compute expression `dst = rhs`; returns False when `rhs` is not one."""
     md = DREG.match(dst)
     if not md:
@@ -149,9 +162,18 @@ def compute(rhs: str, dst: str, stp: Step) -> bool:
                 stp.w[n] = f"{fn}(r({DREG.match(a).group(1)}),imm({int(m.group(2))}))"
             else:
                 stp.w[n] = f"{fn}({read_reg(a)},{read_reg(b)})"
-            if fn.startswith("i"):
+            if AVAC and fn in ("iadd", "isub"):
+                stp.fl = f"iflags('{fn[1:]}',{read_reg(a)},{stp.w[n].split(',', 1)[1][:-1]})"
+            elif fn.startswith("i"):
                 stp.fl = f"flags_of(r({n}),{stp.w[n]})"
             return True
+    m = re.match(r"^(max|min)\((\w+),(\w+)\)$", rhs)
+    if m:
+        fn = ("f" if f else "i") + m.group(1)
+        stp.w[n] = f"{fn}({read_reg(m.group(2))},{read_reg(m.group(3))})"
+        if not f:
+            stp.fl = f"flags_val({stp.w[n]})"
+        return True
     m = re.match(r"^abs (\w+)$", rhs)
     if m:
         stp.w[n] = f"fabs({read_reg(m.group(1))})"
@@ -166,6 +188,14 @@ def compute(rhs: str, dst: str, stp: Step) -> bool:
     if m:
         stp.w[n] = f"fclip({read_reg(m.group(1))},{read_reg(m.group(2))})"
         return True
+    m = re.match(r"^lshift (\w+) by (\w+)$", rhs)
+    if m:
+        amount = m.group(2)
+        if re.match(r"^(0x[0-9a-f]+|\d+)$", amount):
+            stp.w[n] = f"ishl({read_reg(m.group(1))},imm({num(amount)}))"
+        else:
+            stp.w[n] = f"ishl({read_reg(m.group(1))},{read_reg(amount)})"
+        return True
     m = re.match(r"^float (\w+) by (\w+)$", rhs)
     if m:
         stp.w[n] = f"ffloat({read_reg(m.group(1))},{read_reg(m.group(2))})"
@@ -177,6 +207,10 @@ def compute(rhs: str, dst: str, stp: Step) -> bool:
     m = re.match(r"^fix (\w+) by (\w+)$", rhs)
     if m:
         stp.w[n] = f"ffix({read_reg(m.group(1))},{read_reg(m.group(2))})"
+        return True
+    m = re.match(r"^recips (\w+)$", rhs)
+    if m:
+        stp.w[n] = f"frecips({read_reg(m.group(1))})"
         return True
     m = re.match(r"^trunc (\w+)$", rhs)
     if m:
@@ -197,12 +231,18 @@ def compute(rhs: str, dst: str, stp: Step) -> bool:
 def parse_part(part: str, stp: Step) -> None:
     """One `dst = src` or special part of an instruction."""
     if part.startswith("if "):
-        m = re.match(r"^if (ne|ge|tf) (.*)$", part)
+        m = re.match(r"^if (ne|ge|tf|eq|av|ac) (.*)$", part)
         sub = Step()
         parse_part(m.group(2), sub)
         # a conditional register move / pass: keep the old value where the condition fails
         for n, e in sub.w.items():
             stp.w[n] = f"cond_{m.group(1)}(m,r({n}),{e})"
+        # a conditional exchange: each element follows its own flag
+        for lane, dct in ((0, sub.wx), (1, sub.wy)):
+            for n, e in dct.items():
+                (stp.wx if lane == 0 else stp.wy)[n] = (
+                    f"cond_lane(m,'{m.group(1)}',{lane},{'x' if lane == 0 else 'y'}[{n}],{e})"
+                )
         return
     m = re.match(r"^bit tst astatx (0x[0-9a-f]+)$", part)
     if m:

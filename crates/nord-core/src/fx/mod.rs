@@ -26,6 +26,7 @@ mod fw_delay_table;
 pub mod fw_delay_time;
 mod fw_drive_tables;
 mod fw_ext40;
+mod fw_flang;
 pub mod fw_leslie;
 mod fw_leslie_callee;
 mod fw_leslie_core;
@@ -41,8 +42,12 @@ mod fw_leslie_ops;
 pub mod fw_map;
 mod fw_mod1;
 mod fw_mod2;
+mod fw_mod2_run;
 mod fw_params;
 mod fw_pe;
+mod fw_pe_ops;
+mod fw_phas0;
+mod fw_phas1;
 mod fw_reverb;
 mod fw_rvb_core;
 mod fw_rvb_steps;
@@ -51,6 +56,8 @@ mod fw_rvb_wrap;
 mod fw_short_float;
 mod fw_stage;
 mod fw_tone_stack;
+mod fw_vibe;
+mod fw_vibe_stage;
 mod fw_words;
 mod master;
 mod master_iir;
@@ -115,6 +122,8 @@ mod tests_fw_series;
 mod tests_lfo_golden;
 #[cfg(test)]
 mod tests_master_golden;
+#[cfg(test)]
+mod tests_mod2_golden;
 #[cfg(test)]
 mod tests_resonant_golden;
 #[cfg(test)]
@@ -256,6 +265,7 @@ pub struct LayerFxChain {
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
     /// The firmware chorus (`firmware_fx.mod2`), boxed: the ring is 4 KB.
     fw_mod2: Option<Box<fw_mod2::FwMod2Stage>>,
+    fw_vibe: Option<Box<fw_vibe_stage::FwVibeStage>>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
     /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
@@ -365,6 +375,7 @@ impl LayerFxChain {
             mod2_type_raw: None,
             fw_mod1: None,
             fw_mod2: None,
+            fw_vibe: None,
             fw_comp: None,
             fw_amp: None,
             fw_reverb: None,

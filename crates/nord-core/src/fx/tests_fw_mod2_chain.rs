@@ -1,5 +1,5 @@
 //! `FirmwareFx::mod2` in the layer chain: the firmware `CHOR` stages replace the engine chorus
-//! only for `kFx2Type` 4 and 5.
+//! only for `kFx2Type` 4 to 7 (`CHOR`, `VIBE`).
 
 use super::*;
 
@@ -26,8 +26,8 @@ fn run(fx: &mut LayerFxChain, n: usize) -> Vec<[f32; 2]> {
 }
 
 #[test]
-fn the_firmware_chorus_has_a_four_frame_delay_and_stays_bounded() {
-    for ty in [4, 5] {
+fn the_firmware_chorus_and_vibe_have_a_four_frame_delay_and_stays_bounded() {
+    for ty in [4, 5, 6, 7] {
         let mut fx = chain(true, ty);
         let y = run(&mut fx, 20_000);
         assert!(y[..4].iter().all(|f| *f == [0.0, 0.0]), "type {ty}");
@@ -47,7 +47,7 @@ fn the_engine_path_is_used_when_the_switch_is_off_or_the_type_is_not_a_firmware_
     let first_frames_live =
         |fx: &mut LayerFxChain| run(fx, 3).iter().any(|f| f[0] != 0.0 || f[1] != 0.0);
     assert!(first_frames_live(&mut chain(false, 4)));
-    for ty in [0, 2, 6, 8, 10] {
+    for ty in [0, 2, 8, 10] {
         assert!(
             first_frames_live(&mut chain(true, ty)),
             "type {ty} stays on the engine"
