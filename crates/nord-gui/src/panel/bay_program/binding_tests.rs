@@ -224,6 +224,7 @@ fn section_edit() -> Vec<&'static str> {
     let mut u = ProgramUi::default();
     let spec = PROGRAM_BUTTONS
         .iter()
+        .chain(BUTTONS.iter())
         .find(|s| s.id == "program.section_edit")
         .copied()
         .expect("SECTION EDIT button");
