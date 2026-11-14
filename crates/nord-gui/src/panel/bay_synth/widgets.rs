@@ -16,7 +16,13 @@ pub(super) const LEGEND_DIM: Color32 = Color32::from_gray(105);
 
 /// Small silkscreen text.
 pub(super) fn tiny(p: &Painter, pos: Pos2, s: &str, col: Color32, al: Align2) {
-    p.text(pos, al, s, FontId::proportional(6.5), col);
+    p.text(
+        pos,
+        al,
+        s,
+        FontId::proportional(crate::widgets::MIN_FONT_PX),
+        col,
+    );
 }
 
 /// Small round LED.

@@ -1,0 +1,1 @@
+# Known label collisions (see legibility_tests.rs). Must only shrink; empty = clean.
