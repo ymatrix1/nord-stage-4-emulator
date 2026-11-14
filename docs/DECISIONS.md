@@ -29,10 +29,10 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D21](#d21-organ-model-to-dsp-path-map) | 2026-11-13 | Organ model to DSP path map (B3, Vox, Pipe) | accepted |
 | [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
 | [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
-| [D26](#d26-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
 | [D29](#d29-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
+| [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
 
 ---
 
@@ -290,6 +290,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Impact:** Open defaults are tracked in TD-04, TD-10 and TD-11. The `render_hash` SHA-256 is recorded in each PR that touches it.
 - **Update 2026-11-13 (amp):** `FirmwareFx::amp` became the default for Twin, JC and Small (and their variations) after the rule was met: algorithm and words VERIFIED against the oracle (drive stage golden, cabinet impulse response and chain golden), the ARM mapping VERIFIED (`kAmpTypeNew` words captured from the ARM, `kAmpDrive` = `127 drive / 10`), and the end-to-end comparison with the video improves (Vox score 3.98 to 1.30, RMS +0.2 to +0.5 dB). `FirmwareFx::OFF` / `--amp-path engine` keep the old path. `render_hash` `25baa387...` to `c7f06ca7ff6f8663be3bf2af772c6d6854f23593808ff3382d1895cf5f5ddbd5`. Open: JC and Small have no recording, piano and synth cabinets are ASSUMED equal ([fx-type-map](research/fx-type-map.md) s11).
 - **Update 2026-11-13 (routing):** `FirmwareRouting::{Off, On}` (`ns4 render-patch --firmware-routing`) makes the engine follow the program's section / layer enables and per-layer KB zones. Default stays `Off`: the zone-enable rule is VERIFIED on the ARM firmware, but the meaning of the 12 `kKbZone` codes is EMPIRICAL (the firmware key-range writer is not found, OQ23), so criterion (2) is not met and `render_hash` is unchanged ([engine-routing](research/engine-routing.md)).
+- **Update 2026-11-14 (routing key ranges):** criterion (2) is now met for the key range: the code to range map is read from the firmware tables and equals the ARM zone objects of 384 of 384 factory programs ([zone-key-ranges](research/zone-key-ranges.md)); the split position table of the decode was corrected (36 was missing). The default stays `Off`: the nine factory programs with a section on and no layer (OQ25) sound only through an ASSUMED rule (an enabled section without layers plays layer A) because the loader that fills the section table is not run and no hardware clip exists. `render_hash` unchanged.
 
 
 **Update 2026-11-14 (synth flip).** The synth strip chain, the stage oscillators and the per-wave P table became the default of `SynthLayer::new` and `FirmwareOptions::default()` ([synth-validation](research/synth-validation.md)): over 15 hardware clips (nine Part A programs, six lesson notes) the default has mean score 4.1 against 6.6 for legacy, 9 clips better, 3 equal, 3 worse; the 9 clips never used for a fit gain 3.8 dB of score on average (7 better); no Part A clip is worse than legacy by more than 3 dB in presence or RMS. This is an EMPIRICAL exception to condition 1 (verified end to end): the oscillator P words are fitted, not read from the firmware, and the validation clips are lossy YouTube audio at an assumed velocity. The classic chain stays one switch away (`--legacy-all`, `--synth-chain legacy`, `SynthLayer::legacy`).
@@ -325,7 +326,11 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Fit one gain per model (rejected: hides the structure); flip B3 and Vox on RMS alone (rejected: D22 criteria).
 - **Impact:** `render_hash` `c7f06ca7...` unchanged (the dump has no Pipe layer or program rotary). Program renders change: rotary drive 10 times lower in the engine unit, Pipe level.
 
-### D26. The multi-tap reverb (types 2..11) 2, 3, earlier mislabelled all-pass); their instance words are in the FX image and the boot log.
+### D26. FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1`
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-delay-mod-types`; evidence [fx-mod-types](research/fx-mod-types.md))
+- **Context:** The engine models A-PAN and TREM as `sin` LFOs with an assumed `0.1 .. 15 Hz` rate. The firmware routines are `0x122D93` (A-PAN, `kFx1Type` 0, 1) and `0x122C39` (types 2, 3, earlier mislabelled all-pass); their instance words are in the FX image and the boot log.
 - **Decision:** Model `0x122D93` (`tools/fx_model_apan.py`, bit identical to the oracle on 1000 scenarios plus per-instruction traces), port it as `FwAutoPan`, and wire it and the already verified `FwAllpass` (mix 0 = tremolo) through `fx/fw_mod1.rs` behind `FirmwareFx::mod1`. Default stays off.
 - **Why:** 70 of 89 Mod 1 programs use these two types. The routines and parameter words are VERIFIED; what is not verified end to end is the rate in hertz (4 frames per call at the DSP frame rate) and the TREM role, so D22 keeps the switch opt-in.
 - **Alternatives:** Flip the default (rejected: no hardware recording of the rate); tune the engine LFO range by ear (rejected: the firmware words are available).
@@ -340,20 +345,22 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Keep manual names (wrong category set and an invented `SUPER`); name the entries `<Category> <name>` for every category (the manual figure shows it only for MULTI, the rule for the others is unverified); map the header id by program names (guesswork, kept out of code).
 - **Impact:** CAT dial of ANALOG has 8 stops (MULTI is the sixth, SUPER the seventh); the WAVE page shows firmware names instead of `Table n`; the flat wavetable index of a panel pick now equals the one of a loaded program (`cat * 8 + i` before). `render_hash` unchanged.
 
-### D28. The firmware amp stays the default; the Vox presence residual is not assigned to the model to type map is ASSUMED
+### D28. The firmware amp stays the default; the Vox presence residual is not assigned to the amp
 
-amp
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-amp-twin-port`; evidence [fx-type-map](research/fx-type-map.md) s12)
+- **Context:** [organ-presence-gap](research/organ-presence-gap.md) left the Vox presence / brilliance 7.5 / 9.7 dB under the clip and pointed at a missing amp / cabinet port.
+- **Decision:** No amp or default change. The drive stage and cabinet (D22) already cover Twin, Twin II, JC, JC II, Small, Small II with oracle words; the residual is attributed to the organ bank and Mod 2, not the amp.
+- **Why:** With the amp on, presence / brilliance are -7.5 / -9.7 dB; amp input level up to +24 dB, every other amp type and all `FirmwareFx` ports leave 5.5 / 6.4 dB at best; B3 is bit identical for both amp paths (amp off in its program).
+- **Alternatives:** Fit a presence shelf after the cabinet (rejected: the cabinet words are oracle exact, and the fit would hide the organ bank gap); flip `vox` on the clip score (rejected: D22 and D25 bars).
+- **Impact:** None on renders or `render_hash`; the cabinet taps gain a fingerprint and response test.
+
+### D31. The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (task `ns4-tc25` follow-up, D22 rule)
-(PR for `feat/fx-amp-twin-port`; evidence [fx-type-map](research/fx-type-map.md) s12)
-- **Context:** The wrapper `0x120FDB` and packed core `0x120D8A` of [organ-presence-gap](research/organ-presence-gap.md) left the reverb types 2..11 are ported (`FwReverbMulti`) and reproduce the oracle word for word on nine types. The ARM words of each type are captured, but which UI reverb (Booth, Room, Stage, Hall, Cathedral Vox presence / brilliance 7.5 / 9.7 dB under clip and the variation flag) selects which `kRvbType` was never read from pointed at a program, type 6 has no capture, and no hardware clip was compared.
-missing amp / cabinet port.
-- **Decision:** `FirmwareFx::reverb` also drives Booth (2, 3), Room (4, 5), Stage (7 with No amp or default change. The drive stage and cabinet (D22) already cover Twin, Twin II, JC, JC II, Small, Small II oracle words; the variation flag), Hall (8, 9) and Cathedral (10, 11) through `FwReverbMulti`; the default stays off residual is attributed to organ bank Mod 2, not amp.
-- **Why:** With amp on, presence / brilliance are -7.5 / -9.7 dB; amp input level up to +24 dB, every other amp type all `FirmwareFx` ports leave 5.5 / 6.4 dB at best; B3 is bit identical for both amp paths (amp in its program).
-- **Alternatives:** Fit a presence shelf after cabinet (rejected: cabinet words are oracle exact, and the engine FDN stays the default path for every model.
-- **Why:** D22: the algorithm is VERIFIED, fit would hide the mapping into it is a guess (size order of organ bank gap); flip `vox` on the type words), clip score (rejected: D22 and the end-to-end comparison with the hardware is missing. Opting in costs nothing for existing renders.
+- **Context:** The wrapper `0x120FDB` and packed core `0x120D8A` of the reverb types 2..11 are ported (`FwReverbMulti`) and reproduce the oracle word for word on nine types. The ARM words of each type are captured, but which UI reverb (Booth, Room, Stage, Hall, Cathedral and the variation flag) selects which `kRvbType` was never read from a program, type 6 has no capture, and no hardware clip was compared.
+- **Decision:** `FirmwareFx::reverb` also drives Booth (2, 3), Room (4, 5), Stage (7 with the variation flag), Hall (8, 9) and Cathedral (10, 11) through `FwReverbMulti`; the default stays off and the engine FDN stays the default path for every model.
+- **Why:** D22: the algorithm is VERIFIED, the mapping into it is a guess (size order of the type words), and the end-to-end comparison with the hardware is missing. Opting in costs nothing for existing renders.
 - **Alternatives:** Flip the default now (rejected: criteria 2 and 3 of D22 are not met); keep the port in the tools only (the engine could not use it).
 - **Impact:** TD-10 and OQ21 stay open for the comparison, type 6 and the organ rows. Flip the default only when a Part A program with a known type scores better than the FDN (s10 method, [fx-reverb-leslie](research/fx-reverb-leslie.md) s14).
-D25 bars).
-None on renders or `render_hash`; cabinet taps gain fingerprint response test.

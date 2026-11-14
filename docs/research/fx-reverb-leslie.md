@@ -323,5 +323,5 @@ The routine is allocation free after `new` (a type change runs `set_type`: clear
 ## Follow-ups
 
 1. A hardware clip with a clean release into a Spring reverb (decay), and the SPRING name check of types 0, 1; then re-run the s10 comparison and revisit the default (D22).
-3. Types 2..11: ported and verified against the oracle (s14). Open: the hardware comparison for Booth, Room, Stage, Hall and Cathedral programs (then D22 / D26: flip `FirmwareFx::reverb` only if it scores better than the FDN), type 6 (no ARM capture), the organ rows (zero in the image: how does the organ part's reverb get its words?), the UI names of the type pairs.
+3. Types 2..11: ported and verified against the oracle (s14). Open: the hardware comparison for Booth, Room, Stage, Hall and Cathedral programs (then D22 / D31: flip `FirmwareFx::reverb` only if it scores better than the FDN), type 6 (no ARM capture), the organ rows (zero in the image: how does the organ part's reverb get its words?), the UI names of the type pairs.
 4. Leslie: capture the rotor words over many ARM ticks per `kEffectsLeslieSpeed` value.
