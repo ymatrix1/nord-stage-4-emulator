@@ -44,6 +44,7 @@ impl BackupLibraryState {
                     program.name = title.clone();
                     panel.apply_program(&program);
                     audio.send_command(AudioCommand::LoadProgram(program));
+                    panel.program_ui.mark_clean();
                     self.error_message = None;
                     self.status_message = format!("Program: {title}");
                 }
@@ -53,6 +54,9 @@ impl BackupLibraryState {
                     sound,
                     from_program,
                 } => {
+                    if from_program {
+                        panel.program_ui.mark_clean(); // follows a program load
+                    }
                     let sound_name = sound.name.clone();
                     let zones = sound.strokes.len();
                     // The panel type follows the model on the focused layer: header type of the
@@ -94,6 +98,9 @@ impl BackupLibraryState {
                     sound,
                     from_program,
                 } => {
+                    if from_program {
+                        panel.program_ui.mark_clean(); // follows a program load
+                    }
                     let sound_name = sound.name.clone();
                     let zones = sound.zones.len();
                     if let Some(prev) = self.sample_cache.insert(key, Arc::clone(&sound)) {

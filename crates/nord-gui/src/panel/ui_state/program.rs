@@ -104,6 +104,11 @@ pub struct ProgramUi {
     pub pending: Vec<(u32, PendingSnapshot)>,
     pub reply_tx: Sender<(u32, Box<ProgramState>)>,
     pub reply_rx: Receiver<(u32, Box<ProgramState>)>,
+    /// Edit tracking of the boxed `E` (see `bay_program/edited.rs`): the sound-edit count last
+    /// seen, its value at the last load / store, and a load / store waiting to rebase it.
+    pub edit_count: u32,
+    pub edit_baseline: u32,
+    pub clean_pending: bool,
     /// Inventory ids painted in the last frame (evidence for the "every control is drawn" test).
     pub painted: Vec<&'static str>,
 }
@@ -162,6 +167,9 @@ impl Default for ProgramUi {
             pending: Vec::new(),
             reply_tx,
             reply_rx,
+            edit_count: 0,
+            edit_baseline: 0,
+            clean_pending: false,
             painted: Vec::new(),
         }
     }
