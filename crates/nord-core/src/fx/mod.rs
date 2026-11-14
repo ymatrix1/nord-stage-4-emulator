@@ -38,6 +38,7 @@ mod fw_leslie_main_c;
 mod fw_leslie_main_d;
 mod fw_leslie_main_e;
 mod fw_leslie_ops;
+mod fw_leslie_ring;
 pub mod fw_map;
 mod fw_mod1;
 mod fw_mod2;
@@ -130,6 +131,7 @@ pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
 pub use fw_ext40::{Fp, E40};
 pub use fw_leslie::{FwLeslie, FwLeslieE40};
+pub use fw_leslie_ring::RingAdvance;
 pub use fw_map::AllpassType;
 pub use fw_params::{
     compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,

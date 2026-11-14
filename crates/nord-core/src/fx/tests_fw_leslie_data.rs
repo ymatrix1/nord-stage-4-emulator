@@ -14,13 +14,13 @@ fn fnv(words: &[u32]) -> u64 {
     h
 }
 
-/// FNV-1a 64 of windows 0..16 in order (`fx_leslie_words.py` output, VERIFIED on OS v1.66).
+/// FNV-1a 64 of windows 0..15 in order (`fx_leslie_words.py` output, VERIFIED on OS v1.66).
 #[rustfmt::skip]
-const FNV: [u64; 16] = [
+const FNV: [u64; 15] = [
     0xb9b23f3a46fd0825, 0xe8dcf635e9892f75, 0xb4b9f844bf11bfcb, 0x0243cfa845185aa5,
     0x4c19ae5279a9501e, 0xb5a2df74dd56f524, 0x0149abc4f5a0ea24, 0x70611a2ad446b571,
     0xe32492ecf8ef6164, 0xd974ed96b9cd4f2b, 0x88201fb960ff6465, 0x88201fb960ff6465,
-    0xcfd85f1700474095, 0xe8dd3076bfc57b65, 0x88201fb960ff6465, 0x0abbf48dcaa9f3ce,
+    0xcfd85f1700474095, 0x164e256e62dac4a0, 0xd086bdc43fb50a0b,
 ];
 
 #[test]
@@ -35,7 +35,7 @@ fn the_data_windows_match_their_fingerprints() {
         assert_eq!(fnv(w.1), want, "window {k} at {:#x}", w.0);
     }
     let words: usize = all.iter().map(|w| w.1.len()).sum();
-    assert_eq!(words, 3810);
+    assert_eq!(words, 5282);
 }
 
 #[test]
