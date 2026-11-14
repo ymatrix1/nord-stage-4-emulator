@@ -23,6 +23,7 @@ mod tests {
             std::mem::size_of::<PianoEdit>(),
             std::mem::size_of::<SynthEdit>(),
             std::mem::size_of::<FxEdit>(),
+            std::mem::size_of::<ProgramEdit>(),
         ];
         assert_eq!(sizes.len(), 5);
     }
