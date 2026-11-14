@@ -5,6 +5,7 @@
 //! `0 = Organ A`, anything else `Organ B`.
 
 use nord_core::engine::Stage4Engine;
+use nord_core::morph::LayerId;
 use nord_core::organ::{OrganLayer, OrganModel, RotarySpeed, ScannerMode};
 
 /// Panel edits for the Organ area.
@@ -25,6 +26,38 @@ pub enum OrganEdit {
     Sustped { layer: u8, on: bool },
     /// PSTICK of one organ layer (Shift + Layer B button); host `ped_pstick_{n}`.
     Pstick { layer: u8, on: bool },
+    /// POLY percussion (Shift + percussion VOLUME); both layers, host `organz_poly_perc_{n}`.
+    PercPoly(bool),
+    /// Preset (`false`) / Drawbar Live (`true`) of both layers; host `organz_drawbar_live_{n}`.
+    DrawbarLive(bool),
+    /// Physical drawbar positions (`0..=8` each) of both layers; host `organz_live1..9_{n}`.
+    LiveDrawbars([u8; 9]),
+    /// SYNC (Shift + Preset): copy the physical positions into the stored preset of both layers.
+    SyncPreset,
+    /// Rotary ORGAN button: route the organ through the rotary speaker; host `organy_rotary_on_{n}`.
+    RotaryOrgan(bool),
+    /// Rotary ANGLE (Shift + STOP MODE): wide or narrow microphone separation; host
+    /// `organy_mic_angle_{n}`.
+    RotaryAngle { wide: bool },
+    /// KB ZONE of one layer as a set of the four zone LEDs (bit `u` = zone `u + 1`).
+    Zone { layer: u8, leds: u8 },
+    /// Aux KB LED of one layer: the layer is played by the aux keyboard.
+    AuxKb { layer: u8, on: bool },
+}
+
+/// Rotary mic separation of the wide ANGLE position.
+/// ASSUMED: the engine default `120.0` (`OrganLayer::new`, spec `organ-engine.md`); the manual
+/// does not give degrees. A hardware measurement of the two ANGLE positions would confirm.
+pub const ANGLE_WIDE_DEG: f32 = 120.0;
+/// Rotary mic separation of the narrow ANGLE position. ASSUMED: half of the wide value.
+pub const ANGLE_NARROW_DEG: f32 = 60.0;
+
+fn layer_id(layer: u8) -> LayerId {
+    if layer == 0 {
+        LayerId::OrganA
+    } else {
+        LayerId::OrganB
+    }
 }
 
 fn layer_mut(engine: &mut Stage4Engine, layer: u8) -> &mut OrganLayer {
@@ -72,6 +105,38 @@ impl OrganEdit {
             OrganEdit::Pstick { layer, on } => {
                 engine.pedals.pstick[usize::from(layer.min(1))] = on;
             }
+            OrganEdit::PercPoly(on) => {
+                engine.organ_a.percussion_poly = on;
+                engine.organ_b.percussion_poly = on;
+            }
+            OrganEdit::DrawbarLive(on) => {
+                engine.organ_a.drawbar_live = on;
+                engine.organ_b.drawbar_live = on;
+            }
+            OrganEdit::LiveDrawbars(bars) => {
+                let bars = bars.map(|b| b.min(8));
+                engine.organ_a.live_drawbars = bars;
+                engine.organ_b.live_drawbars = bars;
+            }
+            OrganEdit::SyncPreset => {
+                engine.sync_organ_preset(LayerId::OrganA);
+                engine.sync_organ_preset(LayerId::OrganB);
+            }
+            OrganEdit::RotaryOrgan(on) => {
+                engine.organ_a.rotary_enabled = on;
+                engine.organ_b.rotary_enabled = on;
+            }
+            OrganEdit::RotaryAngle { wide } => {
+                let deg = if wide {
+                    ANGLE_WIDE_DEG
+                } else {
+                    ANGLE_NARROW_DEG
+                };
+                engine.organ_a.rotary_mic_angle_deg = deg;
+                engine.organ_b.rotary_mic_angle_deg = deg;
+            }
+            OrganEdit::Zone { layer, leds } => engine.set_layer_zone_leds(layer_id(layer), leds),
+            OrganEdit::AuxKb { layer, on } => engine.set_layer_aux(layer_id(layer), on),
         }
     }
 }
@@ -154,5 +219,50 @@ mod tests {
         let mut e = engine();
         OrganEdit::CloseMic(true).apply(&mut e);
         assert!(e.organ_a.rotary_close_mic && e.organ_b.rotary_close_mic);
+    }
+
+    #[test]
+    fn poly_percussion_and_rotary_switches_reach_both_layers() {
+        let mut e = engine();
+        OrganEdit::PercPoly(true).apply(&mut e);
+        assert!(e.organ_a.percussion_poly && e.organ_b.percussion_poly);
+        OrganEdit::RotaryOrgan(false).apply(&mut e);
+        assert!(!e.organ_a.rotary_enabled && !e.organ_b.rotary_enabled);
+        OrganEdit::RotaryAngle { wide: false }.apply(&mut e);
+        assert_eq!(e.organ_b.rotary_mic_angle_deg, ANGLE_NARROW_DEG);
+        OrganEdit::RotaryAngle { wide: true }.apply(&mut e);
+        assert_eq!(e.organ_a.rotary_mic_angle_deg, 120.0, "engine default");
+    }
+
+    #[test]
+    fn preset_live_and_sync_follow_the_engine_rules() {
+        let mut e = engine();
+        OrganEdit::DrawbarLive(true).apply(&mut e);
+        assert!(e.organ_a.drawbar_live && e.organ_b.drawbar_live);
+        OrganEdit::LiveDrawbars([1, 2, 3, 4, 5, 6, 7, 8, 99]).apply(&mut e);
+        assert_eq!(
+            e.organ_a.live_drawbars,
+            [1, 2, 3, 4, 5, 6, 7, 8, 8],
+            "clamped"
+        );
+        assert_eq!(e.organ_a.drawbars[0], 8, "live bars leave the preset alone");
+        OrganEdit::SyncPreset.apply(&mut e);
+        assert_eq!(e.organ_a.drawbars, e.organ_a.live_drawbars);
+        assert_eq!(e.organ_b.drawbars, e.organ_b.live_drawbars);
+    }
+
+    #[test]
+    fn zone_and_aux_edits_target_one_layer() {
+        let mut e = engine();
+        OrganEdit::Zone {
+            layer: 1,
+            leds: 0b1100,
+        }
+        .apply(&mut e);
+        assert_eq!(e.layer_zone_leds(LayerId::OrganB), 0b1100);
+        assert_eq!(e.layer_zone_leds(LayerId::OrganA), 0b1111);
+        OrganEdit::AuxKb { layer: 0, on: true }.apply(&mut e);
+        assert!(e.aux_kb.is_aux_layer(LayerId::OrganA));
+        assert!(!e.aux_kb.is_aux_layer(LayerId::OrganB));
     }
 }

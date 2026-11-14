@@ -76,11 +76,6 @@ impl Face<'_> {
     }
 }
 
-/// Dim tooltip text for a control whose engine feature is tracked by `bean`.
-pub(super) fn missing(feature: &str, bean: &str) -> String {
-    format!("Not supported by the engine yet: {feature} ({bean})")
-}
-
 /// Small LED (no bloom), `r` px radius.
 pub(super) fn led_small(
     p: &Painter,
@@ -317,12 +312,6 @@ mod tests {
             run_tracker(&mut t, "s", false, 40, true, true),
             Some(Trigger::Shifted)
         );
-    }
-
-    #[test]
-    fn missing_text_names_feature_and_bean() {
-        let m = missing("KB ZONE", "ns4-h7he");
-        assert!(m.contains("KB ZONE") && m.contains("ns4-h7he"));
     }
 
     #[test]
