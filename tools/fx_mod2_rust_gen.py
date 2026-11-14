@@ -32,21 +32,25 @@ FILES = {
     "phas0": ("fw_phas0.rs", "`0x12379B` (`kFx2Type` 0 `PHAS`, module `0xC02BB1E8`)"),
     "phas1": ("fw_phas1.rs", "`0x1238FC` (`kFx2Type` 1 `PHAS`, module `0xC02BB2C4`)"),
     "ens": ("fw_ens.rs", "`0x123A7B` (`kFx2Type` 8, 9 `ENS`, module `0xC0441558`)"),
+    "rm": ("fw_rm.rs", "`0x1239D0` (`kFx1Type` 4, 5 `RM`, module `0xC02BB10C`)"),
+    "wah": ("fw_wah.rs", "`0x123DD2` (`kFx1Type` 8, 9 `WAH`, module `0xC04414C4`)"),
+    "awah": ("fw_awah.rs", "`0x123E9B` (`kFx1Type` 6, 7 `A-WAH`, module `0xC0279290`)"),
+    "pump": ("fw_pump.rs", "`0x122D2C` (`kFx1Type` 10, 11 `PUMP`, module `0xC02BB5E4`)"),
     "spin": ("fw_spin.rs", "`0x123557` (`kFx2Type` 10, 11 `SPIN`, module `0xC0278FAC`)"),
 }
 #: Pair functions taken over by name (all in `fw_pe.rs` / `fw_pe_ops.rs`).
 PAIR_FNS = {
     "fmul", "fadd", "fsub", "fabs", "ffloat", "ftrunc", "iadd", "isub", "ishl", "fpass", "favg",
-    "fclip", "frecips", "imax", "imin", "fext_p", "fdep_p", "swap",
+    "fclip", "frecips", "imax", "imin", "fext_p", "fdep_p", "swap", "imul", "iashift",
 }  # fmt: skip
-CONDS = {"ne": "Ne", "eq": "Eq", "av": "Av", "ac": "Ac"}
+CONDS = {"ne": "Ne", "eq": "Eq", "av": "Av", "ac": "Ac", "gt": "Gt", "lt": "Lt", "le": "Le"}
 PE_EXPORTS = [
     "Db", "Di", "Dl", "Dm", "St", "W", "Wx", "Wy", "fabs", "fadd", "ffloat", "fmul", "fsub",
     "ftrunc", "iadd", "imm",
 ]  # fmt: skip
 OPS_EXPORTS = [
-    "Cond", "favg", "fclip", "fdep_p", "fext_p", "fl_add_sub", "fl_float", "fl_int", "fpass",
-    "frecips", "imax", "imin", "ishl", "isub", "swap",
+    "Cond", "favg", "fclip", "fdep_p", "fext_p", "fl_add_sub", "fl_comp", "fl_float", "fl_icomp",
+    "fl_int", "fpass", "frecips", "iashift", "imax", "imin", "imul", "ishl", "isub", "swap",
 ]  # fmt: skip
 
 
@@ -104,6 +108,8 @@ class Emit:
             return simple[fn]()
         if fn.startswith("cond_"):
             return f"m.cond(Cond::{CONDS[fn[5:]]}, {self.expr(args[1])}, {self.expr(args[2])})"
+        if fn in ("comp", "icomp"):
+            return f"fl_{fn}({self.expr(args[0])}, {self.expr(args[1])})"
         if fn == "iflags":
             return (
                 f"fl_add_sub({self.expr(args[1])}, {self.expr(args[2])}, "

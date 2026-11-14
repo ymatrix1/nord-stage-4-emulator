@@ -15,9 +15,10 @@
 //! samples (VERIFIED, test `flang_center_plus_swing_is_constant`).
 
 use super::fw_chorus::{CTX_I1, RING_BASE};
+use super::fw_mod1_data as boot;
 use super::fw_mod2_data as d;
 use super::fw_mod2_data::Law;
-use super::fw_mod2_run::{process, Mod2State, Routine};
+use super::fw_mod2_run::{process, Mod2State, Routine, RING2_BASE};
 use super::fw_mod2_tables::PHAS_TABLE;
 
 /// Offset of the `PHAS 0` table inside the ring array (`c[0x1A]` points there).
@@ -27,6 +28,9 @@ const DEFAULT_PARAM: u32 = 64;
 /// One wired type: its routine, rows, type words, laws and the words that scale.
 struct Spec {
     routine: Routine,
+    /// `I1` of the instance row of the piano unit when its words are the image under the boot
+    /// words (self pointers are relocated); 0 for the image only rows.
+    base: u32,
     row: &'static [(i32, u32)],
     words: &'static [(i32, u32)],
     amt: &'static [Law],
@@ -38,38 +42,73 @@ struct Spec {
 }
 
 fn spec(ty: u8) -> Option<Spec> {
-    let (routine, row, words, amt, rate, phase, delay): (_, _, _, _, _, &[i32], &[i32]) = match ty {
-        0 => (
-            Routine::Phas0,
-            d::ROW_PHAS0,
-            d::WORDS_0,
-            d::AMT_0,
-            d::RATE_0,
-            &[-32],
-            &[],
-        ),
-        2 => (
-            Routine::Flang,
-            d::ROW_FLANG,
-            d::WORDS_2,
-            d::AMT_2,
-            d::RATE_2,
-            &[-20],
-            &[-16, -15],
-        ),
-        3 => (
-            Routine::Flang,
-            d::ROW_FLANG,
-            d::WORDS_3,
-            d::AMT_3,
-            d::RATE_3,
-            &[-20],
-            &[-16, -15],
-        ),
-        _ => return None,
-    };
+    let (routine, base, row, words, amt, rate, phase, delay): (_, _, _, _, _, _, &[i32], &[i32]) =
+        match ty {
+            0 => (
+                Routine::Phas0,
+                0,
+                d::ROW_PHAS0,
+                d::WORDS_0,
+                d::AMT_0,
+                d::RATE_0,
+                &[-32],
+                &[],
+            ),
+            2 => (
+                Routine::Flang,
+                0,
+                d::ROW_FLANG,
+                d::WORDS_2,
+                d::AMT_2,
+                d::RATE_2,
+                &[-20],
+                &[-16, -15],
+            ),
+            3 => (
+                Routine::Flang,
+                0,
+                d::ROW_FLANG,
+                d::WORDS_3,
+                d::AMT_3,
+                d::RATE_3,
+                &[-20],
+                &[-16, -15],
+            ),
+            1 => (
+                Routine::Phas1,
+                0xB0432,
+                boot::ROW_PHAS1,
+                d::WORDS_1,
+                d::AMT_1,
+                d::RATE_1,
+                &[-32],
+                &[],
+            ),
+            8 | 9 => (
+                Routine::Ens,
+                0xC129E,
+                boot::ROW_ENS,
+                if ty == 8 { d::WORDS_8 } else { d::WORDS_9 },
+                if ty == 8 { d::AMT_8 } else { d::AMT_9 },
+                if ty == 8 { d::RATE_8 } else { d::RATE_9 },
+                &[-6],
+                &[],
+            ),
+            10 | 11 => (
+                Routine::Spin,
+                0xC1174,
+                boot::ROW_SPIN,
+                if ty == 10 { d::WORDS_10 } else { d::WORDS_11 },
+                if ty == 10 { d::AMT_10 } else { d::AMT_11 },
+                if ty == 10 { d::RATE_10 } else { d::RATE_11 },
+                &[],
+                &[],
+            ),
+            _ => return None,
+        };
     Some(Spec {
         routine,
+        base,
         row,
         words,
         amt,
@@ -124,13 +163,25 @@ impl FwLawStage {
     /// Stage for `kFx2Type` `ty` (0, 2, 3), `kFx2Rate` and `kFx2Amt` in `0..=127`, at
     /// `fs`; `None` for the other types.
     pub(super) fn new(ty: u8, rate: u32, amount: u32, fs: f32) -> Option<Self> {
+        // ENS (8, 9) is not wired: with the boot row its left output element stays exactly 0
+        // (`docs/research/fx-mod-types.md` s8).
+        if matches!(ty, 8 | 9) {
+            return None;
+        }
         let sp = spec(ty)?;
         let ratio = crate::organ::FIRMWARE_FRAME_RATE_HZ / f64::from(fs);
         let mut st = Mod2State::new();
         for &(o, w) in sp.row.iter().filter(|(o, _)| (-0x20..=0x2A).contains(o)) {
-            // Pointer words of the image are placeholders (the ARM allocates the rings).
+            // Pointer words of the image are placeholders (the ARM allocates the rings); a
+            // pointer into the row itself (a boot word) is relocated to the context of the port.
             st.ctx[index(o)] = if (0xB_1000..0xB_2100).contains(&w) {
-                RING_BASE
+                if sp.routine == Routine::Spin && (27..=29).contains(&o) {
+                    RING2_BASE
+                } else {
+                    RING_BASE
+                }
+            } else if sp.base != 0 && (sp.base - 0x20..=sp.base + 0x2A).contains(&w) {
+                CTX_I1 + w - sp.base
             } else {
                 w
             };
@@ -176,7 +227,7 @@ impl FwLawStage {
                 self.st.ring[PHAS_TABLE_AT..PHAS_TABLE_AT + PHAS_TABLE.len()]
                     .copy_from_slice(&PHAS_TABLE);
             }
-            Routine::Ens | Routine::Phas1 | Routine::Vibe | Routine::Spin => {}
+            _ => {}
         }
     }
 
@@ -256,7 +307,7 @@ impl FwLawStage {
 mod tests {
     use super::*;
 
-    const TYPES: [u8; 3] = [0, 2, 3];
+    const TYPES: [u8; 6] = [0, 1, 2, 3, 10, 11];
 
     fn run(ty: u8, rate: u32, amount: u32, fs: f32, n: usize) -> Vec<[f32; 2]> {
         let mut st = FwLawStage::new(ty, rate, amount, fs).unwrap();
@@ -281,19 +332,15 @@ mod tests {
                 );
                 assert!(out[..4].iter().all(|f| *f == [0.0, 0.0]), "latency");
                 assert!(
-                    out.iter().skip(4).any(|f| f[0] != 0.0),
+                    out.iter().skip(4).any(|f| f[0] != 0.0 || f[1] != 0.0),
                     "type {ty} rate {rate} amount {amount} is silent"
                 );
             }
         }
-        assert!(
-            FwLawStage::new(4, 0, 0, 48_000.0).is_none(),
-            "CHOR has its own stage"
-        );
-        for ty in [1, 8, 9, 10, 11] {
+        for ty in [4, 5, 6, 7, 8, 9] {
             assert!(
                 FwLawStage::new(ty, 0, 0, 48_000.0).is_none(),
-                "type {ty} is not wired"
+                "type {ty} has its own stage or is not wired"
             );
         }
     }
@@ -395,6 +442,31 @@ mod tests {
         let fs = 48_000.0;
         let f3 = FwLawStage::new(3, 64, 64, fs).unwrap();
         assert_eq!(word(&f3, -29), 0x3f80_0000, "c[-29] of the type 2 switch");
+    }
+
+    #[test]
+    fn the_boot_words_complete_ens_spin_and_phas1() {
+        // The ARM sends the self pointers, the block counts and the all-pass gains at the boot
+        // (`fx-mod1-rows.csv`, source `boot`); the image alone left ENS silent.
+        let fs = 48_000.0;
+        let ens = boot::ROW_ENS.iter().find(|w| w.0 == -5).unwrap();
+        assert_eq!(ens.1, 0xc1296, "ENS phase pointer is the address of c[-8]");
+        let spin = FwLawStage::new(10, 64, 64, fs).unwrap();
+        assert_eq!(word(&spin, -8), CTX_I1 - 10, "SPIN phase pointer");
+        assert_eq!(word(&spin, 27), RING2_BASE, "SPIN ring 2");
+        let ph = FwLawStage::new(1, 64, 64, fs).unwrap();
+        assert_eq!(word(&ph, -29), CTX_I1 - 31, "PHAS 1 phase pointer");
+        assert_eq!(word(&ph, -26), 0x3ea0_0000, "all-pass gain 0.3125");
+        assert_eq!(word(&ph, -17), 0xbf33_3333, "all-pass gain -0.7");
+    }
+
+    #[test]
+    fn the_rotor_stays_bounded_over_long_runs() {
+        for ty in [10, 11] {
+            let out = run(ty, 100, 127, 48_000.0, 200_000);
+            let peak = out.iter().flatten().fold(0.0f32, |m, x| m.max(x.abs()));
+            assert!(peak.is_finite() && peak < 8.0, "type {ty}: peak {peak}");
+        }
     }
 
     #[test]
