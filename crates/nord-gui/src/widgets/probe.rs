@@ -12,6 +12,10 @@ pub enum Kind {
     GroupInside,
     /// Knob body plus tick ring.
     Knob,
+    /// Everything a fader cap sweeps over (slot ends plus cap half-height and shadow).
+    CapTravel,
+    /// Bounding square of an LED (bezel included).
+    Led,
 }
 
 /// One recorded rectangle.
@@ -35,6 +39,17 @@ pub fn record(ctx: &Context, kind: Kind, rect: Rect, title: &str) {
             title: title.to_string(),
         });
     });
+}
+
+/// Record an LED whose dark bezel has radius `r` centred at `c` (test builds only).
+pub fn led(p: &egui::Painter, c: egui::Pos2, r: f32) {
+    let rect = Rect::from_center_size(c, egui::vec2(2.0 * r, 2.0 * r));
+    record(p.ctx(), Kind::Led, rect, "");
+}
+
+/// Record the travel of a fader cap (test builds only).
+pub fn cap_travel(ctx: &Context, rect: Rect, id: &str) {
+    record(ctx, Kind::CapTravel, rect, id);
 }
 
 /// Everything recorded since the last [`clear`].

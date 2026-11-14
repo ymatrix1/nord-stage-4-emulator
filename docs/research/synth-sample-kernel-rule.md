@@ -94,7 +94,7 @@ The block is integer code (the ARM926 has no FPU) with two soft-float calls (`0x
 | Played note reaches the synth event | in the booted harness a MIDI note-on (60, 61, 72, 48) calls the synth voice event `0xC01EC690` with the unshifted note as first record word (`0x3C, 0x3D, 0x48, 0x30`, second word `0x10000`) | VERIFIED (run, `keydown-zones` rig) |
 | Run with a SAMPLES layer | **not obtained**. `Edt_Syn_kMode / kOscBank` sweeps (4 x 4, `kOscWave` applied) produce no SY or SMP message and `0xC01E00AC` / the chain `0xC01E1434` are not reached on a note-on: the sample sound objects come from the program / sample-set load, which needs the flash downloads the harness stubs ([keydown-paths](keydown-paths.md) section 4). The kernel record write `0x9243B + 0x38 k` could therefore not be captured | open |
 
-Consequence: the structural evidence says the chain key is the layer note without the `+0x18` transposition, which is what `Voice::note` holds, but the event-record to object link was not run. D22 therefore keeps `--sample-kernel key` opt-in (D29).
+Consequence: the structural evidence says the chain key is the layer note without the `+0x18` transposition, which is what `Voice::note` holds, but the event-record to object link was not run. D22 therefore keeps `--sample-kernel key` opt-in (D35).
 
 ## 9. Loop handling, record fields, WAVE bank
 

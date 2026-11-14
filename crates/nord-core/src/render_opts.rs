@@ -121,11 +121,34 @@ pub fn apply_rotary_unity(engine: &mut Stage4Engine, on: bool) {
 /// `gain_db` is applied after it (the booted firmware level is about -50 dB, so the level stage that
 /// makes it up in the hardware is open; `0.0` keeps the firmware level).
 pub fn apply_leslie_firmware(engine: &mut Stage4Engine, on: bool, gain_db: f32) {
+    apply_leslie_firmware_ring(engine, on, gain_db, crate::fx::RingAdvance::ADVANCE);
+}
+
+/// [`apply_leslie_firmware`] with an explicit history ring behaviour (`--leslie-ring`).
+pub fn apply_leslie_firmware_ring(
+    engine: &mut Stage4Engine,
+    on: bool,
+    gain_db: f32,
+    ring: crate::fx::RingAdvance,
+) {
     if on {
         for organ in [&mut engine.organ_a, &mut engine.organ_b] {
-            organ.leslie_fw = Some(Box::new(crate::fx::FwLeslie::new()));
+            organ.leslie_fw = Some(Box::new(crate::fx::FwLeslie::with_ring(ring)));
             organ.leslie_gain = 10f32.powf(gain_db / 20.0);
         }
+    }
+}
+
+/// Parses a `--leslie-ring` value: `firmware | advance | frozen`.
+pub fn parse_leslie_ring(v: &str) -> Result<crate::fx::RingAdvance, String> {
+    use crate::fx::RingAdvance;
+    match v {
+        "firmware" => Ok(RingAdvance::PASS_RESET8),
+        "advance" => Ok(RingAdvance::ADVANCE),
+        "frozen" => Ok(RingAdvance::FROZEN),
+        _ => Err(format!(
+            "invalid --leslie-ring '{v}' (expected firmware|advance|frozen)"
+        )),
     }
 }
 
@@ -281,6 +304,10 @@ pub struct FirmwareOptions {
     pub leslie_firmware: bool,
     /// `--leslie-gain-db <dB>`: gain after the firmware Leslie in millidecibel (default 0).
     pub leslie_gain_mdb: i32,
+    /// `--leslie-ring firmware|advance|frozen`: the history ring pointers of the firmware Leslie
+    /// (default `advance`: 4 words per call; `firmware`: re-based every 8 calls like the booted
+    /// pass routine; `frozen`: the first oracle state, `fx-leslie.md` s10).
+    pub leslie_ring: crate::fx::RingAdvance,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -310,6 +337,7 @@ impl Default for FirmwareOptions {
             organ_level: OutputLevel::ModelDefault,
             leslie_firmware: false,
             leslie_gain_mdb: 0,
+            leslie_ring: crate::fx::RingAdvance::ADVANCE,
         }
     }
 }
@@ -352,6 +380,7 @@ impl FirmwareOptions {
             organ_level: OutputLevel::ModelDefault,
             leslie_firmware: false,
             leslie_gain_mdb: 0,
+            leslie_ring: crate::fx::RingAdvance::ADVANCE,
         }
     }
 
@@ -427,6 +456,9 @@ impl FirmwareOptions {
                 _ => return Err(format!("invalid --leslie '{v}' (firmware|engine)")),
             };
         }
+        if let Some(v) = value("--leslie-ring") {
+            o.leslie_ring = parse_leslie_ring(v)?;
+        }
         if let Some(v) = value("--leslie-gain-db") {
             let db: f32 = v
                 .parse()
@@ -465,10 +497,11 @@ impl FirmwareOptions {
         engine.piano_b.firmware_layer_law = self.piano_layer_law;
         apply_b3_tail(engine, self.b3_tail);
         apply_farfisa_processor(engine, self.farfisa_processor);
-        apply_leslie_firmware(
+        apply_leslie_firmware_ring(
             engine,
             self.leslie_firmware,
             self.leslie_gain_mdb as f32 / 1000.0,
+            self.leslie_ring,
         );
         apply_synth_chain(engine, self.synth_chain);
         self.set_shape(engine);

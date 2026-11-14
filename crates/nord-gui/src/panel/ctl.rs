@@ -85,6 +85,8 @@ pub(super) fn led_small(
     off_col: Color32,
     r: f32,
 ) {
+    #[cfg(test)]
+    crate::widgets::probe::led(p, c, r + 1.0);
     p.circle_filled(c, r + 1.0, Color32::from_rgb(14, 16, 19));
     p.circle_filled(c, r, if on { on_col } else { off_col });
     if on {
@@ -123,6 +125,20 @@ pub(super) fn led_row(
     }
 }
 
+/// "FX FOCUS" caption left of the focus LED at `led`: the LED sits over the level ladder of the
+/// last layer with the ON button to its right, so the text goes into the free strip above the
+/// faders (never onto the ladder or the button).
+pub(super) fn fx_focus_caption(p: &Painter, led: egui::Pos2) {
+    label(
+        p,
+        pos2(led.x - 8.0, led.y),
+        "FX FOCUS",
+        5.5,
+        Color32::from_gray(235),
+        Align2::RIGHT_CENTER,
+    );
+}
+
 /// Tiny silkscreen text centred above `rect`, `lift` px over its top edge.
 pub(super) fn tag(p: &Painter, rect: Rect, text: &str, lift: f32) {
     label(
@@ -149,8 +165,11 @@ pub(super) fn tag_fit(p: &Painter, rect: Rect, text: &str, lift: f32, max_w: f32
     }
 }
 
-/// Pitch of stacked [`tag_fit`] lines (px): the minimum font plus a 1 px gap.
-const TAG_LINE: f32 = 8.5;
+/// Pitch of stacked [`tag_fit`] lines (px): the minimum font plus a 2 px gap (audit rule `V`).
+const TAG_LINE: f32 = 9.5;
+
+/// Distance (px) from the start of a legend's text to the centre of its state LED.
+const LEGEND_LED_GAP: f32 = 5.0;
 
 /// Map a gesture to a trigger; a double tap is just a second primary tap on these buttons.
 fn trigger_of(g: Gesture, shift_held: bool, shift_fn: bool) -> Trigger {
@@ -273,8 +292,9 @@ pub(super) fn shift_legend(
     let p = ui.painter().clone();
     let drawn = label(&p, pos, text, 5.5, col, Align2::CENTER_TOP);
     if let Some(l) = lit {
-        // State LED right after the text, wherever the text ends.
-        let x = drawn.right() + 3.5;
+        // State LED before the text, as printed on the instrument ("o SUSTPED"); keeps it away
+        // from a group frame that ends at the right of the legend.
+        let x = drawn.left() - LEGEND_LED_GAP;
         led_small(
             &p,
             pos2(x, drawn.center().y),

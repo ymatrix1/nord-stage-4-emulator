@@ -195,7 +195,7 @@ fn render_speed(
     let leds = rect_or_empty("rotary.speed_leds", o);
     let ly = leds.center().y;
     // Hardware order: LED, then its name. The row rectangle spans both pairs.
-    let (lx_slow, lx_fast) = (leds.left() + 2.6, leds.center().x + 3.0);
+    let (lx_slow, lx_fast) = (leds.left() - 0.4, leds.center().x + 3.0);
     // LEDs show the real rotor state (a pedal can change it); `fast` stays the UI toggle.
     let (led_slow, led_fast) = (
         state.telemetry.rotary_slow(fast),
@@ -219,7 +219,7 @@ fn render_speed(
     );
     label(
         painter,
-        pos2(lx_slow + 3.0, ly),
+        pos2(lx_slow + 4.5, ly),
         "SLOW",
         5.0,
         Color32::WHITE,
@@ -227,7 +227,7 @@ fn render_speed(
     );
     label(
         painter,
-        pos2(lx_fast + 3.0, ly),
+        pos2(lx_fast + 4.5, ly),
         "FAST",
         5.0,
         Color32::WHITE,

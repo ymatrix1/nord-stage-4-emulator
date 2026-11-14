@@ -22,11 +22,11 @@ use std::collections::BTreeSet;
 /// Smallest readable label height in px at zoom 1 (`widgets::MIN_FONT_PX`).
 const MIN_FONT_PX: f32 = crate::widgets::MIN_FONT_PX;
 /// Control rectangles above this area are containers, not checked for foreign labels.
-const BIG_RECT_PX2: f32 = 6000.0;
+pub(super) const BIG_RECT_PX2: f32 = 6000.0;
 /// Overlap (px) in both axes needed to count as a collision.
 const TOL: f32 = 1.0;
 /// Button bezel and LED ring around a control rectangle: labels keep out of it too.
-const BEZEL_PX: f32 = 1.5;
+const BEZEL_PX: f32 = 2.5;
 const ALLOW: &str = include_str!("legibility_allow.txt");
 
 /// One painted text.
@@ -194,6 +194,7 @@ fn collisions_match_the_allow_list() {
     let audit = audit_of(None, vec2(3300.0, 900.0));
     let mut found = violations(&audit.labs);
     found.extend(super::legibility_rules::extra_violations(&audit));
+    found.extend(super::legibility_caps::violations(&audit));
     let labs = audit.labs;
     println!(
         "legibility: {} labels, {} collisions",
