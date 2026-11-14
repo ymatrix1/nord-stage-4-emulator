@@ -49,10 +49,19 @@ impl ProgramUi {
             self.title = p.name.clone();
             return vec![cmd(ProgramEdit::Recall(p.state.clone()))];
         }
-        match self.catalog.programs.get(usize::from(loc.index())) {
+        // The archive layout (header locations, moved by Organize) wins over the sorted catalog.
+        let entry = if self.library.has_factory_layout() {
+            self.library.factory_at(loc)
+        } else {
+            self.catalog
+                .programs
+                .get(usize::from(loc.index()))
+                .map(String::as_str)
+        };
+        match entry {
             Some(entry) => {
                 self.title = display_name(entry);
-                self.requests.push(LoadRequest::Program(entry.clone()));
+                self.requests.push(LoadRequest::Program(entry.to_string()));
             }
             None => self.title = "(empty)".to_string(),
         }

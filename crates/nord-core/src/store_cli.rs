@@ -4,7 +4,7 @@
 //! `Stage4Engine`, optionally edit it, and write the engine state back over the base program with
 //! `Stage4Engine::export_program`, so unmapped fields stay bit-identical.
 
-use crate::cbin::{CbinFile, ProgramDecoded};
+use crate::cbin::{store_into_backup, CbinFile, LivePut, ProgramDecoded, ProgramPut};
 use crate::engine::{LiveSlots, Stage4Engine, LIVE_SLOT_COUNT};
 use std::fs;
 
@@ -16,6 +16,9 @@ pub const STORE_USAGE: &str =
 /// Usage of `ns4 export-live`.
 pub const LIVE_USAGE: &str =
     "usage: ns4 export-live <out-dir> <slot1.ns4p|-> ... <slot8.ns4p|-> (writes live-N.ns4l; '-' leaves a slot empty)";
+
+/// Usage of `ns4 backup-store`.
+pub const BACKUP_USAGE: &str = "usage: ns4 backup-store <in.ns4b> <out.ns4b> [--program <file.ns4p> [--bank A-H|0-7] [--loc 0-63] [--name <program name>]] [--live <file.ns4l> [--slot 0-7]] (no edit flags: verbatim copy)";
 
 fn load(path: &str) -> Result<(CbinFile, ProgramDecoded), String> {
     let bytes = fs::read(path).map_err(|e| format!("failed to read {path}: {e}"))?;
@@ -104,6 +107,73 @@ pub fn export_live(args: &[String]) -> Result<String, String> {
     ))
 }
 
+/// Bank `A`..`H` or `0`..`7` as an index.
+fn parse_bank(v: &str) -> Result<u16, String> {
+    let b = match v.as_bytes() {
+        [c @ b'A'..=b'H'] => u16::from(c - b'A'),
+        [c @ b'a'..=b'h'] => u16::from(c - b'a'),
+        _ => v.parse::<u16>().map_err(|e| format!("--bank: {e}"))?,
+    };
+    (b < 8)
+        .then_some(b)
+        .ok_or_else(|| "--bank: expected A-H or 0-7".to_string())
+}
+
+fn parse_below(v: &str, name: &str, limit: u16) -> Result<u16, String> {
+    let n = v.parse::<u16>().map_err(|e| format!("{name}: {e}"))?;
+    (n < limit)
+        .then_some(n)
+        .ok_or_else(|| format!("{name}: expected 0-{}", limit - 1))
+}
+
+/// `ns4 backup-store`: writes a program and/or a Live slot file into a copy of a `.ns4b` backup.
+/// Every other entry (and `meta.xml`) stays byte-identical.
+pub fn backup_store(args: &[String]) -> Result<String, String> {
+    let (src, dst) = match (args.first(), args.get(1)) {
+        (Some(a), Some(b)) if !a.starts_with("--") && !b.starts_with("--") => (a, b),
+        _ => return Err(BACKUP_USAGE.to_string()),
+    };
+    let (mut programs, mut lives) = (Vec::new(), Vec::new());
+    if let Some(path) = flag(args, "--program")? {
+        let (file, _) = load(path)?;
+        let bank = match flag(args, "--bank")? {
+            Some(b) => parse_bank(b)?,
+            None => file.header.bank_index,
+        };
+        let loc = match flag(args, "--loc")? {
+            Some(l) => parse_below(l, "--loc", 64)?,
+            None => file.header.location_index,
+        };
+        let stem = std::path::Path::new(path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Untitled");
+        let name = flag(args, "--name")?.unwrap_or(stem);
+        programs.push(ProgramPut::from_file(bank, loc, name, &file).map_err(|e| e.to_string())?);
+    }
+    if let Some(path) = flag(args, "--live")? {
+        let (file, _) = load(path)?;
+        let slot = match flag(args, "--slot")? {
+            Some(n) => parse_below(n, "--slot", LIVE_SLOT_COUNT as u16)?,
+            None => file.header.location_index,
+        };
+        let mut file = file;
+        file.header.bank_index = 0;
+        file.header.location_index = slot;
+        lives.push(LivePut {
+            slot,
+            bytes: file.to_bytes(),
+        });
+    }
+    // No edits: a verbatim copy (round-trip check of the writer).
+    let rep = store_into_backup(src.as_ref(), dst.as_ref(), &programs, &lives)
+        .map_err(|e| format!("{src}: {e}"))?;
+    Ok(format!(
+        "wrote {dst} ({} B): {} replaced, {} added, {} removed",
+        rep.bytes_written, rep.replaced, rep.added, rep.removed
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,5 +239,72 @@ mod tests {
             111.0
         );
         assert!(export_live(&words(&[&out])).is_err());
+    }
+
+    #[test]
+    fn backup_store_replaces_one_program_and_rejects_bad_arguments() {
+        use crate::cbin::{rewrite_backup_file, EntryEdit, Ns4BackupArchive};
+        let dir = tmp("backup");
+        let prog = |t: f32| {
+            let mut p = ProgramDecoded::default();
+            p.global.tempo_bpm = t;
+            p.to_cbin_file(1, 7).unwrap().to_bytes()
+        };
+        let src = dir.join("in.ns4b");
+        let seed = dir.join("seed.ns4b");
+        // Build a one-program archive by adding entries to an empty-ish seed archive.
+        fs::write(
+            &seed,
+            crate::cbin::backup_writer::more_tests::build_zip(&[("meta.xml", b"<backup/>")]),
+        )
+        .unwrap();
+        let put = |n: &str, d: Vec<u8>| EntryEdit::Put {
+            name: n.into(),
+            data: d,
+        };
+        rewrite_backup_file(
+            &seed,
+            &src,
+            &[put("Program/Bank B/Old.ns4p", prog(90.0_f32))],
+        )
+        .unwrap();
+        let edited = dir.join("New.ns4p");
+        fs::write(&edited, prog(150.0_f32)).unwrap();
+        let out = dir.join("out.ns4b");
+        let (s, o, e) = (
+            src.to_string_lossy().into_owned(),
+            out.to_string_lossy().into_owned(),
+            edited.to_string_lossy().into_owned(),
+        );
+        let msg = backup_store(&words(&[
+            &s,
+            &o,
+            "--program",
+            &e,
+            "--bank",
+            "B",
+            "--loc",
+            "7",
+        ]))
+        .unwrap();
+        assert!(
+            msg.contains("1 added") && msg.contains("1 removed"),
+            "{msg}"
+        );
+        let a = Ns4BackupArchive::open(&out).unwrap();
+        assert!(a.find("Program/Bank B/New.ns4p").is_some());
+        assert!(a.find("Old.ns4p").is_none());
+        assert!(a.find("meta.xml").is_some());
+        let bytes = a.read_entry_from_file(&out, "meta.xml").unwrap();
+        assert_eq!(bytes, b"<backup/>");
+        let copy = dir.join("copy.ns4b").to_string_lossy().into_owned();
+        backup_store(&words(&[&s, &copy])).unwrap();
+        assert_eq!(fs::read(&s).unwrap(), fs::read(&copy).unwrap());
+        assert!(backup_store(&words(&[&s])).is_err());
+        assert!(backup_store(&words(&[&s, &o, "--program", &e, "--bank", "J"])).is_err());
+        assert!(backup_store(&words(&[&s, &o, "--program", &e, "--loc", "64"])).is_err());
+        assert!(backup_store(&words(&[&s, &s, "--program", &e])).is_err());
+        assert_eq!(parse_bank("c").unwrap(), 2);
+        assert_eq!(parse_bank("7").unwrap(), 7);
     }
 }
