@@ -45,7 +45,7 @@ pub(super) const ROTARIES: [Choice<RotaryDrive>; 3] = [
     (RotaryDrive::Unity, "Unity", "tanh(g x) / g, EMPIRICAL"),
     (RotaryDrive::Scaled, "Scaled /10", "drive / 10, EMPIRICAL"),
 ];
-pub(super) const ORGAN_LEVELS: [Choice<OutputLevel>; 3] = [
+pub(super) const ORGAN_LEVELS: [Choice<OutputLevel>; 4] = [
     (
         OutputLevel::ModelDefault,
         "Model default",
@@ -56,6 +56,11 @@ pub(super) const ORGAN_LEVELS: [Choice<OutputLevel>; 3] = [
         OutputLevel::Firmware,
         "Firmware",
         "swell word, EMPIRICAL gain K",
+    ),
+    (
+        OutputLevel::Chain,
+        "Verified chain",
+        "word 1.6 x FX path 0.3732, VERIFIED (13 dB under the clips)",
     ),
 ];
 pub(super) const CHAINS: [Choice<Option<SynthChain>>; 2] = [

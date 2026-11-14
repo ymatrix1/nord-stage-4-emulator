@@ -163,6 +163,14 @@ pub const PIANO_BUS: SwitchInfo = sw(
     Assumed,
     "Sample path scaled by the SMP bus convention 0.5 instead of 0.55 (Q31 receiver ASSUMED).",
 );
+/// Piano receiver chain scale (`--firmware-piano-chain`).
+pub const PIANO_CHAIN: SwitchInfo = sw(
+    "Piano",
+    "--firmware-piano-chain",
+    "FX path scale",
+    Mixed,
+    "Sample path scaled by the verified FX receiver path 0.7464 (engine unit = DAC fraction ASSUMED).",
+);
 /// Amp path (`--amp-path`).
 pub const AMP: SwitchInfo = sw(
     "FX",
@@ -318,7 +326,7 @@ pub const ROUTING: SwitchInfo = sw(
 );
 
 /// All switches in bar order.
-pub const ALL: [SwitchInfo; 31] = [
+pub const ALL: [SwitchInfo; 32] = [
     TONE,
     B3_TAIL,
     FARFISA,
@@ -330,6 +338,7 @@ pub const ALL: [SwitchInfo; 31] = [
     LESLIE_GAIN,
     PIANO_LEVEL,
     PIANO_BUS,
+    PIANO_CHAIN,
     PIANO_LAYER_LAW,
     CHAIN,
     STAGES,

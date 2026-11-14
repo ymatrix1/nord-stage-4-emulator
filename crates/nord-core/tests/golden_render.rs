@@ -1,26 +1,26 @@
-//! Per-engine golden renders next to `examples/render_hash.rs`.
+//! Per-engine golden renders (the former `render_hash` example, now only this test).
 //!
-//! The example and this test render the same five segments (`tests/support/render_segments.rs`):
-//! the full engine, the synth, the organ, the piano and the FX sweep. Two checks per segment:
+//! Five segments (`tests/support/render_segments.rs`): the full engine, the synth, the organ, the
+//! piano and the FX sweep. Their concatenation is the `render_hash` stream. Two checks per
+//! segment:
 //!
 //! * fingerprint (always): byte length, all samples finite, peak and RMS within 0.1 % of the
 //!   recorded values. A real behaviour change moves them; platform `libm` last-bit differences
 //!   (the CI runs Linux, Windows and macOS) do not.
 //! * SHA-256 (exact; set `NS4_GOLDEN_EXACT=1` and run with `--release`): the byte-for-byte
-//!   golden, the same bytes as `examples/render_hash.rs`. Recorded on Windows x86_64 in a release
-//!   build; a debug build gives other FX bits (segment `fx`), so the exact check belongs to
-//!   release only. Other operating systems are not verified (platform `libm`), hence opt-in.
+//!   golden. Recorded on Windows x86_64 in a release build; a debug build gives other FX bits
+//!   (segment `fx`), so the exact check belongs to release only. Other operating systems are not
+//!   verified (platform `libm`), hence opt-in.
 //!
 //! Re-baselining (only with a PR that says which segment changed and why, `docs/DECISIONS.md` D22):
 //!
-//! 1. `cargo run --release -p nord-core --example render_hash -- out.f32le` prints one line per
-//!    segment (`segment <name>: <bytes> bytes sha256 <hash>`) and the whole-file `sha256`
-//!    (the value `docs/TECH_DEBT.md` and `docs/DECISIONS.md` quote).
-//! 2. `NS4_GOLDEN_PRINT=1 cargo test -p nord-core --test golden_render -- --nocapture` prints
-//!    the fingerprint lines (`GOLDEN <name> <bytes> <peak> <rms> <sha256>`).
-//! 3. Run step 2 with `--release`, copy the lines into `GOLDEN` below, run
+//! 1. `NS4_GOLDEN_PRINT=1 cargo test --release -p nord-core --test golden_render -- --nocapture`
+//!    prints one line per segment (`GOLDEN <name> <bytes> <peak> <rms> <sha256>`) and
+//!    `GOLDEN whole <sha256>` (the `render_hash` value `docs/TECH_DEBT.md` and `docs/DECISIONS.md`
+//!    quote).
+//! 2. Copy the lines into `GOLDEN` and `WHOLE` below, run
 //!    `NS4_GOLDEN_EXACT=1 cargo test --release -p nord-core --test golden_render`, and update
-//!    the whole-file hash in `docs/TECH_DEBT.md`.
+//!    the whole-file hash in the docs.
 
 #[path = "support/render_segments.rs"]
 mod render_segments;
@@ -32,16 +32,16 @@ const GOLDEN: [(&str, usize, f64, f64, &str); 5] = [
     (
         "engine",
         480000,
-        1.0,
-        0.246595,
-        "76fe958bdce59bf85d02d919cfded966e3d877351857cdae08cf6e0874d32a9e",
+        0.989326,
+        0.212953,
+        "35841a3087012f0bdcb1cd3f2b541df79d64a761caa61407c6b1e882e1f62027",
     ),
     (
         "synth",
         768000,
-        0.472107,
-        0.155154,
-        "f82978c4706ba348764249e865c68a891dab629a623d0dbf4876fec3e39183d2",
+        0.236886,
+        0.080882,
+        "ce65df9032afa9782c9b0ef56c25a67b89af0c0cf56dd8ed4b4c3d1763ecc917",
     ),
     (
         "organ",
@@ -67,7 +67,7 @@ const GOLDEN: [(&str, usize, f64, f64, &str); 5] = [
 ];
 
 /// Whole-file SHA-256 of `render_hash` (the five segments joined).
-const WHOLE: &str = "31577ee1983486f37e36c42ae647052ab5ad039d6169853ed1069fc617686703";
+const WHOLE: &str = "490e621874790a612d840a871e053c72943fb569dffe391413ba9f5705bdd39b";
 
 /// Peak and RMS of little-endian f32 samples; `None` when one is not finite.
 fn stats(bytes: &[u8]) -> Option<(f64, f64)> {
@@ -113,6 +113,7 @@ fn every_engine_segment_matches_its_golden_fingerprint() {
         let hash = sha256_hex(bytes);
         if print {
             println!("GOLDEN {name} {} {peak:.6} {rms:.6} {hash}", bytes.len());
+            whole.extend_from_slice(bytes);
             continue; // re-baseline mode: print only
         }
         whole.extend_from_slice(bytes);
@@ -126,6 +127,10 @@ fn every_engine_segment_matches_its_golden_fingerprint() {
                 "{name}: SHA-256 (re-baseline, see the file docs)"
             );
         }
+    }
+    if print {
+        println!("GOLDEN whole {}", sha256_hex(&whole));
+        return;
     }
     if exact {
         assert_eq!(sha256_hex(&whole), WHOLE, "whole render_hash");

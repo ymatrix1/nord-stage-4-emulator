@@ -47,6 +47,7 @@ pub fn copy_engine(dst: &mut FirmwareOptions, src: &FirmwareOptions, engine: Eng
         Engine::Piano => {
             dst.piano_firmware_level = src.piano_firmware_level;
             dst.piano_bus_scale = src.piano_bus_scale;
+            dst.piano_chain_scale = src.piano_chain_scale;
             dst.piano_layer_law = src.piano_layer_law;
         }
         Engine::Synth => {

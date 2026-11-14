@@ -1,8 +1,8 @@
-//! Golden-render segments shared by `examples/render_hash.rs` and `tests/golden_render.rs`.
+//! Golden-render segments used by `tests/golden_render.rs`.
 //!
 //! One deterministic stereo f32 stream per engine (full engine, synth, organ, piano, FX sweep).
-//! Concatenated in this order they are the `render_hash` file, so the whole-file SHA-256 of the
-//! example equals the SHA-256 of the segments joined. Derived numbers only; no audio is stored.
+//! Concatenated in this order they are the `render_hash` file, so the SHA-256 of the segments
+//! joined is the `render_hash` value. Derived numbers only; no audio is stored.
 #![allow(dead_code)]
 
 use nord_core::engine::Stage4Engine;

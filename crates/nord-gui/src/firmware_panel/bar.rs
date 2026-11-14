@@ -195,6 +195,7 @@ fn piano_row(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
                 &LEVELS,
             );
             checkbox(ui, &info::PIANO_BUS, &mut next.piano_bus_scale);
+            checkbox(ui, &info::PIANO_CHAIN, &mut next.piano_chain_scale);
             checkbox(ui, &info::PIANO_LAYER_LAW, &mut next.piano_layer_law);
         });
         group(ui, "Global", false, false, |ui| {

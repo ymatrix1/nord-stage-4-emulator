@@ -38,7 +38,7 @@ opt-in field of `FirmwareOptions` has a control:
 | Group | Controls |
 |---|---|
 | Organ | Source, B3 tail (enabled with B3 wheels), B3 Bass processor, Farfisa processor, Rotary drive, Level, Leslie (engine / firmware), Ring and Leslie gain (enabled with the firmware Leslie) |
-| Piano | Level, SMP bus scale, Layer law |
+| Piano | Level, SMP bus scale, FX path scale, Layer law |
 | Global | Firmware routing |
 | Synth | Chain, Stage oscillators, P table, Filter, Measured laws, Shape (checkbox + slider), Sample kernel, Sample pitch |
 | FX | Amp path, All ports, then one checkbox per port: Delay laws, Delay time, Reverb mix, Reverb (Spring and the multi-tap types 2..11), Compressor, Mod 1, Mod 2, Amp EQ |
@@ -159,7 +159,7 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | `--leslie firmware\|engine` (Organ: Leslie) | Firmware Leslie processor instead of the engine rotary (`docs/research/fx-leslie.md`) | MIXED (routine VERIFIED, ring EMPIRICAL) |
 | `--leslie-ring firmware\|advance\|frozen` (Organ: Ring) | History ring pointers of the firmware Leslie: advance (default), booted pass routine, first oracle state | EMPIRICAL |
 | `--leslie-gain-db <dB>` (Organ: Leslie gain) | Gain after the firmware Leslie, -24..+24 dB in the bar | ASSUMED |
-| `--organ-level default\|legacy\|firmware` (Organ: Level) | Organ output level law: legacy bus scale, or firmware swell word and squared layer level (`docs/research/organ-output-law.md`) | MIXED per choice |
+| `--organ-level default\|legacy\|firmware\|chain` (Organ: Level) | Organ output level law: legacy bus scale, firmware swell word and squared layer level, or `chain` (verified word 1.6 x FX path 0.3732 in place of K, 14 dB under the B3 / Vox clips) (`docs/research/organ-output-law.md`) | MIXED per choice |
 | `--synth-chain legacy\|strip` (Synth: Chain) | Per-voice chain: firmware strip (default since D22, `docs/research/synth-validation.md`) or the classic engine chain; `--legacy-all` selects the classic chain | MIXED (partly VERIFIED) |
 | `--synth-stages` / `--no-synth-stages` (Synth: Stage oscillators) | Bit-exact firmware oscillator stages on the strip chain (noise, Shape Square, SUPER, MULTI, SHAPE SINE); on by default | MIXED (stages VERIFIED, voice weights ASSUMED) |
 | `--synth-p table\|fitted\|off\|g,w2,r2,shape,cutoff` (Synth: P table) | Per-wave oscillator level, cutoff factor and SHAPE word law fitted to hardware clips (`synth/p_table.rs`) | EMPIRICAL |
@@ -169,8 +169,10 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | `--measured-laws` (Synth: Measured laws) | 16-voice Super Saw, envelope depth, decay, pitch, vibrato (`audible-genius-synth-lessons.md`) | EMPIRICAL |
 | `--synth-shape <0..1>` (Synth: Shape) | Shape word of the firmware SHAPE oscillator (strip chain); off keeps the saw placeholder | ASSUMED |
 | `--firmware-piano-level` / `--legacy-piano-level` (Piano: Level) | Firmware velocity level law for `.npno` (default on); legacy is the touch curve (`piano-engine.md`) | VERIFIED |
+| `--firmware-piano-chain` (Piano: FX path scale) | Sample path scaled 0.7464, the verified FX receiver path (engine unit = DAC fraction ASSUMED; Velvet Grand clip +10 to +12 dB over) | MIXED |
 | `--firmware-piano-layer-law` (Piano: Layer law) | Piano layer fader follows `(v / 127)^2` | ASSUMED |
 | `--firmware-piano-bus` (Piano: SMP bus scale) | Sample path scaled 0.5 instead of 0.55 (Q31 receiver convention) | ASSUMED |
+| `--firmware-piano-chain` (Piano: FX path scale) | Sample path scaled 0.7464, the verified FX receiver path (engine unit = DAC fraction ASSUMED; Velvet Grand clip +10 to +12 dB over) | MIXED |
 | `--amp-path engine\|firmware` (FX: Amp path) | Firmware drive stage (engine default) or engine tanh drive and RBJ cabinet; 4 frames latency | VERIFIED (`tests_amp_golden.rs`) |
 | `--firmware-fx` (FX: All ports) | Every `FirmwareFx` port at once, see `effects-and-routing.md`; the bar shows them as the eight checkboxes below | MIXED per port |
 | `--firmware-fx-ports delay-laws` (FX: Delay laws) | Delay send and dry gains follow `kDlyMix` | MIXED |

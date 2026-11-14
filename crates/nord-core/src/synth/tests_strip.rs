@@ -73,6 +73,8 @@ fn strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range() {
     fw.filter_engine = FilterEngine::Firmware;
     fw.saw_model = SawModel::FirmwareSy;
     for s in [&mut strip, &mut fw] {
+        // the `Lp4` family (the Ladder24 stage has its own model, see below)
+        s.filter_model = FilterModel::Lp24;
         s.note_on(45, 100);
         let _ = render_n(s, 3_000);
     }
@@ -216,4 +218,26 @@ fn table_type_factor_opens_lp12_and_band_pass_but_not_lp24() {
         share(FilterModel::Lp24, false),
     );
     assert!((a / b - 1.0).abs() < 1e-4, "Lp24 factor is 1: {a} vs {b}");
+}
+
+#[test]
+fn ladder24_runs_the_firmware_ladder_stage_only_with_the_strip_chain_and_the_opt_in() {
+    let render = |chain: SynthChain, on: bool| {
+        let mut s = layer(chain);
+        s.filter_model = FilterModel::Ladder24;
+        s.strip_stages = on;
+        s.note_on(57, 100);
+        render_n(&mut s, 2_400)
+    };
+    let base = render(SynthChain::FirmwareStrip, false);
+    let staged = render(SynthChain::FirmwareStrip, true);
+    assert!(staged.iter().all(|f| f[0].is_finite() && f[0].abs() < 8.0));
+    assert!(energy(&staged) > 1e-6, "ladder stage is silent");
+    assert_ne!(base, staged, "the Ladder24 stage replaces the assumed Lp4");
+    assert_eq!(render(SynthChain::FirmwareStrip, false), base);
+    assert_eq!(
+        render(SynthChain::Legacy, true),
+        render(SynthChain::Legacy, false),
+        "the legacy chain never reads the opt-in"
+    );
 }
