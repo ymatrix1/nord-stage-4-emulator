@@ -9,7 +9,7 @@ mod synth;
 pub use fx::FxEdit;
 pub use organ::OrganEdit;
 pub use piano::PianoEdit;
-pub use program::ProgramEdit;
+pub use program::{CopyItem, MorphTarget, ProgramEdit, SplitCfg};
 pub use synth::SynthEdit;
 
 #[cfg(test)]
@@ -23,7 +23,6 @@ mod tests {
             std::mem::size_of::<PianoEdit>(),
             std::mem::size_of::<SynthEdit>(),
             std::mem::size_of::<FxEdit>(),
-            std::mem::size_of::<ProgramEdit>(),
         ];
         assert!(sizes.iter().all(|&s| s == 0));
     }

@@ -12,7 +12,9 @@ mod io;
 
 pub use apply::apply_audio_command;
 pub use command::AudioCommand;
-pub use edits::{FxEdit, OrganEdit, PianoEdit, ProgramEdit, SynthEdit};
+pub use edits::{
+    CopyItem, FxEdit, MorphTarget, OrganEdit, PianoEdit, ProgramEdit, SplitCfg, SynthEdit,
+};
 pub use frame::{f32_to_i16, render_frame_to_f32, render_frame_to_i16};
 pub use handle::AudioHandle;
 pub use io::{handle_midi_bytes, start_audio_and_midi};

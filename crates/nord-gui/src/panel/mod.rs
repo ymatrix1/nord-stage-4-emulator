@@ -33,6 +33,7 @@ mod prelude {
     pub use nord_core::synth::{FilterModel, SynthOscMode, VaWaveform};
 }
 
+pub use bay_program::catalog::LoadRequest;
 pub use state::Stage4PanelState;
 
 use bay_effects::render_bay_effects;
