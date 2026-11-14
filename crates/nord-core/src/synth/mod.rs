@@ -22,6 +22,7 @@ mod dsp;
 mod fw_adr_chain;
 mod fw_env_rates;
 mod fw_filter;
+mod fw_filter_table_d;
 mod fw_filter_tables;
 mod fw_shape;
 mod fw_stages;
