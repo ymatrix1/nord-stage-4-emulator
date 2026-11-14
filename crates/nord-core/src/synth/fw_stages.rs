@@ -10,11 +10,11 @@
 //! is open, OQ22): they are the ASSUMED constants below.
 
 use super::fw_shape::signed_phase;
-use super::fw_super1::super1_sample;
-use super::fw_sync::sync2_core;
 use super::fw_sine3::shape_sine3_core;
 use super::fw_sine_hp::{shape_sine_hp_core, OutputHighPass};
 use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
+use super::fw_super1::super1_sample;
+use super::fw_sync::sync2_core;
 use super::gain_dezip::SY_FRAME_RATE_HZ;
 use super::hw_saw::{SAW_A, SAW_B, SAW_C};
 
@@ -302,10 +302,7 @@ mod tests {
             FwStage::from_category_wave(4, 4),
             Some(FwStage::ShapeSineHp)
         );
-        assert_eq!(
-            FwStage::from_category_wave(4, 3),
-            Some(FwStage::ShapeSine3)
-        );
+        assert_eq!(FwStage::from_category_wave(4, 3), Some(FwStage::ShapeSine3));
         assert_eq!(FwStage::from_category_wave(4, 6), None);
         assert_eq!(FwStage::from_category_wave(3, 0), None);
         assert_eq!(FwStage::from_category_wave(2, 2), Some(FwStage::Sync2));

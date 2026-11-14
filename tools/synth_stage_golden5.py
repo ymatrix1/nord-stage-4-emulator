@@ -4,7 +4,8 @@
     python tools/synth_stage_golden5.py > crates/nord-core/src/synth/tests_fw_stage_golden5.rs
 
 Derived values of the bit-exact models (checked against the SHARC oracle by
-`tools/synth_wave_oracle.py`): the SUPER wave 1 inline square one SHAPE SINE wave 3 oscillator and one SYNC wave 2 oscillator. Only derived values appear.
+`tools/synth_wave_oracle.py`): the SUPER wave 1 inline square, one SHAPE SINE wave 3
+oscillator and one SYNC wave 2 oscillator. Only derived values appear.
 """
 
 from __future__ import annotations

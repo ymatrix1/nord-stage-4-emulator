@@ -1,10 +1,10 @@
 //! Interpolation table of the SYNC stages (`DM(0xB074C ..)` of the ORG core 2 image).
 //!
-//! Derived numeric table: 258 raw 32-bit float words read from the oracle after the boot,
-//! made by `python tools/synth_stage_sync.py > <file>` from `docs/research/data/
-//! synth-sync-table.json` (`docs/research/synth-stage-models-5.md`). It rises roughly as
-//! `2^(i / 32)` up to entry 127, holds 16.0 at entry 128, restarts at 0.092 (entry 129) and
-//! falls to the lower bound `1e-6` (`0x358637BD`).
+//! Derived numeric table: 258 raw 32-bit float words read from the oracle after the
+//! boot, made by `python tools/synth_stage_sync.py > <file>` from
+//! `docs/research/data/synth-sync-table.json`, see `synth-stage-models-5.md`.
+//! It rises roughly as `2^(i / 32)` up to entry 127, holds 16.0 at entry 128,
+//! restarts at 0.092 (entry 129) and falls to the lower bound `1e-6` (`0x358637BD`).
 
 pub(super) const SYNC_TABLE: [u32; 258] = [
     0x3f800000, 0x3f82d33c, 0x3f85b670, 0x3f88a9f4, 0x3f8bae25, 0x3f8ec360, 0x3f91ea08, 0x3f95227d,
