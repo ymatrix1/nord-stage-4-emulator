@@ -4,18 +4,21 @@
 //!
 //! The routine runs once per pass on 2 blocks of two stereo frames, so the stage collects 4
 //! frames and releases them one call later: **latency 4 frames (83 us at 48 kHz)**. The phase
-//! increment word is scaled by `FIRMWARE_FRAME_RATE_HZ / sample_rate`; the delay words are in DSP
-//! frames and are not rescaled (ASSUMED: the ring is 512 frames).
+//! increment word is scaled by `FIRMWARE_FRAME_RATE_HZ / sample_rate`, the tap delay word (`-600`
+//! words, 300 frames of the 512 frame ring) by the inverse so that it keeps its duration in
+//! seconds (ASSUMED: the all-pass and biquad coefficients stay those of the DSP frame rate).
 //!
 //! Provenance (`docs/research/fx-mod2-types.md` s6): the routine is VERIFIED against the oracle;
 //! the static words are the image row of the piano / synth unit (`0xC17A0`, `0xC16FE`, dump of
 //! OS v1.66) and the words of the type switch (`fx-type-words.csv`, piano kind, used for every
-//! layer kind: ASSUMED); type 7 (variation) writes only three words, so it uses the words of
-//! type 6 (ASSUMED, OQ21); the laws are the closed forms of `fx-param-fits.csv` (11 samples
+//! layer kind: ASSUMED); type 7 (variation) writes only three words because the capture switched
+//! from type 6 inside the same module (`0xC0279128`, `fx-type-modules.csv`: 12 words for type 6,
+//! 3 for type 7), so a switch into type 7 from another module writes the whole set and the
+//! stage uses the words of type 6 for both (EMPIRICAL, OQ21); the laws are the closed forms of `fx-param-fits.csv` (11 samples
 //! each: VERIFIED at the samples).
 
-use super::fw_chorus::{CTX_I1, CTX_N, RING_BASE, RING_N};
-use super::fw_mod2_run::{process, Routine};
+use super::fw_chorus::{CTX_I1, RING_BASE};
+use super::fw_mod2_run::{process, Mod2State, Routine, CTX_N};
 
 /// Image row words (VERIFIED by dump, synth and piano unit rows agree): offset, word.
 const IMAGE: [(i32, u32); 4] = [
@@ -45,8 +48,7 @@ const DELAY_WORD: u32 = (-600i32) as u32;
 /// Firmware `VIBE` stage plus the 4-frame buffers.
 #[derive(Debug, Clone)]
 pub(super) struct FwVibeStage {
-    ctx: [u32; CTX_N],
-    ring: [u32; RING_N],
+    st: Mod2State,
     scale: f64,
     input: [[f32; 2]; 4],
     output: [[f32; 2]; 4],
@@ -75,19 +77,22 @@ fn rate_word(rate: u32) -> u32 {
 impl FwVibeStage {
     /// Stage for `kFx2Rate` and `kFx2Amt` in `0..=127`, at `sample_rate`.
     pub(super) fn new(rate: u32, amount: u32, fs: f32) -> Self {
-        let mut ctx = [0u32; CTX_N];
+        let mut state = Mod2State::new();
+        let ctx: &mut [u32; CTX_N] = &mut state.ctx;
         for (o, w) in IMAGE.into_iter().chain(TYPE_WORDS) {
             ctx[index(o)] = w;
         }
         ctx[index(2)] = GAIN_WORD;
-        ctx[index(-0x20)] = DELAY_WORD;
+        let scale = crate::organ::FIRMWARE_FRAME_RATE_HZ / f64::from(fs);
+        // The tap in words (pairs), rescaled to the engine rate and kept even.
+        let tap = (f64::from(DELAY_WORD as i32) / scale / 2.0).round() as i32 * 2;
+        ctx[index(-0x20)] = tap as u32;
         ctx[index(-0x1F)] = RING_BASE;
         ctx[index(-0x1E)] = RING_BASE;
         ctx[index(-0x16)] = CTX_I1 - 0x19;
         let mut st = Self {
-            ctx,
-            ring: [0; RING_N],
-            scale: crate::organ::FIRMWARE_FRAME_RATE_HZ / f64::from(fs),
+            st: state,
+            scale,
             input: [[0.0; 2]; 4],
             output: [[0.0; 2]; 4],
             pos: 0,
@@ -99,8 +104,8 @@ impl FwVibeStage {
     /// Writes the targets of `kFx2Rate` and `kFx2Amt` (the routine has no smoothers here).
     pub(super) fn set_params(&mut self, rate: u32, amount: u32) {
         let inc = (f64::from(rate_word(rate.min(127))) * self.scale).round() as u32;
-        self.ctx[index(-0x17)] = inc;
-        self.ctx[index(-2)] = depth_word(amount.min(127));
+        self.st.ctx[index(-0x17)] = inc;
+        self.st.ctx[index(-2)] = depth_word(amount.min(127));
     }
 
     /// Pushes one frame and returns the frame of the previous block at the same position.
@@ -112,7 +117,7 @@ impl FwVibeStage {
         if self.pos == 4 {
             self.pos = 0;
             let mut block: [f32; 8] = std::array::from_fn(|i| self.input[i / 2][i % 2]);
-            process(Routine::Vibe, &mut self.ctx, &mut self.ring, &mut block);
+            process(Routine::Vibe, &mut self.st, &mut block);
             for (i, o) in self.output.iter_mut().enumerate() {
                 *o = [block[2 * i], block[2 * i + 1]];
             }
@@ -165,9 +170,23 @@ mod tests {
             for _ in 0..400 {
                 st.process_frame([0.1, 0.1]);
             }
-            st.ctx[index(-0x19)]
+            st.st.ctx[index(-0x19)]
         };
         assert_ne!(phase(0), phase(100));
+    }
+
+    #[test]
+    fn the_tap_keeps_its_duration_when_the_engine_rate_changes() {
+        let tap = |fs: f32| FwVibeStage::new(60, 60, fs).st.ctx[index(-0x20)] as i32;
+        let f = crate::organ::FIRMWARE_FRAME_RATE_HZ as f32;
+        assert_eq!(tap(f), -600, "at the DSP frame rate the image word");
+        let (a, b) = (tap(48_000.0), tap(96_000.0));
+        assert!((-700..-640).contains(&a), "{a}");
+        assert!(
+            ((b as f32 / a as f32) - 2.0).abs() < 0.01,
+            "twice the rate, twice the words"
+        );
+        assert!(a % 2 == 0 && b % 2 == 0, "pairs");
     }
 
     #[test]

@@ -15,7 +15,6 @@ use super::fw_words::val;
 #[derive(Clone, Copy)]
 pub(super) enum Cond {
     Ne,
-    #[allow(dead_code)] // used by the flanger routine, which has no wired stage yet
     Eq,
     Av,
     Ac,
@@ -40,9 +39,10 @@ pub(super) fn dag_next(i: u32, step: u32, len: u32, base: u32) -> u32 {
 }
 
 impl<M: Mem> Pe<M> {
-    /// Pre-modify address `Ii + Mm` (no write back, no wrap).
+    /// Pre-modify address `Ii + Mm` (no write back); wraps inside the circular buffer of `Ii`
+    /// like the post-modify (VERIFIED: `ENS` against the oracle, `dm(m6,i6)` with `L6 = 0x200`).
     pub(super) fn plain(&self, i: usize, m: usize) -> u32 {
-        self.i[i].wrapping_add(self.m[m])
+        dag_next(self.i[i], self.m[m], self.l[i], self.b[i])
     }
 
     /// `Ii` modified by an immediate, wrapping inside the circular buffer.
@@ -111,6 +111,48 @@ pub(super) fn fl_add_sub(a: P, b: P, sub: bool) -> Eff {
         out[3][c] = carry;
     }
     Eff::Fl4(out[0], out[1], out[2], out[3])
+}
+
+/// `Rn = Sm`: the pair with the elements exchanged.
+pub(super) fn swap(a: P) -> P {
+    [a[1], a[0]]
+}
+
+/// Signed maximum of two fixed-point words (`Rn = MAX(Rx, Ry)`).
+pub(super) fn imax(a: P, b: P) -> P {
+    [0, 1].map(|c| (a[c] as i32).max(b[c] as i32) as u32)
+}
+
+/// Signed minimum of two fixed-point words (`Rn = MIN(Rx, Ry)`).
+pub(super) fn imin(a: P, b: P) -> P {
+    [0, 1].map(|c| (a[c] as i32).min(b[c] as i32) as u32)
+}
+
+/// `Rn = FEXT Rx BY pos:len` (zero extended; `se` sign extends a field that fits the word).
+pub(super) fn fext_p(a: P, pos: P, len: P, se: P) -> P {
+    [0, 1].map(|c| {
+        let (pos, len) = (pos[c], len[c]);
+        let mut v = if pos < 32 { a[c] >> pos } else { 0 };
+        if len < 32 {
+            v &= (1u32 << len) - 1;
+        }
+        if se[c] != 0 && len > 0 && pos + len <= 32 && (v >> (len - 1)) & 1 == 1 {
+            v |= !((1u32 << len) - 1);
+        }
+        v
+    })
+}
+
+/// `Rn = FDEP Rx BY pos:len`: the low `len` bits of `a`, shifted to `pos`.
+pub(super) fn fdep_p(a: P, pos: P, len: P) -> P {
+    [0, 1].map(|c| {
+        let field = if len[c] < 32 {
+            a[c] & ((1u32 << len[c]) - 1)
+        } else {
+            a[c]
+        };
+        field.checked_shl(pos[c]).unwrap_or(0)
+    })
 }
 
 pub(super) fn isub(a: P, b: P) -> P {
@@ -222,6 +264,17 @@ mod tests {
     }
 
     #[test]
+    fn extrema_and_bit_fields_follow_the_shifter() {
+        let w = |x: u32| [x; 2];
+        assert_eq!(swap([1, 2]), [2, 1]);
+        assert_eq!(imax(w(5), w((-3i32) as u32)), w(5));
+        assert_eq!(imin(w(5), w((-3i32) as u32)), w((-3i32) as u32));
+        assert_eq!(fext_p(w(0xABCD_1234), w(22), w(10), w(0)), w(0x2AF));
+        assert_eq!(fext_p(w(0x8000_0000), w(22), w(10), w(1)), w(0xFFFF_FE00));
+        assert_eq!(fdep_p(w(0x3FF), w(22), w(9)), w(0x1FF << 22));
+    }
+
+    #[test]
     fn shifts_follow_the_sign_of_the_amount() {
         assert_eq!(ishl([3, 3], [1, 40]), [6, 0]);
         assert_eq!(ishl([8, 8], [(-1i32) as u32, (-40i32) as u32]), [4, 0]);
@@ -247,10 +300,12 @@ mod tests {
     }
 
     #[test]
-    fn pre_modify_addresses_do_not_wrap_and_immediate_modifies_do() {
+    fn pre_modify_addresses_wrap_in_a_circular_buffer_like_immediate_modifies() {
         let mut pe = Pe::new(Flat(vec![0; 8]), 0, 4);
         pe.m[3] = 7;
-        assert_eq!(pe.plain(1, 3), 11);
+        assert_eq!(pe.plain(1, 3), 11, "L = 0: a plain add");
+        (pe.b[6], pe.i[6], pe.l[6], pe.m[6]) = (16, 23, 8, 2);
+        assert_eq!(pe.plain(6, 6), 17, "23 + 2 = 25 >= 24: 25 - 8");
         (pe.b[6], pe.i[6], pe.l[6]) = (16, 23, 8);
         assert_eq!(pe.dmodi(6, 2), 17, "23 + 2 = 25 >= 24: 25 - 8");
     }

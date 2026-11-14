@@ -111,4 +111,4 @@ def test_the_golden_vectors_are_deterministic_and_complete():
     a, b = gr.golden("vibe"), gr.golden("vibe")
     assert a == b and "ring_diff" in a and "ctx_out" in a
     assert gr.golden("flang") != a
-    assert gr.CTX_N == 0x46
+    assert gr.CTX_N == 0x4B
