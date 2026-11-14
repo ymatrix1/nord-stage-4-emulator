@@ -22,7 +22,10 @@ pub fn controls() -> Vec<ControlEntry> {
         e("piano.type_leds", s, K::Led, "TYPE LEDs (6)", 24)
             .ui("Grand, Upright, Electric, Clav, Digital, Misc"),
     );
-    v.push(e("piano.select_dial", s, K::Encoder, "PIANO SELECT", 24).todo("ns4-h7he"));
+    v.push(
+        e("piano.select_dial", s, K::Encoder, "PIANO SELECT", 24)
+            .ui("walks the models of the TYPE in the loaded piano library; the library is GUI state, no host parameter"),
+    );
     v.push(
         e("piano.list", s, K::Encoder, "LIST (Shift+dial)", 25)
             .shift()
