@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn multi_saw_page_matches_the_manual_example() {
         let mut s = SynthUi::new();
-        s.turn_dial(1, 4, false);
+        s.turn_dial(1, 5, false); // MULTI is the sixth category (SYNC sits at 2)
         s.turn_dial(2, -9, false);
         s.turn_dial(2, 1, false);
         let v = view_of(&s, None);
