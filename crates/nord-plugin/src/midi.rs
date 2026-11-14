@@ -158,6 +158,10 @@ pub fn to_core_midi_event(event: &NoteEvent<()>) -> Option<CoreMidiEvent> {
         NoteEvent::MidiProgramChange {
             channel, program, ..
         } => Some(CoreMidiEvent::ProgramChange { channel, program }),
+        NoteEvent::MidiPitchBend { channel, value, .. } => Some(CoreMidiEvent::PitchBend {
+            channel,
+            value: (value.clamp(0.0, 1.0) * 16383.0).round() as u16,
+        }),
         _ => None,
     }
 }
@@ -165,6 +169,29 @@ pub fn to_core_midi_event(event: &NoteEvent<()>) -> Option<CoreMidiEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pitch_bend_event_maps_to_14_bit_value() {
+        let bend = |value| NoteEvent::MidiPitchBend {
+            timing: 0,
+            channel: 1,
+            value,
+        };
+        assert_eq!(
+            to_core_midi_event(&bend(1.0)),
+            Some(CoreMidiEvent::PitchBend {
+                channel: 1,
+                value: 16383
+            })
+        );
+        assert_eq!(
+            to_core_midi_event(&bend(0.0)),
+            Some(CoreMidiEvent::PitchBend {
+                channel: 1,
+                value: 0
+            })
+        );
+    }
 
     #[test]
     fn test_to_core_midi_event_conversion() {

@@ -123,3 +123,9 @@ def test_apply_edits_sets_dotted_and_indexed_fields_and_rejects_unknown():
     assert doc == {"organ": {"drawbars_b": [8, 0, 8], "fx": {"reverb_enabled": False}}}
     with pytest.raises(KeyError):
         ev.apply_edits(doc, {"organ.fx.nope": 1})
+
+
+def test_variant_velocity_prefers_variant_then_segment_then_100():
+    assert ev.variant_velocity({}, {}) == 100
+    assert ev.variant_velocity({"velocity": 90}, {}) == 90
+    assert ev.variant_velocity({"velocity": 90}, {"velocity": 64}) == 64
