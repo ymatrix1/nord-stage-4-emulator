@@ -31,6 +31,35 @@ impl OrganLayer {
         self.process_rotary(x, 1.0 / self.sample_rate)
     }
 
+    /// The firmware Leslie processor on one organ sample: the engine's ramped rotor rates become
+    /// the three speed words (`0xB2F25` drum, `0xB2F26` horn, `0xB2FA1` drum ratio), the organ signal
+    /// goes in the left lane (the right lane of the organ bus is silent, `docs/research/fx-leslie.md`).
+    ///
+    /// ASSUMED: the fast words are the slow words times the engine's horn / drum rate ratio (the ARM
+    /// words for the fast speed were not found); the phase period is `2^32` (`0.72 Hz` at the slow
+    /// word, VERIFIED in the model: the phase passes `0x80000000` without clamping).
+    fn process_leslie_firmware(&mut self, x: f32) -> [f32; 2] {
+        const FS_DSP: f64 = 44_444_000.0 / 1024.0;
+        const SLOW_HORN_HZ: f64 = 0.80;
+        const SLOW_DRUM_HZ: f64 = 0.67;
+        let scale = FS_DSP / f64::from(self.sample_rate);
+        let word =
+            |slow: u32, ratio: f64| (f64::from(slow) * scale * ratio).round().max(0.0) as u32;
+        let horn = f64::from(self.horn_rate_hz) / SLOW_HORN_HZ;
+        let drum = f64::from(self.drum_rate_hz) / SLOW_DRUM_HZ;
+        let gain = self.leslie_gain;
+        if let Some(l) = self.leslie_fw.as_mut() {
+            l.set_speed_words([
+                word(0x22b00, drum),
+                word(0x26000, horn),
+                word(0x15d00, drum),
+            ]);
+            let y = l.process(x, 0.0);
+            return [y[0] * gain, y[1] * gain];
+        }
+        [0.0; 2]
+    }
+
     /// Processes Model 122 Rotary Speaker with Doppler delay, Close Mic, Angle, Stop Mode, and cabinet reflections.
     pub(super) fn process_rotary(&mut self, scanner_out: f32, inv_fs: f32) -> [f32; 2] {
         let drive = if self.rotary_drive_scaled {
@@ -68,6 +97,9 @@ impl OrganLayer {
         self.drum_rate_hz += (target_drum - self.drum_rate_hz)
             * (inv_fs / (4.2 * self.globals.rotor_tau_scale)).min(1.0);
 
+        if self.leslie_fw.is_some() {
+            return self.process_leslie_firmware(scanner_out);
+        }
         if effective_speed == RotarySpeed::Stop && self.horn_rate_hz < 0.05 {
             // Brake horn cleanly toward front cabinet position
             self.horn_phase *= (1.0 - inv_fs * 6.0).max(0.0);

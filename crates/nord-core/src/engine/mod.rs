@@ -14,7 +14,15 @@ use crate::piano::PianoLayer;
 use crate::synth::SynthLayer;
 
 pub use aux_kb::{AuxKb, AuxVelocityCurve, NoteRoute};
+pub use extern_menu::{ExternDevice, ExternDevices, ExternMenu};
 pub use extern_out::{ExternLayer, ExternState, MidiOut, MidiOutQueue, MIDI_OUT_CAPACITY};
+pub use foot_switch::{foot_switch_b_func, FootSwitchB};
+pub use midi_menu::{MidiMenuSettings, MidiMode, ProgramRequest, TransposeAt};
+pub use organ_trigger::{OrganTrigger, TriggerPoint, LOW_TRIGGER_DELAY_SEC};
+pub use output_routing::{
+    OutChoice, OutputRouting, RoutingMode, OUTPUT_SOURCES, OUTPUT_TRIM_DB_RANGE, SRC_ORGAN,
+    SRC_ROTARY,
+};
 pub use pedal_assign::{
     PanelFunc, SustainPedalType, TripleFunc, TriplePedal, TripleState, TripleUnit,
 };
@@ -25,14 +33,21 @@ pub use pedals::{
 
 mod aux_kb;
 mod clipboard;
+mod extern_menu;
 mod extern_out;
+mod foot_switch;
 mod fx_params;
 mod handoff;
 mod layer_init;
 mod live_slots;
 mod midi_dispatch;
+mod midi_menu;
+mod midi_out;
+mod mix;
 mod morph_clip;
 mod organ_modes;
+mod organ_trigger;
+mod output_routing;
 mod pedal_assign;
 mod pedals;
 mod program;
@@ -51,6 +66,8 @@ mod telemetry_cell;
 mod tests_extern;
 #[cfg(test)]
 mod tests_firmware_routing;
+#[cfg(test)]
+mod tests_midix;
 #[cfg(test)]
 mod tests_pedals;
 #[cfg(test)]
@@ -130,6 +147,15 @@ pub struct Stage4Engine {
     settings: GlobalSettings,
     /// Extern layer settings and the outgoing MIDI queue.
     pub extern_out: ExternState,
+    /// Global MIDI menu settings (Local Control, Sect On, Ctrl / Dev, PC, Transpose MIDI At).
+    pub midi_menu: MidiMenuSettings,
+    midi_rt: midi_menu::MidiRuntime,
+    /// Extern menu: Echo Global, Keyboard Velocity and Device MIDI filters of the Extern layers.
+    pub extern_menu: ExternMenu,
+    /// Output menu: routing of sections and layers to the four outputs, and output trims.
+    pub output_routing: OutputRouting,
+    /// Sound menu Organ Keyboard Trigger Point.
+    pub organ_trigger: OrganTrigger,
     note_hold_counts: [[[u8; 7]; 128]; 16],
     /// Per-program transpose in semitones (`-6..=6`, manual p.40).
     transpose: i8,
@@ -185,6 +211,11 @@ impl Stage4Engine {
             pedals: PedalState::default(),
             settings: GlobalSettings::default(),
             extern_out: ExternState::default(),
+            midi_menu: MidiMenuSettings::default(),
+            midi_rt: midi_menu::MidiRuntime::default(),
+            extern_menu: ExternMenu::default(),
+            output_routing: OutputRouting::default(),
+            organ_trigger: OrganTrigger::default(),
             note_hold_counts: [[[0; 7]; 128]; 16],
             transpose: 0,
             held_transpose: [[0; 128]; 16],
@@ -200,99 +231,10 @@ impl Stage4Engine {
     }
 
     /// Renders a single stereo frame `[left, right]` across all 7 layers + 7 FX racks + Master Bus.
+    /// This is the Main pair (outputs 1-2); see [`Self::render_frame_multi`] for all four outputs.
     pub fn render_frame(&mut self) -> [f32; 2] {
-        self.master_clock.advance(self.sample_rate);
-        self.pedals.triple.tick();
-        self.sync_synth_clock();
-
-        // Apply Morphing Matrix to Synth filter cutoffs via OS v1.66 14 Hz .. 32 kHz curve
-        let cut_a = crate::cbin::cutoff_norm_to_hz(
-            self.synth_cutoff_morph[0].evaluate(&self.morph_controllers),
-        );
-        let cut_b = crate::cbin::cutoff_norm_to_hz(
-            self.synth_cutoff_morph[1].evaluate(&self.morph_controllers),
-        );
-        let cut_c = crate::cbin::cutoff_norm_to_hz(
-            self.synth_cutoff_morph[2].evaluate(&self.morph_controllers),
-        );
-        if self.synth_cutoff_morph[0].delta_wheel.abs() > 1e-5
-            || self.synth_cutoff_morph[0].delta_pedal.abs() > 1e-5
-            || self.synth_cutoff_morph[0].delta_aftertouch.abs() > 1e-5
-        {
-            self.synth_a.cutoff_hz = cut_a;
-        }
-        if self.synth_cutoff_morph[1].delta_wheel.abs() > 1e-5
-            || self.synth_cutoff_morph[1].delta_pedal.abs() > 1e-5
-            || self.synth_cutoff_morph[1].delta_aftertouch.abs() > 1e-5
-        {
-            self.synth_b.cutoff_hz = cut_b;
-        }
-        if self.synth_cutoff_morph[2].delta_wheel.abs() > 1e-5
-            || self.synth_cutoff_morph[2].delta_pedal.abs() > 1e-5
-            || self.synth_cutoff_morph[2].delta_aftertouch.abs() > 1e-5
-        {
-            self.synth_c.cutoff_hz = cut_c;
-        }
-
-        let mut raw_layers = [
-            self.organ_a.render_frame(),
-            self.organ_b.render_frame(),
-            self.piano_a.render_frame(),
-            self.piano_b.render_frame(),
-            self.synth_a.render_frame(),
-            self.synth_b.render_frame(),
-            self.synth_c.render_frame(),
-        ];
-        self.apply_organ_swell(&mut raw_layers);
-
-        let mut mix_l = 0.0f32;
-        let mut mix_r = 0.0f32;
-        let mut rot_in = 0.0f32;
-        let mut rot_used = false;
-
-        for (i, raw) in raw_layers.into_iter().enumerate() {
-            self.fx_chains[i].apply_morph(&self.morph_controllers);
-            let [fx_l, fx_r] = self.fx_chains[i].process_frame_with_bpm(raw, self.master_clock.bpm);
-            let level = self.layer_levels[i].evaluate(&self.morph_controllers);
-            // organ layers follow the firmware level law `(v / 127)^2` when it is selected
-            let level = match i {
-                0 => self.organ_a.level_law().layer_gain(level),
-                1 => self.organ_b.level_law().layer_gain(level),
-                _ => level,
-            };
-            let gain = level * self.program_gain;
-            // TO ROTARY (Piano / Synth layers): the mono sum after the fader feeds the shared rotary.
-            if i >= 2 && self.fx_chains[i].amp_cabinet == AmpCabinet::ToRotary {
-                rot_in += 0.5 * (fx_l + fx_r) * gain;
-                rot_used = true;
-                continue;
-            }
-            mix_l += fx_l * gain;
-            mix_r += fx_r * gain;
-        }
-        if rot_used {
-            self.rotary_bus.mirror_rotary_settings(&self.organ_a);
-            let [rl, rr] = self.rotary_bus.process_external_rotary(rot_in);
-            mix_l += rl;
-            mix_r += rr;
-        }
-        if self.fx_sharing.reverb_global.is_some() {
-            self.global_reverb.apply_morph(&self.morph_controllers);
-            [mix_l, mix_r] = self.global_reverb.process_reverb_frame([mix_l, mix_r]);
-        }
-
-        let volume = self.pedals.volume_gain();
-        if volume != 1.0 {
-            mix_l *= volume;
-            mix_r *= volume;
-        }
-        let out = self.master_bus.process_frame([mix_l, mix_r]);
-        if self.settings.mono_output {
-            let mid = 0.5 * (out[0] + out[1]);
-            [mid, mid]
-        } else {
-            out
-        }
+        let out = self.render_frame_multi();
+        [out[0], out[1]]
     }
 
     /// Feeds the Master Clock tempo to the Synth layers and applies their KB Sync clock resets.
@@ -308,12 +250,17 @@ impl Stage4Engine {
         }
     }
 
-    /// Processes an interleaved or dual-channel block in place with zero heap allocations.
-    pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let frames = left.len().min(right.len());
+    /// Per-block control work shared by `process_block` and `process_block_multi`.
+    pub(super) fn begin_block(&mut self) {
         self.extern_sync_volume();
         self.apply_fx_sharing();
         self.apply_organ_sharing();
+    }
+
+    /// Processes an interleaved or dual-channel block in place with zero heap allocations.
+    pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let frames = left.len().min(right.len());
+        self.begin_block();
         for i in 0..frames {
             let [l, r] = self.render_frame();
             left[i] = l;

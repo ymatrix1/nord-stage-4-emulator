@@ -107,8 +107,11 @@ pub struct UserProgram {
 /// In-memory program storage: banks plus the eight Live slots. Nothing is written to disk.
 #[derive(Debug, Clone, Default)]
 pub struct UserLibrary {
-    programs: BTreeMap<u16, UserProgram>,
+    pub(super) programs: BTreeMap<u16, UserProgram>,
     live: [Option<Box<ProgramState>>; 8],
+    /// Archive entry that sits at each location of the opened `.ns4b` (flat index -> entry path),
+    /// read from the entry headers; Organize moves these along with the user programs.
+    pub(super) factory: BTreeMap<u16, String>,
 }
 
 impl UserLibrary {

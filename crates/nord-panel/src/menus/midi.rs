@@ -2,8 +2,8 @@
 //!
 //! Channels use `0 = Off`, `1..=16` as printed, matching `auxkb_channel` and the engine helpers.
 
-use super::{Menu, MenuItem as I, MenuPage, GAP};
-use crate::types::Binding::{Bound, UiOnly, Unsupported as U};
+use super::{Menu, MenuItem as I, MenuPage};
+use crate::types::Binding::{Bound, UiOnly};
 
 const CH: (i32, i32, i32) = (0, 16, 1);
 const CH_NOTE: &str = "0 = Off";
@@ -18,8 +18,14 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 1,
         title: "Local Control",
         items: &[
-            I::toggle("midi.1.local_control", "Local Control", true, 61, U(GAP))
-                .note("always reverts to On at power-up (manual p.57)"),
+            I::toggle(
+                "midi.1.local_control",
+                "Local Control",
+                true,
+                61,
+                Bound("engine:midi_menu.local_control"),
+            )
+            .note("always reverts to On at power-up (manual p.57), so hosts do not persist it"),
         ],
     },
     MenuPage {
@@ -70,7 +76,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 Bound("engine:layer_midi_channels"),
             )
             .note(ARROW),
-            I::toggle("midi.3.organ_sect", "Sect On", false, 62, U(GAP)),
+            I::toggle("midi.3.organ_sect", "Sect On", false, 62, Bound("engine:midi_menu.sect_on")),
         ],
     },
     MenuPage {
@@ -96,7 +102,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 Bound("engine:layer_midi_channels"),
             )
             .note(ARROW),
-            I::toggle("midi.4.piano_sect", "Sect On", false, 62, U(GAP)),
+            I::toggle("midi.4.piano_sect", "Sect On", false, 62, Bound("engine:midi_menu.sect_on")),
         ],
     },
     MenuPage {
@@ -131,7 +137,7 @@ pub(super) const PAGES: &[MenuPage] = &[
                 Bound("engine:layer_midi_channels"),
             )
             .note(ARROW),
-            I::toggle("midi.5.synth_sect", "Sect On", false, 62, U(GAP)),
+            I::toggle("midi.5.synth_sect", "Sect On", false, 62, Bound("engine:midi_menu.sect_on")),
         ],
     },
     MenuPage {
@@ -173,9 +179,11 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 7,
         title: "Control / NRPN / Device Mode",
         items: &[
-            I::choice("midi.7.type", "Type", CTRL_TYPE, 1, 62, U(GAP)),
-            I::choice("midi.7.ctrl", "Ctrl", MODE, 0, 63, U(GAP)),
-            I::choice("midi.7.dev", "Dev", MODE, 3, 63, U(GAP)),
+            I::choice("midi.7.type", "Type", CTRL_TYPE, 1, 62, Bound("engine:midi_menu.nrpn")),
+            I::choice("midi.7.ctrl", "Ctrl", MODE, 3, 63, Bound("engine:midi_menu.ctrl")).assumed(
+                "manual default is Off; the engine has always accepted panel CCs on the Global channel, so Send & Receive is the default",
+            ),
+            I::choice("midi.7.dev", "Dev", MODE, 3, 63, Bound("engine:midi_menu.dev")),
         ],
     },
     MenuPage {
@@ -183,8 +191,8 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 8,
         title: "Program Change Mode",
         items: &[
-            I::choice("midi.8.pc", "PC", MODE, 3, 63, U(GAP)),
-            I::choice("midi.8.pc_ext", "PC Ext", MODE, 3, 63, U(GAP)),
+            I::choice("midi.8.pc", "PC", MODE, 3, 63, Bound("engine:midi_menu.pc")),
+            I::choice("midi.8.pc_ext", "PC Ext", MODE, 3, 63, Bound("engine:midi_menu.pc_ext")),
         ],
     },
     MenuPage {
@@ -197,7 +205,7 @@ pub(super) const PAGES: &[MenuPage] = &[
             TRANSPOSE_AT,
             0,
             63,
-            U(GAP),
+            Bound("engine:midi_menu.transpose_at"),
         )],
     },
     MenuPage {

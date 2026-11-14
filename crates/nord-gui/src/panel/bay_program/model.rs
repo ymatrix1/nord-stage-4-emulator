@@ -203,12 +203,12 @@ impl Screen {
     pub fn soft_labels(self) -> [&'static str; 4] {
         match self {
             Self::List => ["Num", "Abc", "Cat", ""],
-            Self::StoreAs => ["ABC", "Cat", "Del", "Ins"],
+            Self::StoreAs => ["Abc", "Cat", "Del", "Ins"],
             Self::Split => ["Note", "Low", "Mid", "High"],
             Self::Clock => ["KBS", "", "", ""],
             Self::Preset { .. } => ["Num", "Cat", "Cancel", ""],
             Self::Undo => ["UNDO", "REDO", "", ""],
-            Self::LayerInit => ["All", "Org AB", "Pno", "Syn"],
+            Self::LayerInit => ["All", "Organ", "Piano", "Synth"],
             Self::Copy => ["Layer", "Fx", "Morph", "Prog"],
             Self::Paste => ["Paste", "Swap", "", ""],
             // Item rows 1-4; `menu_screen` blanks the rows a page does not have.
