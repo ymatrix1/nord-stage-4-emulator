@@ -201,3 +201,30 @@ fn panel_render_is_deterministic_and_non_empty() {
     assert!(n > 500, "panel painted only {n} shapes");
     eprintln!("PANEL_FRAME_HASH {a:#018x} shapes {n}");
 }
+
+/// Frame-time probe: prints the mean CPU time of one full-panel frame (release build gives the
+/// number that matters; the assertion only guards against order-of-magnitude regressions).
+#[test]
+fn full_panel_frame_time_probe() {
+    let ctx = egui::Context::default();
+    let (audio_handle, _rx) = AudioHandle::new();
+    let mut state = Stage4PanelState::default();
+    let mut frame = || {
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                render_stage4_panel(ui, &mut state, &audio_handle);
+            });
+        });
+    };
+    for _ in 0..3 {
+        frame();
+    }
+    let n = 40;
+    let t0 = std::time::Instant::now();
+    for _ in 0..n {
+        frame();
+    }
+    let ms = t0.elapsed().as_secs_f64() * 1000.0 / f64::from(n);
+    eprintln!("FRAME_MS {ms:.2}");
+    assert!(ms < 500.0, "frame took {ms:.1} ms");
+}

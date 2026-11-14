@@ -20,7 +20,8 @@ pub fn pitch_and_mod_wheels(
         Sense::click_and_drag(),
     );
     if resp_pitch.dragged() {
-        let d = -resp_pitch.drag_delta().x * 0.02;
+        // Dragging right bends up: positive values draw the paddle to the right.
+        let d = resp_pitch.drag_delta().x * 0.02;
         *pitch = (*pitch + d).clamp(-1.0, 1.0);
         changed = true;
     } else if !resp_pitch.is_pointer_button_down_on() && pitch.abs() > 1e-4 {
@@ -105,5 +106,38 @@ mod tests {
             assert!(!pitch_and_mod_wheels(ui, rp, rm, &mut pitch, &mut modw));
             assert_eq!(modw, 0.25);
         });
+    }
+
+    /// Dragging the stick to the right must bend up (positive) and draw it right of centre.
+    #[test]
+    fn dragging_right_moves_the_pitch_stick_right() {
+        use egui::{Event, Modifiers, PointerButton, RawInput};
+        let ctx = egui::Context::default();
+        let mut pitch = 0.0_f32;
+        let mut modw = 0.0_f32;
+        let rp = Rect::from_min_size(pos2(10.0, 10.0), vec2(40.0, 40.0));
+        let rm = Rect::from_min_size(pos2(80.0, 10.0), vec2(30.0, 120.0));
+        let c = rp.center();
+        let mut run = |events: Vec<Event>| {
+            let raw = RawInput {
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(raw, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    pitch_and_mod_wheels(ui, rp, rm, &mut pitch, &mut modw);
+                });
+            });
+        };
+        run(vec![Event::PointerMoved(c)]);
+        run(vec![Event::PointerButton {
+            pos: c,
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Modifiers::NONE,
+        }]);
+        run(vec![Event::PointerMoved(pos2(c.x + 12.0, c.y))]);
+        run(vec![Event::PointerMoved(pos2(c.x + 24.0, c.y))]);
+        assert!(pitch > 0.1, "dragging right gave pitch {pitch}");
     }
 }
