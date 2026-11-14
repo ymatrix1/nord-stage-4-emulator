@@ -114,6 +114,8 @@ mod tests_pattern_tie;
 #[cfg(test)]
 mod tests_perf;
 #[cfg(test)]
+mod tests_sample_pitch;
+#[cfg(test)]
 mod tests_strip;
 mod voice;
 mod voice_alloc;
@@ -227,6 +229,9 @@ pub struct SynthLayer {
     /// `SAMPLES` oscillator only, opt-in (default off): pick the 12-tap kernel with the firmware
     /// key rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
     pub sample_kernel_by_key: bool,
+    /// `SAMPLES` oscillator only, opt-in (default off): the note-to-step ratio follows the firmware
+    /// exponent tables (`sinc::pitch_law::key_ratio`) instead of exact `2^(n/12)`.
+    pub sample_pitch_fw: bool,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -376,6 +381,7 @@ impl SynthLayer {
             strip_stage: None,
             strip_stages: true,
             sample_kernel_by_key: false,
+            sample_pitch_fw: false,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,

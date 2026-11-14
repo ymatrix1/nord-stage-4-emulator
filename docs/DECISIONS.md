@@ -396,6 +396,37 @@ law verified, but path from stored word to SMP voice gains (`0xC023195C`) traced
 layer Flip law by (changes program level below 127 untraced path); flip bus scale (0.83 dB assumption, true receiver scale unknown up 12 dB).
 `render_hash` unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
 
+### D35. The SAMPLES kernel rule stays opt-in; D31. multi-tap reverb (types 2..11) is D32. FX Mod 2: CHOR uses the firmware pitch law is added opt-in
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-sample-pitch-wave`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) sections 7 to 9)
+- **Context:** D22 flips a default only after an end-to-end check. The kernel rule (`--sample-kernel key`) needs `[voice + 8]` to be the played key; the harness cannot load a SAMPLES program (no sample-set download), so the kernel record write `0x9243B + 0x38 k` was not captured. The ARM pitch block `0xC01E14AC..0xC01E15A4` was run for the first time.
+- **Decision:** Keep `--sample-kernel key` opt-in (structure shows `[+8]` is the key before the `[+0x18]` transposition, but the event-record link was not run). Add `sinc::pitch_law` (bit-identical to the firmware block for 23 inputs) behind `SynthLayer::sample_pitch_fw` / `--sample-pitch fw`; default off.
+model type map ASSUMED
+
+(task `ns4-tc25` follow-up, rule)
+wrapper `0x120FDB` and packed core `0x120D8A` of reverb types 2..11 are ported (`FwReverbMulti`) and reproduce oracle word word on nine types. words of each type are captured, which UI reverb (Booth, Room, Stage, Hall, Cathedral and variation flag) selects which `kRvbType` never read from program, type 6 has no capture, and no hardware clip compared.
+`FirmwareFx::reverb` also drives Booth (2, 3), Room (4, 5), Stage (7 with variation flag), Hall (8, and Cathedral (10, 11) through `FwReverbMulti`; stays off and engine FDN stays path every model.
+**Why:** D22: algorithm VERIFIED, mapping into it guess (size order of type words), and comparison with hardware missing. Opting in costs nothing existing renders.
+**Alternatives:** Flip now (rejected: criteria 2 and 3 of are met); keep port in tools (the engine could use it).
+**Impact:** TD-10 and OQ21 stay open comparison, type 6 and organ rows. Flip when Part A with known type scores better than FDN (s10 method, [fx-reverb-leslie](research/fx-reverb-leslie.md) s14).
+routines `FirmwareFx::mod2`
+
+`feat/fx-mod2-types`; [fx-mod2-types](research/fx-mod2-types.md))
+renders Mod `CHOR` as assumed `9 ms` modulated delay. routines `0x122E24` (`kFx2Type` 4) `0x122F77` (5), circular stereo delay line LFO driven fractional tap; CHOR used by 93 156 Mod programs.
+Model both routines instruction by instruction (`tools/fx_model_chorus.py`, 500/500 scenarios per per-instruction trace against oracle), them pair-register machine (`fx/fw_pe.rs`, `fw_chorus4.rs`, `fw_chorus5.rs`) wire them `fx/fw_mod2.rs` `FirmwareFx::mod2` (in `ALL`, `DEFAULT`).
+routines data flow VERIFIED; amount laws VERIFIED at 11 samples interpolated between them, delay DSP frames, rate hertz recording layer specific piano row, keeps switch opt-in.
+Tune chorus by ear available); wait all six Mod CHOR alone covers 60 % Mod programs).
+`ns4 render-patch --firmware-fx` `FirmwareFx::ALL` change CHOR programs (4 frame latency, delay times rates); `render_hash` unchanged.
+bus convention ASSUMED.
+exponent law VERIFIED; place where root key and the sample rate enter the ARM word, and the DSP conversion of the pair-block word to Stage B step, are not traced, so the absolute step is not firmware-derived.
+- **Alternatives:** Flip the kernel default on the structural evidence (changes every SAMPLES program on an unrun field); replace the `2^(n/12)` step outright (the join with the DSP step table is open).
+- **Impact:** `render_hash` unchanged (both flags default off).
+bus convention ASSUMED.
+verified, path from stored SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, level verified end end.
+layer Flip by piano (changes program level below 127 untraced path); flip bus scale (0.83 dB assumption, true receiver scale unknown up 12 dB).
+`render_hash` unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
+
 ### D32. FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2`
 
 - **Status:** accepted 2026-11-14
@@ -409,3 +440,13 @@ bus convention stays ASSUMED.
 law verified, but path from stored word to SMP voice gains (`0xC023195C`) traced, receiver SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was found, absolute level verified end to end.
 Flip law (changes every program level below 127 on untraced path); flip bus scale (0.83 dB on assumption, true receiver scale unknown up to 12 dB).
 unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
+
+### D36. The Amp EQ uses the firmware tone stack behind `FirmwareFx::eq`; the EQ gain stays 0.25 dB per count
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-comp-eq-wiring`; evidence [fx-eq-words](research/fx-eq-words.md))
+- **Context:** TD-10 asked whether the EQ gain count indexes the `2^(1/24)` ladder (0.25086 dB per count); the compressor and EQ ports were not wired to the preset fields, and `kCmpResponse` and the tables `0x2f730c` / `0x2ae5b4` were open.
+- **Decision:** (1) Keep `EQ_GAIN_DB_PER_COUNT = 0.25`: the ARM shelf words give `1 + F = 10^(c / 80)` on the cut side to five digits. (2) Wire the already oracle-verified tone stack `0x1243F4` with the ARM words of `kAmpTreble`, `kAmpBass`, `kAmpMid`, `kAmpMidFreq` as the opt-in `FirmwareFx::eq` (in `ALL`, not in `DEFAULT`, 2 frame latency). (3) `kCmpResponse` stays closed (no DSP effect) and the compressor stays opt-in; `0x2f730c` is not the EQ.
+- **Why:** The words and the routine are VERIFIED, but the joint mid gain by frequency law, the interpolation between 11 captured indices, the organ unit's routine layout and the engine versus 43,402 Hz rate are not, and no hardware clip isolates an EQ setting, so D22 does not allow a default switch.
+- **Alternatives:** Switch the EQ gain to the ladder (rejected: refuted by the words); flip the default (rejected: no end to end check); rescale the words to the engine rate (rejected: loses the bit-for-bit words, deferred until the full capture exists).
+- **Impact:** `render_hash` unchanged (flag default off). With the flag the layer gains 2 frames of latency, the boost side tops out at 14.77 dB, and the mid band has a firmware width and centre (frequencies 1.106 times higher at 48 kHz).
