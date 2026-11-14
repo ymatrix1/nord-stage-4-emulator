@@ -4,18 +4,16 @@
 //! Positions come from `layout_px::rect_or_empty`. Shift functions share their base control's
 //! rect and are printed as legends below it ([`ctl::shift_legend`]).
 
-use super::ctl::{gesture_button, led_row, missing, shift_legend, Face};
+use super::aux_flag::{aux_flag_from_telemetry, aux_led};
+use super::ctl::{gesture_button, led_row, mark, shift_legend, Face};
+use super::kb_zone;
 use super::layout_px::rect_or_empty;
-use super::organ_logic::{step_octave, step_zone};
+use super::organ_logic::step_octave;
 use super::organ_widgets::{level_fader, level_ladder};
 use super::prelude::*;
 use crate::audio::OrganEdit;
 use nord_panel::behaviour::Trigger;
 
-/// Bean tracking the missing section-level Organ behaviour.
-const BEAN: &str = "ns4-h7he";
-/// Bean tracking Aux KB routing.
-const AUX_BEAN: &str = "ns4-ymci";
 /// Focus LED blink rate. ASSUMED: 2 Hz; the manual says "blinking" without a rate (p.18).
 const BLINK_HZ: f64 = 2.0;
 
@@ -92,7 +90,7 @@ pub(super) fn render_strip(
     let focus = state.organ_ui.focus_layer;
 
     // ON (tap) / SOLO (hold).
-    let on_dim = missing("section ON/OFF", BEAN);
+    let section_on = state.organ_section_on();
     let t = gesture_button(
         ui,
         &mut state.organ_ui.trackers,
@@ -100,13 +98,18 @@ pub(super) fn render_strip(
         "organ.on",
         false,
         Face {
-            led: Some(state.organ_ui.section_on),
-            dim: Some(&on_dim),
+            led: Some(section_on),
+            tip: "ON: tap switches every Organ layer off, or back on. Hold: SOLO",
             ..Face::black()
         },
     );
     match t {
-        Some(Trigger::Primary) => state.organ_ui.section_on = !state.organ_ui.section_on,
+        Some(Trigger::Primary) => {
+            let changed = state.organ_on_tap();
+            for (l, _) in changed.iter().enumerate().filter(|(_, c)| **c) {
+                send_layer(state, audio, l);
+            }
+        }
         Some(Trigger::Hold) => state.organ_ui.solo = !state.organ_ui.solo,
         _ => {}
     }
@@ -128,7 +131,6 @@ pub(super) fn render_strip(
     );
 
     // Layers A and B.
-    let aux_dim = missing("Aux KB routing", AUX_BEAN);
     let phase = blink(ui);
     for (l, ids) in LAYER_IDS.iter().enumerate() {
         let (layer_id, focus_id, fader_id, ladder_id, aux_id) = *ids;
@@ -204,18 +206,19 @@ pub(super) fn render_strip(
             lvl,
             state.organ_layer_active(l),
         );
-        led_row(
-            ui,
-            rc(aux_id),
-            aux_id,
-            &[false],
-            (LED_GREEN, LED_GREEN_DIM),
-            Some(&aux_dim),
-        );
+        let lit = aux_flag_from_telemetry(state.organ_ui.aux[l]);
+        let tip = "AUX KB: this layer is played by the aux keyboard (click to switch)";
+        if aux_led(ui, rc(aux_id), aux_id, lit, tip) {
+            state.organ_ui.aux[l] = !state.organ_ui.aux[l];
+            audio.send_command(AudioCommand::Organ(OrganEdit::AuxKb {
+                layer: l as u8,
+                on: state.organ_ui.aux[l],
+            }));
+        }
+        mark(ui, aux_id);
     }
 
     // OCTAVE SHIFT with KB ZONE on Shift.
-    let zone_dim = missing("KB ZONE", BEAN);
     for (up, id, zone_id, text) in [
         (false, "organ.octave_down", "organ.kb_zone_down", "ZONE-"),
         (true, "organ.octave_up", "organ.kb_zone_up", "ZONE+"),
@@ -239,21 +242,23 @@ pub(super) fn render_strip(
             }
             Some(Trigger::Shifted) => {
                 let z = &mut state.organ_ui.kb_zone[focus];
-                *z = step_zone(*z, up);
+                *z = kb_zone::step(*z, up);
+                audio.send_command(AudioCommand::Organ(OrganEdit::Zone {
+                    layer: focus as u8,
+                    leds: kb_zone::leds(*z),
+                }));
             }
             _ => {}
         }
-        shift_legend(ui, rc(id), zone_id, text, None, Some(&zone_dim));
+        shift_legend(ui, rc(id), zone_id, text, None, None);
     }
-    let zone = state.organ_ui.kb_zone[focus];
-    let lits: [bool; 4] = std::array::from_fn(|i| i as u8 == zone);
     led_row(
         ui,
         rc("organ.zone_leds"),
         "organ.zone_leds",
-        &lits,
+        &kb_zone::lits(state.organ_ui.kb_zone[focus]),
         (LED_GREEN, LED_GREEN_DIM),
-        Some(&zone_dim),
+        None,
     );
 }
 

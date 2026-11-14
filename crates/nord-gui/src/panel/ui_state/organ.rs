@@ -11,14 +11,19 @@ use nord_core::organ::ScannerMode;
 pub struct OrganUi {
     /// Layer the strip buttons (OCTAVE, KB ZONE, VIB type, ...) act on; its LED blinks.
     pub focus_layer: usize,
-    /// Section ON button (`organ.on`); no engine support yet (ns4-h7he).
-    pub section_on: bool,
+    /// Layer bit mask (bit 0 = A) to bring back when ON is pressed again (`organ.on`).
+    pub restore_layers: u8,
     /// Temporary SOLO monitor mode (manual p.43); never stored in a program.
     pub solo: bool,
     /// Drawbar Live: ladders are unlit, the physical drawbars play (manual p.21).
     pub drawbar_live: bool,
-    /// KB ZONE position per layer, `0..=3` (four green LEDs).
+    /// KB ZONE position per layer (`kb_zone::POSITIONS`, `0` = every zone, the engine default).
     pub kb_zone: [u8; 2],
+    /// Aux KB flag per layer (the LED); the UI value until telemetry reads it back.
+    pub aux: [bool; 2],
+    /// Physical drawbar positions (the sliders). They follow the stored preset while Preset mode
+    /// is on and move alone in Drawbar Live (manual p.21).
+    pub live_bars: [u8; 9],
     /// SUSTPED per layer (Shift function of the layer buttons).
     pub sustped: [bool; 2],
     /// PSTICK per layer.
@@ -35,9 +40,9 @@ pub struct OrganUi {
     pub vib_on_b: bool,
     /// Rotary CLOSE MIC (Shift function of the ORGAN routing button).
     pub close_mic: bool,
-    /// Rotary ANGLE wide/narrow (Shift function of STOP MODE); no engine support yet.
+    /// Rotary ANGLE wide/narrow (Shift function of STOP MODE); wide is the engine default.
     pub rotary_angle_wide: bool,
-    /// Rotary ORGAN routing button; no engine support yet.
+    /// Rotary ORGAN routing button: the organ goes through the rotary speaker (engine default on).
     pub rotary_organ: bool,
     /// Per-button gesture state machines, keyed by control id.
     pub trackers: Trackers,
@@ -47,10 +52,12 @@ impl Default for OrganUi {
     fn default() -> Self {
         Self {
             focus_layer: 0,
-            section_on: true,
+            restore_layers: 0b01,
             solo: false,
             drawbar_live: false,
             kb_zone: [0; 2],
+            aux: [false; 2],
+            live_bars: [8, 8, 8, 0, 0, 0, 0, 0, 0],
             sustped: [false; 2],
             pstick: [false; 2],
             perc_poly: false,
@@ -59,7 +66,7 @@ impl Default for OrganUi {
             vib_type_b: ScannerMode::C3,
             vib_on_b: false,
             close_mic: false,
-            rotary_angle_wide: false,
+            rotary_angle_wide: true,
             rotary_organ: true,
             trackers: Trackers::new(),
         }
@@ -74,7 +81,10 @@ mod tests {
     fn default_starts_on_layer_a_in_preset_mode() {
         let u = OrganUi::default();
         assert_eq!(u.focus_layer, 0);
-        assert!(u.section_on && !u.solo && !u.drawbar_live);
+        assert!(!u.solo && !u.drawbar_live);
+        assert_eq!(u.restore_layers, 0b01);
+        assert!(u.rotary_angle_wide && u.rotary_organ, "engine defaults");
+        assert_eq!(u.kb_zone, [0, 0]);
         assert_eq!(u.vib_type_b, ScannerMode::C3);
         assert!(u.trackers.is_empty());
     }

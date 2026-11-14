@@ -377,7 +377,7 @@ def stage(lanes: list[Lane]):
     return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]
 
 
-def saw_helper(phase: int, inc: int, amp: X = ONE):
+def saw_helper(phase: int, inc: int, amp: X = ONE, offset: int = 0):
     """Helper `0x12501F` (listing `0x24A03E..0x24A160`): four band-limited falling saw samples."""
     a = flt(inc, -31)
     g = mul(C_FADE, add(clip(sub(A_FADE, a), B_FADE), B_FADE))
@@ -385,7 +385,7 @@ def saw_helper(phase: int, inc: int, amp: X = ONE):
     r7 = recip_refined(a, HALF)
     ph = [u32(phase + k * inc) for k in (1, 2, 3, 4)]
     out = []
-    for x in ph:
+    for x in (u32(p + offset) for p in ph):
         xf = flt(x, -31)
         xo = flt(x ^ 0x80000000, -31)
         w = sub(ONE, clip(ONE, mul(xf, r7)))
@@ -435,5 +435,94 @@ def stage_pulse(lanes: list[Lane]):
         offs.append(u32(ln.pulse + ln.pulse))
     o1 = [pulse_helper(ln.phase1, c[0], o) for ln, c, o in zip(lanes, incs, offs, strict=True)]
     o2 = [pulse_helper(ln.phase2, c[1], o) for ln, c, o in zip(lanes, incs, offs, strict=True)]
+    scales = [ld(ln.out_gain) for ln in lanes]
+    return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]
+
+
+# VERIFIED (image words `DM(I0 + 4 .. 18)` of the pass, dump of the frame constants): the polynomial
+# of the sine helper `0x12522E`, and the fade constants of stage `0x120CD0`.
+SINE_C12 = ld(0x3FC90FAC)
+SINE_C14 = ld(0xBF25591E)
+SINE_C16 = ld(0x3DA2ACAA)
+SINE_C18 = ld(0xBB8DEBE6)
+SINE_FADE_A = ld(0x3F30F34B)
+SINE_FADE_B = ld(0x3E6BEF0F)
+SINE_FADE_C = ld(0x400AE2EB)
+SINE_OFFSET = 0xC0000000
+
+
+def sine_helper(phase: int, inc: int):
+    """Helper `0x12522E` (listing `0x24A45C..0x24A4E8`): four samples of `t (c12 + q (c14 + q (c16 +
+    q c18)))` with `t = |x| - 1`, `q = t^2`, `x = (phase - 0xC0000000) 2^-30`."""
+    ph = [u32(phase + k * inc) for k in (1, 2, 3, 4)]
+    out = []
+    for x in ph:
+        t = sub(abs(flt(u32(x - SINE_OFFSET), -30)), ONE)
+        q = mul(t, t)
+        h = add(mul(SINE_C18, q), SINE_C16)
+        h = add(mul(h, q), SINE_C14)
+        h = add(mul(h, q), SINE_C12)
+        out.append(mul(h, t))
+    return out, ph[3]
+
+
+def stage_sine(lanes: list[Lane]):
+    """Stage `0x120CD0` (ANALOG PURE sine): fade from the pitch word, sine helper twice per lane."""
+    incs, gs = [], []
+    for ln in lanes:
+        pitch = ld(ln.pitch)
+        incs.append((fix(mul(pitch, ld(ln.ratio1)), 31), fix(mul(pitch, ld(ln.ratio2)), 31)))
+        g = mul(SINE_FADE_C, add(clip(sub(SINE_FADE_A, pitch), SINE_FADE_B), SINE_FADE_B))
+        gs.append(ld(st(g)))
+    o1 = [sine_helper(ln.phase1, c[0]) for ln, c in zip(lanes, incs, strict=True)]
+    o2 = [sine_helper(ln.phase2, c[1]) for ln, c in zip(lanes, incs, strict=True)]
+    scales = [mul(g, ld(ln.out_gain)) for g, ln in zip(gs, lanes, strict=True)]
+    return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]
+
+
+def stage_triangle(lanes: list[Lane]):
+    """Stage `0x121183` (ANALOG PURE triangle): the parabola helper twice per oscillator with a
+    fixed half-cycle shift; fade and window width come from the pitch word, not the increment."""
+    sts = []
+    for ln in lanes:
+        f = ld(ln.pitch)
+        g = ld(st(mul(C_FADE, add(clip(sub(A_FADE, f), B_FADE), B_FADE))))
+        sts.append((f, g, ld(st(recip_refined(f, HALF)))))
+    incs = []
+    for ln in lanes:
+        pitch = ld(ln.pitch)
+        incs.append((fix(mul(pitch, ld(ln.ratio1)), 31), fix(mul(pitch, ld(ln.ratio2)), 31)))
+
+    def osc(phase: int, inc: int, f: X, inv_a: X):
+        ph = [u32(phase + k * inc) for k in (1, 2, 3, 4)]
+        first, r6 = helper(ph, f, inv_a)
+        first = [ld(st(v)) for v in first]
+        second, _ = helper([u32(p - 0x80000000) for p in ph], r6, inv_a)
+        return [sub(x, y) for x, y in zip(first, second, strict=True)], ph[3]
+
+    o1 = [osc(ln.phase1, c[0], s_[0], s_[2]) for ln, c, s_ in zip(lanes, incs, sts, strict=True)]
+    o2 = [osc(ln.phase2, c[1], s_[0], s_[2]) for ln, c, s_ in zip(lanes, incs, sts, strict=True)]
+    scales = [mul(ld(ln.out_gain), s_[1]) for ln, s_ in zip(lanes, sts, strict=True)]
+    return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]
+
+
+def stage_shape_saw(lanes: list[Lane]):
+    """Stage `0x12169D` (ANALOG SHAPE wave 1, Shape Saw): two half-amplitude saw helper calls per
+    oscillator, the second shifted by `2 FIX(-w 2^30)` with `w = DM(-5, I2)` (`shape_a` here)."""
+    half = HALF
+    incs, offs = [], []
+    for ln in lanes:
+        pitch = ld(ln.pitch)
+        incs.append((fix(mul(pitch, ld(ln.ratio1)), 31), fix(mul(pitch, ld(ln.ratio2)), 31)))
+        offs.append(u32(fix(-ld(ln.shape_a), 30) * 2))
+
+    def osc(phase: int, inc: int, off: int):
+        first, ph = saw_helper(phase, inc, half)
+        first = [ld(st(v)) for v in first]
+        second, _ = saw_helper(phase, inc, half, off)
+        return [add(y, x) for x, y in zip(first, second, strict=True)], ph
+
+    o1 = [osc(ln.phase1, c[0], o) for ln, c, o in zip(lanes, incs, offs, strict=True)]
+    o2 = [osc(ln.phase2, c[1], o) for ln, c, o in zip(lanes, incs, offs, strict=True)]
     scales = [ld(ln.out_gain) for ln in lanes]
     return mix_lanes(lanes, o1, o2, scales), [o[1] for o in o1], [o[1] for o in o2]

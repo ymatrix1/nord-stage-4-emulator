@@ -183,7 +183,7 @@ fn fader_click_sets_the_level() {
 }
 
 #[test]
-fn octave_buttons_step_and_shift_moves_the_zone_led_only() {
+fn octave_buttons_step_and_shift_moves_the_zone_assignment() {
     let mut s = Stage4PanelState::default();
     let edits = tap(&mut s, "piano.octave_up");
     assert_eq!(s.piano_ui.octave[0], 1);
@@ -195,11 +195,19 @@ fn octave_buttons_step_and_shift_moves_the_zone_led_only() {
         }]
     );
     let mut rig = Rig::new(&mut s);
-    let at = rig.centre("piano.octave_down");
+    rig.clock = 100.0; // a fresh clock must not look like a double tap of the first press
+    let at = rig.centre("piano.octave_up");
     let edits = rig.press(&mut s, at, 0.05, true);
-    assert!(edits.is_empty());
+    assert_eq!(
+        edits,
+        [PianoEdit::Zone {
+            layer: 0,
+            leds: 0b0001
+        }],
+        "shifted tap sends the zone, not an octave"
+    );
     assert_eq!(s.piano_ui.octave[0], 1);
-    assert_eq!(s.piano_ui.kb_zone[0], 3);
+    assert_eq!(s.piano_ui.kb_zone[0], 1);
 }
 
 #[test]
@@ -282,4 +290,48 @@ fn dial_click_requests_the_next_library_model_and_shift_opens_the_list() {
     assert_eq!(s.piano_ui.model_request.as_deref(), Some("b.npno"));
     rig.press(&mut s, at, 0.05, true);
     assert_eq!(s.piano_ui.overlay, super::ui_state::PianoOverlay::List);
+}
+
+#[test]
+fn on_off_applied_to_the_engine_silences_every_piano_layer() {
+    let mut s = Stage4PanelState {
+        piano_b_active: true,
+        ..Stage4PanelState::default()
+    };
+    let edits = tap(&mut s, "piano.on");
+    let mut e = Stage4Engine::new(48_000.0);
+    e.scene.scene_1_mask = 0b0001100;
+    e.scene.scene_2_mask = 0b0001100;
+    for ed in &edits {
+        ed.apply(&mut e);
+    }
+    assert_eq!(e.scene.scene_1_mask & 0b1100, 0, "both piano layers off");
+    assert_eq!(e.scene.scene_2_mask & 0b1100, 0);
+}
+
+#[test]
+fn aux_led_click_sends_the_flag_of_that_layer_and_the_engine_follows() {
+    let mut s = Stage4PanelState::default();
+    let edits = tap(&mut s, "piano.aux_led.b");
+    assert_eq!(edits, [PianoEdit::AuxKb { layer: 1, on: true }]);
+    assert_eq!(s.piano_ui.aux, [false, true]);
+    let mut e = Stage4Engine::new(48_000.0);
+    edits[0].apply(&mut e);
+    assert!(e.aux_kb.is_aux_layer(nord_core::morph::LayerId::PianoB));
+    assert!(!e.aux_kb.is_aux_layer(nord_core::morph::LayerId::PianoA));
+}
+
+#[test]
+fn zone_edit_from_the_panel_reaches_the_engine_router() {
+    let mut s = Stage4PanelState::default();
+    let mut rig = Rig::new(&mut s);
+    let at = rig.centre("piano.octave_up");
+    let edits = rig.press(&mut s, at, 0.05, true);
+    assert_eq!(edits.len(), 1);
+    let mut e = Stage4Engine::new(48_000.0);
+    for ed in &edits {
+        ed.apply(&mut e);
+    }
+    assert_eq!(e.layer_zone_leds(nord_core::morph::LayerId::PianoA), 0b0001);
+    assert_eq!(e.layer_zone_leds(nord_core::morph::LayerId::PianoB), 0b1111);
 }

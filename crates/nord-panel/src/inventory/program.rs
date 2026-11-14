@@ -64,7 +64,7 @@ pub fn controls() -> Vec<ControlEntry> {
             } else {
                 "menu button order inferred from the panel photo"
             })
-            .todo(bean),
+            .ui("opens the menu screen; its items are bound in nord_panel::menus"),
         );
     }
     v.extend([

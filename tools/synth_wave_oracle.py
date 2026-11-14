@@ -34,6 +34,9 @@ PARAM = 0xC169A  # P = DM(-32, I2)
 STAGE = 0x1212D3
 STAGE_SAW = 0x1215FB
 STAGE_PULSE = 0x121B99
+STAGE_SINE = 0x120CD0
+STAGE_TRIANGLE = 0x121183
+STAGE_SHAPE_SAW = 0x12169D
 PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not duplicated in SIMD)
 DEVS = ("0x282c0380=1", "0x3108d008=5")
 
@@ -42,7 +45,14 @@ def fbits(x: float) -> int:
     return m.f2u(x)
 
 
-MODELS = {STAGE: m.stage, STAGE_SAW: m.stage_saw, STAGE_PULSE: m.stage_pulse}
+MODELS = {
+    STAGE: m.stage,
+    STAGE_SAW: m.stage_saw,
+    STAGE_PULSE: m.stage_pulse,
+    STAGE_SINE: m.stage_sine,
+    STAGE_TRIANGLE: m.stage_triangle,
+    STAGE_SHAPE_SAW: m.stage_shape_saw,
+}
 
 
 def pokes(lanes: list[m.Lane]) -> dict[int, int]:
@@ -116,6 +126,8 @@ def compare(
             ln.pitch = got[RECORD - 29 + i]
             ln.shape_a = got[RECORD + 17 + i]
             ln.shape_b = got[RECORD + 19 + i]
+            if stage == STAGE_SHAPE_SAW:
+                ln.shape_a = got[RECORD - 5 + i]
         model = MODELS[stage]
         want, _, _ = model(lanes)
         for i in (0, 1):

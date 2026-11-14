@@ -22,6 +22,9 @@ mod tests;
 /// Bean tracking menu behaviour the engine cannot honour yet.
 pub(crate) const GAP: &str = "ns4-zb9o";
 
+/// Item id of System page 1 "Memory Protect" (manual p.57); the Program bay gates STORE on it.
+pub const ID_MEMORY_PROTECT: &str = "system.1.memory_protect";
+
 /// The eight menus, reached with SHIFT + a Program button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Menu {
@@ -274,5 +277,11 @@ mod model_tests {
         assert!(find_item("system.2.transpose").is_some());
         assert!(find_item("nope").is_none());
         assert_eq!(pages_of(Menu::AuxKb).len(), 3);
+        let mp = find_item(ID_MEMORY_PROTECT).expect("memory protect item");
+        assert_eq!(
+            mp.default,
+            Value::Bool(true),
+            "factory default is protected"
+        );
     }
 }

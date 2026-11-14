@@ -175,7 +175,9 @@ impl KeybedSplitRouter {
             return 0.0;
         }
         if !self.splits.iter().any(|s| s.enabled) {
-            return if (mask & 1) != 0 { 1.0 } else { 0.0 };
+            // Zones only matter once the keyboard is split: any non-empty set spans all keys
+            // (the firmware routing does the same, `engine/routing.rs`).
+            return 1.0;
         }
 
         // Evaluate across the first enabled split boundary for clean 2-zone/4-zone transitions

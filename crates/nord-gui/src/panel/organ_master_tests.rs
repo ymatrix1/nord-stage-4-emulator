@@ -16,12 +16,8 @@ fn bay_controls() -> Vec<ControlEntry> {
         .collect()
 }
 
-/// Inventory ids of Unsupported controls the GUI drives anyway through other engine fields.
-const IMPLEMENTED_DESPITE_INVENTORY: [&str; 2] = ["organ.vibrato_on.a", "organ.vibrato_on.b"];
-
 fn is_unsupported(c: &ControlEntry) -> bool {
     matches!(c.binding, Binding::Unsupported(_))
-        && !IMPLEMENTED_DESPITE_INVENTORY.contains(&c.id.as_str())
 }
 
 #[test]
@@ -151,9 +147,13 @@ fn shift_tap_on_octave_moves_the_kb_zone_instead() {
         },
     );
     assert_eq!(sim.state.organ_ui.kb_zone[0], 1);
-    assert!(
-        sim.organ_edits().is_empty(),
-        "shifted function sends no octave"
+    assert_eq!(
+        sim.organ_edits(),
+        vec![OrganEdit::Zone {
+            layer: 0,
+            leds: 0b0001
+        }],
+        "shifted function sends the zone, no octave"
     );
 }
 
@@ -177,7 +177,7 @@ fn hold_on_on_button_toggles_solo() {
     let mut sim = Sim::new();
     sim.hold("organ.on", 0.7);
     assert!(sim.state.organ_ui.solo);
-    assert!(sim.state.organ_ui.section_on, "hold is SOLO, not ON/OFF");
+    assert!(sim.state.organ_section_on(), "hold is SOLO, not ON/OFF");
 }
 
 #[test]
@@ -203,6 +203,7 @@ fn percussion_buttons_send_state() {
         },
     );
     assert!(sim.state.organ_ui.perc_poly && !sim.state.perc_soft);
+    assert_eq!(sim.organ_edits(), vec![OrganEdit::PercPoly(true)]);
 }
 
 #[test]
@@ -289,22 +290,6 @@ fn rotary_buttons_send_speed_stop_and_close_mic() {
         },
     );
     assert_eq!(sim.organ_edits(), vec![OrganEdit::CloseMic(true)]);
-}
-
-#[test]
-fn dimmed_controls_keep_their_ui_state() {
-    let mut sim = Sim::new();
-    assert!(sim.state.organ_ui.rotary_organ);
-    sim.click("rotary.organ");
-    assert!(!sim.state.organ_ui.rotary_organ);
-    sim.hold("rotary.stop_mode", 0.7);
-    assert!(sim.state.organ_ui.rotary_angle_wide);
-    sim.click("organ.on");
-    assert!(!sim.state.organ_ui.section_on);
-    assert!(
-        sim.organ_edits().is_empty(),
-        "dimmed controls reach no engine"
-    );
 }
 
 #[test]

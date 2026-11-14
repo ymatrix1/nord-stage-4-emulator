@@ -1,10 +1,13 @@
 //! Organ drawbars (manual p.19-21): nine drawbars with their 8-LED ladders.
 //!
-//! The ladder shows the stored preset value and is unlit in Drawbar Live (manual p.21).
+//! The ladder shows the stored preset value and is unlit in Drawbar Live (manual p.21). The
+//! sliders are the physical drawbars: in Preset mode they edit the preset, in Drawbar Live only
+//! the physical positions (`OrganEdit::LiveDrawbars`).
 
 use super::layout_px::rect_or_empty;
 use super::organ_widgets::{drawbar_ladder, drawbar_slot};
 use super::prelude::*;
+use crate::audio::OrganEdit;
 
 const SLOT_IDS: [&str; 9] = [
     "organ.drawbar.1",
@@ -56,6 +59,11 @@ pub(super) fn render_drawbars(
     state: &mut Stage4PanelState,
     audio: &AudioHandle,
 ) {
+    let live = state.organ_ui.drawbar_live;
+    if !live {
+        // Preset mode: the physical drawbars follow the stored preset (program loads, SYNC).
+        state.organ_ui.live_bars = state.organ_drawbars;
+    }
     let mut changed = false;
     for i in 0..9 {
         let slot = rect_or_empty(SLOT_IDS[i], origin);
@@ -63,12 +71,12 @@ pub(super) fn render_drawbars(
             ui,
             slot,
             SLOT_IDS[i],
-            &mut state.organ_drawbars[i],
+            &mut state.organ_ui.live_bars[i],
             is_white(i),
         ) {
             changed = true;
         }
-        let lit = ladder_value(state.organ_drawbars[i], state.organ_ui.drawbar_live);
+        let lit = ladder_value(state.organ_drawbars[i], live);
         drawbar_ladder(ui, rect_or_empty(LADDER_IDS[i], origin), LADDER_IDS[i], lit);
         label(
             painter,
@@ -80,7 +88,13 @@ pub(super) fn render_drawbars(
         );
     }
     if changed {
-        audio.send_command(AudioCommand::SetDrawbars(state.organ_drawbars));
+        if !live {
+            state.organ_drawbars = state.organ_ui.live_bars;
+            audio.send_command(AudioCommand::SetDrawbars(state.organ_drawbars));
+        }
+        audio.send_command(AudioCommand::Organ(OrganEdit::LiveDrawbars(
+            state.organ_ui.live_bars,
+        )));
     }
 }
 
