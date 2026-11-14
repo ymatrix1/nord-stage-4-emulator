@@ -8,7 +8,7 @@
 
 use nih_plug::prelude::*;
 use nord_core::engine::Stage4Engine;
-use nord_core::organ::{OrganLayer, OrganModel};
+use nord_core::organ::{clamp_stop_angle, OrganLayer, OrganModel, STOP_ANGLE_COUNT};
 
 /// Number of organ layers (A and B).
 pub const ORGAN_EXTRA_LAYERS: usize = 2;
@@ -37,6 +37,10 @@ pub struct OrganExtraLayerParams {
     /// Detuned vibrato copies (firmware `DETUNE_CENTS` table).
     #[id = "detuned"]
     pub detuned: BoolParam,
+    /// Rotary ANGLE (Shift + STOP MODE): rest position of horn and rotor in Stop Mode,
+    /// `0` = Free, `1..=6` = `nord_core::organ::STOP_ANGLE_LABELS`.
+    #[id = "stop_angle"]
+    pub stop_angle: IntParam,
 }
 
 impl Default for OrganExtraLayerParams {
@@ -69,6 +73,14 @@ impl Default for OrganExtraLayerParams {
             .with_unit(" ct"),
             crosstalk: FloatParam::new("Crosstalk", 1.0, FloatRange::Linear { min: 0.0, max: 2.0 }),
             detuned: BoolParam::new("Detuned Copies", false),
+            stop_angle: IntParam::new(
+                "Rotary Stop Angle",
+                0,
+                IntRange::Linear {
+                    min: 0,
+                    max: i32::from(STOP_ANGLE_COUNT),
+                },
+            ),
         }
     }
 }
@@ -111,6 +123,7 @@ impl OrganExtraLayerParams {
         t.fine_tune_cents = self.fine_tune.value();
         t.crosstalk_level = self.crosstalk.value();
         t.detuned_copies = self.detuned.value();
+        t.rotary_stop_angle = clamp_stop_angle(self.stop_angle.value().clamp(0, 255) as u8);
     }
 }
 
@@ -167,6 +180,7 @@ mod tests {
         assert_eq!(o.fine_tune_cents, reference.fine_tune_cents);
         assert_eq!(o.crosstalk_level, reference.crosstalk_level);
         assert_eq!(o.detuned_copies, reference.detuned_copies);
+        assert_eq!(o.rotary_stop_angle, reference.rotary_stop_angle);
     }
 
     #[test]
@@ -217,6 +231,19 @@ mod tests {
         assert_differs(&render(&wide, fast), &render(&narrow, fast), "mic angle");
     }
 
+    #[test]
+    fn stop_angle_reaches_the_engine_and_clamps() {
+        let mut bank = OrganExtraBank::default();
+        bank.layers[1].stop_angle = IntParam::new("s", 4, IntRange::Linear { min: 0, max: 99 });
+        let mut engine = Stage4Engine::new(44100.0);
+        bank.sync_to_engine(&mut engine);
+        assert_eq!(engine.organ_b.rotary_stop_angle, 4);
+        assert_eq!(engine.organ_a.rotary_stop_angle, 0);
+        bank.layers[1].stop_angle = IntParam::new("s", 99, IntRange::Linear { min: 0, max: 99 });
+        bank.sync_to_engine(&mut engine);
+        assert_eq!(engine.organ_b.rotary_stop_angle, STOP_ANGLE_COUNT);
+    }
+
     /// Fine Tune and detuned copies live in the firmware oscillator bank (Pipe models).
     fn pipe(o: &mut OrganLayer) {
         o.model = OrganModel::Pipe1;
@@ -256,7 +283,8 @@ mod tests {
             .into_iter()
             .map(|(id, _, _)| id)
             .collect();
-        assert_eq!(ids.len(), 7 * ORGAN_EXTRA_LAYERS);
+        assert_eq!(ids.len(), 8 * ORGAN_EXTRA_LAYERS);
+        assert!(ids.contains(&"stop_angle_1".to_string()));
         assert!(ids.contains(&"model_1".to_string()));
         assert!(ids.contains(&"mic_angle_2".to_string()));
     }

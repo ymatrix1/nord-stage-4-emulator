@@ -1,6 +1,7 @@
 //! Soft buttons (Program buttons 1-4 on screens that label them), the Layer Init / Copy / Paste
 //! choices and Shift/Exit.
 
+use super::fw_messages::FwMessage;
 use super::model::{ListMode, Screen};
 use super::nav::{cmd, sibling};
 use crate::audio::{AudioCommand, CopyItem, ProgramEdit};
@@ -114,11 +115,26 @@ impl ProgramUi {
 
     fn paste_choice(&mut self, n: u8) -> Vec<AudioCommand> {
         let Some(item) = self.copied else {
-            self.set_message("Nothing to Paste");
+            self.show(if n == 2 {
+                FwMessage::NothingToSwapWith
+            } else {
+                FwMessage::NothingToPaste
+            });
             return Vec::new();
         };
         self.screen = Screen::Home;
         match (n, item) {
+            // ASSUMED: pasting a whole program is a stored-memory write, so Memory Protect refuses
+            // it with the firmware's `Unable to Paste` + `%c Memory Protected` (0x283790); layer,
+            // FX and morph pastes only edit the working program and stay allowed.
+            (1, CopyItem::Program) if self.menu.memory_protect() => {
+                self.set_message(format!(
+                    "{}\n{}",
+                    FwMessage::UnableToPaste.text(),
+                    FwMessage::MemoryProtected.text()
+                ));
+                Vec::new()
+            }
             (1, _) => {
                 // Paste into the focused layer / same morph source / program.
                 let target = match item {
@@ -126,11 +142,11 @@ impl ProgramUi {
                     CopyItem::Fx(_) => CopyItem::Fx(self.focus),
                     other => other,
                 };
-                self.set_message("Pasted");
+                self.show(FwMessage::Pasted);
                 vec![cmd(ProgramEdit::Paste(target))]
             }
             (2, _) => {
-                self.set_message("Swapped");
+                self.show(FwMessage::Swapped);
                 vec![cmd(ProgramEdit::Swap(self.focus, sibling(self.focus)))]
             }
             _ => Vec::new(),

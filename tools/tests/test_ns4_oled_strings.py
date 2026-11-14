@@ -10,6 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 NAME_RS = ROOT / "crates/nord-gui/src/panel/bay_program/name.rs"
+FW_MESSAGES_RS = ROOT / "crates/nord-gui/src/panel/bay_program/fw_messages.rs"
 
 
 def image(*strings: str, pad: int = 8) -> bytes:
@@ -213,3 +214,67 @@ def test_fixed_wording_is_in_the_firmware() -> None:
         "ModWheel MIDI",
     ):
         assert text in pool.exact, text
+
+
+@needs_fw
+def test_param_hint_labels_are_in_the_firmware() -> None:
+    """Labels and LFO destination words of `panel/param_hint/table.rs` marked VERIFIED."""
+    fw = firmware()
+    assert fw is not None
+    pool = os_.Pool(os_.fw_strings(fw.read_bytes()))
+    for text in (
+        "Oscillator Ctrl",
+        "Oscillator Env Amount",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Filter Env Amount",
+        "LFO Destination",
+        "LFO Rate",
+        "LFO Amount",
+        "Glide Rate",
+        "Arpeggiator Rate",
+        "Arpeggiator Range",
+        "Filter",
+        "Osc Pitch",
+        "OscCtrl",
+    ):
+        assert text in pool.exact, text
+
+
+def fw_message_table() -> list[tuple[str, int]]:
+    """`(text, offset)` of every `FwMessage`, read from `fw_messages.rs` (`text()`, `offset()`)."""
+    src = FW_MESSAGES_RS.read_text(encoding="utf-8")
+    texts = dict(re.findall(r"Self::(\w+) => \"([^\"]+)\",", src))
+    offsets = dict(re.findall(r"Self::(\w+) => (0x[0-9A-Fa-f]+),", src))
+    assert texts.keys() == offsets.keys() and len(texts) == 10
+    return [(texts[k], int(offsets[k], 16)) for k in texts]
+
+
+def test_message_table_lists_the_firmware_messages_of_the_bean() -> None:
+    texts = {t for t, _ in fw_message_table()}
+    assert {
+        "Piano not found",
+        "Sample not found",
+        "Please wait...",
+        "Pasted",
+        "Swapped",
+        "Nothing to Swap with",
+        "Are you sure?",
+        "Memory Protected",
+    } <= texts
+
+
+@needs_fw
+def test_message_strings_are_in_the_firmware() -> None:
+    fw = firmware()
+    assert fw is not None
+    data = fw.read_bytes()
+    for text, off in fw_message_table():
+        end = data.index(b"\0", off)
+        found = data[off:end].decode("ascii")
+        # `%c Memory Protected` is the firmware string; the `%c` glyph is not drawn (see
+        # `MEMORY_PROTECTED_GLYPH`), so only the tail must match.
+        # `Unable to Paste` is the first line of the string `Unable to Paste<LF>%c Memory
+        # Protected`.
+        first_line = found.split(chr(10))[0]
+        assert found in (text, f"%c {text}") or first_line == text, (text, hex(off), found)

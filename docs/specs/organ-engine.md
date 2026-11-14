@@ -338,7 +338,7 @@ Firmware strings confirm the dedicated `LeslieHorn` and `Rotary Mic Distance` pa
 4. **Doppler Pitch, Mic Placement & Cabinet Reflections:**
    - **Mic Distance (`rotary_close_mic`):** `Close` yields deeper horn Doppler excursion ($\pm 0.55\text{ ms}$) and narrower beaming with subtle baffle reflections (`0.05`); `Normal` uses $\pm 0.35\text{ ms}$ excursion and stronger stereo cabinet early reflections (`0.18` cross-taps at $3.4\text{ ms}$ / $4.6\text{ ms}$).
    - **Mic Angle (`rotary_mic_angle_deg`):** Virtual stereo microphone angular separation ($0^\circ..180^\circ$, default $120^\circ$).
-   - **Stop Mode (`rotary_stop_mode` / `RotarySpeed::Stop`):** Smoothly brakes both horn and drum rotors to zero rotational speed and parks the horn facing the cabinet baffle.
+   - **Stop Mode (`rotary_stop_mode` / `RotarySpeed::Stop`):** Smoothly brakes both horn and drum rotors to zero rotational speed. `rotary_stop_angle` (`0` Free, `1..=6`) picks the rest position they settle at; Free keeps the phase they stopped at ([effects-and-routing](effects-and-routing.md) 2.7b).
 
 ---
 

@@ -2,6 +2,8 @@
 //! OCTAVE SHIFT, KB ZONE LEDs (manual p.27-28).
 
 use super::widgets::{dot, fader, gesture_of, ladder, pad, tiny, LEGEND, LEGEND_DIM};
+use crate::audio::SynthEdit;
+use crate::panel::aux_flag::{aux_flag_from_telemetry, aux_led};
 use crate::panel::layout_px::rect_or_empty;
 use crate::panel::prelude::*;
 use crate::panel::ui_state::{unsupported_reason, Btn, LayerAction, SynthUi};
@@ -43,6 +45,12 @@ fn layer_pad(
     sui.mark(id);
     let resp = ui.interact(rect, ui.id().with(id), Sense::click_and_drag());
     let mut action = LayerAction::None;
+    if i == 1 && resp.hovered() && ui.input(|inp| inp.modifiers.shift) {
+        // PSTICK/RNG list (manual p.28): Shift + mouse wheel over Layer B moves the bend range.
+        // egui turns Shift+wheel into a horizontal scroll, so read both axes.
+        let pts = ui.input(|inp| inp.raw_scroll_delta.x + inp.raw_scroll_delta.y);
+        sui.pstick_range_scroll(pts);
+    }
     if let Some(g) = gesture_of(ui, sui, id, &resp) {
         let shift = ui.input(|i| i.modifiers.shift);
         action = sui.layer_button(i, g, shift, active);
@@ -70,10 +78,15 @@ fn layer_pad(
             (false, true) => LED_AMBER,
             (false, false) => LEGEND,
         };
+        let text = if i == 1 && lit {
+            format!("{legend} {}", sui.pstick_range)
+        } else {
+            legend.to_string()
+        };
         tiny(
             p,
             pos2(rect.center().x, rect.bottom() + 3.0),
-            legend,
+            &text,
             col,
             Align2::CENTER_TOP,
         );
@@ -83,9 +96,12 @@ fn layer_pad(
             let _ = resp.on_hover_text(format!(
                 "{legend} (Shift+click): the Synth layers follow the {}",
                 if i == 0 {
-                    "sustain pedal"
+                    "sustain pedal".to_string()
                 } else {
-                    "pitch stick"
+                    format!(
+                        "pitch stick, bend range {} semitones (Shift+wheel changes it)",
+                        sui.pstick_range
+                    )
                 }
             ));
         }
@@ -145,12 +161,15 @@ pub(super) fn paint_strip(
             LED_RED_DIM,
         );
         sui.mark(AUX_LEDS[i]);
+        // Aux KB LED: the layer is played by the aux keyboard (click toggles the flag; the engine
+        // read-back overrides the UI value once telemetry is live).
         let aux = rect_or_empty(AUX_LEDS[i], o);
-        dot(p, aux.center(), tele.aux(4 + i), LED_GREEN, LED_GREEN_DIM);
-        if let Some(why) = unsupported_reason(AUX_LEDS[i]).filter(|_| tele.get().is_none()) {
-            let _ = ui
-                .interact(aux.expand(2.0), ui.id().with(AUX_LEDS[i]), Sense::hover())
-                .on_hover_text(format!("AUX KB: {why}"));
+        let aux_on = aux_flag_from_telemetry(tele, 4 + i, sui.layers[i].aux);
+        let tip = "AUX KB: this layer is played by the aux keyboard (click to switch)";
+        if aux_led(ui, aux, AUX_LEDS[i], aux_on, tip) {
+            let on = !sui.layers[i].aux;
+            sui.layers[i].aux = on;
+            sui.push_edit(SynthEdit::AuxKb { layer: i as u8, on });
         }
         match layer_pad(ui, p, o, sui, i, active[i]) {
             LayerAction::Activate => {
@@ -174,21 +193,14 @@ pub(super) fn paint_strip(
     pad(ui, p, o, sui, Btn::OctaveUp, "SHIFT");
     sui.mark("synth.zone_leds");
     let z = rect_or_empty("synth.zone_leds", o);
-    for k in 0..4 {
+    let lits = crate::panel::kb_zone::lits(sui.layer().kb_zone);
+    for (k, lit) in lits.into_iter().enumerate() {
         let c = pos2(z.left() + (k as f32 + 0.5) * z.width() / 4.0, z.center().y);
-        dot(
-            p,
-            c,
-            usize::from(sui.layer().kb_zone) == k,
-            LED_GREEN,
-            LED_GREEN_DIM,
-        );
+        dot(p, c, lit, LED_GREEN, LED_GREEN_DIM);
     }
-    if let Some(why) = unsupported_reason("synth.zone_leds") {
-        let _ = ui
-            .interact(z.expand(2.0), ui.id().with("zone_leds"), Sense::hover())
-            .on_hover_text(why);
-    }
+    let _ = ui
+        .interact(z.expand(2.0), ui.id().with("zone_leds"), Sense::hover())
+        .on_hover_text("KB ZONE LEDs: the keyboard zones the focused layer plays on");
 }
 
 #[cfg(test)]
