@@ -166,23 +166,62 @@ The delay of a line is the tap, not the length: `|tap|` words behind the write p
 
 Reading (EMPIRICAL): both types are dense after 0.4 s; type 0 is darker (-18 dB at 4-8 kHz against -6 dB) and decays faster, type 1 is brighter and longer. These are numbers of the firmware routine at `kRvbAmt` 127 with no `kRvbColor` or type-specific tail words beyond the 39 captured ones; a SPRING reverb of 4 to 5 s is long, so the name mapping stays ASSUMED until a recording is compared.
 
-## 9. Not done (stop point of the second pass)
+## 9. Not done (stop point of the second pass; superseded by s10)
 
-| Item | State |
+| Item | State then | State now |
+|---|---|---|
+| Rust port behind `FirmwareFx::reverb` | not started | done, s10 |
+| `emu_vs_hw.py` reverb segment, decay and spectral gap against a hardware clip | not started | done, s10 (decay not measurable from the clips) |
+| Types 2..11 (`0x123ABE`, `0x12314A`, `0x12329B`) | not started | not started; `tools/fx_rvbcore_gen.py` generates the steps from any `tools/fx_model_*.py` of the same shape once the model of those routines exists |
+| ARM activation path | not needed for types 0 and 1 (s8) | unchanged |
+
+## 10. The Rust port of types 0 and 1 (third pass, 2026-11-13)
+
+**What exists.** `FirmwareFx::reverb` (opt-in, `ns4 render-patch --firmware-reverb`) runs the routine `0x12417E` for `ReverbModel::Spring` (variation flag: type 1) and leaves every other reverb on the engine FDN.
+
+| File | Role |
 |---|---|
-| Rust port behind `FirmwareFx::reverb` | not started. The model is the specification and now runs against the real layout. A port needs the 230 steps as Rust over a region-mapped memory (ctx 96 words, two 5000 word lines, 3140 word all-pass buffer, 0x180 word state array), the 4-frame wrapper (`FwRvbWrap`) and golden vectors from `golden_words` / `fx_rvbreal`. Not attempted within the time-box |
-| `emu_vs_hw.py` reverb segment, decay and spectral gap against a hardware clip | not started; needs the Rust path |
-| Types 2..11 (`0x123ABE`, `0x12314A`, `0x12329B`) | not started; the instruction-form generator of the first pass applies |
-| ARM activation path | not needed for types 0 and 1 (s8); whether other effects keep pointers in the image the same way is open (`fx-reverb-instance.csv` shows one instance per core) |
+| `tools/fx_rvbcore_gen.py` | reads the syntax tree of `tools/fx_model_rvbcore.py` (no listing, no firmware bytes) and writes `fx/fw_rvb_steps.rs` (the 215 straight-line instructions plus the 16 of the loop pass, one line each, effects committed after all right-hand sides are read) and `fx/fw_rvb_words.rs` (the derived words of [data/fx-reverb-instance.csv](data/fx-reverb-instance.csv) core 2 and the 39 type words of types 0, 1 from [data/fx-type-words.csv](data/fx-type-words.csv); the five firmware pointers become region tags). `--check` and `tools/tests/test_fx_rvbcore_gen.py` fail on a stale file |
+| `fx/fw_rvb_core.rs` | register-pair machine (words or floats, `B`/`L` circular buffers, `BDCST1` loads) over one pre-allocated word array: context, state array, PM list, 3140 word all-pass buffer, two 5008 word lines (14.9 k words); no allocation after `new` |
+| `fx/fw_ext40.rs` | `Fp` trait: `E40` (32 significant bits, ties to even, exact integer mantissa arithmetic, store truncates to 24 bits, flush below 2^-126) and plain `f32` |
+| `fx/fw_rvb_wrap.rs` | the half-rate wrapper made generic over `Fp` (`FwRvbWrap` stays the `f32` type) |
+| `fx/fw_reverb.rs` | `Reverb<F>` / `FwReverb` (E40) / `FwReverbF32`: block of 4 frames or frame by frame with **4 frames of latency**; `set_amount` maps `kRvbAmt` through `fw_map::reverb_send` / `reverb_dry` into `c[0x12]`, `c[0x13]` (the core smooths them into `c[0x14]`, `c[0x15]`) |
+
+**Golden vectors** (`tools/fx_rvbcore_golden.py` runs `0x12417E` in the `sharc-fx` oracle on the real instance, 3000 calls, 24000 words per case; `tests_fw_rvb_golden.rs`):
+
+| Case | Oracle first output | Words | E40 port |
+|---|---|---|---|
+| type 0, `kRvbAmt` 127, impulse | call 1335 | 24000 | every word equal (FNV-1a hash, non-zero count, first call, 6 sample calls) |
+| type 0, `kRvbAmt` 64, noise | call 0 | 24000 | every word equal |
+| type 1, 127, impulse | call 1333 | 24000 | every word equal |
+| type 1, 64, noise | call 0 | 24000 | every word equal |
+
+So the match is **exact (0 differing words, sign of zero aside)** on the 40-bit path. The `f32` path (plain single precision, no store truncation) keeps the data flow and differs by 95 dB (impulse) to 120 dB (noise) below the signal (SNR of the 3000-call runs, worst absolute error 9e-7); both paths are kept, `FwReverb` (E40) is what the chain uses (at least 7 times faster than real time in a release build: the golden tests run 12 cases of 0.25 s of audio, 8 of them on the 40-bit path, in 0.4 s). Sign of a flushed underflow is not modelled (compared as zero, as in `fx_reverb_model.py`). The wrapper alone on the 40-bit path also reproduces the earlier wrapper golden words (`tests_rvb_wrap_golden.rs` words, 64 + 24 state words).
+
+**Against the video** (`tools/emu_vs_hw.py`, segments `fx_reverb` = A:74 B3 Old Forest, organ, Spring type 0, `kRvbAmt` 0.62 (the highest Spring amount of the Part A programs), `organ_b3` = A:14 (type 0, 0.22) and `fx_amp` = A:64 (type 0, 0.20); new variants `fw-reverb` = `--firmware-reverb`). Score = mean |band delta| in dB over the five bands below 8 kHz, emulator minus hardware clip; lossy YouTube audio, a live performance: shape evidence only.
+
+| Segment | Variant | 400-1500 Hz | 1.5-3 kHz | 3-8 kHz | Stereo width hw / emu | Score |
+|---|---|---|---|---|---|---|
+| fx_reverb | engine FDN | -4.1 | +8.7 | +9.6 | 0.25 / 0.21 | 5.84 |
+| fx_reverb | firmware | -2.4 | +8.3 | +8.0 | 0.25 / 0.13 | 5.09 |
+| organ_b3 | engine FDN | +2.2 | -1.9 | +1.2 | 0.48 / 0.35 | 4.36 |
+| organ_b3 | firmware | +2.3 | -1.8 | +1.5 | 0.48 / 0.34 | 4.43 |
+| fx_amp | engine FDN | -1.7 | +3.2 | +10.7 | 0.09 / 0.07 | 4.75 |
+| fx_amp | firmware | -1.7 | +3.2 | +10.7 | 0.09 / 0.06 | 4.70 |
+
+* **Spectrum.** The firmware reverb improves the clip with the high amount (score 5.84 to 5.09: low and mid bands 0.9 to 1.7 dB closer, 3 to 8 kHz 1.6 dB closer) and is neutral at the low amounts (4.36 to 4.43, 4.75 to 4.70). The dominant gaps (+8 to +10 dB above 1.5 kHz, +14 dB RMS) are not the reverb: the same in both variants.
+* **Stereo width.** The firmware reverb is narrower than the hardware in every clip (0.13 against 0.25 at amount 0.62; the engine FDN 0.21): the routine's two frames are held and the wet path is nearly mono at the output (`R12`, `R14` of one stereo call); a gap of 0.12 against 0.04.
+* **Decay.** Not measurable: the performer keeps playing, so no clip contains a release followed by a reverb tail (`emu_vs_hw.py` `tail_t60_s` returns none for the hardware in all three segments). Emulator side, from the last release: engine FDN T60 0.6 to 0.7 s, firmware 3.4 to 4.1 s (the oracle's own impulse response says 4.3 s at amount 127). The steepest 0.5 s fall of the hardware clip is -22 dB/s in `fx_reverb` (engine -91, firmware -38) and -123 dB/s in `organ_b3` (engine -129, firmware -78): the first favours the long tail, the second the short one, so the clips do not decide the T60.
+
+**Decision (D22).** The port matches the oracle exactly, but the end-to-end conditions are not met: the decay gap cannot be measured with the available clips, the stereo gap grows, the spectral gain is 0.75 dB at one clip, and the name mapping of types 0, 1 to the UI's SPRING is still ASSUMED (s8). `FirmwareFx::reverb` therefore stays opt-in and `render_hash` is unchanged. What would move it: a hardware clip with a clean release into a Spring reverb (or a long sustained note released), or the type 0 name check on the unit.
 
 ## Implications
 
-- The reverb dry / send law is exact; it is the only part of the reverb the Rust engine can follow the firmware on now. The core routine is reproduced (s6) but not its data.
+- The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are not.
 - `kCmpResponse` is closed: no word depends on it.
 
 ## Follow-ups
 
-1. Rust port of the core behind `FirmwareFx::reverb` from the model (s9), golden vectors from `fx_rvbreal.py`.
-2. `emu_vs_hw.py` reverb segment (a clip with reverb type 0 or 1 and a high amount) once the port exists; check the SPRING reading.
+1. A hardware clip with a clean release into a Spring reverb (decay), and the SPRING name check of types 0, 1; then re-run the s10 comparison and revisit the default (D22).
 3. Types 2..11 (`0x9500A..` words, s3): their routines (`0x123ABE`, `0x12314A`, `0x12329B`) are not these wrappers; the listing-to-steps generator applies.
 4. Leslie: capture the rotor words over many ARM ticks per `kEffectsLeslieSpeed` value.
