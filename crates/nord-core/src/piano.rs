@@ -9,6 +9,7 @@ use std::f32::consts::TAU;
 use std::path::Path;
 use std::sync::Arc;
 
+pub mod downstream;
 pub mod level_q23;
 pub mod npno_level;
 pub mod q31_kernel;
@@ -19,6 +20,7 @@ pub mod step_q32;
 pub mod velocity_curve;
 pub mod velocity_level;
 
+mod extra_voice;
 #[cfg(test)]
 mod interp_switch;
 
@@ -781,6 +783,8 @@ struct PianoVoice {
     sample_pos_detune: f64,
     sample_step: f64,
     sample_step_detune: f64,
+    /// Extra first voice of a firmware note-on (released with its note, no release sample of its own).
+    extra: bool,
 }
 
 /// 2-pole modal harmonic string resonator for Advanced String Resonance.
@@ -836,9 +840,14 @@ pub struct PianoLayer {
     pub sostenuto_pedal_down: bool,
     pub soft_pedal_down: bool,
     pub sound: Option<Arc<NpnoSound>>,
-    /// Opt-in: scale the velocity response by the firmware level law of the loaded `.npno`
-    /// (`NpnoSound::firmware_velocity_gain`) instead of the touch curve. Default off.
+    /// Firmware level law (default `true`): `.npno` sounds with a parsed level model start the
+    /// voices the firmware starts, each with the gain `level_q23 / 2^23`
+    /// (`piano/extra_voice.rs`). SFZ/WAV and synthetic sounds have no model and always use the
+    /// legacy touch curve; set `false` to force the legacy path for `.npno` sounds too.
     pub firmware_velocity_level: bool,
+    /// Scale the sample path by the SMP bus convention (`downstream::FIRMWARE_SAMPLE_SCALE`,
+    /// 0.5) instead of the legacy 0.55. Default `false`: the Q31 receiver convention is ASSUMED.
+    pub firmware_bus_scale: bool,
     /// Sample interpolation: hardware-parity SMP kernel (default) or the older cubic.
     pub sample_interp: SampleInterp,
     kernel: &'static SmpKernel,
@@ -916,7 +925,8 @@ impl PianoLayer {
             sostenuto_pedal_down: false,
             soft_pedal_down: false,
             sound,
-            firmware_velocity_level: false,
+            firmware_velocity_level: true,
+            firmware_bus_scale: false,
             sample_interp: SampleInterp::default(),
             kernel: SmpKernel::shared(),
             voices: [PianoVoice::default(); MAX_PIANO_VOICES],
@@ -988,6 +998,11 @@ impl PianoLayer {
             _ => 0.0,
         };
         let detune_ratio = 2.0f64.powf(unison_cents / 1200.0);
+        if self.firmware_velocity_level
+            && self.start_firmware_voices(note, velocity, effective_note, freq, detune_ratio, gain)
+        {
+            return;
+        }
 
         let damper_down = self.damper_pedal_down;
         let (stroke_idx, sample_step, has_multi_vel) = if let Some(snd) = &self.sound {
@@ -1069,6 +1084,7 @@ impl PianoLayer {
             sample_pos_detune: 0.0,
             sample_step,
             sample_step_detune: sample_step * detune_ratio,
+            extra: false,
         };
     }
 
@@ -1108,6 +1124,7 @@ impl PianoLayer {
             sample_pos_detune: 0.0,
             sample_step: step,
             sample_step_detune: step,
+            extra: false,
         };
     }
 
@@ -1124,7 +1141,9 @@ impl PianoLayer {
                 } else if !v.releasing {
                     v.releasing = true;
                     v.soft_release = self.soft_release || self.damper_half;
-                    release_trigger = Some((v.last_velocity, v.amp, v.gain));
+                    if !v.extra {
+                        release_trigger = Some((v.last_velocity, v.amp, v.gain));
+                    }
                 }
             }
         }
@@ -1161,7 +1180,7 @@ impl PianoLayer {
                     if !v.sostenuto_held && !v.releasing {
                         v.releasing = true;
                         v.soft_release = self.soft_release;
-                        if rel_count < MAX_PIANO_VOICES {
+                        if rel_count < MAX_PIANO_VOICES && !v.extra {
                             released_notes[rel_count] = (v.note, v.last_velocity, v.amp, v.gain);
                             rel_count += 1;
                         }
@@ -1392,7 +1411,8 @@ impl PianoLayer {
                 }
             };
 
-            let sample_scale = if v.stroke_idx.is_some() { 0.55 } else { 0.2 };
+            let sample_scale =
+                downstream::sample_scale(v.stroke_idx.is_some(), self.firmware_bus_scale);
             let voice_gain = v.amp * v.env * v.gain * sample_scale;
             sum_l += sig_l * voice_gain;
             sum_r += sig_r * voice_gain;
@@ -1529,26 +1549,22 @@ mod tests {
         out
     }
 
-    /// Opt-in firmware level law: off by default, and when on the voice amplitude follows the
-    /// firmware level of the loaded `.npno` relative to velocity 127.
+    /// Firmware level law is the default for `.npno` sounds with a level model; the voice
+    /// amplitude is the firmware gain, `false` restores the touch curve, and sounds without a
+    /// model (synthetic, SFZ) always use the legacy path.
     #[test]
-    fn firmware_velocity_level_is_opt_in_and_follows_the_level_law() {
+    fn firmware_velocity_level_is_the_default_for_npno_sounds_only() {
         let image = npno_level::test_image(60, &[(0, 66, 0), (0, 56, 16), (0, 36, 46)], 40);
         let model = Arc::new(npno_level::NpnoLevel::parse(&image).unwrap());
         let mut sound = NpnoSound::new_synthetic("fw", 60, &[0.1; 64], 48_000.0);
+        let stroke = sound.strokes[0].clone();
+        sound.strokes = vec![stroke; 3];
         sound.firmware_level = Some(model.clone());
         let sound = Arc::new(sound);
 
-        let mut layer = PianoLayer::new(48_000.0);
-        layer.set_sound(Some(sound.clone()));
-        assert!(!layer.firmware_velocity_level, "default stays off");
-        layer.note_on(60, 40);
-        let default_amp = layer.voices[0].amp;
-        assert!((default_amp - layer.touch.map_velocity(40)).abs() < 1e-6);
-
         let mut fw = PianoLayer::new(48_000.0);
-        fw.set_sound(Some(sound));
-        fw.firmware_velocity_level = true;
+        fw.set_sound(Some(sound.clone()));
+        assert!(fw.firmware_velocity_level, "default is on");
         fw.note_on(60, 40);
         let want = model.main_voice_q23(60, 40).unwrap() as f32 / 8_388_608.0;
         assert!(
@@ -1558,11 +1574,27 @@ mod tests {
         );
         assert!(fw.voices[0].amp < 1.0);
         fw.note_on(61, 40);
-        let fallback = fw.voices[1].amp;
+        let fallback = fw
+            .voices
+            .iter()
+            .filter(|v| v.active && v.note == 61)
+            .map(|v| v.amp)
+            .next()
+            .unwrap();
         assert!(
             (fallback - fw.touch.map_velocity(40)).abs() < 0.3,
             "unmapped note falls back"
         );
+
+        let mut legacy = PianoLayer::new(48_000.0);
+        legacy.set_sound(Some(sound));
+        legacy.firmware_velocity_level = false;
+        legacy.note_on(60, 40);
+        assert!((legacy.voices[0].amp - legacy.touch.map_velocity(40)).abs() < 1e-6);
+
+        let mut synthetic = PianoLayer::new(48_000.0);
+        synthetic.note_on(60, 40);
+        assert!((synthetic.voices[0].amp - synthetic.touch.map_velocity(40)).abs() < 1e-6);
     }
 
     #[test]
