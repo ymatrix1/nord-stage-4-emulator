@@ -13,7 +13,10 @@ import synth_stage_noise as noise  # noqa: E402
 import synth_stage_record as rec  # noqa: E402
 import synth_stage_shape_sine as shape_sine  # noqa: E402
 import synth_stage_shape_sine2 as sine2  # noqa: E402
+import synth_stage_shape_sine3 as sine3  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
+import synth_stage_super1 as super1  # noqa: E402
+import synth_stage_sync as sync  # noqa: E402
 import synth_stage_unison as unison  # noqa: E402
 import synth_wave_model as m  # noqa: E402
 import synth_wave_oracle as o  # noqa: E402
@@ -31,6 +34,9 @@ MODELS = {
     "0x1232a5": shape_sine.stage_shape_sine_2,
     "0x122f1f": shape_sine.stage_shape_sine_5,
     "0x120dab": sine2.stage_shape_sine_4,
+    "0x121e9d": super1.stage_super1,
+    "0x12377d": sine3.stage_shape_sine_3,
+    "0x122a32": sync.stage_sync2,
 }
 
 
@@ -140,3 +146,93 @@ def test_shape_sine_4_setup_laws_at_the_idle_spread() -> None:
     # width law saturates for spread >= 0.1: q = 1 and `pq = f`
     assert abs(float(ir) * float(m.ld(f)) - float(sine2.INV_TWO_PI)) < 1e-6
     assert float(k) > 0.0
+
+
+def test_super1_fold_is_a_square_with_a_smoothed_edge_at_a_quarter_cycle() -> None:
+    r7 = m.mul(m.ONE, m.X(50))
+    far = super1.fold_diff([0x10000000, 0x70000000, 0x90000000, 0xE0000000], r7)
+    # away from |x| = 0.5 the bump `w` is 0 and the sample is the sign of `|x| - 0.5`
+    assert far == [-m.ONE, m.ONE, m.ONE, -m.ONE]
+    near = super1.fold_diff([0x3FF00000], r7)[0]  # just below |x| = 0.5: inside the bump
+    assert -m.ONE < near < 0
+
+
+def test_super1_runs_seven_voices_and_leaves_the_eighth_phase() -> None:
+    lanes = o.random_lanes(random.Random(5), True)
+    for ln in lanes:
+        ln.pitch, ln.spread = m.f2u(0.01), m.f2u(0.3)
+    _, last, _ = super1.stage_super1(lanes)
+    assert super1.VOICES == 7
+    assert last[0] != lanes[0].phases[6]
+
+
+def test_golden5_file_is_what_the_generator_prints() -> None:
+    import synth_stage_golden5 as g5
+
+    path = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
+    assert (path / "tests_fw_stage_golden5.rs").read_text() == g5.rust()
+
+
+def test_shape_sine_3_setup_laws_at_the_idle_spread() -> None:
+    f, s5 = m.f2u(0.01), m.f2u(0.5)
+    g, ra, rb, k, r7, c, shift = sine3.setup(f, s5)
+    assert 0.0 < float(g) < 1.5
+    # vr = 0.75 (1 - 5.5 f) at the idle spread; rA, rB are 1 / (1 -+ vr)
+    vr = 0.75 * (1 - 5.5 * float(m.ld(f)))
+    assert abs(float(ra) - 1 / (1 - vr)) < 1e-5
+    assert abs(float(rb) - 1 / (1 + vr)) < 1e-5
+    assert abs(float(c) - 2 / 3.141592653589793 * vr) < 1e-6
+    assert abs(shift - vr * 2**31) < 2**9
+    assert abs(float(r7) - 50.0) < 1e-3
+    assert float(k) > 0.0
+
+
+def test_shape_sine_3_warp_selects_the_lower_slope_below_the_knee() -> None:
+    ra, rb = m.X(2), m.X(1, 2)
+    assert sine3.warp_y(m.X(-3, 4), ra, rb) == m.X(1, 2)  # (a + 1) rA = 0.5 < 1: lower slope
+    assert sine3.warp_y(m.X(0), ra, rb) == m.X(-1, 2)  # (a + 1) rA = 2 >= 1: (a - 1) rB
+
+
+def test_shape_sine_3_golden_has_96_rows() -> None:
+    import synth_stage_golden5 as g5
+
+    assert len(g5.sine3_rows()) == 96
+
+
+def test_sync_table_file_has_the_documented_nodes() -> None:
+    words = sync.table()
+    assert len(words) == 258
+    assert m.ld(words[0]) == m.ONE and m.ld(words[128]) == m.X(16)
+    assert words[257] == 0x358637BD
+    assert all(m.ld(a) < m.ld(b) for a, b in zip(words[:127], words[1:128], strict=True))
+
+
+def test_sync_lookup_interpolates_linearly_and_hits_the_nodes() -> None:
+    words = sync.table()
+    assert sync.lookup(m.f2u(0.5), words) == m.ld(words[64])  # index 64, fraction 0
+    mid = sync.lookup(m.f2u(0.5 + 0.5 / 128), words)
+    want = m.ld(words[64]) + (m.ld(words[65]) - m.ld(words[64])) / 2
+    assert abs(float(mid - want)) < 1e-6
+
+
+def test_sync_uuf_is_the_upper_unsigned_product_word() -> None:
+    assert sync.uuf(0x80000000, 0x80000000) == 0x40000000
+    assert sync.uuf(0xFFFFFFFF, 2) == 1
+    assert sync.int_clip(0x00000500, 0x100) == 0x100
+    assert sync.int_clip(m.u32(-0x500), 0x100) == m.u32(-0x100)
+
+
+def test_sync_setup_at_the_idle_spread_matches_the_table_node() -> None:
+    f = m.f2u(0.01)
+    g, frac, lim, mult, q, r7, off = sync.setup(f, m.f2u(0.5), sync.table())
+    h = m.ld(sync.table()[64])  # 4.0439
+    assert lim == 4 << 25 and mult == m.fix(h, 25)
+    assert abs(float(frac) - (float(h) - 4)) < 1e-6
+    assert abs(float(r7) - 50.0) < 1e-3 and abs(float(q) - 50.0 / float(h)) < 1e-4
+    assert abs(off + 2**31 / float(h)) < 2**8 or off == m.fix(-m.X(1) / h, 31)
+    assert 0 < float(g) < 1.5
+
+
+def test_sync_and_sine3_rust_table_is_what_the_generator_prints() -> None:
+    path = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
+    assert (path / "fw_sync_table.rs").read_text() == sync.rust_table()

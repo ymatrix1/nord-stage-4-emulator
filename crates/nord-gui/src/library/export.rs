@@ -12,8 +12,8 @@ use super::BackupLibraryState;
 use crate::panel::bay_program::catalog::display_name;
 use crate::panel::bay_program::store::{UserLibrary, PER_BANK};
 use nord_core::cbin::{
-    rewrite_backup_file, store_edits, CbinFile, LivePut, Ns4BackupArchive, ProgramDecoded,
-    ProgramPut, SlotIndex,
+    preset_edits, rewrite_backup_file, store_edits, CbinFile, LivePut, Ns4BackupArchive,
+    PresetIndex, PresetPut, PresetSection, ProgramDecoded, ProgramPut, SlotIndex, PRESETS_PER_BANK,
 };
 use nord_core::engine::LiveSlots;
 use std::fs::File;
@@ -112,6 +112,41 @@ pub fn plan_export(
     Ok(plan)
 }
 
+/// Preset edits of the Preset Organize layout.
+#[derive(Debug, Default)]
+pub struct PresetPlan {
+    pub puts: Vec<PresetPut>,
+    pub cleared: Vec<(PresetSection, u16, u16)>,
+}
+
+/// Works out the preset edits of the Preset Organize layout in `lib`: an entry that is not where
+/// the archive keeps it is placed at its new location, a location left empty is cleared.
+pub fn plan_presets(
+    lib: &UserLibrary,
+    index: &PresetIndex,
+    read: &mut dyn FnMut(&str) -> Result<Vec<u8>, String>,
+) -> Result<PresetPlan, String> {
+    let mut plan = PresetPlan::default();
+    for section in PresetSection::ALL {
+        for (i, entry) in lib.presets.cells(section).into_iter().enumerate() {
+            let (bank, loc) = (i as u16 / PRESETS_PER_BANK, i as u16 % PRESETS_PER_BANK);
+            let here = index.entry_at(section, bank, loc);
+            match entry {
+                Some(e) if here != Some(e.as_str()) => {
+                    let file = base_file(Some(&e), read)?.ok_or("missing entry")?;
+                    plan.puts.push(
+                        PresetPut::from_file(section, bank, loc, &display_name(&e), &file)
+                            .map_err(|err| format!("{e}: {err}"))?,
+                    );
+                }
+                None if here.is_some() => plan.cleared.push((section, bank, loc)),
+                _ => {}
+            }
+        }
+    }
+    Ok(plan)
+}
+
 impl BackupLibraryState {
     /// Writes the library (stored programs, Organize layout, Live slots) into a copy of the open
     /// backup at `export_path`.
@@ -138,7 +173,14 @@ impl BackupLibraryState {
                 .read_entry(&mut reader, name)
                 .map_err(|e| e.to_string())
         })?;
-        let edits = store_edits(&index, &plan.programs, &plan.cleared, &plan.lives);
+        let pindex = PresetIndex::read(&archive, &mut reader).map_err(|e| e.to_string())?;
+        let presets = plan_presets(lib, &pindex, &mut |name| {
+            archive
+                .read_entry(&mut reader, name)
+                .map_err(|e| e.to_string())
+        })?;
+        let mut edits = store_edits(&index, &plan.programs, &plan.cleared, &plan.lives);
+        edits.extend(preset_edits(&pindex, &presets.puts, &presets.cleared));
         let rep = rewrite_backup_file(&src, &dst, &edits).map_err(|e| e.to_string())?;
         Ok(format!(
             "Exported {} ({} replaced, {} added, {} removed)",
@@ -182,6 +224,10 @@ impl BackupLibraryState {
 #[cfg(test)]
 #[path = "export_tests.rs"]
 mod more_tests;
+
+#[cfg(test)]
+#[path = "export_presets_tests.rs"]
+mod preset_tests;
 
 #[cfg(test)]
 mod tests {

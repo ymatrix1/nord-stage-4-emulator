@@ -14,6 +14,8 @@ impl Stage4Engine {
         } else {
             0.0
         };
+        fx.mod2_type_raw = Some(dec.mod2_type_raw);
+        fx.mod2_rate_raw = Some((dec.mod2_rate.clamp(0.0, 1.0) * 127.0).round() as u8);
         fx.mod2_type = dec.mod2_type();
         fx.mod2_rate_hz = 0.1 + dec.mod2_rate.clamp(0.0, 1.0) * 9.9;
         fx.mod2_amount = if dec.mod2_enabled {

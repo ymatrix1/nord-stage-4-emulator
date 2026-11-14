@@ -80,6 +80,8 @@ pub struct FirmwareFx {
     /// Firmware Amp EQ (tone stack `0x1243F4` with the `kAmpTreble` / `kAmpBass` / `kAmpMid` /
     /// `kAmpMidFreq` words) in place of the engine's three biquads.
     pub eq: bool,
+    /// Firmware Mod 2 `CHOR` (`kFx2Type` 4, 5) with the `kFx2Amt` / `kFx2Rate` words.
+    pub mod2: bool,
 }
 
 impl Default for FirmwareFx {
@@ -105,6 +107,7 @@ impl FirmwareFx {
         amp: false,
         mod1: false,
         eq: false,
+        mod2: false,
     };
 
     /// Every switch on.
@@ -117,6 +120,7 @@ impl FirmwareFx {
         amp: true,
         mod1: true,
         eq: true,
+        mod2: true,
     };
 }
 
@@ -139,9 +143,11 @@ mod tests {
                 && all.amp
                 && all.mod1
                 && all.eq
+                && all.mod2
         );
         assert!(!d.reverb, "the firmware reverb is opt-in");
         assert!(!d.mod1 && all.mod1, "the firmware Mod 1 is opt-in");
+        assert!(!d.mod2 && all.mod2, "the firmware Mod 2 is opt-in");
         assert!(!d.eq && all.eq, "the firmware EQ is opt-in");
         assert_ne!(all, FirmwareFx::OFF);
     }

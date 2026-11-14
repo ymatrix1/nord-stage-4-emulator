@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 pub mod category;
 pub mod downstream;
+pub mod label;
 pub mod level_q23;
 pub mod npno_level;
 pub mod q31_kernel;
