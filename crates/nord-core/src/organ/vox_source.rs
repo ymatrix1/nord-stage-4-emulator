@@ -14,6 +14,13 @@ use super::vox_keys::ROWS;
 use super::vox_output::VoxOutput;
 use super::vox_sines::{VoxSines, BUCKETS};
 
+/// VERIFIED: gain word `DM(0x95FD1)` = `DM(G + 0xB)` of record 0 (`0x3F1EB100`, 0.61989) written by the
+/// ARM boot for the default program. Found by bisecting the 29,758 boot words of the PNO core 1
+/// state: with it the oracle chord is 4.15 dB below the install-only chord (RMS ratio 0.6199),
+/// without it equal (`docs/research/organ-vox-click.md` section 3). That it follows the layer
+/// level (about `(level / 127)^2`) is ASSUMED: only the default level was captured.
+pub(super) const OUTPUT_LEVEL: f32 = 0.619_89;
+
 /// Vox tone source state (all arrays preallocated).
 ///
 /// The weights are applied the way the firmware writes them: instantly (VERIFIED: the output
@@ -76,8 +83,10 @@ impl VoxSource {
         let (notes, buckets) = weights.split_at(NOTES);
         let dot = |w: &[f32], y: &[f32]| w.iter().zip(y).map(|(a, b)| a * b).sum::<f32>();
         self.active = weights.iter().any(|&w| w != 0.0);
-        self.output
-            .process(dot(notes, &self.block) + dot(buckets, &self.buckets))
+        OUTPUT_LEVEL
+            * self
+                .output
+                .process(dot(notes, &self.block) + dot(buckets, &self.buckets))
     }
 
     /// `true` when the last weights were all zero and the output sections have decayed.

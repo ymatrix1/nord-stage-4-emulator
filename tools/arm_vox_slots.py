@@ -54,10 +54,23 @@ def case_stores(code: bytes, addr: int, limit: int = 40) -> list[int]:  # pragma
     return offsets
 
 
+LEVEL_TABLE = 0xC0443AF4 + 0x278  # indexed by the stored drawbar value 0..8
+
+
+def levels(code: bytes) -> list[int]:
+    """The 23-bit level of drawbar values 0..8 (`[0xC0443AF4 + 0x278 + 4 v]`)."""
+    return [struct.unpack_from("<i", code, LEVEL_TABLE - LOAD_BASE + 4 * v)[0] for v in range(9)]
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("code")
-    code = Path(ap.parse_args(argv).code).read_bytes()
+    ap.add_argument("what", nargs="?", default="slots", choices=("slots", "levels"))
+    ns = ap.parse_args(argv)
+    code = Path(ns.code).read_bytes()
+    if ns.what == "levels":
+        print(levels(code))
+        return 0
     for i in range(CASES):
         target = word(code, TABLE + 4 * i)
         print(i, hex(target), case_slots(case_stores(code, target)))
