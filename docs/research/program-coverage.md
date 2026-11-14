@@ -342,13 +342,13 @@ Counts: panic 0, non-finite 0, silent 9, clipping 36, level jump 29.
 - **Coverage by engine.** Of 384 programs, 168 use piano+synth, 96 synth only, 76 piano only; only 37 touch the organ. Piano and synth sample playback (real `.npno` and `.nsmp4` data) is therefore the bulk of the factory space, and every piano class in use (1-7, 14-16) is one whose extra-voice rule is documented (`piano-sound-load`).
 - **Assumed paths dominate.** Use-weighted, 18% of classified path uses (layers and FX units) sit on a verified path with engine defaults (998 of 5437) and 48% with `--firmware-all` (2605 of 5437); 2% (118) are not modelled at all: SYNC, MULTI, SHAPE SINE, SUB OSC and MISC analog waves (102 layers), the synthetic WAVE bank (14 layers) and Amp To Rotary (2 units). Most of the remaining assumed weight is FX (reverb, mod, delay loop) and the analog oscillators.
 - **Piano extra voice.** 244 programs use a piano class (1, 2, 3, 5, 6) whose firmware starts an extra voice per note that the engine does not play; the level of the main voice is verified, the layering is not.
-- **Firmware routing is not safe to default yet.** 9 programs are silent in scene I under `--firmware-routing` (OQ24); the legacy fallback keeps them audible. 165 programs use a non-default key zone code on a sounding layer and 48 enable splits, so zone codes matter for the real space.
+- **Firmware routing is not safe to default yet.** 9 programs are silent in scene I under `--firmware-routing` (OQ25); the legacy fallback keeps them audible. 165 programs use a non-default key zone code on a sounding layer and 48 enable splits, so zone codes matter for the real space.
 - **Health.** No panic, NaN or Inf in any of 768 renders (nor in 96 programs re-rendered with notes 21, 36, 96, 108 at velocity 127, run once before the B3 Bass fix). The master output is hard limited at 1.0: 43 programs (default) and 55 (firmware-all) touch full scale, 18 each clip on at least 0.1% of samples, mostly organ B3 or full-chord synth programs; this is a level calibration question, not a numeric fault.
 - **Level jumps.** Firmware-all versus default RMS differs by a median of 0.34 dB with p10/p90 of -3.3/+3.2 dB; 29 programs differ by 6 dB or more (up to +17.0 and -16.3 dB), see the table. These are the programs where an opt-in path changes level most and the first candidates for a hardware A/B.
 
 ## 10. Follow-ups
 
-- Decide scene I / II semantics and the empty-mask programs (OQ24) before `--firmware-routing` can join `--firmware-all`.
+- Decide scene I / II semantics and the empty-mask programs (OQ25) before `--firmware-routing` can join `--firmware-all`.
 - Level calibration of the organ and full-chord synth programs that hit full scale: needs a hardware level reference, not a small fix.
 - Wire the verified PURE sine/triangle/pulse and Shape Saw stages, and model SYNC, MULTI, SHAPE SINE, SUB OSC and MISC (102 layers), the largest unmodelled synth share.
 - Play the piano extra voice for classes 1, 2, 3, 5, 6.

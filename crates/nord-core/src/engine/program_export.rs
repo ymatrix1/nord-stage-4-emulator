@@ -86,7 +86,7 @@ impl ProgramState {
         o.percussion_third = a.percussion_third_harmonic;
         o.rotary_enabled = a.rotary_enabled;
         o.rotary_speed = a.rotary_speed;
-        o.rotary_drive = a.rotary_drive;
+        o.rotary_drive = a.rotary_drive * 10.0;
         level(
             &mut o.layer_a_level,
             &mut o.layer_a_level_morph,

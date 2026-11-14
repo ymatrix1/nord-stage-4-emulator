@@ -107,6 +107,7 @@ fn render(chord: &Chord, mode: WeightMode) -> Vec<f32> {
     let mut o = OrganLayer::new(FIRMWARE_FRAME_RATE_HZ as f32);
     o.model = OrganModel::Pipe2;
     o.weight_mode = mode;
+    o.output_level = super::OutputLevel::Legacy; // the test compares the two weight modes at their own scales
     o.drawbars = chord.drawbars;
     o.percussion_enabled = false;
     o.rotary_enabled = false;

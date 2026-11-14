@@ -3,10 +3,14 @@
 use super::bay_piano_select::TYPE_NAMES;
 use super::layout_px::to_px;
 use super::piano_logic as logic;
+use super::piano_models;
 use super::piano_widgets as w;
 use super::prelude::*;
 use super::ui_state::PianoOverlay;
 use nord_panel::{section_rect, Section};
+
+/// OLED text when no `.ns4b` / `.npno` is loaded (TYPE still changes the engine type).
+pub const NO_LIBRARY: &str = "No piano library";
 
 /// File stem of a library entry name.
 fn stem(name: &str) -> &str {
@@ -36,49 +40,58 @@ pub(super) fn draw_overlay(ui: &mut Ui, p: &Painter, o: egui::Pos2, state: &mut 
         StrokeKind::Inside,
     );
     let cat = TYPE_NAMES[logic::category_index(state)];
-    let n = state.piano_ui.models.len();
-    let idx = state.piano_ui.model_idx.min(n.saturating_sub(1));
-    let cur = state.piano_ui.models.get(idx).map(|m| stem(m).to_string());
+    let idxs = piano_models::in_type(state, state.piano_cat);
+    let (pos_in_type, n) = piano_models::position(state);
+    let at = pos_in_type.saturating_sub(1);
+    let cur = state
+        .piano_ui
+        .models
+        .get(state.piano_ui.model_idx)
+        .map(|m| stem(m).to_string());
     let x = rect.left() + 6.0;
     let mut y = rect.top() + 9.0;
     if mode == PianoOverlay::List {
-        let head = format!("Piano {cat}   {}/{}", if n == 0 { 0 } else { idx + 1 }, n);
+        let head = format!("Piano {cat}   {pos_in_type}/{n}");
         w::small_text(p, pos2(x, y), &head, OLED_FG, Align2::LEFT_CENTER);
-        if n == 0 {
+        if state.piano_ui.models.is_empty() {
             w::small_text(
                 p,
                 pos2(x, y + 22.0),
-                "No piano library loaded",
+                NO_LIBRARY,
+                Color32::from_gray(150),
+                Align2::LEFT_CENTER,
+            );
+        } else if n == 0 {
+            w::small_text(
+                p,
+                pos2(x, y + 22.0),
+                "No model of this type",
                 Color32::from_gray(150),
                 Align2::LEFT_CENTER,
             );
         }
-        let first = idx.saturating_sub(2);
-        for (row, i) in (first..n.min(first + 5)).enumerate() {
+        let first = at.saturating_sub(2);
+        for (row, k) in (first..n.min(first + 5)).enumerate() {
             let ry = rect.top() + 22.0 + row as f32 * 12.0;
             let band = Rect::from_min_size(
                 pos2(rect.left() + 3.0, ry - 5.5),
                 vec2(rect.width() - 6.0, 11.0),
             );
-            if i == idx {
+            if k == at && pos_in_type > 0 {
                 p.rect_stroke(band, 2.0, Stroke::new(1.0_f32, OLED_FG), StrokeKind::Inside);
             }
-            let name: String = stem(&state.piano_ui.models[i]).chars().take(30).collect();
+            let name: String = stem(&state.piano_ui.models[idxs[k]])
+                .chars()
+                .take(30)
+                .collect();
             w::small_text(p, pos2(x + 2.0, ry), &name, OLED_FG, Align2::LEFT_CENTER);
         }
         if resp.clicked() {
             if let Some(pos) = resp.interact_pointer_pos() {
                 let row = ((pos.y - (rect.top() + 16.5)) / 12.0).floor() as isize;
-                let first = idx.saturating_sub(2) as isize;
-                let pick = first + row;
-                if row >= 0
-                    && pick >= 0
-                    && (pick as usize) < n
-                    && (pick as usize) < first as usize + 5
-                {
-                    state.piano_ui.model_idx = pick as usize;
-                    state.piano_ui.model_request =
-                        Some(state.piano_ui.models[pick as usize].clone());
+                let pick = first as isize + row;
+                if row >= 0 && pick >= 0 && (pick as usize) < n && (pick as usize) < first + 5 {
+                    piano_models::select(state, idxs[pick as usize]);
                 }
             }
         }
@@ -100,8 +113,12 @@ pub(super) fn draw_overlay(ui: &mut Ui, p: &Painter, o: egui::Pos2, state: &mut 
             .unwrap_or_else(|| "(no model loaded)".to_string());
         let lines = [
             format!("Model: {}", name.chars().take(28).collect::<String>()),
-            format!("Type: {cat}   {}/{}", if n == 0 { 0 } else { idx + 1 }, n),
-            "Version, size: not exposed by the library".to_string(),
+            format!("Type: {cat}   {pos_in_type}/{n}"),
+            if state.piano_ui.models.is_empty() {
+                NO_LIBRARY.to_string()
+            } else {
+                "Version, size: not exposed by the library".to_string()
+            },
         ];
         for line in lines {
             w::small_text(p, pos2(x, y), &line, OLED_FG, Align2::LEFT_CENTER);
@@ -127,5 +144,80 @@ mod tests {
     fn stem_strips_directory_and_extension() {
         assert_eq!(stem("Piano/Grand/White Grand XL.npno"), "White Grand XL");
         assert_eq!(stem("plain"), "plain");
+    }
+
+    /// Texts painted by the overlay in one headless frame.
+    fn overlay_texts(setup: impl FnOnce(&mut Stage4PanelState)) -> Vec<String> {
+        let ctx = egui::Context::default();
+        let mut state = Stage4PanelState::default();
+        setup(&mut state);
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let (rect, _) = ui.allocate_exact_size(vec2(1560.0, 420.0), Sense::hover());
+                let p = ui.painter().clone();
+                draw_overlay(ui, &p, rect.min, &mut state);
+            });
+        });
+        out.shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn typed_library(s: &mut Stage4PanelState) {
+        s.piano_ui.models = [
+            "Piano/Grand/G0.npno",
+            "Piano/Upright/U0.npno",
+            "Piano/Upright/U1.npno",
+        ]
+        .map(String::from)
+        .to_vec();
+        s.piano_ui.model_types = vec![
+            PianoCategory::Grand,
+            PianoCategory::Upright,
+            PianoCategory::Upright,
+        ];
+    }
+
+    #[test]
+    fn list_without_a_library_says_so() {
+        let t = overlay_texts(|s| s.piano_ui.overlay = PianoOverlay::List);
+        assert!(t.contains(&"Piano Grand   0/0".to_string()), "{t:?}");
+        assert!(t.contains(&NO_LIBRARY.to_string()), "{t:?}");
+        let t = overlay_texts(|s| s.piano_ui.overlay = PianoOverlay::Info);
+        assert!(t.contains(&NO_LIBRARY.to_string()), "{t:?}");
+    }
+
+    #[test]
+    fn list_shows_type_position_and_only_the_models_of_the_type() {
+        let t = overlay_texts(|s| {
+            typed_library(s);
+            s.piano_cat = PianoCategory::Upright;
+            s.piano_ui.model_idx = 2;
+            s.piano_ui.overlay = PianoOverlay::List;
+        });
+        assert!(t.contains(&"Piano Upright   2/2".to_string()), "{t:?}");
+        assert!(
+            t.contains(&"U0".to_string()) && t.contains(&"U1".to_string()),
+            "{t:?}"
+        );
+        assert!(
+            !t.contains(&"G0".to_string()),
+            "Grand models are not listed: {t:?}"
+        );
+    }
+
+    #[test]
+    fn info_shows_the_type_of_the_current_model() {
+        let t = overlay_texts(|s| {
+            typed_library(s);
+            s.piano_cat = PianoCategory::Grand;
+            s.piano_ui.overlay = PianoOverlay::Info;
+        });
+        assert!(t.contains(&"Type: Grand   1/1".to_string()), "{t:?}");
+        assert!(t.contains(&"Model: G0".to_string()), "{t:?}");
     }
 }

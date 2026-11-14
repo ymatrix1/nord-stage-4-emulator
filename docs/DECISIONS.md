@@ -28,6 +28,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D20](#d20-derived-values-only-no-firmware-bytes-in-the-repository) | 2026-11-12 | Derived values only: no firmware bytes in the repository | accepted |
 | [D21](#d21-organ-model-to-dsp-path-map) | 2026-11-13 | Organ model to DSP path map (B3, Vox, Pipe) | accepted |
 | [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
+| [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
 
 ---
 
@@ -306,3 +307,12 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Alternatives:** Make 0.5 the default now (changes every `.npno` render by 0.83 dB on an assumption); attenuate the piano layer by 12 dB to match the video (fits a replay artefact, would be wrong at the real velocities).
 - **Impact:** `render_hash` unchanged. No engine stage other than the 0.55 constant differs from the firmware at default settings.
 
+### D25. The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PR for `feat/organ-output-level-law`; evidence [organ-output-law](research/organ-output-law.md))
+- **Context:** Vox needed +14 dB, B3 +9.3 dB (drive fixed) and Pipe +14.4 dB (legacy bus) for the video level; the Vox gain word `0x3F1EB100` was assumed to follow the layer level.
+- **Decision:** One law `K * swell_word * level^2` (`organ/output_level.rs`). Swell word `520 v^2 2^-23` (sender `0xC0223B90`, default pedal 100 = 0.6199) and layer level `(v / 127)^2` (handler `0xC011AB8C`) are VERIFIED from the firmware; `K = 2.8` is EMPIRICAL (three clips). `OutputLevel::ModelDefault` applies it to Pipe on the firmware bank; `--organ-level legacy|firmware` overrides. The program rotary drive is imported as `preset / 10` (firmware `v / 127`). B3Wheels, Vox and `FirmwareRouting` stay opt-in.
+- **Why:** Pipe meets the bar (oracle lines 0.00 dB, RMS +3.3, crest -0.4, sub +1.3, mid +0.7 dB; score 4.95 to 3.25). B3Wheels fails the oracle criterion (2 start-phase lines) and presence (-19.9 dB); Vox fails mid (+7.6 dB) and the 1.5 to 8 kHz bands; routing has an EMPIRICAL zone table.
+- **Alternatives:** Fit one gain per model (rejected: hides the structure); flip B3 and Vox on RMS alone (rejected: D22 criteria).
+- **Impact:** `render_hash` `c7f06ca7...` unchanged (the dump has no Pipe layer or program rotary). Program renders change: rotary drive 10 times lower in the engine unit, Pipe level.

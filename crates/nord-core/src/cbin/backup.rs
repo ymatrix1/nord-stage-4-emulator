@@ -240,6 +240,17 @@ impl Ns4BackupArchive {
         reader: &mut R,
         idx: usize,
     ) -> Result<Vec<u8>, CbinError> {
+        self.read_entry_prefix_by_index(reader, idx, usize::MAX)
+    }
+
+    /// Like [`read_entry_by_index`](Self::read_entry_by_index) but reads at most the first
+    /// `max_len` bytes (a `.npno` header is 48 bytes of a multi-hundred-megabyte entry).
+    pub fn read_entry_prefix_by_index<R: Read + Seek>(
+        &self,
+        reader: &mut R,
+        idx: usize,
+        max_len: usize,
+    ) -> Result<Vec<u8>, CbinError> {
         let entry = self
             .entries
             .get(idx)
@@ -269,7 +280,8 @@ impl Ns4BackupArchive {
         let extra_len = u16::from_le_bytes([lfh[28], lfh[29]]) as u64;
         let data_offset = entry.local_header_offset + 30 + name_len + extra_len;
         let size = usize::try_from(entry.uncompressed_size)
-            .map_err(|_| CbinError::BitstreamError("entry exceeds host usize".to_string()))?;
+            .map_err(|_| CbinError::BitstreamError("entry exceeds host usize".to_string()))?
+            .min(max_len);
 
         reader
             .seek(SeekFrom::Start(data_offset))
@@ -489,6 +501,26 @@ mod tests {
         archive.extend_from_slice(&0u16.to_le_bytes()); // comment len
 
         archive
+    }
+
+    #[test]
+    fn test_prefix_read_returns_only_the_head_of_a_stored_entry() {
+        let zip_bytes =
+            build_synthetic_zip(&[("Piano/Grand/a.npno", ZIP_METHOD_STORED, b"0123456789")]);
+        let archive = Ns4BackupArchive::from_bytes(&zip_bytes).unwrap();
+        let mut r = std::io::Cursor::new(zip_bytes);
+        assert_eq!(
+            archive.read_entry_prefix_by_index(&mut r, 0, 4).unwrap(),
+            b"0123"
+        );
+        assert_eq!(
+            archive.read_entry_prefix_by_index(&mut r, 0, 99).unwrap(),
+            b"0123456789"
+        );
+        assert_eq!(
+            archive.read_entry_by_index(&mut r, 0).unwrap(),
+            b"0123456789"
+        );
     }
 
     #[test]

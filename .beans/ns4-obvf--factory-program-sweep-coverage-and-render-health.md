@@ -21,7 +21,7 @@ Know where the engine is still on assumed paths before claiming coverage.
 - [x] panics/NaN checked; small fixes with tests
 
 ## Out of Scope
-Audio-quality claims, level calibration, scene-mask semantics (OQ24).
+Audio-quality claims, level calibration, scene-mask semantics (OQ25).
 
 ## Summary of Changes
 See docs/research/program-coverage.md.
