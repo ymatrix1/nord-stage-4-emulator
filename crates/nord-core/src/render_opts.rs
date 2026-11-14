@@ -4,7 +4,7 @@
 use crate::engine::{FirmwareRouting, Stage4Engine};
 use crate::fx::FirmwareFx;
 use crate::organ::{OutputLevel, ToneWheelSource};
-use crate::synth::{FilterEngine, SynthChain};
+use crate::synth::{FilterEngine, PSpec, SynthChain};
 
 /// Parses a `--tone-source` value: `default | legacy | firmware | vox | b3wheels`.
 pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
@@ -219,6 +219,9 @@ pub struct FirmwareOptions {
     /// `--synth-shape <0..1>`: strip shape word of the SHAPE oscillator (`fw_shape.rs`) in
     /// thousandths (`None` = the ASSUMED saw placeholder).
     pub synth_shape_milli: Option<u16>,
+    /// `--synth-p fitted|gain,w2,r2,shape,cutoff`: the EMPIRICAL oscillator P block of the strip
+    /// chain (`synth/p_block.rs`); `None` keeps the single idle oscillator.
+    pub synth_p: Option<PSpec>,
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
@@ -252,6 +255,7 @@ impl Default for FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
+            synth_p: None,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -285,6 +289,7 @@ impl FirmwareOptions {
             piano_bus_scale: false,
             measured_laws: false,
             synth_shape_milli: None,
+            synth_p: None,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -364,6 +369,9 @@ impl FirmwareOptions {
                 .map_err(|_| format!("invalid --synth-shape '{v}'"))?;
             o.synth_shape_milli = Some((x.clamp(0.0, 1.0) * 1000.0).round() as u16);
         }
+        if let Some(v) = value("--synth-p") {
+            o.synth_p = Some(PSpec::parse(v)?);
+        }
         Ok(o)
     }
 
@@ -387,6 +395,7 @@ impl FirmwareOptions {
         );
         apply_synth_chain(engine, self.synth_chain);
         self.set_shape(engine);
+        self.set_p_block(engine);
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
@@ -452,6 +461,7 @@ impl FirmwareOptions {
             FirmwareRouting::Off
         });
         self.set_shape(engine);
+        self.set_p_block(engine);
         self.set_organ_level(engine);
     }
 
@@ -472,6 +482,13 @@ impl FirmwareOptions {
         engine.synth_a.strip_shape = shape;
         engine.synth_b.strip_shape = shape;
         engine.synth_c.strip_shape = shape;
+    }
+
+    fn set_p_block(&self, engine: &mut Stage4Engine) {
+        let p = self.synth_p.map(PSpec::block);
+        engine.synth_a.p_block = p;
+        engine.synth_b.p_block = p;
+        engine.synth_c.p_block = p;
     }
 
     fn set_measured_laws(&self, engine: &mut Stage4Engine) {
@@ -515,6 +532,9 @@ impl FirmwareOptions {
         }
         if let Some(m) = self.synth_shape_milli {
             parts.push(format!("shape={:.2}", f32::from(m) / 1000.0));
+        }
+        if let Some(p) = self.synth_p {
+            parts.push(format!("synth-p={p:?}"));
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
@@ -637,6 +657,26 @@ mod tests {
         FirmwareOptions::default().apply_exact(&mut e);
         assert_eq!(e.synth_b.strip_shape, None);
         assert!(FirmwareOptions::from_args(&["--synth-shape".into(), "x".into()]).is_err());
+    }
+
+    #[test]
+    fn synth_p_flag_sets_and_clears_the_p_block() {
+        let args: Vec<String> = ["--synth-p", "fitted"].map(String::from).to_vec();
+        let o = FirmwareOptions::from_args(&args).unwrap();
+        assert_eq!(o.synth_p, Some(PSpec::Fitted));
+        assert!(o.summary().contains("synth-p"));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert_eq!(e.synth_c.p_block, Some(crate::synth::PBlock::FITTED));
+        let custom = FirmwareOptions::from_args(&["--synth-p".into(), "1,0,1,0.5,1".into()]);
+        assert_eq!(
+            custom.unwrap().synth_p,
+            Some(PSpec::Custom([1000, 0, 1000, 500, 1000]))
+        );
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert_eq!(e.synth_c.p_block, None);
+        assert!(FirmwareOptions::from_args(&["--synth-p".into(), "x".into()]).is_err());
+        assert_eq!(FirmwareOptions::firmware_all().synth_p, None);
     }
 
     #[test]
