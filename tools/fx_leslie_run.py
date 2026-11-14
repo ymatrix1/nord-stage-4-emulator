@@ -16,6 +16,7 @@ limits: `docs/research/fx-leslie.md` s4.
 from __future__ import annotations
 
 import argparse
+import math
 import random
 import subprocess
 import sys
@@ -48,7 +49,19 @@ def noise_pokes(calls: int, seed: int = 3, amp: float = 0.3) -> list[str]:
     return out
 
 
-def build_args(script: Path, calls: int, extra: list[str]) -> list[str]:
+def sine_pokes(calls: int, hz: float, amp: float = 0.3, fs: float = 44_444_000 / 1024) -> list[str]:
+    """A sine of `hz` on all four words of each call (2 frames per call, words `2 f + k`)."""
+    out: list[str] = []
+    for k in range(calls):
+        for j in range(4):
+            v = amp * math.sin(2 * math.pi * hz * (2 * k + j // 2) / fs)
+            out += ["--poke", f"{k}:{IO + j:#x}=f{v}"]
+    return out
+
+
+def build_args(
+    script: Path, calls: int, extra: list[str], sine_hz: float | None = None
+) -> list[str]:
     args = ["--entry", "0x121007"]
     for d in PASS_DEVS:
         args += ["--dev", d]
@@ -56,7 +69,9 @@ def build_args(script: Path, calls: int, extra: list[str]) -> list[str]:
     args += ["--call", hex(ROUTINE), "--until", hex(END), "--calls", str(calls)]
     for reg, v in (("I0", IO), ("I1", STATE), ("M0", 0), ("M1", 1), ("M2", 2), ("M9", 1)):
         args += ["--set", f"{reg}={v:#x}"]
-    args += boot_pokes(script) + noise_pokes(calls) + extra
+    args += (
+        boot_pokes(script) + (sine_pokes(calls, sine_hz) if sine_hz else noise_pokes(calls)) + extra
+    )
     return [*args, "--dump", f"{IO:#x}:4"]
 
 
@@ -65,10 +80,11 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap.add_argument("pno_core1", type=Path)
     ap.add_argument("script", type=Path)
     ap.add_argument("--calls", type=int, default=400)
+    ap.add_argument("--sine", type=float, help="sine input in Hz instead of noise")
     ap.add_argument("--binary", type=Path, default=Path("target/release/sharc-fx.exe"))
     ns, extra = ap.parse_known_args(argv)
     with tempfile.NamedTemporaryFile("w", suffix=".args", delete=False) as f:
-        f.write("\n".join(build_args(ns.script, ns.calls, extra)))
+        f.write("\n".join(build_args(ns.script, ns.calls, extra, ns.sine)))
     out = subprocess.run(
         [str(ns.binary), str(ns.pno_core1), f"@{f.name}"], capture_output=True, text=True
     )
