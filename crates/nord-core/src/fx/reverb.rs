@@ -16,6 +16,7 @@ impl LayerFxChain {
             ReverbModel::Hall => (0.89, 2.05),
             ReverbModel::Cathedral => (0.935, 2.65),
         };
+        let decay_gain = self.reverb_decay(decay_gain);
         let damp = match self.reverb_color {
             ReverbColor::Normal => 0.42,
             ReverbColor::Bright => 0.68,
@@ -31,6 +32,7 @@ impl LayerFxChain {
         let mod_offset = (self.reverb_chorale_phase.sin() * mod_depth).round() as isize;
         let fs_scale = (self.sample_rate / 48_000.0).clamp(0.4, 4.0);
 
+        let [l_in, r_in] = self.reverb_input(l, r);
         let mut tap_outs = [0.0f32; FDN_SIZE];
         for (i, out) in tap_outs.iter_mut().enumerate() {
             let base_f = if self.reverb_model == ReverbModel::Spring {
@@ -54,7 +56,7 @@ impl LayerFxChain {
 
         // Two-stage stereo input allpass diffusion prevents transient flutter/metallic ringing
         const AP_G: f32 = 0.55;
-        let mut dif_l = l;
+        let mut dif_l = l_in;
         for (stage, &ap_delay) in REV_AP_DELAYS.iter().enumerate().take(2) {
             let w = self.rev_ap_indices[stage];
             let r_idx = (w + 512 - ap_delay) % 512;
@@ -64,7 +66,7 @@ impl LayerFxChain {
             self.rev_ap_indices[stage] = (w + 1) % 512;
             dif_l = delayed - AP_G * v;
         }
-        let mut dif_r = r;
+        let mut dif_r = r_in;
         for (stage, &ap_delay) in REV_AP_DELAYS.iter().enumerate().skip(2) {
             let w = self.rev_ap_indices[stage];
             let r_idx = (w + 512 - ap_delay) % 512;

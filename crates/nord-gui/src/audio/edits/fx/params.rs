@@ -84,11 +84,13 @@ pub enum FxFlag {
     DelayAnalog,
     DelayPingPong,
     DelayFxVariation,
+    /// Reverb VARIATION of Spring / Booth / Room (manual p.52-53).
+    ReverbVariation,
 }
 
 impl FxFlag {
     /// Every variant (used by the tests).
-    pub const ALL: [FxFlag; 10] = [
+    pub const ALL: [FxFlag; 11] = [
         FxFlag::Mod1Variation,
         FxFlag::Mod1Ped,
         FxFlag::Mod2Variation,
@@ -99,6 +101,7 @@ impl FxFlag {
         FxFlag::DelayAnalog,
         FxFlag::DelayPingPong,
         FxFlag::DelayFxVariation,
+        FxFlag::ReverbVariation,
     ];
 
     pub(super) fn set(self, fx: &mut LayerFxChain, on: bool) {
@@ -113,6 +116,7 @@ impl FxFlag {
             Self::DelayAnalog => fx.delay_analog = on,
             Self::DelayPingPong => fx.delay_ping_pong = on,
             Self::DelayFxVariation => fx.delay_fx_variation = on,
+            Self::ReverbVariation => fx.reverb_variation = on,
         }
     }
 }

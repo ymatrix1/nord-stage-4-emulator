@@ -28,7 +28,11 @@ impl ChainUi {
                 float(slot, FxFloat::Mod1Amount, self.mod1_amount),
                 float(slot, FxFloat::Mod1PedPos, self.mod1_ped_pos),
                 flag(slot, FxFlag::Mod1Variation, self.mod1_variation),
-                flag(slot, FxFlag::Mod1Ped, self.mod1_ped && self.mod1_is_wah()),
+                flag(slot, FxFlag::Mod1Ped, self.mod1_ped && self.mod1_has_ped()),
+                FxEdit::Mod1Sync {
+                    slot,
+                    beats: tables::mst_beats(self.mod1_mst).filter(|_| self.mod1_has_clock()),
+                },
             ],
             Unit::Mod2 => vec![
                 FxEdit::Mod2Type {
@@ -89,6 +93,11 @@ impl ChainUi {
                     slot,
                     color: self.color_engine(),
                 },
+                flag(
+                    slot,
+                    FxFlag::ReverbVariation,
+                    self.reverb_variation_engine(),
+                ),
                 float(slot, FxFloat::ReverbMix, self.reverb_mix),
             ],
         }
@@ -157,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_selection_sends_off() {
+    fn a_wah_and_spin_selection_reach_the_engine_while_the_unit_is_on() {
         let c = ChainUi {
             mod1_on: true,
             mod1_sel: 3, // A-WAH
@@ -165,12 +174,19 @@ mod tests {
             mod2_sel: 5, // SPIN
             ..ChainUi::default()
         };
-        assert_eq!(c.mod1_engine(), Mod1Type::Off);
-        assert_eq!(c.mod2_engine(), Mod2Type::Off);
+        assert_eq!(c.mod1_engine(), Mod1Type::AutoWah);
+        assert_eq!(c.mod2_engine(), Mod2Type::Spin);
+        let off = ChainUi {
+            mod1_sel: 3,
+            mod2_sel: 5,
+            ..ChainUi::default()
+        };
+        assert_eq!(off.mod1_engine(), Mod1Type::Off, "unit off");
+        assert_eq!(off.mod2_engine(), Mod2Type::Off);
     }
 
     #[test]
-    fn ped_applies_to_wah_only() {
+    fn ped_applies_to_wah_and_pump_only() {
         let mut c = ChainUi {
             mod1_ped: true,
             mod1_sel: 1,
@@ -180,10 +196,14 @@ mod tests {
             .edits(Unit::Mod1, 0)
             .contains(&flag(0, FxFlag::Mod1Ped, false)));
         c.mod1_sel = 4;
-        assert!(c.mod1_is_wah());
+        assert!(c.mod1_has_ped());
         assert!(c
             .edits(Unit::Mod1, 0)
             .contains(&flag(0, FxFlag::Mod1Ped, true)));
+        c.mod1_sel = 3; // A-WAH has VARIATION, not PED
+        assert!(c
+            .edits(Unit::Mod1, 0)
+            .contains(&flag(0, FxFlag::Mod1Ped, false)));
     }
 
     #[test]
@@ -207,5 +227,55 @@ mod tests {
             slot: 3,
             beats: Some(0.75)
         }));
+    }
+
+    #[test]
+    fn new_types_reach_the_engine_and_pump_ped_and_clock_are_sent() {
+        let mut c = ChainUi {
+            mod1_on: true,
+            mod1_sel: 5, // PUMP
+            mod1_ped: true,
+            mod1_mst: 5, // 1/4
+            mod2_on: true,
+            mod2_sel: 5, // SPIN
+            ..ChainUi::default()
+        };
+        let e = c.edits(Unit::Mod1, 2);
+        assert!(e.contains(&FxEdit::Mod1Type {
+            slot: 2,
+            kind: Mod1Type::Pump
+        }));
+        assert!(e.contains(&flag(2, FxFlag::Mod1Ped, true)));
+        assert!(e.contains(&FxEdit::Mod1Sync {
+            slot: 2,
+            beats: Some(1.0)
+        }));
+        assert!(c.edits(Unit::Mod2, 2).contains(&FxEdit::Mod2Type {
+            slot: 2,
+            kind: Mod2Type::Spin
+        }));
+        c.mod1_sel = 2; // RM has no Master Clock and no PED
+        let e = c.edits(Unit::Mod1, 2);
+        assert!(e.contains(&FxEdit::Mod1Sync {
+            slot: 2,
+            beats: None
+        }));
+        assert!(e.contains(&flag(2, FxFlag::Mod1Ped, false)));
+    }
+
+    #[test]
+    fn reverb_variation_is_sent_for_the_left_hand_types_only() {
+        let mut c = ChainUi {
+            rev_sel: 0, // SPRING
+            rev_alt: true,
+            ..ChainUi::default()
+        };
+        assert!(c
+            .edits(Unit::Reverb, 0)
+            .contains(&flag(0, FxFlag::ReverbVariation, true)));
+        c.rev_sel = 4; // HALL: CHORALE instead
+        assert!(c
+            .edits(Unit::Reverb, 0)
+            .contains(&flag(0, FxFlag::ReverbVariation, false)));
     }
 }

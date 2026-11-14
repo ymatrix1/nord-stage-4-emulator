@@ -25,11 +25,85 @@ fn mod1_on_then_selector_edits_the_organ_chains() {
 }
 
 #[test]
-fn selector_skips_unsupported_types() {
+fn selector_cycles_through_a_wah_and_pump_and_the_engine_follows() {
     let mut s = Session::new();
+    s.state.fx_ui.chains[0].mod1_on = true;
     s.state.fx_ui.chains[0].mod1_sel = 2; // RM
     s.click("mod1.selector");
-    assert_eq!(s.chain().mod1_sel, 4, "A-WAH is skipped, WAH is next");
+    assert_eq!(s.chain().mod1_sel, 3, "A-WAH is next");
+    assert!(s.fx_edits().contains(&FxEdit::Mod1Type {
+        slot: 0,
+        kind: Mod1Type::AutoWah
+    }));
+    s.click("mod1.selector");
+    s.click("mod1.selector");
+    assert_eq!(s.chain().mod1_sel, 5);
+    assert!(s.fx_edits().contains(&FxEdit::Mod1Type {
+        slot: 0,
+        kind: Mod1Type::Pump
+    }));
+    s.click("mod1.selector");
+    assert_eq!(s.chain().mod1_sel, 0, "wraps to A-PAN");
+}
+
+#[test]
+fn mod2_selector_reaches_ens_and_spin() {
+    let mut s = Session::new();
+    s.state.fx_ui.chains[0].mod2_on = true;
+    s.state.fx_ui.chains[0].mod2_sel = 3; // VIBE
+    s.click("mod2.selector");
+    assert!(s.fx_edits().contains(&FxEdit::Mod2Type {
+        slot: 0,
+        kind: nord_core::fx::Mod2Type::Ensemble
+    }));
+    s.click("mod2.selector");
+    assert!(s.fx_edits().contains(&FxEdit::Mod2Type {
+        slot: 0,
+        kind: nord_core::fx::Mod2Type::Spin
+    }));
+}
+
+#[test]
+fn pump_shift_function_is_ped_and_a_wah_keeps_variation() {
+    let mut s = Session::new();
+    s.state.fx_ui.chains[0].mod1_sel = 5;
+    s.shift_click("mod1.selector");
+    assert!(s.chain().mod1_ped && !s.chain().mod1_variation);
+    assert!(s.fx_edits().contains(&FxEdit::Flag {
+        slot: 0,
+        param: FxFlag::Mod1Ped,
+        on: true
+    }));
+    s.state.fx_ui.chains[0].mod1_sel = 3;
+    s.shift_click("mod1.selector");
+    assert!(s.chain().mod1_variation, "A-WAH VARIATION");
+}
+
+#[test]
+fn mod1_rate_knob_selects_the_master_clock_division_when_on() {
+    let mut s = Session::new();
+    s.state.fx_ui.chains[0].mod1_sel = 5; // PUMP
+    s.state.fx_ui.chains[0].mod1_mst = 5; // MST CLK already on (1/4)
+    s.drag_up("mod1.rate", 40.0);
+    assert!(s.chain().mod1_mst > 5, "division {}", s.chain().mod1_mst);
+    let want = crate::panel::ui_state::fx::mst_beats(s.chain().mod1_mst);
+    assert!(s.fx_edits().contains(&FxEdit::Mod1Sync {
+        slot: 0,
+        beats: want
+    }));
+}
+
+#[test]
+fn mod1_mst_clk_is_inert_on_ring_mod() {
+    let mut s = Session::new();
+    s.state.fx_ui.chains[0].mod1_sel = 2; // RM
+    s.state.fx_ui.chains[0].mod1_mst = 5;
+    s.drag_up("mod1.rate", 40.0);
+    assert!(s.fx_edits().iter().all(|e| !matches!(
+        e,
+        FxEdit::Mod1Sync { beats: Some(_), .. }
+    )));
+    assert!(s.chain().mod1_rate > 4.0, "the knob edits the free rate");
 }
 
 #[test]
@@ -239,13 +313,46 @@ fn reverb_chorale_only_on_right_hand_types() {
         slot: 0,
         color: ReverbColor::Chorale
     }));
-    s.state.fx_ui.chains[0].rev_sel = 1; // Booth: left-hand type has no engine variation
+    s.state.fx_ui.chains[0].rev_sel = 1; // Booth: VARIATION instead of CHORALE
     s.click("reverb.on");
     s.click("reverb.on");
     let e = s.fx_edits();
     assert!(e.contains(&FxEdit::ReverbColor {
         slot: 0,
         color: ReverbColor::Normal
+    }));
+    assert!(
+        e.contains(&FxEdit::Flag {
+            slot: 0,
+            param: FxFlag::ReverbVariation,
+            on: true
+        }),
+        "the Booth VARIATION reaches the engine"
+    );
+}
+
+#[test]
+fn reverb_variation_toggles_on_the_left_hand_types_and_is_not_dimmed() {
+    let mut s = Session::new();
+    s.state.fx_ui.chains[0].rev_sel = 0; // Spring
+    s.shift_click("reverb.type");
+    assert!(s.chain().rev_alt);
+    let e = s.fx_edits();
+    assert!(e.contains(&FxEdit::Flag {
+        slot: 0,
+        param: FxFlag::ReverbVariation,
+        on: true
+    }));
+    assert!(!e.contains(&FxEdit::ReverbColor {
+        slot: 0,
+        color: ReverbColor::Chorale
+    }));
+    s.shift_click("reverb.type");
+    assert!(!s.chain().rev_alt);
+    assert!(s.fx_edits().contains(&FxEdit::Flag {
+        slot: 0,
+        param: FxFlag::ReverbVariation,
+        on: false
     }));
 }
 
