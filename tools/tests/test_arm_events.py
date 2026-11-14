@@ -23,7 +23,7 @@ def test_the_five_encoder_ids_map_to_the_five_pairs_both_ways() -> None:
         assert ev.ID_OF_ENCODER_PAIR[pair] == ident
         assert ev.encoder_pair_for(ident) == pair
     assert ev.encoder_pair_for(99) is None
-    # The Program dial is pair 1 (index 6), the value widget's other id is pair 0 (index 7).
+    # The Program dial is pair 1 (index 6), PIANO SELECT is pair 0 (index 7).
     assert (ev.ID_OF_ENCODER_PAIR[1], ev.ID_OF_ENCODER_PAIR[0]) == (6, 7)
 
 

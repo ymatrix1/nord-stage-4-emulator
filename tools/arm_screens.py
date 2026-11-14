@@ -46,6 +46,12 @@ LATCH = 0x60000025
 # ASSUMED: one tick is 1 ms of virtual time (`arm_steady.INSNS_PER_TICK`).
 TICK_INSNS = 200_000
 CONTROLLER_MODE_HORIZONTAL = 0  # the firmware's init stream sends `20 00`
+# VERIFIED (fifth pass, research s16): the modifier word the key handler keeps (`0xC007B590` clears
+# and `0xC007B79C` sets bits; `0xC007B0BC` copies it into the flags word of every encoder event).
+# Bit 0 is set after a Shift press and release and stays set; the menu handler `0xC014EEC8` then
+# moves the page / slot selection with the Program dial. With bit 0 clear the dial edits the value
+# of the selected item (`0xC012DEC0` -> settings adjust `0xC00DFA00`).
+MODIFIER_WORD = 0xC05846AC
 
 
 @dataclass(frozen=True)
@@ -248,6 +254,16 @@ class Session:
         self.run(after)
         frames = (self.link.frames(0)[n[0] :], self.link.frames(1)[n[1] :])
         return Capture(frames, self.texts[t0:])
+
+
+def edit(session: Session, pair: int, detents: int, **kwargs) -> Capture:  # noqa: ANN003
+    """Turn encoder `pair` as an edit: the modifier word is cleared first (see `MODIFIER_WORD`).
+
+    Without that, a menu opened with Shift + Program n keeps bit 0 set after Shift is released and
+    the Program dial pages instead of changing the value (research note s16.1).
+    """
+    session.emu.write32(MODIFIER_WORD, 0)
+    return session.turn(pair, detents, **kwargs)
 
 
 def parse_key(text: str) -> tuple[int, int, int]:
