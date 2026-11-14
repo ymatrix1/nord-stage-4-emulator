@@ -63,6 +63,7 @@ def record(
         rng = random.Random(seed)
         lanes = o.random_lanes(rng, stage in o.UNISON_STAGES)
         o.random_hp(rng, lanes, stage)
+        o.random_misc(seed, lanes, stage)
         o.random_s5(seed, lanes, stage)
         o.random_pitch(seed, lanes, stage)
         got = o.run_pass(sharc_org, image, lanes, stage)
