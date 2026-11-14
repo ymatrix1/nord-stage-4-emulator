@@ -228,3 +228,68 @@ fn full_panel_frame_time_probe() {
     eprintln!("FRAME_MS {ms:.2}");
     assert!(ms < 500.0, "frame took {ms:.1} ms");
 }
+
+/// Click probe: taps the centre of every inventory control on the full panel and prints the ids
+/// where the click changed neither the audio commands nor the painted frame (candidates for
+/// overlapped, dead or purely cosmetic widgets).
+#[test]
+fn full_panel_click_probe() {
+    use egui::{Event, Modifiers, PointerButton, RawInput};
+    let ctx = egui::Context::default();
+    let (audio_handle, rx) = AudioHandle::new();
+    let mut state = Stage4PanelState::default();
+    let mut time = 1.0_f64;
+    let mut origin = pos2(0.0, 0.0);
+    let mut frame =
+        |events: Vec<Event>, state: &mut Stage4PanelState, origin: &mut egui::Pos2| -> u64 {
+            time += 0.04;
+            let input = RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1700.0, 600.0))),
+                time: Some(time),
+                events,
+                ..Default::default()
+            };
+            let out = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    *origin = ui.cursor().min;
+                    render_stage4_panel(ui, state, &audio_handle);
+                });
+            });
+            let text = format!("{:?}", out.shapes);
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+            for b in text.bytes() {
+                h ^= u64::from(b);
+                h = h.wrapping_mul(0x0100_0000_01b3);
+            }
+            h
+        };
+    frame(vec![], &mut state, &mut origin);
+    let mut silent = Vec::new();
+    for c in nord_panel::all_controls() {
+        let Some(r) = super::layout_px::rect_of(&c.id, origin) else {
+            continue;
+        };
+        let at = r.center();
+        while rx.try_recv().is_ok() {}
+        let ev = |pressed| Event::PointerButton {
+            pos: at,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        frame(vec![Event::PointerMoved(at)], &mut state, &mut origin);
+        let hover = frame(vec![], &mut state, &mut origin);
+        frame(vec![ev(true)], &mut state, &mut origin);
+        frame(vec![ev(false)], &mut state, &mut origin);
+        let after = frame(vec![], &mut state, &mut origin);
+        if rx.try_recv().is_err() && hover == after {
+            silent.push(c.id.clone());
+        }
+        frame(
+            vec![Event::PointerMoved(pos2(0.0, 0.0))],
+            &mut state,
+            &mut origin,
+        );
+    }
+    eprintln!("CLICK_PROBE silent {}: {}", silent.len(), silent.join(" "));
+}
