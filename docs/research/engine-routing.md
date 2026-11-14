@@ -109,11 +109,27 @@ What it says:
 
 `FirmwareRouting` therefore stays **opt-in** and is not part of `--firmware-all`. To flip the default: find the writer of the zone key range (OQ23) or a second clip of a split program (a `0` / `6` or `1` / `2` / `3` program with hardware audio), then re-run section 5 and re-baseline.
 
+## 7. Empty layer enables (OQ25, 2026-11-14)
+
+Question: 9 programs decode to a silent scene I under `--firmware-routing`. Is the layer enable stored elsewhere?
+
+| Finding | Evidence | Tag |
+|---|---|---|
+| Layout of the section block header: bit 8 `kLayerFocusOrg_I` (1 bit, id `0xAD`), bits 9..10 `kLayerEnableOrg_I` (2 bits, `0xAE`), bit 11 `kLayerFocusOrg_II` (`0xAF`), bits 12..13 `kLayerEnableOrg_II` (`0xB0`); piano the same, synth 3-bit enables | names, ranges and widths of `arm-edit-params.csv` rows 205..208 match the decoded offsets exactly; bit 8 is set only in B3 split programs (focus) | VERIFIED (names, widths) |
+| The 9 programs have the section enable bit set and `enable = 0` in every layer of the sounding section; no other field (layer `PresetEnable` bit, zone code, focus bits) differs from sounding programs | decode of all 384 programs (`tools/arm_program_routing.py` decode side): 30 section-scenes with enable 1 and mask 0, 9 programs whose whole scene I is empty | VERIFIED (decode) |
+| The ARM layer-enable handlers give zone byte 0 for view (enable 1, mask 0), so the plain file field cannot make them sound | `arm_program_routing.py` run on `Vox Like Me`: scene I and II, organ / piano / synth, 0 mismatches against the decode, all zone bytes 0 | VERIFIED (run) |
+| The section table writer (program load) is not executed by the harness; no plain `str` with offset `0x288` / `0x294` is it (candidates `0xC00B1844`, `0xC00B1874` store only the view byte), and the handler `0xC0120100..` additionally reads `[setup + 0x508]`, scene A `+0x294`, `[0xC055B144] + 4` and a section getter `0xC00F906C` | capstone scan of `bank0_CODE.bin` | EMPIRICAL (not decoded) |
+| Rule used by the engine: an enabled section with no layer on plays layer A, applied only when the whole scene would otherwise be silent | the piano section is on with mask 0 beside a sounding synth in `Tines Layer`, `Piano Soft Orch`, `Rising Sun`, `Piano Str Pad`, `Steam Piano`: programs whose names need the piano; the 9 silent programs are Vox / Farfisa / lead / piano programs whose names need the one enabled section | ASSUMED (names, no hardware clip) |
+
+Effect (`ns4 render-patch --firmware-routing --notes 48,55,64,72`, release build): `Vox Like Me`, `Burning Lead`, `LoFi Piano`, `Farfisa II`, `70s CP Strings` render audible (peak 1.00 / 1.00 / 0.35 / 1.00 / 0.72); they were silent before this change (the other four Vox programs take the same path). Default render unchanged (the rule only runs in `FirmwareRouting::On`). Tests: `routing::tests::empty_scene_plays_layer_a_of_each_enabled_section`, `scene_with_a_sounding_layer_keeps_its_mask`, `tests_firmware_routing::enabled_section_without_layers_plays_layer_a_with_firmware_routing`.
+
+Not decided: whether layer A is also added in the 20 section-scenes with mask 0 beside a sounding section (`J3 Grand Layers`, `24 Frames J3`, `Windhoek B3 II`, ...). The engine leaves them as decoded; a hardware clip of `J3 Grand Layers` (organ section on, mask 0) would settle it.
+
 ## Implications
 
 - The B3 clip gap that looked like an output stage problem is the layer zone: with the routing the sub, the crest and the clipping match the hardware and the RMS is within 4 dB. `B3Wheels` (+ tail) with `--firmware-routing` is now the closest B3 path; the remaining B3 gap is presence / brilliance (-12.5 / -4.7 dB) and the level law `L` (OQ19).
 - Factory programs that split (48 of 384) now sound their layers only in their zone with `--firmware-routing`; programs that do not split are unchanged.
-- The legacy empty-mask fallback (`apply_program`) hid programs whose scene masks are all zero; with the routing on they are silent as on the hardware.
+- The legacy empty-mask fallback (`apply_program`) hid programs whose scene masks are all zero; with the routing on, a scene whose enabled sections have no layer on plays layer A of each (section 7, ASSUMED); a scene with no enabled section stays silent.
 
 ## Follow-ups
 

@@ -7,9 +7,12 @@
 //! * Overview: the whole panel, zoom = window fit.
 //! * Focus on one section: that section fills the window (zoom up to [`MAX_ZOOM`]).
 //! * Click a section header or press Z to toggle focus, Esc to leave, 1-5 jump to a section.
+//! * Panorama (P, see `panorama.rs`): the detailed view shows a pannable / zoomable rectangle
+//!   of the panel ([`ViewState::panorama`]) with a strip of the whole instrument below it.
 
 use super::layout_px::{to_px, PANEL_HEIGHT_PX, PANEL_WIDTH_PX};
-use egui::{pos2, vec2, Context, Pos2, Rect, Vec2};
+use super::panorama;
+use egui::{vec2, Context, Pos2, Rect, Vec2};
 use nord_panel::Section;
 
 /// Logical size of the drawn panel (control area plus keybed).
@@ -43,11 +46,14 @@ pub struct ViewState {
     pub last: Option<Section>,
     /// Fixed zoom in physical px per logical px (screenshots); `None` fits the window.
     pub fixed_zoom: Option<f32>,
+    /// Panorama mode: the visible rectangle in logical panel px (`None` = mode off).
+    pub panorama: Option<Rect>,
 }
 
 impl ViewState {
     /// Toggle focus on `s`: focus it, or return to the overview when it already has focus.
     pub fn toggle(&mut self, s: Section) {
+        self.panorama = None;
         if self.focus == Some(s) {
             self.exit();
         } else {
@@ -67,34 +73,63 @@ impl ViewState {
     pub fn toggle_z(&mut self, hovered: Option<Section>) {
         match self.focus {
             Some(_) => self.exit(),
-            None => self.focus = hovered.or(self.last).or(Some(Section::Organ)),
+            None => {
+                self.panorama = None;
+                self.focus = hovered.or(self.last).or(Some(Section::Organ));
+            }
         }
     }
 
-    /// Apply Z, Esc and 1-5 from this frame's input. Returns `true` when the view changed.
+    /// Part of the panel the view shows in logical panel px; `None` is the whole panel.
+    pub fn region(&self) -> Option<Rect> {
+        self.panorama.or_else(|| focus_region(self.focus))
+    }
+
+    /// Top-left of the panel for a view whose visible area starts at `top_left`.
+    pub fn origin(&self, top_left: Pos2) -> Pos2 {
+        region_origin(self.region(), top_left)
+    }
+
+    /// Logical height the view reserves on top of the panel (bars, panorama strip).
+    fn extra_h(&self) -> f32 {
+        match (self.panorama, self.focus) {
+            (Some(_), _) => BAR_H + panorama::strip_extra_h(),
+            (None, Some(_)) => 0.0,
+            (None, None) => BAR_H,
+        }
+    }
+
+    /// Apply P, Z, Esc, 1-5 and (in the panorama) arrows and +/- from this frame's input. Returns `true` when the view changed.
     pub fn handle_keys(&mut self, ctx: &Context, origin: Pos2) -> bool {
         if ctx.wants_keyboard_input() {
             return false;
         }
         let before = *self;
-        let (z, esc, digit, hover) = ctx.input(|i| {
+        let moved = self.handle_viewport_keys(ctx);
+        let (p, z, esc, digit, hover) = ctx.input(|i| {
             let digit =
                 (0..FOCUSABLE.len()).find(|n| i.key_pressed(digit_key(*n)) && !i.modifiers.any());
             (
+                i.key_pressed(egui::Key::P) && !i.modifiers.any(),
                 i.key_pressed(egui::Key::Z) && !i.modifiers.any(),
                 i.key_pressed(egui::Key::Escape),
                 digit,
                 i.pointer.hover_pos(),
             )
         });
-        if z {
+        if p {
+            self.toggle_panorama();
+        } else if z {
             self.toggle_z(hover.and_then(|p| section_at(p, origin)));
         } else if esc {
-            self.exit();
+            if self.panorama.take().is_none() {
+                self.exit();
+            }
         } else if let Some(n) = digit {
+            self.panorama = None;
             self.focus = Some(FOCUSABLE[n]);
         }
-        *self != before
+        moved || *self != before
     }
 }
 
@@ -126,23 +161,49 @@ pub fn header_px(section: Section, origin: Pos2) -> Rect {
     Rect::from_min_size(r.min, vec2(r.width(), HEADER_H))
 }
 
-/// Logical size of what the view shows.
-pub fn content_size(focus: Option<Section>) -> Vec2 {
-    match focus {
-        Some(s) => section_px(s, Pos2::ZERO).size() + vec2(2.0, 2.0) * FOCUS_MARGIN,
-        None => PANEL_SIZE,
-    }
+/// Region of the panel a focused section shows (the section plus [`FOCUS_MARGIN`]).
+pub fn focus_region(focus: Option<Section>) -> Option<Rect> {
+    focus.map(|s| section_px(s, Pos2::ZERO).expand(FOCUS_MARGIN))
 }
 
-/// Zoom (egui zoom factor relative to the native scale) that fits the view into a window of
-/// `window_phys` physical px on a display with `native_ppp` physical px per point.
+/// Logical size of `region` (`None` is the whole panel).
+pub fn region_size(region: Option<Rect>) -> Vec2 {
+    region.map_or(PANEL_SIZE, |r| r.size())
+}
+
+/// Logical size of what a focused (or whole-panel) view shows.
+pub fn content_size(focus: Option<Section>) -> Vec2 {
+    region_size(focus_region(focus))
+}
+
+/// Top-left of the panel when `region` of it starts at `top_left`.
+pub fn region_origin(region: Option<Rect>, top_left: Pos2) -> Pos2 {
+    region.map_or(top_left, |r| top_left - r.min.to_vec2())
+}
+
+/// Zoom (egui zoom factor relative to the native scale) that fits `size` plus `extra_h` logical
+/// px into a window of `window_phys` physical px on a display with `native_ppp` px per point.
+fn fit(size: Vec2, extra_h: f32, window_phys: Vec2, native_ppp: f32) -> f32 {
+    let w = window_phys / native_ppp.max(0.1);
+    (w.x / size.x)
+        .min(w.y / (size.y + extra_h))
+        .clamp(MIN_ZOOM, MAX_ZOOM)
+}
+
+/// Zoom that fits a focused (or whole-panel) view into the window.
 pub fn fit_zoom(focus: Option<Section>, window_phys: Vec2, native_ppp: f32) -> f32 {
     let bars = if focus.is_some() { 0.0 } else { BAR_H };
-    let c = content_size(focus);
-    let w = window_phys / native_ppp.max(0.1);
-    (w.x / c.x)
-        .min(w.y / (c.y + bars))
-        .clamp(MIN_ZOOM, MAX_ZOOM)
+    fit(content_size(focus), bars, window_phys, native_ppp)
+}
+
+/// Zoom that fits whatever `view` shows (focus, panorama viewport or the whole panel).
+pub fn fit_zoom_view(view: &ViewState, window_phys: Vec2, native_ppp: f32) -> f32 {
+    fit(
+        region_size(view.region()),
+        view.extra_h(),
+        window_phys,
+        native_ppp,
+    )
 }
 
 /// Apply the zoom of `view` to `ctx` (takes effect on the next frame).
@@ -152,7 +213,7 @@ pub fn apply_zoom(ctx: &Context, view: &ViewState) {
         Some(px_per_logical) => px_per_logical / native,
         None => {
             let phys = ctx.input(|i| i.screen_rect().size()) * ctx.pixels_per_point();
-            fit_zoom(view.focus, phys, native)
+            fit_zoom_view(view, phys, native)
         }
     };
     let z = (z * 100.0).round() / 100.0;
@@ -161,23 +222,15 @@ pub fn apply_zoom(ctx: &Context, view: &ViewState) {
     }
 }
 
-/// Top-left of the panel for a view whose visible area starts at `top_left`.
+/// Top-left of the panel for a focused view whose visible area starts at `top_left`.
 pub fn panel_origin(focus: Option<Section>, top_left: Pos2) -> Pos2 {
-    match focus {
-        Some(s) => {
-            let m = section_px(s, Pos2::ZERO).min;
-            pos2(
-                top_left.x + FOCUS_MARGIN - m.x,
-                top_left.y + FOCUS_MARGIN - m.y,
-            )
-        }
-        None => top_left,
-    }
+    region_origin(focus_region(focus), top_left)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui::pos2;
 
     #[test]
     fn toggle_enters_and_leaves_and_remembers() {
