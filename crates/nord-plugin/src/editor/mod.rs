@@ -13,7 +13,8 @@
 //! | `map.rs`, `map_area.rs` | `AudioCommand` to `ParamWrite` mapping |
 //! | `probe.rs` | one command per mapping arm; derives the mapped families |
 //! | `coverage.rs` | live / passive / dimmed classification of the inventory |
-//! | `readback.rs` | host parameter values to panel state |
+//! | `menu_table.rs`, `map_settings.rs` | menu item <-> host parameter table, write side |
+//! | `readback.rs`, `readback_menu.rs` | host parameter values to panel and menu state |
 //! | `notes.rs` | bounded SPSC keybed queue and its engine dispatch |
 //! | `index.rs`, `write.rs` | parameter lookup and the host writer |
 //!
@@ -28,9 +29,12 @@ mod map_fx;
 mod map_pattern;
 mod map_settings;
 mod map_synth;
+pub mod menu_table;
+pub mod menu_ui_only;
 pub mod notes;
 pub mod probe;
 pub mod readback;
+pub mod readback_menu;
 pub mod sink;
 pub mod write;
 

@@ -27,10 +27,16 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 
 ## Acceptance Criteria
 - [ ] PanelHost over AudioHandle
-- [ ] Panorama view, focused rack view, library drawer
+- [x] Panorama view (strip + draggable viewport, `P`), focused rack view (`Z`, `1`-`5`), library drawer (slides in, `L`); headless-tested, not seen on a real display
 
 ## Out of Scope
 - Redistributing Clavia photos, manuals or firmware; `.reference/` stays git-ignored
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
+
+- Panorama (2026-11-14): `panel/panorama.rs` adds `ViewState::panorama` (viewport rectangle in logical panel px) and a 56 px strip under the detailed view: drag or click pans, wheel and `+` / `-` zoom, arrows pan, `P` toggles, `Esc` leaves, `Z` / `1`-`5` / section header focus a section. `view.rs` now works on a region instead of focus only.
+- Drawer: the library was already a docked `SidePanel`; it now slides (`show_animated`) and `L` toggles it. Library logic untouched.
+- Tests: `panel/panorama_tests.rs` (keys, strip drag, wheel, click-through, default frame unchanged, frame-time probe) on `Sim::full_panel()`, `library/ui.rs` (slide, click-through, `L`), view math in `panorama.rs`.
+- `--screenshot` unchanged (panorama off, drawer not drawn). No view persistence added: the app has no eframe storage.
+- Still open for B12 in the roadmap: PanelHost over AudioHandle; the strip is a section-outline map, not a live thumbnail.

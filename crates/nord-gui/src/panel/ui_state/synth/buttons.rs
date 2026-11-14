@@ -134,7 +134,7 @@ impl SynthUi {
         let l = self.layer();
         match b {
             Btn::On => self.solo,
-            Btn::Mode => self.page == super::SynthPage::Extern,
+            Btn::Mode => l.extern_on,
             Btn::PitchSmp => l.env_to_pitch,
             Btn::OscEnvelope => l.osc_vel,
             Btn::FilterType => self.group_filter.is_active(),

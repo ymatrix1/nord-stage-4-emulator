@@ -47,7 +47,7 @@ pub fn controls() -> Vec<ControlEntry> {
     v.push(
         e("synth.extern", s, K::Button, "EXTERN (Shift+Mode)", 46)
             .shift()
-            .todo("ns4-ymci"),
+            .bound("engine:set_layer_extern"),
     );
     v.push(e("synth.waveform", s, K::Button, "WAVEFORM", 29).todo(bean));
     v.push(

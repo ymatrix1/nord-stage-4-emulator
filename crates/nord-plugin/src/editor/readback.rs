@@ -178,6 +178,7 @@ pub fn sync_panel_from_params(idx: &ParamIndex, s: &mut Stage4PanelState) {
         }
     }
     sync_fx_focus(idx, s);
+    super::readback_menu::sync_menu_from_params(idx, &mut s.program_ui.menu);
 }
 
 /// Host layer number (`fx_*_{n}`) the panel's FX focus slot addresses.

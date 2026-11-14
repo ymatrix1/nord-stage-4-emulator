@@ -295,6 +295,7 @@ class Lane:
     out_gain: int  # P[16]
     pulse: int = 0  # DM(-8, I1): pulse width offset word (stage `0x121B99`), doubled as an integer
     state: int = 0  # noise generator state word (`DM(0xB2EF9 + lane)`, stage `0x121FD8`)
+    hp: tuple = ()  # output high pass `(state 0, state 1, coefficient)` words (SHAPE SINE 4)
     ratios: tuple = ()  # unison stages: P[-32 + 2 j] for j = 0..7 (lane word)
     phases: tuple = ()  # unison stages: voice phase words (`DM(0xC2336 + 2 j)` + lane)
     groups: tuple = ()  # unison stages: weight groups P[-16 + 4 j .. -13 + 4 j] (shared)

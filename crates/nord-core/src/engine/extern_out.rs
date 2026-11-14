@@ -233,6 +233,29 @@ impl Stage4Engine {
         }
     }
 
+    /// Switches Synth layer `i` (`0..3`) into or out of Extern mode (EXTERN, Shift+Mode, manual
+    /// p.46): an Extern layer sends MIDI out instead of rendering audio, so its internal voices are
+    /// released on entry and its sounding Extern notes are released on exit. Field writes and
+    /// ring-buffer pushes only: allocation free. Out-of-range `i` is ignored.
+    pub fn set_layer_extern(&mut self, i: usize, on: bool) {
+        if i >= 3 || self.extern_out.layers[i].enabled == on {
+            return;
+        }
+        if on {
+            let layer = match i {
+                0 => &mut self.synth_a,
+                1 => &mut self.synth_b,
+                _ => &mut self.synth_c,
+            };
+            (0..128u8).for_each(|n| layer.note_off(n));
+        } else {
+            self.extern_all_notes_off(i);
+        }
+        self.extern_out.layers[i].enabled = on;
+        // The volume poll records the first fader value after (re-)entering Extern.
+        self.extern_out.last_volume[i] = VOLUME_UNSET;
+    }
+
     /// Turns a CC VAL dial: stores `value` for `slot` (0 or 1) and transmits it.
     pub fn extern_set_cc_value(&mut self, i: usize, slot: usize, value: u8) {
         let layer = &mut self.extern_out.layers[i];

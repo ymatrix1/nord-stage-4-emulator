@@ -19,6 +19,9 @@ impl OrganLayer {
         buses: &[[f32; NUM_TONEWHEELS]; 2],
         lanes: usize,
     ) -> [f32; 2] {
+        if self.farfisa_keys_active() {
+            return [self.sum_farfisa_keys(&buses[0]), 0.0];
+        }
         if self.b3_weights_active() {
             return [self.sum_b3_weights(&buses[0]), 0.0];
         }

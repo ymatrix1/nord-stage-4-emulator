@@ -29,7 +29,9 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D21](#d21-organ-model-to-dsp-path-map) | 2026-11-13 | Organ model to DSP path map (B3, Vox, Pipe) | accepted |
 | [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
 | [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
+| [D27](#d27-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
+| [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
 
 ---
 
@@ -331,3 +333,22 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** 70 of 89 Mod 1 programs use these two types. The routines and parameter words are VERIFIED; what is not verified end to end is the rate in hertz (4 frames per call at the DSP frame rate) and the TREM role, so D22 keeps the switch opt-in.
 - **Alternatives:** Flip the default (rejected: no hardware recording of the rate); tune the engine LFO range by ear (rejected: the firmware words are available).
 - **Impact:** `ns4 render-patch --firmware-fx` and `FirmwareFx::ALL` change A-PAN and TREM programs (4 frame latency, firmware depth and rate); the default `render_hash` is unchanged.
+
+### D27. The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped
+
+- **Status:** proposed 2026-11-14 (accepted when the PR for `research/wave-categories` merges)
+- **Context:** The ANALOG, WAVE and FM name tables of the panel were written from the manual: 7 ANALOG categories (no `SYNC`), invented `SUPER` items, eight invented `TABLES n` groups for WAVE and `ALGO A..E` for FM. The firmware builds the real tree in one routine (`0xC01ADBC0`); the STORE `Cat:` value could not be traced to a model class, and the factory header `category_id` values (`1..52`) do not index the 26-name table.
+- **Decision:** `nord-gui` `ui_state/synth/waves.rs` holds the firmware tree (8 ANALOG categories with `SYNC` at index 2, 5 WAVE categories of 6/6/14/10/10, FM groups `HARMONIC` / `INHARMONIC A..E`), each entry with its firmware wave id, checked row by row against `docs/research/data/synth-wave-categories.csv`. The OLED composes `Multi ` / `Super ` before the entry name (manual figure). The WAVE browser indexes the engine bank by flat position. The 26 program categories stay as in `bay_program/name.rs` with the link to the STORE value ASSUMED; no header id is written.
+- **Why:** Category membership, names and ids are VERIFIED twice (ARM tree and DSP P-table, 45 of 45); the panel category index now equals the `osc_category` field of a loaded program. Writing a header id would need the unknown id map (OQ26).
+- **Alternatives:** Keep manual names (wrong category set and an invented `SUPER`); name the entries `<Category> <name>` for every category (the manual figure shows it only for MULTI, the rule for the others is unverified); map the header id by program names (guesswork, kept out of code).
+- **Impact:** CAT dial of ANALOG has 8 stops (MULTI is the sixth, SUPER the seventh); the WAVE page shows firmware names instead of `Table n`; the flat wavetable index of a panel pick now equals the one of a loaded program (`cat * 8 + i` before). `render_hash` unchanged.
+
+### D27. The piano layer level law is opt-in; the bus convention stays ASSUMED
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/piano-bus-convention`; evidence [piano-bus-convention](research/piano-bus-convention.md))
+- **Context:** OQ20 listed the SMP bus receiver convention and the piano layer level handler `0xC011A7A4` (law read from the listing, never run) as open. D22 requires end-to-end verification before a default changes.
+- **Decision:** Run the handler live (`tools/arm_layer_level.py`): the stored word is `(v / 127)^2` (mute sentinel `-0.05` at 0), identical to the organ handler. Add `PianoLayer::firmware_layer_law` (`--firmware-piano-layer-law`, `piano/downstream.rs::layer_gain`, `engine/mix.rs`) as an opt-in. `firmware_bus_scale` stays opt-in and the bus convention stays ASSUMED.
+- **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
+- **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 on an untraced path); flip the bus scale (0.83 dB on an assumption, and the true receiver scale is unknown by up to 12 dB).
+- **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
