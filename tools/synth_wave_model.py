@@ -309,6 +309,7 @@ class Lane:
     counter: int = 0  # MISC: frame counter word `DM(13, I2)`
     lp: int = 0  # MISC low-passed noise: filter state word `DM(-3, I2)`
     extra: tuple = ()  # further per-lane frame words of a stage, `(address offset from I2, word)`
+    lat: tuple = ()  # SUPER 2..4: three biquad sections `(s1, s2) x 3` (`DM(I2 - 3 + 4 n + lane)`)
 
 
 @dataclass
