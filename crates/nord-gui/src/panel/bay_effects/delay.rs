@@ -2,14 +2,13 @@
 //! with VARIATION, FILTER / PING PONG and TAP/SET / ANALOG.
 
 use super::ctx::{from_log, to_log, Fx};
+use crate::panel::param_hint::fmt;
+use crate::panel::param_hint::table::DELAY_MS as TIME_MS;
 use crate::panel::prelude::Stage4PanelState;
 use crate::panel::ui_state::fx::{ChainUi, Unit, DELAY_FX, MST_LABELS};
 use crate::style::{LED_RED, LED_RED_DIM};
 use nord_core::fx::DelayFilterMode;
 use nord_panel::behaviour::{cycle, Trigger};
-
-/// Shortest and longest free delay time (VERIFIED, `FxPreset::delay_time_ms`: 20..1500 ms).
-const TIME_MS: (f32, f32) = (20.0, 1500.0);
 
 /// Feedback filter order of the FILTER button: off, LP, HP, BP.
 const FILTERS: [DelayFilterMode; 4] = [
@@ -37,6 +36,7 @@ fn tempo(f: &mut Fx, c: &mut ChainUi) -> bool {
             let next = v.round().clamp(0.0, steps) as usize;
             changed = next != c.mst;
             c.mst = next;
+            f.hint("delay.tempo", MST_LABELS[next]);
         }
     } else {
         let mut n = to_log(c.tempo_ms, TIME_MS.0, TIME_MS.1);
@@ -44,6 +44,7 @@ fn tempo(f: &mut Fx, c: &mut ChainUi) -> bool {
         if f.knob("delay.tempo", &mut n, (0.0, 1.0), &tip, None) {
             c.tempo_ms = from_log(n, TIME_MS.0, TIME_MS.1);
             changed = true;
+            f.hint("delay.tempo", &fmt::time(c.tempo_ms / 1000.0));
         }
     }
     let readout = if c.mst > 0 {
