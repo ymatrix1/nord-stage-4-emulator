@@ -24,9 +24,54 @@ pub const KEY_RANGE: std::ops::RangeInclusive<u8> = 21..=108;
 /// PRD section 5 budget: CPU time of one 128-frame block at 48 kHz with all layers and FX active.
 pub const PRD_BLOCK_BUDGET_MS: f64 = 0.8;
 
+/// Which workload `ns4 bench` renders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Scenario {
+    /// 7 layers, 88 keys held, every FX rack on (the module docs).
+    #[default]
+    Worst,
+    /// Default Scene I (Organ A, Piano A, Synth A), default FX, a 10-note chord.
+    Typical,
+    /// The worst-case engine with no key held (every FX rack still runs).
+    Idle,
+}
+
+impl Scenario {
+    /// Name as given to `ns4 bench --scenario`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Worst => "worst",
+            Self::Typical => "typical",
+            Self::Idle => "idle",
+        }
+    }
+
+    /// Scenario of a command line name.
+    pub fn parse(name: &str) -> Option<Self> {
+        [Self::Worst, Self::Typical, Self::Idle]
+            .into_iter()
+            .find(|s| s.name() == name)
+    }
+
+    /// The engine of this scenario, keys already pressed.
+    pub fn engine(self, sample_rate: f32) -> Stage4Engine {
+        match self {
+            Self::Worst => {
+                let mut e = worst_case_engine(sample_rate);
+                press_all_keys(&mut e);
+                e
+            }
+            Self::Typical => typical_engine(sample_rate),
+            Self::Idle => worst_case_engine(sample_rate),
+        }
+    }
+}
+
 /// What to render.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BenchConfig {
+    /// Workload.
+    pub scenario: Scenario,
     /// Blocks excluded from timing (lazy tables, caches, voice ramp-up).
     pub warmup_blocks: usize,
     /// Timed blocks.
@@ -38,6 +83,7 @@ pub struct BenchConfig {
 impl Default for BenchConfig {
     fn default() -> Self {
         Self {
+            scenario: Scenario::Worst,
             warmup_blocks: 200,
             blocks: 2000,
             multi_out: true,
@@ -113,6 +159,19 @@ pub fn press_all_keys(e: &mut Stage4Engine) {
     }
 }
 
+/// Typical program: default layers (Organ A, Piano A, Synth A), default FX, a 10-note chord.
+pub fn typical_engine(sample_rate: f32) -> Stage4Engine {
+    let mut e = Stage4Engine::new(sample_rate);
+    for note in 55..65 {
+        e.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note,
+            velocity: 100,
+        });
+    }
+    e
+}
+
 /// FNV-1a over the bit patterns of `samples`, continuing from `hash`.
 pub fn fnv1a_f32(mut hash: u64, samples: &[f32]) -> u64 {
     for s in samples {
@@ -136,9 +195,12 @@ fn render_block(e: &mut Stage4Engine, multi: bool, bufs: &mut [[f32; BLOCK_FRAME
     }
 }
 
-/// Runs the worst-case workload and returns timing and the output hash.
+/// Runs the workload of `cfg.scenario` and returns timing and the output hash.
 pub fn run(cfg: BenchConfig) -> BenchReport {
-    run_with(cfg, |_| {})
+    match cfg.scenario {
+        Scenario::Worst => run_with(cfg, |_| {}),
+        other => run_engine(cfg, other.engine(SAMPLE_RATE)),
+    }
 }
 
 /// Like [`run`], with `setup` applied to the worst-case engine before the keys are pressed.
@@ -199,6 +261,10 @@ pub fn run_engine(cfg: BenchConfig, mut e: Stage4Engine) -> BenchReport {
 /// FX racks bypassed (reverb off, the other effects at their defaults), so they do not add up
 /// to the full figure.
 pub fn breakdown(cfg: BenchConfig) -> Vec<(String, f64)> {
+    let cfg = BenchConfig {
+        scenario: Scenario::Worst,
+        ..cfg
+    };
     let mut rows = vec![("full worst case".to_string(), run(cfg).mean_ms)];
     let fx_off = |e: &mut Stage4Engine| {
         for chain in &mut e.fx_chains {
@@ -211,31 +277,9 @@ pub fn breakdown(cfg: BenchConfig) -> Vec<(String, f64)> {
         "all FX racks and master comp off".into(),
         run_with(cfg, fx_off).mean_ms,
     ));
-    let idle = {
-        let mut e = worst_case_engine(SAMPLE_RATE);
-        let mut bufs = [[0.0f32; BLOCK_FRAMES]; 4];
-        for _ in 0..cfg.warmup_blocks {
-            render_block(&mut e, cfg.multi_out, &mut bufs);
-        }
-        let t0 = Instant::now();
-        for _ in 0..cfg.blocks {
-            render_block(&mut e, cfg.multi_out, &mut bufs);
-        }
-        t0.elapsed().as_secs_f64() * 1000.0 / cfg.blocks.max(1) as f64
-    };
+    let idle = run_engine(cfg, Scenario::Idle.engine(SAMPLE_RATE)).mean_ms;
     rows.push(("no keys held, all FX racks on (idle)".into(), idle));
-    // Typical program: default layers (Organ A, Piano A, Synth A), default FX, a 10-note chord.
-    let typical = {
-        let mut e = Stage4Engine::new(SAMPLE_RATE);
-        for note in 55..65 {
-            e.handle_midi(MidiEvent::NoteOn {
-                channel: 0,
-                note,
-                velocity: 100,
-            });
-        }
-        run_engine(cfg, e).mean_ms
-    };
+    let typical = run_engine(cfg, Scenario::Typical.engine(SAMPLE_RATE)).mean_ms;
     rows.push((
         "typical: Scene I (3 layers), 10 keys, default FX".into(),
         typical,
@@ -259,19 +303,22 @@ pub fn breakdown(cfg: BenchConfig) -> Vec<(String, f64)> {
 /// Human readable report, one metric per line (printed by `ns4 bench`).
 pub fn format_report(cfg: BenchConfig, r: &BenchReport) -> String {
     let budget = r.mean_ms <= PRD_BLOCK_BUDGET_MS;
+    let workload = match cfg.scenario {
+        Scenario::Worst => format!(
+            "7 layers (Scene II), {} keys held, 7 FX racks + master comp",
+            KEY_RANGE.count()
+        ),
+        Scenario::Idle => "7 layers (Scene II), no key held, 7 FX racks + master comp".to_string(),
+        Scenario::Typical => "Scene I (3 layers), 10 keys held, default FX".to_string(),
+    };
     format!(
-        "ns4 bench: 7 layers (Scene II), {} keys held, 7 FX racks + master comp, {} @ {} Hz, {} frame blocks\n\
+        "ns4 bench: {workload}, {} @ {} Hz, {} frame blocks\n\
          blocks timed        {}\n\
          mean / p50 / p99 / max  {:.3} / {:.3} / {:.3} / {:.3} ms per block (deadline {:.3} ms)\n\
          realtime factor     {:.2}x  (CPU load {:.1}% of one core)\n\
          PRD budget          mean <= {PRD_BLOCK_BUDGET_MS} ms: {}\n\
          output hash         {:#018x}  (finite: {}, peak {:.3})",
-        KEY_RANGE.count(),
-        if cfg.multi_out {
-            "4 outputs"
-        } else {
-            "stereo"
-        },
+        if cfg.multi_out { "4 outputs" } else { "stereo" },
         SAMPLE_RATE,
         BLOCK_FRAMES,
         r.blocks,
@@ -295,6 +342,7 @@ mod tests {
 
     fn quick() -> BenchConfig {
         BenchConfig {
+            scenario: Scenario::Worst,
             warmup_blocks: 20,
             blocks: 40,
             multi_out: true,
@@ -351,6 +399,7 @@ mod tests {
     #[test]
     fn report_text_names_the_budget_verdict() {
         let r = run(BenchConfig {
+            scenario: Scenario::Worst,
             warmup_blocks: 1,
             blocks: 2,
             multi_out: false,
@@ -358,5 +407,34 @@ mod tests {
         let text = format_report(BenchConfig::default(), &r);
         assert!(text.contains("realtime factor"));
         assert!(text.contains("PRD budget"));
+    }
+
+    #[test]
+    fn scenarios_parse_run_and_differ() {
+        for sc in [Scenario::Worst, Scenario::Typical, Scenario::Idle] {
+            assert_eq!(Scenario::parse(sc.name()), Some(sc));
+        }
+        assert_eq!(Scenario::parse("nope"), None);
+        let hash = |scenario| {
+            run(BenchConfig {
+                scenario,
+                ..quick()
+            })
+        };
+        let (worst, typical, idle) = (
+            hash(Scenario::Worst),
+            hash(Scenario::Typical),
+            hash(Scenario::Idle),
+        );
+        assert!(worst.hash != typical.hash && typical.hash != idle.hash);
+        assert!(typical.peak > 0.0 && typical.all_finite && idle.all_finite);
+        let text = format_report(
+            BenchConfig {
+                scenario: Scenario::Typical,
+                ..quick()
+            },
+            &typical,
+        );
+        assert!(text.contains("10 keys held"), "{text}");
     }
 }

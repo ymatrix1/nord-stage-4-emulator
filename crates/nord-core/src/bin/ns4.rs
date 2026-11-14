@@ -224,6 +224,14 @@ fn run_cli(args: &[String]) -> Result<String, String> {
             cfg.blocks = num("--blocks", cfg.blocks);
             cfg.warmup_blocks = num("--warmup", cfg.warmup_blocks);
             cfg.multi_out = !args.iter().any(|a| a == "--stereo");
+            if let Some(name) = args
+                .iter()
+                .position(|a| a == "--scenario")
+                .and_then(|i| args.get(i + 1))
+            {
+                cfg.scenario = nord_core::bench::Scenario::parse(name)
+                    .ok_or_else(|| format!("unknown scenario '{name}' (expected: worst | typical | idle)"))?;
+            }
             let mut out = format_report(cfg, &run(cfg));
             if args.iter().any(|a| a == "--breakdown") {
                 out.push_str("
@@ -462,7 +470,7 @@ Wrote {wav_path} ({} bytes, 32-bit float stereo)", wav.len()));
         "export-live" => nord_core::store_cli::export_live(&args[2..]),
         "backup-store" => nord_core::store_cli::backup_store(&args[2..]),
         other => Err(format!(
-            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | store-program <base> <out> | export-live <dir> <slots...> | backup-store <in.ns4b> <out.ns4b> [--program ...] [--live ...] | render-demo | bench [--blocks N] [--warmup N] [--stereo] [--breakdown] | render-patch <path>)"
+            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | store-program <base> <out> | export-live <dir> <slots...> | backup-store <in.ns4b> <out.ns4b> [--program ...] [--live ...] | render-demo | bench [--blocks N] [--warmup N] [--stereo] [--scenario worst|typical|idle] [--breakdown] | render-patch <path>)"
         )),
     }
 }
