@@ -60,6 +60,12 @@ impl SynthLayer {
             }
             _ => 1.0,
         };
+        // Pitch stick: exactly 1.0 (no powf) while the stick is centred.
+        let pitch_mod = if self.bend_cents == 0.0 {
+            pitch_mod
+        } else {
+            pitch_mod * 2.0f32.powf(self.bend_cents / 1200.0)
+        };
 
         let bank = wavetable_bank();
         let sample_sound = self.sample_sound.as_deref();
@@ -445,8 +451,14 @@ impl SynthLayer {
                     self.sample_rate,
                 )
             };
+            // Strip chain: the ARM key word carries `g(vel)` (ASSUMED linear level, `key_velocity.rs`).
+            let vel_level = if strip.is_some() && self.strip_key_velocity {
+                key_velocity_gain(v.velocity)
+            } else {
+                v.velocity
+            };
             let amp_vel = (1.0 - self.amp_velocity.clamp(0.0, 1.0))
-                + self.amp_velocity.clamp(0.0, 1.0) * v.velocity;
+                + self.amp_velocity.clamp(0.0, 1.0) * vel_level;
             let voice_gain = if dezip {
                 v.smoothed_gain(dezip_pole)
             } else {

@@ -99,6 +99,25 @@ Source: `Nord Stage 4 User Manual v1.6X-Edition-N.pdf` (local, `.reference/`), p
 
 Consequence for Jazz Guitar II (A:78): Mod 2 = `VIBE variation` is a *mono* vibe, so the hardware stereo width (0.96, coherence 0.06 at 1..2 kHz) cannot come from Mod 2; the remaining candidates are the delay feedback `CHOR variation` (stereo widening pedal) and the reverb.
 
+### 2.8 Variations, PED, TO ROTARY, GLOBAL and GROUP (implemented, `ns4-e3zs`)
+
+Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant below is ASSUMED (no firmware or recording source).
+
+| Item | Behaviour | Fields / code |
+|---|---|---|
+| Mod 1 VARIATION | Tremolo: square-like wave `tanh(6 x)/tanh(6)`; A-Pan: harder pan `tanh(3 x)/tanh(3)`; Ring mod: right carrier 90 degrees ahead (stereo) | `mod1_variation`, `fx/modulation.rs` |
+| Mod 1 PED (Wah) | Filter position = `mod1_ped_pos` (0..1) instead of the LFO | `mod1_ped`, `mod1_ped_pos` |
+| Mod 2 VARIATION | Flanger and Vibe: one shared LFO (mono); Chorus: 7 ms base, 6.5 ms depth, 0.6 wet; Phaser (Bi-Phase): feedback 0.6 instead of 0.35, zero at minimum amount | `mod2_variation` |
+| Not implemented | A-WAH and PUMP (Mod 1), SPIN (Mod 2) have no engine type yet | |
+| TO ROTARY | A Piano / Synth layer (index 2..6) with `AmpCabinet::ToRotary` bypasses the master mix: its post-fader mono sum feeds one shared rotary instance (`rotary_bus`) whose speed, drive, mic and stop settings mirror `organ_a`. Organ layers keep their built-in rotary | `engine/mod.rs`, `OrganLayer::mirror_rotary_settings`, `process_external_rotary` |
+| GROUP | `FxSharing::piano_group` / `synth_group` (source layer): `copy_all_settings_from` copies every user setting to the other layers of the section (DSP state stays per layer) | `engine/sharing.rs`, `fx/sharing.rs` |
+| GLOBAL Delay / Compressor | `FxSharing::delay_global` / `comp_global`: the source layer's settings are copied to all layers, each keeps its own instance | same |
+| GLOBAL Reverb | `FxSharing::reverb_global`: every layer's reverb is bypassed (`bypass_reverb`) and one shared reverb (`global_reverb`, settings of the source layer) runs on the summed mix after the rotary and the level faders, before the master bus | `render_frame` |
+| Master Clock division | `delay_sync_beats` (17 hardware fractions) is exposed to hosts | `fxy_delay_beats_*` |
+| Reverb BRIGHT / DARK / CHORALE | already present as `ReverbColor` (`fxsel_rev_color`) | |
+
+`Stage4Engine::apply_fx_sharing` runs at the start of `process_block` (field copies only). Callers that drive `render_frame` directly call it after changing settings. All modes default off, so default rendering is bit-identical (existing golden tests unchanged). Limitation: the TO ROTARY bus keeps its own rotor phase, independent of the organ's rotor.
+
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
 After summing all 7 active layers:
@@ -202,7 +221,7 @@ parameter set per engine mode. The engine's `0..=1` fields are the presets' `raw
 | compressor slope, log gain | slope `c[-0x17]`, `c[-0x0B]` | `0.05` (`CMP_SLOPE`), `1.0` | with `kCmpAmt` | ASSUMED (base words of the Cmp type switch not captured) |
 | `kCmpResponse` | none | the handler ignores the value (same four constants, 4 states tried) | no (engine `comp_fast` keeps its legacy meaning) | closed: no DSP effect ([fx-reverb-leslie](../research/fx-reverb-leslie.md) s4) |
 | `kRvbAmt` | send `0xC02BB44C` word `-0x1F`, dry word `-0x1E` | `x^2 (2 - x)` with `x = v/128` (1 at 127), `sqrt(1 - wet^2)` | reverb dry and send when `FirmwareFx::reverb_mix`; the reverb network itself stays the engine FDN | words VERIFIED (all 128 values), role EMPIRICAL |
-| Reverb types 0, 1 routines | module `0xC02BB54C` | `0x12417E` / `0x12435C`: fs/4 Butterworth bank, hold, second bank, `out = in c[0x15] + wet` around the core `0x123F61` | `FwRvbWrap` / `fw_rvb_mix2` (not wired: no `FirmwareFx` switch, the core is not modelled) | wrapper VERIFIED word for word given the core outputs; core structure EMPIRICAL ([fx-reverb-leslie](../research/fx-reverb-leslie.md) s5) |
+| Reverb types 0, 1 routines | module `0xC02BB54C` | `0x12417E` / `0x12435C`: fs/4 Butterworth bank, hold, second bank, `out = in c[0x15] + wet` around the core `0x123F61` | `FwRvbWrap` / `fw_rvb_mix2` (not wired: no `FirmwareFx` switch; the core has no Rust port yet) | wrapper VERIFIED word for word given the core outputs; core code VERIFIED instruction by instruction in Python (`tools/fx_model_rvbcore.py`, oracle trace compare), its pointer words and PM coefficient list open ([fx-reverb-leslie](../research/fx-reverb-leslie.md) s5, s6) |
 | `kAmpDrive`, `kAmpTypeNew` 1..6 | `c[-0x20]` of `FwAmpDrive` (`v/127`); type words `c[-0xD..-0xB]`, sections `c[7..0xB]`, `c[0x10..0x14]` (`fx/fw_amp_types.rs`, `docs/research/data/fx-amp-types.csv`) | `v/127`; type = amp mode (1 Twin, 2 Twin II, 3 JC, 4 JC II, 5 Small, 6 Small II) | layer amp when `FirmwareFx::amp` (`fx/fw_amp_stage.rs`, tables `fx/fw_drive_tables.rs`): replaces the engine `tanh` drive and RBJ cabinet for those six modes, 4 frame latency; the firmware cabinet FIR and the organ tone routines are not modelled, so the engine EQ and compressor still follow. Vox with the stage alone: mid +8.0 to -2.5 dB but presence -4.9 to -9.6 dB and RMS +11.4 dB, so it stays opt-in ([fx-type-map](../research/fx-type-map.md) s8) | words, tables and algorithm VERIFIED against the oracle (`tests_amp_golden.rs`, worst 1.4e-6 and 1.7e-4 of the peak); cabinet and level staging open |
 | `kAmpTreble`, `kAmpBass` | `F c[-0x1B]`, `E c[-0x1C]`, `A c[-0x20]`, `a c[-0x14]` | 13-point tables, linear in the word between points | fill only (`set_tone_stack`): the other tone-stack words come from the Amp type switch | words VERIFIED at the 13 counts, interpolation and unit tables (piano) EMPIRICAL |
 | `kAmpMid`, `kAmpMidFreq` | `C D B` and `0xC044398C` words | not mapped | no | open |

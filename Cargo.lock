@@ -2224,6 +2224,7 @@ dependencies = [
  "image",
  "midir 0.10.4",
  "nord-core",
+ "nord-panel",
  "serde",
 ]
 

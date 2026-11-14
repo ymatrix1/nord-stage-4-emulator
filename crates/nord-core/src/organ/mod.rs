@@ -47,6 +47,8 @@ mod farfisa_golden;
 #[cfg(test)]
 mod farfisa_source_tests;
 #[cfg(test)]
+mod pipe_lines;
+#[cfg(test)]
 mod vox_golden;
 #[cfg(test)]
 mod weight_tests;
@@ -367,7 +369,10 @@ impl OrganLayer {
                 dry = 0.6 * dry + 0.3 * self.farf_bp1_state[0] + 0.25 * self.farf_bp2_state[0];
             }
             OrganModel::Pipe1 | OrganModel::Pipe2 => {
-                // Pipe gentle high-frequency damping
+                // ASSUMED: flat output gain 0.92 (a textbook trim, no firmware source). It shapes
+                // no frequency: the bank + mix path matches the oracle to 0.00 dB per line on three
+                // chords (`pipe_lines.rs`), so it is not the cause of the darkness against the video
+                // (`docs/research/pipe-video-gap.md`).
                 dry *= 0.92;
             }
         }

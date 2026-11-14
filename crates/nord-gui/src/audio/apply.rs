@@ -7,6 +7,11 @@ use nord_core::organ::ScannerMode;
 /// Applies a single `AudioCommand` to the `Stage4Engine` and `master_vol`.
 pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_vol: &mut f32) {
     match cmd {
+        AudioCommand::Organ(e) => e.apply(engine),
+        AudioCommand::Piano(e) => e.apply(engine),
+        AudioCommand::Synth(e) => e.apply(engine),
+        AudioCommand::Fx(e) => e.apply(engine),
+        AudioCommand::Program(e) => e.apply(engine),
         AudioCommand::Midi(ev) => engine.handle_midi(ev),
         AudioCommand::SetMasterVolume(v) => *master_vol = v.clamp(0.0, 1.0),
         AudioCommand::SetDrawbars(d) => engine.organ_a.drawbars = d,
