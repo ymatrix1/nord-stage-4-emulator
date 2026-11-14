@@ -96,6 +96,16 @@ pub fn apply_rotary_unity(engine: &mut Stage4Engine, on: bool) {
     }
 }
 
+/// Rescales the program's rotary drive from the preset unit (0..10, `cbin/organ_preset.rs`) to the
+/// engine unit (0..1: `rotary.rs` uses `gain = 1 + 3 drive`). The default program path passes the
+/// preset unit through unchanged, so a stored drive of 2.44 reaches the tube law as 2.44 (gain
+/// 8.3) instead of 0.244 (gain 1.73): EMPIRICAL, see `docs/research/b3-rotary.md`.
+pub fn apply_rotary_scaled(engine: &mut Stage4Engine) {
+    for organ in [&mut engine.organ_a, &mut engine.organ_b] {
+        organ.rotary_drive = (organ.rotary_drive / 10.0).clamp(0.0, 1.0);
+    }
+}
+
 /// Applies the opt-in firmware switches to every layer of `engine`.
 pub fn apply_firmware_options(
     engine: &mut Stage4Engine,
@@ -160,6 +170,7 @@ impl Default for FirmwareOptions {
             piano_firmware_level: true,
             piano_bus_scale: false,
             measured_laws: false,
+            firmware_routing: false,
         }
     }
 }
@@ -334,6 +345,16 @@ impl FirmwareOptions {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rotary_drive_scaled_maps_the_preset_unit_to_the_engine_unit() {
+        let mut e = Stage4Engine::new(48_000.0);
+        e.organ_a.rotary_drive = 2.44;
+        e.organ_b.rotary_drive = 12.0;
+        apply_rotary_scaled(&mut e);
+        assert!((e.organ_a.rotary_drive - 0.244).abs() < 1e-6);
+        assert_eq!(e.organ_b.rotary_drive, 1.0, "clamped to the engine range");
+    }
+
     use super::*;
 
     fn args(v: &[&str]) -> Vec<String> {

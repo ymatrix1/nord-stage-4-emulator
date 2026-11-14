@@ -212,6 +212,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [ ] Firmware map from the `kKbZone` code to the key range (OQ23), then flip `FirmwareRouting` to the default with a `render_hash` re-baseline
 - [ ] SY / SMP equality, output-stage level for the B3 clip, Vox level word, Farfisa state; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 - [x] B3 clip gap decomposed: layer B (section II off in the program) and notes outside the zone cause the sub and most of the RMS gap; Farfisa sounds in the oracle with the key-down words ([organ-output-level](research/organ-output-level.md))
+- [x] Engine rotary drive scale: preset unit 0..10 reaches the tube law unscaled (gain 8.3 instead of 1.73); opt-in `--rotary-drive scaled` ([b3-rotary](research/b3-rotary.md)); B3 clip with routing: presence -12 dB still fails, flip not made
 - [ ] Engine: honour section I / II and zone flags for organ layers, then re-run `emu_vs_hw.py --only organ_b3`; Farfisa processor port; layer level law; Vox level word; real flash reads (FAT sector reads of the `.ns4b` library: sample maps, stroke tables) instead of zeros
 
 ### 7b.3 Organ
