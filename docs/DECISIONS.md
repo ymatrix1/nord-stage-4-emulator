@@ -42,6 +42,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
 | [D32](#d32-fx-mod-2-chor-uses-the-firmware-routines-behind-firmwarefxmod2) | 2026-11-14 | FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2` | accepted |
 | [D40](#d40-fx-mod-2-phas-0-and-flang-use-the-firmware-routines-behind-firmwarefxmod2-ens-and-spin-are-verified-and-ported-only-delays-are-rescaled-to-the-engine-rate) | 2026-11-14 | FX Mod 2: PHAS 0 and FLANG use the firmware routines behind `FirmwareFx::mod2`; ENS and SPIN are verified and ported only; delays are rescaled to the engine rate | accepted |
+| [D41](#d41-the-b3-bass-stage-is-wired-opt-in-the-generator-weights-follow-a-table-of-held-writes-no-default-flips) | 2026-11-14 | The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips | accepted |
 | [D35](#d35-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
 
 ---
@@ -503,3 +504,13 @@ Velvet Grand (level 127) reads same flag on.
 - **Why:** The routines reproduce the oracle; the laws are exact at the captured samples. ENS output is silent and SPIN diverges with the words that the captures provide, so a stage would be a guess; PHAS 1 has 2 of about 20 words. Rescaling the delay keeps the ms and Hz of the hardware at 44.1 / 48 / 96 kHz.
 - **Alternatives:** Interpolate with the quadratic closed forms where they exist (kept the samples: one mechanism for all types); wire SPIN with an assumed rotor driver (rejected: unstable); rescale the filter coefficients too (rejected: needs a redesign of the all-pass and biquad words, not data).
 - **Impact:** `FirmwareFx::ALL` changes FLANG and PHAS 0 programs (4 frame latency); `DEFAULT` and `render_hash` unchanged. Types 1, 8 to 11 stay on the engine. OQ21 lists what remains (ENS / SPIN / PHAS 1 instance words, Mod 1 RM / A-WAH / PUMP).
+
+### D41. The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/organ-b3-bass-wired`; evidence [organ-farfisa-bass](research/organ-farfisa-bass.md) s12)
+- **Context:** The B3 Bass ring is `wheel x generator weight` (`DM 0x95122..`), and the weight shrinks on wheels shared by several keys. The processor part (windows, `G`, line gain) was already within 1.45 dB (s11). D22 allows a default flip only after an end-to-end check.
+- **Decision:** (1) Model the weight of a wheel as `T[note][n]`, `n` = held writes on the wheel (drawbar and percussion items of every held key), table derived from the real ARM key-down (`bass-gen-weights.csv`, `organ/b3_bass_gen.rs`); key-up removes the writes of the key. (2) Wire the stage opt-in (`OrganLayer::set_b3_bass_processor`, `--b3-bass-processor on`, `organ/b3_bass_stage.rs`): wheel bus x coefficient per wheel and window, two 511-tap FIRs from the measured window gains, output `1 - 0.84 G`. (3) Share the FIR design with the Farfisa stage (`gain_fir.rs`). (4) Flip no default.
+- **Why:** The rule is bit exact over 297 replayed writes of 9 sequences; the chord 60 64 67 is +1.1 to +2.5 dB per oracle line (not within 1 dB); the key tables are the `888888888` key-down and the real default program writes smaller window steps; the B3 clip of the presence gap plays the B3 model, so no hardware clip of a B3 Bass program exists to compare.
+- **Alternatives:** Find a closed form of `T` first (rejected: five fit families leave 0.3 to 1.3 % residual, the table is exact); flip the Bass default on the chord check (rejected: 2.5 dB at slot 48 and no clip); wait for the bit-exact `0x122296` model (rejected: the opt-in stage is useful now and does not touch defaults).
+- **Impact:** `render_hash` unchanged (flag default off, no code path changes when off). The Farfisa FIR design moves to `gain_fir.rs` with identical numerics. Open: drawbar and percussion dependence of the key tables, bit-exact processor, closed form of `T`, `G` resync after key-up, a B3 Bass clip.

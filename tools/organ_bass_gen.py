@@ -46,7 +46,7 @@ def split_writes(words: list[tuple[int, int]]) -> list[tuple[int, int]]:
 def build_tables(
     per_key: dict[int, list[tuple[int, int]]],
 ) -> tuple[dict[int, list[int]], dict[int, Counter]]:
-    """`(T, counts)`: `T[note][n]` bits from an ascending run, `counts[key][note]` writes per key."""
+    """`(T, counts)`: `T[note][n]` bits of an ascending run and the writes per key and wheel."""
     table: dict[int, list[int]] = defaultdict(list)
     counts: dict[int, Counter] = {}
     for key in sorted(per_key):

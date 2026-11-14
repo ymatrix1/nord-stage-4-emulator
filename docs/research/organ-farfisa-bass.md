@@ -235,7 +235,7 @@ Tools: `tools/organ_bass_gen.py capture` (ARM key-down of keys 24..108, drawbars
 | Key-up, octave shift, ring-down | tests `release_rings_down_to_silence_and_stays_finite`, `octave_shift_registers_the_transposed_key_and_releases_it` |
 | Default render | `render_hash` unchanged (flag off by default, no code path changes when off) |
 
-**Clip comparison and default (D22, D39).** The B3 clip of [organ-presence-gap](organ-presence-gap.md) (`B3 Chords n Solo`) plays the **B3** model, not B3 Bass: the stage requires `b3_bass_mode`, so the bass band delta of `emu_vs_hw.py` with and without `--b3-bass-processor on` is **0.00 dB by construction**; no hardware clip of a B3 Bass program is available, and the chord check above is 1.1 to 2.5 dB. No default is flipped.
+**Clip comparison and default (D22, D41).** The B3 clip of [organ-presence-gap](organ-presence-gap.md) (`B3 Chords n Solo`) plays the **B3** model, not B3 Bass: the stage requires `b3_bass_mode`, so the bass band delta of `emu_vs_hw.py` with and without `--b3-bass-processor on` is **0.00 dB by construction**; no hardware clip of a B3 Bass program is available, and the chord check above is 1.1 to 2.5 dB. No default is flipped.
 
 Still open: the stage does not model the drawbar and percussion settings (the key tables are the `888888888` key-down; the real default program writes smaller window steps, so levels differ), the bit-exact `0x122296` model (with the 1.45 dB residual of the processor part), the scanner inside the processor, the closed form of `T`, the `G` resync after a key-up, and a B3 Bass hardware clip.
 
