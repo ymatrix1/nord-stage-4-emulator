@@ -130,12 +130,7 @@ impl SynthUi {
             (Btn::OctaveDown | Btn::OctaveUp, _) => {
                 let dir = if b == Btn::OctaveUp { 1 } else { -1 };
                 if shifted {
-                    let z = crate::panel::kb_zone::step(self.layer().kb_zone, dir > 0);
-                    self.layer_mut().kb_zone = z;
-                    self.out.push(SynthEdit::Zone {
-                        layer: self.focus.min(2) as u8,
-                        leds: crate::panel::kb_zone::leds(z),
-                    });
+                    self.step_zone(dir > 0);
                 } else {
                     let o = (i32::from(self.layer().octave) + dir).clamp(-3, 3) as i8;
                     self.edit(Scope::Layer, SynthParam::Octave(o), |l| l.octave = o);

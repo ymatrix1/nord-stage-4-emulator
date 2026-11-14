@@ -163,17 +163,18 @@ pub(super) fn render_strip(
                 };
                 *flag = !*flag;
                 let on = *flag;
-                audio.send_command(AudioCommand::Organ(if l == 0 {
-                    OrganEdit::Sustped {
-                        layer: focus as u8,
-                        on,
+                for t in state.edit_layers(focus, 2) {
+                    if l == 0 {
+                        state.organ_ui.sustped[t] = on;
+                    } else {
+                        state.organ_ui.pstick[t] = on;
                     }
-                } else {
-                    OrganEdit::Pstick {
-                        layer: focus as u8,
-                        on,
-                    }
-                }));
+                    audio.send_command(AudioCommand::Organ(if l == 0 {
+                        OrganEdit::Sustped { layer: t as u8, on }
+                    } else {
+                        OrganEdit::Pstick { layer: t as u8, on }
+                    }));
+                }
             }
             _ => {}
         }
@@ -193,12 +194,14 @@ pub(super) fn render_strip(
         );
         let mut lvl = state.organ_layer_level(l);
         if level_fader(ui, rc(fader_id), fader_id, &mut lvl) {
-            if l == 0 {
-                state.organ_a_level = lvl;
-            } else {
-                state.organ_b_level = lvl;
+            for t in state.edit_layers(l, 2) {
+                if t == 0 {
+                    state.organ_a_level = lvl;
+                } else {
+                    state.organ_b_level = lvl;
+                }
+                send_layer(state, audio, t);
             }
-            send_layer(state, audio, l);
         }
         level_ladder(
             ui,
@@ -238,19 +241,23 @@ pub(super) fn render_strip(
         match gesture_button(ui, &mut state.organ_ui.trackers, rc(id), id, true, face) {
             Some(Trigger::Primary) => {
                 let v = step_octave(state.organ_octave_of(focus), up);
-                state.set_organ_octave(focus, v);
-                audio.send_command(AudioCommand::Organ(OrganEdit::Octave {
-                    layer: focus as u8,
-                    shift: v,
-                }));
+                for t in state.edit_layers(focus, 2) {
+                    state.set_organ_octave(t, v);
+                    audio.send_command(AudioCommand::Organ(OrganEdit::Octave {
+                        layer: t as u8,
+                        shift: v,
+                    }));
+                }
             }
             Some(Trigger::Shifted) => {
-                let z = &mut state.organ_ui.kb_zone[focus];
-                *z = kb_zone::step(*z, up);
-                audio.send_command(AudioCommand::Organ(OrganEdit::Zone {
-                    layer: focus as u8,
-                    leds: kb_zone::leds(*z),
-                }));
+                let z = kb_zone::step(state.organ_ui.kb_zone[focus], up);
+                for t in state.edit_layers(focus, 2) {
+                    state.organ_ui.kb_zone[t] = z;
+                    audio.send_command(AudioCommand::Organ(OrganEdit::Zone {
+                        layer: t as u8,
+                        leds: kb_zone::leds(z),
+                    }));
+                }
             }
             _ => {}
         }

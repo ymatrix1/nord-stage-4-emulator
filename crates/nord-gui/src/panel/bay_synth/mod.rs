@@ -64,6 +64,8 @@ pub(super) fn render_bay_synth(
     let out = state.synth_ui.sync_legacy(legacy_of(state));
     store_legacy(state, out);
     state.synth_ui.begin_frame();
+    // SECTION EDIT (manual p.43): every edit of this bay reaches all three layers.
+    state.synth_ui.section_edit = state.program_ui.section_edit_active();
     // Sample Library: the dials browse the backup's samples; picks go out as load requests.
     state
         .synth_ui

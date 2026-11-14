@@ -120,8 +120,15 @@ fn render_vibrato(
     ) {
         let next = VIB_TYPES[cycle(vib_index(ty), VIB_TYPES.len(), true)];
         let on = state.organ_vib_of(focus).1;
-        state.set_organ_vib(focus, next, on);
-        send_scanner(state, audio, focus);
+        for l in state.edit_layers(focus, 2) {
+            let own_on = if l == focus {
+                on
+            } else {
+                state.organ_vib_of(l).1
+            };
+            state.set_organ_vib(l, next, own_on);
+            send_scanner(state, audio, l);
+        }
     }
     let cur = vib_index(ty);
     for i in 0..6 {
@@ -146,8 +153,11 @@ fn render_vibrato(
             gesture_button(ui, &mut state.organ_ui.trackers, rect, id, false, face)
         {
             let ty = state.organ_vib_of(l).0;
-            state.set_organ_vib(l, ty, !on);
-            send_scanner(state, audio, l);
+            for t in state.edit_layers(l, 2) {
+                let own_ty = if t == l { ty } else { state.organ_vib_of(t).0 };
+                state.set_organ_vib(t, own_ty, !on);
+                send_scanner(state, audio, t);
+            }
         }
         tag(painter, rect, text, 6.5);
     }
