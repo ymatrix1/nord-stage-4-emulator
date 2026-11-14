@@ -211,3 +211,24 @@ in [GUI testing](../gui-testing.md)). Layout decisions it led to:
   the VIBRATO heading (SELECT).
 - Two-word percussion names (`VOLUME SOFT`, `HARMONIC 3RD`) stack when the neighbour is closer
   than the full name.
+
+### Round 2: fader caps, LEDs, stacked legends, comparison with the photos
+
+Added rules `F`, `E`, `T`, `V`, `M` ([GUI testing](../gui-testing.md)). Changes: drawbar footage
+numbers print 13 px below the slot (the cap and its shadow reach 6 px past it); state LEDs of Shift
+legends sit before the text (photo: `o SUSTPED`, `o CLOSE MIC`); stacked lines use 9.5 px pitch;
+the Program buttons 5-8 and MON/COPY moved 3 px down, the Piano zone LEDs 3 px down, the split LEDs
+2 px up (`layout_tweaks.rs`; control rectangles in `nord-panel` are unchanged); the layer-strip
+`FX FOCUS` LED now has its caption (left of the LED, over the free strip above the faders); the
+Effects amp RES trimmer has a `RES` name to its right.
+
+Remaining differences against `.reference/crops` (kept: legibility over fidelity, or out of scope):
+
+| Section | Photo | Emulator |
+|---|---|---|
+| Organ | bold caps, bass/str names over each drawbar, 1-8 numerals beside the ladders, group frames (ORGAN MODEL, VIB/CHORUS, B3 PERCUSSION), `C2 V3 C3` matrix | plain regular text; no per-drawbar names or numerals; no group frames; LED column per model |
+| Piano | ACOUSTICS / UNISON / KB TOUCH / DYN COMP titles with numbered LEDs, PIANO SELECT box always visible, TIMBRE listed BRIGHT, MID, SOFT with DYNO1/2 | no titles, select box only as overlay, TIMBRE listed SOFT, MID, BRIGHT; SOFT REL / STR RES names are inside the buttons |
+| Synth | MODE, ARPEGGIATOR/GATE, VOICE, VIBRATO, LFO, OSCILLATORS, FILTER, AMP, UNISON framed boxes with 0-10 numerals; INFO / LIST / LIST under the three knobs | only the heading text; no numerals; the three OLED knobs have no name |
+| Effects | MOD 1, MOD 2, DELAY, COMP, REVERB, AMP SIM/EQ boxes, scale numerals, variation lists | one grid of knobs and buttons, GROUP / MST CLK sub-legends, no boxes or numerals |
+| Master / Program | ROTARY SPEAKER box in the master column, MORPH ASSIGN / SPLIT / MST CLK / TRANSP / PRESET LIBRARY / PROGRAM boxes | rotary box only; other legends plain; dimmed legends are grey 150 on red |
+| Keybed | keys only | keys only, split LEDs as unlabelled dots at the top edge |

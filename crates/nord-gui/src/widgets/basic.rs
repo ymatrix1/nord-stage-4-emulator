@@ -55,6 +55,8 @@ pub fn label_fit(
 
 /// Draws a round indicator LED with a dark bezel, 3D glint, and realistic bloom.
 pub fn led(p: &Painter, c: Pos2, on: bool, col_on: Color32, col_off: Color32) {
+    #[cfg(test)]
+    super::probe::led(p, c, 4.5);
     p.circle_filled(c, 4.5, Color32::from_rgb(14, 16, 19));
     p.circle_filled(c, 3.4, if on { col_on } else { col_off });
     if on {
