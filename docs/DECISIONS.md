@@ -30,6 +30,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
 | [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
 | [D26](#d26-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
+| [D27](#d27-the-smp-post-stage-is-unity-the-piano-defaults-stay-until-the-receiver-is-found) | 2026-11-14 | The SMP post stage is unity (`bus * 2^-29`); piano defaults stay until the receiver is found | accepted |
 
 ---
 
@@ -331,3 +332,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
 - **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 on an untraced path); flip the bus scale (0.83 dB on an assumption, and the true receiver scale is unknown by up to 12 dB).
 - **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
+
+### D27. The SMP post stage is unity; the piano defaults stay until the receiver is found
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/piano-bus-gain-run`; evidence [piano-bus-convention](research/piano-bus-convention.md) section 2b)
+- **Context:** OQ20 needed the real gain of the SMP post stage (`0x1C0918..0x1C0A70`) and the receiver convention of its serial ring before `firmware_bus_scale` or `firmware_layer_law` could become defaults (D22, D24, D26).
+- **Decision:** Run the whole audio interrupt in the oracle (`sharc-ref` `irq ... break=PC` and `resume`, `tools/oracle_scenarios/smp_post_stage.scn`). Measured: with the ARM gate words open the post stage is unity, `ring = bus * 2^-29` (a `2^30` stroke is `2.0`), with a 100-interrupt `0.99 / 0.01` fade. `firmware_bus_scale` and `firmware_layer_law` stay opt-in; no default, `render_hash` or GUI changes.
+- **Why:** The gain of the SMP side is now verified, but the end-to-end level also needs the receiver of the ring (FX or PNO SPORT input and the master scale to the codec), which was not found, and the layer level word was not traced to the voice gains (`0xC023195C`). D22 asks for end-to-end verification.
+- **Alternatives:** Flip `firmware_bus_scale` now (the SMP side is known, the receiver is not: up to 12 dB of uncertainty remains); flip the layer law (untraced path).
+- **Impact:** None on rendering. The oracle harness gains `break=PC`, `resume` and `NS4_IRQ_TRACE` for the next interrupt-level experiments.

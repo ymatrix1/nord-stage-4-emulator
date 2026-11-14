@@ -28,7 +28,23 @@ store floats at DM(I2) = 0xB2000 / 0xB2014, 2 frames per interrupt           EMP
 serial port transmit, 32-bit words (DM 0x0C00 = 0x020C21F0)                  EMPIRICAL (listing)
 ```
 
-The ring words stayed zero in a `sharc-ref` run (`run 0x1C0915`, bus words 2^30 preset in 24 words, flags `DM(0xB2031)`, `DM(0xB2032)`, `DM(0x5201)` set): the ISR sets up registers (`I1`, `I5` and the filter state pointers) before `0x1C0915` that the call does not reproduce, so no gain number was measured. Next step: run the whole audio interrupt (`irq 17`) with a playing voice whose bus pointer is `0x9404E` and the flags the DMA ISR sets.
+The ring words stayed zero in a `sharc-ref` run (`run 0x1C0915`, bus words 2^30 preset in 24 words, flags `DM(0xB2031)`, `DM(0xB2032)`, `DM(0x5201)` set): the ISR sets up registers (`I1`, `I5` and the filter state pointers) before `0x1C0915` that the call does not reproduce, so no gain number was measured. That `run` failed because the post stage keeps its gains in DM words the ARM writes (below). The whole audio interrupt now runs in the oracle (section 2b).
+
+## 2b. Post stage run live (VERIFIED)
+
+`sharc-ref` got `irq VECTOR [STEPS] break=PC` (stop before `PC`, interrupt still in service) and `resume` (finish it), so the bus can be fed between the voice loop and the post stage (`tools/oracle_scenarios/smp_post_stage.scn`; with a playing voice the bus is `DM(0x9404E..)` and survives the interrupt, so the voice route and this one agree word for word: a real Bright Grand stroke, bus pointer `0x9404E`, gives the same words as with a private bus). `NS4_IRQ_TRACE=1` prints the visited pc ranges of every interrupt (the post stage `0x1C0912..0x1C0A61` runs on every audio interrupt).
+
+| Item | Result | Tag |
+|---|---|---|
+| Image defaults | Ring stays exactly 0: the post stage is gated by DM words the image zeroes. Poking every word `0x94000..0x940AF` alone found six that open it: `0x9403E, 0x94040, 0x94042, 0x94044, 0x94046, 0x94048` (each an `x`/`y` float pair `+1`). `0x9403E, 0x94042, 0x94046` are the words the ARM writes as `1.0` for the piano ids (`Edt_Pno_kPosStatus` and friends, [arm-organ-messages](arm-organ-messages.md)); `0x94040, 0x94044, 0x94048` are their one-pole states (`state = 0.99 state + 0.01 gate`, per interrupt) | VERIFIED (run, `smp_post_stage.scn`) |
+| Which bus word reaches which ring word | A single bus word `2^30` (float `2.0`): `DM(0x9404E)` -> ring `0xB2000`, `0x9404F` -> `0xB2001`, `0x94051` -> both, `0x94054` -> `0xB200A`, `0x94055` -> `0xB200B`; the words `0x94050, 0x94052, 0x94053` do not reach it. So the 4 frames of one interrupt are `0x9404E + 6 j` (L, R), 2 of them per ring half | VERIFIED (run) |
+| Gain, steady state | Gate open and bus words `2^29` (float `1.0`) held on `0x9404E`, `0x9404F` for 300 interrupts: ring `0xB2000` reads `0.0092, 0.0968 (ISR 10), 0.751 (ISR 149), 0.938 (ISR 299)` and approaches 1.0 as roughly `1 - 0.99^n` (0.951 expected at 299, 0.938 read): the post stage is **unity**, `ring = bus * 2^-29` after the gain fade (time constant 100 interrupts) | VERIFIED (run) |
+| Gate closed | Ring `0.0001, 0.0004, 0.0008, ...` (`ctl only`): the same `0.99 / 0.01` fade from 0, so a stroke started after a long silence fades in over about 100 interrupts | VERIFIED (run) |
+| Overflow | Two bus words are added as integers (`DM(I0-32) + DM(I1-13)`, words `0x9404E + 0` and `+ 3`); two words of `2^30` wrap to negative. A real stroke never gets there (Bright Grand at full gain peaks near `2^28`) | VERIFIED (run) |
+| Verdict | The bus-to-ring scale is exactly `2^-29` (a full-scale `2^30` stroke is `2.0`), no further gain on the path was seen (`DM(0x94098) = 1.0` image value was left at its default; the trailing 0.01-weight terms are the fade) | VERIFIED |
+
+Not reached in the time box: the receiver of the ring (the SPORT receive buffer of FX or PNO), so the `1.0 = full scale` question of the master stage, and the `0xC023195C` slew trace stay open.
+
 
 ## 3. Layer level run (VERIFIED)
 
@@ -45,7 +61,7 @@ Not worked on in this pass (time box); the listing facts of [smp-voice](smp-voic
 
 ## Decision
 
-D26 (opt-in layer law; defaults unchanged). `firmware_bus_scale` stays opt-in.
+D26 (opt-in layer law; defaults unchanged), D27 (post stage measured unity; `firmware_bus_scale` stays opt-in).
 
 ## Implications
 
@@ -54,7 +70,7 @@ D26 (opt-in layer law; defaults unchanged). `firmware_bus_scale` stays opt-in.
 
 ## Follow-ups
 
-1. Run the whole SMP audio interrupt with a playing voice and read the ring (needs the DMA-ISR flags): gives the exact bus-to-ring gain of the post stage (including the one-pole sections).
+1. Done (section 2b): the post stage is unity, `ring = bus * 2^-29`.
 2. Find the SPORT receive buffer of the FX or PNO core that carries the SMP stream and the first float multiply on it (the input trim), then the output stage to the codec.
 3. Trace `0xC023195C` to the SMP record gain writes to prove (or refute) that the layer level word scales the piano voice gains; then flip `firmware_layer_law` by default (D22).
 4. SMP slew time constant, stream start/end history, damper-down strokes (section 4).
