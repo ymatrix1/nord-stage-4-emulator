@@ -68,13 +68,13 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
 | **Total** | | | | | | **274** |
 
-By binding: `Bound` 141, `UiOnly` 57, `Unsupported` 76. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
+By binding: `Bound` 141, `UiOnly` 58, `Unsupported` 75. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 76 controls. Morphable: 35.
 
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
 ## Gap list
 
-The old code-review gap list is replaced by the 76 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the 75 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 5b. Behaviour layer
 
@@ -113,7 +113,7 @@ What would confirm or replace the table: a higher-resolution front photo (at lea
 
 ## 7b. Engine bindings (`engine:<path>`)
 
-A control that has no host parameter but acts on the engine through the panel is `Bound("engine:<path>")`, as in `menus/`. `inventory/tests.rs` accepts the id when each dot-separated segment is a public field (`pub seg:`) or method (`pub fn seg(`) in the engine sources it lists (`engine/mod.rs`, `engine/zone_assign.rs`, `morph.rs`, `synth/sound_init.rs`). Used by `synth.sound_init` (`engine:synth_a.sound_init`). Rewired by the Synth / Effects bays: `synth.sound_init`, `reverb.variation` (`fxz_rev_var_{n}`) and the new `mod1.mst_clk` (`fxz_mod1_beats_{n}`, a Shift function of the Mod 1 RATE knob, shared rectangle). The three Synth OLED dials stay `Unsupported` in the inventory although the pages now work: one dial maps to many host ids, so it has no single binding.
+A control that has no host parameter but acts on the engine through the panel is `Bound("engine:<path>")`, as in `menus/` (the menu model's own totals, 111 bound / 11 `UiOnly` / 7 `Unsupported`, are in `midi-and-control.md` section 5; the inventory counts above are panel controls only and do not change with the menu bindings). `inventory/tests.rs` accepts the id when each dot-separated segment is a public field (`pub seg:`) or method (`pub fn seg(`) in the engine sources it lists (`engine/mod.rs`, `engine/zone_assign.rs`, `morph.rs`, `synth/sound_init.rs`). Used by `synth.sound_init` (`engine:synth_a.sound_init`). Rewired by the Synth / Effects bays: `synth.sound_init`, `reverb.variation` (`fxz_rev_var_{n}`) and the new `mod1.mst_clk` (`fxz_mod1_beats_{n}`, a Shift function of the Mod 1 RATE knob, shared rectangle). The three Synth OLED dials stay `Unsupported` in the inventory although the pages now work: one dial maps to many host ids, so it has no single binding.
 
 ## 8. Standalone Program area and keybed (`crates/nord-gui`, B8d / B8g)
 

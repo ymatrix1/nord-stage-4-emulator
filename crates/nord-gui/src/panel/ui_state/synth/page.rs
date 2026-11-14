@@ -94,17 +94,10 @@ const fn dim(label: &'static str, why: &'static str) -> Option<DialDef> {
     })
 }
 
-const NO_LIBRARY: &str =
-    "Sample Library browsing is not wired to the panel dials; load a .nsmp4 from the library";
-
 /// Dial table: `[left, middle, right]`, `None` = the dial is unused on this page.
 pub fn dial_defs(page: SynthPage, mode: SynthOscMode) -> [Option<DialDef>; 3] {
     match page {
-        SynthPage::Waveform if mode == SynthOscMode::Sample => [
-            d("BRIGHT"),
-            dim("CAT", NO_LIBRARY),
-            dim("SAMPLE", NO_LIBRARY),
-        ],
+        SynthPage::Waveform if mode == SynthOscMode::Sample => [d("BRIGHT"), d("CAT"), d("SAMPLE")],
         SynthPage::Waveform => [d("TYPE"), d("CAT"), d("WAVE")],
         SynthPage::FilterType => [d("TYPE"), d("KBD TRK"), d("DRIVE")],
         SynthPage::EnvOsc | SynthPage::EnvFilter | SynthPage::EnvAmp => {
@@ -169,7 +162,7 @@ mod tests {
         let s = dial_defs(SynthPage::Waveform, SynthOscMode::Sample);
         assert_eq!(s.map(|x| x.unwrap().label), ["BRIGHT", "CAT", "SAMPLE"]);
         assert!(s[0].unwrap().unsupported.is_none());
-        assert!(s[1].unwrap().unsupported.is_some());
+        assert!(s.iter().flatten().all(|x| x.unsupported.is_none()));
     }
 
     #[test]

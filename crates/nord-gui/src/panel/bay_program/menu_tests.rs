@@ -136,6 +136,15 @@ fn every_page_of_every_menu_renders_all_its_items() {
         assert_eq!(p.ui.screen, Screen::Menu(m));
         for page in 0..n {
             let model = pages_of(m.model())[page];
+            if m == MenuId::Organize && page == 0 {
+                // Dedicated Organize page: location row, choice row, Swap/Move/Ok/Undo soft buttons.
+                let t = p.text();
+                assert_eq!(t.sub, "1/2 Program Organize");
+                assert_eq!(t.soft, ["Swap", "Move", "Ok", "Undo"]);
+                assert!(t.rows[0].starts_with(">A:11"), "{:?}", t.rows);
+                p.page_up(1);
+                continue;
+            }
             let mut rows = 0;
             let blocks = model.items.len().div_ceil(p.ui.menu.block_size());
             for _ in 0..blocks {
@@ -164,13 +173,13 @@ fn every_page_of_every_menu_renders_all_its_items() {
 fn unsupported_items_render_dimmed_with_their_bean() {
     let mut p = Panel::new();
     p.open(3); // Organize
+    p.page_up(1); // Preset Organize: still a gap; Program Organize is a dedicated page
     let t = p.text();
     assert!(t
         .rows
         .iter()
         .all(|r| r.starts_with(DIM) && r.contains("ns4-")));
     assert_eq!(p.dial(1), 0, "nothing to edit");
-    p.page_up(1);
     p.soft(1);
     assert_eq!(p.ui.message.as_ref().unwrap().0, "Not supported yet");
 }

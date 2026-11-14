@@ -19,16 +19,20 @@ const fn pat(len: u8, steps: [u8; 16]) -> GatePattern {
     GatePattern { len, steps }
 }
 
-/// ASSUMED: the factory pattern presets are not decoded from firmware. These eight are plausible
-/// simple and syncopated rhythms (2..16 steps, as the manual's Length dial allows); confirm by
-/// stepping the hardware Preset dial and noting each pattern's grid.
+/// ASSUMED: the factory pattern presets (hardware `Edt_Syn_kArpPtnPreset`, 0..28 = 29 presets) are
+/// not stored in a patch and the firmware table was not located (`docs/research/synth-arp-patterns.md`),
+/// so this list is not the hardware list. Slots 3 to 5 use rhythms that recur unedited in the
+/// factory backup (EMPIRICAL as rhythm shapes, not as preset identities): `E..E..E..` (9 steps, 3
+/// programs), `EEE.E.EEE.E.` (12 steps, 4 programs) and `.EEE` (4 steps, 3 programs; reproduce with
+/// `python tools/ns4_arp_patterns.py <backup>.ns4b`). The gate length of an "on" step stays 4
+/// eighths: which of the hardware gate codes `E q Q` is which length is unmeasured.
 pub const PATTERN_PRESETS: [GatePattern; PATTERN_PRESET_COUNT] = [
     pat(4, [4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     pat(4, [0, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     pat(4, [6, 2, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(8, [4, 4, 0, 4, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(4, [3, 3, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    pat(8, [4, 0, 0, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    pat(9, [4, 0, 0, 4, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    pat(12, [4, 4, 4, 0, 4, 0, 4, 4, 4, 0, 4, 0, 0, 0, 0, 0]),
+    pat(4, [0, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     pat(2, [8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     pat(16, [4, 0, 4, 4, 0, 4, 0, 4, 4, 0, 4, 0, 4, 4, 0, 0]),
 ];

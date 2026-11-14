@@ -29,6 +29,8 @@ Maps incoming MIDI velocity $v \in [1, 127]$ to normalized gain/timbre excitatio
 
 Voice output stage (VERIFIED, `smp_voice.rs`): `bus += (y << 17) * gain >> 31`, so a bus word read as a fraction of Q31 full scale is `(y / 8192) * 0.5 * gain` (`FIRMWARE_SAMPLE_SCALE`). The engine sample path multiplies `y / 8192` by `LEGACY_SAMPLE_SCALE = 0.55` (ASSUMED, legacy); `PianoLayer::firmware_bus_scale` (default `false`, `ns4 render-patch --firmware-piano-bus`) uses 0.5 (-0.83 dB). The receiver's full-scale convention is ASSUMED. After the voice the engine adds no level at default settings (layer level 1.0, master compressor amount 0, FX off, timbre `Off`, dyn comp 0, unison 0; string resonance < 1e-5 of RMS), measured in [piano-downstream-level](../research/piano-downstream-level.md) (D24). The video comparison level depends on the replay velocity (0.37 dB per step), see that note.
 
+Receiver and replay ([piano-note-velocity](../research/piano-note-velocity.md)): the first reader of the bus (SMP post stage, pc `0x1C0918`) converts a bus word with `FLOAT BY -29` (`word * 2^-29`, EMPIRICAL); the rest of the path to the DAC is not decoded, so the `2^31` convention stays ASSUMED and the 0.55 constant stays the default. `ns4 render-patch --events` accepts a per-event `velocity` (1..127) that overrides `--velocity`. The Velvet Grand clip matches a uniform replay velocity of about 88 (spectrum within 2.7 dB per band, brilliance +0.5 dB, RMS +7.3 dB = the Pipe yardstick offset); per-note velocities cannot be recovered from the recording. The piano layer level (`0xB7` / `0xB8`) follows `(v / 127)^2` in the firmware (handler `0xC011A7A4`, VERIFIED from the listing, not run); the engine applies it linearly (the two agree at the default 127).
+
 ### Firmware velocity -> level law (opt-in, `piano/velocity_level.rs`)
 
 VERIFIED against the real firmware (OS v1.66, `docs/research/piano-sound-load.md` sections 6 and 7; Clavinet D6, Bright Grand, Amber Upright, note 60, 79 velocities): the piano class level method `0xC00A1EB4` stores the Q23 voice amplitude
@@ -51,6 +53,7 @@ Each Piano layer offers selectable spectral contours modeled via 2nd-order biqua
 - **`Soft`:** $-6\text{ dB}$ high-shelf above $1.8\text{ kHz}$ for warm ballad voicings.
 - **`Mid`:** $+3.5\text{ dB}$ presence peak at $1.2\text{ kHz}$ ($Q = 0.9$) to cut through a live band.
 - **`Bright`:** $+4.5\text{ dB}$ high-shelf above $2.5\text{ kHz}$.
+- **Electric type** (`PianoLayer::category == Electric`, manual p.26): `Soft`, `Mid`, `Bright` are tailored. The bell/presence band moves to the upper mid-range (ASSUMED 2.2 kHz); `Soft` cuts treble and bell (`-0.55 high - 0.30 bell`), `Mid` boosts the bell (`+0.60 bell`), `Bright` boosts bell and treble (`+0.50 bell + 0.65 high`). Gains are ASSUMED (manual wording only); confirm with a hardware sweep of the TIMBRE steps on an EP model. All other types keep the acoustic set above bit-identically. `Dyno1` / `Dyno2` exist for Electric only (the panel cycles Off, Soft, Mid, Bright for the other types). The seven Clav pick-up EQ combinations (p.26) are UI-only; the engine has no Clav timbre yet.
 - **`Dyno1` / `Dyno2`** (Electric Pianos): Classic Dyno-My-Piano bell boost ($+6\text{ dB}$ @ $3.8\text{ kHz}$, $+3\text{ dB}$ @ $120\text{ Hz}$, $-4\text{ dB}$ notch @ $800\text{ Hz}$).
 
 ---
@@ -159,3 +162,7 @@ Status: **candidate, ASSUMED, not implemented.** The PNO Core1 routine `0x122620
 | Role judgement | superseded by `docs/research/organ-tone-source.md`: about 70 % organ tonewheels, about 20 % string resonance only (ASSUMED) |
 
 The modal resonators of section 4 are the shipped model; this bank would replace them only after the ARM weight writer or a running capture confirms the role. Open items stay in `docs/OPEN-QUESTIONS.md` and TD-04.
+
+## 5. Piano types and models (PIANO SELECT, manual p.24-25)
+
+The TYPE button selects one of six types (Grand, Upright, Electric, Clav, Digital, Misc); the PIANO SELECT dial steps through the models of that type; the TYPE LEDs show the type of the current model; LIST shows `Piano <Type> n/N` and INFO `Type: <Type> n/N`. The model's type is the `bank_index` of its `.npno` CBIN header and its place in the type is `location_index` (VERIFIED, [piano-types](../research/piano-types.md)). The GUI library (`library/piano_catalog.rs`) reads only the 16 header bytes of each `.npno` entry (archive folder, then `Misc`, as fallbacks), lists models in hardware order and publishes `(entry, type)` pairs; TYPE loads the last used (else first) model of the next type that has models. Without a library TYPE only changes the engine type (Electric timbre set, Dyno steps) and the OLED reads `No piano library`. Engine `category` is set when a sound loads (its header type) and by TYPE; loading a program sets it from the preset.

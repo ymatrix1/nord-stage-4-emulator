@@ -8,7 +8,7 @@
 //! returns `base`. Control thread only: it allocates.
 
 use super::*;
-use crate::cbin::{MorphDeltas, ProgramDecoded};
+use crate::cbin::{CbinError, CbinFile, CbinKind, MorphDeltas, ProgramDecoded};
 
 /// Overwrites `field` with the engine value unless `project(field)` (what applying `field`
 /// yields) already equals it.
@@ -74,6 +74,8 @@ impl ProgramState {
         let (a, b) = (&self.organ_a, &self.organ_b);
         o.model = a.model;
         o.model_b = b.model;
+        o.b3_bass_a = a.b3_bass_mode && a.model == crate::organ::OrganModel::B3;
+        o.b3_bass_b = b.b3_bass_mode && b.model == crate::organ::OrganModel::B3;
         o.drawbars_a = a.drawbars;
         o.drawbars_b = b.drawbars;
         keep(&mut o.layer_a_octave, |v| v.clamp(-2, 2), a.octave_shift);
@@ -163,6 +165,36 @@ impl LiveSlots {
         scratch.apply_program(prog);
         self.set(slot, scratch.capture_state());
     }
+
+    /// Loads a Live slot file (`.ns4l`) back into the slot its header names (`location_index`,
+    /// VERIFIED `0..7` in the Factory Restore archive). Returns the slot.
+    pub fn import_live_file(
+        &mut self,
+        file: &CbinFile,
+        sample_rate: f32,
+    ) -> Result<usize, CbinError> {
+        if file.header.kind != CbinKind::Live {
+            return Err(CbinError::UnknownTag(file.header.kind.tag()));
+        }
+        let slot = usize::from(file.header.location_index);
+        if slot >= LIVE_SLOT_COUNT {
+            return Err(CbinError::BitstreamError(format!(
+                "Live slot {slot} out of range (0..{LIVE_SLOT_COUNT})"
+            )));
+        }
+        let prog = ProgramDecoded::from_cbin_file(file)?;
+        self.import_program(slot, &prog, sample_rate);
+        Ok(slot)
+    }
+
+    /// [`Self::import_live_file`] from the bytes of an `.ns4l` file.
+    pub fn import_live_bytes(
+        &mut self,
+        bytes: &[u8],
+        sample_rate: f32,
+    ) -> Result<usize, CbinError> {
+        self.import_live_file(&CbinFile::parse(bytes)?, sample_rate)
+    }
 }
 
 #[cfg(test)]
@@ -240,5 +272,26 @@ mod tests {
         assert_eq!(out, prog);
         let file = out.to_live_cbin_file(3).unwrap();
         assert_eq!(file.header.location_index, 3);
+    }
+
+    #[test]
+    fn import_live_files_fill_the_slot_named_by_the_header() {
+        let mut prog = base();
+        prog.global.tempo_bpm = 133.0_f32;
+        let bytes = prog.to_live_cbin_file(5).unwrap().to_bytes();
+        let mut live = LiveSlots::default();
+        assert_eq!(live.import_live_bytes(&bytes, 48_000.0_f32).unwrap(), 5);
+        assert!(live.get(4).is_none());
+        let back = live.export_slot(5, &prog).unwrap();
+        assert_eq!(back.global.tempo_bpm, 133.0_f32);
+        // The imported slot survives export -> import again, bit for bit.
+        assert_eq!(back.to_live_cbin_file(5).unwrap().to_bytes(), bytes);
+        // A program file, an out-of-range slot and garbage are refused.
+        let prog_file = prog.to_cbin_file(0, 0).unwrap().to_bytes();
+        assert!(live.import_live_bytes(&prog_file, 48_000.0_f32).is_err());
+        assert!(live
+            .import_live_bytes(&prog.to_live_cbin_file(8).unwrap().to_bytes(), 48_000.0_f32)
+            .is_err());
+        assert!(live.import_live_bytes(b"nope", 48_000.0_f32).is_err());
     }
 }

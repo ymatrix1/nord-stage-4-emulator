@@ -62,6 +62,15 @@ pub(super) fn render_bay_synth(
     let out = state.synth_ui.sync_legacy(legacy_of(state));
     store_legacy(state, out);
     state.synth_ui.begin_frame();
+    // Sample Library: the dials browse the backup's samples; picks go out as load requests.
+    state
+        .synth_ui
+        .samples
+        .set_catalog(&state.program_ui.catalog.samples);
+    state
+        .synth_ui
+        .samples
+        .observe_loaded(state.loaded_sample_name.as_deref());
 
     let frame = to_px(
         nord_panel::layout::section_rect(nord_panel::Section::Synth),
@@ -114,6 +123,12 @@ pub(super) fn render_bay_synth(
 
     for e in state.synth_ui.take_edits() {
         audio_handle.send_command(AudioCommand::Synth(e));
+    }
+    for (layer, entry) in state.synth_ui.samples.take_requests() {
+        state
+            .program_ui
+            .requests
+            .push(crate::panel::LoadRequest::Sample { entry, layer });
     }
     // Panel edits go back to the older fields so the rest of the app keeps seeing layer A.
     let out = state.synth_ui.sync_legacy(legacy_of(state));

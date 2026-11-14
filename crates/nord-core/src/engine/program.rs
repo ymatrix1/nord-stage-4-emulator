@@ -118,6 +118,8 @@ impl Stage4Engine {
         // Organ (Layers A & B + shared Organ FX)
         self.organ_a.model = prog.organ.model;
         self.organ_b.model = prog.organ.model_b;
+        self.organ_a.b3_bass_mode = prog.organ.b3_bass_a;
+        self.organ_b.b3_bass_mode = prog.organ.b3_bass_b;
         self.organ_a.drawbars = prog.organ.drawbars_a;
         self.organ_b.drawbars = prog.organ.drawbars_b;
         self.organ_a.octave_shift = prog.organ.layer_a_octave.clamp(-2, 2);

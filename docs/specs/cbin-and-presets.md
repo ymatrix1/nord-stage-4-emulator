@@ -34,7 +34,7 @@ The bit-level streaming codecs in [`crates/nord-core/src/cbin/bitstream.rs`](../
 
 | Directory | Extension | Count | Exact Size (Bytes) | Description |
 |---|---|---:|---:|---|
-| `Program/Bank A..H/` | `.ns4p` | 384 | `868` | Full 7-layer Stage 4 Programs (8 Banks × 48 Programs) |
+| `Program/Bank A..F/` | `.ns4p` | 384 | `868` | Full 7-layer Stage 4 Programs (6 full banks x 64; header `bank_index` `0..5`, `location_index` `0..63`; banks G and H are empty user banks) |
 | `Live/Bank 1/` | `.ns4l` | 8 | `868` | Live buffer slots (`Live 0.ns4l` .. `Live 7.ns4l`) |
 | `Synth Preset/Bank 1..8/` | `.ns4y` | 384 | `541` | Single-layer Synth Engine + Synth FX presets |
 | `Piano Preset/Bank 1..2/` | `.ns4n` | 96 | `195` | Single-layer Piano Engine + Piano FX presets |
@@ -60,8 +60,10 @@ Every `.ns4p`, `.ns4l`, `.ns4y`, `.ns4n`, `.ns4o`, and `.ns4t` file begins with 
 | `0x14` | 4 B | `u32` LE | `schema_id_le` | Payload schema version (matches big-endian repeat at `0x2E`) |
 | `0x18` | 4 B | `u32` LE | `checksum` | 32-bit payload checksum / CRC over `+0x2E..EOF` |
 | `0x1C` | 18 B | `[u8; 18]` | `reserved` | All zeros (`0x00`) in preset files |
-| `0x2E` | 2 B | `u16` BE | `schema_id_be` | Big-endian repeat of `schema_id` (`0x0139` for `ns4p`/`ns4l`, `0x00D0` for `ns4y`, `0x00CD` for `ns4o`, `0x00CB` for `ns4n`, `0x006C` for `ns4t`) |
+| `0x2E` | 2 B | `u16` BE | `schema_id_be` | Big-endian repeat of `schema_id` (`0x0139` for `ns4p`/`ns4l`, `0x00D0` for `ns4y`, `0x00CD` for `ns4o`, `0x00CB` for `ns4n`, `0x006C` for `ns4t`) |
 | `0x30` | `N` B | Bitstream | `payload` | Bit-packed preset state (`820` B for `ns4p`/`ns4l`, `493` B for `ns4y`, `147` B for `ns4n`, `135` B for `ns4o`, `76` B for `ns4t`) |
+
+**`.npno` piano models:** `bank_index` is the piano **type** (`0` Grand, `1` Upright, `2` Electric, `3` Clav, `4` Digital, `5` Misc; the TYPE LED order and the `.ns4p` piano layer `category` field) and `location_index` is the position of the model inside its type on the hardware. VERIFIED on the 38 models of `Nord Stage 4 Factory Restore RevK v1.66.ns4b`: type equals the archive folder and positions run `0..N-1` without gaps per type (`python tools/npno_types.py <backup>`; [piano-types](../research/piano-types.md)).
 
 ### Schema ID Table
 
@@ -112,7 +114,7 @@ Morphable parameters of bit width `W` occupy `4W + 3` bits:
 - `0..8`: `0x11`; `9..11`: `enable_i[B:A]`; `12..14`: `enable_ii[B:A]`.
 - `14..45`: `level_a` (`W=7` morph); `45..76`: `level_b` (`W=7` morph).
 - `80`: `rotary_enabled` (1b); `81..83`: `leslie_speed` (`0|2=Stop, 1=Slow, 3=Fast`); `92..99`: `rotary_drive` (7b); `130..133`: `VibratoTypeB3` (`0..5 -> V1, C1, V2, C2, V3, C3`).
-- `0x03` Layers at bit `144` (A) and `392` (B): `+8..+12` `kb_zone` (4b, `Edt_Org_kKbZone`, 12 values, default 5; read-only, [morph-and-zones](morph-and-zones.md) section 6); `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2`); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
+- `0x03` Layers at bit `144` (A) and `392` (B): `+8..+12` `kb_zone` (4b, `Edt_Org_kKbZone`, 12 values, default 5; read-only, [morph-and-zones](morph-and-zones.md) section 6); `+12..+16` signed 4b `octave` (`-2..+2`); `+17..+20` `model` (`0=B3, 1=Vox, 2=Farfisa, 3=Pipe1, 4=Pipe2, 5=B3 Bass`; 5 decodes to `B3` with `b3_bass_a` / `b3_bass_b` set and is written back as 5; before the sweep it fell into Pipe2, 4 factory programs use it, [program-coverage](../research/program-coverage.md)); `+40 + i*19` (`i=0..8`) drawbars (`W=4` morph, `max_val=8`); `+232` `vibrato_on`; `+233..+237` percussion `[on, third, fast, soft]`.
 - Bytes `80..135`: `0x36` Organ FX chain.
 
 #### Piano Block (`0x0C`, `147` Bytes = 2×`0x0B` + 2×`0x36`)
@@ -159,8 +161,8 @@ Code: `engine/program_export.rs`, `cbin/program_file.rs`, `store_cli.rs`.
 
 - `Stage4Engine::export_program(&base)`, `ProgramState::export_into` and `LiveSlots::export_slot(slot, &base)` patch the engine state onto a base `ProgramDecoded`. A field is written only when the engine value differs from what `apply_program` would derive from the base value, so `apply_program(base)` then `export_program(base)` returns `base` and unedited bytes stay identical (tests `unedited_export_equals_the_base_and_is_byte_identical`, `edits_survive_encode_parse_apply`).
 - Mapped fields: tempo, split points / crossfades / zone enables, Organ model, drawbars, octave, percussion, rotary, layer levels with Wheel / A.T. / Ctrl Pedal deltas for all 7 layers, Piano category / timbre / touch / string resonance / pedal noise / soft release / unison / dynamic compression / octave, Synth octave. Not mapped (kept from the base): per-layer FX chains, deep Synth parameters, scene enables, transpose and master compressor (no packed bit position is known), Organ vibrato / scanner, name and category.
-- `ProgramDecoded::to_cbin_file_like(&template)` keeps the template header (format version, kind, bank, location, 18 reserved bytes) and its checksum when the payload is unchanged; otherwise the checksum is the wrapping byte sum (`ASSUMED` hardware rule, identical to `to_cbin_file`). `to_live_cbin_file(slot)` writes kind `ns4l` with bank 0 and location = slot (`ASSUMED`: no real `.ns4l` header was inspected).
-- `LiveSlots::import_program(slot, &prog, sample_rate)` loads a decoded program into a slot through a scratch engine.
+- `ProgramDecoded::to_cbin_file_like(&template)` keeps the template header (format version, kind, bank, location, 18 reserved bytes) and its checksum when the payload is unchanged; otherwise the checksum is the wrapping byte sum (`ASSUMED` hardware rule, identical to `to_cbin_file`). `to_live_cbin_file(slot)` writes kind `ns4l` with bank 0 and location = slot (`VERIFIED`: all 8 `Live/Bank 1/Live N.ns4l` headers of the Factory Restore archive have `bank_index 0`, `location_index N`, read with a header dump of the archive entries).
+- `LiveSlots::import_program(slot, &prog, sample_rate)` loads a decoded program into a slot through a scratch engine. `LiveSlots::import_live_file` / `import_live_bytes` load an `.ns4l` back into the slot its header names (`location_index`, `0..7`; other kinds and out-of-range slots are refused; test `import_live_files_fill_the_slot_named_by_the_header`).
 
 ```bash
 # Re-store a program through the engine (byte-identical without edits), optionally editing:
@@ -282,3 +284,37 @@ Recognized chunks and layout:
 ### 5.4 `.ns4b` Backup Archive Reader (`crates/nord-core/src/cbin/backup.rs`)
 
 `.ns4b` archives are standard PKZIP files whose entries use method `0` (`ZIP_STORED`). `Ns4BackupArchive` parses ZIP central-directory/local-header records without external runtime dependencies so users can list and load `.npno`, `.nsmp4`, and `.ns4p` entries directly from a legally owned `.ns4b` archive or extracted folder.
+
+### 5.5 `.ns4b` Backup Writer (`cbin/backup_writer.rs`, `cbin/backup_store.rs`, `cbin/crc32.rs`)
+
+`rewrite_backup(archive, reader, writer, edits)` streams an archive (the Factory Restore backup is 3.14 GB, never loaded whole) and applies `EntryEdit::Put { name, data }` (replace in place, or append when the name is new) and `EntryEdit::Remove { name }`.
+
+| Part | Behaviour |
+|---|---|
+| No edits | verbatim copy, ZIP64 archives included |
+| Untouched entry | its local-file region (header, data, any descriptor) is copied byte for byte; its central record is copied with only the local-header offset patched |
+| Replaced entry | new `ZIP_STORED` local header (version, time and date kept from the central record, data-descriptor flag cleared, CRC-32 and sizes recomputed), central record patched in place (flags, method, CRC, sizes) |
+| Added entry | appended after the last local entry; version 20, DOS date 1980-01-01, UTF-8 flag only for non-ASCII names |
+| Removed entry | local region and central record dropped |
+| Central directory and end record | original records in original order (minus removed, plus added); entry counts, size and offset patched; the archive comment and the one-byte central extra field of the real archive are kept |
+| `meta.xml` | an ordinary entry: stays byte-identical unless the caller puts a new one. `ASSUMED`: the manifest only names product, OS and Sound Manager versions (section 2), so storing programs does not change it; confirm by restoring an edited backup on hardware |
+| Refused | ZIP64 archives with edits, offsets or sizes over 4 GB, duplicate or conflicting edits, removing a missing name, a rewrite onto the input path (a failed write removes the partial output) |
+
+`SlotIndex::read` maps programs and Live slots to their entries by header (`bank_index` at `0x0C`, `location_index` at `0x0E`). **Program names are not in the payload, only in the entry file name.** `store_edits(index, programs, cleared, lives)` turns "program P at (bank, loc)" into edits: it replaces whatever entry sits at that location; the entry path is `Program/Bank <A-H>/<name>.ns4p`; a name clash with another entry gets ` (2)`; paths the new set no longer uses are removed, so a Swap or Move of programs inside one bank is a set of plain replaces. Live slots replace the entry whose header names the slot, else `Live/Bank 1/Live <slot>.ns4l` is added.
+
+Evidence (Factory Restore RevK v1.66, 3 143 490 731 B, 1171 entries, all `ZIP_STORED`, no data descriptors):
+
+| Check | Result |
+|---|---|
+| `ns4 backup-store in out` (no edits) | `cmp` identical, SHA-256 equal |
+| `ns4 backup-store in out --program <that program's own bytes> --bank A --loc 38` (replace path, every offset recomputed) | `cmp` identical |
+| same with `ns4 store-program ... --tempo 141` applied first | 15 bytes differ: 4 local-header CRC, 4 central-record CRC, 7 inside the one 868 B entry; `meta.xml` and all other entries equal |
+| header scan of the archive entries | 384 programs in banks A-F, 64 locations each (`0..63`); 8 Live entries with location = slot |
+
+```bash
+# Write one program (and/or a Live slot file) into a copy of a backup; other entries stay identical:
+ns4 backup-store in.ns4b out.ns4b --program edited.ns4p --bank A --loc 38 [--name "Program name"]
+ns4 backup-store in.ns4b out.ns4b --live live-1.ns4l --slot 0
+```
+
+GUI: the library top bar has **Export backup** (path field, default `<name>-edited.ns4b`) and **Load Live slots**. Export applies the program library (STORE, Organize) and the Live slots to a copy: a stored program is patched onto the archive program of the same cell (`export_into`, so FX chains and deep Synth data come from that program; `ASSUMED` limitation: a stored program does not remember which program it was edited from), a moved archive program only gets its header location rewritten (payload bit-identical), emptied locations lose their entry. See [midi-and-control.md](midi-and-control.md) section 5.2 for the Organize flow.

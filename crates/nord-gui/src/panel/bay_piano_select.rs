@@ -64,9 +64,11 @@ fn draw_type_and_dial(
     w::face(p, ty, pr.down, false);
     w::inside(p, ty, "TYPE", false);
     w::legend(p, ty, "INFO", false);
-    pr.resp.on_hover_text(
-        "TYPE: next of Grand, Upright, Electric, Clav, Digital, Misc. Shift+tap = INFO.",
-    );
+    pr.resp.on_hover_text(if state.piano_ui.models.is_empty() {
+        "TYPE: next of Grand, Upright, Electric, Clav, Digital, Misc. No piano library is loaded (open an .ns4b), so only the sound character of the type changes. Shift+tap = INFO."
+    } else {
+        "TYPE: next piano type that has models, and loads its last used model. The PIANO SELECT dial then steps through the models of that type. Shift+tap = INFO."
+    });
     state.piano_ui.mark("piano.type");
     state.piano_ui.mark("piano.info");
 
@@ -75,9 +77,9 @@ fn draw_type_and_dial(
     state.piano_ui.mark("piano.type_leds");
 
     let dial = r("piano.select_dial");
-    let n = state.piano_ui.models.len();
+    let (at, n) = logic::models_position(state);
     let pos = if n > 1 {
-        state.piano_ui.model_idx as f32 / (n - 1) as f32
+        at.saturating_sub(1) as f32 / (n - 1) as f32
     } else {
         0.0
     };
@@ -96,9 +98,9 @@ fn draw_type_and_dial(
     }
     w::legend(p, dial, "LIST", false);
     let tip = if n == 0 {
-        "PIANO SELECT: no piano library loaded (open an .ns4b or a .npno). Turn or click to cycle models; Shift+turn = LIST."
+        "PIANO SELECT: no piano model of this type (open an .ns4b or a .npno, or press TYPE). Shift+turn = LIST."
     } else {
-        "PIANO SELECT: turn (scroll or drag) or click to cycle the library models; Shift+turn = LIST."
+        "PIANO SELECT: turn (scroll or drag) or click to cycle the models of the selected type; Shift+turn = LIST."
     };
     resp.on_hover_text(tip);
     if state.piano_ui.mark_inv(
@@ -285,8 +287,13 @@ fn draw_timbre(
         (&["SOFT", "TREBLE", "BRIL"], state.piano_ui.clav_timbre)
     } else {
         let idx = logic::timbre_index(state);
+        let electric = state.piano_cat == PianoCategory::Electric;
         (
-            &["SOFT", "MID", "BRIGHT", "DYNO1", "DYNO2"],
+            if electric {
+                &["SOFT", "MID", "BRIGHT", "DYNO1", "DYNO2"][..]
+            } else {
+                &["SOFT", "MID", "BRIGHT"][..]
+            },
             if idx == 0 { 0 } else { 1 << (idx - 1) },
         )
     };
@@ -315,7 +322,7 @@ fn draw_timbre(
         );
     } else {
         pr.resp.on_hover_text(
-            "TIMBRE: off, Soft, Mid, Bright, Dyno 1, Dyno 2 (applies to both layers).",
+            "TIMBRE: off, Soft, Mid, Bright; Dyno 1 and 2 on the Electric type only (applies to both layers).",
         );
         state.piano_ui.mark("piano.timbre");
     }
@@ -366,10 +373,9 @@ mod tests {
             assert!(ids.contains(&id), "{id}");
         }
         let d: Vec<_> = dims.iter().map(|d| d.0).collect();
-        assert_eq!(
-            d,
-            ["piano.select_dial"],
-            "only the inventory-unsupported dial"
+        assert!(
+            d.is_empty(),
+            "nothing in the select group is unsupported: {d:?}"
         );
     }
 
@@ -378,11 +384,8 @@ mod tests {
         let (_, ids, dims) = render(|s| s.piano_cat = PianoCategory::Clav);
         assert_eq!(ids.len(), 12);
         let d: Vec<_> = dims.iter().map(|d| d.0).collect();
-        assert_eq!(
-            d,
-            ["piano.select_dial", "piano.soft_release", "piano.timbre"]
-        );
-        assert!(dims[2].1.contains("Clav"));
+        assert_eq!(d, ["piano.soft_release", "piano.timbre"]);
+        assert!(dims[1].1.contains("Clav"));
     }
 
     #[test]

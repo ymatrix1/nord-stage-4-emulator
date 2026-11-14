@@ -223,6 +223,42 @@ fn type_tap_cycles_and_shift_tap_opens_info() {
 }
 
 #[test]
+fn type_tap_with_a_library_loads_the_first_model_of_the_next_type() {
+    let mut s = Stage4PanelState::default();
+    s.piano_ui.models = ["g0", "g1", "u0", "u1"].map(String::from).to_vec();
+    s.piano_ui.model_types = [PianoCategory::Grand, PianoCategory::Grand]
+        .into_iter()
+        .chain([PianoCategory::Upright; 2])
+        .collect();
+    let edits = tap(&mut s, "piano.type");
+    assert_eq!(edits, [PianoEdit::Category(PianoCategory::Upright)]);
+    assert_eq!(s.piano_ui.model_request.as_deref(), Some("u0"));
+    assert_eq!(s.piano_ui.model_idx, 2);
+}
+
+#[test]
+fn dial_click_steps_inside_the_type_and_wraps() {
+    let mut s = Stage4PanelState::default();
+    s.piano_ui.models = ["g0", "g1", "u0"].map(String::from).to_vec();
+    s.piano_ui.model_types = vec![
+        PianoCategory::Grand,
+        PianoCategory::Grand,
+        PianoCategory::Upright,
+    ];
+    let mut rig = Rig::new(&mut s);
+    rig.clock = 100.0;
+    let at = rig.centre("piano.select_dial");
+    rig.press(&mut s, at, 0.05, false);
+    assert_eq!(s.piano_ui.model_request.take().as_deref(), Some("g1"));
+    rig.press(&mut s, at, 0.05, false);
+    assert_eq!(
+        s.piano_ui.model_request.as_deref(),
+        Some("g0"),
+        "wraps inside Grand, never into the Upright model"
+    );
+}
+
+#[test]
 fn acoustics_buttons_send_their_edits() {
     let mut s = Stage4PanelState::default();
     assert_eq!(

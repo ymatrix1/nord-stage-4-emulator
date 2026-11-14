@@ -15,10 +15,12 @@ Menu items marked Unsupported in crates/nord-panel/src/menus/ that need new engi
 Full menu parity with the OS v1.6x manual.
 
 ## Acceptance Criteria
-- [ ] Output bus routing (Global / Per Program) with multi-output host ports
-- [ ] MIDI CC/NRPN/Device send-receive filters, Program Change modes, Transpose MIDI at In/Out
-- [ ] Triple pedal assignments (Pump, Mst Clk Tap, Program Up/Down, Synth Vibrato)
-- [ ] Organ keyboard trigger point High/Low
+- [x] Output bus routing (Global / Per Program): engine `OutputRouting` and `process_block_multi` (engine/output_routing.rs); multi-output host audio ports remain open (the plugin carries outputs 1-2)
+- [x] MIDI CC/NRPN/Device send-receive filters, Program Change modes, Transpose MIDI at In/Out, Local Control, Sect On (engine/midi_menu.rs)
+- [x] Extern menu: Echo Global, Keyboard Velocity, Device MIDI filters (engine/extern_menu.rs)
+- [x] Triple pedal assignments (Pump, Mst Clk Tap, Program Up/Down, Synth Vibrato) and Foot Switch SW B (engine/foot_switch.rs)
+- [x] Organ keyboard trigger point High/Low (engine/organ_trigger.rs)
+- [x] PSTICK bends Organ and Piano layers
 - [ ] Organize Swap/Move on the program bank
 
 ## Out of Scope

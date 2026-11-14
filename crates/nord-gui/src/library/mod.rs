@@ -4,17 +4,20 @@
 //! retained `Arc` references on the UI thread so the real-time CPAL audio callback never drops
 //! heap allocations when hot-swapping instruments.
 
+mod export;
 mod loaders;
 mod piano_bridge;
+mod piano_catalog;
 mod poll;
 mod program;
 #[cfg(test)]
 mod support;
 mod ui;
 
+use crate::panel::bay_program::store::PER_BANK;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded};
-use nord_core::piano::NpnoSound;
+use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded, SlotIndex};
+use nord_core::piano::{NpnoSound, PianoCategory};
 use nord_core::synth::SynthSampleSound;
 use std::collections::HashMap;
 use std::fs::File;
@@ -60,7 +63,10 @@ pub struct BackupLibraryState {
     pub archive: Option<Arc<Ns4BackupArchive>>,
     pub manifest_summary: Option<String>,
     pub programs: Vec<String>,
+    /// `.npno` entry names in hardware order (type, then position in the type).
     pub pianos: Vec<String>,
+    /// Piano type of each entry of `pianos` (parallel).
+    pub piano_types: Vec<PianoCategory>,
     pub samples: Vec<String>,
     pub filter: String,
     pub active_tab: BackupTab,
@@ -69,6 +75,12 @@ pub struct BackupLibraryState {
     pub pending_jobs: usize,
     pub status_message: String,
     pub error_message: Option<String>,
+    /// Where Export backup writes (empty: `<name>-edited.ns4b` next to the opened backup).
+    pub export_path: String,
+    /// `(flat location, entry path)` of every program of the opened backup, from the entry headers.
+    program_slots: Vec<(u16, String)>,
+    layout_rev: u32,
+    synced_layout_rev: u32,
     piano_cache: HashMap<String, Arc<NpnoSound>>,
     sample_cache: HashMap<String, Arc<SynthSampleSound>>,
     retired_pianos: Vec<Arc<NpnoSound>>,
@@ -98,6 +110,7 @@ impl BackupLibraryState {
             manifest_summary: None,
             programs: Vec::new(),
             pianos: Vec::new(),
+            piano_types: Vec::new(),
             samples: Vec::new(),
             filter: String::new(),
             active_tab: BackupTab::Programs,
@@ -106,6 +119,10 @@ impl BackupLibraryState {
             pending_jobs: 0,
             status_message: "No .ns4b backup loaded".to_string(),
             error_message: None,
+            export_path: String::new(),
+            program_slots: Vec::new(),
+            layout_rev: 0,
+            synced_layout_rev: 0,
             piano_cache: HashMap::new(),
             sample_cache: HashMap::new(),
             retired_pianos: Vec::new(),
@@ -146,6 +163,17 @@ impl BackupLibraryState {
             .ok()
             .map(|m| format!("v{} build {}", m.product_version, m.product_build));
 
+        // Which entry sits at which location (header bank/location), for Organize and Export.
+        let slots = SlotIndex::read(&archive, &mut reader)
+            .map(|idx| {
+                idx.programs
+                    .into_iter()
+                    .filter(|(b, l, _)| *b < 8 && *l < PER_BANK)
+                    .map(|(b, l, n)| (b * PER_BANK + l, n))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let mut programs: Vec<String> = archive
             .entries_with_ext(".ns4p")
             .into_iter()
@@ -153,12 +181,9 @@ impl BackupLibraryState {
             .collect();
         programs.sort();
 
-        let mut pianos: Vec<String> = archive
-            .entries_with_ext(".npno")
-            .into_iter()
-            .map(|e| e.name.clone())
-            .collect();
-        pianos.sort();
+        let models = piano_catalog::read_models(&archive, &mut reader);
+        let pianos: Vec<String> = models.iter().map(|m| m.entry.clone()).collect();
+        let piano_types: Vec<PianoCategory> = models.iter().map(|m| m.category).collect();
 
         let mut samples: Vec<String> = archive
             .entries_with_ext(".nsmp4")
@@ -188,10 +213,14 @@ impl BackupLibraryState {
         self.error_message = None;
         self.path_input = path.display().to_string();
         self.backup_path = Some(path.to_path_buf());
+        self.export_path = export::default_export_path(path).display().to_string();
+        self.program_slots = slots;
+        self.layout_rev = self.layout_rev.wrapping_add(1);
         self.archive = Some(Arc::new(archive));
         self.manifest_summary = manifest_summary;
         self.programs = programs;
         self.pianos = pianos;
+        self.piano_types = piano_types;
         self.samples = samples;
         self.reap_retired_sounds();
         Ok(())

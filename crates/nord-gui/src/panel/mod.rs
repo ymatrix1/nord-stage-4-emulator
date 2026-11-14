@@ -8,7 +8,7 @@ mod bay_master;
 mod bay_organ;
 mod bay_piano;
 mod bay_piano_select;
-mod bay_program;
+pub(crate) mod bay_program;
 mod bay_synth;
 mod ctl;
 mod kb_zone;
@@ -29,6 +29,7 @@ mod organ_widgets;
 #[cfg(test)]
 mod piano_click_tests;
 mod piano_logic;
+pub mod piano_models;
 mod piano_overlay;
 mod piano_widgets;
 #[cfg(test)]
