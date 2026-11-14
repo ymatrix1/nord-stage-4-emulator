@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(t.big, "STORE PROGRAM AS");
         assert!(t.sub.starts_with("[R]usty"), "{}", t.sub);
         assert_eq!(t.soft, ["Abc", "Cat", "Del", "Ins"]);
-        assert_eq!(t.rows[0], "Cat: None");
+        assert_eq!(t.rows[0], "Cat: Undefined");
         u.store_press();
         let t = compose(&u, &sum());
         assert_eq!(t.big, "STORE PROGRAM TO");

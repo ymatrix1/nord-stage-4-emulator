@@ -177,7 +177,6 @@ def test_program_category_table_matches_our_names() -> None:
         return re.findall(r'"([^"]*)"', body.group(1))
 
     assert rust_list("CATEGORIES") == table[0::2]
-    assert rust_list("CATEGORY_SHORT") == table[1::2]
 
 
 @needs_fw

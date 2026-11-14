@@ -51,37 +51,6 @@ pub const CATEGORIES: [&str; 26] = [
     "Undefined",
 ];
 
-/// Short category names for narrow columns (`0xC02BF3C8` word `2 i + 1`), same order as
-/// [`CATEGORIES`]. VERIFIED like [`CATEGORIES`].
-pub const CATEGORY_SHORT: [&str; 26] = [
-    "Accord/Harm",
-    "Bass",
-    "Brass Ens",
-    "Brass Solo",
-    "Choir",
-    "Drums",
-    "Effects",
-    "Gtr/Pluck",
-    "Mellotron",
-    "Misc",
-    "Orchestral",
-    "Organ",
-    "Perc Tuned",
-    "Piano",
-    "Rhythm",
-    "Strings Ana",
-    "Strings Ens",
-    "Strings Solo",
-    "Synth Bass",
-    "Synth Classic",
-    "Synth Lead",
-    "Synth Pad",
-    "Wind Ens",
-    "Wind Solo",
-    "User",
-    "Undef",
-];
-
 /// Category of a program that was never given one: the last entry, `Undefined`.
 pub const UNDEFINED_CATEGORY: usize = CATEGORIES.len() - 1;
 
@@ -251,10 +220,9 @@ mod tests {
     }
 
     #[test]
-    fn category_tables_pair_full_and_short_names() {
-        assert_eq!(CATEGORIES.len(), CATEGORY_SHORT.len());
+    fn category_table_ends_with_user_and_undefined() {
+        assert_eq!(CATEGORIES.len(), 26);
+        assert_eq!(&CATEGORIES[24..], ["User", "Undefined"]);
         assert_eq!(CATEGORIES[UNDEFINED_CATEGORY], "Undefined");
-        assert_eq!(CATEGORY_SHORT[UNDEFINED_CATEGORY], "Undef");
-        assert!(CATEGORY_SHORT.iter().all(|s| s.len() <= 13));
     }
 }

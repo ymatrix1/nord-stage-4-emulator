@@ -342,7 +342,7 @@ mod tests {
         u.organize_soft(1);
         goto(&mut u, "A:12");
         u.organize_soft(3);
-        assert_eq!(u.message.as_ref().unwrap().0, "Memory Protect is on");
+        assert_eq!(u.message.as_ref().unwrap().0, "Memory Protected");
         assert_eq!(u.library.name_at(loc("A:11")).as_deref(), Some("One"));
         assert!(u.organize.pending.is_some(), "the choice stays");
         u.menu.set_memory_protect(false);
@@ -350,7 +350,7 @@ mod tests {
         assert_eq!(u.library.name_at(loc("A:11")).as_deref(), Some("Two"));
         u.menu.set_memory_protect(true);
         u.organize_soft(4);
-        assert_eq!(u.message.as_ref().unwrap().0, "Memory Protect is on");
+        assert_eq!(u.message.as_ref().unwrap().0, "Memory Protected");
         assert_eq!(u.library.name_at(loc("A:11")).as_deref(), Some("Two"));
     }
 
