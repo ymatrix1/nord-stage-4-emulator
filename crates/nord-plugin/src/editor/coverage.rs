@@ -133,7 +133,7 @@ mod tests {
         let fate = |id: &str| c.entries.iter().find(|(i, _)| i == id).map(|(_, f)| *f);
         assert_eq!(fate("master.level"), Some(Fate::Live));
         assert_eq!(fate("no.such.control"), None);
-        assert!(!DIM_TOOLTIP.is_empty());
+        assert_eq!(DIM_TOOLTIP, "not automatable in the plugin yet");
     }
 
     #[test]

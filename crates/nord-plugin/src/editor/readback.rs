@@ -267,9 +267,11 @@ mod tests {
     fn defaults_are_read_from_the_host_parameters() {
         let p = Stage4Params::default();
         let idx = ParamIndex::new(&p);
-        let mut s = Stage4PanelState::default();
-        s.master_volume = 0.0;
-        s.organ_drawbars = [0; 9];
+        let mut s = Stage4PanelState {
+            master_volume: 0.0,
+            organ_drawbars: [0; 9],
+            ..Default::default()
+        };
         sync_panel_from_params(&idx, &mut s);
         assert!((s.master_volume - 0.8).abs() < 1e-6);
         assert_eq!(s.organ_drawbars, [8, 8, 8, 0, 0, 0, 0, 0, 0]);

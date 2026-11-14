@@ -16,9 +16,10 @@ use nord_core::piano::{PianoCategory, PianoTimbre, VelocityTouch};
 use nord_core::synth::SynthOscMode;
 use nord_core::synth_types::{ArpMode, LfoDestination, LfoShape, NotePriority, VibratoMode};
 use nord_gui::audio::{
-    AudioCommand as C, FxEdit, FxFlag, FxFloat, OrganEdit, PianoEdit, SynthEdit, SynthParam,
-    SynthTarget,
+    AudioCommand as C, FxEdit, FxFlag, FxFloat, OrganEdit, PianoEdit, ProgramEdit, SettingsEdit,
+    SynthEdit, SynthParam, SynthTarget,
 };
+use nord_panel::menus::Value;
 use std::collections::BTreeSet;
 
 /// Plausible in-range plain value for each FX float (used by the unit round-trip test too).
@@ -161,6 +162,18 @@ pub fn probe_commands() -> Vec<C> {
         sp(SynthParam::ArpMode(ArpMode::UpDown)),
         sp(SynthParam::VibratoMode(VibratoMode::Delay)),
     ];
+    for (id, value) in [
+        ("aux_kb.1.enable", Value::Bool(true)),
+        ("aux_kb.2.organ", Value::Index(1)),
+        ("aux_kb.2.piano", Value::Index(2)),
+        ("aux_kb.2.synth", Value::Index(4)),
+        ("aux_kb.3.curve", Value::Index(2)),
+    ] {
+        v.push(C::Program(ProgramEdit::Settings(SettingsEdit {
+            id,
+            value,
+        })));
+    }
     for i in 0..7 {
         v.push(C::SetLayerActive(i, true));
     }

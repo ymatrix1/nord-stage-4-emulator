@@ -7,6 +7,7 @@
 
 use super::map_area::{map_organ, map_piano};
 use super::map_fx::map_fx;
+use super::map_settings::map_settings;
 use super::map_synth::map_synth;
 use super::write::ParamWrite as W;
 use nih_plug::prelude::Enum;
@@ -14,7 +15,7 @@ use nord_core::midi::{cc, MidiEvent};
 use nord_core::organ::{OrganModel, RotarySpeed};
 use nord_core::piano::{PianoCategory, PianoTimbre, VelocityTouch};
 use nord_core::synth::SynthOscMode;
-use nord_gui::audio::AudioCommand;
+use nord_gui::audio::{AudioCommand, ProgramEdit};
 use std::fmt::Debug;
 
 /// Drawbar host ids, 16' first (same order as `AudioCommand::SetDrawbars`).
@@ -120,6 +121,7 @@ pub fn map_command(cmd: &AudioCommand, out: &mut Vec<W>) -> bool {
         C::Piano(e) => map_piano(e, out),
         C::Synth(e) => map_synth(e, out),
         C::Fx(e) => map_fx(e, out),
+        C::Program(ProgramEdit::Settings(s)) => return map_settings(s, out),
         C::Midi(MidiEvent::ControlChange {
             controller, value, ..
         }) if *controller == cc::MOD_WHEEL => {

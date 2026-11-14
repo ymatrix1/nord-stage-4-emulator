@@ -25,6 +25,7 @@ pub mod index;
 pub mod map;
 mod map_area;
 mod map_fx;
+mod map_settings;
 mod map_synth;
 pub mod notes;
 pub mod probe;
@@ -81,8 +82,10 @@ mod tests {
 
     #[test]
     fn editor_size_round_trips_through_the_plugin_state() {
-        let mut saved = Stage4Params::default();
-        saved.editor_state = EguiState::from_size(900, 243);
+        let saved = Stage4Params {
+            editor_state: EguiState::from_size(900, 243),
+            ..Default::default()
+        };
         let fields = saved.serialize_fields();
         assert!(fields.contains_key("editor-state"));
 
