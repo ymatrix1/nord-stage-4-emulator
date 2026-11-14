@@ -67,8 +67,10 @@ pub struct PianoUi {
     pub dyn_comp: [u8; LAYERS],
     /// OCTAVE SHIFT -2..=2 per layer.
     pub octave: [i8; LAYERS],
-    /// KB ZONE assignment (0..4, one of the four green LEDs) per layer. UI only.
+    /// KB ZONE position per layer (`kb_zone::POSITIONS`, `0` = every zone, the engine default).
     pub kb_zone: [u8; LAYERS],
+    /// Aux KB flag per layer (the LED); the UI value until telemetry reads it back.
+    pub aux: [bool; LAYERS],
     /// SUSTPED (Shift + Layer A); engine default is on for the pianos.
     pub sustped: bool,
     /// PSTICK (Shift + Layer B); engine default is off.
@@ -108,6 +110,7 @@ impl Default for PianoUi {
             dyn_comp: [0; LAYERS],
             octave: [0; LAYERS],
             kb_zone: [0; LAYERS],
+            aux: [false; LAYERS],
             sustped: true,
             pstick: false,
             clav_timbre: 0,
@@ -189,11 +192,13 @@ mod tests {
 
     #[test]
     fn inventory_lookup_matches_the_binding() {
-        assert!(inventory_unsupported("piano.kb_zone_up"));
+        assert!(!inventory_unsupported("piano.kb_zone_up"));
+        assert!(inventory_unsupported("piano.select_dial"));
         assert!(!inventory_unsupported("piano.sustped"));
         assert!(!inventory_unsupported("piano.unison"));
         let mut u = PianoUi::default();
-        assert!(u.mark_inv("piano.zone_leds", "r"));
+        assert!(u.mark_inv("piano.select_dial", "r"));
+        assert!(!u.mark_inv("piano.zone_leds", "r"));
         assert!(!u.mark_inv("piano.unison", "r"));
     }
 

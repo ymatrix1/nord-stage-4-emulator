@@ -34,11 +34,11 @@ pub fn controls() -> Vec<ControlEntry> {
         e("organ.model_leds", s, K::Led, "MODEL LEDs (6)", 18)
             .ui("six models: B3, B3 Bass, Vox, Farf, Pipe 1, Pipe 2"),
     );
-    v.push(e("organ.preset", s, K::Button, "PRESET", 21).todo("ns4-h7he"));
+    v.push(e("organ.preset", s, K::Button, "PRESET", 21).bound("organz_drawbar_live_{n}"));
     v.push(
         e("organ.sync", s, K::Button, "SYNC", 21)
             .shift()
-            .todo("ns4-h7he"),
+            .bound("organz_sync_{n}"),
     );
     for (i, host) in DRAWBAR_IDS.iter().enumerate() {
         let n = i + 1;
@@ -71,12 +71,12 @@ pub fn controls() -> Vec<ControlEntry> {
     v.push(
         e("organ.vibrato_on.a", s, K::Button, "VIB/CHORUS ON A", 19)
             .layer(Layer::A)
-            .todo("ns4-h7he"),
+            .bound("organx_scanner_{n}"),
     );
     v.push(
         e("organ.vibrato_on.b", s, K::Button, "VIB/CHORUS ON B", 19)
             .layer(Layer::B)
-            .todo("ns4-h7he"),
+            .bound("organx_scanner_{n}"),
     );
     v.push(e("organ.perc_on", s, K::Button, "PERCUSSION ON", 20).bound("organ_perc_enable"));
     v.push(e("organ.perc_volume", s, K::Button, "VOLUME SOFT", 20).bound("organ_perc_soft"));
@@ -85,7 +85,7 @@ pub fn controls() -> Vec<ControlEntry> {
     v.push(
         e("organ.perc_poly", s, K::Button, "POLY (Shift+Volume)", 20)
             .shift()
-            .todo("ns4-h7he"),
+            .bound("organz_poly_perc_{n}"),
     );
     v
 }
