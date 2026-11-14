@@ -247,7 +247,16 @@ Room for the boxes comes from `GROUP_TWEAKS` in `layout_tweaks.rs` (rows moved b
 | Piano | `1 2 3` under the UNISON and DYN COMP LEDs, `H M L` under KB TOUCH (full names do not fit 13 px) |
 | Program | the PROGRAM box has a 2 px left pad so the PAGE / BANK buttons sit inside its border |
 
-Remaining after round 4: SAMPLES / ANALOG LEDs in the Synth MODE box and MONO / LEGATO in VOICE (the button still shows its value), the TO ROTARY / LP FILTER / HP FILTER names beside the amp list (FLT / ROT buttons instead), MED / LIGHT / HEAVY in full, the `C2 V3 C3` vibrato matrix, a light tab behind the ROTARY SPEAKER title, the PROGRAM title still starts at the frame edge.
+### Round 5: LED names and lists
+
+| Section | Added |
+|---|---|
+| Synth | MODE box prints `SAMPLES` / `ANALOG` and VOICE box `MONO` / `LEGATO`, each with its LED above the button (`bay_synth/names.rs`; the lit LED follows the layer state, POLY lights none; the old SELECT / MODE legends are gone, the button keeps its value). The MODE frame grew 12 px at the top for the two rows |
+| Piano | KB TOUCH prints `HEAVY`, `MED`, `LIGHT` under its LEDs on two staggered lines (the middle name lower; the names are wider than the 13 px LED pitch); the PIANO SELECT box moved 3 px lower (nudge 45 to 48 for type and info, the dial and LIST stay at 45) |
+| Layer Effects | the amp list has a second column `TO ROTARY` / `LP FILTER` / `HP FILTER` with LEDs that follow the cabinet choice (TO ROTARY dimmed with its reason on Organ layers); the small buttons beside the selector keep working and lost their FLT / ROT text |
+| Program | the PROGRAM title sits at 6 % of the frame width instead of on its left corner |
+
+Remaining after round 5: the `C2 V3 C3` vibrato matrix of the Organ and the light tab behind the ROTARY SPEAKER title (not done: no free room at the photo scale without moving the Master controls), the amp FLT / ROT buttons are unlabeled pills (the names are in the list above them).
 
 Remaining differences against `.reference/crops` (kept: legibility over fidelity, or out of scope):
 

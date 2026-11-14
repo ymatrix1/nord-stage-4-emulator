@@ -207,8 +207,13 @@ fn draw_acoustics(
 
 /// Names under the three LEDs of UNISON and DYN COMP (photo `NS4_HA88_Piano-01`).
 const LED_NAMES_LEVEL: [&str; 3] = ["1", "2", "3"];
-/// Initials under the KB TOUCH LEDs: Heavy, Medium, Light.
-const LED_NAMES_TOUCH: [&str; 3] = ["H", "M", "L"];
+/// Names under the KB TOUCH LEDs, LED order: Heavy, Medium, Light (manual p.25).
+const LED_NAMES_TOUCH: [&str; 3] = ["HEAVY", "MED", "LIGHT"];
+/// Line of each KB TOUCH name: the names are wider than the 13 px LED pitch, so the middle one
+/// sits on a second line (the photo prints MED, LIGHT and HEAVY at three heights as well).
+const TOUCH_NAME_LINE: [usize; 3] = [0, 1, 0];
+/// Pitch (px) of those two lines (the 7.5 px font plus a 2 px gap, audit rule `V`).
+const NAME_LINE: f32 = 9.5;
 /// Distance (px) from the bottom of the button to the centre of those names.
 const LED_NAME_DROP: f32 = 15.5;
 
@@ -264,8 +269,8 @@ fn draw_option_buttons(
             vec2(rect.width(), 6.0),
         );
         w::led_strip(p, row, 3, |i| i == lit, RED, false);
-        // Printed under the LEDs: 1 2 3 (UNISON, DYN COMP) and H M L (KB TOUCH: Heavy, Medium,
-        // Light; the full names need more than the 13 px between the LEDs).
+        // Printed under the LEDs: 1 2 3 (UNISON, DYN COMP) and HEAVY / MED / LIGHT (KB TOUCH, on
+        // two staggered lines because the names are wider than the LED pitch).
         let names = if id == "piano.kb_touch" {
             LED_NAMES_TOUCH
         } else {
@@ -273,9 +278,14 @@ fn draw_option_buttons(
         };
         for (i, n) in names.iter().enumerate() {
             let x = rect.left() + rect.width() * (i as f32 + 0.5) / 3.0;
+            let line = if id == "piano.kb_touch" {
+                TOUCH_NAME_LINE[i]
+            } else {
+                0
+            };
             crate::widgets::label(
                 p,
-                pos2(x, rect.bottom() + LED_NAME_DROP),
+                pos2(x, rect.bottom() + LED_NAME_DROP + NAME_LINE * line as f32),
                 n,
                 crate::widgets::MIN_FONT_PX,
                 Color32::from_gray(205),
@@ -359,6 +369,13 @@ mod tests {
             list > closed + 5 && info > closed + 3,
             "{closed} {list} {info}"
         );
+    }
+
+    #[test]
+    fn kb_touch_prints_full_names_with_the_middle_one_on_a_second_line() {
+        assert_eq!(LED_NAMES_TOUCH, ["HEAVY", "MED", "LIGHT"]);
+        // Neighbours on one line would overlap (names wider than the LED pitch): they alternate.
+        assert!(TOUCH_NAME_LINE.windows(2).all(|w| w[0] != w[1]));
     }
 
     #[test]

@@ -125,13 +125,15 @@ pub(super) fn pad(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthUi, b: Btn, 
             Align2::CENTER_CENTER,
         );
     }
-    tiny(
-        p,
-        pos2(rect.center().x, rect.top() - 3.0),
-        label,
-        Color32::WHITE,
-        Align2::CENTER_BOTTOM,
-    );
+    if !label.is_empty() {
+        tiny(
+            p,
+            pos2(rect.center().x, rect.top() - 3.0),
+            label,
+            Color32::WHITE,
+            Align2::CENTER_BOTTOM,
+        );
+    }
     if let Some((aid, legend)) = alias {
         let why = unsupported_reason(aid);
         let col = if why.is_some() {

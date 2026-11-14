@@ -95,3 +95,26 @@ OLED files, golden images, the `C2 V3 C3` vibrato matrix.
 
 ### Summary of Changes
 `widgets/scale.rs`, `widgets/knob.rs`, `bay_effects/{lists,ctx,ids,amp,delay,modulation,reverb}.rs`, `bay_synth/pots.rs` (split from `widgets.rs`), `bay_master/rotary.rs`, `bay_piano_select.rs`, `layout_tweaks.rs`, `nord-panel` frame pads, `legibility_tests.rs` (own-numeral exemption).
+
+
+## Round 5 (fix/panel-leds-lists)
+
+### Context
+The real panel prints SAMPLES / ANALOG and MONO / LEGATO LED names, the full KB TOUCH names, TO ROTARY / LP FILTER / HP FILTER beside the amp list, and the Program title clear of the frame corner; the emulator showed initials, FLT / ROT or only the button value.
+
+### Higher Goal
+Every control can be read from what is printed on it; the legibility audit stays at 0 with an empty allow-list.
+
+### Acceptance Criteria
+- [x] SAMPLES / ANALOG and MONO / LEGATO LEDs with names (`bay_synth/names.rs`)
+- [x] KB TOUCH HEAVY / MED / LIGHT
+- [x] Amp list second column TO ROTARY / LP FILTER / HP FILTER
+- [x] PROGRAM title inset
+- [ ] `C2 V3 C3` vibrato matrix and Rotary title tab (not done)
+- [x] Audit 0 before, 1 during, 0 after; allow-list empty; docs and ROADMAP updated
+
+### Out of Scope
+OLED files, golden images.
+
+### Summary of Changes
+`bay_synth/{names,controls,widgets,mod}.rs`, `bay_piano_select.rs`, `bay_effects/amp.rs`, `layout_tweaks.rs`, `nord-panel` frames_table (MODE pad, PROGRAM title).

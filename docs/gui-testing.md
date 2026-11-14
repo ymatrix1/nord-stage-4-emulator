@@ -127,6 +127,8 @@ Round 3 adds frames (`panel/frames.rs`, `widgets/scale.rs`) and needs no new rul
 
 Round 4 adds knob numerals (`widgets/scale.rs`) and the Effects variation lists (`bay_effects/lists.rs`) with no new rule. Rule `C` exempts a numeral printed around the tick ring of its own knob (`is_own_numeral`: the text is one of the knob's numerals and lies within 16 px of its probe rectangle). First run with the numerals on 116 collisions (61 C, 44 L, 10 G, 1 V), 0 after names moved below the `0` / `10`, knob bodies shrank, frame pads grew and a few nudges; the lists and piano numerals gave 12 C, 2 E, 2 L, 2 T and 6 G / 4 V respectively, all fixed.
 
+Round 5 adds LED names (`bay_synth/names.rs`), KB TOUCH full names and the amp second list column with no new rule; first run 1 L (MED against the PIANO SELECT title), then 1 S (LIST at the section edge) while nudging, 0 after.
+
 `legibility_allow.txt` lists tolerated violations (empty now; the test also fails on stale
 entries). Run with `NS4_WRITE_COLLISIONS=<file> cargo test -p nord-gui collisions_match` to dump
 the current list. Fixes go into the shared helpers first: `widgets::label_fit` / `fit_size`
@@ -148,6 +150,8 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | After round 2 (drawbar numbers below the cap travel, LEDs before legend text, 9.5 px line pitch, nudges) | yes | 0 |
 | Round 3 content added (29 frames, type / timbre names first run: 28; then scale numerals, dial names, drawbar names and numerals: 64 and 43 on the next runs; rules unchanged) | yes | 28 |
 | After round 3 (frame pads, group nudges, scale placement, title positions) | yes | 0 |
+| Round 5 content added (MODE / VOICE LED names, KB TOUCH names, amp list column, PROGRAM title; nudges in progress) | yes | 1 |
+| After round 5 (Piano select nudge 48 / dial 45) | yes | 0 |
 | Round 4 content added (ring numerals, variation lists, piano LED names) | yes | 116 first run |
 | After round 4 (names below numerals, 3 px smaller knobs, frame pads, nudges) | yes | 0 |
 

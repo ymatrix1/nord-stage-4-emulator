@@ -105,12 +105,22 @@ pub(super) fn amp(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
 fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
     let mut changed = false;
     let m = f.rect("amp.model");
+    let rot_why = dim_reason("amp.to_rotary", c, slot);
     let leds = [
         ("TWIN", c.cabinet == AmpCabinet::Twin, ""),
         ("JC", c.cabinet == AmpCabinet::Jc, ""),
         ("SMALL", c.cabinet == AmpCabinet::Small, ""),
+        (
+            "TO ROTARY",
+            c.cabinet == AmpCabinet::ToRotary,
+            rot_why.unwrap_or(""),
+        ),
+        ("LP FILTER", c.cabinet == AmpCabinet::LpFilter, ""),
+        ("HP FILTER", c.cabinet == AmpCabinet::HpFilter, ""),
     ];
-    f.led_list("amp.model", m, &leds, &[2, 1, 0], &[]);
+    // Left column TWIN, JC, SMALL (top to bottom), right column TO ROTARY, LP FILTER, HP FILTER
+    // (manual p.51; photo `NS4-Panel-effects`).
+    f.led_list("amp.model", m, &leds, &[2, 1, 0], &[3, 4, 5]);
     let tip = "AMP MODEL: click cycles none, Twin, JC, Small. Shift+click or hold: VARIATION";
     match f.button("amp.model", m, MODELS[1..].contains(&c.cabinet), true, tip) {
         Some(Trigger::Primary) => {
@@ -132,33 +142,20 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
         why,
     );
 
-    // LP24 / HP24 and TO ROTARY share the model button's LEDs on the instrument.
+    // LP FILTER / HP FILTER and TO ROTARY share the model selector's LEDs on the instrument; here
+    // the two small buttons beside it select them and the names are printed in the list above.
     let flt = f.rect("amp.filter");
     let is_flt = matches!(c.cabinet, AmpCabinet::LpFilter | AmpCabinet::HpFilter);
-    let name = match c.cabinet {
-        AmpCabinet::LpFilter => "LP24",
-        AmpCabinet::HpFilter => "HP24",
-        _ => "FLT",
-    };
-    let tip = format!("AMP FILTER: {name}. Click cycles LP24, HP24, off (replaces the amp model)");
-    if f.button("amp.filter", flt, is_flt, false, &tip).is_some() {
+    let tip = "AMP FILTER: click cycles LP FILTER, HP FILTER, off (replaces the amp model)";
+    if f.button("amp.filter", flt, is_flt, false, tip).is_some() {
         c.cabinet = next_filter(c.cabinet);
         changed = true;
     }
-    crate::widgets::label(
-        f.p,
-        egui::pos2(flt.right() + 3.0, flt.center().y),
-        name,
-        5.5,
-        super::ctx::CAPTION,
-        egui::Align2::LEFT_CENTER,
-    );
 
     let rot = f.rect("amp.to_rotary");
-    let dim = dim_reason("amp.to_rotary", c, slot);
     let is_rot = c.cabinet == AmpCabinet::ToRotary;
     let tip = "TO ROTARY: send this Layer to the Rotary Speaker (last unit of its chain)";
-    if f.button("amp.to_rotary", rot, is_rot, false, tip).is_some() && dim.is_none() {
+    if f.button("amp.to_rotary", rot, is_rot, false, tip).is_some() && rot_why.is_none() {
         c.cabinet = if is_rot {
             AmpCabinet::Off
         } else {
@@ -166,15 +163,7 @@ fn model_selector(f: &mut Fx, c: &mut ChainUi, slot: usize) -> bool {
         };
         changed = true;
     }
-    crate::widgets::label(
-        f.p,
-        egui::pos2(rot.right() + 3.0, rot.center().y),
-        "ROT",
-        5.5,
-        super::ctx::CAPTION,
-        egui::Align2::LEFT_CENTER,
-    );
-    if let Some(why) = dim {
+    if let Some(why) = rot_why {
         f.dim(rot);
         f.hover(rot, "amp.to_rotary_why", &format!("Not available: {why}"));
     }

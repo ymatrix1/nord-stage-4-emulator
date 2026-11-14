@@ -1,6 +1,7 @@
 //! Buttons and pots of the Synth section outside the layer strip: Oscillators, Filter, Amp, LFO,
 //! Voice, Vibrato, Arpeggiator/Gate, KB Hold (manual p.28-37).
 
+use super::names::paint_names;
 use super::widgets::{pad, pot};
 use crate::panel::prelude::*;
 use crate::panel::ui_state::{Btn, Knob, SynthUi};
@@ -8,7 +9,7 @@ use egui::Pos2;
 
 /// Pad buttons: (button, legend printed above it).
 const PADS: [(Btn, &str); 17] = [
-    (Btn::Mode, "SELECT"),
+    (Btn::Mode, ""),
     (Btn::Waveform, "WAVEFORM"),
     (Btn::PitchSmp, "PITCH/SMP"),
     (Btn::OscEnvelope, "ENVELOPE"),
@@ -17,7 +18,7 @@ const PADS: [(Btn, &str); 17] = [
     (Btn::AmpEnvelope, "ENVELOPE"),
     (Btn::LfoWaveform, "WAVEFORM"),
     (Btn::LfoDest, "DEST"),
-    (Btn::VoiceMode, "MODE"),
+    (Btn::VoiceMode, ""),
     (Btn::Unison, "SELECT"),
     (Btn::VibratoSel, "SELECT"),
     (Btn::VibratoMenu, "MENU"),
@@ -49,6 +50,8 @@ pub(super) fn paint_controls(ui: &mut Ui, p: &Painter, o: Pos2, sui: &mut SynthU
     for (k, label) in POTS {
         pot(ui, p, o, sui, k, label);
     }
+    // MODE / VOICE print LED names instead of a legend (the button keeps its value).
+    paint_names(p, o, sui);
 }
 
 #[cfg(test)]

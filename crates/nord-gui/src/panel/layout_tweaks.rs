@@ -92,9 +92,9 @@ pub const GROUP_TWEAKS: &[(&str, f32, f32)] = &[
     ("synth.unison", 0.0, 16.0),
     // Piano: the PIANO SELECT box (type names, dial) moves under the KB TOUCH / DYN COMP LEDs; the
     // TIMBRE button moves left so its two name columns end before the box.
-    ("piano.type", 0.0, 45.0),
+    ("piano.type", 0.0, 52.0),
     ("piano.select_dial", 0.0, 45.0),
-    ("piano.info", 0.0, 45.0),
+    ("piano.info", 0.0, 52.0),
     ("piano.list", 0.0, 45.0),
     ("piano.timbre", -9.0, 0.0),
     // Layer Effects: Mod 1 clear of the header's ON button legend, Mod 2 and Amp Sim/EQ down,
