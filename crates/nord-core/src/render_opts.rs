@@ -222,6 +222,9 @@ pub struct FirmwareOptions {
     /// `--synth-p fitted|gain,w2,r2,shape,cutoff`: the EMPIRICAL oscillator P block of the strip
     /// chain (`synth/p_block.rs`); `None` keeps the single idle oscillator.
     pub synth_p: Option<PSpec>,
+    /// `--synth-stages`: `SynthLayer::strip_stages` (noise, Shape Square, SUPER, MULTI firmware stages
+    /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
+    pub synth_stages: bool,
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
@@ -256,6 +259,7 @@ impl Default for FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             synth_p: None,
+            synth_stages: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -290,6 +294,7 @@ impl FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             synth_p: None,
+            synth_stages: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -337,6 +342,7 @@ impl FirmwareOptions {
         }
         o.piano_bus_scale |= has("--firmware-piano-bus");
         o.measured_laws |= has("--measured-laws");
+        o.synth_stages |= has("--synth-stages");
         o.firmware_routing |= has("--firmware-routing");
         if has("--legacy-routing") {
             o.firmware_routing = false;
@@ -396,6 +402,7 @@ impl FirmwareOptions {
         apply_synth_chain(engine, self.synth_chain);
         self.set_shape(engine);
         self.set_p_block(engine);
+        self.set_stages(engine);
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
@@ -462,6 +469,9 @@ impl FirmwareOptions {
         });
         self.set_shape(engine);
         self.set_p_block(engine);
+    }
+
+        self.set_stages(engine);
         self.set_organ_level(engine);
     }
 
@@ -489,6 +499,11 @@ impl FirmwareOptions {
         engine.synth_a.p_block = p;
         engine.synth_b.p_block = p;
         engine.synth_c.p_block = p;
+        }
+    fn set_stages(&self, engine: &mut Stage4Engine) {
+        engine.synth_a.strip_stages = self.synth_stages;
+        engine.synth_b.strip_stages = self.synth_stages;
+        engine.synth_c.strip_stages = self.synth_stages;
     }
 
     fn set_measured_laws(&self, engine: &mut Stage4Engine) {
@@ -535,6 +550,8 @@ impl FirmwareOptions {
         }
         if let Some(p) = self.synth_p {
             parts.push(format!("synth-p={p:?}"));
+        if self.synth_stages {
+            parts.push("stages".into());
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
@@ -644,6 +661,17 @@ mod tests {
         };
         m.apply_to(&mut a);
         assert!(a.synth_a.measured_laws && a.synth_b.measured_laws && a.synth_c.measured_laws);
+    }
+
+    #[test]
+    fn synth_stages_flag_sets_the_opt_in_stage_oscillators() {
+        let o = FirmwareOptions::from_args(&["--synth-stages".into()]).unwrap();
+        assert!(o.synth_stages && o.summary().contains("stages"));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert!(e.synth_a.strip_stages && e.synth_c.strip_stages);
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert!(!e.synth_b.strip_stages);
     }
 
     #[test]

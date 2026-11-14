@@ -24,6 +24,7 @@ mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_tables;
 mod fw_shape;
+mod fw_stages;
 mod fw_strip_cutoff;
 mod gain_dezip;
 mod hw_saw;
@@ -50,6 +51,7 @@ pub use fw_filter::{
     FW_CUTOFF_MAX_FRACTION, FW_CUTOFF_MIN_HZ,
 };
 pub use fw_shape::{fw_shape_wave, fw_shape_width};
+pub use fw_stages::{noise_sample, noise_step, saw_diff, spread_u, FwStage, FwStageState};
 pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
 pub use gain_dezip::{gain_pole_for, CONTROL_TICK_HZ, SY_FRAME_RATE_HZ, SY_GAIN_POLE};
 pub use hw_saw::{firmware_blep_step, firmware_saw, firmware_saw_fade, SawModel};
@@ -78,6 +80,8 @@ mod tests_envelope;
 mod tests_fw_filter_golden;
 #[cfg(test)]
 mod tests_fw_shape_golden;
+#[cfg(test)]
+mod tests_fw_stage_golden;
 #[cfg(test)]
 mod tests_hw_saw_golden;
 #[cfg(test)]
@@ -187,6 +191,11 @@ pub struct SynthLayer {
     pub strip_shape: Option<f32>,
     /// Strip chain only (opt-in): empirical oscillator-stage parameter block (`p_block.rs`).
     pub p_block: Option<PBlock>,
+    /// ANALOG category / wave of the decoded oscillator as a modelled firmware stage (`fw_stages.rs`).
+    pub strip_stage: Option<FwStage>,
+    /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
+    /// with the firmware stage models instead of the decoded legacy waveform.
+    pub strip_stages: bool,
     strip_cache: Option<([f32; 8], StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
@@ -319,6 +328,8 @@ impl SynthLayer {
             strip_key_velocity: true,
             strip_shape: None,
             p_block: None,
+            strip_stage: None,
+            strip_stages: false,
             osc_shape_category: false,
             strip_cache: None,
             ctrl_counter: 0,

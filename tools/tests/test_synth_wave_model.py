@@ -71,7 +71,7 @@ def test_stage_advances_the_phase_by_four_increments() -> None:
 def test_oracle_pokes_cover_the_surviving_words_of_both_lanes() -> None:
     lanes = o.random_lanes(random.Random(1))
     pk = o.pokes(lanes)
-    assert len(lanes) == 2 and len(pk) == 2 * 9 + 1
+    assert len(lanes) == 2 and len(pk) == 2 * 10 + 1
     assert pk[o.RECORD - 21] == lanes[0].phase1 and pk[o.RECORD - 20] == lanes[1].phase1
 
 
