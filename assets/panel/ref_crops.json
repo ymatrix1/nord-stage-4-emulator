@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "status": "REFERENCE-DERIVED (D28)",
+  "source": "Owner-supplied render NS4-Panel-organ.max-2000x2000.format-png.png (1961 x 1185, private, kept in .reference/, never committed). Boxes are (x0, y0, x1, y1) in its pixels; tools/panel_refbake.py cuts the committed sprites from it.",
+  "ref_px_per_unit": 129.0,
+  "slot_plate_target": [47, 57, 68],
+  "buttons": {
+    "organ_on": [716, 25, 852, 97],
+    "vib_chorus": [1011, 226, 1148, 303],
+    "perc_volume": [1402, 244, 1539, 320],
+    "perc_decay": [1563, 244, 1701, 320],
+    "perc_harmonic": [1724, 244, 1862, 320],
+    "organ_model": [736, 356, 873, 433],
+    "vib_on": [1088, 375, 1226, 452],
+    "perc_on": [1724, 376, 1862, 453],
+    "aux_a_onoff": [272, 628, 410, 705],
+    "aux_b_onoff": [448, 628, 586, 705],
+    "rotary_organ": [65, 649, 202, 719],
+    "stop_mode": [66, 845, 202, 920],
+    "rotary_speed": [66, 1027, 202, 1103],
+    "preset_sync": [360, 850, 498, 929],
+    "octave_shift": [291, 1012, 564, 1092]
+  },
+  "triangles": {
+    "organ_model": {"box": [774, 215, 835, 339], "grid": [2, 3], "lit": [0, 2], "unlit_src": [0, 0], "dir": "left"},
+    "vib_chorus": {"box": [1173, 232, 1295, 292], "grid": [3, 2], "lit": [2, 0], "unlit_src": [1, 0], "dir": "up"}
+  },
+  "knobs": {
+    "master": {"centre": [132.3, 173.2], "top_offset": [-22.5, -6.5], "pointer_deg": 127, "body_from": "drive"},
+    "drive": {"centre": [132.3, 485.2], "top_offset": [-19.0, 2.0], "pointer_deg": -90}
+  },
+  "tiles": {
+    "plate_red": {"target": [130, 27, 38], "tol": 45},
+    "plate_slate": {"target": [55, 64, 76], "tol": 30},
+    "plate_silver": {"target": [181, 192, 206], "tol": 30}
+  },
+  "caps": {
+    "drawbar_cap_black": {"centre": [658.5, 967.5], "kind": "black", "size": [96, 160]},
+    "drawbar_cap_white": {"centre": [949, 1006], "kind": "white", "size": [96, 160]},
+    "layer_cap_grey": {"centre": [309, 243.5], "kind": "grey", "size": [96, 96]}
+  }
+}

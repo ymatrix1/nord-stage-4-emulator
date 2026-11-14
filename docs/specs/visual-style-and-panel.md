@@ -181,20 +181,25 @@ To keep every label legible on standard 1080p/1440p/4K monitors and inside DAW p
 
 ## 6. Baked sprite proof (B7, Phase 6b)
 
-Measured output of the D15 baker: a knob filmstrip with a separate arc-ring layer, three fader cap sprites (black, white, grey) with one shared shadow layer, and two plates, rendered by `assets/blender/build_proof.py`, committed under `assets/panel/proof/` with SHA-256 hashes in `manifest.json` (`python tools/panel_assets.py verify`). Colours and proportions come from numbers measured on the owner's private reference images, stored in [`assets/panel/theme_samples.json`](../../assets/panel/theme_samples.json) (no pixels, D16). Details, sizes and what still differs from the hardware: [panel-blender-proof.md](../research/panel-blender-proof.md).
+Measured output of the D15 baker (v4, matched feature by feature to the owner's private Organ section render; since [D28](../DECISIONS.md#d28-panel-proof-sprites-may-be-derived-from-the-reference-render) buttons, triangle selectors, knob bodies, the DRIVE scale and plate tiles are cut from the reference by `tools/panel_refbake.py`, tagged `REFERENCE-DERIVED (D28)`): a knob filmstrip with two separate overlay layers (arc ring, numbered DRIVE scale), drawbar caps (black, white) with one shared shadow, a grey layer-fader cap with its own shadow, grey and black pill buttons in their wells, three seamless plate tiles (red leather, slate, silver header) and the slotted slate plate. Rendered by `assets/blender/build_proof.py`, committed under `assets/panel/proof/` with SHA-256 hashes in `manifest.json` (`python tools/panel_assets.py verify`). Colours and proportions are numbers measured on the reference, stored in [`assets/panel/theme_samples.json`](../../assets/panel/theme_samples.json) (no pixels, D16). Details, method, sizes and what still differs: [panel-blender-proof.md](../research/panel-blender-proof.md).
 
 | Item | Value | Tag |
 |---|---|---|
-| Knob filmstrip | 64 frames, 8x8 grid, frame 96 px (1x) / 192 px (2x), transparent (composes on any plate), pointer -135 to +135 deg clockwise | rotation `EMPIRICAL` (rotary scale on reference, measurement only) |
-| Knob arc ring | own transparent layer, 270 deg, thin start to thick end, outer 1.25 x cap radius | proportions `EMPIRICAL` |
-| Fader caps | black, white, grey; 96 px / 192 px; one shadow sprite of the same size shared by all | shape `ASSUMED` (original), proportions `EMPIRICAL` |
-| Plate colours | red (134, 31, 41), slate (55, 64, 76) sampled from the reference; rendered within 6 per channel | `MEASURED` (see note) |
-| Light | one top-left sun, elevation about 61 deg, soft | `ASSUMED`, D15 |
-| Camera | orthographic, 30 deg tilt toward player | `ASSUMED` |
-| Size, one knob style + all caps + plates | 503 KB (1x), 1.47 MB (2x) PNG | measured |
-| Full-panel estimate (4 knob styles) | 1.82 MB (1x), 5.13 MB (2x) PNG | counts `ASSUMED` until B2 |
+| Scale | 64 px per Blender unit at 1x, 128 at 2x (reference: 129); knob base 0.8 u | `EMPIRICAL` |
+| Camera | perspective, straight down, 13.5 u above the panel; per-class lean as a camera offset with lens shift (`panel_assets.LEAN`) so all layers stay aligned | `EMPIRICAL` (fitted from the Master Level lean) |
+| Light | one top-left sun (elevation about 61 deg, soft, diffuse only, the only shadow caster); uniform diffuse ambient; glossy-only ring softbox for edge highlights | sun `ASSUMED` (D15), ambient `EMPIRICAL` |
+| Knob filmstrip | 64 frames, 8x8 grid, frame 96 px (1x) / 192 px (2x), transparent, pointer -135 to +135 deg clockwise; 20 flutes, bent tapered pointer | rotation and proportions `EMPIRICAL` |
+| Knob arc ring | own layer, 270 deg, outer 1.31 x cap radius, thickness 3 to 15 reference px | `EMPIRICAL` (circle fit) |
+| Reference knobs | Master Level and DRIVE: cap body from the reference (pointer removed), Blender pointer filmstrip (64 frames, cap holdout) and shadow at each knob's lean; DRIVE numeral scale layer from the reference | `REFERENCE-DERIVED (D28)` body and scale, pointer `EMPIRICAL` |
+| Drawbar caps | black (16'), white (8'); 96 x 160 px (1x); one shared 3D part (full-width base, block with tapered sides and sloped front, lower nose with a steep right wall, low base band in front), same camera for both colours, calibrated materials, Blender shadow | shape from the owner's photos of the real part, size `EMPIRICAL` |
+| Layer-fader cap | grey; 96 x 96 px (1x); 3D rounded frustum, calibrated material, own Blender shadow | shape from the owner's photo, size `EMPIRICAL` |
+| Buttons | all 15 buttons of the reference (black and grey pills, octave pair), up state with well, one sprite per instance (about 68 x 38 px at 1x) | `REFERENCE-DERIVED (D28)` |
+| Triangle selectors | ORGAN MODEL and VIB/CHORUS matrices, unlit base plus lit overlay (left, up; right and down mirrored) | `REFERENCE-DERIVED (D28)` |
+| Plate tiles | red, slate, silver; 128 px (1x), seamless, quilted from clean reference patches shifted to the measured colours | `REFERENCE-DERIVED (D28)` |
+| Size, whole proof set | 824 KB (1x), 2.76 MB (2x) PNG | measured |
+| Full-panel estimate (6 knob, 15 button styles) | 2.16 MB (1x), 6.64 MB (2x) PNG | counts `ASSUMED` until B2 |
 
-Note: the sampled colours differ from the §2 tokens (red (134, 31, 41) vs `#8E1B1F`; slate (55, 64, 76) vs `#323D47`). The sprites follow the samples; which one becomes the theme token is open for B8.
+Note: the sampled colours differ from the §2 tokens (red (130, 27, 38) vs `#8E1B1F`; slate (55, 64, 76) vs `#323D47`; silver (179, 191, 205) vs `#A3AFB9`). The sprites follow the samples; which one becomes the theme token is open for B8. Still different from the reference (summary): buttons and selectors match up to resampling. The knobs differ in the ring (full track vs lit value), the static fluted body and a slightly softer pointer bend. Each cap colour is one sprite, so it keeps the lean of the drawbar it was cut from. Full per-style list in the research note.
 
 ## Label legibility rules (B8)
 

@@ -4,7 +4,9 @@
 Pipeline (Blender is a development dependency only; CI never renders):
 
     python tools/panel_assets.py render      # headless Blender -> assets/panel/proof/_raw
-    python tools/panel_assets.py pack        # stitch filmstrips, write manifest + size report
+    python tools/panel_refbake.py --ref <reference.png>   # reference-derived sprites (D28)
+    python tools/panel_assets.py pack        # stitch filmstrips, manifest, sizes
+    python tools/panel_assets.py preview     # assets/panel/proof/preview_2x.png
     python tools/panel_assets.py verify      # check committed PNGs against the manifest (CI-safe)
 
 The same constants are imported by `assets/blender/build_proof.py` so the scene and the
@@ -27,33 +29,89 @@ MANIFEST = PROOF_DIR / "manifest.json"
 SCENE_SCRIPT = ROOT / "assets" / "blender" / "build_proof.py"
 THEME_SAMPLES = ROOT / "assets" / "panel" / "theme_samples.json"  # measured colours, numbers only
 
-# EMPIRICAL: 1 Blender unit = 64 px at 1x. Chosen so a 96 px frame covers 1.5 units; measured
-# proportions (cap diameter vs fader-cap width about 1:1) come from the owner's reference photo,
-# numbers only, no pixels (D16).
+# EMPIRICAL: 1 Blender unit = 64 px at 1x. The reference render has 129 px per unit (knob base
+# diameter 103.4 px = 0.8 u), so our 2x sprites (128 px per unit) sit at the reference scale.
 PX_PER_UNIT = 64
 SCALES = (1, 2)
 KNOB_FRAMES = 64
 KNOB_GRID = 8  # 8 x 8 grid of frames per filmstrip
 KNOB_FRAME_PX = 96  # 1x frame edge; 2x doubles it
-# EMPIRICAL: rotary scale on the reference photo runs 0 at lower-left to 10 at lower-right,
-# a 270 degree sweep; frame 0 = -135 deg, frame 63 = +135 deg (clockwise positive).
+# EMPIRICAL: rotary scale on the reference runs 0 at lower-left to 10 at lower-right, a 270
+# degree sweep; frame 0 = -135 deg, frame 63 = +135 deg (clockwise positive).
 KNOB_SWEEP_DEG = 270.0
-FADER_FRAME_PX = 96
-FADER_COLORS = ("black", "white", "grey")  # drawbar black / white, layer-fader grey
-# ASSUMED: the reference renders are a near top-down perspective view (the arc ring reads
-# almost circular, ratio 0.93 = cos 22 deg). One orthographic camera tilted 24 deg for every
-# sprite keeps layers aligned while still showing cap sides and fronts.
-CAM_TILT_DEG = 30.0
-PLATE_PX = {"plate_red": (128, 128), "plate_slate_slot": (128, 256)}
+
+# EMPIRICAL: the reference is a perspective render looking straight down. The Master Level top
+# face is shifted 23 px off its base at 848 px off-centre, which for a 0.4 u tall cap puts the
+# camera about 13.5 u (1750 reference px) above the panel.
+CAM_HEIGHT_U = 13.5
+# EMPIRICAL: camera offset from each sprite class (units, +x right, +y up the panel), read from
+# where the matching control sits relative to the reference image centre (980, 592): Master
+# Level knob, 16' drawbar cap, layer fader A cap, ORGAN button. Plates are flat (no lean).
+LEAN = {
+    "knob": (6.57, -1.5),
+    # EMPIRICAL: the DRIVE pointer sits 5.5 px below the base centre on the reference, so the
+    # optical axis is above that knob (the reference is cropped off-centre vertically).
+    "knob_master": (6.57, 1.0),
+    "knob_drive": (6.57, 1.4),
+    "drawbar": (1.3, 5.3),  # EMPIRICAL: between the 16' and 8' caps, axis above centre
+    "layer": (5.29, -2.73),
+    "button": (6.59, 0.70),
+    "plate": (0.0, 0.0),
+    # EMPIRICAL: per cap, from where it sits on the reference; the optical axis is about
+    # 290 px above the image centre (DRIVE knob lean), tuned against the cap silhouettes.
+    "drawbar_cap_black": (1.2, 5.2),
+    "drawbar_cap_white": (0.2, 5.5),
+    "layer_cap_grey": (5.29, -0.45),
+}
+
+# Blender-rendered single sprites: name -> (1x width, 1x height) in px.
+SPRITES = {
+    "knob_ring": (96, 96),  # white arc, separate layer (Master Level style)
+    "knob_shadow_master": (96, 96),  # shadow of the reference-derived Master Level cap
+    "knob_shadow_drive": (96, 96),
+    "plate_slate_slot": (128, 256),  # drawbar slot on slate, not a tile
+    # caps: 3D geometry textured by projecting the reference from the cap's camera (D28)
+    "drawbar_cap_black": (96, 160),
+    "drawbar_shadow_black": (96, 160),
+    "drawbar_cap_white": (96, 160),
+    "drawbar_shadow_white": (96, 160),
+    "layer_cap_grey": (96, 96),
+    "layer_shadow_grey": (96, 96),
+}
+# Knobs whose cap body is cut from the reference (D28); each gets a Blender pointer filmstrip.
+REF_KNOBS = ("master", "drive")
+FILMSTRIPS = ("knob_filmstrip", *(f"pointer_{k}" for k in REF_KNOBS))
+TILES = ("plate_red", "plate_slate", "plate_silver")  # reference-derived, seamless
+REF_CROPS = ROOT / "assets" / "panel" / "ref_crops.json"
+
+
+def ref_sprites(crops: dict | None = None) -> list[str]:
+    """Names of the sprites `tools/panel_refbake.py` cuts from the reference (D28)."""
+    crops = crops or json.loads(REF_CROPS.read_text(encoding="utf-8"))
+    names = [f"button_{b}" for b in crops["buttons"]]
+    names += [f"tri_{t}" for t in crops["triangles"]]
+    names += sorted({f"tri_lit_{t['dir']}" for t in crops["triangles"].values()})
+    names += [f"knob_body_{k}" for k in crops["knobs"]] + ["knob_scale", *TILES]
+    return names
+
+
+DRAWBAR_COLORS = ("black", "white")
+# Cap frames (1x px); the caps are cut from the reference (D28), see ref_crops.json "caps".
+CAP_FRAMES = {
+    "drawbar_cap_black": (96, 160),
+    "drawbar_cap_white": (96, 160),
+    "layer_cap_grey": (96, 96),
+}
 
 # ASSUMED: control counts until B2 (ns4-3n0d) verifies them against the manual; chosen from a
 # rough read of the reference photo (3 sections x ~12 knobs, 9+9 drawbars, 3 layer faders).
 PANEL_ESTIMATE = {"knobs": 45, "faders": 30, "buttons": 150}
-# ASSUMED: distinct sprite styles (each needs its own filmstrip / cap sprite pair): knob styles =
-# small, medium, large, endless encoder; fader styles = grey layer cap, black and white drawbar.
-KNOB_STYLES = 4
-# ASSUMED: one shared PNG per button state, 3 sprites (up, down, lit-overlay) at 64 px square.
-BUTTON_SPRITE_BYTES_FACTOR = 3
+# ASSUMED: distinct knob styles on the whole panel (each needs its own filmstrip): the two
+# reference knobs (Master Level, DRIVE) plus the generic style and three more sizes elsewhere.
+KNOB_STYLES = 6
+# ASSUMED: button down and lit states are not rendered yet; each button sprite will need two
+# more of the same size.
+BUTTON_EXTRA_STATES = 2
 
 
 def knob_angle_deg(frame: int) -> float:
@@ -63,8 +121,8 @@ def knob_angle_deg(frame: int) -> float:
     return -KNOB_SWEEP_DEG / 2 + KNOB_SWEEP_DEG * frame / (KNOB_FRAMES - 1)
 
 
-def frame_path(raw: Path, scale: int, frame: int) -> Path:
-    return raw / f"knob_{scale}x" / f"f{frame:03d}.png"
+def frame_path(raw: Path, scale: int, frame: int, strip: str = "knob") -> Path:
+    return raw / f"{strip}_{scale}x" / f"f{frame:03d}.png"
 
 
 def sha256(path: Path) -> str:
@@ -79,27 +137,48 @@ def png_size(path: Path) -> tuple[int, int]:
     return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
 
 
-def stitch_filmstrip(raw: Path, scale: int, out: Path) -> None:
-    """Pack the 64 knob frames into an 8x8 grid PNG (row-major, frame 0 top-left)."""
+def save_png(img, out: Path) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out, format="PNG", optimize=True, compress_level=9)
+
+
+def stitch_filmstrip(raw: Path, scale: int, out: Path, strip: str = "knob") -> None:
+    """Pack 64 frames into an 8x8 grid PNG (row-major, frame 0 top-left)."""
     from PIL import Image
 
     edge = KNOB_FRAME_PX * scale
     sheet = Image.new("RGBA", (edge * KNOB_GRID, edge * KNOB_GRID), (0, 0, 0, 0))
     for i in range(KNOB_FRAMES):
-        with Image.open(frame_path(raw, scale, i)) as im:
+        with Image.open(frame_path(raw, scale, i, strip)) as im:
             if im.size != (edge, edge):
                 raise ValueError(f"frame {i} is {im.size}, expected {(edge, edge)}")
             sheet.paste(im.convert("RGBA"), ((i % KNOB_GRID) * edge, (i // KNOB_GRID) * edge))
-    out.parent.mkdir(parents=True, exist_ok=True)
-    sheet.save(out, format="PNG", optimize=True, compress_level=9)
+    save_png(sheet, out)
+
+
+def make_seamless(img):
+    """Return an opaque copy of `img` that wraps without seams: the image is cross-faded with a
+    copy rolled by half its size (weight 1 at the centre, 0 at the borders), and the blend is
+    renormalised so the grain keeps its contrast where both copies mix."""
+    import numpy as np
+    from PIL import Image
+
+    a = np.asarray(img.convert("RGB"), dtype=np.float64)
+    h, w = a.shape[:2]
+    b = np.roll(a, (h // 2, w // 2), axis=(0, 1))
+    wy = np.sin(np.pi * (np.arange(h) + 0.5) / h) ** 2
+    wx = np.sin(np.pi * (np.arange(w) + 0.5) / w) ** 2
+    wa = np.outer(wy, wx)[..., None]
+    mean = a.mean(axis=(0, 1))
+    mix = ((a - mean) * wa + (b - mean) * (1 - wa)) / np.sqrt(wa**2 + (1 - wa) ** 2)
+    out = np.clip(np.rint(mean + mix), 0, 255).astype(np.uint8)
+    return Image.fromarray(out, "RGB").convert("RGBA")
 
 
 def asset_names() -> list[str]:
     names = []
     for s in SCALES:
-        names += [f"knob_filmstrip_{s}x.png", f"knob_ring_{s}x.png", f"fader_shadow_{s}x.png"]
-        names += [f"fader_cap_{c}_{s}x.png" for c in FADER_COLORS]
-        names += [f"{p}_{s}x.png" for p in PLATE_PX]
+        names += [f"{n}_{s}x.png" for n in (*FILMSTRIPS, *SPRITES, *ref_sprites())]
     return names
 
 
@@ -114,7 +193,7 @@ def build_manifest(proof: Path = PROOF_DIR) -> dict:
             "width": w,
             "height": h,
         }
-    return {"version": 1, "files": files}
+    return {"version": 2, "files": files}
 
 
 def verify_manifest(manifest: dict, proof: Path = PROOF_DIR) -> list[str]:
@@ -130,7 +209,7 @@ def verify_manifest(manifest: dict, proof: Path = PROOF_DIR) -> list[str]:
 
 
 def size_report(manifest: dict, estimate: dict | None = None) -> dict:
-    """Per-asset bytes plus a full-panel estimate per scale (PNG on disk and RGBA in GPU memory)."""
+    """Per-scale bytes plus a full-panel estimate (PNG on disk and RGBA in GPU memory)."""
     estimate = estimate or PANEL_ESTIMATE
     f = manifest["files"]
     out = {"estimate_counts": dict(estimate), "per_scale": {}}
@@ -138,75 +217,26 @@ def size_report(manifest: dict, estimate: dict | None = None) -> dict:
     def px(name: str) -> int:
         return f[name]["width"] * f[name]["height"]
 
+    buttons = [n for n in ref_sprites() if n.startswith("button_")]
     for s in SCALES:
-        knob, ring = f"knob_filmstrip_{s}x.png", f"knob_ring_{s}x.png"
-        shadow = f"fader_shadow_{s}x.png"
-        caps = [f"fader_cap_{c}_{s}x.png" for c in FADER_COLORS]
-        plates = [f"{p}_{s}x.png" for p in PLATE_PX]
-        shared = [knob, ring, shadow, *caps, *plates]  # one knob style, all cap colours
-        btn_px = (64 * s) ** 2 * BUTTON_SPRITE_BYTES_FACTOR  # buttons not rendered yet (ASSUMED)
-        extra_knobs = KNOB_STYLES - 1  # further knob styles cost one more filmstrip + ring each
+        knob = f"knob_filmstrip_{s}x.png"
+        singles = [*SPRITES, *ref_sprites()]
+        shared = [f"{n}_{s}x.png" for n in (*FILMSTRIPS, *singles)]
+        extra = (KNOB_STYLES - len(FILMSTRIPS)) * px(knob) + BUTTON_EXTRA_STATES * sum(
+            px(f"{b}_{s}x.png") for b in buttons
+        )
         out["per_scale"][f"{s}x"] = {
+            "knob_styles": KNOB_STYLES,
+            "button_styles": len(buttons),
             "knob_filmstrip_png_bytes": f[knob]["bytes"],
-            "knob_ring_png_bytes": f[ring]["bytes"],
-            "fader_cap_plus_shadow_png_bytes": f[caps[0]]["bytes"] + f[shadow]["bytes"],
+            "sprite_png_bytes": {n: f[f"{n}_{s}x.png"]["bytes"] for n in (*FILMSTRIPS, *singles)},
             "shared_sprite_set_png_bytes": sum(f[n]["bytes"] for n in shared),
             "shared_sprite_set_rgba_bytes": 4 * sum(px(n) for n in shared),
-            "full_panel_png_bytes_excl_buttons": sum(f[n]["bytes"] for n in shared)
-            + extra_knobs * (f[knob]["bytes"] + f[ring]["bytes"]),
-            "full_panel_rgba_bytes_incl_buttons": 4
-            * (sum(px(n) for n in shared) + extra_knobs * (px(knob) + px(ring)) + btn_px),
+            "full_panel_png_bytes": sum(f[n]["bytes"] for n in shared)
+            + (KNOB_STYLES - len(FILMSTRIPS)) * f[knob]["bytes"],
+            "full_panel_rgba_bytes": 4 * (sum(px(n) for n in shared) + extra),
         }
     return out
-
-
-PREVIEW_FRAMES = (0, 16, 32, 47, 63)
-
-
-def _frame(strip, frame: int, edge: int):
-    col, row = frame % KNOB_GRID, frame // KNOB_GRID
-    return strip.crop((col * edge, row * edge, (col + 1) * edge, (row + 1) * edge))
-
-
-def composed_knob(proof: Path, frame: int, scale: int = 2):
-    """Plate, arc ring layer, then the knob frame (shadow baked in): the draw order in the app."""
-    from PIL import Image
-
-    e = KNOB_FRAME_PX * scale
-    plate = Image.open(proof / f"plate_red_{scale}x.png").convert("RGBA")
-    c = plate.size[0] // 2
-    bg = plate.crop((c - e // 2, c - e // 2, c + e // 2, c + e // 2))
-    bg.alpha_composite(Image.open(proof / f"knob_ring_{scale}x.png").convert("RGBA"))
-    strip = Image.open(proof / f"knob_filmstrip_{scale}x.png").convert("RGBA")
-    bg.alpha_composite(_frame(strip, frame, e))
-    return bg
-
-
-def composed_fader(proof: Path, color: str, scale: int = 2):
-    """Slate plate with slot, then the shared shadow layer, then the cap sprite."""
-    from PIL import Image
-
-    e = FADER_FRAME_PX * scale
-    slate = Image.open(proof / f"plate_slate_slot_{scale}x.png").convert("RGBA")
-    cx, cy = slate.size[0] // 2, slate.size[1] // 2
-    bg = slate.crop((cx - e // 2, cy - e // 2, cx + e // 2, cy + e // 2))
-    for n in (f"fader_shadow_{scale}x", f"fader_cap_{color}_{scale}x"):
-        bg.alpha_composite(Image.open(proof / f"{n}.png").convert("RGBA"))
-    return bg
-
-
-def compose_preview(proof: Path = PROOF_DIR, scale: int = 2):
-    """Proof sheet: five knob frames (top) and the three fader caps (bottom), composed from the
-    committed layers exactly as the app would draw them."""
-    from PIL import Image
-
-    e, gap = KNOB_FRAME_PX * scale, 8
-    sheet = Image.new("RGBA", (e * 5 + gap * 4, e * 2 + gap), (24, 24, 26, 255))
-    for i, frame in enumerate(PREVIEW_FRAMES):
-        sheet.paste(composed_knob(proof, frame, scale), (i * (e + gap), 0))
-    for i, color in enumerate(FADER_COLORS):
-        sheet.paste(composed_fader(proof, color, scale), (i * (e + gap), e + gap))
-    return sheet
 
 
 def find_blender() -> str:
@@ -233,17 +263,44 @@ def render(raw: Path = RAW_DIR) -> None:
     subprocess.run(cmd, check=True)
 
 
+def retexture_slot(render, tile, target, slot_lum: float = 40.0):
+    """Keep the Blender slot (dark pixels and their 1 px edge) and replace the rendered slate
+    around it with the reference slate tile (D28), shifted to the measured slate colour of the
+    drawbar area, so the plate behind the caps has the reference grain."""
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    from_render = np.asarray(render.convert("RGB"), dtype=np.float64)
+    lum = from_render.mean(axis=2)
+    slot = Image.fromarray(((lum < slot_lum) * 255).astype(np.uint8)).filter(
+        ImageFilter.MaxFilter(3)
+    )
+    keep = np.asarray(slot.filter(ImageFilter.GaussianBlur(0.8)), dtype=np.float64)[..., None] / 255
+    t = np.asarray(tile.convert("RGB"), dtype=np.float64)
+    reps = (-(-from_render.shape[0] // t.shape[0]), -(-from_render.shape[1] // t.shape[1]), 1)
+    t = np.tile(t, reps)[: from_render.shape[0], : from_render.shape[1]]
+    t = t - t.mean(axis=(0, 1)) + np.asarray(target, dtype=np.float64)
+    out = from_render * keep + t * (1 - keep)
+    return Image.fromarray(np.clip(np.rint(out), 0, 255).astype(np.uint8), "RGB").convert("RGBA")
+
+
 def pack(raw: Path = RAW_DIR, proof: Path = PROOF_DIR) -> dict:
+    """Stitch the Blender filmstrips and copy the Blender sprites (the slot plate gets the
+    reference slate grain); the reference-derived sprites are already written by
+    panel_refbake.py, which must run first. Then rebuild the manifest."""
+    from PIL import Image
+
     for s in SCALES:
-        stitch_filmstrip(raw, s, proof / f"knob_filmstrip_{s}x.png")
-        for name in (
-            "knob_ring",
-            "fader_shadow",
-            *PLATE_PX,
-            *(f"fader_cap_{c}" for c in FADER_COLORS),
-        ):
+        for strip in FILMSTRIPS:
+            name = "knob" if strip == "knob_filmstrip" else strip
+            stitch_filmstrip(raw, s, proof / f"{strip}_{s}x.png", name)
+        for name in SPRITES:
             src = raw / f"{name}_{s}x.png"
             (proof / src.name).write_bytes(src.read_bytes())
+        slot = proof / f"plate_slate_slot_{s}x.png"
+        with Image.open(slot) as im, Image.open(proof / f"plate_slate_{s}x.png") as tile:
+            target = json.loads(REF_CROPS.read_text(encoding="utf-8"))["slot_plate_target"]
+            save_png(retexture_slot(im, tile, target), slot)
     manifest = build_manifest(proof)
     (proof / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
@@ -254,14 +311,17 @@ def main(argv: list[str]) -> int:
     if cmd == "render":
         render()
     elif cmd == "pack":
-        report = size_report(pack())
-        print(json.dumps(report, indent=2))
+        print(json.dumps(size_report(pack()), indent=2))
     elif cmd == "verify":
         problems = verify_manifest(json.loads(MANIFEST.read_text(encoding="utf-8")))
         print("\n".join(problems) or "all hashes match")
         return 1 if problems else 0
     elif cmd == "preview":
-        compose_preview().convert("RGB").save(PROOF_DIR / "preview_2x.png", optimize=True)
+        import panel_preview
+
+        out = PROOF_DIR / "preview_2x.png"
+        panel_preview.compose_preview(PROOF_DIR).convert("RGB").save(out, optimize=True)
+        print(out)
     elif cmd == "report":
         print(json.dumps(size_report(json.loads(MANIFEST.read_text(encoding="utf-8"))), indent=2))
     else:

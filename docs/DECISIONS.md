@@ -31,6 +31,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
+| [D28](#d28-panel-proof-sprites-may-be-derived-from-the-reference-render) | 2026-11-13 | Panel proof sprites may be derived from the reference render | accepted |
 
 ---
 
@@ -215,8 +216,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** Original art removes the trademark and copyright risk at no cost in quality. Functional-or-stub keeps the panel honest about what works. Host parameter IDs are a stable contract for saved DAW projects, so only additions are safe.
 - **Alternatives:** Photo-derived art (rejected: rights); full menus before release (delays the visual goal); renaming per-layer IDs (breaks saved projects); all keybed variants up front (more layout work for no early benefit).
 - **Impact:** Unblocks B7 art direction, B8d/B9d scope, B8g layout and B9a-c parameter work. The remaining Phase 6b unknown is OQ13 (hardware behaviour).
-
-
+- **Narrowed by:** [D28](#d28-panel-proof-sprites-may-be-derived-from-the-reference-render) for the panel proof sprites and textures (2026-11-13). Logo, wordmark, silkscreen text and the 3D fan model rules stay as above.
 ### D17. Chip identity: FX, PNO and ORG run on ADSP-2157x (SHARC+), SY1SY2 and SMP on ADSP-2148x
 
 - **Status:** accepted 2026-11-12
@@ -341,3 +341,19 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** Category membership, names and ids are VERIFIED twice (ARM tree and DSP P-table, 45 of 45); the panel category index now equals the `osc_category` field of a loaded program. Writing a header id would need the unknown id map (OQ26).
 - **Alternatives:** Keep manual names (wrong category set and an invented `SUPER`); name the entries `<Category> <name>` for every category (the manual figure shows it only for MULTI, the rule for the others is unverified); map the header id by program names (guesswork, kept out of code).
 - **Impact:** CAT dial of ANALOG has 8 stops (MULTI is the sixth, SUPER the seventh); the WAVE page shows firmware names instead of `Table n`; the flat wavetable index of a panel pick now equals the one of a loaded program (`cat * 8 + i` before). `render_hash` unchanged.
+
+### D28. Panel proof sprites may be derived from the reference render
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive
+- **Context:** B7 (`ns4-77s9`) has to make the panel sprites match the owner's reference render of the Organ section (`.reference/NS4-Panel-organ.max-2000x2000.format-png.png`, 1961 x 1185, private) as closely as possible, for every knob and button style. Under D16 the renders could only be modelled and shaded to resemble it; after three iterations (PR 84, PR 109, PR 114) the owner still wanted a closer match and lifted the art restriction for this task: "vamos tentar bater exatamente, pode tirar as regras do d16, já que são imagens, o objetivo é gerar o mais próximo possível" (relayed from the owner's chat and confirmed by the owner in this session, 2026-11-13).
+- **Decision:** For the panel sprites and textures, pixels of the reference render may be used directly: crops, sampled or synthesised textures, masks and inpainting. `tools/panel_refbake.py` cuts them using the boxes and centres stored in `assets/panel/ref_crops.json`. Parts that must move (knob pointers) or that need their own layer (shadows) stay Blender-rendered. Unchanged from D16: the reference file itself, the `.reference/` archives and the 3D fan model are never committed (AGENTS.md rule 6); no Nord logo or wordmark; silkscreen text stays a vector or dynamic layer (the DRIVE numeral scale is the one exception, as the owner asked for it as a knob layer).
+- **Why:** The goal set by the owner is the closest possible visual match, and cutting from the reference is the only way to match it exactly. Procedural modelling reached about 20 to 30 mean absolute difference per feature; reference crops are near zero at the reference positions.
+- **Alternatives:**
+  - A. Keep D16 and continue procedural matching: lower risk, but it does not reach an exact match (owner rejected this for now).
+  - B. Keep reference-derived sprites local only (git-ignored): no publication risk, but the app and CI would not have the assets.
+- **Impact:**
+  - **Copyright risk:** the repository `ymatrix1/nord-stage-4-emulator` is public. The committed sprites below are derived from Clavia's own product imagery. Publishing them carries a copyright (and, for the look of the product, trade-dress) risk that D16 had avoided. The owner accepted this risk on 2026-11-13. This is a project decision, not legal advice.
+  - **Reference-derived files** (both 1x and 2x, in `assets/panel/proof/`): `button_*` (15 buttons), `tri_organ_model`, `tri_vib_chorus`, `tri_lit_left`, `tri_lit_up`, `knob_body_master`, `knob_body_drive`, `knob_scale`, `plate_red`, `plate_slate`, `plate_silver`. The list is generated by `panel_assets.ref_sprites()`. These can be swapped back to original renders by dropping them from `ref_crops.json` and restoring the Blender stages.
+  - **Still original (D16 rules):** `knob_filmstrip` (generic knob), `pointer_*` filmstrips, `knob_shadow_*`, `knob_ring`, the drawbar and layer caps and their shadows (3D parts; the drawbar profile is numbers measured from one cap of the owner's purchased 3D model of the instrument, the layer cap follows the owner's photo; the model file is never committed), and the slot itself in `plate_slate_slot` (its plate area is the reference slate tile).
+  - Provenance tags: reference-derived sprites are tagged `REFERENCE-DERIVED (D28)` in `ref_crops.json`, the research note and spec [visual-style-and-panel.md](specs/visual-style-and-panel.md) §6.
