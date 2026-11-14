@@ -32,6 +32,8 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D29](#d29-the-piano-layer-level-law-is-opt-in-the-bus-convention-stays-assumed) | 2026-11-14 | The piano layer level law `(v / 127)^2` is opt-in; the bus convention stays ASSUMED | accepted |
 | [D30](#d30-the-smp-post-stage-is-unity-the-piano-defaults-stay-until-the-receiver-is-found) | 2026-11-14 | The SMP post stage is unity (`bus * 2^-29`); piano defaults stay until the receiver is found | accepted |
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
+| [D36](#d36-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
+| [D37](#d37-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
 
 ---
@@ -385,3 +387,13 @@ cabinet taps fingerprint response test.
 - **Why:** The exponent law is VERIFIED; the place where the root key and the sample rate enter the ARM word, and the DSP conversion of the pair-block word to the Stage B step, are not traced, so the absolute step is not firmware-derived.
 - **Alternatives:** Flip the kernel default on the structural evidence (changes every SAMPLES program on an unrun field); replace the `2^(n/12)` step outright (the join with the DSP step table is open).
 - **Impact:** `render_hash` unchanged (both flags default off).
+
+### D37. The SAMPLES defaults stay; the sample set cannot be served through the library loader
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/arm-sample-set-harness`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) section 10)
+- **Context:** D36 left `--sample-kernel key` and `--sample-pitch fw` opt-in until a SAMPLES layer runs in the ARM harness (key field `[voice + 8]`, pair-block word to step join). The task was to serve the sample set from the local backup so that the layer loads.
+- **Decision:** No default flips. `tools/arm_sample_probe.py` records the attempt: the generic library loader never binds an `.nsmp4` (object states 3, 4, 7 for every type word of its compare chain), the synth voice event ends at the empty sample slot list for all five layer objects, and the ARM pitch word is written to `0x9219E + 0x20`, outside the pair block of its voice and not to the table entry `0x93580`.
+- **Why:** D22 needs the end-to-end run. The two claims to flip (key without transposition; the firmware step scale) are still structural or law-only, and the join found a mismatch between the ARM word target and the table the DSP reads, so the EMPIRICAL step model stays the only calibrated one.
+- **Alternatives:** Forge a sample slot object (rejected: proves nothing about the key field); flip `--sample-kernel key` on the structural evidence (rejected, as in D36); replace the step model by `word(key) / word(60)` (rejected: not joined).
+- **Impact:** None on renders or `render_hash`; one new tool and tests.

@@ -103,6 +103,30 @@ Consequence: the structural evidence says the chain key is the layer note withou
 | Loop and second read position | no ARM-side loop code in the sender (unchanged); the voice update writes `+0x0A`, `+0x0C .. +0x0F`, `+0x13` from stack fields it copies out of the event record (`0xC01E0334..0xC01E0378`, `0xC01E09B8..0xC01E0A48`): roles of the stack slots not decoded | open |
 | WAVE (Wavetable) layers | in the harness the oscillator edits (`kMode` 0..3 x `kOscBank` 0..3, `kOscWave` applied) send only PNO core 1 / core 2 and ORG messages (24 or 32 words each, identical for every bank), **no SY or SMP word**; banks 1 and 2 only change the strip type index to 49..53 ([synth-wave-stages](synth-wave-stages.md): stages `0x124269`, `0x12453F`). So the 14 WAVE layers are most likely strip stages on PNO core 2 plus a table stored on the host, not SY / SMP voices; the table read path is not decoded | EMPIRICAL (negative run) |
 
+## 10. SAMPLES layer in the ARM harness: what was tried (2026-11-14, `tools/arm_sample_probe.py`)
+
+Goal: serve a sample set from the local `.ns4b` so that a SAMPLES layer loads and plays, then capture the kernel record write, the pitch message and the record fields. **Not reached; the findings below narrow where the sample set enters.** No default changed (D37).
+
+| Item | Result | Tag |
+|---|---|---|
+| Sample files in the backup | all 195 `Samp Lib/**/*.nsmp4` are `CBIN` kind `nsmp` with `NSMP` at `0x2C`; chunks `\0hdr` (112 bytes, name at payload `+10`), `\0cat` (8), then `\0map`, `\0stk` ... (`survey`: 195 / 195 headers, 195 / 195 names) | VERIFIED (run) |
+| The FAT library loader is not the sample path | serving a real `.nsmp4` as device image through `LibraryStub` + `0xC00C0444(mgr, 1, 1)` with each type word of the compare chain of `0xC00B92E4` (`onpn`, `nsp`, `npdl`, `map`, `abc`) returns status 0 but binds no object: pool object state 3 (`onpn`, `nsp`; `npdl` also 3 after a 3,084-byte read), 4 (`map`), 7 (`abc`); `CNSP` is not found at `0xB0`. The loader has no `nsmp` type word, and the string table lists `nsmp` only as a browser file kind (`0xC0444B60`) next to `Samp Lib (Native)` | VERIFIED (run, `try_load`) |
+| Where the sample set lives | the boot stages `SampLib`, `Smp Populate`, `Pno Populate` (`0xC0526530..`) and `Sample Flash Error` name a flash partition read by the SMP populate step, not the FAT volumes; the sample status strings (`Sample is ok`, `Sample type error`, `Sample parse error`, `Unsupported format`, `Sample is broken`, `Out of memory`, table `0xC02FA318`, users `0xC01D4640 / 0xC01D46E0 / 0xC01D680C / 0xC01D80A0`) belong to a sample object class in `0xC01D0000..0xC01D8100` that is fed by a different loader | EMPIRICAL (string table, literal scan; loader not decoded) |
+| Why the synth voice event stops | with all three sections enabled (`arm_zones.enable_sections`) and only synth layer A kept, a note-on and note-off enter `0xC01EC690` and `0xC01E72C4` three times in total and run only the blocks `0xC01E72C4..0xC01E7314, 0xC01E7394..0xC01E73C8, 0xC01E7318..0xC01E7328, 0xC01E7374..0xC01E7380, 0xC01E7544..0xC01E760C, 0xC01E7D64..`: `[[layer + 0x4C0]] == 0` (the layer's sample slot list is empty) takes `0xC01E7324 -> 0xC01E7374`, and the allocator counters `0xC05B0C78 + 0x78/0x7C/0x80` are 0. `0xC01E00AC`, `0xC01EC790`, the key store `0xC01E0A00` and the kernel chain `0xC01E1434` are never entered. For each of the five layer objects of `0xC05B028C` (`synth_gate`) the slot list pointer is set and its first slot is 0 | VERIFIED (run) |
+| Consequence | a SAMPLES layer needs a sample slot object (class check `[[obj]] == 0xC01D0800`, value `[obj + 4]` non-zero) in `[[layer + 0x4C0]]`; it is produced by the sample loader, which needs the SampLib flash contents, not a FAT image. Forging the object would not prove the key field | EMPIRICAL |
+
+### Pair block and the pitch word (SHARC oracle, run)
+
+The SY image was run with `sy_voice_sine.scn` (control: `poke 0x93580 0x0800` gives step `0xA00000`, ratio 0.625, unchanged) and a pair-block dump `capture pb0 0x9219e 0x30`. A pair is 22 words with the two voices interleaved at stride 2; per voice word 0 = `0x04000036` (index `0x36` in the low half = table entry `DM(0x9354A + 0x36) = DM(0x93580)`), word 1 = gain 1.0, words 2..5 = constants `0x3B98676A` (x2), `0x3D4CCCCC`, `0x3BA00000`. The ARM pitch sender (`0xC01E15B0..0xC01E160C`) writes the float word to `[0xC05482F8 + 16 voice + 4] + 0x20`, i.e. `0x9219E + 0x20 = 0x921BE` for voice 0 (table content after boot: voice 0 `0x9219E`, voice 1 `0x9219F`, voice 2 `0x921B4`, voice 55 `0x923F1`). That address is word 10 of the **next** pair block (`0x921B4`), not the table entry `0x93580` and not a word of voice 0's own pair. So the float32 `word(key)` (`0.0120558` at key 60) and the 16-bit packed table entry of [sy-smp-audio](sy-smp-audio.md) section 4 are different objects and the DSP routine that maps one to the other was **not** found (poking `0x3C458580` at `0x921BE` leaves the step at 0 and disturbs the gain word of the other pair). The six measured steps therefore cannot be compared with the law: the join and the scale of section 7 stay open, as does the place where root key and sample rate enter. | VERIFIED (run, oracle); join open |
+
+Run it: `uv run --with unicorn python tools/arm_sample_probe.py <CODE> <SRAM> --cache target/keydown.snap --ns4b <backup> --member "Samp Lib/Accordion_Harm/Carina Accordion 1_PS 4.1.nsmp4"` (tests: `tools/tests/test_arm_sample_probe.py`).
+
+### What remains (replaces follow-up 0 below)
+
+1. Find the sample loader (class with status table `0xC02FA318`, the SampLib flash read) and serve the `\0hdr`, `\0map` and `\0stk` headers to it; then the three captures of the task are one note-on: record write `0x9243B + 0x38 k`, pitch message, fields `+0x0A, +0x0C .. +0x0F, +0x13`.
+2. Decode the DSP side of the pair-block write `0x9219E + 0x20` (which SY routine reads it and fills `DM(0x9354A + index)`), then compare the six measured steps with `sinc::pitch_law`.
+3. WAVE bank: unchanged (section 9, negative run on PNO core 2); the strip stages `0x124269 / 0x12453F` and the table read path are not decoded.
+
 ## Implications
 
 - `SincKernelSet::for_key` (`sinc/key_rule.rs`) is the firmware rule; it replaces the ASSUMED ratio rule for the `SAMPLES` oscillator behind `--sample-kernel key` (opt-in, `SynthLayer::sample_kernel_by_key`). Kernels 0 and 1 (`fc` 1.10, 1.05) are used for keys up to B3; the legacy rule never picked them.
@@ -111,7 +135,7 @@ Consequence: the structural evidence says the chain key is the layer note withou
 
 ## Follow-ups
 
-0. (open after this PR) Load a SAMPLES program into the harness (sample header download served from the local `.ns4b`) and capture `0x9243B + 0x38 k` plus the pair-block word; that closes section 8 and the scale of section 7.
+0. (still open, narrowed in section 10) Load a SAMPLES program into the harness: the FAT loader is not the sample path and the sample slot list `[[layer + 0x4C0]]` stays empty.
 
 1. Boot the harness with a SAMPLES program, play a note and capture the message to `0x9243B + 0x38 k`: confirms the key field, transposition and the voice id to record map.
 2. Run the pitch block `0xC01E14AC..0xC01E1598` for keys 0..127 and compare with the six measured steps of [sy-smp-audio](sy-smp-audio.md) section 4.
