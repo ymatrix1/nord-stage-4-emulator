@@ -30,9 +30,11 @@ from fx_pe import (  # noqa: F401
     ffloat,
     fmul,
     fpass,
+    frecips,
     fsub,
     iadd,
     imm,
+    ishl,
     lift,
     signed32,
     swap,
@@ -90,6 +92,32 @@ def flags_of(_old, new):
     return flags_val(new)
 
 
+def iflags(kind, a, b):
+    """`(AN, AZ, AV, AC)` of a fixed add or subtract per element (`core/fixed_alu.rs`: AV is the
+    signed overflow, AC the carry out, `x + !y + 1` for a subtract so `x - x` carries)."""
+    out = ([], [], [], [])
+    for x, y in zip(a, b, strict=True):
+        x, y = wd(x), wd(y)
+        exact = signed32(x) + signed32(y) if kind == "add" else signed32(x) - signed32(y)
+        carry = x + y > M32 if kind == "add" else x >= y
+        r = (x + y if kind == "add" else x - y) & M32
+        for lst, v in zip(
+            out,
+            (bool(r & 0x80000000), r == 0, not -(1 << 31) <= exact < 1 << 31, carry),
+            strict=True,
+        ):
+            lst.append(v)
+    return out
+
+
+def imax(a, b):
+    return lift(lambda x, y: max(signed32(wd(x)), signed32(wd(y))) & M32)(a, b)
+
+
+def imin(a, b):
+    return lift(lambda x, y: min(signed32(wd(x)), signed32(wd(y))) & M32)(a, b)
+
+
 def comp(a, b):
     return _comp(a, b)
 
@@ -109,6 +137,35 @@ def cond_ge(m, old, new):
     return [old[c] if m.an[c] else new[c] for c in (0, 1)]
 
 
+def cond_eq(m, old, new):
+    """`IF EQ`: the new value where the last result was zero."""
+    return [new[c] if m.az[c] else old[c] for c in (0, 1)]
+
+
+def cond_av(m, old, new):
+    return [new[c] if m.av[c] else old[c] for c in (0, 1)]
+
+
+def cond_ac(m, old, new):
+    return [new[c] if m.ac[c] else old[c] for c in (0, 1)]
+
+
+def cond_lane(m, kind, lane, old, new):
+    """One element of a conditional exchange follows its own element's flag."""
+    return cond_of(m, kind)(m, [old, old], [new, new])[lane]
+
+
+def cond_of(_m, kind):
+    return {
+        "ne": cond_ne,
+        "eq": cond_eq,
+        "ge": cond_ge,
+        "tf": cond_tf,
+        "av": cond_av,
+        "ac": cond_ac,
+    }[kind]
+
+
 def cond_tf(m, old, new):
     return [new[c] if m.tf[c] else old[c] for c in (0, 1)]
 
@@ -119,12 +176,15 @@ class LMachine(Machine):
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
         self.an, self.az, self.tf = [False, False], [False, False], [False, False]
+        self.av, self.ac = [False, False], [False, False]
         self.callees: dict[int, object] = {}
 
     def step(self, pc, *a, fl=None, tf=None, **k):
         super().step(pc, *a, **k)
         if fl is not None:
-            self.an, self.az = fl
+            self.an, self.az = fl[0], fl[1]
+            if len(fl) == 4:
+                self.av, self.ac = fl[2], fl[3]
         if tf is not None:
             self.tf = tf
 

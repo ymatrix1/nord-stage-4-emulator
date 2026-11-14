@@ -5,7 +5,7 @@
 //! | Fate | Meaning |
 //! |---|---|
 //! | `Live` | `Binding::Bound` to a host parameter the editor sink writes |
-//! | `Passive` | `UiOnly` / `Unsupported` in the inventory: drawn as in the standalone, no host parameter by design |
+//! | `Passive` | `UiOnly` / `Unsupported` in the inventory, or `Bound("ui:...")` (a GUI path): drawn as in the standalone, no host parameter by design |
 //! | `Dimmed` | `Bound`, but the host parameter is missing or the sink does not write it yet |
 //! | `Shared` | would be dimmed but shares its rectangle with a live or passive control (a Shift function of a live knob), so it stays undimmed |
 //!
@@ -48,6 +48,10 @@ impl Coverage {
 
 fn first_pass(c: &ControlEntry, index: &ParamIndex, mapped: &[&str]) -> Fate {
     match c.binding {
+        // A `ui:` binding is performed by the panel itself (program browser, synth pages, effect
+        // ON buttons): there is no host parameter by design, so it is drawn and works as in the
+        // standalone.
+        Binding::Bound(path) if path.starts_with("ui:") => Fate::Passive,
         Binding::Bound(template) => match index.family_of(template) {
             Some(fam) if mapped.contains(&fam.as_str()) => Fate::Live,
             _ => Fate::Dimmed,
@@ -106,11 +110,11 @@ mod tests {
     }
 
     #[test]
-    fn live_and_dimmed_partition_the_bound_controls() {
+    fn live_and_dimmed_partition_the_host_bound_controls() {
         let c = coverage();
         let bound = nord_panel::all_controls()
             .iter()
-            .filter(|e| matches!(e.binding, Binding::Bound(_)))
+            .filter(|e| matches!(e.binding, Binding::Bound(b) if !b.starts_with("ui:")))
             .count();
         assert_eq!(
             c.count(Fate::Live) + c.count(Fate::Dimmed) + c.count(Fate::Shared),
@@ -150,6 +154,12 @@ mod tests {
         let mut c = c;
         c.binding = Binding::Bound("no_such_param_{n}");
         assert_eq!(first_pass(&c, &idx, &[]), Fate::Dimmed);
+        c.binding = Binding::Bound("ui:program.slot");
+        assert_eq!(
+            first_pass(&c, &idx, &[]),
+            Fate::Passive,
+            "GUI path, no host id"
+        );
         c.binding = Binding::Bound("master_level");
         assert_eq!(first_pass(&c, &idx, &["master_level"]), Fate::Live);
         assert_eq!(first_pass(&c, &idx, &[]), Fate::Dimmed);

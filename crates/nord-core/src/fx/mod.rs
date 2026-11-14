@@ -25,7 +25,10 @@ mod fw_delay;
 mod fw_delay_table;
 pub mod fw_delay_time;
 mod fw_drive_tables;
+mod fw_eq;
+mod fw_eq_tables;
 mod fw_ext40;
+mod fw_flang;
 pub mod fw_leslie;
 mod fw_leslie_callee;
 mod fw_leslie_core;
@@ -42,8 +45,12 @@ mod fw_leslie_ring;
 pub mod fw_map;
 mod fw_mod1;
 mod fw_mod2;
+mod fw_mod2_run;
 mod fw_params;
 mod fw_pe;
+mod fw_pe_ops;
+mod fw_phas0;
+mod fw_phas1;
 mod fw_reverb;
 mod fw_rvb_core;
 mod fw_rvb_steps;
@@ -57,6 +64,8 @@ mod fw_rvbm_words;
 mod fw_short_float;
 mod fw_stage;
 mod fw_tone_stack;
+mod fw_vibe;
+mod fw_vibe_stage;
 mod fw_words;
 mod master;
 mod master_iir;
@@ -96,6 +105,8 @@ mod tests_fw_amp_chain;
 #[cfg(test)]
 mod tests_fw_delay_time;
 #[cfg(test)]
+mod tests_fw_eq_chain;
+#[cfg(test)]
 mod tests_fw_leslie_data;
 #[cfg(test)]
 mod tests_fw_leslie_golden;
@@ -125,6 +136,8 @@ mod tests_fw_series;
 mod tests_lfo_golden;
 #[cfg(test)]
 mod tests_master_golden;
+#[cfg(test)]
+mod tests_mod2_golden;
 #[cfg(test)]
 mod tests_resonant_golden;
 #[cfg(test)]
@@ -268,8 +281,11 @@ pub struct LayerFxChain {
     fw_mod1: Option<fw_mod1::FwMod1Stage>,
     /// The firmware chorus (`firmware_fx.mod2`), boxed: the ring is 4 KB.
     fw_mod2: Option<Box<fw_mod2::FwMod2Stage>>,
+    fw_vibe: Option<Box<fw_vibe_stage::FwVibeStage>>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
+    /// The firmware Amp EQ (`firmware_fx.eq`), built when first needed.
+    fw_eq: Option<fw_eq::FwEqStage>,
     /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
     fw_reverb: Option<Box<FwReverb>>,
     /// The firmware multi-tap reverb (`firmware_fx.reverb`, `kRvbType` 2..11), built when first
@@ -380,8 +396,10 @@ impl LayerFxChain {
             mod2_type_raw: None,
             fw_mod1: None,
             fw_mod2: None,
+            fw_vibe: None,
             fw_comp: None,
             fw_amp: None,
+            fw_eq: None,
             fw_reverb: None,
             fw_reverb_multi: None,
             fw_comp_amount: 0.0,

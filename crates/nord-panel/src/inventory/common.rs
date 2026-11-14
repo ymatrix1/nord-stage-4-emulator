@@ -18,7 +18,7 @@ pub struct BlockSpec {
     /// Manual page of the SUSTPED/PSTICK text.
     pub ped_page: u16,
     pub pstick_label: &'static str,
-    /// Host id of the per-layer octave parameter (`_{n}` suffix), if the section has one.
+    /// Binding of OCTAVE SHIFT +/-: the per-layer host id (`_{n}` suffix) or a `ui:` GUI path.
     pub octave_id: Option<&'static str>,
     /// Bean tracking the missing section-level behaviour.
     pub bean: &'static str,
@@ -209,6 +209,7 @@ mod tests {
             layers: &[Layer::A, Layer::B, Layer::C],
             section: Section::Synth,
             name: "synth",
+            octave_id: Some("ui:synth.octave"),
             ..ORGAN
         };
         let unsupported = |v: Vec<ControlEntry>| {
@@ -219,9 +220,8 @@ mod tests {
         };
         assert!(unsupported(layer_block(&organ)).is_empty());
         assert!(unsupported(layer_block(&piano)).is_empty());
-        let s = unsupported(layer_block(&synth));
-        // Only the Synth octave shift (no host octave parameter yet) is left.
-        assert_eq!(s, ["synth.octave_down", "synth.octave_up"]);
+        // The Synth octave shift has no host parameter; it is `ui:synth.octave` (`SynthParam::Octave`).
+        assert!(unsupported(layer_block(&synth)).is_empty());
     }
 
     #[test]

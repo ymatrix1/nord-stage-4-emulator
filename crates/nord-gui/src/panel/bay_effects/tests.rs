@@ -176,4 +176,5 @@ fn rendering_is_deterministic() {
     assert_eq!(dump(&Session::new()), dump(&Session::new()));
 }
 
+mod binding;
 mod flows;

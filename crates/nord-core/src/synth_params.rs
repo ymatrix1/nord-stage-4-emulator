@@ -129,6 +129,18 @@ fn apply_modulation(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
         ArpMode::Off
     };
     synth.arp_rate_bpm = dec.arp_bpm;
+    apply_pattern(synth, dec);
+}
+
+/// Imports the stored pattern words: the layer's custom pattern, played through preset dial 0
+/// (the hardware shows the stored words as dial 0, `docs/research/synth-arp-patterns.md`). A
+/// layer that holds only the blank bits keeps the engine's default pattern.
+fn apply_pattern(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
+    synth.perf.pattern_on = dec.pattern.enabled;
+    if dec.pattern.is_stored() {
+        synth.perf.custom = dec.pattern.to_custom_pattern();
+        synth.select_pattern_preset(0);
+    }
 }
 
 fn apply_voice_mode(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
@@ -216,6 +228,69 @@ mod tests {
         assert!((s.vibrato_depth_cents - 46.0).abs() < 1e-4);
         assert_eq!(s.arp_mode, ArpMode::Up);
         assert_eq!(apply(&SynthLayerDecoded::default()).arp_mode, ArpMode::Off);
+    }
+
+    #[test]
+    fn stored_pattern_words_become_the_layer_custom_pattern() {
+        use crate::cbin::synth_pattern::SynthPatternDecoded;
+        let dec = SynthLayerDecoded {
+            pattern: SynthPatternDecoded {
+                enabled: true,
+                steps: 4,
+                accent: 0b00_00_01_00,
+                gate: 0b11_00_10_01,
+                pan: 0b00_00_00_10,
+            },
+            ..Default::default()
+        };
+        let s = apply(&dec);
+        assert!(s.perf.pattern_on && s.perf.plays_custom());
+        assert_eq!(s.pattern_dial_value(), 0);
+        assert_eq!(s.pattern_length(), 4);
+        assert_eq!(&s.perf.custom.gate[..4], &[8, 8, 4, 0]);
+        assert!(s.perf.custom.tie[1] && !s.perf.custom.tie[0]);
+        assert!(s.perf.custom.accent[1]);
+        assert_eq!(s.perf.custom.pan[0], crate::synth::PatternPan::Right);
+
+        // Blank pattern bits leave the engine's default pattern (8 steps) and pattern off.
+        let blank = apply(&SynthLayerDecoded::default());
+        assert!(!blank.perf.pattern_on);
+        assert_eq!(blank.pattern_length(), 8);
+    }
+
+    #[test]
+    fn a_program_pattern_survives_pack_unpack_and_plays_as_the_custom_pattern() {
+        use crate::cbin::synth_pattern::SynthPatternDecoded;
+        use crate::cbin::synth_preset::SynthPresetDecoded;
+        // Hardware words of preset 13 (gate QEEEEEQEQEEEEEQE, pan LLRLLRLLRRLRRLRR, 16 steps),
+        // the pattern two factory programs hold unedited.
+        let word = |text: &str, chars: &str| -> u32 {
+            text.chars()
+                .enumerate()
+                .map(|(i, c)| (chars.find(c).unwrap() as u32) << (2 * i))
+                .sum()
+        };
+        let pattern = SynthPatternDecoded {
+            enabled: true,
+            steps: 16,
+            accent: 0,
+            gate: word("QEEEEEQEQEEEEEQE", "EqQ."),
+            pan: word("LLRLLRLLRRLRRLRR", "CLR."),
+        };
+        let mut preset = SynthPresetDecoded::default();
+        preset.layer_b.pattern = pattern;
+        let bytes = preset.pack().unwrap();
+        let back = SynthPresetDecoded::unpack(&bytes).unwrap();
+        assert_eq!(back.layer_b.pattern, pattern);
+        assert!(!back.layer_a.pattern.is_stored());
+        assert_eq!(back.pack().unwrap(), bytes, "lossless round trip");
+
+        let s = apply(&back.layer_b);
+        let want = crate::synth::PATTERN_PRESETS[13];
+        assert_eq!(s.pattern_length(), want.len);
+        assert_eq!(s.perf.custom.gate, want.steps);
+        assert_eq!(s.perf.custom.tie, want.tie);
+        assert_eq!(s.perf.custom.pan, want.pan);
     }
 
     #[test]

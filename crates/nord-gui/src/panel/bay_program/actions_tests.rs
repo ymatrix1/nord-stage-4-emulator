@@ -164,13 +164,23 @@ fn section_edit_latches_on_double_tap_and_tap_leaves() {
 }
 
 #[test]
-fn solo_pedal_tap_set_key_and_presets_report_instead_of_dropping() {
+fn solo_pedal_tap_set_key_and_presets_report_or_act() {
     let mut u = ProgramUi::default();
     u.activate("program.solo", Trigger::Primary);
     assert!(u.solo && u.message.is_some());
     u.message = None;
-    u.activate("mst_clk.pedal_tap", Trigger::Shifted);
-    assert!(u.message.is_some());
+    let out = u.activate("mst_clk.pedal_tap", Trigger::Shifted);
+    assert!(u.pedal_tap && u.message.is_some());
+    assert!(matches!(
+        out.as_slice(),
+        [AudioCommand::Program(ProgramEdit::PedalTap(true))]
+    ));
+    let out = u.activate("mst_clk.pedal_tap", Trigger::Shifted);
+    assert!(!u.pedal_tap);
+    assert!(matches!(
+        out.as_slice(),
+        [AudioCommand::Program(ProgramEdit::PedalTap(false))]
+    ));
     u.activate("split.set_key", Trigger::Shifted);
     assert!(u.split.set_key_armed);
     u.activate("preset_library.single_synth", Trigger::Shifted);
