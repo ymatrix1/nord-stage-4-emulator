@@ -16,6 +16,9 @@ mod fw_amp_types;
 mod fw_autopan;
 mod fw_cabinet;
 mod fw_cabinet_taps;
+mod fw_chorus;
+mod fw_chorus4;
+mod fw_chorus5;
 mod fw_coeffs;
 mod fw_compressor;
 mod fw_delay;
@@ -38,6 +41,7 @@ mod fw_leslie_ops;
 pub mod fw_map;
 mod fw_mod1;
 mod fw_params;
+mod fw_pe;
 mod fw_reverb;
 mod fw_rvb_core;
 mod fw_rvb_steps;
@@ -70,6 +74,8 @@ mod tests_biquad_golden;
 mod tests_cabinet_golden;
 #[cfg(test)]
 mod tests_chain;
+#[cfg(test)]
+mod tests_chorus_golden;
 #[cfg(test)]
 mod tests_compressor_golden;
 #[cfg(test)]
