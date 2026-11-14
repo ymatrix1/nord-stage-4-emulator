@@ -2,8 +2,23 @@
 
 use super::menu_screen::DIM;
 use super::oled::OledText;
+use super::oled_home::EDITED;
 use crate::panel::prelude::*;
-use egui::FontId;
+use egui::{FontId, Pos2};
+
+/// Draw the boxed `E` of an edited program with its top-left at `at`; returns the right edge.
+fn boxed_e(painter: &Painter, at: Pos2, font: &FontId, color: Color32) -> f32 {
+    let glyph = painter.text(
+        at + vec2(1.0, 0.0),
+        Align2::LEFT_TOP,
+        "E",
+        font.clone(),
+        color,
+    );
+    let frame = glyph.expand2(vec2(1.0, 0.0));
+    painter.rect_stroke(frame, 0.0, Stroke::new(0.7_f32, color), StrokeKind::Inside);
+    frame.right() + 2.0
+}
 
 /// Paint the display text into `rect`, scaling the type to the rectangle.
 pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
@@ -27,13 +42,19 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
             Some(rest) => (rest, fg.gamma_multiply(0.45)),
             None => (s, fg),
         };
-        painter.text(
-            pos2(rect.left() + 2.0, *y),
-            Align2::LEFT_TOP,
-            s,
-            FontId::monospace(size.max(MIN_FONT_PX)),
-            color,
-        );
+        let font = FontId::monospace(size.max(MIN_FONT_PX));
+        let mut x = rect.left() + 2.0;
+        let mut segments = s.split(EDITED);
+        let first = segments.next().unwrap_or_default();
+        x = painter
+            .text(pos2(x, *y), Align2::LEFT_TOP, first, font.clone(), color)
+            .right();
+        for rest in segments {
+            x = boxed_e(painter, pos2(x + 1.0, *y), &font, color);
+            x = painter
+                .text(pos2(x, *y), Align2::LEFT_TOP, rest, font.clone(), color)
+                .right();
+        }
         *y += size * 1.15;
     };
     line(&mut y, &text.big, f_big);
@@ -80,6 +101,27 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
 mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
+
+    #[test]
+    fn the_edited_mark_adds_a_box_and_the_e() {
+        let paint_big = |big: &str| {
+            shapes_painted(|_ui, p, rect, _s, _a| {
+                let t = OledText {
+                    big: big.into(),
+                    ..Default::default()
+                };
+                paint(
+                    p,
+                    Rect::from_min_size(rect.min, vec2(80.0, 40.0)),
+                    &t,
+                    false,
+                );
+            })
+        };
+        let plain = paint_big("A:11");
+        let edited = paint_big(&format!("A:11{EDITED}"));
+        assert!(edited >= plain + 2, "box and E: {plain} -> {edited}");
+    }
 
     #[test]
     fn painter_draws_text_rows_and_only_the_labelled_soft_buttons() {
