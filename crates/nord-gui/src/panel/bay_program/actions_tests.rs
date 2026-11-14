@@ -191,3 +191,28 @@ fn solo_pedal_tap_set_key_and_presets_report_instead_of_dropping() {
         "preset store is reported as unsupported"
     );
 }
+
+#[test]
+fn store_as_proposes_a_numbered_name_when_the_name_exists() {
+    use super::super::store::{ProgLoc, UserProgram};
+    let e = Stage4Engine::new(48_000.0);
+    let mut u = ProgramUi::default();
+    u.library.put(
+        ProgLoc::from_index(9),
+        UserProgram {
+            name: "NS4 Palette".into(),
+            category: 13,
+            state: e.capture_state(),
+        },
+    );
+    u.title = "NS4 Palette".into();
+    u.store_as();
+    assert_eq!(u.store.editor.name(), "NS4 Palette 2");
+    u.title = "Brand New".into();
+    u.store_as();
+    assert_eq!(u.store.editor.name(), "Brand New");
+    u.loc = ProgLoc::from_index(9);
+    u.store_as();
+    assert_eq!(u.store.editor.category, 13, "the program's own category");
+    assert_eq!(u.store.editor.category_label(), "Piano");
+}
