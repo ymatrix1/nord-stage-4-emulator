@@ -98,6 +98,14 @@ pub struct Stage4Params {
     #[nested(id_prefix = "synthm", group = "Synth Mod")]
     pub synth_mod: crate::synth_mod_params::SynthModBank,
 
+    /// Pedal menu settings, Swell and per-layer SUSTPED / PSTICK.
+    #[nested(id_prefix = "ped", group = "Pedals")]
+    pub pedals: crate::aux_pedal_params::PedalBank,
+
+    /// Aux KB enable, channel, curve and layer assignment.
+    #[nested(id_prefix = "auxkb", group = "Aux KB")]
+    pub aux_kb: crate::aux_pedal_params::AuxKbParams,
+
     /// Per-layer Synth Gate, Pattern, KB Hold / Sync and Master Clock sync.
     #[nested(id_prefix = "synthg", group = "Synth Gate")]
     pub synth_gate: crate::synth_gate_params::SynthGateBank,
@@ -341,6 +349,8 @@ impl Default for Stage4Params {
             synth_layers: crate::synth_params::SynthLayerBank::default(),
             program: crate::program_params::ProgramParams::default(),
             synth_mod: crate::synth_mod_params::SynthModBank::default(),
+            pedals: crate::aux_pedal_params::PedalBank::default(),
+            aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
             organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
@@ -612,6 +622,8 @@ impl Stage4Params {
         self.synth_layers.sync_to_engine(engine);
         self.program.sync_to_engine(engine);
         self.synth_mod.sync_to_engine(engine);
+        self.aux_kb.sync_to_engine(engine);
+        self.pedals.sync_to_engine(engine);
         self.synth_gate.sync_to_engine(engine);
         self.organ_layers.sync_to_engine(engine);
         self.layer_fx_extra.sync_to_engine(engine);

@@ -130,7 +130,7 @@ impl FirmwarePanelState {
                 self.opts = FirmwareOptions::firmware_all();
             }
             if ui.button("Legacy preset").clicked() {
-                self.opts = FirmwareOptions::default();
+                self.opts = FirmwareOptions::legacy_all();
             }
             let o = &mut self.opts;
             dropdown(ui, "Organ", "fw_tone", &mut o.tone_source, &TONES);
@@ -268,7 +268,7 @@ mod tests {
         apply_audio_command(rx.try_recv().unwrap(), &mut engine, &mut vol);
         assert_eq!(engine.synth_a.chain, SynthChain::FirmwareStrip);
         assert!(engine.piano_a.firmware_velocity_level);
-        panel.opts = FirmwareOptions::default();
+        panel.opts = FirmwareOptions::legacy_all();
         panel.push(&handle);
         apply_audio_command(rx.try_recv().unwrap(), &mut engine, &mut vol);
         assert_eq!(engine.synth_a.chain, SynthChain::Legacy);

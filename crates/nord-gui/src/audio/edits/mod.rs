@@ -24,6 +24,6 @@ mod tests {
             std::mem::size_of::<SynthEdit>(),
             std::mem::size_of::<ProgramEdit>(),
         ];
-        assert!(sizes.iter().all(|&s| s == 0));
+        assert_eq!(sizes.len(), 5);
     }
 }

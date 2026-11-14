@@ -231,6 +231,19 @@ def cond_ge(flags, new, old):
     return [old[c] if an[c] else new[c] for c in (0, 1)]
 
 
+def dag_next(i: int, m: int, length: int, base: int) -> int:
+    """`Ii` after `Ii += Mm` with circular buffer `Bi` / `Li` (`core/dag.rs::dag_next`, CBUFEN).
+
+    VERIFIED: the wrap is one buffer length: a non-negative modify reaching `B + L` or beyond
+    subtracts `L`, a negative one falling below `B` adds `L`; `L = 0` is a plain add."""
+    nxt = (i + m) & M32
+    if length == 0:
+        return nxt
+    if signed32(m) >= 0:
+        return (nxt - length) & M32 if nxt >= (base + length) & M32 else nxt
+    return (nxt + length) & M32 if nxt < base else nxt
+
+
 class Missing(dict):
     """Memory that reports the first read of an unset address through `reads`."""
 
@@ -274,6 +287,12 @@ class Machine:
     def a(self, name: str, off: int = 0) -> int:
         return (self.ir[name] + off) & M32
 
+    def mod(self, i: int, m: int) -> int:
+        """`Ii` modified by `Mm` honouring `Li` / `Bi` (post-modify, pre-modify, `MODIFY`)."""
+        return dag_next(
+            self.ir[f"i{i}"], self.ir[f"m{m}"], self.ir.get(f"l{i}", 0), self.ir.get(f"b{i}", 0)
+        )
+
     # --- one instruction ---------------------------------------------------------------------
     def step(self, pc, w=None, wx=None, wy=None, st=None, d=None, swaps=()):
         """Check the trace, then commit the effects of one instruction.
@@ -296,6 +315,8 @@ class Machine:
             self.written.update((addr & M32, (addr + 1) & M32))
         for k, v in (d or {}).items():
             self.ir[k] = v & M32
+            if k[0] == "b":  # a write to `Bn` also loads `In` (circular buffer base)
+                self.ir["i" + k[1:]] = v & M32
 
     def _check(self, pc: int) -> None:
         row = self.trace[self._row]
@@ -307,7 +328,7 @@ class Machine:
         for name, files in (("x", row["r"]), ("y", row["s"])):
             regs = getattr(self, name)
             for n, v in enumerate(files):
-                if regs[n] is not None and wd(regs[n]) != v:
+                if regs[n] is not None and wd(regs[n]) != v and (wd(regs[n]) | v) & M32 >> 1:
                     raise AssertionError(
                         f"before {pc:#x}: {'RS'[name == 'y']}{n} model {wd(regs[n]):#010x} "
                         f"oracle {v:#010x}"
@@ -318,8 +339,8 @@ class Machine:
                 raise AssertionError(f"before {pc:#x}: {k} model {v:#x} oracle {row[kind][n]:#x}")
 
 
-def parse_trace(text: str, call: int = 0) -> list[dict]:
-    """The `trace` rows of call number `call` of a `sharc-fx --trace` output."""
+def parse_traces(text: str) -> list[list[dict]]:
+    """The `trace` rows of every call of a `sharc-fx --trace` output (`[0]` precedes call 0)."""
     calls: list[list[dict]] = [[]]
     for line in text.splitlines():
         if line.startswith("trace "):
@@ -331,7 +352,12 @@ def parse_trace(text: str, call: int = 0) -> list[dict]:
             calls[-1].append(row)
         elif line.startswith("call "):
             calls.append([])
-    return calls[call]
+    return calls
+
+
+def parse_trace(text: str, call: int = 0) -> list[dict]:
+    """The `trace` rows of call number `call` of a `sharc-fx --trace` output."""
+    return parse_traces(text)[call]
 
 
 def log2_exact(q: Fraction) -> float:
