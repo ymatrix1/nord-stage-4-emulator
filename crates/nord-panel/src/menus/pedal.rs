@@ -71,6 +71,8 @@ const GAIN: (f32, f32, f32) = (1.0, 10.0, 0.1);
 const GAIN_NOTE: &str =
     "range 1-10 from manual; default 1 and the 0.1 step are ASSUMED (engine default)";
 const JACK: &str = "jack electrical type; the host sends normalised values";
+const TRIPLE: &str = "engine:pedals.triple.funcs";
+const SUSTAIN_NOTE: &str = "choices and default from manual p.60; the engine default is SP-2 (continuous) so half pedaling works, the hardware default SP-1 is not applied";
 const TP1: &str = "present only when Sustain Type is Nord TP-1";
 
 pub(super) const PAGES: &[MenuPage] = &[
@@ -115,9 +117,17 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 3,
         title: "Sustain Pedal",
         items: &[
-            I::choice("pedal.3.sustain_type", "Type", SUSTAIN_TYPE, 0, 60, UiOnly(JACK)),
-            I::choice("pedal.3.left", "Left", LEFT, 0, 60, U(GAP)).note(TP1),
-            I::choice("pedal.3.middle", "Mid", MIDDLE, 0, 60, U(GAP)).note(TP1),
+            I::choice(
+                "pedal.3.sustain_type",
+                "Type",
+                SUSTAIN_TYPE,
+                0,
+                60,
+                Bound("engine:pedals.triple.sustain_type"),
+            )
+            .note(SUSTAIN_NOTE),
+            I::choice("pedal.3.left", "Left", LEFT, 0, 60, Bound(TRIPLE)).note(TP1),
+            I::choice("pedal.3.middle", "Mid", MIDDLE, 0, 60, Bound(TRIPLE)).note(TP1),
             I::choice(
                 "pedal.3.right",
                 "Right",
@@ -133,8 +143,8 @@ pub(super) const PAGES: &[MenuPage] = &[
         page: 4,
         title: "Triple Pedal Function",
         items: &[
-            I::choice("pedal.4.left", "Left", LEFT, 0, 60, U(GAP)),
-            I::choice("pedal.4.middle", "Middle", MIDDLE, 0, 60, U(GAP)),
+            I::choice("pedal.4.left", "Left", LEFT, 0, 60, Bound(TRIPLE)),
+            I::choice("pedal.4.middle", "Middle", MIDDLE, 0, 60, Bound(TRIPLE)),
             I::choice("pedal.4.right", "Right", RIGHT, 0, 60, Bound("ped_right"))
                 .note("same host parameter as pedal.3.right; the engine has one right-pedal state"),
         ],

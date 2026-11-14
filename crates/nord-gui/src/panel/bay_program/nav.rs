@@ -98,6 +98,7 @@ impl ProgramUi {
                 vec![cmd(ProgramEdit::Transpose(self.transp.effective()))]
             }
             Screen::Preset { kind, .. } => self.preset_dial(kind, delta),
+            Screen::Menu(_) => self.menu_dial(delta),
             _ => Vec::new(),
         }
     }
@@ -128,6 +129,7 @@ impl ProgramUi {
                 self.list_cat_held = false;
                 return out;
             }
+            Screen::Menu(_) => self.menu.step_page(delta),
             Screen::StoreTo => {
                 if let Some(StoreTarget::Bank(l)) = self.store.target {
                     self.store.target = Some(StoreTarget::Bank(step(l)));
