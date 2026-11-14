@@ -26,7 +26,7 @@ impl OrganLayer {
         };
         let w = (TAU * center_hz * inv_fs).clamp(0.02, 0.55);
         let q_damp = 0.45;
-        let excite = white * self.click_env;
+        let excite = white * self.click_env * self.globals.click_scale;
         // 2-pole State-Variable Bandpass filter (zero DC offset)
         let hp = excite - self.click_bp_state[1] - q_damp * self.click_bp_state[0];
         let bp = self.click_bp_state[0] + w * hp;

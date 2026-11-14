@@ -13,8 +13,11 @@ mod drawbar;
 mod drawbar_sum;
 mod farfisa_wheels;
 mod firmware_bank;
+mod globals;
 mod keyclick;
 mod lane_mix;
+mod percussion_poly;
+mod preset_live;
 mod rotary;
 mod scanner;
 #[cfg(test)]
@@ -67,6 +70,7 @@ pub use firmware_bank::{
     build_x_table, cycles_per_frame, firmware_wave_x, fracmul, implied_frame_rate,
     implied_frame_rate_at, phase_step, ToneBank, ARM_DEFAULT_TUNE_WORD, DEFAULT_TUNE_WORD,
 };
+pub use globals::OrganGlobals;
 pub use lane_mix::{gains_for, keep_for_rate, LaneMixer, FIRMWARE_FRAME_RATE_HZ};
 pub use types::{
     OrganModel, RotarySpeed, ScannerMode, ToneWheelSource, HAMMOND_GEAR_RATIOS, NUM_TONEWHEELS,
@@ -102,6 +106,14 @@ pub struct OrganLayer {
     pub percussion_third_harmonic: bool,
     pub percussion_fast_decay: bool,
     pub percussion_soft: bool,
+    /// POLY percussion (manual p.20, Shift+Volume): every new key stroke gets its own percussion
+    /// attack regardless of held keys. Default `false` = single-trigger (unchanged behaviour).
+    pub percussion_poly: bool,
+    /// Drawbar Live mode (manual p.21, Preset off): the physical drawbar positions
+    /// (`live_drawbars`) drive the sound instead of the stored `drawbars`. Default `false`.
+    pub drawbar_live: bool,
+    /// Physical drawbar positions (`0..=8`), used while `drawbar_live`; `88 8000 000` by default.
+    pub live_drawbars: [u8; 9],
     /// Transformer compartment crosstalk intensity (`1.0` = nominal -42 dB B3 bleed).
     pub crosstalk_level: f32,
     pub rotary_enabled: bool,
@@ -140,6 +152,8 @@ pub struct OrganLayer {
     pub weight_level: f32,
     /// Key-click transient on key-down / key-up (default on; off for oracle comparisons).
     pub key_click_enabled: bool,
+    /// Global Sound/System menu settings (defaults are exact no-ops).
+    pub globals: OrganGlobals,
     tonewheel_freqs: [f32; NUM_TONEWHEELS],
     tonewheel_freqs_hz: [f64; NUM_TONEWHEELS],
     synced_fine_cents: f32,
@@ -159,6 +173,7 @@ pub struct OrganLayer {
     note_gains: [f32; 128],
     active_key_count: usize,
     percussion_env: f32,
+    poly_perc: percussion_poly::PolyPercussion,
     click_env: f32,
     click_bp_state: [f32; 2],
     rng_state: u32,
@@ -201,6 +216,9 @@ impl OrganLayer {
             percussion_third_harmonic: false,
             percussion_fast_decay: true,
             percussion_soft: false,
+            percussion_poly: false,
+            drawbar_live: false,
+            live_drawbars: [8, 8, 8, 0, 0, 0, 0, 0, 0],
             crosstalk_level: 1.0,
             rotary_enabled: true,
             rotary_speed: RotarySpeed::Slow,
@@ -218,6 +236,7 @@ impl OrganLayer {
             weight_mode: WeightMode::default(),
             weight_level: 1.0,
             key_click_enabled: true,
+            globals: OrganGlobals::default(),
             tonewheel_freqs: freqs,
             tonewheel_freqs_hz: freqs_hz,
             synced_fine_cents: 0.0,
@@ -237,6 +256,7 @@ impl OrganLayer {
             note_gains: [1.0; 128],
             active_key_count: 0,
             percussion_env: 0.0,
+            poly_perc: percussion_poly::PolyPercussion::new(),
             click_env: 0.0,
             click_bp_state: [0.0; 2],
             rng_state: 0x6D2B_79F5,
@@ -278,13 +298,18 @@ impl OrganLayer {
             if self.active_key_count == 0 && self.percussion_enabled {
                 self.percussion_env = 1.0;
             }
+            if self.percussion_poly && self.percussion_enabled {
+                self.percussion_env = 1.0;
+                self.poly_perc.trigger(idx);
+            }
             self.held_notes[idx] = true;
             self.note_gains[idx] = gain.clamp(0.0, 1.0);
             self.b3_weights.mark();
+            let drawbars = *self.active_drawbars();
             self.weight_state.key_down(
                 idx as u8,
                 velocity_for_gain(gain),
-                &self.drawbars,
+                &drawbars,
                 self.octave_shift.clamp(-2, 2),
             );
             self.active_key_count += 1;
@@ -353,7 +378,7 @@ impl OrganLayer {
             OrganModel::B3 => {}
             OrganModel::Vox => {
                 // Vox drawbar 9 acts as Wave/Tone control morphing between flute and reed
-                let tone = f32::from(self.drawbars[8].min(8)) / 8.0;
+                let tone = f32::from(self.active_drawbars()[8].min(8)) / 8.0;
                 dry = (1.0 - 0.5 * tone) * dry + tone * dry.signum() * dry.abs().powf(0.8);
             }
             OrganModel::Farfisa => {
@@ -384,7 +409,12 @@ impl OrganLayer {
         } else {
             0.55
         };
-        self.percussion_env *= (-inv_fs / perc_tau).exp();
+        let perc_decay = (-inv_fs / perc_tau).exp();
+        self.percussion_env *= perc_decay;
+        let poly_peak = self.poly_perc.decay(perc_decay);
+        if self.percussion_poly {
+            self.percussion_env = poly_peak;
+        }
 
         // 5. Hammond Scanner Vibrato & Chorus (V1-V3, C1-C3)
         let scanner_out = self.process_scanner(dry, inv_fs);
