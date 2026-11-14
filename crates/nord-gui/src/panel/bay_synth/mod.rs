@@ -10,6 +10,7 @@ mod controls;
 mod coverage;
 mod graphics;
 mod oled;
+mod oled_arp;
 mod oled_types;
 mod oled_view;
 mod strip;

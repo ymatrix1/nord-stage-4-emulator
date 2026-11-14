@@ -6,12 +6,18 @@
 
 mod group;
 mod param;
+mod pattern;
 
 pub use group::SynthGroup;
 pub use param::SynthParam;
+pub use pattern::PatternParam;
 
 use nord_core::engine::Stage4Engine;
+use nord_core::morph::MorphParameter;
 use nord_core::synth::SynthLayer;
+
+/// Engine layer index of Synth A (Organ A, B, Piano A, B, Synth A, B, C).
+const SYNTH_FIRST_LAYER: usize = 4;
 
 /// Which Synth layers an edit reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +35,14 @@ pub enum SynthEdit {
     Param(SynthTarget, SynthParam),
     /// GROUP: copy a settings group from layer `src` to the other layers.
     Group { src: u8, group: SynthGroup },
+    /// SOUND INIT of layer `0..=2` (Shift+Waveform, manual p.37): `SynthLayer::sound_init` plus the
+    /// cutoff morph reset. Allocation-free, unlike `Stage4Engine::sound_init`, which also pushes an
+    /// Undo snapshot (so this edit is not undoable).
+    SoundInit(u8),
+    /// SUSTPED (Shift+Layer A): all three Synth layers follow the sustain pedal.
+    Sustped(bool),
+    /// PSTICK (Shift+Layer B): all three Synth layers follow the pitch stick.
+    Pstick(bool),
 }
 
 /// The three synth layers, in A, B, C order.
@@ -53,6 +67,21 @@ impl SynthEdit {
                 for l in layers(engine) {
                     p.apply(l);
                 }
+            }
+            Self::SoundInit(i) => {
+                let i = usize::from(i);
+                if i < 3 {
+                    layers(engine)[i].sound_init();
+                    engine.synth_cutoff_morph[i] = MorphParameter::new(0.5);
+                }
+            }
+            Self::Sustped(on) => {
+                engine.pedals.sustped[SYNTH_FIRST_LAYER..SYNTH_FIRST_LAYER + 3].fill(on);
+                engine.refresh_pedal_routing();
+            }
+            Self::Pstick(on) => {
+                engine.pedals.pstick[SYNTH_FIRST_LAYER..SYNTH_FIRST_LAYER + 3].fill(on);
+                engine.refresh_pedal_routing();
             }
             Self::Group { src, group } => {
                 let [a, b, c] = layers(engine);
@@ -132,5 +161,37 @@ mod tests {
             &mut master,
         );
         assert_eq!(e.synth_c.glide_sec, 0.5);
+    }
+
+    #[test]
+    fn sound_init_resets_one_layer_in_place_and_keeps_waveform() {
+        use nord_core::synth::VaWaveform;
+        let mut e = Stage4Engine::new(48_000.0);
+        let fresh_cutoff = e.synth_b.cutoff_hz;
+        e.synth_b.cutoff_hz = 321.0;
+        e.synth_b.waveform = VaWaveform::Triangle;
+        e.synth_b.perf.zigzag = true;
+        e.synth_c.cutoff_hz = 654.0;
+        e.synth_cutoff_morph[1].delta_wheel = 0.4;
+        SynthEdit::SoundInit(1).apply(&mut e);
+        assert_eq!(e.synth_b.cutoff_hz, fresh_cutoff);
+        assert_eq!(e.synth_b.waveform, VaWaveform::Triangle);
+        assert!(!e.synth_b.perf.zigzag);
+        assert_eq!(e.synth_c.cutoff_hz, 654.0);
+        assert_eq!(e.synth_cutoff_morph[1].delta_wheel, 0.0);
+        assert_eq!(e.undo_available(), None, "the light edit takes no snapshot");
+        SynthEdit::SoundInit(7).apply(&mut e);
+    }
+
+    #[test]
+    fn sustped_and_pstick_cover_the_three_synth_layers_only() {
+        let mut e = Stage4Engine::new(48_000.0);
+        SynthEdit::Sustped(true).apply(&mut e);
+        SynthEdit::Pstick(true).apply(&mut e);
+        assert_eq!(e.pedals.sustped[4..7], [true; 3]);
+        assert_eq!(e.pedals.pstick[4..7], [true; 3]);
+        assert!(!e.pedals.pstick[3] && !e.pedals.sustped[1]);
+        SynthEdit::Pstick(false).apply(&mut e);
+        assert_eq!(e.pedals.pstick[4..7], [false; 3]);
     }
 }

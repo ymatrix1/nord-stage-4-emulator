@@ -64,15 +64,30 @@ fn layer_pad(
     if let Some((sid, legend)) = sub {
         sui.mark(sid);
         let why = unsupported_reason(sid);
+        let lit = if i == 0 { sui.sustped } else { sui.pstick };
+        let col = match (why.is_some(), lit) {
+            (true, _) => LEGEND_DIM,
+            (false, true) => LED_AMBER,
+            (false, false) => LEGEND,
+        };
         tiny(
             p,
             pos2(rect.center().x, rect.bottom() + 3.0),
             legend,
-            if why.is_some() { LEGEND_DIM } else { LEGEND },
+            col,
             Align2::CENTER_TOP,
         );
         if let Some(why) = why {
             let _ = resp.on_hover_text(format!("{legend} (Shift): {why}"));
+        } else {
+            let _ = resp.on_hover_text(format!(
+                "{legend} (Shift+click): the Synth layers follow the {}",
+                if i == 0 {
+                    "sustain pedal"
+                } else {
+                    "pitch stick"
+                }
+            ));
         }
     }
     action
