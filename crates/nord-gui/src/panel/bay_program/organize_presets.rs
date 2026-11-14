@@ -6,9 +6,9 @@
 //! section Organ / Piano / Synth, the dial moves the location pointer, and a location reads
 //! `bank:position` like the preset ids on the display (`1:05`, manual p.42).
 //!
-//! The in-memory model holds the archive entry that sits at each location of each section
-//! ([`PresetLibrary`]); the emulator has no way to store a new preset yet, so the cells are
-//! archive entry paths only. Export backup (`library/export.rs`) writes the new order.
+//! The in-memory model holds the entry that sits at each location of each section
+//! ([`PresetLibrary`]): an archive entry path, or the virtual path of a preset stored with STORE
+//! (`preset_user.rs`). Export backup (`library/export.rs`) writes the new order.
 
 use super::catalog::display_name;
 use super::oled::OledText;
@@ -46,7 +46,13 @@ pub fn preset_label(index: u16) -> String {
 /// The archive entries of the Preset Library by section and flat location.
 #[derive(Debug, Clone, Default)]
 pub struct PresetLibrary {
-    slots: [BTreeMap<u16, String>; 3],
+    pub(super) slots: [BTreeMap<u16, String>; 3],
+    /// Presets stored with STORE, by their virtual entry path (see `preset_user.rs`).
+    pub(super) user: BTreeMap<String, super::preset_user::UserPreset>,
+    /// Entry last loaded into each section: the base a stored preset is patched onto.
+    pub(super) loaded: [Option<String>; 3],
+    /// Serial of the next stored preset (keeps virtual paths unique).
+    pub(super) serial: u32,
 }
 
 impl PresetLibrary {
@@ -60,6 +66,7 @@ impl PresetLibrary {
             .collect();
         let changed = new != self.slots[slot(section)];
         self.slots[slot(section)] = new;
+        self.drop_unreferenced();
         changed
     }
 

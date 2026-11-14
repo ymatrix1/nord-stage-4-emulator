@@ -14,6 +14,7 @@ use super::backup_presets::PresetSection;
 use super::container::{CbinError, CbinFile, CbinHeader, CbinKind};
 use super::presets::{OrganPresetDecoded, PianoPresetDecoded, ProgramDecoded};
 use super::synth_preset::SynthPresetDecoded;
+use crate::morph::LayerId;
 
 /// The decoded block of one preset file.
 #[derive(Debug, Clone, PartialEq)]
@@ -89,6 +90,21 @@ impl SectionPreset {
         };
         file.refresh_checksum();
         Ok(file)
+    }
+
+    /// Layers a load of this preset fills: the whole section, or `single` when that is a layer of
+    /// the section (an Organ preset always fills both layers).
+    pub fn target_layers(&self, single: Option<LayerId>) -> Vec<LayerId> {
+        use LayerId::*;
+        let all: &[LayerId] = match self {
+            Self::Organ(_) => return vec![OrganA, OrganB],
+            Self::Piano(_) => &[PianoA, PianoB],
+            Self::Synth(_) => &[SynthA, SynthB, SynthC],
+        };
+        match single {
+            Some(id) if all.contains(&id) => vec![id],
+            _ => all.to_vec(),
+        }
     }
 
     /// The `.npno` / `.nsmp4` entries of `archive` the preset names (Piano layer `name_hash`,
@@ -231,6 +247,23 @@ mod tests {
         assert!(refs.synth_c.is_some() && refs.synth_a.is_none() && refs.piano_a.is_none());
         let refs = SectionPreset::init(PresetSection::Organ).resolve_sounds(&archive);
         assert_eq!(refs, ProgramSoundRefs::default());
+    }
+
+    #[test]
+    fn target_layers_follow_the_section_and_the_single_layer_choice() {
+        let o = SectionPreset::init(PresetSection::Organ);
+        let p = SectionPreset::init(PresetSection::Piano);
+        let s = SectionPreset::init(PresetSection::Synth);
+        assert_eq!(o.target_layers(Some(LayerId::PianoA)).len(), 2);
+        assert_eq!(p.target_layers(None), [LayerId::PianoA, LayerId::PianoB]);
+        assert_eq!(p.target_layers(Some(LayerId::PianoB)), [LayerId::PianoB]);
+        assert_eq!(
+            p.target_layers(Some(LayerId::SynthA)).len(),
+            2,
+            "wrong section"
+        );
+        assert_eq!(s.target_layers(Some(LayerId::SynthC)), [LayerId::SynthC]);
+        assert_eq!(s.target_layers(None).len(), 3);
     }
 
     #[test]

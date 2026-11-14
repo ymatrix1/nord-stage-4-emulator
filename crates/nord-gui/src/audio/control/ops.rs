@@ -7,6 +7,7 @@
 use super::swap::{Retire, SwapState};
 use super::{ProgramControl, Slot};
 use crate::audio::{AudioCommand, CopyItem, ProgramEdit};
+use nord_core::cbin::SectionPreset;
 use nord_core::engine::{LayerInitTarget, ProgramState, StateMask, UndoHint, UndoOp};
 use nord_core::morph::LayerId;
 use std::time::Duration;
@@ -38,6 +39,14 @@ fn paste_mask(item: CopyItem) -> StateMask {
         CopyItem::Morph(_) => StateMask::MORPH,
         CopyItem::Program => StateMask::ALL,
     }
+}
+
+/// Parts of the program a preset load changes: the layers it fills and the Layer Scene masks.
+fn preset_mask(preset: &SectionPreset, single: Option<LayerId>) -> StateMask {
+    let layers = preset.target_layers(single);
+    layers
+        .into_iter()
+        .fold(StateMask::SCENE, |m, id| m | StateMask::layer(id))
 }
 
 impl ProgramControl {
@@ -84,6 +93,10 @@ impl ProgramControl {
             ProgramEdit::Recall(state) => {
                 self.shadow.apply_state(state.clone());
                 self.send_state(UndoOp::ProgramChange, StateMask::ALL, state);
+            }
+            ProgramEdit::LoadPreset { preset, single } => {
+                self.shadow.load_section_preset(&preset, single);
+                self.send_edit(UndoOp::LoadPreset, preset_mask(&preset, single));
             }
             // Not control operations: `dispatch` never routes them here.
             _ => {}
