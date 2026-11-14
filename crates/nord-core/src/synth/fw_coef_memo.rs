@@ -5,6 +5,7 @@
 //! the voice reuses the last result when the inputs are bit-identical. The output is therefore
 //! bit-identical to recomputing it every sample (perf task TD-14).
 
+use super::strip_map::strip_cutoff_hz;
 use super::{FwCoefs, FwFilterType};
 
 /// Inputs of the last computation, as bit patterns.
@@ -20,9 +21,24 @@ struct Key {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FwCoefMemo {
     last: Option<(Key, FwCoefs)>,
+    /// Last strip-law cutoff: input Hz bits and result.
+    strip: Option<(u32, f32)>,
 }
 
 impl FwCoefMemo {
+    /// [`strip_cutoff_hz`] of `hz` (word, `tan`, `atan` in `f64`), recomputed only when `hz` changed.
+    #[inline]
+    pub fn strip_cutoff(&mut self, hz: f32) -> f32 {
+        if let Some((bits, out)) = self.strip {
+            if bits == hz.to_bits() {
+                return out;
+            }
+        }
+        let out = strip_cutoff_hz(hz);
+        self.strip = Some((hz.to_bits(), out));
+        out
+    }
+
     /// [`FwCoefs::from_params`] for these inputs, recomputed only when an input changed.
     #[inline]
     pub fn get(
@@ -75,6 +91,27 @@ mod tests {
             let got = m.get(kind, fc, res, 48_000.0);
             let want = FwCoefs::from_params(kind, fc, res, 48_000.0);
             assert!(same(&got, &want), "{kind:?} {fc} {res}");
+        }
+    }
+
+    #[test]
+    fn strip_cutoff_memo_equals_the_direct_law() {
+        let mut m = FwCoefMemo::default();
+        for hz in [
+            14.0_f32,
+            440.0,
+            440.0,
+            441.0,
+            8000.0,
+            20_000.0,
+            0.0,
+            f32::NAN,
+        ] {
+            assert_eq!(
+                m.strip_cutoff(hz).to_bits(),
+                strip_cutoff_hz(hz).to_bits(),
+                "{hz}"
+            );
         }
     }
 

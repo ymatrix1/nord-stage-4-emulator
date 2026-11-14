@@ -88,7 +88,6 @@ pub use perf::{
     PATTERN_PRESET_MAX,
 };
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
-use strip_map::strip_cutoff_hz;
 pub use strip_map::{
     attack_index, attack_seconds, cutoff_hz_from_word, decay_index, decay_seconds,
     strip_word_for_cutoff, STRIP_PASS_FRAMES,
