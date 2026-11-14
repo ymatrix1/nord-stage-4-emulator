@@ -130,6 +130,8 @@ Update 2 (B3 tail): with the processor tail's amplitude response (`b3_tail.rs`, 
 
 Update 3 (stage ablation): the B3 mid deficit of the tail variant and the Vox mid excess are not post-chain effects (rotary, reverb, vibrato, firmware FX, delay, EQ, modulation move the mid band by under 1 dB; the Twin amp lifts Vox presence and brilliance). See [b3-vox-video-gap](b3-vox-video-gap.md).
 
+Update 4 (piano downstream level): the piano `+12 dB` (all notes, velocity 100) is not an engine stage. At replay velocity 64 it is +4.8 dB (`--confirmed-only` +2.3), against the Pipe yardstick (oracle-verified absolute scale, +7.3 dB) the piano is +2.4 dB; brilliance flips from +5.4 to -15.3 dB between velocity 100 and 64. The only engine-side difference is the 0.83 dB sample scale (`--firmware-piano-bus`). Variants `piano-bus`, `vel-64`, `vel-64-piano-bus` are in the segment spec. See [piano-downstream-level](piano-downstream-level.md).
+
 ## Update: layer routing (2026-11-13)
 
 The B3 clip sub excess and clipping are the layer zone, not the output stage: with the opt-in `--firmware-routing` (per-layer KB zones and section / layer enables, [engine-routing](engine-routing.md)) `b3wheels` gives sub -1.6 dB, crest 17.2 dB (hardware 18.6), 0 % at full scale and RMS +3.8 dB; presence stays -12.5 dB. The other five segments are unchanged.
