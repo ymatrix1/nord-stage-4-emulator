@@ -70,6 +70,59 @@ pub fn gain_q31(level_q23: u32) -> i32 {
     (i64::from(level_q23) << 8).min(i64::from(i32::MAX)) as i32
 }
 
+/// SMP ring float per bus word: the post stage is unity and converts with `FLOAT BY -29`.
+///
+/// VERIFIED: `ring = bus * 2^-29` (oracle run through the audio interrupt,
+/// `docs/research/piano-bus-convention.md` s2b; `smp_post_stage.scn`).
+pub const SMP_RING_PER_BUS_WORD: f32 = 1.0 / 536_870_912.0;
+
+/// Master gain word of the FX Core1 output stage, `DM(0xB651A)` of the image (`0x3E3F1412`).
+///
+/// VERIFIED (run): with the level word `DM(0xB6518)` at 1.0 the stage multiplies the master
+/// buffer by this word and negates it; PNO lanes and the SMP stream reach the output words with
+/// the same gain, -0.1862 (PNO) and -0.1869 (SMP) after 5000 passes of `sharc-org`
+/// (`tools/fx_input_path.py`, `docs/research/piano-receiver-scale.md`). ASSUMED: that the ARM
+/// leaves `DM(0xB6518)` at 1.0 (it is 0 in the image and no writer was found).
+pub const FX_MASTER_GAIN_WORD: u32 = 0x3E3F_1412;
+
+/// DAC conversion of the FX Core1 pass: `word = fix(clip(2 * x, 0.999)) * 2^31`.
+///
+/// VERIFIED (run): output words preset to 0.25 give the DAC word `0x40000000`; 0.5 and above give
+/// `0x7FDF3B80` (`0.999 * 2^31`); the constant is the immediate `0x3F7FBE77` at `0x121321`.
+pub const FX_DAC_CLIP_WORD: u32 = 0x3F7F_BE77;
+
+/// Float full scale of the FX master buffer: `x = 0.5` is the DAC clip (`clip / 2`).
+#[inline]
+pub fn fx_dac_full_scale() -> f32 {
+    f32::from_bits(FX_DAC_CLIP_WORD) * 0.5
+}
+
+/// DAC word as a fraction of `2^31` for a float `x` on the FX master buffer (level word 1.0).
+#[inline]
+pub fn fx_dac_fraction(x: f32) -> f32 {
+    let clip = f32::from_bits(FX_DAC_CLIP_WORD);
+    (2.0 * f32::from_bits(FX_MASTER_GAIN_WORD) * x).clamp(-clip, clip)
+}
+
+/// DAC fraction of one SMP bus word through the verified receiver path (unity copy, unity master
+/// IIR, master gain, DAC doubling).
+#[inline]
+pub fn bus_word_dac_fraction(word: i32) -> f32 {
+    fx_dac_fraction(word as f32 * SMP_RING_PER_BUS_WORD)
+}
+
+/// Engine amplitude per `y / 8192` unit and unit voice gain if the DAC fraction were the engine
+/// unit: `(y << 17)` is `y / 8192 * 2^30`, so the DAC fraction is `4 * G * y / 8192`.
+///
+/// ASSUMED (derived, not wired): [`FIRMWARE_SAMPLE_SCALE`] is `0.5`, so the receiver path is
+/// 3.5 dB above the bus reading (2.7 dB above [`LEGACY_SAMPLE_SCALE`]). Not an engine default:
+/// the master level word `DM(0xB6518)` is unresolved and the organ `K` disagrees by 17.5 dB,
+/// see `docs/research/piano-receiver-scale.md` s2.
+#[inline]
+pub fn receiver_path_sample_scale() -> f32 {
+    4.0 * f32::from_bits(FX_MASTER_GAIN_WORD)
+}
+
 /// Bus word as a fraction of Q31 full scale.
 #[inline]
 pub fn bus_unit(word: i32) -> f32 {
@@ -197,5 +250,38 @@ mod tests {
             (db - 0.83).abs() < 0.01,
             "legacy is 0.83 dB hotter, got {db}"
         );
+    }
+
+    #[test]
+    fn receiver_path_constants_follow_the_verified_words() {
+        assert!((f32::from_bits(FX_MASTER_GAIN_WORD) - 0.1866).abs() < 1e-7);
+        assert!((fx_dac_full_scale() - 0.4995).abs() < 1e-6);
+        // float 0.25 on the master buffer -> 2 * 0.1866 * 0.25 of 2^31
+        assert!((fx_dac_fraction(0.25) - 0.0933).abs() < 1e-6);
+        // the clip is reached from x = 0.999 / (2 G)
+        assert!((fx_dac_fraction(10.0) - 0.999).abs() < 1e-6);
+        assert!((fx_dac_fraction(-10.0) + 0.999).abs() < 1e-6);
+    }
+
+    #[test]
+    fn bus_word_to_dac_matches_the_ring_arithmetic() {
+        // 2^28 bus word -> ring 0.5 -> 2 * 0.1866 * 0.5 = 0.1866 of 2^31
+        let w = 1_i32 << 28;
+        assert!((w as f32 * SMP_RING_PER_BUS_WORD - 0.5).abs() < 1e-9);
+        assert!((bus_word_dac_fraction(w) - 0.1866).abs() < 1e-6);
+        // a full-scale unity stroke (2^30, ring 2.0) reads 0.7464 of 2^31 through the receiver path
+        assert!((bus_word_dac_fraction(1 << 30) - 0.7464).abs() < 1e-6);
+    }
+
+    #[test]
+    fn receiver_path_scale_is_the_bus_reading_times_four_g() {
+        let g = f32::from_bits(FX_MASTER_GAIN_WORD);
+        assert!((receiver_path_sample_scale() - 4.0 * g).abs() < 1e-9);
+        // per decoded unit: the bus word is y/8192 * 2^30, so the DAC fraction matches
+        let word = 1_i32 << 29; // y / 8192 = 0.5 at unity gain: 0.5 * 2^30
+        let want = 0.5 * receiver_path_sample_scale();
+        assert!((bus_word_dac_fraction(word) - want).abs() < 1e-6);
+        let ratio_db = 20.0 * (receiver_path_sample_scale() / FIRMWARE_SAMPLE_SCALE).log10();
+        assert!((ratio_db - 3.48).abs() < 0.01, "{ratio_db}");
     }
 }
