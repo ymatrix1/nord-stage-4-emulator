@@ -90,6 +90,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 
 | Research Note | Focus |
 |---|---|
+| [research/program-coverage.md](research/program-coverage.md) | Factory program sweep: engine paths used by the 384 programs, verified vs assumed, render health |
 | [research/organ-model-paths.md](research/organ-model-paths.md) | Which PNO core 1 routines each `Edt_Org_kModel` installs |
 | [research/b3-tone-source.md](research/b3-tone-source.md) | B3 tone source: generator `0x121BBE` + processor `0x121E2B` |
 | [research/b3-generator.md](research/b3-generator.md) | B3 generator frequency law, wheel tables, silent tail |
