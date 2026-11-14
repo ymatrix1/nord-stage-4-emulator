@@ -255,11 +255,12 @@ impl eframe::App for Stage4App {
 
         // Screenshot capture: F12 (whole window) or the CLI plan (section crop at a fixed zoom).
         if let Some(plan) = &self.shot {
-            let native = ctx.native_pixels_per_point().unwrap_or(1.0);
+            // InnerSize is in points at egui's current scale (native x zoom).
+            let ppp = ctx.pixels_per_point();
             let phys = ctx.input(|i| i.screen_rect().size()) * ctx.pixels_per_point();
             if !self.shot_requested {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                    screenshot::inner_size_command(plan, native),
+                    screenshot::inner_size_command(plan, ppp),
                 ));
                 if plan.ready(self.frame_count, phys) {
                     self.shot_requested = true;
@@ -345,7 +346,7 @@ wrote {}",
     let cli = parse_cli_args(argv);
 
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([1580.0, 472.0])
+        .with_inner_size([1900.0, 680.0])
         .with_min_inner_size([960.0, 360.0])
         .with_title(firmware_panel::window_title(&cli.firmware));
     if cli.screenshot_target.is_some() {
@@ -425,5 +426,26 @@ mod tests {
             positional.initial_backup,
             Some(PathBuf::from("factory.ns4b"))
         );
+    }
+
+    #[test]
+    fn test_cli_screenshot_flags() {
+        let parsed = parse_cli_args(
+            [
+                "nord-stage4",
+                "--screenshot",
+                "o.png",
+                "--screenshot-scale",
+                "2",
+                "--screenshot-section",
+                "synth",
+            ]
+            .map(String::from),
+        );
+        assert_eq!(parsed.screenshot_target, Some(PathBuf::from("o.png")));
+        assert_eq!(parsed.screenshot_scale, Some(2.0));
+        assert_eq!(parsed.screenshot_section, Some(nord_panel::Section::Synth));
+        let bad = parse_cli_args(["x", "--screenshot-section", "nope"].map(String::from));
+        assert_eq!(bad.screenshot_section, None);
     }
 }

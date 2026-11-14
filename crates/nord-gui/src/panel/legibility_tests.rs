@@ -47,8 +47,9 @@ fn collect(shape: &Shape, origin: egui::Pos2, out: &mut Vec<Lab>) {
                 .first()
                 .map_or(0.0, |s| s.format.font_id.size);
             let g = t.galley.rect.translate(t.pos.to_vec2());
-            let band = size * 0.8;
-            let ink = Rect::from_center_size(g.center(), vec2(g.width(), band.min(g.height())));
+            let band = size * 1.0;
+            let ink =
+                Rect::from_center_size(g.center(), vec2(g.width() + 2.0, band.min(g.height())));
             out.push(Lab {
                 text: t.galley.text().to_string(),
                 rect: ink.translate(-origin.to_vec2()),
@@ -129,7 +130,12 @@ pub(super) fn violations(labs: &[Lab]) -> BTreeSet<String> {
         let Some(r) = super::layout_px::rect_of(&c.id, egui::Pos2::ZERO) else {
             continue;
         };
-        let key = (r.min.x as i32, r.min.y as i32, r.max.x as i32, r.max.y as i32);
+        let key = (
+            r.min.x as i32,
+            r.min.y as i32,
+            r.max.x as i32,
+            r.max.y as i32,
+        );
         if r.area() > BIG_RECT_PX2 || !seen.insert(key) {
             continue;
         }
@@ -155,7 +161,11 @@ fn allowed() -> BTreeSet<String> {
 fn collisions_match_the_allow_list() {
     let (labs, _) = labels_of(None, vec2(1700.0, 500.0));
     let found = violations(&labs);
-    println!("legibility: {} labels, {} collisions", labs.len(), found.len());
+    println!(
+        "legibility: {} labels, {} collisions",
+        labs.len(),
+        found.len()
+    );
     if let Ok(path) = std::env::var("NS4_WRITE_COLLISIONS") {
         let body: Vec<&str> = found.iter().map(String::as_str).collect();
         std::fs::write(path, body.join("\n") + "\n").unwrap();
@@ -165,7 +175,11 @@ fn collisions_match_the_allow_list() {
     let new: Vec<_> = found.difference(&allow).collect();
     let stale: Vec<_> = allow.difference(&found).collect();
     assert!(new.is_empty(), "new collisions:\n{}", join(&new));
-    assert!(stale.is_empty(), "fixed, remove from allow-list:\n{}", join(&stale));
+    assert!(
+        stale.is_empty(),
+        "fixed, remove from allow-list:\n{}",
+        join(&stale)
+    );
 }
 
 fn join(v: &[&String]) -> String {
@@ -189,7 +203,10 @@ fn every_section_draws_its_title_and_labels_when_focused() {
     for s in FOCUSABLE {
         let (labs, visible) = labels_of(Some(s), vec2(1700.0, 900.0));
         let sec = view::section_px(s, egui::Pos2::ZERO);
-        let inside = labs.iter().filter(|l| sec.contains(l.rect.center())).count();
+        let inside = labs
+            .iter()
+            .filter(|l| sec.contains(l.rect.center()))
+            .count();
         assert!(inside > 15, "{s:?}: only {inside} labels in the section");
         assert!(visible.width() > 100.0, "{s:?} visible {visible:?}");
     }
@@ -197,5 +214,7 @@ fn every_section_draws_its_title_and_labels_when_focused() {
 
 #[test]
 fn allow_list_parser_skips_comments_and_blanks() {
-    assert!(allowed().iter().all(|l| !l.starts_with('#') && !l.is_empty()));
+    assert!(allowed()
+        .iter()
+        .all(|l| !l.starts_with('#') && !l.is_empty()));
 }

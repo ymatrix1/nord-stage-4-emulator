@@ -8,12 +8,12 @@
 //! * Focus on one section: that section fills the window (zoom up to [`MAX_ZOOM`]).
 //! * Click a section header or press Z to toggle focus, Esc to leave, 1-5 jump to a section.
 
-use super::layout_px::to_px;
+use super::layout_px::{to_px, PANEL_HEIGHT_PX, PANEL_WIDTH_PX};
 use egui::{pos2, vec2, Context, Pos2, Rect, Vec2};
 use nord_panel::Section;
 
 /// Logical size of the drawn panel (control area plus keybed).
-pub const PANEL_SIZE: Vec2 = Vec2::new(1560.0, 420.0);
+pub const PANEL_SIZE: Vec2 = Vec2::new(PANEL_WIDTH_PX, PANEL_HEIGHT_PX);
 /// Height of a section header strip (`widgets::section_frame`).
 pub const HEADER_H: f32 = 22.0;
 /// Logical px kept around a focused section.
@@ -78,8 +78,8 @@ impl ViewState {
         }
         let before = *self;
         let (z, esc, digit, hover) = ctx.input(|i| {
-            let digit = (0..FOCUSABLE.len())
-                .find(|n| i.key_pressed(digit_key(*n)) && !i.modifiers.any());
+            let digit =
+                (0..FOCUSABLE.len()).find(|n| i.key_pressed(digit_key(*n)) && !i.modifiers.any());
             (
                 i.key_pressed(egui::Key::Z) && !i.modifiers.any(),
                 i.key_pressed(egui::Key::Escape),

@@ -13,9 +13,10 @@ mod bay_synth;
 mod ctl;
 mod kb_zone;
 mod keybed;
+pub mod layout_px;
+mod layout_tweaks;
 #[cfg(test)]
 mod legibility_tests;
-pub mod layout_px;
 mod organ_drawbars;
 mod organ_logic;
 #[cfg(test)]

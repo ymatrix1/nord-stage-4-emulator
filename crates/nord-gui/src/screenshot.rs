@@ -62,7 +62,7 @@ impl ShotPlan {
         content_size(self.section) * self.scale
     }
 
-    /// Window size (OS points at the native scale) that holds the region.
+    /// Window size in egui points at scale `native_ppp` that holds the region.
     pub fn window_points(&self, native_ppp: f32) -> Vec2 {
         self.region_phys() / native_ppp.max(0.1)
     }
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn region_scales_with_zoom_and_section() {
         let whole = ShotPlan::new("a.png".into(), None, Some(2.0));
-        assert_eq!(whole.region_phys(), vec2(3120.0, 840.0));
+        assert_eq!(whole.region_phys(), crate::panel::view::PANEL_SIZE * 2.0);
         let organ = ShotPlan::new("a.png".into(), Some(Section::Organ), Some(2.0));
         assert!(organ.region_phys().x < whole.region_phys().x / 3.0);
         assert_eq!(organ.view().focus, Some(Section::Organ));
@@ -150,7 +150,7 @@ mod tests {
         let (w, h) = (r.x as usize + 20, r.y as usize + 20);
         let img = egui::ColorImage::new([w, h], egui::Color32::RED);
         let out = p.crop(&img).expect("crop");
-        assert_eq!((out.width(), out.height()), (390, 105));
+        assert_eq!((out.width(), out.height()), (780, 210));
         assert_eq!(out.get_pixel(0, 0).0, [255, 0, 0, 255]);
         let small = egui::ColorImage::new([10, 10], egui::Color32::BLUE);
         assert_eq!(p.crop(&small).expect("crop").width(), 10);
