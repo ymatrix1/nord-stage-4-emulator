@@ -57,3 +57,7 @@ The routing zone-code table is EMPIRICAL ([engine-routing](engine-routing.md)). 
 2. Measure the Leslie horn response from the effects DSP (the oracle chain of the Leslie routines) and set the engine horn gain and crossover from it.
 3. Derive the organ output level from the firmware (the layer level `0xB1/0xB2` path, the organ unit output routines `0x124344/0x1239D0`, `0x124270/0x1238FC`, the FX-chain input gain words) rather than fit it; the candidates above (squared layer level, legacy bus against the ARM weight unit) predict B3 +9.3, Vox +14, Pipe +14.4 dB, so the model-dependent part is the open piece.
 4. Then flip `B3Wheels` + tail and `FirmwareRouting` together with a re-baselined `render_hash` (D22).
+
+## Update 2026-11-13 (output law)
+
+The Vox word `0x3F1EB100` is the swell word of the default pedal (`Fnc_Swell = 100`), the layer level law is `(v / 127)^2`, and the program rotary drive is now imported in the firmware unit (`preset / 10`): see [organ-output-law](organ-output-law.md) and D25.
