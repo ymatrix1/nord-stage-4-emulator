@@ -171,6 +171,8 @@ impl<F: Fp> Core<F> {
             win,
             nwin: windows.len(),
             mem: vec![0u32; total as usize].into_boxed_slice(),
+            ring: RingAdvance::FROZEN,
+            calls: 0,
             #[cfg(test)]
             pcs: Vec::new(),
             #[cfg(test)]
