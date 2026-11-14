@@ -16,6 +16,9 @@ pub const DIM: char = '~';
 
 /// Text of an item value as the display shows it.
 pub fn format_value(item: &MenuItem, v: Value) -> String {
+    if let Some(s) = super::menu_labels::special_value(item.id, v) {
+        return s;
+    }
     match (item.kind, v) {
         (ItemKind::Toggle, Value::Bool(b)) => if b { "On" } else { "Off" }.into(),
         (ItemKind::Enum(choices), Value::Index(i)) => {
@@ -124,7 +127,9 @@ pub fn compose(ui: &ProgramUi, m: MenuId) -> OledText {
     // nearly everywhere (research note s12.3 / s14 list the exceptions, still open).
     let sub = match &ui.message {
         Some((msg, _)) => msg.clone(),
-        None => page.title.to_string(),
+        None => super::menu_labels::page_label(page.menu, page.page)
+            .unwrap_or(page.title)
+            .to_string(),
     };
     // VERIFIED: the title bar carries `n/N` right-aligned (`SYSTEM SETTINGS  1/6`); the lit soft
     // button is the focused item (`Type` / `Func` / `Gain` on the Pedal page).
@@ -157,8 +162,8 @@ mod tests {
         assert_eq!(f("midi.3.organ_a", Value::Int(7)), "7");
         assert_eq!(f("extern.3.bank_msb_a", Value::Int(-1)), "--");
         assert_eq!(f("extern.5.program_a", Value::Int(12)), "12");
-        assert_eq!(f("system.2.transpose", Value::Int(3)), "+3");
-        assert_eq!(f("sound.2.piano_pedal_noise", Value::Float(-1.5)), "-1.5");
+        assert_eq!(f("system.2.transpose", Value::Int(3)), "+3 semi");
+        assert_eq!(f("sound.2.piano_pedal_noise", Value::Float(-1.5)), "-2 dB");
         assert_eq!(f("pedal.1.ctrl_gain", Value::Float(2.0)), "2.0");
         assert_eq!(f("system.5.reset_all", Value::None), "");
     }

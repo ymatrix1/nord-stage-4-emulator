@@ -155,7 +155,7 @@ fn init_undo_copy_paste() -> Vec<&'static str> {
     assert_ne!(e.layer_levels[2].base, 0.33);
     tap(&mut u, "program.undo");
     assert_eq!(u.screen, Screen::Undo);
-    let out = u.soft_down(1);
+    let out = u.soft_down(4);
     run(&mut u, &mut e, out);
     assert_eq!(e.layer_levels[2].base, 0.33);
     // MON/COPY the focused layer, PASTE it into another one.

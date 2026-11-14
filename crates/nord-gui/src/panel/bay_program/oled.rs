@@ -1,14 +1,12 @@
 //! The Program OLED: text of every screen (pure, testable) and its painter.
 
 use super::catalog::display_name;
-use super::model::{ListMode, PresetKind, ProgView, Screen};
+use super::model::{ProgView, Screen};
 use super::morph::source_label;
-use super::nav::ORGAN_PRESETS;
 pub use super::oled_grid::Line;
 use super::oled_home::{location_title, name_line, section_rows};
 #[cfg(test)]
 use super::oled_icons::{ICON_ORGAN, ICON_PIANO, ICON_SYNTH};
-use super::split::{note_name, xfade_label, SplitRow};
 use super::store::ProgLoc;
 use crate::panel::ui_state::ProgramUi;
 use nord_core::morph::LayerId;
@@ -49,6 +47,9 @@ pub struct OledText {
     /// Title-bar screens with their own row layout (the Store screens): when not empty these
     /// lines replace the label and the body rows.
     pub lines: Vec<Line>,
+    /// Program-list screens: index within `rows` of the lit (selected) row; the rows then sit at
+    /// y = 13, 23, 33, 43 and carry no focus marker.
+    pub sel: Option<usize>,
 }
 
 impl OledText {
@@ -96,19 +97,6 @@ pub fn name_at(ui: &ProgramUi, loc: ProgLoc) -> String {
         .get(usize::from(loc.index()))
         .map(|e| display_name(e))
         .unwrap_or_default()
-}
-
-fn window(items: &[String], cursor: usize, n: usize) -> Vec<String> {
-    let start = cursor
-        .saturating_sub(n / 2)
-        .min(items.len().saturating_sub(n));
-    items
-        .iter()
-        .enumerate()
-        .skip(start)
-        .take(n)
-        .map(|(i, t)| format!("{}{t}", if i == cursor { ">" } else { " " }))
-        .collect()
 }
 
 fn home(ui: &ProgramUi, sum: &Summary) -> OledText {
@@ -181,85 +169,6 @@ fn home(ui: &ProgramUi, sum: &Summary) -> OledText {
     t
 }
 
-fn list(ui: &ProgramUi) -> OledText {
-    let order = ui.catalog.order(ui.list_mode);
-    let names: Vec<String> = order
-        .iter()
-        .map(|&i| display_name(&ui.catalog.programs[i]))
-        .collect();
-    let mode = match ui.list_mode {
-        ListMode::Num => "Num",
-        ListMode::Abc => "Abc",
-        ListMode::Cat => "Cat",
-    };
-    OledText {
-        big: format!("LIST {mode}"),
-        sub: names
-            .get(ui.list_cursor)
-            .cloned()
-            .unwrap_or_else(|| "No backup open".into()),
-        rows: window(&names, ui.list_cursor, 4),
-        soft: ui.screen.soft_labels(),
-        ..Default::default()
-    }
-}
-
-fn split(ui: &ProgramUi) -> OledText {
-    let s = &ui.split;
-    let pts = |f: &dyn Fn(usize) -> String| {
-        ["L", "M", "H"]
-            .iter()
-            .enumerate()
-            .map(|(i, n)| format!("{}{n}:{}", if i == s.point { ">" } else { "" }, f(i)))
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
-    let note = pts(&|i| {
-        if s.enabled[i] {
-            note_name(s.notes[i])
-        } else {
-            "Off".into()
-        }
-    });
-    let xf = pts(&|i| xfade_label(s.xfade[i]).into());
-    let (a, b) = if s.row == SplitRow::Note {
-        (">", " ")
-    } else {
-        (" ", ">")
-    };
-    OledText {
-        big: format!("KEYBOARD SPLIT {}", if s.on { "ON" } else { "OFF" }),
-        sub: String::new(),
-        rows: vec![format!("{a}Note {note}"), format!("{b}xFade {xf}")],
-        soft: ui.screen.soft_labels(),
-        ..Default::default()
-    }
-}
-
-fn preset(ui: &ProgramUi, kind: PresetKind, single: bool) -> OledText {
-    let names: Vec<String> = match kind {
-        PresetKind::Organ => ORGAN_PRESETS.iter().map(|m| format!("{m:?}")).collect(),
-        PresetKind::Piano => ui.catalog.pianos.iter().map(|e| display_name(e)).collect(),
-        PresetKind::Synth => ui.catalog.samples.iter().map(|e| display_name(e)).collect(),
-    };
-    let names = ui.preset_browser_names(kind).unwrap_or(names);
-    let mut rows = window(&names, ui.preset_cursor, 4);
-    if single {
-        rows.insert(0, format!("Layer: {}", layer_label(ui.focus)));
-    }
-    OledText {
-        bar: Some(String::new()),
-        big: kind.title().into(),
-        sub: names
-            .get(ui.preset_cursor)
-            .cloned()
-            .unwrap_or_else(|| "No backup open".into()),
-        rows,
-        soft: ui.screen.soft_labels(),
-        ..Default::default()
-    }
-}
-
 /// Layers a Layer Init of each section would reset, as the display prints them above the soft
 /// buttons: Organ always `AB`, Piano and Synth the focused layer.
 fn layer_init_letters(focus: LayerId) -> String {
@@ -283,18 +192,21 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
     };
     match ui.screen {
         Screen::Home => home(ui, sum),
-        Screen::List => list(ui),
+        Screen::List => super::oled_lists::list(ui),
         Screen::Menu(m) => super::menu_screen::compose(ui, m),
         Screen::StoreTo | Screen::StoreAs => super::oled_store::compose(ui),
-        Screen::Split => split(ui),
-        Screen::Clock => t(
-            "MST CLK",
-            format!("{:.0} BPM", ui.clock.bpm),
-            vec![
-                format!("KBS: {}", ui.clock.kbs.label()),
-                "External clock: none".into(),
-            ],
-        ),
+        Screen::Split => super::oled_lists::split(ui),
+        // VERIFIED (ARM frame, research note s16.7, key id 16): a popup in the lower half of the
+        // home screen, label `Master Clock Tempo` (row y = 45, four beat boxes at the right, the
+        // first lit) and `120 bpm` (y = 55). ASSUMED: the Keyboard Sync state is appended to the
+        // value (the real popup has no room for the KBS soft button, which stays functional).
+        Screen::Clock => OledText {
+            popup: Some((
+                "Master Clock Tempo".into(),
+                format!("{:.0} bpm\tKBS {}", ui.clock.bpm, ui.clock.kbs.label()),
+            )),
+            ..home(ui, sum)
+        },
         // VERIFIED: Transpose is a popup in the lower half of the home screen, label and value
         // (`Transpose` / `+1 semi`, ARM frames, research note s12). ASSUMED: `Off` for the off state.
         Screen::Transpose => OledText {
@@ -308,18 +220,31 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
             )),
             ..home(ui, sum)
         },
-        Screen::Preset { kind, single } => preset(ui, kind, single),
-        Screen::Undo => t(
-            "UNDO",
-            match (ui.undo_blocked, ui.redo_available) {
-                (true, true) => "Nothing to Undo. Redo?",
-                (true, false) => "Nothing to Undo",
-                (false, true) => "Revert the last edit? (Redo ready)",
-                (false, false) => "Revert the last edit?",
+        Screen::Preset { kind, single } => super::oled_lists::preset(ui, kind, single),
+        // VERIFIED (ARM frame, research note s16.7, key id 21 with the modifier bit set): bar `UNDO`
+        // without a counter, `Nothing to Undo` (8 px, ink rows 16 to 23), and one outlined `Ok`
+        // button in the fourth soft slot. ASSUMED: with history the label reads `Undo to before` and
+        // the row `the last edit?` (the pool pair `Undo to before` / `%s?`), `Redo` sits in the
+        // third slot (the pool order is `Ok`, `Redo`); the Redo slot is only drawn when a redo exists.
+        Screen::Undo => {
+            let (sub, rows) = if ui.undo_blocked {
+                ("Nothing to Undo", Vec::new())
+            } else {
+                ("Undo to before", vec!["the last edit?".to_string()])
+            };
+            let mut soft = ui.screen.soft_labels();
+            if !ui.redo_available {
+                soft[2] = "";
             }
-            .into(),
-            Vec::new(),
-        ),
+            OledText {
+                bar: Some(String::new()),
+                big: "UNDO".into(),
+                sub: sub.into(),
+                rows,
+                soft,
+                ..Default::default()
+            }
+        }
         // VERIFIED: title, prompt and the per-section layer letters (`AB`, `A`, `A`) above the
         // All / Organ / Piano / Synth soft buttons (soft-piano video `NVMtX0epXog` 1:16,
         // piano-pad video `hR31DQrxfT4` 1:02). PAGE picking the layer is emulator-only.
@@ -381,15 +306,6 @@ pub use super::oled_paint::paint;
 #[cfg(test)]
 mod unit {
     use super::*;
-
-    #[test]
-    fn window_centres_the_cursor_and_marks_it() {
-        let items: Vec<String> = ["a", "b", "c", "d", "e", "f"].map(String::from).to_vec();
-        assert_eq!(window(&items, 0, 4), [">a", " b", " c", " d"]);
-        assert_eq!(window(&items, 3, 4), [" b", " c", ">d", " e"]);
-        assert_eq!(window(&items, 5, 4), [" c", " d", " e", ">f"]);
-        assert!(window(&[], 0, 4).is_empty());
-    }
 
     #[test]
     fn layer_labels_follow_the_hardware_short_names() {

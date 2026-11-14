@@ -155,16 +155,16 @@ fn undo_soft_button_is_gated_by_availability_and_redo_is_offered() {
     let mut u = ProgramUi::default();
     u.screen = Screen::Undo;
     u.undo_blocked = true;
-    assert!(u.soft_down(1).is_empty(), "nothing to undo: button inert");
+    assert!(u.soft_down(4).is_empty(), "nothing to undo: button inert");
     assert_eq!(u.screen, Screen::Home);
 
     u.screen = Screen::Undo;
     u.undo_blocked = false;
     u.redo_available = false;
-    assert!(u.soft_down(2).is_empty(), "no redo available");
+    assert!(u.soft_down(3).is_empty(), "no redo available");
     u.screen = Screen::Undo;
     u.redo_available = true;
-    let out = u.soft_down(2);
+    let out = u.soft_down(3);
     assert!(matches!(
         &out[0],
         crate::audio::AudioCommand::Program(ProgramEdit::Redo)

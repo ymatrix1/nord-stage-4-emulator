@@ -10,6 +10,18 @@ use crate::panel::ui_state::{
 
 pub use crate::panel::param_hint::fmt::time as fmt_time;
 
+/// Caption of the OSC CTRL value under the wave name.
+///
+/// VERIFIED (ARM frame, research note s16.4): a Shape wave reads `SHAPE: 0.0`. ASSUMED: the other
+/// categories keep the knob name `OSC CTRL` (no frame of them was captured).
+pub(super) fn ctrl_label(cat: &str) -> &'static str {
+    if cat.eq_ignore_ascii_case("shape") {
+        "SHAPE"
+    } else {
+        "OSC CTRL"
+    }
+}
+
 fn icon_of(sui: &SynthUi) -> Icon {
     let l = sui.layer();
     match l.wave_type {
@@ -102,20 +114,20 @@ pub fn view_of(sui: &SynthUi, sample_name: Option<&str>) -> OledView {
             [
                 WAVE_TYPES[usize::from(l.wave_type) % 4].to_string(),
                 l.cat_name(),
-                format!("{}({})", l.wave_idx + 1, l.wave_count()),
+                format!("{} ({})", l.wave_idx + 1, l.wave_count()),
             ],
         ),
         SynthPage::Waveform => (
             "OSC WAVEFORM",
             Graphic::Wave {
                 name: l.wave_name(),
-                ctrl: format!("OSC CTRL: {:.1}", l.osc_ctrl * 10.0),
+                ctrl: format!("{}: {:.1}", ctrl_label(&l.cat_name()), l.osc_ctrl * 10.0),
                 icon: icon_of(sui),
             },
             [
                 WAVE_TYPES[usize::from(l.wave_type) % 4].to_string(),
                 l.cat_name(),
-                format!("{}({})", l.wave_idx + 1, l.wave_count()),
+                format!("{} ({})", l.wave_idx + 1, l.wave_count()),
             ],
         ),
         SynthPage::FilterType => {
@@ -216,6 +228,13 @@ mod tests {
     }
 
     #[test]
+    fn a_shape_wave_captions_its_control_shape() {
+        assert_eq!(ctrl_label("SHAPE"), "SHAPE");
+        assert_eq!(ctrl_label("Shape"), "SHAPE");
+        assert_eq!(ctrl_label("PURE"), "OSC CTRL");
+    }
+
+    #[test]
     fn default_view_is_the_analog_waveform_page() {
         let v = view_of(&SynthUi::new(), None);
         assert_eq!(v.title, "OSC WAVEFORM");
@@ -223,7 +242,7 @@ mod tests {
         assert_eq!(soft_labels(&v), ["TYPE", "CAT", "WAVE"]);
         assert_eq!(v.soft[0].as_ref().unwrap().value, "ANALOG");
         assert_eq!(v.soft[1].as_ref().unwrap().value, "PURE");
-        assert_eq!(v.soft[2].as_ref().unwrap().value, "3(7)");
+        assert_eq!(v.soft[2].as_ref().unwrap().value, "3 (7)");
         assert!(matches!(&v.graphic, Graphic::Wave { name, .. } if name == "Saw"));
     }
 

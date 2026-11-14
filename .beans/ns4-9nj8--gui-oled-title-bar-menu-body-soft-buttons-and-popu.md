@@ -19,9 +19,9 @@ The Program / Synth OLED matches the real screens' structure.
 ## Acceptance Criteria
 
 - [x] Title bar painted inverted with the page counter right-aligned (menus, Preset, Layer Init; `OledText::bar`). Section Edit and Morph assign keep their plain text screens; the Synth pages are on display 1 (own painter).
-- [ ] Menu body: 8 px label, 13 px value. Done for one-item pages (`OledText::body_big`, value alone in 13 px under the page title); several-item blocks keep rows; the real labels of research note s14 are still open (page titles stand in).
+- [x] Menu body: 8 px label, 13 px value. Done for one-item pages (`OledText::body_big`, value alone in 13 px under the page title); several-item blocks keep rows; the real labels of research note s14 are applied (`menu_labels.rs`).
 - [x] Outlined soft buttons with the active one inverted (`OledText::soft_on`, menus).
-- [ ] Parameter popups in the lower half of the home screen: Transpose done (`OledText::popup`); Master Clock, Octave Shift and effect types open.
+- [ ] Parameter popups in the lower half of the home screen: Transpose and Master Clock done (`OledText::popup`); Octave Shift (frame in research s17.4, slider graphic) and effect types open.
 - [x] Unit tests assert the measured rows (`oled_paint::bar`, bar / popup / lit soft button paint tests, menu bar titles).
 
 ## Out of Scope
@@ -36,3 +36,4 @@ Proportional bitmap font (own bean); shipping any firmware pixel data.
 - Left: menu body layout, remaining popups, Organize inverted row.
 - Fourth pass: one-item menu pages show the value alone in the 13 px font (`menu_screen::compose`, `oled_paint::paint`); tests `a_one_item_page_shows_its_title_and_a_lone_value`, `a_lone_menu_value_paints_like_any_body_row`. Not done (no frame of the exact layout was captured this pass): Master Clock / Octave Shift popup graphics, Store As, UNDO / arp LEFT-RIGHT / LFO titles, program list `Import into A:11`.
 - Fifth pass: the Store screens (`STORE PROGRAM TO` / `STORE PROGRAM AS`) use the title bar and the measured rows (`oled_store::compose`, `oled_grid::Line`; `As:Unnamed` without a space, `Cat: <None>`, lit cursor cell); tests in `oled_store.rs` and `oled_paint_tests.rs`. Still open (frames now exist in research s16.4 / s16.5): the program list `Import into A:11`, the Synth `OSC WAVEFORM` columns, two-part menu values.
+- Sixth pass: program list screen (`oled_lists.rs`: list icon bar, rows y = 13 + 10 i, lit selected row; LIST view and Program Organize), Synth `OSC WAVEFORM` (`1 (6)`, `SHAPE:` caption, inverted soft tabs), real menu labels and values (`Volume Level Offset`, `Control Pedal Type`, `+3 semi`, Fine Tune `440.8Hz` / `+3 cent` as a two-part tab value), Undo dialog, Master Clock popup. Left: display 1 blank while a list is open, beat boxes / octave slider graphics, `Undo to before <name>?` with the item name.
