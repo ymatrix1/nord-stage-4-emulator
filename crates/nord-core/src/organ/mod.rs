@@ -24,10 +24,14 @@ mod types;
 mod vibrato_bank;
 mod vibrato_link;
 mod vox_bank;
+#[cfg(test)]
+mod vox_bank_tests;
+mod vox_image;
 mod vox_keys;
 mod vox_layer;
 mod vox_output;
 mod vox_shaper;
+mod vox_sines;
 mod vox_source;
 mod weight_state;
 mod weights;

@@ -217,7 +217,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] B3: processor tail as an oracle-measured amplitude response (`b3_tail.rs`, [organ-b3-tail](research/organ-b3-tail.md))
 - [ ] B3: dry gain writer, tail phase, multi-write `A`, drawbar sweep; then make `B3Wheels` the B3 default (3 chords: 10 / 8 / 6 of 13 / 13 / 11 lines within 1 dB; hardware clip mid band -11.9 dB)
 - [x] Vox in Rust: post stage `0x12272D` and output stage `0x1229B3` with the captured key-down weights (four footage rows per key, no velocity), 9.9 cent offset explained ([organ-keydown-weights](research/organ-keydown-weights.md))
-- [ ] Vox default: oscillator start phases (two chord lines 3.4 / 2.1 dB off), sine bank rows 84..95, amp stage and brightness (`ns4-58cz`)
+- [x] Vox oracle criterion: image start phases, 36-sine bank, instant weights; three chords within 0.34 dB on every line ([organ-vox-start-state](research/organ-vox-start-state.md))
+- [ ] Vox default: video check (mid +4.2 dB, RMS -5.9 dB, crest 29.4 against 16.1 dB), drawbar edit value law, organ level `L` and the model's key click (`ns4-58cz`)
 - [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
 - [ ] Farfisa processor `0x122B85` (ARM weights and filter tables, OQ19) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust
 - [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
