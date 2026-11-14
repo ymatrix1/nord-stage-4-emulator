@@ -222,13 +222,29 @@ the Program buttons 5-8 and MON/COPY moved 3 px down, the Piano zone LEDs 3 px d
 `FX FOCUS` LED now has its caption (left of the LED, over the free strip above the faders); the
 Effects amp RES trimmer has a `RES` name to its right.
 
+### Round 3: functional identification (titles, frames, scales, names)
+
+A user cannot find or understand a control without its name, frame or scale, so round 3 prints what the real panel prints and the emulator omitted. Frames come from `nord_panel::layout::frames` ([control inventory](control-inventory.md) section 7), painted by `panel/frames.rs` before the controls of each bay.
+
+| Section | Added |
+|---|---|
+| Piano | `ACOUSTICS`, `UNISON`, `KB TOUCH`, `DYN COMP` titles; an always-visible `PIANO SELECT` box with the six type names beside a 2 x 3 LED block (left column ELECTRIC, UPRIGHT, GRAND; right column CLAV, DIGITAL, MISC; `EMPIRICAL`, read from `NS4_HA88_Piano-01`); TIMBRE listed BRIGHT, MID, SOFT top to bottom (was SOFT, MID, BRIGHT) with DYNO1 / DYNO2 in a second column (dimmed unless the Electric type is selected) |
+| Organ | `ORGAN MODEL`, `VIB/CHORUS`, `B3 PERCUSSION` frames (the former `ORGAN MODEL` / `VIB/CHORUS` text tags are the frame titles now); per-drawbar register names over each ladder (manual p.19: BASS16, STR16, FLUTE8, OBOE8, TRMP8, STR8, FLUTE4, STR4, 2 2/3) and the numerals 1-8 beside every LED ladder (the ladder LEDs are 1 px smaller in radius to make room) |
+| Synth | `MODE`, `ARPEGGIATOR / GATE`, `VOICE`, `VIBRATO`, `LFO`, `OSCILLATORS`, `FILTER`, `AMP`, `UNISON` boxes (the old heading texts are the box titles; the MODE, VOICE and UNISON button legends became SELECT / MODE / SELECT so a title is not printed twice); `0` and `10` (`-10` and `10` for the oscillator ENV AMT) at the two ends of every pot's tick ring (`widgets/scale.rs`); `INFO`, `LIST`, `LIST` under the three OLED dials |
+| Layer Effects | `MOD 1`, `MOD 2`, `AMP SIM/EQ`, `DELAY`, `COMP`, `REVERB` boxes; `0` / `10` scale ends on every knob, `-15` / `15` under the three EQ knobs (no room beside them) |
+| Program | `MORPH ASSIGN`, `SPLIT`, `MST CLK`, `TRANSP`, `PRESET LIBRARY`, `PROGRAM` boxes on the red block (the SPLIT, MST CLK and TRANSP button legends are ON/SET, TAP/SET, ON/SET so the title is not repeated) |
+| Keybed | `L`, `M`, `H` printed beside the three split-point LEDs |
+| Contrast | every dimmed legend (ZONE -/+, PEDAL TAP, SOLO, Shift legends of unsupported controls, dimmed button names) goes through `style::dim_legend`, which fades the ink but keeps a WCAG contrast of at least 4.5:1 against the slate and the red (grey 150 on red was 3.9:1, grey 105 on slate 2.2:1) |
+
+Room for the boxes comes from `GROUP_TWEAKS` in `layout_tweaks.rs` (rows moved by 6 to 30 px so a 7.5 px legend, a border and a title fit between stacked boxes); the photo tables stay untouched. A few controls cannot sit exactly where the photo has them: the three OLED dials moved up 10 px, the Vibrato box right 5 px, the Piano TIMBRE button left 9 px.
+
 Remaining differences against `.reference/crops` (kept: legibility over fidelity, or out of scope):
 
 | Section | Photo | Emulator |
 |---|---|---|
-| Organ | bold caps, bass/str names over each drawbar, 1-8 numerals beside the ladders, group frames (ORGAN MODEL, VIB/CHORUS, B3 PERCUSSION), `C2 V3 C3` matrix | plain regular text; no per-drawbar names or numerals; no group frames; LED column per model |
-| Piano | ACOUSTICS / UNISON / KB TOUCH / DYN COMP titles with numbered LEDs, PIANO SELECT box always visible, TIMBRE listed BRIGHT, MID, SOFT with DYNO1/2 | no titles, select box only as overlay, TIMBRE listed SOFT, MID, BRIGHT; SOFT REL / STR RES names are inside the buttons |
-| Synth | MODE, ARPEGGIATOR/GATE, VOICE, VIBRATO, LFO, OSCILLATORS, FILTER, AMP, UNISON framed boxes with 0-10 numerals; INFO / LIST / LIST under the three knobs | only the heading text; no numerals; the three OLED knobs have no name |
-| Effects | MOD 1, MOD 2, DELAY, COMP, REVERB, AMP SIM/EQ boxes, scale numerals, variation lists | one grid of knobs and buttons, GROUP / MST CLK sub-legends, no boxes or numerals |
-| Master / Program | ROTARY SPEAKER box in the master column, MORPH ASSIGN / SPLIT / MST CLK / TRANSP / PRESET LIBRARY / PROGRAM boxes | rotary box only; other legends plain; dimmed legends are grey 150 on red |
-| Keybed | keys only | keys only, split LEDs as unlabelled dots at the top edge |
+| Organ | bold caps, `C2 V3 C3` matrix | regular text, LED column per model |
+| Piano | numbered LEDs (1 2 3) on UNISON / DYN COMP, SOFT REL / STR RES names beside LEDs | LED rows under the buttons, names inside the buttons |
+| Synth | `MODE` box holds SAMPLES / ANALOG LEDs, VOICE box MONO / LEGATO LEDs, 1-9 scale numerals all around each knob | one button per choice with its current value, scale ends only |
+| Effects | variation lists beside the rocker LEDs, FREQ / RES numerals (200 ... 8K), FX FOCUS column inside a box | one LED row per selector without names, no numerals on the amp FREQ knob |
+| Master / Program | the PAGE / BANK buttons inside the PROGRAM box | the PAGE buttons touch its left edge |
+| Keybed | keys only | keys plus the three LED names |

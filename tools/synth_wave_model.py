@@ -301,6 +301,8 @@ class Lane:
     groups: tuple = ()  # unison stages: weight groups P[-16 + 4 j .. -13 + 4 j] (shared)
     spread: int = 0  # unison stages: DM(-5, I2)
     octaves: tuple = ()  # MULTI: DM(-32 .. -30, I1) voice multipliers (shared by both lanes)
+    # word that sets `DM(-5, I2)`: `s5 = clip(w, 0.5) + 0.5` (SYNC probes)
+    s5_src: int | None = None
 
 
 @dataclass

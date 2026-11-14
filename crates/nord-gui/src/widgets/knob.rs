@@ -55,6 +55,8 @@ pub fn knob(
         );
     }
 
+    super::scale::paint(p, center, radius, id);
+
     // 1. Drop shadow
     p.circle_filled(
         center + vec2(0.0, 2.0),

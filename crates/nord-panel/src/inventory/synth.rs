@@ -8,7 +8,6 @@ use crate::types::{ControlEntry, ControlKind as K, Layer, Section};
 pub fn controls() -> Vec<ControlEntry> {
     let s = Section::Synth;
     let e = ControlEntry::new;
-    let bean = "ns4-4w9l";
     let mut v = layer_block(&BlockSpec {
         section: s,
         name: "synth",
@@ -16,8 +15,8 @@ pub fn controls() -> Vec<ControlEntry> {
         page: 27,
         ped_page: 28,
         pstick_label: "PSTICK/RNG",
-        octave_id: None,
-        bean,
+        octave_id: Some("ui:synth.octave"),
+        bean: "ns4-4w9l",
     });
     v.push(e("synth.oled", s, K::Oled, "SYNTH DISPLAY", 27).ui("drawn by the OLED renderer (B8d)"));
     // One dial edits many parameters: the display page picks the target (`synth_dials.rs`).
@@ -50,7 +49,7 @@ pub fn controls() -> Vec<ControlEntry> {
             .shift()
             .bound("engine:set_layer_extern"),
     );
-    v.push(e("synth.waveform", s, K::Button, "WAVEFORM", 29).todo(bean));
+    v.push(e("synth.waveform", s, K::Button, "WAVEFORM", 29).bound("ui:synth.page.waveform"));
     v.push(
         e(
             "synth.sound_init",
@@ -66,9 +65,11 @@ pub fn controls() -> Vec<ControlEntry> {
     v.push(
         e("synth.osc.ctrl", s, K::Knob, "OSC CTRL", 28)
             .morph()
-            .todo(bean),
+            .bound("ui:synth.osc_ctrl"),
     );
-    v.push(e("synth.osc.pitch_smp", s, K::Button, "PITCH/SMP", 28).todo(bean));
+    v.push(
+        e("synth.osc.pitch_smp", s, K::Button, "PITCH/SMP", 28).bound("ui:synth.page.pitch_smp"),
+    );
     v.push(
         e(
             "synth.osc.env_to_pitch",
@@ -80,7 +81,9 @@ pub fn controls() -> Vec<ControlEntry> {
         .shift()
         .bound("synthx_osc_env_pitch_{n}"),
     );
-    v.push(e("synth.osc.envelope", s, K::Button, "OSC ENVELOPE", 33).todo(bean));
+    v.push(
+        e("synth.osc.envelope", s, K::Button, "OSC ENVELOPE", 33).bound("ui:synth.page.env_osc"),
+    );
     v.push(
         e("synth.osc.env_amt", s, K::Knob, "OSC ENV AMT", 33)
             .morph()
@@ -95,10 +98,12 @@ pub fn controls() -> Vec<ControlEntry> {
             33,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:synth.osc_velocity"),
     );
     // Filter
-    v.push(e("synth.filter.type", s, K::Button, "FILTER TYPE", 31).todo(bean));
+    v.push(
+        e("synth.filter.type", s, K::Button, "FILTER TYPE", 31).bound("ui:synth.page.filter_type"),
+    );
     v.push(
         e("synth.filter.freq", s, K::Knob, "FILTER FREQ", 32)
             .morph()
@@ -114,7 +119,10 @@ pub fn controls() -> Vec<ControlEntry> {
             .morph()
             .bound("synthx_filter_env_{n}"),
     );
-    v.push(e("synth.filter.envelope", s, K::Button, "FILTER ENVELOPE", 33).todo(bean));
+    v.push(
+        e("synth.filter.envelope", s, K::Button, "FILTER ENVELOPE", 33)
+            .bound("ui:synth.page.env_filter"),
+    );
     v.push(
         e(
             "synth.filter.velocity",
@@ -124,7 +132,7 @@ pub fn controls() -> Vec<ControlEntry> {
             33,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:synth.filter_velocity"),
     );
     v.push(
         e(
@@ -135,7 +143,7 @@ pub fn controls() -> Vec<ControlEntry> {
             32,
         )
         .shift()
-        .todo(bean),
+        .bound("ui:synth.group_filter"),
     );
     v
 }

@@ -32,6 +32,7 @@ import synth_stage_shape_sine3 as shape_sine3
 import synth_stage_shapes as shapes
 import synth_stage_super1 as super1
 import synth_stage_sync as sync
+import synth_stage_sync3 as sync3
 import synth_stage_unison as unison
 import synth_wave_model as m
 
@@ -55,19 +56,26 @@ STAGE_SHAPE_SINE1 = 0x1235C9
 STAGE_SHAPE_SINE4 = 0x120DAB
 STAGE_SHAPE_SINE3 = 0x12377D
 STAGE_SYNC2 = 0x122A32
+STAGE_SYNC3 = 0x122C5C
 STAGE_MULTI = 0x121C54
 STAGE_SUPER1 = 0x121E9D
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1)
 PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
 NOISE_STATE = 0xB2EF9  # DM state word of lane x (lane y one above)
 PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not duplicated in SIMD)
+# VERIFIED (watch of the store site `pc 0x126960`, listing `0x24D248..0x24D2D6`, poke probe:
+# 0.3 gives
+# `s5` = 0x3F4CCCCD, 3 of 3 values): the pass computes `DM(-5, I2) = clip(F0 + F8, 0.5) + 0.5` and
+# the word `DM(0xC271A + lane)` is its only persistent term (the others are rewritten by the pass).
+S5_SRC = 0xC271A
+S5_STAGES = (STAGE_SYNC2, STAGE_SYNC3)
 EXTRA_BUF: list[str] = []
 # VERIFIED (listing `0x241E4E..0x241EA6`, dump after the pass): the SHAPE SINE 4 output high
 # pass reads its state words and coefficient at `DM(-32 / -30 / -28, I7)`,
 # `I7 = DM(-9, I3) = 0xC22F6`.
 HP_WORDS = (0xC22D6, 0xC22D8, 0xC22DA)
 HP_IDLE_COEF = 0x3F7F9DB2
-HP_STAGES = (STAGE_SHAPE_SINE4,)
+HP_STAGES = (STAGE_SHAPE_SINE4, STAGE_SYNC3)
 DEVS = ("0x282c0380=1", "0x3108d008=5")
 
 
@@ -92,6 +100,7 @@ MODELS = {
     STAGE_SHAPE_SINE4: shape_sine2.stage_shape_sine_4,
     STAGE_SHAPE_SINE3: shape_sine3.stage_shape_sine_3,
     STAGE_SYNC2: sync.stage_sync2,
+    STAGE_SYNC3: sync3.stage_sync3,
     STAGE_MULTI: unison.stage_multi,
     STAGE_SUPER1: super1.stage_super1,
 }
@@ -113,6 +122,8 @@ def pokes(lanes: list[m.Lane]) -> dict[int, int]:
             for off, w in zip(HP_WORDS, ln.hp, strict=True):
                 d[off + i] = w
         d[PULSE_WORD] = lanes[0].pulse
+        if ln.s5_src is not None:
+            d[S5_SRC + i] = ln.s5_src
         for j, (rho, ph) in enumerate(zip(ln.ratios, ln.phases, strict=False)):
             d[PARAM - 32 + 2 * j + i] = rho
             d[PHASE_TABLE + 2 * j + i] = ph
@@ -163,6 +174,14 @@ def random_hp(rng: random.Random, lanes: list[m.Lane], stage: int) -> None:
             ln.hp = (fbits(rng.uniform(-1, 1)), fbits(rng.uniform(-1, 1)), HP_IDLE_COEF)
 
 
+def random_s5(seed: int, lanes: list[m.Lane], stage: int) -> None:
+    """Random `s5` sources (own generator: the other draws of a trial stay the same)."""
+    if stage in S5_STAGES:
+        r2 = random.Random(seed * 7919)
+        for ln in lanes:
+            ln.s5_src = fbits(r2.uniform(-0.55, 0.55))
+
+
 def run_pass(
     sharc_org: str, image: str, lanes: list[m.Lane], stage: int = STAGE
 ) -> dict[int, int]:  # pragma: no cover
@@ -182,7 +201,7 @@ def run_pass(
         cmd += ["--csv", str(cp)]
         r = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if "fault" in r.stdout or not cp.exists():
-            raise RuntimeError(r.stdout[-800:])
+            raise RuntimeError(r.stdout[-800:] + r.stderr[-800:])
         rows = list(csv.DictReader(cp.open()))
     return {int(row["address"], 16): int(row["raw"], 16) for row in rows}
 
@@ -196,6 +215,7 @@ def compare(
         rng = random.Random(seed)
         lanes = random_lanes(rng, stage in UNISON_STAGES)
         random_hp(rng, lanes, stage)
+        random_s5(seed, lanes, stage)
         got = run_pass(sharc_org, image, lanes, stage)
         for i, ln in enumerate(lanes):
             ln.pitch = got[RECORD - 29 + i]

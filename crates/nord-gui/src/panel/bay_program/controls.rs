@@ -114,40 +114,75 @@ pub const PROGRAM_BUTTONS: [Spec; 8] = [
 pub const BUTTONS: [Spec; 17] = [
     b("program.shift.left", "SHIFT", None, false),
     b("program.shift.right", "SHIFT", None, false),
-    b("program.page_down", "PAGE-", sf("program.bank_down", "BANK-"), false),
-    b("program.page_up", "PAGE+", sf("program.bank_up", "BANK+"), false),
-    b("program.prog_view", "PROG VIEW", sf("program.preset_name", "PRESET NAME"), false),
-    b("program.live_mode", "LIVE MODE", sf("program.num_pad", "NUM PAD"), false),
-    b("program.store", "STORE", sf("program.store_as", "STORE AS"), false),
+    b(
+        "program.page_down",
+        "PAGE-",
+        sf("program.bank_down", "BANK-"),
+        false,
+    ),
+    b(
+        "program.page_up",
+        "PAGE+",
+        sf("program.bank_up", "BANK+"),
+        false,
+    ),
+    b(
+        "program.prog_view",
+        "PROG VIEW",
+        sf("program.preset_name", "PRESET NAME"),
+        false,
+    ),
+    b(
+        "program.live_mode",
+        "LIVE MODE",
+        sf("program.num_pad", "NUM PAD"),
+        false,
+    ),
+    b(
+        "program.store",
+        "STORE",
+        sf("program.store_as", "STORE AS"),
+        false,
+    ),
     Spec {
         id: "program.solo",
         label: "SOLO",
         shift: sf("program.undo", "UNDO"),
-        support: Support::Unsupported("Solo needs the Layer buttons of the other bays; the state is tracked"),
+        support: Support::Unsupported(
+            "Solo needs the Layer buttons of the other bays; the state is tracked",
+        ),
         hold_primary: false,
     },
     Spec {
         id: "program.section_edit",
         label: "SECT EDIT",
         shift: sf("program.layer_init", "LAYER INIT"),
-        support: Support::Partial("State is ProgramUi::section_edit_active(); bays apply it with the engine section_edit helpers"),
+        support: Support::Partial(
+            "Latches and lights, but no bay applies it to edits yet (ns4-fqym)",
+        ),
         hold_primary: true,
     },
-    b("program.mon_copy", "MON/COPY", sf("program.paste", "PASTE"), false),
+    b(
+        "program.mon_copy",
+        "MON/COPY",
+        sf("program.paste", "PASTE"),
+        false,
+    ),
     b("program.layer_scene_ii", "SCENE II", None, false),
-    b("split.on_set", "SPLIT", sf("split.set_key", "SET KEY"), true),
+    b(
+        "split.on_set",
+        "ON/SET",
+        sf("split.set_key", "SET KEY"),
+        true,
+    ),
     Spec {
         id: "mst_clk.tap_set",
-        label: "MST CLK",
-        shift: Some(ShiftFn {
-            id: "mst_clk.pedal_tap",
-            label: "PEDAL TAP",
-            support: Support::Unsupported("The standalone has no pedal input yet (ns4-ymci)"),
-        }),
+        label: "TAP/SET",
+        shift: sf("mst_clk.pedal_tap", "PEDAL TAP"),
         support: Support::Partial("KBS and an external MIDI clock are not modelled by the engine"),
         hold_primary: true,
     },
-    b("transp.on_set", "TRANSP", sf("transp.panic", "PANIC"), true),
+    b("transp.on_set", "ON/SET", sf("transp.panic", "PANIC"), true),
     b("preset_library.organ", "ORGAN", None, false),
     Spec {
         id: "preset_library.piano",
@@ -276,7 +311,11 @@ pub fn draw_button(
         Align2::CENTER_BOTTOM,
         spec.label,
         FontId::proportional(size.max(MIN_FONT_PX)),
-        fade(Color32::WHITE),
+        if dim {
+            dim_legend(Color32::WHITE)
+        } else {
+            Color32::WHITE
+        },
     );
     if let Some(s) = spec.shift {
         let col = if shift_lit {
@@ -290,7 +329,7 @@ pub fn draw_button(
             s.label,
             FontId::proportional((size * 0.9).max(MIN_FONT_PX)),
             if s.support.is_dimmed() {
-                col.gamma_multiply(0.45)
+                dim_legend(col)
             } else {
                 col
             },

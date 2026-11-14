@@ -10,6 +10,8 @@
 #![cfg_attr(test, allow(clippy::field_reassign_with_default))]
 
 pub mod actions;
+#[cfg(test)]
+mod binding_tests;
 pub mod catalog;
 pub mod clock;
 pub mod controls;
@@ -150,13 +152,14 @@ pub(super) fn render_bay_program(
     state.program_ui.redo_available = state.telemetry.redo_available();
 
     let area = to_px(layout::section_rect(Section::Program), origin);
-    painter.rect_filled(area, 5.0, Color32::from_rgb(115, 18, 22));
+    painter.rect_filled(area, 5.0, PROGRAM_RED);
     painter.rect_stroke(
         area,
         5.0,
         Stroke::new(1.0_f32, GROUP_BORDER),
         StrokeKind::Inside,
     );
+    super::frames::paint_frames(painter, origin, Section::Program);
 
     let pu = &mut state.program_ui;
     let mut cmds = Vec::new();

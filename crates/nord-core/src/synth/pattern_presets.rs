@@ -17,30 +17,47 @@ pub const PATTERN_PRESET_COUNT: usize = 29;
 pub const PATTERN_PRESET_MAX: u8 = (PATTERN_PRESET_COUNT - 1) as u8;
 
 /// A preset pattern: `len` steps, each a gate length in eighths of a step (`0` = rest, `8` = full
-/// step) and a pan. Presets never accent (the firmware writes an all-zero accent word).
+/// step), a tie flag and a pan. Presets never accent (the firmware writes an all-zero accent word).
+///
+/// `tie[i]` is the hardware gate code `Q`: the note of step `i` is held into step `i + 1`, which
+/// does not trigger (the arpeggio does not advance) and ends with its own gate. The last step
+/// never ties across the pattern end.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GatePattern {
     pub len: u8,
     pub steps: [u8; 16],
+    pub tie: [bool; 16],
     pub pan: [PatternPan; 16],
 }
 
-/// Gate length in eighths of a step for the hardware gate codes `E`, `q`, `Q`, `.` (rest).
-/// ASSUMED: `E` = 4 as before, `q` = 6 and `Q` = 8 keep the order short < medium < long. The
-/// firmware only shows that `Q` is a long step followed by a played step and `q` a long step
-/// followed by a rest (`S`/`L` strings of the table); the durations are unmeasured. Confirm by
-/// recording the hardware gate of a preset with `Q` and `q` steps (for example presets 10 and 24).
-const fn gate_eighths(code: u8) -> u8 {
+/// Characters of the 2-bit gate codes `0..=3` of the pattern word (`Edt_Syn_kArpPtnDur`).
+pub(super) const GATE_CODES: &[u8; 4] = b"EqQ.";
+
+/// Characters of the 2-bit pan codes `0..=2` of the pattern word; code 3 is unused (centre).
+pub(super) const PAN_CODES: &[u8; 4] = b"CLRC";
+
+/// Gate length in eighths of a step that the note of a step lasts by itself, for the hardware gate
+/// codes `E`, `q`, `Q`, `.` (rest). `Q` additionally ties into the next step (see [`GatePattern`]).
+///
+/// VERIFIED: the firmware pattern compiler at `bank0_CODE.bin@0xC02424DC` turns each step into two
+/// half-step slots (`[obj+0x24] = steps * 2` at `0xC011C520`) with note-on, hold and note-off
+/// records: `E` is on for 1 slot (4 eighths), `q` for 2 slots (8 eighths, one full step), `Q` is on
+/// for 2 slots and held into the next step (no new note: same tick). Checked by
+/// `python tools/ns4_arp_gate.py gates <bank0_CODE.bin> docs/research/arp-preset-table.csv` (the
+/// rule reproduces every note of the 29 presets and of all 1360 gate strings of 2 to 5 steps, 0
+/// differences). That one slot is half a step (4 eighths) in time is EMPIRICAL: two slots per step
+/// are structural in the compiler and the manual (p.36) says one step is one 1/8 note, but the
+/// player that walks the records was not located.
+pub(super) const fn gate_eighths(code: u8) -> u8 {
     match code {
         b'E' => 4,
-        b'q' => 6,
-        b'Q' => 8,
+        b'q' | b'Q' => 8,
         b'.' => 0,
         _ => panic!("gate code must be one of E q Q ."),
     }
 }
 
-const fn pan_of(code: u8) -> PatternPan {
+pub(super) const fn pan_of(code: u8) -> PatternPan {
     match code {
         b'C' => PatternPan::Center,
         b'L' => PatternPan::Left,
@@ -56,11 +73,13 @@ const fn preset(gate: &str, pan: &str) -> GatePattern {
     let mut out = GatePattern {
         len: g.len() as u8,
         steps: [0; 16],
+        tie: [false; 16],
         pan: [PatternPan::Center; 16],
     };
     let mut i = 0;
     while i < g.len() {
         out.steps[i] = gate_eighths(g[i]);
+        out.tie[i] = g[i] == b'Q';
         out.pan[i] = pan_of(p[i]);
         i += 1;
     }
@@ -69,13 +88,15 @@ const fn preset(gate: &str, pan: &str) -> GatePattern {
 
 /// The 29 presets, index = hardware dial value.
 ///
-/// Index 0: ASSUMED default pattern (8 steps `E`, centred): the parameter default is 0 and a new
-/// patch holds the all-`E` 8-step pattern (4 factory layers), but no firmware table entry exists
-/// for 0. Indices 1..=28: VERIFIED against the firmware routine (`tools/ns4_arp_presets.py`, max
+/// Index 0: not a table entry. The firmware treats dial value 0 as "the saved custom pattern"
+/// (`GlueArpPtnPreset` listener `0xC0102F30` and update method `0xC010FDAC`, replayed by
+/// `python tools/ns4_arp_gate.py dial <bank0_CODE.bin>`); the engine plays `PerfState::custom` for
+/// it. This entry is only the hardware default of that pattern (8 steps `E`, centred; the
+/// parameter default and 4 factory layers, EMPIRICAL). Indices 1..=28: VERIFIED against the firmware routine (`tools/ns4_arp_presets.py`, max
 /// error 0 steps); presets 2, 4, 11, 13 and 25 also appear unedited (steps, gate and pan words
 /// equal) in the factory backup, presets 5 and 27 with an edited pan
 /// (`python tools/ns4_arp_presets.py check <backup>.ns4b docs/research/arp-preset-table.csv`).
-/// The gate durations are `ASSUMED` (see [`gate_eighths`]).
+/// The gate durations are VERIFIED relative to the firmware compiler (see [`gate_eighths`]).
 pub const PATTERN_PRESETS: [GatePattern; PATTERN_PRESET_COUNT] = [
     preset("EEEEEEEE", "CCCCCCCC"),
     preset("EEEEEEQEEQEEEEEE", "CCRCLRCCCCCCLRCC"),
@@ -146,7 +167,7 @@ mod tests {
     #[test]
     fn firmware_gate_codes_map_to_eighths() {
         assert_eq!(gate_eighths(b'E'), 4);
-        assert_eq!(gate_eighths(b'q'), 6);
+        assert_eq!(gate_eighths(b'q'), 8);
         assert_eq!(gate_eighths(b'Q'), 8);
         assert_eq!(gate_eighths(b'.'), 0);
     }
@@ -162,6 +183,23 @@ mod tests {
         assert_eq!(p.pan[2], PatternPan::Right);
         assert_eq!(p.pan[3], PatternPan::Left);
         assert_eq!(p.pan[9], PatternPan::Right);
+    }
+
+    #[test]
+    fn q_codes_tie_and_other_codes_do_not() {
+        // Preset 10 = QEQE.q.E: Q at 0 and 2 tie into the next step, q (step 5) is a full step.
+        let p = PATTERN_PRESETS[10];
+        assert_eq!(&p.steps[..8], &[8, 4, 8, 4, 0, 8, 0, 4]);
+        assert_eq!(
+            &p.tie[..8],
+            &[true, false, true, false, false, false, false, false]
+        );
+        // No preset ties a rest, and no flag sits beyond the pattern length.
+        for (i, p) in PATTERN_PRESETS.iter().enumerate() {
+            let n = usize::from(p.len);
+            assert!((0..n).all(|k| !p.tie[k] || p.steps[k] > 0), "preset {i}");
+            assert!(p.tie[n..].iter().all(|&t| !t), "preset {i}");
+        }
     }
 
     #[test]

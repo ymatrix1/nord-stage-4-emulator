@@ -22,7 +22,8 @@ pub fn rect(id: &str) -> Option<Rect> {
         "piano.octave_up" => px(743.0, 290.0, 765.0, 302.0),
         "piano.zone_leds" => px(731.0, 309.0, 754.0, 315.0),
         "piano.type" => px(795.0, 253.0, 818.0, 266.0),
-        "piano.type_leds" => px(800.0, 229.0, 812.0, 251.0),
+        // Widened from 800..812 to hold the 2 x 3 LED block with the six type names printed beside it.
+        "piano.type_leds" => px(778.0, 229.0, 836.0, 251.0),
         "piano.select_dial" => px(797.0, 285.0, 815.0, 303.0),
         "piano.soft_release" => px(778.0, 161.0, 801.0, 174.0),
         "piano.kb_touch" => px(778.0, 206.0, 801.0, 219.0),
