@@ -8,6 +8,7 @@
 #![allow(semicolon_in_expressions_from_macros)]
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
+pub mod audio_out;
 pub mod aux_pedal_params;
 pub mod editor;
 pub mod fx_extra_params;
@@ -73,14 +74,8 @@ impl Plugin for NordStage4Plugin {
 
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-    // Stereo output instrument.
-    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
-        main_input_channels: None,
-        main_output_channels: NonZeroU32::new(2),
-        aux_input_ports: &[],
-        aux_output_ports: &[],
-        names: PortNames::const_default(),
-    }];
+    // Stereo instrument: main 1-2 plus aux 3-4 first, stereo only as the fallback.
+    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = audio_out::LAYOUTS;
 
     const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
@@ -117,7 +112,7 @@ impl Plugin for NordStage4Plugin {
     fn process(
         &mut self,
         buffer: &mut Buffer,
-        _aux: &mut AuxiliaryBuffers,
+        aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         // Synchronize automatable parameters to engine state
@@ -141,6 +136,7 @@ impl Plugin for NordStage4Plugin {
         let mut sample_idx = 0;
 
         let channels = buffer.as_slice();
+        let mut aux_channels = aux.outputs.first_mut().map(|b| b.as_slice());
 
         while sample_idx < num_samples {
             // Dispatch all events at the current sample offset
@@ -160,23 +156,22 @@ impl Plugin for NordStage4Plugin {
                 num_samples
             };
 
-            // Process stereo audio block into host buffer without heap allocations
+            // Render into the host buffers without heap allocations. With the aux port present
+            // (2-bus layout) outputs 3-4 go to it; otherwise only outputs 1-2 are rendered.
+            let range = sample_idx..block_end;
             if channels.len() >= 2 {
                 let (left, right) = channels.split_at_mut(1);
-                let left_slice = &mut left[0][sample_idx..block_end];
-                let right_slice = &mut right[0][sample_idx..block_end];
-
-                for (l, r) in left_slice.iter_mut().zip(right_slice.iter_mut()) {
-                    let [out_l, out_r] = self.engine.render_frame();
-                    *l = out_l;
-                    *r = out_r;
+                let (ml, mr) = (&mut left[0][range.clone()], &mut right[0][range.clone()]);
+                let aux_pair = aux_channels.as_deref_mut().and_then(|a| match a {
+                    [al, ar, ..] => Some((al.get_mut(range.clone())?, ar.get_mut(range)?)),
+                    _ => None,
+                });
+                match aux_pair {
+                    Some((al, ar)) => audio_out::render_main_aux(&mut self.engine, ml, mr, al, ar),
+                    None => audio_out::render_main(&mut self.engine, ml, mr),
                 }
             } else if channels.len() == 1 {
-                let mono_slice = &mut channels[0][sample_idx..block_end];
-                for m in mono_slice.iter_mut() {
-                    let [out_l, out_r] = self.engine.render_frame();
-                    *m = 0.5 * (out_l + out_r);
-                }
+                audio_out::render_mono(&mut self.engine, &mut channels[0][range]);
             }
 
             sample_idx = block_end;
