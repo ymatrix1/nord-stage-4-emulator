@@ -144,6 +144,40 @@ impl<F: Fp> Core<F> {
         c
     }
 
+    /// A machine with zeroed memory windows `(base, words)` and no boot state: the multi-tap
+    /// reverb (`fw_rvbm.rs`) lays out its own instance. Allocates once, here.
+    pub(super) fn blank(windows: &[(u32, u32)]) -> Self {
+        assert!(windows.len() <= MAX_WINDOWS, "too many memory windows");
+        let mut win = [(0, 0, 0); MAX_WINDOWS];
+        let mut total = 0u32;
+        for (k, &(base, len)) in windows.iter().enumerate() {
+            win[k] = (base, len, total);
+            total += len;
+        }
+        Core {
+            rg: [[V::W(0); 2]; 16],
+            i: [0; 16],
+            m: [0; 16],
+            l: [0; 16],
+            b: [0; 16],
+            an: [false; 2],
+            az: [false; 2],
+            tf: [false; 2],
+            win,
+            nwin: windows.len(),
+            mem: vec![0u32; total as usize].into_boxed_slice(),
+            #[cfg(test)]
+            pcs: Vec::new(),
+            #[cfg(test)]
+            stray: 0,
+        }
+    }
+
+    /// Zeroes every memory window (no allocation).
+    pub(super) fn clear_memory(&mut self) {
+        self.mem.fill(0);
+    }
+
     /// Sets the three rotor speed words (`0xB2F25`, `0xB2F26`, `0xB2FA1`).
     pub(super) fn set_speed_words(&mut self, w: [u32; 3]) {
         for (a, v) in SPEED_WORDS.into_iter().zip(w) {
@@ -195,7 +229,7 @@ impl<F: Fp> Core<F> {
         self.slot(a).map_or(0, |s| self.mem[s])
     }
 
-    fn wr(&mut self, a: u32, w: u32) {
+    pub(super) fn wr(&mut self, a: u32, w: u32) {
         if let Some(s) = self.slot(a) {
             self.mem[s] = w;
         } else {

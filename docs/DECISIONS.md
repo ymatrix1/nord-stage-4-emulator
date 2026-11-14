@@ -29,6 +29,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D21](#d21-organ-model-to-dsp-path-map) | 2026-11-13 | Organ model to DSP path map (B3, Vox, Pipe) | accepted |
 | [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
 | [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
+| [D26](#d26-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
 
 ---
 
@@ -320,3 +321,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** Pipe meets the bar (oracle lines 0.00 dB, RMS +3.3, crest -0.4, sub +1.3, mid +0.7 dB; score 4.95 to 3.25). B3Wheels fails the oracle criterion (2 start-phase lines) and presence (-19.9 dB); Vox fails mid (+7.6 dB) and the 1.5 to 8 kHz bands; routing has an EMPIRICAL zone table.
 - **Alternatives:** Fit one gain per model (rejected: hides the structure); flip B3 and Vox on RMS alone (rejected: D22 criteria).
 - **Impact:** `render_hash` `c7f06ca7...` unchanged (the dump has no Pipe layer or program rotary). Program renders change: rotary drive 10 times lower in the engine unit, Pipe level.
+
+### D26. The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (task `ns4-tc25` follow-up, D22 rule)
+- **Context:** The wrapper `0x120FDB` and packed core `0x120D8A` of the reverb types 2..11 are ported (`FwReverbMulti`) and reproduce the oracle word for word on nine types. The ARM words of each type are captured, but which UI reverb (Booth, Room, Stage, Hall, Cathedral and the variation flag) selects which `kRvbType` was never read from a program, type 6 has no capture, and no hardware clip was compared.
+- **Decision:** `FirmwareFx::reverb` also drives Booth (2, 3), Room (4, 5), Stage (7 with the variation flag), Hall (8, 9) and Cathedral (10, 11) through `FwReverbMulti`; the default stays off and the engine FDN stays the default path for every model.
+- **Why:** D22: the algorithm is VERIFIED, the mapping into it is a guess (size order of the type words), and the end-to-end comparison with the hardware is missing. Opting in costs nothing for existing renders.
+- **Alternatives:** Flip the default now (rejected: criteria 2 and 3 of D22 are not met); keep the port in the tools only (the engine could not use it).
+- **Impact:** TD-10 and OQ21 stay open for the comparison, type 6 and the organ rows. Flip the default only when a Part A program with a known type scores better than the FDN (s10 method, [fx-reverb-leslie](research/fx-reverb-leslie.md) s14).
