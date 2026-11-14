@@ -27,6 +27,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import synth_stage_noise as noise
 import synth_stage_shape_sine as shape_sine
+import synth_stage_shape_sine2 as shape_sine2
 import synth_stage_shapes as shapes
 import synth_stage_unison as unison
 import synth_wave_model as m
@@ -48,11 +49,19 @@ STAGE_SHAPE_SINE0 = 0x123427
 STAGE_SHAPE_SINE5 = 0x122F1F
 STAGE_SHAPE_SINE2 = 0x1232A5
 STAGE_SHAPE_SINE1 = 0x1235C9
+STAGE_SHAPE_SINE4 = 0x120DAB
 STAGE_MULTI = 0x121C54
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI)
 PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
 NOISE_STATE = 0xB2EF9  # DM state word of lane x (lane y one above)
 PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not duplicated in SIMD)
+EXTRA_BUF: list[str] = []
+# VERIFIED (listing `0x241E4E..0x241EA6`, dump after the pass): the SHAPE SINE 4 output high
+# pass reads its state words and coefficient at `DM(-32 / -30 / -28, I7)`,
+# `I7 = DM(-9, I3) = 0xC22F6`.
+HP_WORDS = (0xC22D6, 0xC22D8, 0xC22DA)
+HP_IDLE_COEF = 0x3F7F9DB2
+HP_STAGES = (STAGE_SHAPE_SINE4,)
 DEVS = ("0x282c0380=1", "0x3108d008=5")
 
 
@@ -74,6 +83,7 @@ MODELS = {
     STAGE_SHAPE_SINE5: shape_sine.stage_shape_sine_5,
     STAGE_SHAPE_SINE2: shape_sine.stage_shape_sine_2,
     STAGE_SHAPE_SINE1: shape_sine.stage_shape_sine_1,
+    STAGE_SHAPE_SINE4: shape_sine2.stage_shape_sine_4,
     STAGE_MULTI: unison.stage_multi,
 }
 
@@ -90,6 +100,9 @@ def pokes(lanes: list[m.Lane]) -> dict[int, int]:
             d[PARAM + off + i] = w
         d[PARAM + 16 + i] = ln.out_gain
         d[NOISE_STATE + i] = ln.state
+        if ln.hp:
+            for off, w in zip(HP_WORDS, ln.hp, strict=True):
+                d[off + i] = w
         d[PULSE_WORD] = lanes[0].pulse
         for j, (rho, ph) in enumerate(zip(ln.ratios, ln.phases, strict=False)):
             d[PARAM - 32 + 2 * j + i] = rho
@@ -134,6 +147,13 @@ def random_lanes(rng: random.Random, unison: bool = False) -> list[m.Lane]:
     return lanes
 
 
+def random_hp(rng: random.Random, lanes: list[m.Lane], stage: int) -> None:
+    """Random output high pass states for the stages that end in one (idle coefficient)."""
+    if stage in HP_STAGES:
+        for ln in lanes:
+            ln.hp = (fbits(rng.uniform(-1, 1)), fbits(rng.uniform(-1, 1)), HP_IDLE_COEF)
+
+
 def run_pass(
     sharc_org: str, image: str, lanes: list[m.Lane], stage: int = STAGE
 ) -> dict[int, int]:  # pragma: no cover
@@ -149,6 +169,7 @@ def run_pass(
         cmd += ["--buf", f"{RECORD - 38:#x}:64:f32", "--buf", f"{PULSE_WORD - 8:#x}:24:f32"]
         cmd += ["--buf", f"{NOISE_STATE - 2:#x}:8:f32"]
         cmd += ["--buf", f"{PARAM - 32:#x}:64:f32", "--buf", f"{PHASE_TABLE:#x}:16:f32"]
+        cmd += EXTRA_BUF
         cmd += ["--csv", str(cp)]
         r = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if "fault" in r.stdout or not cp.exists():
@@ -163,7 +184,9 @@ def compare(
     """`(equal words, total words)` of model against oracle over random trials."""
     equal = total = 0
     for seed in range(1, trials + 1):
-        lanes = random_lanes(random.Random(seed), stage in UNISON_STAGES)
+        rng = random.Random(seed)
+        lanes = random_lanes(rng, stage in UNISON_STAGES)
+        random_hp(rng, lanes, stage)
         got = run_pass(sharc_org, image, lanes, stage)
         for i, ln in enumerate(lanes):
             ln.pitch = got[RECORD - 29 + i]

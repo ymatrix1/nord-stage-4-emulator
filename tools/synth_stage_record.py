@@ -60,7 +60,9 @@ def record(
     """`count` oracle cases of one stage."""
     cases = []
     for seed in range(FIRST_SEED, FIRST_SEED + count):
-        lanes = o.random_lanes(random.Random(seed), stage in o.UNISON_STAGES)
+        rng = random.Random(seed)
+        lanes = o.random_lanes(rng, stage in o.UNISON_STAGES)
+        o.random_hp(rng, lanes, stage)
         got = o.run_pass(sharc_org, image, lanes, stage)
         for i, ln in enumerate(lanes):
             ln.pitch = got[o.RECORD - 29 + i]

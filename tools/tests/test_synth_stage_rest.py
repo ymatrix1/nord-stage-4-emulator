@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import synth_stage_noise as noise  # noqa: E402
 import synth_stage_record as rec  # noqa: E402
 import synth_stage_shape_sine as shape_sine  # noqa: E402
+import synth_stage_shape_sine2 as sine2  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
 import synth_stage_unison as unison  # noqa: E402
 import synth_wave_model as m  # noqa: E402
@@ -29,6 +30,7 @@ MODELS = {
     "0x1235c9": shape_sine.stage_shape_sine_1,
     "0x1232a5": shape_sine.stage_shape_sine_2,
     "0x122f1f": shape_sine.stage_shape_sine_5,
+    "0x120dab": sine2.stage_shape_sine_4,
 }
 
 
@@ -107,3 +109,34 @@ def test_unison_pokes_cover_the_voice_tables() -> None:
     assert pk[o.PARAM - 32 + 2 * 3 + 1] == lanes[1].ratios[3]
     assert pk[o.PARAM - 16 + 4 * 2 + 3] == lanes[0].groups[2][3]
     assert pk[unison.MULTI_OCTAVES_ADDR + 1] == lanes[0].octaves[1]
+
+
+def test_shape_sine_4_golden_file_is_what_the_generator_prints() -> None:
+    import synth_stage_golden4 as g4
+
+    path = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
+    assert (path / "tests_fw_stage_golden4.rs").read_text() == g4.rust()
+
+
+def test_shape_sine_4_high_pass_is_a_one_pole_difference_filter() -> None:
+    one, zero = m.f2u(1.0), m.f2u(0.0)
+    c = sine2.HP_IDLE[2]
+    # idle states: the first word passes unchanged, later words add `c` times the previous output
+    words = [m.f2u(v) for v in (0.5, 0.5, 0.25, -0.25)]
+    out = sine2.output_high_pass(words, (zero, zero, c))
+    assert out[0] == words[0]
+    assert m.ld(out[1]) == m.ld(m.st(m.mul(m.ld(out[0]), m.ld(c))))
+    # a state word shifts only the first difference
+    shifted = sine2.output_high_pass(words, (one, zero, c))
+    assert m.ld(shifted[0]) == m.sub(m.ld(words[0]), m.ONE)
+
+
+def test_shape_sine_4_setup_laws_at_the_idle_spread() -> None:
+    f = m.f2u(0.01)
+    inc = m.fix(m.ld(f), 31)
+    g, p, ir, k = sine2.setup(f, inc, m.f2u(0.5))
+    assert 0.0 < float(g) < 1.5
+    assert abs(float(p) - 1.0085) < 1e-3  # polynomial of the spread word at 0.5
+    # width law saturates for spread >= 0.1: q = 1 and `pq = f`
+    assert abs(float(ir) * float(m.ld(f)) - float(sine2.INV_TWO_PI)) < 1e-6
+    assert float(k) > 0.0

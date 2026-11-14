@@ -485,7 +485,15 @@ impl SynthLayer {
             let fw_co =
                 (strip.is_some() || self.filter_engine == FilterEngine::Firmware).then(|| {
                     let fc = if strip.is_some() {
-                        strip_cutoff_hz(voice_cutoff * p_block.map_or(1.0, |p| p.cutoff_scale))
+                        strip_cutoff_hz(
+                            voice_cutoff
+                                * p_block.map_or(1.0, |p| p.cutoff_scale)
+                                * if self.p_table.is_some() {
+                                    type_cutoff_scale(self.filter_model)
+                                } else {
+                                    1.0
+                                },
+                        )
                     } else {
                         voice_cutoff
                     };

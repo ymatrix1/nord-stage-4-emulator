@@ -112,6 +112,13 @@ impl ProgramControl {
             // Held keys never change panel state; skipping them keeps shadow voices silent.
             AudioCommand::Midi(MidiEvent::NoteOn { .. } | MidiEvent::NoteOff { .. }) => {}
             AudioCommand::Midi(ev) => self.shadow.handle_midi(*ev),
+            // Same Local Control gate as the live engine, without queueing MIDI out on the shadow.
+            AudioCommand::Keyboard(MidiEvent::NoteOn { .. } | MidiEvent::NoteOff { .. }) => {}
+            AudioCommand::Keyboard(ev) => {
+                if self.shadow.midi_menu.local_control {
+                    self.shadow.handle_midi(*ev);
+                }
+            }
             AudioCommand::SwapState(_) => {}
             other => apply_audio_command(other.clone(), &mut self.shadow, &mut self.master_vol),
         }

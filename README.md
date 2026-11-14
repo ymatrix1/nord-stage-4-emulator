@@ -41,6 +41,12 @@ Read the full specification suite in [`docs/`](docs/README.md):
 
 ---
 
+## Download
+
+Tagged releases ship `ns4` (CLI), `nord-stage4` (GUI), the standalone plugin host, and the CLAP + VST3 plugin for Windows x86_64, Linux x86_64 and macOS arm64, with SHA256 files. Install paths per OS are in the `README.txt` inside each archive. The plugin has **not** been verified in any DAW yet ([docs/HOST_COMPATIBILITY.md](docs/HOST_COMPATIBILITY.md)); builds are unsigned. Maintainers: see [docs/RELEASING.md](docs/RELEASING.md).
+
+---
+
 ## Quick Start
 
 ### 1. Build & Test the Rust DSP & Parser Core (`crates/nord-core`)

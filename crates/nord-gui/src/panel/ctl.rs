@@ -135,6 +135,23 @@ pub(super) fn tag(p: &Painter, rect: Rect, text: &str, lift: f32) {
     );
 }
 
+/// Like [`tag`], but a name wider than `max_w` (the room between this control and its
+/// neighbour) is broken at its space into two stacked lines instead of running into the
+/// neighbour's name.
+pub(super) fn tag_fit(p: &Painter, rect: Rect, text: &str, lift: f32, max_w: f32) {
+    let split = text.find(' ');
+    match split {
+        Some(i) if text_width(p, text, 5.5) > max_w => {
+            tag(p, rect, &text[i + 1..], lift);
+            tag(p, rect, &text[..i], lift + TAG_LINE);
+        }
+        _ => tag(p, rect, text, lift),
+    }
+}
+
+/// Pitch of stacked [`tag_fit`] lines (px): the minimum font plus a 1 px gap.
+const TAG_LINE: f32 = 8.5;
+
 /// Map a gesture to a trigger; a double tap is just a second primary tap on these buttons.
 fn trigger_of(g: Gesture, shift_held: bool, shift_fn: bool) -> Trigger {
     match g {
@@ -254,10 +271,18 @@ pub(super) fn shift_legend(
         Color32::WHITE
     };
     let p = ui.painter().clone();
-    label(&p, pos, text, 5.5, col, Align2::CENTER_TOP);
+    let drawn = label(&p, pos, text, 5.5, col, Align2::CENTER_TOP);
     if let Some(l) = lit {
-        let x = base.center().x + text.len() as f32 * 1.5 + 3.0;
-        led_small(&p, pos2(x, pos.y + 2.5), l, LED_AMBER, LED_AMBER_DIM, 1.4);
+        // State LED right after the text, wherever the text ends.
+        let x = drawn.right() + 3.5;
+        led_small(
+            &p,
+            pos2(x, drawn.center().y),
+            l,
+            LED_AMBER,
+            LED_AMBER_DIM,
+            1.4,
+        );
     }
     let hit = Rect::from_min_size(pos2(base.center().x - 12.0, base.bottom()), vec2(24.0, 8.0));
     let resp = ui.interact(hit, ui.id().with((id, "legend")), Sense::hover());
@@ -324,6 +349,8 @@ mod tests {
                 gesture_button(ui, &mut tr, r, "x.btn", true, Face::black());
                 shift_legend(ui, r, "x.shift", "LEG", Some(true), Some("tip"));
                 tag(ui.painter(), r, "TAG", 4.0);
+                tag_fit(ui.painter(), r, "TWO WORDS", 4.0, 5.0);
+                tag_fit(ui.painter(), r, "ONE", 4.0, 5.0);
                 let row = Rect::from_min_size(pos2(80.0, 40.0), vec2(24.0, 6.0));
                 led_row(
                     ui,
