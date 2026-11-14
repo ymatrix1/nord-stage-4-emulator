@@ -26,11 +26,13 @@ from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+import synth_stage_misc as misc
 import synth_stage_noise as noise
 import synth_stage_shape_sine as shape_sine
 import synth_stage_shape_sine2 as shape_sine2
 import synth_stage_shape_sine3 as shape_sine3
 import synth_stage_shapes as shapes
+import synth_stage_sub as sub_osc
 import synth_stage_super1 as super1
 import synth_stage_sync as sync
 import synth_stage_sync1 as sync1
@@ -65,6 +67,10 @@ STAGE_SYNC3 = 0x122C5C
 STAGE_SYNC6 = 0x1239BE
 STAGE_SYNC7 = 0x123C7C
 STAGE_SYNC8 = 0x123FE9
+STAGE_MISC0 = 0x122030
+STAGE_MISC1 = 0x122151
+STAGE_MISC2 = 0x122417
+STAGE_SUB_OSC = 0x12179A
 STAGE_MULTI = 0x121C54
 STAGE_SUPER1 = 0x121E9D
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1)
@@ -77,6 +83,8 @@ PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not d
 # the word `DM(0xC271A + lane)` is its only persistent term (the others are rewritten by the pass).
 S5_SRC = 0xC271A
 S5_STAGES = (
+    STAGE_MISC2,
+    STAGE_SUB_OSC,
     STAGE_SYNC1,
     STAGE_SYNC2,
     STAGE_SYNC3,
@@ -96,7 +104,16 @@ S5_STAGES = (
 # `DM(0xC2716)` (shared by both lanes, 0 in the idle pass), a coefficient, a bend and a vibrato
 # term; 0x01000000 in `DM(0xC2716)` is one semitone (x 1.0595), 0 gives 0.006028.
 PITCH_SRC = 0xC2716
-PITCH_STAGES = (STAGE_SYNC1, STAGE_SYNC2, STAGE_SYNC3, STAGE_SYNC6, STAGE_SYNC7, STAGE_SYNC8)
+PITCH_STAGES = (
+    STAGE_MISC2,
+    STAGE_SUB_OSC,
+    STAGE_SYNC1,
+    STAGE_SYNC2,
+    STAGE_SYNC3,
+    STAGE_SYNC6,
+    STAGE_SYNC7,
+    STAGE_SYNC8,
+)
 PITCH_SEMITONES = (-24.0, 48.0)
 IDLE_PITCH = 0.006028  # pitch word with `DM(0xC2716) = 0`
 MAX_INC = 0.45
@@ -106,7 +123,12 @@ EXTRA_BUF: list[str] = []
 # `I7 = DM(-9, I3) = 0xC22F6`.
 HP_WORDS = (0xC22D6, 0xC22D8, 0xC22DA)
 HP_IDLE_COEF = 0x3F7F9DB2
-HP_STAGES = (STAGE_SHAPE_SINE4, STAGE_SYNC1, STAGE_SYNC3)
+HP_STAGES = (STAGE_SHAPE_SINE4, STAGE_SYNC1, STAGE_SYNC3, STAGE_MISC0, STAGE_MISC2)
+# VERIFIED (dump of the idle pass, words `DM(0xC0B73) = 0xC2556`, `DM(0xC0B7F) = 0xC22F6` = the
+# module record `I3 = 0xC0B88`, `DM(-21, I3)` / `DM(-9, I3)`; watch of the stores at `pc 0x122096`):
+# the pink noise rows of `0x122030` are at `DM(0xC2536 + 2 j + lane)`.
+PINK_PTR = 0xC2556
+MISC_STAGES = (STAGE_MISC0, STAGE_MISC1)
 DEVS = ("0x282c0380=1", "0x3108d008=5")
 
 
@@ -136,6 +158,10 @@ MODELS = {
     STAGE_SYNC6: sync6.stage_sync6,
     STAGE_SYNC7: sync7.stage_sync7,
     STAGE_SYNC8: sync6.stage_sync8,
+    STAGE_MISC0: misc.stage_misc0,
+    STAGE_MISC1: misc.stage_misc1,
+    STAGE_MISC2: misc.stage_misc2,
+    STAGE_SUB_OSC: sub_osc.stage_sub_osc,
     STAGE_MULTI: unison.stage_multi,
     STAGE_SUPER1: super1.stage_super1,
 }
@@ -146,6 +172,12 @@ def pokes(lanes: list[m.Lane]) -> dict[int, int]:
     d: dict[int, int] = {}
     for i, ln in enumerate(lanes):
         d[RECORD - 21 + i] = ln.phase1
+        for j, w in enumerate(ln.rows):
+            d[PINK_PTR - 32 + 2 * j + i] = w
+        if ln.rows:
+            d[RECORD + 13 + i] = ln.counter
+        if ln.lp:
+            d[RECORD - 3 + i] = ln.lp
         d[RECORD - 19 + i] = ln.phase2
         d[PARAM - 32 + i] = ln.ratio1
         d[PARAM - 30 + i] = ln.ratio2
@@ -211,6 +243,20 @@ def random_hp(rng: random.Random, lanes: list[m.Lane], stage: int) -> None:
             ln.hp = (fbits(rng.uniform(-1, 1)), fbits(rng.uniform(-1, 1)), HP_IDLE_COEF)
 
 
+def random_misc(seed: int, lanes: list[m.Lane], stage: int) -> None:
+    """Random MISC states (own generator): rows, counter, filter word, state area pointer."""
+    if stage in MISC_STAGES:
+        r2 = random.Random(seed * 31337)
+        for ln in lanes:
+            ln.rows = (
+                tuple(fbits(r2.uniform(-1, 1)) for _ in range(misc.ROWS))
+                if stage == STAGE_MISC0
+                else ()
+            )
+            ln.counter = r2.getrandbits(12) if stage == STAGE_MISC0 else 0
+            ln.lp = fbits(r2.uniform(-1, 1)) if stage == STAGE_MISC1 else 0
+
+
 def random_s5(seed: int, lanes: list[m.Lane], stage: int) -> None:
     """Random `s5` sources (own generator: the other draws of a trial stay the same)."""
     if stage in S5_STAGES:
@@ -266,6 +312,7 @@ def compare(
         rng = random.Random(seed)
         lanes = random_lanes(rng, stage in UNISON_STAGES)
         random_hp(rng, lanes, stage)
+        random_misc(seed, lanes, stage)
         random_s5(seed, lanes, stage)
         random_pitch(seed, lanes, stage)
         got = run_pass(sharc_org, image, lanes, stage)

@@ -305,6 +305,10 @@ class Lane:
     s5_src: int | None = None
     # word that sets the pitch (`DM(0xC2716)`, shared by both lanes, 0x01000000 per semitone)
     pitch_src: int | None = None
+    rows: tuple = ()  # MISC pink noise: the ten row words (`DM(DM(-21, I3) - 32 + 2 j + lane)`)
+    counter: int = 0  # MISC: frame counter word `DM(13, I2)`
+    lp: int = 0  # MISC low-passed noise: filter state word `DM(-3, I2)`
+    extra: tuple = ()  # further per-lane frame words of a stage, `(address offset from I2, word)`
 
 
 @dataclass
