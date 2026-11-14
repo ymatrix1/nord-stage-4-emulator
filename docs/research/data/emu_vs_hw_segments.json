@@ -66,7 +66,10 @@
       {"id": "dsm_b3_8_4", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 198.4, "to_s": 199.0, "drawbars": [0,0,8,8,0,0,0,0,0], "confidence": "low (0.6 s window, speech)"},
       {"id": "dsm_b3_8_4_2", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 202.6, "to_s": 203.8, "drawbars": [0,0,8,8,0,8,0,0,0], "confidence": "low (speech)"},
       {"id": "dsm_piano_soft", "video": "NVMtX0epXog", "engine": "piano White Grand, no fx", "from_s": 152, "to_s": 168, "timbre": "soft", "confidence": "low (music, mixed notes)"},
-      {"id": "dsm_piano_normal", "video": "NVMtX0epXog", "engine": "piano White Grand, no fx", "from_s": 113, "to_s": 140, "timbre": "normal", "confidence": "low (music, mixed notes)"}
+      {"id": "dsm_piano_normal", "video": "NVMtX0epXog", "engine": "piano White Grand, no fx", "from_s": 113, "to_s": 140, "timbre": "normal", "confidence": "low (music, mixed notes)"},
+      {"id": "dsm_b3_16_ramp", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow, chord C3 G3, preset mode", "from_s": 118.75, "to_s": 120.0, "note": "16 foot drawbar LEDs 1,3,3,4,5,6; G3 16 foot partial 98 Hz", "confidence": "low (hand over the panel afterwards)"},
+      {"id": "dsm_piano_white_grand_notes", "video": "NVMtX0epXog", "engine": "piano White Grand XL 6.3, no fx, other layers off", "from_s": 113, "to_s": 140, "notes": "video_ref.py notes --confirmed-only", "confidence": "low (speech in 3-8k)"},
+      {"id": "dsm_soft_grand_xl_clean", "video": "0-upeS5SzbE", "engine": "piano Soft Grand XL (library sound, not in the factory backup)", "from_s": 540, "to_s": 610, "confidence": "high for the spectrum (no speech); not renderable"}
     ]
   }
 }
