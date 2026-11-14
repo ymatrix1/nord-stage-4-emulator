@@ -21,8 +21,8 @@
 | Layer Init All leaves only Piano A on (white grand) | PP 1:06, SP 1:28 | `engine/layer_init.rs` | matches | none |
 | After Init the synth wave shows `Shape Saw`, shape 0.0 | PP 6:30 | `VaWaveform::Saw` | matches | none |
 | `STORE PROGRAM TO`: location, name at target (`<empty>`), `As: <name>` | PP 5:40-5:45 | `Replaces:` row | differed | fixed, test |
-| Name proposed as `NS4 Palette 2` | PP 5:40 | keeps current name | differs | bean ns4-qdzu |
-| `STORE PROGRAM AS`: name line, `Cat: Piano Acoustic`, soft `Abc Cat Del Ins` | PP 5:47 | `ABC`, `Category:` | differed | label fixed; categories bean ns4-qdzu |
+| Name proposed as `NS4 Palette 2` | PP 5:40 | keeps current name | differs | fixed, test (ns4-qdzu) |
+| `STORE PROGRAM AS`: name line, `Cat: Piano Acoustic`, soft `Abc Cat Del Ins` | PP 5:47 | `ABC`, `Category:` | differed | label fixed; 26 firmware categories adopted, ns4-qdzu |
 | ABC strip order: blank, a-z, A-Z, 0-9, `-` | PP 5:54-6:00 | upper case first | differed | fixed, test; tail after `-` stays ASSUMED |
 | Second STORE press writes; program shows new location without `E` | PP 6:12-6:20 | `store.rs` | matches | none |
 | LFO destination taps: Off, OSC CTRL, OSC PITCH, FILTER (both LEDs), then wraps | LFO 0:30-0:35 | cycled Filter, Pitch, Ctrl, Off | differed | fixed, test |
