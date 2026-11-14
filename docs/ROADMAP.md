@@ -231,6 +231,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Vox oracle criterion: image start phases, 36-sine bank, instant weights; three chords within 0.34 dB on every line ([organ-vox-start-state](research/organ-vox-start-state.md))
 - [x] Vox key-down timeline (replaces the click, crest 16.1 dB), drawbar value law and slot wiring, boot gain word ([organ-vox-click](research/organ-vox-click.md))
 - [ ] Vox default: organ output level stage (RMS -13.7 dB) and the 1.5 to 8 kHz deficit (mid +7.8, presence -7.3, brilliance -9.5 dB) (`ns4-58cz`)
+- [x] B3 / Vox presence-gap diagnosis: per-clip bands, stage ablations, tonal-peakiness and note-register tools (`tools/organ_gap.py`); no firmware stage found, no default flipped ([organ-presence-gap](research/organ-presence-gap.md))
+- [ ] B3 / Vox presence: Twin amp type 289 port (Vox residual 7.5 / 9.7 dB) and a right-hand note list for the B3 clip, then re-run the D22 comparison
 - [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
 - [x] Oracle chords of the Farfisa and B3 Bass processors with the corrected boot log and key-down words (`tools/organ_proc_oracle.py`, `sharc-pass --rec`, [organ-farfisa-bass](research/organ-farfisa-bass.md) s7)
 - [ ] Farfisa processor `0x122B85` and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust (inputs known, OQ18)
