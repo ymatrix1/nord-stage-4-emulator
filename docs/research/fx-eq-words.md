@@ -15,7 +15,7 @@
 | Synth unit | different word values (`B` and `a` about half: another sample rate or step); not wired | VERIFIED words, open |
 | Table `0x2f730c` (18 x 128 `f32`) | **not the Amp EQ**: no row equals a mid word series (s5); form is a 3-set bank of `A, B, A', B', C, C'` rows over a 128 step index, sender `0x1be108` copies words | VERIFIED (negative), role open |
 | Table `0x2ae5b4` (19 entries `10^((i-12)/20)`) | consumer still unknown; not the EQ gain (the EQ gain words are continuous in the count) | open |
-| Compressor | one dynamics block (`0xC0441558#0`, routine `0x120630`), ARM words only from `kCmpAmt`; `kCmpResponse` re-sends constants (no DSP effect). Already wired as `FirmwareFx::compressor` | closed, see s6 |
+| Compressor | one dynamics block (`0xC0441558#0`, routine `0x120630`), ARM words only from `kCmpAmt`; `kCmpResponse` re-sends constants with a plain-integer cell (**corrected: it moves the attack / release pairs with the Q16.16 cell**, [synth-knob-laws](synth-knob-laws.md) s2). Already wired as `FirmwareFx::compressor` | closed, see s6 |
 
 ## 2. Gain law (the TD-10 question)
 

@@ -67,6 +67,10 @@ pub use fw_filter::{
     cutoff_to_r, FilterEngine, FwCoefs, FwFilter, FwFilterType, TablePos, FW_CLIP_LIMIT,
     FW_CUTOFF_MAX_FRACTION, FW_CUTOFF_MIN_HZ,
 };
+pub use fw_knob_laws::{
+    cutoff_word_for_knob, rate_index_for_knob, rate_word_for_knob, unit_word_for_knob, EnvKnobs,
+    StripKnobs, DECAY_DISPLAY_TAU,
+};
 pub use fw_shape::{fw_shape_wave, fw_shape_width};
 pub use fw_stages::{noise_sample, noise_step, saw_diff, spread_u, FwStage, FwStageState};
 pub use fw_strip_cutoff::{fw_cutoff_cycles_per_sample, fw_strip_cutoff_r, FW_CUTOFF_CLIP};
@@ -93,12 +97,8 @@ pub use strip_map::{
     attack_index, attack_seconds, cutoff_hz_from_word, decay_index, decay_seconds,
     strip_word_for_cutoff, STRIP_PASS_FRAMES,
 };
-pub use fw_knob_laws::{
-    cutoff_word_for_knob, rate_index_for_knob, rate_word_for_knob, unit_word_for_knob, EnvKnobs,
-    StripKnobs, DECAY_DISPLAY_TAU,
-};
-pub use strip_path::{StripEnvRecords, StripParams, StripVoice, SynthChain};
 use strip_path::StripKey;
+pub use strip_path::{StripEnvRecords, StripParams, StripVoice, SynthChain};
 pub use voice::SynthVoice;
 #[cfg(test)]
 mod tests_envelope;

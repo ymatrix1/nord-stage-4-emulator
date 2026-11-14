@@ -74,7 +74,11 @@ impl StripEnvRecords {
     /// VERIFIED run); decay knob 127 is Hold. No time search, no displayed-time assumption.
     pub fn from_knobs(k: EnvKnobs, sustain: f32) -> Self {
         let hold = k.decay >= 127;
-        let dec = if hold { RATE_INDEX_MAX } else { rate_index_for_knob(k.decay) };
+        let dec = if hold {
+            RATE_INDEX_MAX
+        } else {
+            rate_index_for_knob(k.decay)
+        };
         Self {
             attack: FwAdrRecord {
                 a: 1.0,
@@ -110,7 +114,13 @@ pub(super) type StripKey = [f32; 15];
 impl SynthLayer {
     fn strip_key(&self) -> StripKey {
         let k = self.active_knobs().map_or([-1.0; 7], |k| {
-            let e = |v: EnvKnobs| [f32::from(v.attack), f32::from(v.decay), f32::from(v.release)];
+            let e = |v: EnvKnobs| {
+                [
+                    f32::from(v.attack),
+                    f32::from(v.decay),
+                    f32::from(v.release),
+                ]
+            };
             let (a, f) = (e(k.amp), e(k.filter));
             [1.0, a[0], a[1], a[2], f[0], f[1], f[2]]
         });

@@ -133,7 +133,11 @@ mod tests {
             assert_eq!(words.len(), 128, "{name}");
             for (knob, w) in words.iter().enumerate() {
                 // the knob 127 index (63) is inside the table (-64..=64)
-                assert_eq!(rate_word_for_knob(knob as u8) as u32, *w, "{name} knob {knob}");
+                assert_eq!(
+                    rate_word_for_knob(knob as u8) as u32,
+                    *w,
+                    "{name} knob {knob}"
+                );
             }
         }
     }
@@ -160,7 +164,10 @@ mod tests {
             for (knob, w) in words.iter().enumerate() {
                 let got = unit_word_for_knob(knob as u8);
                 let want = f32::from_bits(*w);
-                assert!((got - want).abs() < 1.0e-6, "{name} knob {knob}: {got} {want}");
+                assert!(
+                    (got - want).abs() < 1.0e-6,
+                    "{name} knob {knob}: {got} {want}"
+                );
             }
         }
     }
@@ -168,8 +175,16 @@ mod tests {
     fn layer_with_knobs() -> super::super::SynthLayer {
         let mut s = super::super::SynthLayer::new(48_000.0);
         s.strip_knobs = Some(StripKnobs {
-            amp: EnvKnobs { attack: 40, decay: 90, release: 70 },
-            filter: EnvKnobs { attack: 10, decay: 127, release: 20 },
+            amp: EnvKnobs {
+                attack: 40,
+                decay: 90,
+                release: 70,
+            },
+            filter: EnvKnobs {
+                attack: 10,
+                decay: 127,
+                release: 20,
+            },
         });
         s
     }
@@ -182,9 +197,15 @@ mod tests {
         s.knob_laws = true;
         let direct = s.strip_params();
         let k = s.strip_knobs.unwrap();
-        assert_eq!(direct.amp, StripEnvRecords::from_knobs(k.amp, s.sustain_level));
+        assert_eq!(
+            direct.amp,
+            StripEnvRecords::from_knobs(k.amp, s.sustain_level)
+        );
         assert_eq!(direct.filter, StripEnvRecords::from_knobs(k.filter, 0.0));
-        assert_ne!(direct.amp, search.amp, "the cache key changed with the flag");
+        assert_ne!(
+            direct.amp, search.amp,
+            "the cache key changed with the flag"
+        );
         // filter decay knob 127 is Hold: full-scale sustain threshold
         assert_eq!(direct.filter.decay.thr, 1.0);
         s.knob_laws = false;
@@ -199,7 +220,14 @@ mod tests {
     #[test]
     fn knob_records_use_the_rate_tables_at_index_knob_minus_64() {
         use super::super::{attack_coeff, decay_release_coeff, StripEnvRecords};
-        let r = StripEnvRecords::from_knobs(EnvKnobs { attack: 64, decay: 80, release: 0 }, 0.25);
+        let r = StripEnvRecords::from_knobs(
+            EnvKnobs {
+                attack: 64,
+                decay: 80,
+                release: 0,
+            },
+            0.25,
+        );
         assert_eq!(r.attack.b, attack_coeff(0.0));
         assert_eq!(r.decay.a, decay_release_coeff(16.0));
         assert_eq!(r.decay.thr, 0.25);

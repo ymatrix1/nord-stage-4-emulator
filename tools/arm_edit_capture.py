@@ -15,6 +15,10 @@ the tick), and logs every message the fake DSP ports see.
         target/fw_unpacked/bank0_SRAM.bin --cache target/settled.snap --csv out.csv
 
 Evidence and limits: `docs/research/arm-organ-messages.md` section 10.
+
+Value cells are Q16.16 for most ids (`docs/research/synth-knob-laws.md`): `--cell auto` writes
+`value << 16` for ranges of 12 steps or more, `--cell q16` for every id, `--cell raw` reproduces the
+legacy plain-integer capture; `tools/arm_edit_knobs.py` runs both encodings value by value.
 """
 
 from __future__ import annotations

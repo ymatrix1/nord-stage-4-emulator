@@ -2,15 +2,15 @@
 """Knob -> DSP word laws of the edit ids, captured with Q16.16 value cells.
 
 `arm_edit_capture.py` (the first capture) wrote plain integers `0..127` into the value cells,
-which hold Q16.16 numbers (`knob << 16`, [synth-stage-models-10](../docs/research/synth-stage-models-10.md)
-s1). Every integer-knob id then saw position 0 and looked value independent. This tool re-drives
+which hold Q16.16 numbers (`knob << 16`, `docs/research/synth-stage-models-10.md` s1). Every
+integer-knob id then saw position 0 and looked value independent. This tool re-drives
 the ids with `arm_edit_capture.cell_word` in both encodings (`auto`: Q16.16 for ranges of 12 or
 more steps; `q16`: Q16.16 for every id, run for the small ranges as well), applies **every** value
 of a range of up to 128 steps (9 samples for wider ones) from the settled state, and records the
 last word that each DSP address received (`last_words`). The CSV is the input of
 `tools/knob_laws.py`.
 
-    uv run --with unicorn --with capstone python tools/arm_edit_knobs.py \\
+    uv run --with unicorn --with capstone python tools/arm_edit_knobs.py run \\
         target/fw_unpacked/bank0_CODE.bin target/fw_unpacked/bank0_SRAM.bin \\
         --cache target/settled.snap --filter "Edt_Syn" --layers 4 --shard 0/8 --out knobs0.csv
 
@@ -93,7 +93,13 @@ def merge(texts: list[str]) -> str:
     """Concatenate shard CSVs (one header) sorted by id, mode and value."""
     rows = [r for t in texts for r in csv.DictReader(io.StringIO(t))]
     rows.sort(
-        key=lambda r: (int(r["id"], 0), r["layer"], r["mode"], int(r["value"]), int(r["dm_word"], 0))
+        key=lambda r: (
+            int(r["id"], 0),
+            r["layer"],
+            r["mode"],
+            int(r["value"]),
+            int(r["dm_word"], 0),
+        )
     )
     return csv_text(rows)
 
@@ -173,7 +179,9 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     mg.add_argument("--out", type=Path, required=True)
     ns = ap.parse_args(argv)
     if ns.cmd == "merge":
-        ns.out.write_text(merge([p.read_text(encoding="utf-8") for p in ns.inputs]), encoding="utf-8")
+        ns.out.write_text(
+            merge([p.read_text(encoding="utf-8") for p in ns.inputs]), encoding="utf-8"
+        )
         return 0
     index, count = parse_shard(ns.shard)
     found = cap.load_params(ns.params, ns.filter)
