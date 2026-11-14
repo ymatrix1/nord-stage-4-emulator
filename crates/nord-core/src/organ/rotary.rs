@@ -6,6 +6,7 @@
 use super::rotor_stop::{clamp_stop_angle, ease_phase, STOP_ANGLE_RAD};
 use super::types::{ROTARY_BUFFER_SIZE, ROTARY_CROSSOVER_HZ};
 use super::{OrganLayer, RotarySpeed};
+use crate::phase_wrap::wrap_pos;
 use std::f32::consts::TAU;
 
 impl OrganLayer {
@@ -122,13 +123,17 @@ impl OrganLayer {
             Some(t) if self.horn_rate_hz < 0.05 => {
                 self.horn_phase = ease_phase(self.horn_phase, t, inv_fs * 6.0);
             }
-            _ => self.horn_phase = (self.horn_phase + TAU * self.horn_rate_hz * inv_fs) % TAU,
+            _ => {
+                self.horn_phase = wrap_pos(self.horn_phase + TAU * self.horn_rate_hz * inv_fs, TAU)
+            }
         }
         match rest {
             Some(t) if self.drum_rate_hz < 0.05 => {
                 self.drum_phase = ease_phase(self.drum_phase, t, inv_fs * 3.0);
             }
-            _ => self.drum_phase = (self.drum_phase + TAU * self.drum_rate_hz * inv_fs) % TAU,
+            _ => {
+                self.drum_phase = wrap_pos(self.drum_phase + TAU * self.drum_rate_hz * inv_fs, TAU)
+            }
         }
 
         // Write crossover bands into pre-allocated Doppler / reflection buffers

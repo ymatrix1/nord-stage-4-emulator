@@ -44,11 +44,34 @@ pub(super) fn taps_for(kind: u8) -> Option<&'static [f32; LEN]> {
     }
 }
 
-/// Stereo FIR with a circular history; allocation free and `Copy`.
+/// Samples kept when the buffer is full and its newest part moves to the start: the `LEN - 1`
+/// before a sample plus four more, so that a group of four frames never loses its history.
+const KEEP: usize = LEN + 4;
+
+/// Capacity of the linear history of one channel: `KEEP` plus room for 64 new samples, so the
+/// move happens every 64 frames (a few floats per frame) and the cabinet stays small (it lives
+/// inside every FX chain, and the engine is built by value in debug-build tests).
+const BUF: usize = KEEP + 64;
+
+/// Start value of `Iterator::sum` for floats (the sums below keep that order and start).
+const SUM_START: f32 = -0.0;
+
+/// Stereo FIR; allocation free and `Copy`.
+///
+/// Each output sample is `a + b`: `a` the sequential sum over the taps `k < split` and `b` the
+/// sequential sum over the taps `k >= split`, with `split = LEN - slot` and `slot` the position of
+/// the newest sample in a 400-slot circular history that moves down by one slot per frame. The
+/// split is kept exactly as that circular buffer defines it (`pos` below), so the results are
+/// bit-identical to summing the two slices of the ring one after the other, but the samples
+/// themselves live in a linear, time ordered buffer so that a window of taps is contiguous.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct FwCabinet {
     taps: &'static [f32; LEN],
-    hist: [[f32; LEN]; 2],
+    /// Linear history per channel, oldest first; `hist[c][w - 1]` is the newest sample.
+    hist: [[f32; BUF]; 2],
+    /// Next write index; at least `LEN - 1` (the silent history before the first sample).
+    w: usize,
+    /// Ring slot of the newest sample of the equivalent circular history (`0..LEN`).
     pos: usize,
 }
 
@@ -57,27 +80,124 @@ impl FwCabinet {
     pub(super) fn new(kind: u8) -> Option<Self> {
         Some(Self {
             taps: taps_for(kind)?,
-            hist: [[0.0; LEN]; 2],
+            hist: [[0.0; BUF]; 2],
+            w: LEN - 1,
             pos: 0,
         })
     }
 
+    /// Stores `frame` as the newest sample and moves the ring slot down by one.
+    #[inline]
+    fn push(&mut self, frame: [f32; 2]) {
+        if self.w == BUF {
+            for h in &mut self.hist {
+                h.copy_within(BUF - KEEP.., 0);
+            }
+            self.w = KEEP;
+        }
+        for (h, x) in self.hist.iter_mut().zip(frame) {
+            h[self.w] = x;
+        }
+        self.w += 1;
+        self.pos = if self.pos == 0 { LEN - 1 } else { self.pos - 1 };
+    }
+
     /// One stereo frame through the cabinet.
+    ///
+    /// The four chains (two channels, `a` and `b`) are independent, so they run in lockstep: the
+    /// float additions of every chain stay in the same order (bit-identical result) while the CPU
+    /// overlaps their 4-cycle add latencies.
     #[inline]
     pub(super) fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
-        // `hist[c][pos]` is the newest sample; older ones follow at increasing (wrapping) index.
-        self.pos = if self.pos == 0 { LEN - 1 } else { self.pos - 1 };
-        let mut out = [0.0; 2];
-        for (ch, y) in out.iter_mut().enumerate() {
-            let h = &mut self.hist[ch];
-            h[self.pos] = frame[ch];
-            let (newer, older) = h.split_at(self.pos);
-            let (t_head, t_tail) = self.taps.split_at(older.len());
-            let a: f32 = older.iter().zip(t_head).map(|(x, t)| x * t).sum();
-            let b: f32 = newer.iter().zip(t_tail).map(|(x, t)| x * t).sum();
-            *y = a + b;
+        self.push(frame);
+        let split = LEN - self.pos;
+        let newest = self.w - 1;
+        let [h0, h1] = &self.hist;
+        let t = self.taps;
+        let mut acc = [SUM_START; 4];
+        let b_len = LEN - split;
+        let common = split.min(b_len);
+        for k in 0..common {
+            let kb = split + k;
+            acc[0] += h0[newest - k] * t[k];
+            acc[1] += h1[newest - k] * t[k];
+            acc[2] += h0[newest - kb] * t[kb];
+            acc[3] += h1[newest - kb] * t[kb];
         }
-        out
+        for k in common..split {
+            acc[0] += h0[newest - k] * t[k];
+            acc[1] += h1[newest - k] * t[k];
+        }
+        for k in common..b_len {
+            let kb = split + k;
+            acc[2] += h0[newest - kb] * t[kb];
+            acc[3] += h1[newest - kb] * t[kb];
+        }
+        [acc[0] + acc[2], acc[1] + acc[3]]
+    }
+
+    /// Four consecutive stereo frames through the cabinet (`frames[0]` first), the same result and
+    /// the same state as four calls of [`Self::process_frame`].
+    ///
+    /// The four frames are independent sums over the same taps, so they run as the four lanes of
+    /// one pass over the taps (about three times fewer dependent additions than four sequential
+    /// frames). Frame `j` splits its sum at tap `s0 + j` (the ring slot moves by one per frame), so
+    /// only the four taps from `s0` on need per-lane care. When the ring wraps inside the group (one
+    /// group in a hundred) the frames go through [`Self::process_frame`] instead.
+    #[inline]
+    pub(super) fn process_block4(&mut self, frames: [[f32; 2]; 4]) -> [[f32; 2]; 4] {
+        if self.pos < 4 {
+            return frames.map(|f| self.process_frame(f));
+        }
+        let split0 = LEN - self.pos + 1; // split of frame 0 once its slot (`pos - 1`) is written
+        for f in frames {
+            self.push(f);
+        }
+        let first = self.w - 4; // index of frame 0; lane `j` reads `hist[first + j - k]` at tap `k`
+        let t = self.taps;
+        let high = (split0 + 4).min(LEN);
+        // sums[chain a / b][channel][lane]
+        let mut sums = [[[SUM_START; 4]; 2]; 2];
+        let [h0, h1] = &self.hist;
+        // The two channels advance together so that their dependent add chains overlap.
+        let lanes = |k: usize| -> [&[f32; 4]; 2] {
+            [
+                h0[first - k..first - k + 4].try_into().unwrap(),
+                h1[first - k..first - k + 4].try_into().unwrap(),
+            ]
+        };
+        let [chain_a, chain_b] = &mut sums;
+        // taps below every split: all lanes extend their `a` chain
+        for (k, &tk) in t.iter().enumerate().take(split0) {
+            let x = lanes(k);
+            for j in 0..4 {
+                chain_a[0][j] += x[0][j] * tk;
+                chain_a[1][j] += x[1][j] * tk;
+            }
+        }
+        // the taps around the splits: each lane switches from `a` to `b` at its own tap
+        for (k, &tk) in t.iter().enumerate().take(high).skip(split0) {
+            let x = lanes(k);
+            for j in 0..4 {
+                for ch in 0..2 {
+                    let p = x[ch][j] * tk;
+                    if k < split0 + j {
+                        chain_a[ch][j] += p;
+                    } else {
+                        chain_b[ch][j] += p;
+                    }
+                }
+            }
+        }
+        // taps above every split: all lanes extend their `b` chain
+        for (k, &tk) in t.iter().enumerate().skip(high) {
+            let x = lanes(k);
+            for j in 0..4 {
+                chain_b[0][j] += x[0][j] * tk;
+                chain_b[1][j] += x[1][j] * tk;
+            }
+        }
+        std::array::from_fn(|j| std::array::from_fn(|ch| sums[0][ch][j] + sums[1][ch][j]))
     }
 }
 
@@ -97,6 +217,115 @@ mod tests {
                     (y[0] - want).abs() < 1e-7 && (y[1] + want).abs() < 1e-7,
                     "{kind} {n}"
                 );
+            }
+        }
+    }
+
+    /// The straightforward formulation: a circular history and one `Iterator::sum` per half and
+    /// channel (the implementation before the lockstep and block versions).
+    struct Reference {
+        taps: &'static [f32; LEN],
+        hist: [[f32; LEN]; 2],
+        pos: usize,
+    }
+
+    impl Reference {
+        fn new(kind: u8) -> Self {
+            Self {
+                taps: taps_for(kind).unwrap(),
+                hist: [[0.0; LEN]; 2],
+                pos: 0,
+            }
+        }
+
+        fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
+            self.pos = if self.pos == 0 { LEN - 1 } else { self.pos - 1 };
+            let mut out = [0.0; 2];
+            for (ch, y) in out.iter_mut().enumerate() {
+                let h = &mut self.hist[ch];
+                h[self.pos] = frame[ch];
+                let (newer, older) = h.split_at(self.pos);
+                let (t_head, t_tail) = self.taps.split_at(older.len());
+                let a: f32 = older.iter().zip(t_head).map(|(x, t)| x * t).sum();
+                let b: f32 = newer.iter().zip(t_tail).map(|(x, t)| x * t).sum();
+                *y = a + b;
+            }
+            out
+        }
+    }
+
+    fn bits(f: [f32; 2]) -> [u32; 2] {
+        [f[0].to_bits(), f[1].to_bits()]
+    }
+
+    /// Silence first (signed zeros, an all-zero history), then noise, then silence again.
+    fn test_input(n: usize, state: &mut u32) -> [f32; 2] {
+        *state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        let x = if !(450..1900).contains(&n) {
+            0.0
+        } else {
+            (*state >> 8) as f32 / 16_777_216.0 - 0.5
+        };
+        [x, -x * 0.5]
+    }
+
+    #[test]
+    fn lockstep_frames_equal_the_sequential_iterator_sums_bit_for_bit() {
+        for kind in [1u8, 3, 5] {
+            let mut fast = FwCabinet::new(kind).unwrap();
+            let mut slow = Reference::new(kind);
+            let mut state = 0x1234_5678u32;
+            for n in 0..2600 {
+                let f = test_input(n, &mut state);
+                assert_eq!(
+                    bits(fast.process_frame(f)),
+                    bits(slow.process_frame(f)),
+                    "kind {kind} frame {n}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn four_frame_blocks_equal_four_single_frames_bit_for_bit() {
+        for kind in [1u8, 3, 5] {
+            let mut block = FwCabinet::new(kind).unwrap();
+            let mut slow = Reference::new(kind);
+            let mut state = 0x9E37_79B9u32;
+            // 700 blocks cover every ring phase (the 400-slot ring wraps every 100 blocks)
+            for g in 0..700 {
+                let frames: [[f32; 2]; 4] =
+                    std::array::from_fn(|j| test_input(g * 4 + j, &mut state));
+                let got = block.process_block4(frames);
+                for (j, f) in frames.iter().enumerate() {
+                    assert_eq!(
+                        bits(got[j]),
+                        bits(slow.process_frame(*f)),
+                        "kind {kind} block {g} frame {j}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn blocks_and_single_frames_can_be_mixed_on_one_cabinet() {
+        let mut mixed = FwCabinet::new(1).unwrap();
+        let mut slow = Reference::new(1);
+        let mut state = 7u32;
+        let mut n = 0;
+        for g in 0..300 {
+            if g % 3 == 0 {
+                let f = test_input(n, &mut state);
+                n += 1;
+                assert_eq!(bits(mixed.process_frame(f)), bits(slow.process_frame(f)));
+            } else {
+                let frames: [[f32; 2]; 4] = std::array::from_fn(|j| test_input(n + j, &mut state));
+                n += 4;
+                let got = mixed.process_block4(frames);
+                for (j, f) in frames.iter().enumerate() {
+                    assert_eq!(bits(got[j]), bits(slow.process_frame(*f)), "group {g}");
+                }
             }
         }
     }

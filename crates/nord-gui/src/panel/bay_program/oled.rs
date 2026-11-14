@@ -4,11 +4,12 @@ use super::catalog::display_name;
 use super::model::{ListMode, PresetKind, ProgView, Screen};
 use super::morph::source_label;
 use super::nav::ORGAN_PRESETS;
+pub use super::oled_grid::Line;
 use super::oled_home::{location_title, name_line, section_rows};
 #[cfg(test)]
 use super::oled_icons::{ICON_ORGAN, ICON_PIANO, ICON_SYNTH};
 use super::split::{note_name, xfade_label, SplitRow};
-use super::store::{ProgLoc, StoreStage, StoreTarget};
+use super::store::ProgLoc;
 use crate::panel::ui_state::ProgramUi;
 use nord_core::morph::LayerId;
 use nord_core::piano::label::PianoSize;
@@ -45,6 +46,9 @@ pub struct OledText {
     pub soft_on: Option<usize>,
     /// Parameter popup `(label, value)` in the lower half of the home screen.
     pub popup: Option<(String, String)>,
+    /// Title-bar screens with their own row layout (the Store screens): when not empty these
+    /// lines replace the label and the body rows.
+    pub lines: Vec<Line>,
 }
 
 impl OledText {
@@ -59,6 +63,10 @@ impl OledText {
             s.push_str(&super::oled_home::strip_marks(
                 r.trim_start_matches(super::menu_screen::DIM),
             ));
+            s.push('\n');
+        }
+        for l in &self.lines {
+            s.push_str(&l.text);
             s.push('\n');
         }
         if let Some((label, value)) = &self.popup {
@@ -196,52 +204,6 @@ fn list(ui: &ProgramUi) -> OledText {
     }
 }
 
-fn store(ui: &ProgramUi) -> OledText {
-    let ed = &ui.store.editor;
-    if ui.store.stage == StoreStage::Naming {
-        let at = ed.cursor();
-        let chars: Vec<char> = ed.display().chars().collect();
-        let marked: String = (0..chars.len().max(at + 1))
-            .map(|i| {
-                let c = chars.get(i).copied().unwrap_or(' ');
-                if i == at {
-                    format!("[{c}]")
-                } else {
-                    c.to_string()
-                }
-            })
-            .collect();
-        return OledText {
-            big: "STORE PROGRAM AS".into(),
-            sub: marked,
-            rows: vec![format!("Cat: {}", ed.category_label())],
-            soft: ui.screen.soft_labels(),
-            ..Default::default()
-        };
-    }
-    if let Some(t) = ui.preset_store_text() {
-        return t;
-    }
-    let (target, existing) = match ui.store.target {
-        Some(StoreTarget::Live(s)) => (format!("Live {}", s + 1), String::new()),
-        Some(StoreTarget::Bank(l)) => (l.label(), name_at(ui, l)),
-        None => (String::new(), String::new()),
-    };
-    // VERIFIED: hardware lists the name now at the target (`<empty>` when unused) and then
-    // `As: <name>` (piano-pad video, 5:40-5:45).
-    let existing = if existing.is_empty() {
-        super::nav::EMPTY_NAME.to_string()
-    } else {
-        existing
-    };
-    OledText {
-        big: "STORE PROGRAM TO".into(),
-        sub: target,
-        rows: vec![existing, format!("As: {}", ui.store.editor.name())],
-        ..Default::default()
-    }
-}
-
 fn split(ui: &ProgramUi) -> OledText {
     let s = &ui.split;
     let pts = |f: &dyn Fn(usize) -> String| {
@@ -323,7 +285,7 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
         Screen::Home => home(ui, sum),
         Screen::List => list(ui),
         Screen::Menu(m) => super::menu_screen::compose(ui, m),
-        Screen::StoreTo | Screen::StoreAs => store(ui),
+        Screen::StoreTo | Screen::StoreAs => super::oled_store::compose(ui),
         Screen::Split => split(ui),
         Screen::Clock => t(
             "MST CLK",
