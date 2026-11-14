@@ -118,6 +118,12 @@ class Session:
                       raw.decode("latin-1"))
         )  # fmt: skip
 
+    def load_eeproms(self, blob: bytes) -> None:
+        """Preload the four EEPROM images (one 256 KB file) before `boot`."""
+        n = ai.EEPROM_SIZE
+        for i, eeprom in enumerate(self.bus.eeproms):
+            eeprom.data[:] = blob[i * n : (i + 1) * n]
+
     # ----- boot, save, restore ---------------------------------------------------------------
     def boot(self, max_insns: int = 1_500_000_000) -> int:
         """Run to the main loop (I2C blank storage is formatted on the way); returns the pc."""
@@ -213,6 +219,36 @@ class Session:
         frames = (self.link.frames(0)[n[0] :], self.link.frames(1)[n[1] :])
         return Capture(frames, self.texts[t0:])
 
+    def turn(
+        self,
+        pair: int,
+        detents: int,
+        hold_keys: list[tuple[int, int, int]] | None = None,
+        dwell: int = 30,
+        after: int = 40,
+    ) -> Capture:
+        """Turn encoder `pair` (see `arm_keys.ENCODER_PAIRS`) by `detents`, with `hold_keys` down.
+
+        Each Gray state is held `dwell` ticks so the scan (4 reads per sweep) sees every edge.
+        """
+        n = [len(self.link.frames(0)), len(self.link.frames(1))]
+        t0 = len(self.texts)
+        for k in hold_keys or []:
+            self.keys.press(*k)
+        self.run(20)
+        for state in ak.encoder_steps(pair, detents):
+            for k in [k for k in self.keys.held if k[0] == ak.ENCODER_STROBE]:
+                self.keys.release(*k)
+            for k in state:
+                self.keys.press(*k)
+            self.run(dwell)
+        self.run(after)
+        for k in hold_keys or []:
+            self.keys.release(*k)
+        self.run(after)
+        frames = (self.link.frames(0)[n[0] :], self.link.frames(1)[n[1] :])
+        return Capture(frames, self.texts[t0:])
+
 
 def parse_key(text: str) -> tuple[int, int, int]:
     """`strobe,port,bit` (numbers may be hex) to a key tuple."""
@@ -232,8 +268,10 @@ def save_capture(cap: Capture, out: Path, name: str, scale: int = 2) -> None:
     (out / f"{name}.json").write_text(json.dumps(rows, indent=1))
 
 
-def cmd_boot(code: Path, sram: Path, out: Path) -> int:
+def cmd_boot(code: Path, sram: Path, out: Path, eeprom: Path | None = None) -> int:
     session = Session(code, sram)
+    if eeprom is not None:
+        session.load_eeproms(eeprom.read_bytes())
     pc = session.boot()
     print(f"boot: pc={pc:#x}, I2C transactions {len(session.bus.log)}")
     session.run(100)  # let the first screens settle
@@ -256,13 +294,20 @@ def cmd_press(code: Path, sram: Path, state: Path, keys: list[str], out: Path, h
     return 0
 
 
-def cmd_sweep(code: Path, sram: Path, state: Path, out: Path, hold: int) -> int:
+SHIFT_KEY = (0x02, 1, 4)  # EMPIRICAL (sweep): Shift + Program n opens the menus
+
+
+def cmd_sweep(
+    code: Path, sram: Path, state: Path, out: Path, hold: int, shift: bool = False
+) -> int:
     session = Session(code, sram)
     session.load_state(state.read_bytes())
     summary = {}
     for key in ak.all_keys():
+        if shift and key == SHIFT_KEY:
+            continue
         session.reset()
-        cap = session.press([key], hold=hold)
+        cap = session.press([key, SHIFT_KEY] if shift else [key], hold=hold)
         name = "%02x_%d_%d" % key
         summary[name] = cap.strings()
         if cap.texts or cap.frames[0] or cap.frames[1]:
@@ -285,14 +330,18 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs the 
         if name != "boot":
             p.add_argument("--state", type=Path, default=Path("target/oled/state.bin"))
             p.add_argument("--hold", type=int, default=40, help="ticks the keys stay down")
+        if name == "sweep":
+            p.add_argument("--shift", action="store_true", help="hold Shift with every key")
+        if name == "boot":
+            p.add_argument("--eeprom", type=Path, help="initial 256 KB EEPROM image (arm_store.py)")
         if name == "press":
             p.add_argument("--key", action="append", required=True, help="strobe,port,bit")
     ns = ap_.parse_args(argv)
     if ns.cmd == "boot":
-        return cmd_boot(ns.image, ns.sram, ns.out)
+        return cmd_boot(ns.image, ns.sram, ns.out, ns.eeprom)
     if ns.cmd == "press":
         return cmd_press(ns.image, ns.sram, ns.state, ns.key, ns.out, ns.hold)
-    return cmd_sweep(ns.image, ns.sram, ns.state, ns.out, ns.hold)
+    return cmd_sweep(ns.image, ns.sram, ns.state, ns.out, ns.hold, ns.shift)
 
 
 if __name__ == "__main__":
