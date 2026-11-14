@@ -38,6 +38,8 @@ pub struct Options {
     pub raw: Option<String>,
     pub rate: u32,
     pub dumps: Vec<(u32, u32)>,
+    /// `--rec ADDR:COUNT:FILE`: after every pass, `COUNT` DM words from `ADDR` appended to `FILE`.
+    pub recs: Vec<(u32, u32, String)>,
     pub quiet: bool,
     pub no_ping_pong: bool,
     pub calls: bool,
@@ -123,6 +125,17 @@ pub fn parse_args(args: &[String]) -> Result<Options, String> {
                     num(n.into(), "--dump count")?,
                 ));
             }
+            "--rec" => {
+                let s = next(a, &mut it)?;
+                let bad = || format!("bad --rec {s:?} (want ADDR:COUNT:FILE)");
+                let mut f = s.splitn(3, ':');
+                let (addr, n, file) = (f.next(), f.next(), f.next());
+                o.recs.push((
+                    parse_number(addr.ok_or_else(bad)?).ok_or_else(bad)?,
+                    parse_number(n.ok_or_else(bad)?).ok_or_else(bad)?,
+                    file.ok_or_else(bad)?.to_string(),
+                ));
+            }
             "--quiet" => o.quiet = true,
             "--no-ping-pong" => o.no_ping_pong = true,
             "--calls" => o.calls = true,
@@ -153,6 +166,13 @@ mod tests {
         for bad in ["6:0", "0:3", "1", "x:y"] {
             assert!(parse_lane(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn rec_option_parses_address_count_and_file() {
+        let o = parse_args(&args(&["img", "--rec", "0xc2b52:196:ring.bin"])).unwrap();
+        assert_eq!(o.recs, vec![(0xc2b52, 196, "ring.bin".to_string())]);
+        assert!(parse_args(&args(&["img", "--rec", "0x10:4"])).is_err());
     }
 
     #[test]

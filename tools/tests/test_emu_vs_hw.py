@@ -95,6 +95,38 @@ def test_note_onsets_filters_confirmed(tmp_path):
     assert ev.note_onsets(p, confirmed_only=True) == [1.0]
 
 
+def decaying_tail(t60_s: float, release_s: float = 0.5, total_s: float = 3.0) -> np.ndarray:
+    """Noise burst until `release_s`, then an exponential decay of `t60_s` (60 dB in `t60_s`)."""
+    rng = np.random.default_rng(3)
+    t = np.arange(int(total_s * SR)) / SR
+    env = np.where(t < release_s, 0.3, 0.3 * 10 ** (-3 * (t - release_s) / t60_s))
+    return env * rng.standard_normal(len(t))
+
+
+def test_tail_t60_recovers_the_decay_time():
+    for t60 in (0.6, 2.0):
+        got = ev.tail_t60_s(decaying_tail(t60), SR, [(0.0, 0.5)])
+        assert got == pytest.approx(t60, rel=0.15)
+
+
+def test_tail_t60_skips_releases_followed_by_notes_and_silence():
+    mono = decaying_tail(1.0)
+    assert ev.tail_t60_s(mono, SR, [(0.0, 0.5), (0.7, 2.0)]) is None, "a note follows the release"
+    assert ev.tail_t60_s(np.zeros(3 * SR), SR, [(0.0, 0.5)]) is None, "below the floor"
+    assert ev.tail_t60_s(mono, SR, [(0.0, 2.8)]) is None, "the clip ends first"
+
+
+def test_note_intervals_filters_confirmed(tmp_path):
+    p = tmp_path / "ev.json"
+    events = [
+        {"onset_s": 1.0, "offset_s": 1.5, "confirmed": True},
+        {"onset_s": 2.0, "offset_s": 2.5, "confirmed": False},
+    ]
+    p.write_text(json.dumps({"events": events}))
+    assert ev.note_intervals(p) == [(1.0, 1.5), (2.0, 2.5)]
+    assert ev.note_intervals(p, confirmed_only=True) == [(1.0, 1.5)]
+
+
 def test_variant_flags_adds_confirmed_only():
     var = {"label": "x", "flags": ["--firmware-fx"]}
     assert ev.variant_flags(var, False) == ["--firmware-fx"]

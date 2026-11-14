@@ -140,8 +140,10 @@ mod tests {
         assert_eq!(s.layer().pattern_preset, 3);
         assert!(params(&mut s).contains(&SynthParam::PatternPreset(3)));
         s.turn_dial(2, 4, false);
-        assert_eq!(s.layer().pattern_len, 12, "preset 4 has 8 steps, +4");
-        assert!(params(&mut s).contains(&SynthParam::Pattern(PatternParam::Len(12))));
+        // Preset 4 selected by the dial above (preset index 3): the length dial adds 4 steps.
+        let want = nord_core::synth::PATTERN_PRESETS[3].len + 4;
+        assert_eq!(s.layer().pattern_len, want, "preset 4 length + 4");
+        assert!(params(&mut s).contains(&SynthParam::Pattern(PatternParam::Len(want))));
     }
 
     #[test]

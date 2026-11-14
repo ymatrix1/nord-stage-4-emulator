@@ -231,7 +231,8 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Vox key-down timeline (replaces the click, crest 16.1 dB), drawbar value law and slot wiring, boot gain word ([organ-vox-click](research/organ-vox-click.md))
 - [ ] Vox default: organ output level stage (RMS -13.7 dB) and the 1.5 to 8 kHz deficit (mid +7.8, presence -7.3, brilliance -9.5 dB) (`ns4-58cz`)
 - [x] Farfisa generator `0x122A71`: bit-exact Python model, opt-in `ToneWheelSource::FarfisaWheels` ([organ-engine](specs/organ-engine.md) s3.1.8, [organ-farfisa-bass](research/organ-farfisa-bass.md)); B3 Bass `0x122296` and the B3 pass replayed in `sharc-pass` (`tools/organ_fb_pass.py`)
-- [ ] Farfisa processor `0x122B85` (ARM weights and filter tables, OQ19) and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust
+- [x] Oracle chords of the Farfisa and B3 Bass processors with the corrected boot log and key-down words (`tools/organ_proc_oracle.py`, `sharc-pass --rec`, [organ-farfisa-bass](research/organ-farfisa-bass.md) s7)
+- [ ] Farfisa processor `0x122B85` and the B3 / B3 Bass processors `0x121E2B` / `0x122296` (scanner): bit-exact models, then Rust (inputs known, OQ18)
 - [ ] Percussion path (second engine family `0xC00BF890`, `0xC00BE348`), key-up and velocity source
 
 ### 7b.4 Effects
@@ -243,7 +244,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] FX Amp type words (`kAmpTypeNew` 1..6) decoded, the Amp drive stage and cabinet verified against the oracle and default (`FirmwareFx::amp`, Vox score 3.98 to 1.30); Leslie drive found to be `v / 127` into a null-stub row ([fx-type-map](research/fx-type-map.md) s8, s9)
 - [x] Amp cabinet `0x122A1D` as a measured impulse response (`fx/fw_cabinet.rs`), unity rotary drive flag
 - [ ] Organ unit EQ routines (`0x124344`, `0x124270`), routine `0x122B1D`, cabinet bank transliteration, JC / Small recordings; Leslie rotor (PNO core 1 row `0x1237F8`, speed words `0xB2F25/6`; [fx-leslie](research/fx-leslie.md): located, not modelled)
-- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); the reverb half-rate wrapper `0x12417E` / `0x12435C` is modelled and ported (`FwRvbWrap`, not wired); the reverb core `0x123F61` is modelled instruction by instruction in Python (`tools/fx_model_rvbcore.py`, bit-exact against the oracle; real-instance data found in the image, oracle responses T60 4.3 s and 5.4 s for types 0, 1; no Rust port yet); Leslie still open
+- [x] FX reverb amount law (`kRvbAmt`, equal power) wired behind `FirmwareFx::reverb_mix`; `kCmpResponse` closed ([fx-reverb-leslie](research/fx-reverb-leslie.md)); the reverb of types 0 and 1 (wrapper `0x12417E` / `0x12435C` plus core `0x123F61`) is ported to Rust from the instruction model by `tools/fx_rvbcore_gen.py` and is bit exact against the oracle on 3000-call impulse and noise runs (`FwReverb`, opt-in `FirmwareFx::reverb`, `ns4 --firmware-reverb`; oracle responses T60 4.3 s and 5.4 s); types 2..11 and Leslie still open
 - [ ] FX wiring: connect the ported routines to `fx.rs` using the measured context words (compressor amount, delay mix and feedback, Amp drive, phaser rate); the reverb tables (`ns4-ca0i`); the delay time law (`kDlyRateClkDiv`, [fx-delay-time](research/fx-delay-time.md)) is decoded and wired behind `FirmwareFx::delay_time`
 - [ ] Enable gating and the command consumer ([fx-contexts](research/fx-contexts.md) s7; wiring plan s8), then sweep the four type ids with the effects enabled
 
