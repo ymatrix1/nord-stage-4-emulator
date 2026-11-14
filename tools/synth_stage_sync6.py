@@ -11,7 +11,8 @@ word, a fixed edge width 0.5 for the first wave and no output high pass. With `f
     g1 = fade(a h);  g2 = fade(a);  q = max(0.5 / (a h), 2);  q2 = max(0.5 / a, 2)   (stored)
     e2 = 1 - clip(4 a, 1);  c2 = 0.5 - e2 / 2 (SYNC 6) or 0.5 (SYNC 8) (stored);  k = c2 / (1 - c2)
     tA = wave(|y_k|, 0.5, q),  y_k = ASHIFT(UUF(x_k, FIX(h, 25)), 7);   A_k = tA g1 + 1  (stored)
-    tB = wave(|x'_k|, c2, q2),  x' = x (SYNC 6) or x - 0xC0000000 - 2 inc (SYNC 8);  v = 0.5 tB + 0.5
+    tB = wave(|x'_k|, c2, q2);  x' = x (SYNC 6) or x - 0xC0000000 - 2 inc (SYNC 8)
+    v = 0.5 tB + 0.5
     SYNC 6  out = (A v)(g2 FLOAT(x ^ 2^31) - 1) + (1 - k / 2)          scale -0.5 g2 P[16]
     SYNC 8  out = A v - (1 - k / 2)                                    scale g2 P[16]
 """

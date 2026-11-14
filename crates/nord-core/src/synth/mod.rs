@@ -32,6 +32,7 @@ mod fw_stages;
 mod fw_strip_cutoff;
 mod fw_super1;
 mod fw_sync;
+mod fw_sync1;
 mod fw_sync3;
 mod fw_sync6;
 mod fw_sync_table;

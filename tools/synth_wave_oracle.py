@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import random
 import subprocess
 import sys
@@ -32,8 +33,10 @@ import synth_stage_shape_sine3 as shape_sine3
 import synth_stage_shapes as shapes
 import synth_stage_super1 as super1
 import synth_stage_sync as sync
+import synth_stage_sync1 as sync1
 import synth_stage_sync3 as sync3
 import synth_stage_sync6 as sync6
+import synth_stage_sync7 as sync7
 import synth_stage_unison as unison
 import synth_wave_model as m
 
@@ -56,9 +59,11 @@ STAGE_SHAPE_SINE2 = 0x1232A5
 STAGE_SHAPE_SINE1 = 0x1235C9
 STAGE_SHAPE_SINE4 = 0x120DAB
 STAGE_SHAPE_SINE3 = 0x12377D
+STAGE_SYNC1 = 0x1226DD
 STAGE_SYNC2 = 0x122A32
 STAGE_SYNC3 = 0x122C5C
 STAGE_SYNC6 = 0x1239BE
+STAGE_SYNC7 = 0x123C7C
 STAGE_SYNC8 = 0x123FE9
 STAGE_MULTI = 0x121C54
 STAGE_SUPER1 = 0x121E9D
@@ -71,14 +76,37 @@ PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not d
 # `s5` = 0x3F4CCCCD, 3 of 3 values): the pass computes `DM(-5, I2) = clip(F0 + F8, 0.5) + 0.5` and
 # the word `DM(0xC271A + lane)` is its only persistent term (the others are rewritten by the pass).
 S5_SRC = 0xC271A
-S5_STAGES = (STAGE_SYNC2, STAGE_SYNC3, STAGE_SYNC6, STAGE_SYNC8)
+S5_STAGES = (
+    STAGE_SYNC1,
+    STAGE_SYNC2,
+    STAGE_SYNC3,
+    STAGE_SYNC6,
+    STAGE_SYNC7,
+    STAGE_SYNC8,
+    STAGE_SHAPE_SINE0,
+    STAGE_SHAPE_SINE1,
+    STAGE_SHAPE_SINE2,
+    STAGE_SHAPE_SINE3,
+    STAGE_SHAPE_SINE4,
+    STAGE_SHAPE_SINE5,
+)
+# VERIFIED (watch of the store site `pc 0x1262E8`, listing `0x24C500..0x24C5D6`, poke probe over
+# -36..72 semitones): the pass writes the pitch word `DM(-29, I2) = DM(0xC1F79 + lane)` as the
+# interpolated table value at `clip(sum, 0x58000000)`, `sum` = integer words of a note term
+# `DM(0xC2716)` (shared by both lanes, 0 in the idle pass), a coefficient, a bend and a vibrato
+# term; 0x01000000 in `DM(0xC2716)` is one semitone (x 1.0595), 0 gives 0.006028.
+PITCH_SRC = 0xC2716
+PITCH_STAGES = (STAGE_SYNC1, STAGE_SYNC2, STAGE_SYNC3, STAGE_SYNC6, STAGE_SYNC7, STAGE_SYNC8)
+PITCH_SEMITONES = (-24.0, 48.0)
+IDLE_PITCH = 0.006028  # pitch word with `DM(0xC2716) = 0`
+MAX_INC = 0.45
 EXTRA_BUF: list[str] = []
 # VERIFIED (listing `0x241E4E..0x241EA6`, dump after the pass): the SHAPE SINE 4 output high
 # pass reads its state words and coefficient at `DM(-32 / -30 / -28, I7)`,
 # `I7 = DM(-9, I3) = 0xC22F6`.
 HP_WORDS = (0xC22D6, 0xC22D8, 0xC22DA)
 HP_IDLE_COEF = 0x3F7F9DB2
-HP_STAGES = (STAGE_SHAPE_SINE4, STAGE_SYNC3)
+HP_STAGES = (STAGE_SHAPE_SINE4, STAGE_SYNC1, STAGE_SYNC3)
 DEVS = ("0x282c0380=1", "0x3108d008=5")
 
 
@@ -102,9 +130,11 @@ MODELS = {
     STAGE_SHAPE_SINE1: shape_sine.stage_shape_sine_1,
     STAGE_SHAPE_SINE4: shape_sine2.stage_shape_sine_4,
     STAGE_SHAPE_SINE3: shape_sine3.stage_shape_sine_3,
+    STAGE_SYNC1: sync1.stage_sync1,
     STAGE_SYNC2: sync.stage_sync2,
     STAGE_SYNC3: sync3.stage_sync3,
     STAGE_SYNC6: sync6.stage_sync6,
+    STAGE_SYNC7: sync7.stage_sync7,
     STAGE_SYNC8: sync6.stage_sync8,
     STAGE_MULTI: unison.stage_multi,
     STAGE_SUPER1: super1.stage_super1,
@@ -129,6 +159,8 @@ def pokes(lanes: list[m.Lane]) -> dict[int, int]:
         d[PULSE_WORD] = lanes[0].pulse
         if ln.s5_src is not None:
             d[S5_SRC + i] = ln.s5_src
+        if ln.pitch_src is not None:
+            d[PITCH_SRC] = ln.pitch_src
         for j, (rho, ph) in enumerate(zip(ln.ratios, ln.phases, strict=False)):
             d[PARAM - 32 + 2 * j + i] = rho
             d[PHASE_TABLE + 2 * j + i] = ph
@@ -187,6 +219,20 @@ def random_s5(seed: int, lanes: list[m.Lane], stage: int) -> None:
             ln.s5_src = fbits(r2.uniform(-0.55, 0.55))
 
 
+def random_pitch(seed: int, lanes: list[m.Lane], stage: int) -> None:
+    """A random note word for the stages in `PITCH_STAGES` (own generator, both lanes alike).
+
+    The top of the range keeps every oscillator increment `f rho` below `MAX_INC` cycles per
+    sample (beyond that the phase runs past Nyquist and the oracle words are not music).
+    """
+    if stage in PITCH_STAGES:
+        rho = max(abs(float(m.ld(w))) for ln in lanes for w in (ln.ratio1, ln.ratio2))
+        hi = min(PITCH_SEMITONES[1], 12.0 * math.log2(MAX_INC / (IDLE_PITCH * rho)))
+        semis = random.Random(seed * 104729).uniform(PITCH_SEMITONES[0], max(hi, -24.0))
+        for ln in lanes:
+            ln.pitch_src = int(semis * 0x01000000) & 0xFFFFFFFF
+
+
 def run_pass(
     sharc_org: str, image: str, lanes: list[m.Lane], stage: int = STAGE
 ) -> dict[int, int]:  # pragma: no cover
@@ -221,6 +267,7 @@ def compare(
         lanes = random_lanes(rng, stage in UNISON_STAGES)
         random_hp(rng, lanes, stage)
         random_s5(seed, lanes, stage)
+        random_pitch(seed, lanes, stage)
         got = run_pass(sharc_org, image, lanes, stage)
         for i, ln in enumerate(lanes):
             ln.pitch = got[RECORD - 29 + i]

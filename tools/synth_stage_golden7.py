@@ -3,9 +3,10 @@
 
     python tools/synth_stage_golden7.py > crates/nord-core/src/synth/tests_fw_stage_golden7.rs
 
-Derived values of the bit-exact models `tools/synth_stage_sync6.py` (checked against the SHARC
-oracle by `tools/synth_wave_oracle.py --stage 0x1239BE` / `0x123FE9`): one SYNC 6 or SYNC 8
-oscillator. Only derived values appear.
+Derived values of the bit-exact models `tools/synth_stage_sync1.py`, `synth_stage_sync6.py` and
+`synth_stage_sync7.py` (checked against the SHARC oracle by `tools/synth_wave_oracle.py --stage
+0x1226DD` / `0x1239BE` / `0x123C7C` / `0x123FE9`): one SYNC 1, 6, 7 or 8 oscillator (SYNC 1 before
+the output high pass). Only derived values appear.
 """
 
 from __future__ import annotations
@@ -16,7 +17,9 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import synth_stage_golden as g
+import synth_stage_sync1 as sync1
 import synth_stage_sync6 as sync6
+import synth_stage_sync7 as sync7
 import synth_wave_model as m
 
 
@@ -44,13 +47,19 @@ def sync_rows(stage) -> list[tuple[int, int, int, int]]:
 
 def rust() -> str:
     parts = [
-        "//! Firmware parity of the eighth stage batch (`fw_sync6.rs`).\n"
+        "//! Firmware parity of the eighth stage batch (`fw_sync1.rs`, `fw_sync6.rs`).\n"
         "//!\n"
         "//! Derived values only, made by `python tools/synth_stage_golden7.py > <file>` from the\n"
         "//! bit-exact models (`docs/research/synth-stage-models-7.md`).\n"
     ]
     n = 0
-    for tag, stage in (("SY6", sync6.stage_sync6), ("SY8", sync6.stage_sync8)):
+    stages = (
+        ("SY1", lambda lanes: sync1.stage_sync1(lanes, high_pass=False)),
+        ("SY6", sync6.stage_sync6),
+        ("SY7", sync7.stage_sync7),
+        ("SY8", sync6.stage_sync8),
+    )
+    for tag, stage in stages:
         rows = sync_rows(stage)
         n = len(rows)
         for i, name in enumerate(("PHASE", "DT", "SHAPE", "OUT")):
@@ -59,6 +68,8 @@ def rust() -> str:
         "\n#[test]\nfn golden_tables_have_the_documented_shape() {\n"
         f"    assert_eq!(SY6_PHASE.len(), {n});\n"
         f"    assert_eq!(SY8_OUT.len(), {n});\n"
+        "    assert!(SY1_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n"
+        "    assert!(SY7_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n"
         "    assert!(SY6_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n"
         "    assert!(SY8_OUT.iter().all(|&w| f32::from_bits(w).is_finite()));\n}\n"
     )
