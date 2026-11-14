@@ -41,7 +41,7 @@ pub fn controls() -> Vec<ControlEntry> {
         .shift()
         .todo(bean),
         // Transpose (p.40)
-        e("transp.on_set", s, K::Button, "TRANSP ON/SET", 40).todo(bean),
+        e("transp.on_set", s, K::Button, "TRANSP ON/SET", 40).bound("prog_transpose"),
         e("transp.panic", s, K::Button, "PANIC (Shift+Transp)", 40)
             .shift()
             .todo(bean),
