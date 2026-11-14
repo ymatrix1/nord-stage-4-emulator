@@ -54,7 +54,7 @@ pub(super) fn reverb(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             .enumerate()
             .map(|(i, ch)| (ch.label, c.reverb_on && i == c.rev_sel, ch.missing))
             .collect();
-        f.led_row("reverb.type", ty, &leds);
+        f.led_list("reverb.type", ty, &leds, &[2, 1, 0], &[3, 4, 5]);
         let alt = if c.rev_sel >= REVERB_CHORALE_FROM {
             "CHORALE"
         } else {
@@ -98,7 +98,7 @@ pub(super) fn reverb(f: &mut Fx, st: &mut Stage4PanelState, slot: usize) {
             ("BRIGHT", c.rev_tone == Tone::Bright, ""),
             ("DARK", c.rev_tone == Tone::Dark, ""),
         ];
-        f.led_row("reverb.bright_dark", bd, &leds);
+        f.led_list("reverb.bright_dark", bd, &leds, &[], &[0, 1]);
         let tip = "BRIGHT / DARK: click cycles normal, bright, dark (CHORALE replaces it on the engine's single colour setting)";
         if f.button(
             "reverb.bright_dark",

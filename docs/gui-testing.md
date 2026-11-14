@@ -119,6 +119,8 @@ on the instrument.
 
 Round 3 adds frames (`panel/frames.rs`, `widgets/scale.rs`) and needs no new rule: boxes record themselves with the widget probe, so rule `G` keeps every label inside or clear of a box, rule `E` keeps LEDs 4 px from its edge, rule `C` keeps scale numerals off control rectangles and rule `N` off tick rings. Unit tests cover the frame table (`nord-panel`: members exist, frames inside sections; `nord-gui`: boxes do not overlap after nudges), the numerals, the type and timbre names, the keybed LED letters and the contrast floor (`style::dim_legend`, 4.5:1 against slate and red).
 
+Round 4 adds knob numerals (`widgets/scale.rs`) and the Effects variation lists (`bay_effects/lists.rs`) with no new rule. Rule `C` exempts a numeral printed around the tick ring of its own knob (`is_own_numeral`: the text is one of the knob's numerals and lies within 16 px of its probe rectangle). First run with the numerals on 116 collisions (61 C, 44 L, 10 G, 1 V), 0 after names moved below the `0` / `10`, knob bodies shrank, frame pads grew and a few nudges; the lists and piano numerals gave 12 C, 2 E, 2 L, 2 T and 6 G / 4 V respectively, all fixed.
+
 `legibility_allow.txt` lists tolerated violations (empty now; the test also fails on stale
 entries). Run with `NS4_WRITE_COLLISIONS=<file> cargo test -p nord-gui collisions_match` to dump
 the current list. Fixes go into the shared helpers first: `widgets::label_fit` / `fit_size`
@@ -140,6 +142,8 @@ live in `panel/layout_tweaks.rs`, never in the `ASSUMED` photo tables (one excep
 | After round 2 (drawbar numbers below the cap travel, LEDs before legend text, 9.5 px line pitch, nudges) | yes | 0 |
 | Round 3 content added (29 frames, type / timbre names first run: 28; then scale numerals, dial names, drawbar names and numerals: 64 and 43 on the next runs; rules unchanged) | yes | 28 |
 | After round 3 (frame pads, group nudges, scale placement, title positions) | yes | 0 |
+| Round 4 content added (ring numerals, variation lists, piano LED names) | yes | 116 first run |
+| After round 4 (names below numerals, 3 px smaller knobs, frame pads, nudges) | yes | 0 |
 
 ## What each switch changes
 

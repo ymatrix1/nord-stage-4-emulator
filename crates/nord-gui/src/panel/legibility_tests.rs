@@ -27,6 +27,8 @@ pub(super) const BIG_RECT_PX2: f32 = 6000.0;
 const TOL: f32 = 1.0;
 /// Button bezel and LED ring around a control rectangle: labels keep out of it too.
 const BEZEL_PX: f32 = 2.5;
+/// How far (px) a numeral may sit outside the probe rectangle of its knob (tick tip + gap + text).
+const NUMERAL_REACH: f32 = 16.0;
 const ALLOW: &str = include_str!("legibility_allow.txt");
 
 /// One painted text.
@@ -144,7 +146,8 @@ fn pos_key(l: &Lab) -> String {
 }
 
 /// Every violation of the overview panel as a stable one-line key.
-pub(super) fn violations(labs: &[Lab]) -> BTreeSet<String> {
+pub(super) fn violations(a: &Audit) -> BTreeSet<String> {
+    let (labs, recs) = (&a.labs[..], &a.recs[..]);
     let mut v = BTreeSet::new();
     for (i, a) in labs.iter().enumerate() {
         for b in &labs[i + 1..] {
@@ -172,12 +175,27 @@ pub(super) fn violations(labs: &[Lab]) -> BTreeSet<String> {
             continue;
         }
         for l in labs {
-            if !r.contains(l.rect.center()) && overlaps(l.rect, r.expand(BEZEL_PX)) {
+            if !r.contains(l.rect.center())
+                && overlaps(l.rect, r.expand(BEZEL_PX))
+                && !is_own_numeral(recs, &c.id, l)
+            {
                 v.insert(format!("C {} / {}", pos_key(l), c.id));
             }
         }
     }
     v
+}
+
+/// Is `l` a scale numeral printed around the tick ring of knob `id`? It belongs to that knob and
+/// may overlap its rectangle (the tick ring is wider than the body the rectangle covers).
+fn is_own_numeral(recs: &[crate::widgets::probe::Rec], id: &str, l: &Lab) -> bool {
+    use crate::widgets::probe::Kind;
+    crate::widgets::scale::numerals(id).contains(&l.text.as_str())
+        && recs.iter().any(|k| {
+            k.kind == Kind::Knob
+                && k.title == id
+                && k.rect.expand(NUMERAL_REACH).contains_rect(l.rect)
+        })
 }
 
 fn allowed() -> BTreeSet<String> {
@@ -192,7 +210,7 @@ fn allowed() -> BTreeSet<String> {
 #[test]
 fn collisions_match_the_allow_list() {
     let audit = audit_of(None, vec2(3300.0, 900.0));
-    let mut found = violations(&audit.labs);
+    let mut found = violations(&audit);
     found.extend(super::legibility_rules::extra_violations(&audit));
     found.extend(super::legibility_caps::violations(&audit));
     let labs = audit.labs;
