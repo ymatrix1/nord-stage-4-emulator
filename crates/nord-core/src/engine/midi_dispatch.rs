@@ -10,7 +10,8 @@ impl Stage4Engine {
             | MidiEvent::NoteOff { channel, .. }
             | MidiEvent::ControlChange { channel, .. }
             | MidiEvent::ChannelAftertouch { channel, .. }
-            | MidiEvent::ProgramChange { channel, .. } => channel,
+            | MidiEvent::ProgramChange { channel, .. }
+            | MidiEvent::PitchBend { channel, .. } => channel,
         };
         if channel >= 16 {
             return;
@@ -22,17 +23,14 @@ impl Stage4Engine {
                     return;
                 };
                 let mut recipients = 0u8;
-                let is_global_channel = self.global_midi_channel == Some(channel);
                 for layer in LayerId::ALL {
                     if !self.scene.is_layer_active(layer) {
                         continue;
                     }
-                    let is_layer_channel =
-                        self.layer_midi_channels[layer as usize] == Some(channel);
-                    if !is_global_channel && !is_layer_channel {
+                    let Some(route) = self.route_for(layer, channel) else {
                         continue;
-                    }
-                    let split_gain = if is_global_channel && !is_layer_channel {
+                    };
+                    let split_gain = if route == NoteRoute::Global {
                         self.split_router.note_gain(layer, note)
                     } else {
                         1.0
@@ -40,7 +38,13 @@ impl Stage4Engine {
                     if split_gain <= 0.0 {
                         continue;
                     }
+                    let velocity = if route == NoteRoute::Aux {
+                        self.aux_kb.curve.map(velocity)
+                    } else {
+                        velocity
+                    };
                     recipients |= 1 << (layer as u8);
+                    self.clear_held(layer, sounding);
                     self.layer_note_on(layer, sounding, velocity, split_gain);
                 }
                 if recipients != 0 {
@@ -69,30 +73,30 @@ impl Stage4Engine {
                         .any(|counts| counts[note as usize][layer as usize] > 0);
                     if !held_on_any_channel {
                         let sounding = self.sounding_note(channel_idx, note);
-                        self.layer_note_off(layer, sounding);
+                        self.release_or_hold(layer, sounding);
                     }
                 }
             }
             MidiEvent::ControlChange {
                 controller, value, ..
             } => {
+                if self.aux_kb.listens_on(channel) && controller == cc::SUSTAIN_PEDAL {
+                    self.set_sustain_pedal(PedalSource::Aux, value);
+                }
                 if self.global_midi_channel != Some(channel) {
                     return;
                 }
                 let norm = f32::from(value.min(127)) / 127.0;
                 match controller {
                     cc::MOD_WHEEL => self.morph_controllers.mod_wheel = norm,
-                    cc::CONTROL_PEDAL => self.morph_controllers.control_pedal = norm,
+                    cc::CONTROL_PEDAL => self.set_control_pedal(norm),
+                    cc::ORGAN_SWELL => self.set_swell_pedal(norm),
                     cc::DRAWBAR_1_16..=cc::DRAWBAR_9_1 => {
                         let idx = (controller - cc::DRAWBAR_1_16) as usize;
                         let step = ((norm * 8.0).round() as u8).min(8);
                         self.organ_a.drawbars[idx] = step;
                     }
-                    cc::SUSTAIN_PEDAL => {
-                        let down = value >= 64;
-                        self.piano_a.set_damper_pedal(down, value);
-                        self.piano_b.set_damper_pedal(down, value);
-                    }
+                    cc::SUSTAIN_PEDAL => self.set_sustain_pedal(PedalSource::Global, value),
                     cc::SOSTENUTO_PEDAL => {
                         let down = value >= 64;
                         self.piano_a.set_sostenuto_pedal(down, value);
@@ -132,10 +136,24 @@ impl Stage4Engine {
                 }
             }
             MidiEvent::ProgramChange { .. } => {}
+            MidiEvent::PitchBend { value, .. } => {
+                if self.aux_kb.listens_on(channel) {
+                    self.set_pitch_bend(PedalSource::Aux, value);
+                }
+                if self.global_midi_channel == Some(channel) {
+                    self.set_pitch_bend(PedalSource::Global, value);
+                }
+            }
         }
     }
 
     pub(super) fn layer_note_on(&mut self, layer: LayerId, note: u8, velocity: u8, gain: f32) {
+        if let Some(i) = self.extern_index(layer) {
+            // Crossfade gain scales the transmitted velocity; exactly 1.0 outside crossfades.
+            let v = (f32::from(velocity) * gain).round().clamp(1.0, 127.0) as u8;
+            self.extern_note_on(i, note, v);
+            return;
+        }
         match layer {
             LayerId::OrganA => self.organ_a.note_on_with_gain(note, gain),
             LayerId::OrganB => self.organ_b.note_on_with_gain(note, gain),

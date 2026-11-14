@@ -11,7 +11,10 @@
 //! --mode b3          the B3 per-key weight path (`ToneWheelSource::B3Wheels`, spec 3.1.6): wheel
 //!                     tables times the captured `A * W` weights; --drawbars act (the oracle replay of
 //!                     `keydown-b3-c4e4g4.script` has the 16', 5 1/3', 8' and 4' items: `888800000`)
-//! --vibrato N        vox mode: vibrato type 0 (off), 1..3 (V1..V3: Vox depths 0.70, 1.15, 1.76 %)
+//! --mode pipe       the product Pipe2 layer (`ToneWheelSource::ModelDefault` = the bank, no B3
+//!                     pickup calibration, x0.92 output gain); `--weights legacy|firmware` picks the
+//!                     drawbar path (`docs/research/pipe-video-gap.md`)
+//! --vibrato N       vox mode: vibrato type 0 (off), 1..3 (V1..V3: Vox depths 0.70, 1.15, 1.76 %)
 //! --notes 60,64,67    MIDI notes (default C4 E4 G4)       --drawbars 888000000
 //! --frames N          frames to render (default 16384)    --detuned   vibrato level 1: detuned table,
 //!                     stereo-blend lanes in L/R (compare per lane with `organ_oracle_audio.py compare --lanes`)
@@ -145,6 +148,12 @@ fn render_layer(o: &Opts) -> Vec<[f32; 2]> {
             ScannerMode::V2,
             ScannerMode::V3,
         ][usize::from(o.vibrato)];
+    }
+    if o.mode == "pipe" {
+        // The product Pipe2 path: default tone source (the bank), no B3 pickup, x0.92 output gain.
+        organ.model = OrganModel::Pipe2;
+        organ.tonewheel_source = ToneWheelSource::ModelDefault;
+        organ.key_click_enabled = false;
     }
     if o.mode == "b3" {
         organ.model = OrganModel::B3;

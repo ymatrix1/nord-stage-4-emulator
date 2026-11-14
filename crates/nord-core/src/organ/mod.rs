@@ -24,10 +24,14 @@ mod types;
 mod vibrato_bank;
 mod vibrato_link;
 mod vox_bank;
+#[cfg(test)]
+mod vox_bank_tests;
+mod vox_image;
 mod vox_keys;
 mod vox_layer;
 mod vox_output;
 mod vox_shaper;
+mod vox_sines;
 mod vox_source;
 mod weight_state;
 mod weights;
@@ -42,6 +46,8 @@ mod bank_mix_golden;
 mod farfisa_golden;
 #[cfg(test)]
 mod farfisa_source_tests;
+#[cfg(test)]
+mod pipe_lines;
 #[cfg(test)]
 mod vox_golden;
 #[cfg(test)]
@@ -363,7 +369,10 @@ impl OrganLayer {
                 dry = 0.6 * dry + 0.3 * self.farf_bp1_state[0] + 0.25 * self.farf_bp2_state[0];
             }
             OrganModel::Pipe1 | OrganModel::Pipe2 => {
-                // Pipe gentle high-frequency damping
+                // ASSUMED: flat output gain 0.92 (a textbook trim, no firmware source). It shapes
+                // no frequency: the bank + mix path matches the oracle to 0.00 dB per line on three
+                // chords (`pipe_lines.rs`), so it is not the cause of the darkness against the video
+                // (`docs/research/pipe-video-gap.md`).
                 dry *= 0.92;
             }
         }
