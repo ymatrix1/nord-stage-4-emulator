@@ -31,7 +31,7 @@ The **Nord Stage 4 DAW Plugin** (`nord-plugin`) brings the 3-engine, 7-layer Nor
 
 Release archives (see [RELEASING.md](RELEASING.md)) ship with this file and a README that states the plugin is not DAW-verified; update both when a host test result is recorded.
 
-This is a target compatibility matrix, not a report of completed DAW validation. Automated tests cover the plugin code and engine integration; they do not replace loading the built plugin in each host.
+This is a target compatibility matrix, not a report of completed DAW validation. Section 7 lists exactly what was verified headlessly (no DAW), with command lines, and the manual smoke test that remains. Automated tests cover the plugin code and engine integration; they do not replace loading the built plugin in each host.
 
 ---
 
@@ -108,3 +108,135 @@ On macOS, AUv2 packaging is performed via `clap-wrapper`:
 cargo build --release -p nord-plugin
 clap-wrapper --clap target/release/libnord_plugin.dylib --output ~/Library/Audio/Plug-Ins/Components/NordStage4.component --au
 ```
+
+---
+
+## 7. What Was Verified (B13, 2026-11-14)
+
+No DAW was available. Everything below ran headlessly on one Windows 11 development machine (x86-64, release builds, `rustc 1.91` for the workspace, `1.95` for `clap-validator`). The numbers come from that machine only; timing varies by 10 to 20 percent between runs, so ranges are given. **No Reaper, Bitwig or other DAW check was run**; the host rows in section 3 stay "not host-tested".
+
+### 7.1 Audio performance (`ns4 bench`)
+
+Workload (`crates/nord-core/src/bench.rs`): 7 layers sounding (Scene II), 88 keys held (MIDI 21..=108, velocity 100), all 7 FX racks fully on (Mod 1 A-Pan, Mod 2 Chorus, Twin amp with drive, 3-band EQ, compressor, analog ping-pong delay with LP filter and chorus feedback FX, Hall reverb), master compressor on, sources spread over all four outputs (`process_block_multi`), 128-frame blocks at 48 kHz (deadline 2.667 ms), 200 warm-up blocks, 2000 timed blocks.
+
+```bash
+cargo build --release -p nord-core
+./target/release/ns4 bench                     # worst case, 4 outputs (--stereo: process_block)
+./target/release/ns4 bench --blocks 1000 --breakdown
+```
+
+| Measure | Result (several runs) | PRD budget ([PRD](PRD.md) section 5) |
+|---|---|---|
+| Worst case, mean CPU per 128-frame block | 3.6 to 4.5 ms (p50 3.4 ms, p99 7 to 21 ms) | 0.8 ms: **not met** |
+| Realtime factor, worst case | 0.59x to 0.75x (one core overloaded by 33 to 70 percent) | 1.0x minimum |
+| Typical program (Scene I, 3 layers, 10 keys, default FX) | 0.95 to 1.2 ms per block (about 2.2x to 2.8x realtime) | 0.8 ms: **not met** |
+| 7 silent layers, no FX (idle floor) | about 0.5 ms (the 91 organ tonewheels run continuously) | |
+| One layer, 88 keys held, FX off | Organ 0.9 to 1.05 ms, Piano 0.66 to 1.0 ms, Synth 0.9 to 1.2 ms (each includes the 0.5 ms idle floor) | |
+| FX racks (7 chains, all on) | about 1.0 ms on top of the layers; the cabinet voicing (4 biquads per channel) is the largest part | |
+| Plugin `process()` incl. sync of 811 parameters (Scene I, 88 keys) | 1.6 ms per block (`PLUGIN_PROCESS_MS`, `host_lifecycle` test) | |
+
+Verdict: **the PRD figure of 0.8 ms per block is not met** on this machine, neither in the worst case (about 4.5x to 5.5x over) nor with a typical program (about 1.2x to 1.5x over). A typical program still runs at more than twice realtime. The worst case (every key of an 88-key keybed held on all 7 layers with every FX on) overloads one core; real playing holds 10 to 20 notes. No hotspot was found that is clearly wasteful: a `lto = "fat"` / `codegen-units = 1` build gave no gain, flushing denormals changed nothing (bit-identical output hash, same time), and the per-voice cost (about 140 ns per synth voice-frame) is the filter and oscillator model. Nothing was optimised in this change; see TD-14 in [TECH_DEBT](TECH_DEBT.md).
+
+The output hash that `ns4 bench` prints is a pure function of the engine state (`bench::tests::the_hash_is_deterministic_and_the_output_finite_and_audible`), so an optimisation can be checked for bit-identical output by comparing it before and after: `ns4 bench` (2000 blocks, 4 outputs) prints `0xf24749d9ef778acb` at this commit. A quick budget guard runs in `cargo test` (`bench::tests::a_block_stays_within_a_generous_budget`: 20 ms in release, 500 ms in debug); it catches order-of-magnitude regressions only.
+
+### 7.2 Zero allocations in the audio path
+
+Counting `#[global_allocator]` tests (alloc, free and realloc all count; armed only around the audio call; setup and warm-up unarmed):
+
+| Test | What it runs | Result |
+|---|---|---|
+| `nord-core/tests/no_alloc_audio_path.rs::worst_case_polyphony_with_fx_and_multi_out_never_touches_the_heap` | The 7.1 workload for 1500 blocks with key retrigger, sustain pedal, tempo changes, `process_block_multi` and `process_block` alternating | 0 allocator calls |
+| `nord-core/tests/no_alloc_audio_path.rs::process_block_with_telemetry_publishing_never_touches_the_heap` (existing) | 400 blocks with MIDI and telemetry | 0 |
+| `nord-plugin/tests/host_lifecycle.rs::process_never_touches_the_heap_over_a_long_worst_case_run` | `NordStage4Plugin::process` for 1500 blocks: sync of all 811 parameters, event routing, on-screen keybed queue, 88 keys held, Scene I | 0 |
+
+```bash
+cargo test --release -p nord-core --test no_alloc_audio_path
+cargo test --release -p nord-plugin --test host_lifecycle
+```
+
+Locks are not counted by these tests. The plugin `process()` path takes no `Mutex` (the only one in `crates/nord-plugin/src` is in the unit-test mock of `editor/write.rs`). The plugin test cannot reach the 7-layer scene because `layer_scene_ii` is a host parameter that an external crate cannot set; the 7-layer case is the engine test.
+
+### 7.3 GUI frame time (`frame_cost_tests.rs`, `full_panel_frame_time_probe`, `panorama_frame_time_probe`)
+
+CPU only: `egui::Context::run` (layout, labels, group frames, legibility frames) plus `Context::tessellate` at the given pixels per point, for the full 3120 x 840 point panel. GPU rasterisation is not measured (no GPU in headless tests), so this is the CPU part of the B13 "2x-scale frame under 4 ms" budget.
+
+```bash
+cargo test --release -p nord-gui --lib frame_cost -- --nocapture --test-threads=1
+cargo test --release -p nord-gui --lib frame_time_probe -- --nocapture --test-threads=1
+```
+
+| View | `run` | `tessellate` | Total | Vertices | Before PR #306 (same test, same machine) |
+|---|---|---|---|---|---|
+| Full panel, 1x | 0.7 to 1.1 ms | 1.7 to 2.3 ms | 2.5 to 3.2 ms | 39,446 | 2.53 ms, 36,914 vertices |
+| Full panel, 2x | 0.7 to 1.0 ms | 1.9 to 2.2 ms | 2.6 to 3.2 ms | 47,760 | 2.88 ms, 47,712 vertices |
+| Panorama, 1x | 0.7 to 2.0 ms | 1.4 to 2.3 ms | 2.1 to 4.2 ms | 36,078 | 2.13 ms, 33,522 vertices |
+| Panorama, 2x | 0.8 to 1.1 ms | 1.6 to 1.9 ms | 2.3 to 3.0 ms | 42,422 | 2.68 ms, 41,846 vertices |
+
+"Before PR #306" is the first parent of merge `d735d510` (one run each). The frames and labels of #306 added about 215 clipped shapes (2,051 to 2,266) and about 2,500 vertices at 1x (7 percent) and no measurable frame time: the differences are inside the run-to-run noise. No regression, nothing to fix.
+
+The older probes (`run` only, no tessellation) give 0.64 to 0.70 ms for the full panel and 0.57 to 0.71 ms for the panorama. The CPU side of a 2x-scale frame is under 4 ms in 11 of the 12 measured passes (3 runs of the four views; one panorama 1x pass reached 4.2 ms during a noisy run). The margin is thin and the GPU cost and the host's own repaint are not included, so the "under 4 ms" criterion is **not fully verified**. The panel repaints on a 33 ms timer plus on interaction (`panel/mod.rs`), the standalone app asks for 16 ms (`main.rs`); a "repaint only on change" audit was not done.
+
+### 7.4 CLAP: `clap-validator` 0.4.1
+
+Built from source outside the repository with the second installed toolchain (`cargo +1.95.0 install --git https://github.com/free-audio/clap-validator --locked --root <dir>`; the tool needs `rustc 1.95`; it is not on crates.io or PyPI). Nothing from it is committed. The validator needs a `.clap` file, which is the release DLL renamed:
+
+```bash
+cargo build --release -p nord-plugin
+cp target/release/nord_plugin.dll NordStage4.clap        # Linux: libnord_plugin.so
+clap-validator validate NordStage4.clap
+```
+
+Result after the fix in this change (plugin id `org.opennord.nord-stage-4`): **44 tests run, 30 passed, 4 failed, 1 warning, 9 skipped.**
+
+| Group | Result |
+|---|---|
+| Factory, descriptor, features, create/destroy | passed |
+| Audio: basic in/out of place, varying sample rates 1 kHz to 768 kHz, varying and random block sizes 1 to 16k, reset and re-activate, notes, inconsistent notes, sleep/process status, constant mask | passed |
+| Param: set events, cookies, wrong namespace, fuzz (basic, bounds, sample accurate, modulation), conversions, default values | passed |
+| Transport: null, fuzz, fuzz sample accurate | passed |
+| State: `state-invalid-empty` | passed |
+| `process-note-wildcard` | **crashed before the fix, passes now** (below) |
+| `scan-time` | warning: 117 to 130 ms to scan, validator limit 100 ms |
+| `state-invalid-random` | **crashed (abort)**: upstream, below |
+| `state-reproducibility-basic`, `-binary`, `-buffered` | **failed**: upstream, below |
+| Skipped | 64-bit audio (not supported), denormals (no audio input), `audio-ports-activation`, `configurable-audio-ports`, preset discovery (not implemented), `scan-rtld-now` (Unix only) |
+
+What the failures are:
+
+- **`process-note-wildcard` (our bug, fixed).** CLAP wildcard note events (key `-1`) arrive as note 255; `Stage4Engine::handle_midi` indexed its 128-entry hold table with it and panicked on the audio thread (a host crash). Notes, controllers and program numbers above 127 are now dropped in `crates/nord-core/src/engine/midi_dispatch.rs` and, for the multitimbral path that bypasses the engine router, in `crates/nord-plugin/src/midi.rs`. Regression tests: `out_of_range_data_bytes_are_dropped_without_panicking`, `wildcard_keys_are_dropped_in_every_routing_mode`, `hostile_note_events_do_not_panic_and_output_stays_finite`.
+- **`state-reproducibility-*` (upstream nih-plug).** The validator reports that 619 parameter values changed on `state.load` without a `params.rescan(VALUES)` request (for example Delay Feedback 0.35 to 0.182). The values do change to the saved ones, which is the correct restore; the nih-plug CLAP wrapper (rev `de421011`) does not send the rescan notification. The validator stops at that check, so the rest of the test (save, load, save again, compare bytes) did not run. Not fixable in this crate. Real hosts re-read parameters after loading state; not checked in a host.
+- **`state-invalid-random` (upstream nih-plug).** `ext_state_load` in the wrapper reads an 8-byte length from the stream and calls `Vec::with_capacity(length)`; random bytes give a length near 1e18 and the allocation aborts the process. Only a corrupt or hostile state triggers it. Not fixable here without patching nih-plug.
+- **`scan-time`.** 117 to 130 ms against a 100 ms advisory limit; the plugin builds 811 parameters at scan time.
+
+### 7.5 Headless host simulation (`crates/nord-plugin/tests/host_lifecycle.rs`)
+
+Drives the `Plugin` trait the way nih-plug's wrappers do (initialize, process per block with sample-timed events, reset, re-initialize). Checks: activation at 44.1, 48, 88.2, 96 and 192 kHz with blocks of 1 to 1024 frames and finite output; sample-accurate note-on offset inside a block; reset and re-activation at another rate and in offline mode; hostile note events (keys 0, 127, 128, 200, 255, channels up to 255) never panic and the output stays finite; the parameter map has unique ids, defaults in range and a text round trip for all 811 parameters; the persisted editor-state field survives a save and load; zero allocations (7.2). Parameter automation and the wrapper's state save and load are **not** exercised here (nih-plug does not let an external crate set parameter values or call its state code); `clap-validator` is the evidence for those.
+
+### 7.6 Not verified
+
+| Item | Why |
+|---|---|
+| Any DAW (Reaper, Bitwig, Live, Cubase, Studio One, FL Studio, Logic) | No host available; section 3 stays "not host-tested" |
+| VST3 | No VST3 SDK validator is installable with cargo or pip (it needs the SDK and CMake plus a C++ toolchain). The release DLL contains the `GetPluginFactory` string, which is weak evidence only; the VST3 bundle (`cargo xtask bundle nord-plugin --release`) was not built or validated |
+| Standalone wrapper (`nord-plugin-standalone`) | Needs an audio device; not run |
+| AUv2 | Needs macOS and `clap-wrapper` |
+| Automation lanes, project save/load, editor open/close, HiDPI, window resize in a host | Need a host |
+| Multitimbral routing across 7 tracks, transport sync with a moving playhead | Need a host (the tempo is read from the transport in `process`; unit test only) |
+| 2x GPU frame time, repaint-only-on-change audit | Need a GPU run |
+| Linux and macOS builds of the plugin | Not built in this change |
+
+### 7.7 Manual smoke-test checklist (Reaper, Bitwig)
+
+Run once per host and record host name, version, OS, date and the result of every line in `docs/research/` (the editor checklist in [plugin-editor.md](plugin-editor.md) covers the panel itself):
+
+1. Build the bundles: `cargo xtask bundle nord-plugin --release`; copy `target/bundled/nord-plugin.clap` and `.vst3` to the host's plugin folders; rescan. Record the scan time and whether the plugin appears in both formats.
+2. Insert on an instrument track; play MIDI notes from a keyboard or the piano roll: sound on all three engines (Scene I default), no clicks, no stuck notes after stop.
+3. Set the buffer to 64, 128, 512 and 2048 frames and the sample rate to 44.1, 48 and 96 kHz: no dropouts with a 10-note chord; watch the host CPU meter with 88 keys held (the all-layers worst case is expected to overload, see 7.1).
+4. Open and close the editor 10 times, resize it, move it between monitors of different DPI: no crash, the panel stays sharp.
+5. Automate `master_level` and an Organ drawbar with a write lane; play back; the panel knob follows. Move a parameter from the host's generic UI: the panel follows.
+6. Save the project, close the host, reopen: all parameter values, the editor size and the layer scene return. Duplicate the track: the copy keeps its own state.
+7. Set the MIDI routing mode to `MultitimbralPerLayer` and send notes on channels 1 to 7: each reaches its own layer (Organ A, B, Piano A, B, Synth A, B, C).
+8. Change the project tempo and play a synced delay or arpeggio: it follows the host tempo.
+9. Bounce 30 seconds offline with notes and the sustain pedal: the file is finite and matches a realtime bounce within level noise.
+10. Remove the plugin during playback and with the editor open: no crash.
+11. Run `clap-validator validate` on the installed `.clap` and the VST3 validator on the `.vst3` if available; attach the output.

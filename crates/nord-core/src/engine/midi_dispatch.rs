@@ -2,6 +2,18 @@
 
 use super::*;
 
+/// MIDI data bytes are 7 bit. A host can still hand over a wildcard key (CLAP `-1`, seen as 255)
+/// or a corrupt controller number; indexing the per-note tables with one would panic on the audio
+/// thread (found by `clap-validator` `process-note-wildcard`), so such events are dropped.
+fn data_bytes_in_range(event: MidiEvent) -> bool {
+    match event {
+        MidiEvent::NoteOn { note, .. } | MidiEvent::NoteOff { note, .. } => note < 128,
+        MidiEvent::ControlChange { controller, .. } => controller < 128,
+        MidiEvent::ProgramChange { program, .. } => program < 128,
+        MidiEvent::ChannelAftertouch { .. } | MidiEvent::PitchBend { .. } => true,
+    }
+}
+
 impl Stage4Engine {
     /// Handles a real-time MIDI event across the 4-zone split router, Morph matrix, and 7 layers.
     pub fn handle_midi(&mut self, event: MidiEvent) {
@@ -14,7 +26,7 @@ impl Stage4Engine {
             | MidiEvent::ProgramChange { channel, .. }
             | MidiEvent::PitchBend { channel, .. } => channel,
         };
-        if channel >= 16 {
+        if channel >= 16 || !data_bytes_in_range(event) {
             return;
         }
         match event {
@@ -230,5 +242,44 @@ mod tests {
             velocity: 100,
         });
         assert_eq!(e.note_recipients_for_test(0, 60), 0);
+    }
+
+    /// Regression for `clap-validator` `process-note-wildcard`: a wildcard key (255) used to
+    /// index past the 128-entry hold table and panic on the audio thread.
+    #[test]
+    fn out_of_range_data_bytes_are_dropped_without_panicking() {
+        let mut e = Stage4Engine::new(48_000.0);
+        for note in [128u8, 200, 255] {
+            e.handle_midi(MidiEvent::NoteOn {
+                channel: 0,
+                note,
+                velocity: 100,
+            });
+            e.handle_midi(MidiEvent::NoteOff {
+                channel: 0,
+                note,
+                velocity: 0,
+            });
+        }
+        e.handle_midi(MidiEvent::ControlChange {
+            channel: 0,
+            controller: 255,
+            value: 10,
+        });
+        e.handle_midi(MidiEvent::ProgramChange {
+            channel: 0,
+            program: 200,
+        });
+        let mut l = [0.0f32; 64];
+        let mut r = [0.0f32; 64];
+        e.process_block(&mut l, &mut r);
+        assert!(l.iter().chain(&r).all(|s| *s == 0.0), "nothing may sound");
+        // A valid note still works afterwards.
+        e.handle_midi(MidiEvent::NoteOn {
+            channel: 0,
+            note: 60,
+            velocity: 100,
+        });
+        assert_ne!(e.note_recipients_for_test(0, 60), 0);
     }
 }
