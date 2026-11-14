@@ -1,7 +1,7 @@
 ---
 # ns4-aivy
 title: 'GUI OLED: Program home section rows with icons and source names'
-status: todo
+status: completed
 type: task
 created_at: 2026-11-14T14:50:23Z
 updated_at: 2026-11-14T14:50:23Z
@@ -18,8 +18,8 @@ The Program home matches the real unit.
 
 ## Acceptance Criteria
 
-- [ ] Icon column and source names per section row.
-- [ ] Warning glyph for a missing sound.
+- [x] Icon column and source names per section row (`oled_icons`, `section_rows`; own 8 px marks, text from x = 12).
+- [x] Warning glyph for a missing sound (`Piano not found` row when no piano is loaded).
 
 ## Out of Scope
 
@@ -27,4 +27,5 @@ Firmware icon bitmaps (draw our own).
 
 ## Summary of Changes
 
-(pending)
+- `oled_icons.rs` (new): organ / piano / synth / warning marks drawn as shapes in an 8 px cell; the painter puts the row text at x = 12 / 128 of the width after an icon.
+- `oled_home::section_rows`: icon marker + source name (`B3 888000000`, `Pearl Upright  L`, `Pure Saw`), `Piano not found` with the warning icon for an empty piano name; `strip_marks` writes the icons out for the tooltip.
