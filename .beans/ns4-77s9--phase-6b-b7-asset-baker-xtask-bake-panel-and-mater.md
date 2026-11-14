@@ -31,9 +31,9 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
-Proof, Blender and asset side only (branch `feat/blender-panel-proof`):
-- `assets/blender/build_proof.py`: headless Blender 5.2 scene with an original fluted knob cap and wedge fader cap, red lacquer and slate plates with slot, one top-left sun, 14 deg tilted ortho camera.
-- `tools/panel_assets.py` (+ tests): render driver, 8x8 filmstrip stitcher, SHA-256 manifest and verify, size report, preview sheet.
-- `assets/panel/proof/`: 1x and 2x PNGs, `manifest.json`, `preview_2x.png`.
-- Measured: one of each asset 420 KB (1x) / 1.28 MB (2x); full-panel estimate 1.56 MB / 4.62 MB PNG (counts `ASSUMED` until B2). See `docs/research/panel-blender-proof.md`.
-- Not done: egui comparison (needs B4), `xtask bake-panel`, tiny-skia layers, theme tokens in code, buttons, full set.
+Proof, Blender and asset side (PR 84, reworked in v2 on `feat/blender-panel-proof-v2` after the owner found the first renders too far from the hardware):
+- `assets/blender/` (`build_proof.py`, `proof_parts.py`, `proof_materials.py`): headless Blender 5.2 scene with an original 20-flute knob (pointer wrapping down the side), separate arc-ring layer, black/white/grey stepped fader caps with one shared shadow layer, red and slate plates; one top-left sun, 30 deg ortho camera.
+- `assets/panel/theme_samples.json`: colours and proportions measured on the reference (numbers only).
+- `tools/panel_assets.py`, `tools/panel_compare.py` (+ tests): render driver, filmstrip stitcher, SHA-256 manifest and verify, size report, composed preview, private side-by-side helper.
+- Measured: one knob style + all caps + plates 503 KB (1x) / 1.47 MB (2x); full-panel estimate 1.82 MB / 5.13 MB PNG (counts `ASSUMED` until B2). See `docs/research/panel-blender-proof.md`, which also lists what still differs from the reference.
+- Not done: egui comparison (needs B4), `xtask bake-panel`, tiny-skia layers, theme tokens in code, buttons, seamless plates, full set.

@@ -2,62 +2,98 @@
   "version": 1,
   "files": {
     "knob_filmstrip_1x.png": {
-      "sha256": "63eb3003bc10b715801bdb74591862999a14d115ffca564da86e6fb2d3d8f0d7",
-      "bytes": 372214,
+      "sha256": "3b06d73a7adc0936a3ea66f62db50bbbf2300f5af5cef878ba00ef05eb1f26b3",
+      "bytes": 433541,
       "width": 768,
       "height": 768
     },
-    "fader_cap_1x.png": {
-      "sha256": "52ac7fd3e431cc395d4fd12a36c389c4bbb84ee7c74882b5ea0253302ab13ec2",
-      "bytes": 5928,
+    "knob_ring_1x.png": {
+      "sha256": "0d5b253d3abfac9f707ac11fd5ef809bc3c6705902832dc0c411cb9a7b730bc2",
+      "bytes": 4264,
       "width": 96,
       "height": 96
     },
     "fader_shadow_1x.png": {
-      "sha256": "0600c6dc1a5fac8a9adb9ad236b923ffc100781b43c5df4b3df984d83e35fd69",
-      "bytes": 5194,
+      "sha256": "420ae8b1315944085bef2f28bc4ea7eb467952e150afe474de4ef90bf512db95",
+      "bytes": 5918,
+      "width": 96,
+      "height": 96
+    },
+    "fader_cap_black_1x.png": {
+      "sha256": "388e29f8b9748f40edbfed371780163ceec681caaa3d5882b356404f60c14e1c",
+      "bytes": 5637,
+      "width": 96,
+      "height": 96
+    },
+    "fader_cap_white_1x.png": {
+      "sha256": "62fa9ac5fb996675664b1fee2241117b3357655d665f620ef24663bb055c6f79",
+      "bytes": 5737,
+      "width": 96,
+      "height": 96
+    },
+    "fader_cap_grey_1x.png": {
+      "sha256": "db3a74dbf3ab1b06c0b1d3823af48dc2e1dfb4a1b53b4c7c4b9af9bc189c3b57",
+      "bytes": 5677,
       "width": 96,
       "height": 96
     },
     "plate_red_1x.png": {
-      "sha256": "18b2072257f8096d6188768d5615fa9b2e965270f3a7949ad3c4e5aa51627bc6",
-      "bytes": 12916,
+      "sha256": "7885404505288e9ef489fe77a6f7ca7ee69334e6b846f334b53c7c8fb5f72458",
+      "bytes": 14152,
       "width": 128,
       "height": 128
     },
     "plate_slate_slot_1x.png": {
-      "sha256": "a14928857232a5c28ba8f984804af09313a29cc303f726dfc852e80aaa351d4b",
-      "bytes": 23856,
+      "sha256": "ae366c1af908a102f7591653a75cc7e2b8ae026c42f7bd3139c57940be56805f",
+      "bytes": 28210,
       "width": 128,
       "height": 256
     },
     "knob_filmstrip_2x.png": {
-      "sha256": "5ec2c5d413de453baeec789591c0ce429b7f18065eea9c581cb7d406c88ce33f",
-      "bytes": 1091749,
+      "sha256": "332d30b36ddcb120315f93c5769d2968721d061f2c445cf4e559b832de9e1964",
+      "bytes": 1211104,
       "width": 1536,
       "height": 1536
     },
-    "fader_cap_2x.png": {
-      "sha256": "0ebcba7eae412b71b66cb6916bbc6ae8575cd2e2761da13a2df7197be819a19e",
-      "bytes": 17116,
+    "knob_ring_2x.png": {
+      "sha256": "b36d4e8425746ae2e49946a92fca9a4601d418d4d8103556ddb39f72f3eba8b1",
+      "bytes": 11432,
       "width": 192,
       "height": 192
     },
     "fader_shadow_2x.png": {
-      "sha256": "57a092058ab6a07cfe7cbe2bac391964d27f320d4aed3e809bd7ab35ae44f11d",
-      "bytes": 13905,
+      "sha256": "9c9787b0259ca122a7379fcdf9b79e6c9b2c6a37926b85b5cd18062a0c66e155",
+      "bytes": 16323,
+      "width": 192,
+      "height": 192
+    },
+    "fader_cap_black_2x.png": {
+      "sha256": "e0d1698101e0e1e69d8b2160fcdebceb4b26619ee1ba7fc58cd2653b37eca473",
+      "bytes": 17063,
+      "width": 192,
+      "height": 192
+    },
+    "fader_cap_white_2x.png": {
+      "sha256": "c06e1acb1b38bce53596b602f1892aff09246db84723dd1fef383739bfad0456",
+      "bytes": 16976,
+      "width": 192,
+      "height": 192
+    },
+    "fader_cap_grey_2x.png": {
+      "sha256": "cbb2f633f9cf73df1abe3d471fe7e558a5641fbc9c65bc7001ea6827458f018d",
+      "bytes": 17131,
       "width": 192,
       "height": 192
     },
     "plate_red_2x.png": {
-      "sha256": "ee34f8d495393e70b6b042829ea65d161929afc74e13ae2df5d7252982bb1a13",
-      "bytes": 53402,
+      "sha256": "8a927aa5a2ab3be82bf27f1debd32831c6d15664aab421c1930cebe7be453e13",
+      "bytes": 56589,
       "width": 256,
       "height": 256
     },
     "plate_slate_slot_2x.png": {
-      "sha256": "318e4c9247673d6146e5efde5e90900286de9da9a2728c146831d4b31d9b7ab3",
-      "bytes": 106894,
+      "sha256": "eb88e839c869a42f84d2a3b155d3a1aa7df1c02c22f1d7f4014f1322f2aecf86",
+      "bytes": 119584,
       "width": 256,
       "height": 512
     }

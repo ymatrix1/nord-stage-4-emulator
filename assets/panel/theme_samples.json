@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "status": "MEASURED",
+  "source": "Owner-supplied reference render of the Organ section and a Master Level knob close-up (private, local only, never committed; D16). Only the numbers below are stored.",
+  "method": "Median, 10th and 90th percentile of sRGB 8-bit values over small flat patches (about 50x50 px) chosen by eye on flat surface areas, away from text, LEDs and edges. 'use' is the value the Blender materials are calibrated to. Surfaces carry baked lighting, so these are appearance targets, not albedo.",
+  "colors": {
+    "panel_red": {"median": [134, 31, 41], "p10": [112, 21, 31], "p90": [151, 43, 53], "use": [134, 31, 41], "note": "red chassis strip left of the organ section; spec token chassis_red_primary is #8E1B1F = (142, 27, 31)"},
+    "panel_slate": {"median": [55, 64, 76], "p10": [50, 60, 71], "p90": [62, 71, 83], "use": [55, 64, 76], "note": "dark slate between modules; spec token module_slate_bg is #323D47 = (50, 61, 71)"},
+    "header_silver": {"median": [179, 191, 205], "p10": [135, 128, 134], "p90": [184, 195, 209], "use": [179, 191, 205], "note": "section header bar; spec token module_header_bar is #A3AFB9 = (163, 175, 185)"},
+    "slot_floor": {"median": [27, 26, 26], "p10": [1, 1, 1], "p90": [30, 28, 29], "use": [27, 26, 26], "note": "fader slot interior"},
+    "cap_black_top": {"median": [57, 53, 50], "p10": [47, 43, 40], "p90": [80, 76, 73], "use": [57, 53, 50], "note": "black drawbar cap top face; bevel highlights reach p90"},
+    "cap_white_top": {"median": [233, 232, 228], "p10": [233, 232, 228], "p90": [238, 236, 232], "use": [233, 232, 228], "note": "white drawbar cap top face"},
+    "cap_grey_top": {"median": [155, 151, 147], "p10": [113, 112, 108], "p90": [159, 155, 152], "use": [155, 151, 147], "note": "grey layer-fader cap top face"},
+    "knob_top": {"median": [63, 59, 55], "p10": [63, 59, 55], "p90": [63, 59, 55], "use": [63, 59, 55], "note": "Master Level knob top face"},
+    "knob_side": {"median": [47, 41, 39], "p10": [36, 28, 26], "p90": [56, 49, 47], "use": [47, 41, 39], "note": "knob flute sides, right of centre"},
+    "knob_highlight": {"median": [72, 68, 65], "p10": [63, 59, 55], "p90": [80, 76, 73], "use": [72, 68, 65], "note": "soft highlight on the knob top, upper left"},
+    "ring_white": {"median": [245, 233, 231], "p10": [144, 36, 47], "p90": [250, 244, 242], "use": [250, 244, 242], "note": "arc indicator ring; median is tinted by red edge pixels, p90 used"}
+  },
+  "proportions": {
+    "note": "Ratios read by eye and pixel counting on the same references; sizes are relative so no pixel data is kept.",
+    "knob_height_over_diameter": 0.6,
+    "knob_flute_count": 20,
+    "knob_pointer_width_over_diameter": 0.11,
+    "knob_ring_outer_over_cap_radius": 1.15,
+    "knob_ring_thickness_over_diameter": [0.04, 0.14],
+    "knob_ring_sweep_deg": 270,
+    "fader_cap_width_over_knob_diameter": 0.85,
+    "fader_slot_width_over_cap_width": 0.18
+  }
+}
