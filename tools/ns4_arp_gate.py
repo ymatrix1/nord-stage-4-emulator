@@ -26,8 +26,15 @@ and sets the dial back to 0 (the "preset edited" marker). `dial` replays both ro
 
     uv run --with unicorn python tools/ns4_arp_gate.py gates CODE docs/research/arp-preset-table.csv
     uv run --with unicorn python tools/ns4_arp_gate.py dial CODE
+    uv run --with unicorn python tools/ns4_arp_gate.py clock CODE
 
 with `CODE` = `target/fw_unpacked/bank0_CODE.bin`.
+
+**Clock (fourth pass).** `clock` replays the Glue rate update `0xC011A51C` and checks the model of
+the free-running arp clock (`0xC01E6368`): a phase of `2**19` units per firmware beat at the
+`RATE_TABLE` BPM, in a time base of 24000 units per second. See section 8 of the research note for
+what this proves about the step and slot duration and what it does not (the record player itself
+was not found).
 
 Evidence and limits: `docs/research/synth-arp-patterns.md` section 7.
 """
@@ -46,6 +53,12 @@ UPDATE = 0xC010FDAC
 OBJ = 0x80040000  # fake arp / glue object
 RECORDS = 0x80060000
 SLOT_EIGHTHS = 4  # one slot = half a step = 4 eighths of a step
+UPDATE_RATE = 0xC011A51C  # Glue rate update: dial value -> clock rate `[clock+0x38]` (double)
+RATE_TABLE = 0xC02BBF98 + 0x458  # 128 ints: the rate dial's firmware BPM per raw value 0..127
+TIME_BASE_HZ = 24000  # `0x80001DC0` counter: timeouts 2400 / 600 / 4800 = 100 / 25 / 200 ms
+PHASE_PER_BEAT = 1 << 19  # `0x41200000` constant of the rate formula (524288.0)
+FREE_RUN_GRID = 0xC02BBF98  # step grid of the free-running arp: count 8, entry k = k * 2**18
+GRID_ENTRY_PHASE = 1 << 18  # grid spacing = half a firmware beat
 SLOTS_PER_STEP = 2
 NOTE_ON = (0, 1)
 NOTE_OFF = 3
@@ -183,6 +196,73 @@ def restore(emu, saved: tuple[int, int, int, int]) -> list[tuple[int, int]]:
     return writes
 
 
+def rate_per_unit(table_bpm: int) -> float:
+    """Clock phase advance per time-base unit for a rate-table entry (the firmware formula).
+
+    `i2d(entry) / 60.0 * 524288.0 / 24000.0` (the three constants of `0xC011A51C`).
+    """
+    return table_bpm / 60 * PHASE_PER_BEAT / TIME_BASE_HZ
+
+
+def display_bpm(table_bpm: int) -> float:
+    """Quarter-note BPM the panel shows: the table holds twice that (ns4decode's list: raw 0 is
+    "16 bpm" and the table starts at 32; the duplicate entries sit on its "N.A." raw values)."""
+    return table_bpm / 2
+
+
+def grid_seconds(table_bpm: int) -> float:
+    """Seconds between two points of the free-running grid (`2**18` phase units)."""
+    return GRID_ENTRY_PHASE / (rate_per_unit(table_bpm) * TIME_BASE_HZ)
+
+
+def read_rate_table(code: bytes, count: int = 128) -> list[int]:
+    """The 128 firmware rate entries from the code image (`0xC0000000` load base)."""
+    base = RATE_TABLE - 0xC0000000
+    return [int.from_bytes(code[base + 4 * i : base + 4 * i + 4], "little") for i in range(count)]
+
+
+def read_grid(code: bytes, address: int = FREE_RUN_GRID) -> list[int]:
+    """Grid phases `{count; 0; entries as 64-bit}` at `address` (`0xC02BBF98`: 0, 2**18, ...)."""
+    base = address - 0xC0000000
+    count = int.from_bytes(code[base : base + 4], "little")
+    return [
+        int.from_bytes(code[base + 8 + 8 * k : base + 16 + 8 * k], "little") for k in range(count)
+    ]
+
+
+def clock_rate(emu, dial: int) -> float:
+    """Runs the Glue rate update for `dial`; returns the free-running clock rate `[clock+0x38]`."""
+    import struct
+
+    from arm_emu import SENTINEL, STACK_TOP
+
+    glue, arp, clock = OBJ, OBJ + 0x10000, OBJ + 0x18000
+    emu.write32(0x80001DC0, 100000)  # time base low/high words
+    emu.write32(0x80001DC4, 0)
+    emu.write32(glue + 0x64, 0)  # layer 0
+    emu.write32(glue + 0xCC, 0)  # not Master Clock synced
+    emu.write32(glue + 0xC8, dial << 16)  # dial value, 16.16
+    emu.write32(0xC054CBD0 + 4, arp)  # arp pattern object of layer 0
+    emu.write32(0xC054CC10 + 4, clock)  # clock object of layer 0
+    emu.write32(arp + 0xC, 0)  # not triplet
+    emu.set_reg(0, glue)
+    emu.set_reg(13, STACK_TOP - 0x1000)
+    emu.set_reg(14, SENTINEL)
+    emu.run(UPDATE_RATE, SENTINEL, 200_000)
+    lo, hi = emu.read32(clock + 0x38), emu.read32(clock + 0x3C)
+    return struct.unpack("<d", struct.pack("<II", lo, hi))[0]
+
+
+def check_clock(emu, table: list[int]) -> list[str]:
+    """Differences between the formula and the replayed firmware update (empty when equal)."""
+    problems = []
+    for dial, entry in enumerate(table):
+        got, want = clock_rate(emu, dial), rate_per_unit(entry)
+        if abs(got - want) > 1e-9 * max(1.0, want):
+            problems.append(f"dial {dial}: firmware {got!r} formula {want!r}")
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs the firmware image
     import arm_emu
 
@@ -195,8 +275,23 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs the 
     g.add_argument("csv", type=Path)
     d = sub.add_parser("dial")
     d.add_argument("code", type=Path)
+    c = sub.add_parser("clock")
+    c.add_argument("code", type=Path)
     ns = ap_.parse_args(argv)
     emu = arm_emu.load_firmware(ns.code)
+    if ns.cmd == "clock":
+        table = read_rate_table(ns.code.read_bytes())
+        problems = check_clock(emu, table)
+        print("\n".join(problems) or f"all {len(table)} dial values: formula == firmware update")
+        grid = read_grid(ns.code.read_bytes())
+        spacing = sorted({b - a for a, b in zip(grid, grid[1:], strict=False)})
+        print(f"free-run grid: {len(grid)} points, spacing {spacing}")
+        for dial in (0, len(table) - 1):
+            print(
+                f"dial {dial}: {display_bpm(table[dial])} bpm, "
+                f"grid point every {grid_seconds(table[dial]):.5f} s"
+            )
+        return 1 if problems else 0
     if ns.cmd == "gates":
         rows = ap.read_csv(ns.csv)
         problems = check_gates(emu, rows)
