@@ -112,6 +112,8 @@ pub enum ProgramEdit {
     },
     /// Recall a stored program (undoable).
     Recall(Box<ProgramState>),
+    /// One menu item write (System, Sound, Output, Aux KB, Pedal, MIDI, Extern menus).
+    Settings(super::SettingsEdit),
 }
 
 fn set_delta(p: &mut MorphParameter, source: MorphSource, depth: f32) {
@@ -191,6 +193,10 @@ impl ProgramEdit {
             Self::Recall(state) => {
                 engine.begin_undoable(nord_core::engine::UndoOp::ProgramChange);
                 engine.apply_state(state.clone());
+            }
+            Self::Settings(edit) => {
+                // An id no engine field backs is ignored (the menu only sends Bound items).
+                let _ = edit.apply(engine);
             }
         }
     }

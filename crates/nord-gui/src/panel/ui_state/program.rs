@@ -13,6 +13,7 @@ use crate::panel::bay_program::model::{ListMode, ProgView, Screen};
 use crate::panel::bay_program::morph::MorphUi;
 use crate::panel::bay_program::split::SplitUi;
 use crate::panel::bay_program::store::{PendingSnapshot, ProgLoc, StoreFlow, UserLibrary};
+use crate::panel::ui_state::MenuUi;
 use crossbeam_channel::{Receiver, Sender};
 use nord_core::engine::ProgramState;
 use nord_core::morph::{LayerId, MorphSource};
@@ -25,6 +26,8 @@ use std::collections::BTreeMap;
 pub struct ProgramUi {
     /// What the OLED shows.
     pub screen: Screen,
+    /// Page, focus and values of the menu screens (System .. Extern).
+    pub menu: MenuUi,
     pub view: ProgView,
     /// PRESET NAME (Shift+Prog View): show the sound source instead of the preset name.
     pub preset_name: bool,
@@ -105,6 +108,7 @@ impl Default for ProgramUi {
         let (reply_tx, reply_rx) = crossbeam_channel::unbounded();
         Self {
             screen: Screen::Home,
+            menu: MenuUi::default(),
             view: ProgView::Name,
             preset_name: false,
             solo: false,

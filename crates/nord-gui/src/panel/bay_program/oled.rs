@@ -33,7 +33,7 @@ impl OledText {
     pub fn plain(&self) -> String {
         let mut s = format!("{}\n{}\n", self.big, self.sub);
         for r in &self.rows {
-            s.push_str(r);
+            s.push_str(r.trim_start_matches(super::menu_screen::DIM));
             s.push('\n');
         }
         if self.soft.iter().any(|l| !l.is_empty()) {
@@ -269,11 +269,7 @@ pub fn compose(ui: &ProgramUi, sum: &Summary) -> OledText {
     match ui.screen {
         Screen::Home => home(ui, sum),
         Screen::List => list(ui),
-        Screen::Menu(m) => t(
-            m.title(),
-            format!("manual p.{}", m.manual_page()),
-            vec!["Not supported yet".into(), "(follow-up ns4-ymci)".into()],
-        ),
+        Screen::Menu(m) => super::menu_screen::compose(ui, m),
         Screen::StoreTo | Screen::StoreAs => store(ui),
         Screen::Split => split(ui),
         Screen::Clock => t(

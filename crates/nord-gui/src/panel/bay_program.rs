@@ -18,6 +18,10 @@ mod coverage_tests;
 pub mod frame;
 pub mod interact;
 pub mod list;
+pub mod menu_actions;
+pub mod menu_screen;
+#[cfg(test)]
+mod menu_tests;
 pub mod model;
 pub mod morph;
 pub mod name;

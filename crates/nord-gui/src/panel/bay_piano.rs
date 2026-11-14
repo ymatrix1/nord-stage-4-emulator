@@ -5,7 +5,9 @@
 //! the Piano Select and acoustics groups and the model overlays. Behaviour lives in
 //! `piano_logic.rs`, widgets in `piano_widgets.rs`.
 
+use super::aux_flag::{aux_flag_from_telemetry, aux_led};
 use super::bay_piano_select::render_select;
+use super::kb_zone;
 use super::layout_px::{rect_or_empty, to_px};
 use super::piano_logic as logic;
 use super::piano_widgets as w;
@@ -99,10 +101,7 @@ fn draw_strip(
     pr.resp.on_hover_text(
         "Piano ON/OFF. Hold roughly half a second for SOLO (only the Piano sounds while held).",
     );
-    state.piano_ui.mark_inv(
-        "piano.on",
-        "ON: the inventory lists section ON/OFF as unsupported (ns4-h7he); the layer switches below still act",
-    );
+    state.piano_ui.mark("piano.on");
     state.piano_ui.mark("piano.solo");
 
     // FX focus LED mirrors the focused section.
@@ -224,21 +223,17 @@ fn draw_strip(
         w::ladder(p, r(ladder), 11, (shown * 11.0).round() as usize);
         state.piano_ui.mark(ladder);
 
-        // Aux KB LED: the engine has no Aux keyboard routing.
-        let ar = r(aux);
-        let live = state.telemetry.get().is_some();
-        let aux_on = state.telemetry.aux(2 + l);
-        w::mini_led(p, ar.center(), aux_on, LED_GREEN, LED_GREEN_DIM, 2.4, !live);
-        let resp = ui.interact(ar.expand(2.0), ui.id().with(aux), Sense::hover());
-        resp.on_hover_text("AUX KB: lit while the Aux keyboard plays this layer (engine state)");
-        if live {
-            state.piano_ui.mark(aux);
-        } else {
-            state.piano_ui.mark_dim(
-                aux,
-                "AUX KB: no Aux keyboard routing in the engine (ns4-ymci)",
-            );
+        // Aux KB LED: the layer is played by the aux keyboard (click toggles the flag).
+        let lit = aux_flag_from_telemetry(&state.telemetry, 2 + l, state.piano_ui.aux[l]);
+        let tip = "AUX KB: this layer is played by the aux keyboard (click to switch)";
+        if aux_led(ui, r(aux), aux, lit, tip) {
+            state.piano_ui.aux[l] = !state.piano_ui.aux[l];
+            out.push(PianoEdit::AuxKb {
+                layer: l as u8,
+                on: state.piano_ui.aux[l],
+            });
         }
+        state.piano_ui.mark(aux);
     }
 
     draw_octave_and_zone(ui, p, o, state, shift, out);
@@ -276,7 +271,7 @@ fn draw_octave_and_zone(
         if let Some(g) = pr.gesture {
             match w::trigger(g, shift, true, true) {
                 Trigger::Shifted => {
-                    logic::zone_step(state, delta > 0);
+                    logic::zone_step(state, delta > 0, out);
                     state.piano_ui.shift_latch = false;
                 }
                 _ => logic::octave_step(state, delta, out),
@@ -286,13 +281,10 @@ fn draw_octave_and_zone(
         w::inside(p, rect, &format!("OCT {sign}"), false);
         w::legend(p, rect, &format!("ZONE {sign}"), true);
         pr.resp.on_hover_text(format!(
-            "OCTAVE SHIFT {sign} of the focused layer. Shift+tap = KB ZONE {sign} (zone LED moves; the engine has no keyboard-zone split yet, bean ns4-h7he)."
+            "OCTAVE SHIFT {sign} of the focused layer. Shift+tap = KB ZONE {sign} (moves the layer to another keyboard zone; zones act once a Split is on)."
         ));
         state.piano_ui.mark(oct_id);
-        state.piano_ui.mark_inv(
-            zone_id,
-            "KB ZONE: engine has no keyboard-zone assignment (ns4-h7he)",
-        );
+        state.piano_ui.mark(zone_id);
     }
 
     let l = state.piano_ui.layer();
@@ -305,18 +297,15 @@ fn draw_octave_and_zone(
     );
 
     let zr = r("piano.zone_leds");
-    let zone = usize::from(state.piano_ui.kb_zone[l]);
-    w::led_strip(p, zr, 4, |i| i == zone, (LED_GREEN, LED_GREEN_DIM), true);
+    let lits = kb_zone::lits(state.piano_ui.kb_zone[l]);
+    w::led_strip(p, zr, 4, |i| lits[i], (LED_GREEN, LED_GREEN_DIM), false);
     let resp = ui.interact(
         zr.expand(2.0),
         ui.id().with("piano_zone_leds"),
         Sense::hover(),
     );
-    resp.on_hover_text("KB ZONE LEDs: zone assignment is kept in the UI only (no keyboard-zone split in the engine, ns4-h7he)");
-    state.piano_ui.mark_inv(
-        "piano.zone_leds",
-        "KB ZONE LEDs: engine has no keyboard-zone assignment (ns4-h7he)",
-    );
+    resp.on_hover_text("KB ZONE LEDs: the keyboard zones the focused layer plays on");
+    state.piano_ui.mark("piano.zone_leds");
 }
 
 #[cfg(test)]

@@ -85,7 +85,13 @@ STAGE_CASES = ROOT / "docs/research/data/synth-stage-oracle-cases.json"
 
 def test_saw_and_pulse_stages_reproduce_the_recorded_oracle_words() -> None:
     data = json.loads(STAGE_CASES.read_text())["stages"]
-    models = {"0x1215fb": m.stage_saw, "0x121b99": m.stage_pulse}
+    models = {
+        "0x1215fb": m.stage_saw,
+        "0x121b99": m.stage_pulse,
+        "0x120cd0": m.stage_sine,
+        "0x121183": m.stage_triangle,
+        "0x12169d": m.stage_shape_saw,
+    }
     assert set(data) == set(models)
     for name, model in models.items():
         assert len(data[name]) == 6
@@ -95,7 +101,7 @@ def test_saw_and_pulse_stages_reproduce_the_recorded_oracle_words() -> None:
                     ln["pitch"],
                     ln["phase1"],
                     ln["phase2"],
-                    0,
+                    ln["shape_a"],
                     0,
                     ln["ratio1"],
                     ln["ratio2"],

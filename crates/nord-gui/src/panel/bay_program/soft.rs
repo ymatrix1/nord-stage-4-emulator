@@ -66,6 +66,7 @@ impl ProgramUi {
             Screen::LayerInit => self.layer_init_choice(n),
             Screen::Copy => self.copy_choice(n),
             Screen::Paste => self.paste_choice(n),
+            Screen::Menu(_) => self.menu_soft(n),
             _ => Vec::new(),
         }
     }

@@ -2,6 +2,7 @@
 //!
 //! Spec: `docs/specs/visual-style-and-panel.md`. One file per bay (Phase 6b B4).
 
+mod aux_flag;
 mod bay_effects;
 mod bay_master;
 mod bay_organ;
@@ -10,12 +11,16 @@ mod bay_piano_select;
 mod bay_program;
 mod bay_synth;
 mod ctl;
+mod kb_zone;
 mod keybed;
 pub mod layout_px;
 mod organ_drawbars;
 mod organ_logic;
 #[cfg(test)]
 mod organ_master_tests;
+mod organ_preset;
+#[cfg(test)]
+mod organ_rewire_tests;
 mod organ_strip;
 mod organ_widgets;
 #[cfg(test)]

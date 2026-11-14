@@ -265,6 +265,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] ANALOG wave to strip stage table (45 waves, 34 stage routines, `data/synth-wave-types.csv`, [synth-wave-stages](research/synth-wave-stages.md)); Smooth Lead SHAPE wave 0 = stage `0x1212D3`
 - [x] Stage `0x1212D3` (ANALOG SHAPE) bit exact in Python (40-bit registers, 320 of 320 oracle words), Rust `synth/fw_shape.rs`, opt-in `strip_shape` ([synth-wave-models](research/synth-wave-models.md))
 - [x] Saw `0x1215FB` and square / pulse `0x121B99` stages bit exact in Python (320 of 320 oracle words each); preset category / wave == edit-id domain verified on 578 factory layers
+- [x] Sine `0x120CD0`, triangle `0x121183`, Shape Saw `0x12169D` stages bit exact in Python (320 of 320 oracle words each)
 - [ ] Remaining stage models ( then SAW / SQUARE / TRIANGLE / SUB / SYNC stages) bit exact in Python, then opt-in Rust; synth parity remainder: `0x1257B2`, the knob to strip word maps (ASSUMED), `kFltType` and `osc_wave` to stage selection, then flip the defaults and re-baseline `render_hash` (TD-11)
 - [ ] Pulse and triangle shapes, amp envelope smoothing
 - [ ] Hardware sweeps for the remaining ASSUMED scales ([synth-hardware-sweep-plan](research/synth-hardware-sweep-plan.md), OQ7)

@@ -58,6 +58,7 @@ mod tests_program;
 mod tests_routing;
 mod undo;
 mod undo_ops;
+mod zone_assign;
 
 pub use clipboard::{Clip, ClipboardError, LayerClip};
 pub use fx_params::FxParams;
@@ -75,6 +76,7 @@ pub use snapshot::ProgramState;
 pub use telemetry::{Telemetry, TelemetrySink, WORDS as TELEMETRY_WORDS};
 pub use telemetry_cell::TelemetryCell;
 pub use undo::UndoOp;
+pub use zone_assign::zone_code;
 #[cfg(test)]
 mod tests_sharing;
 #[cfg(test)]

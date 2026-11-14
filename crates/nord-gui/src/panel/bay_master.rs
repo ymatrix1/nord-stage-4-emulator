@@ -3,14 +3,11 @@
 //! Controls sit at their `nord_panel::layout` positions. Shift functions (ANGLE on STOP MODE,
 //! CLOSE MIC on ORGAN) share the base button and are printed as legends below it.
 
-use super::ctl::{gesture_button, led_small, mark, missing, shift_legend, tag, Face};
+use super::ctl::{gesture_button, led_small, mark, shift_legend, tag, Face};
 use super::layout_px::rect_or_empty;
 use super::prelude::*;
 use crate::audio::OrganEdit;
 use nord_panel::behaviour::Trigger;
-
-/// Bean tracking the missing Rotary ORGAN routing and ANGLE behaviour.
-const ROTARY_BEAN: &str = "ns4-e3zs";
 
 fn send_rotary(state: &Stage4PanelState, audio: &AudioHandle) {
     audio.send_command(AudioCommand::Organ(OrganEdit::Rotary {
@@ -135,13 +132,12 @@ fn render_rotary_buttons(
     audio: &AudioHandle,
 ) {
     let rc = |id: &str| rect_or_empty(id, o);
-    let dim = missing("Rotary ORGAN routing", ROTARY_BEAN);
 
-    // ORGAN (route to rotary, dimmed) with CLOSE MIC on Shift.
+    // ORGAN (route the organ through the rotary speaker) with CLOSE MIC on Shift.
     let organ = rc("rotary.organ");
     let face = Face {
         led: Some(state.organ_ui.rotary_organ),
-        dim: Some(&dim),
+        tip: "ORGAN: route the Organ through the rotary speaker. Shift+tap: CLOSE MIC",
         ..Face::black()
     };
     match gesture_button(
@@ -152,7 +148,12 @@ fn render_rotary_buttons(
         true,
         face,
     ) {
-        Some(Trigger::Primary) => state.organ_ui.rotary_organ = !state.organ_ui.rotary_organ,
+        Some(Trigger::Primary) => {
+            state.organ_ui.rotary_organ = !state.organ_ui.rotary_organ;
+            audio.send_command(AudioCommand::Organ(OrganEdit::RotaryOrgan(
+                state.organ_ui.rotary_organ,
+            )));
+        }
         Some(Trigger::Shifted) => {
             state.organ_ui.close_mic = !state.organ_ui.close_mic;
             audio.send_command(AudioCommand::Organ(OrganEdit::CloseMic(
@@ -171,7 +172,7 @@ fn render_rotary_buttons(
         None,
     );
 
-    // STOP MODE with ANGLE on Shift (ANGLE dimmed).
+    // STOP MODE with ANGLE on Shift.
     let stop = rc("rotary.stop_mode");
     let face = Face {
         led: Some(state.rotary_stop),
@@ -192,18 +193,20 @@ fn render_rotary_buttons(
         }
         Some(Trigger::Shifted) => {
             state.organ_ui.rotary_angle_wide = !state.organ_ui.rotary_angle_wide;
+            audio.send_command(AudioCommand::Organ(OrganEdit::RotaryAngle {
+                wide: state.organ_ui.rotary_angle_wide,
+            }));
         }
         _ => {}
     }
     tag(painter, stop, "STOP MODE", 7.0);
-    let angle_dim = missing("Rotary ANGLE control", ROTARY_BEAN);
     shift_legend(
         ui,
         stop,
         "rotary.angle",
         "ANGLE",
         Some(state.organ_ui.rotary_angle_wide),
-        Some(&angle_dim),
+        None,
     );
 
     // SLOW/STOP - FAST button and its two LEDs.

@@ -118,6 +118,21 @@ impl MenuId {
         Self::ALL.get(usize::from(n).checked_sub(1)?).copied()
     }
 
+    /// The matching menu of the data model (`nord_panel::menus`).
+    pub fn model(self) -> nord_panel::menus::Menu {
+        use nord_panel::menus::Menu;
+        match self {
+            Self::System => Menu::System,
+            Self::Sound => Menu::Sound,
+            Self::Organize => Menu::Organize,
+            Self::AuxKb => Menu::AuxKb,
+            Self::Output => Menu::Output,
+            Self::Pedal => Menu::Pedal,
+            Self::Midi => Menu::Midi,
+            Self::Extern => Menu::Extern,
+        }
+    }
+
     /// Page title as printed in the manual.
     pub fn title(self) -> &'static str {
         match self {
@@ -155,7 +170,7 @@ pub enum Screen {
     Home,
     /// LIST view of the program catalog (Shift+dial).
     List,
-    /// A menu page (title only: contents are a follow-up).
+    /// A menu page (`ProgramUi::menu` holds the page, focus and values).
     Menu(MenuId),
     /// STORE PROGRAM TO: choose the location.
     StoreTo,
@@ -196,6 +211,8 @@ impl Screen {
             Self::LayerInit => ["All", "Org AB", "Pno", "Syn"],
             Self::Copy => ["Layer", "Fx", "Morph", "Prog"],
             Self::Paste => ["Paste", "Swap", "", ""],
+            // Item rows 1-4; `menu_screen` blanks the rows a page does not have.
+            Self::Menu(_) => ["1", "2", "3", "4"],
             _ => ["", "", "", ""],
         }
     }
@@ -263,6 +280,11 @@ mod tests {
         assert!(Screen::Split.has_soft_buttons());
         assert!(!Screen::Home.has_soft_buttons());
         assert_eq!(Screen::Split.soft_labels()[1], "Low");
+        assert!(Screen::Menu(MenuId::Midi).has_soft_buttons());
+        for m in MenuId::ALL {
+            let model = m.model();
+            assert_eq!(nord_panel::menus::pages_of(model)[0].menu, model);
+        }
     }
 
     #[test]

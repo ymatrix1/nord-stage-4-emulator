@@ -35,13 +35,11 @@ const fn sf(id: &'static str, label: &'static str) -> Option<ShiftFn> {
     })
 }
 
-const MENU_NOTE: &str = "Menu contents are a follow-up (ns4-ymci); the page title opens";
-
 const fn menu(id: &'static str, label: &'static str) -> Option<ShiftFn> {
     Some(ShiftFn {
         id,
         label,
-        support: Support::Unsupported(MENU_NOTE),
+        support: Support::Full,
     })
 }
 
