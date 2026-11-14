@@ -32,11 +32,11 @@ macro_rules! mirror_enum {
 
 mirror_enum!(
     /// Host mirror of [`Mod1Type`].
-    Mod1Sel => Mod1Type { Off = "Off", Tremolo = "Tremolo", AutoPan = "Auto Pan", RingMod = "Ring Mod", Wah = "Wah" }
+    Mod1Sel => Mod1Type { Off = "Off", Tremolo = "Tremolo", AutoPan = "Auto Pan", RingMod = "Ring Mod", Wah = "Wah", AutoWah = "Auto Wah", Pump = "Pump" }
 );
 mirror_enum!(
     /// Host mirror of [`Mod2Type`].
-    Mod2Sel => Mod2Type { Off = "Off", Chorus = "Chorus", Flanger = "Flanger", Phaser = "Phaser", Vibe = "Vibe" }
+    Mod2Sel => Mod2Type { Off = "Off", Chorus = "Chorus", Flanger = "Flanger", Phaser = "Phaser", Vibe = "Vibe", Spin = "Spin", Ensemble = "Ensemble" }
 );
 mirror_enum!(
     /// Host mirror of [`AmpCabinet`].
@@ -221,8 +221,8 @@ mod tests {
 
     #[test]
     fn mirror_enums_cover_every_core_variant() {
-        assert_eq!(Mod1Sel::variants().len(), 5);
-        assert_eq!(Mod2Sel::variants().len(), 5);
+        assert_eq!(Mod1Sel::variants().len(), 7);
+        assert_eq!(Mod2Sel::variants().len(), 7);
         assert_eq!(CabinetSel::variants().len(), 7);
         assert_eq!(SubdivisionSel::variants().len(), 4);
         assert_eq!(DelayFilterSel::variants().len(), 4);
@@ -230,6 +230,10 @@ mod tests {
         assert_eq!(ReverbModelSel::variants().len(), 7);
         assert_eq!(ReverbColorSel::variants().len(), 4);
         assert_eq!(Mod1Type::from(Mod1Sel::Wah), Mod1Type::Wah);
+        assert_eq!(Mod1Type::from(Mod1Sel::AutoWah), Mod1Type::AutoWah);
+        assert_eq!(Mod1Type::from(Mod1Sel::Pump), Mod1Type::Pump);
+        assert_eq!(Mod2Type::from(Mod2Sel::Spin), Mod2Type::Spin);
+        assert_eq!(Mod2Type::from(Mod2Sel::Ensemble), Mod2Type::Ensemble);
         assert_eq!(AmpCabinet::from(CabinetSel::HpFilter), AmpCabinet::HpFilter);
         assert_eq!(
             DelayFeedbackFx::from(DelayFxSel::Space),
