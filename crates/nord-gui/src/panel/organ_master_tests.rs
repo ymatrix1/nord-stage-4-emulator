@@ -162,6 +162,10 @@ fn hold_on_a_layer_button_reaches_sustped() {
     let mut sim = Sim::new();
     sim.hold("organ.layer.a", 0.7);
     assert!(sim.state.organ_ui.sustped[0]);
+    assert_eq!(
+        sim.organ_edits(),
+        vec![OrganEdit::Sustped { layer: 0, on: true }]
+    );
     assert!(
         sim.state.organ_a_active,
         "hold does not switch the layer off"
