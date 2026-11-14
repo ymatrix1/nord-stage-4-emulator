@@ -20,7 +20,7 @@ PR 147 left the Farfisa processor unwired, the B3 Bass table unported and 9 fact
 - [x] Unit tests, docs and ROADMAP in sync
 
 ## Out of Scope
-Bit-exact 0x122B85 / 0x122296 models, B3 Bass key-down weights.
+Bit-exact 0x122B85 / 0x122296 models (B3 Bass: see ns4-4wzo).
 
 ## Summary of Changes
 See docs/research/engine-routing.md s7 and docs/research/organ-farfisa-bass.md s9.

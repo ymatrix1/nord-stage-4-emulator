@@ -32,6 +32,9 @@ impl ProgramUi {
         if self.on_organize_page() {
             return self.organize_soft(n);
         }
+        if self.on_preset_organize_page() {
+            return self.preset_organize_soft(n);
+        }
         match self.menu.soft(usize::from(n).saturating_sub(1)) {
             SoftResult::Action(item) if item.id == RESET_ALL => self.menu_reset(),
             SoftResult::Action(_) => {
@@ -159,10 +162,10 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_action_says_so() {
+    fn an_action_without_behaviour_says_so() {
         let mut u = ProgramUi::default();
-        u.open_menu(MenuId::Organize);
-        u.page(1, false); // Preset Organize has no engine behind it yet
+        u.open_menu(MenuId::Midi);
+        u.page(9, false); // MIDI overview: its only action is a display shortcut
         assert!(u.menu_soft(1).is_empty());
         assert_eq!(u.message.as_ref().unwrap().0, "Not supported yet");
     }
