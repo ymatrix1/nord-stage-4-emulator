@@ -97,16 +97,12 @@ impl Stage4Engine {
                         self.organ_a.drawbars[idx] = step;
                     }
                     cc::SUSTAIN_PEDAL => self.set_sustain_pedal(PedalSource::Global, value),
+                    // CC66 / CC67 stand for the TP-2 Middle / Left pedals; the defaults
+                    // (Sostenuto / Una Corda) behave exactly as the direct piano calls did.
                     cc::SOSTENUTO_PEDAL => {
-                        let down = value >= 64;
-                        self.piano_a.set_sostenuto_pedal(down, value);
-                        self.piano_b.set_sostenuto_pedal(down, value);
+                        self.triple_pedal(TripleUnit::Tp2, TriplePedal::Middle, value)
                     }
-                    cc::SOFT_PEDAL => {
-                        let down = value >= 64;
-                        self.piano_a.set_soft_pedal(down, value);
-                        self.piano_b.set_soft_pedal(down, value);
-                    }
+                    cc::SOFT_PEDAL => self.triple_pedal(TripleUnit::Tp2, TriplePedal::Left, value),
                     cc::SYNTH_FILTER_CUTOFF => {
                         for m in &mut self.synth_cutoff_morph {
                             m.base = norm;

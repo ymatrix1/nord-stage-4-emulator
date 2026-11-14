@@ -102,6 +102,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "ped", group = "Pedals")]
     pub pedals: crate::aux_pedal_params::PedalBank,
 
+    /// Triple Pedal assignments and Sustain Pedal Type.
+    #[nested(id_prefix = "pedx", group = "Pedal Assign")]
+    pub pedal_assign: crate::pedal_assign_params::PedalAssignParams,
+
     /// Aux KB enable, channel, curve and layer assignment.
     #[nested(id_prefix = "auxkb", group = "Aux KB")]
     pub aux_kb: crate::aux_pedal_params::AuxKbParams,
@@ -350,6 +354,7 @@ impl Default for Stage4Params {
             program: crate::program_params::ProgramParams::default(),
             synth_mod: crate::synth_mod_params::SynthModBank::default(),
             pedals: crate::aux_pedal_params::PedalBank::default(),
+            pedal_assign: crate::pedal_assign_params::PedalAssignParams::default(),
             aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
@@ -624,6 +629,7 @@ impl Stage4Params {
         self.synth_mod.sync_to_engine(engine);
         self.aux_kb.sync_to_engine(engine);
         self.pedals.sync_to_engine(engine);
+        self.pedal_assign.sync_to_engine(engine);
         self.synth_gate.sync_to_engine(engine);
         self.organ_layers.sync_to_engine(engine);
         self.layer_fx_extra.sync_to_engine(engine);

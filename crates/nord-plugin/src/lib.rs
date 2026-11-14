@@ -19,6 +19,7 @@ pub mod organ_extra_params;
 pub mod organ_params;
 pub mod param_snapshot;
 pub mod params;
+pub mod pedal_assign_params;
 pub mod piano_extra_params;
 pub mod piano_params;
 pub mod program_params;
