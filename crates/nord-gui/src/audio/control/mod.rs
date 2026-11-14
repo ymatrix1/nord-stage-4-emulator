@@ -55,7 +55,7 @@ impl Slot {
 
 /// The shadow engine, the Undo / Redo snapshots and the channel to the audio thread.
 pub struct ProgramControl {
-    pub(super) shadow: Stage4Engine,
+    pub(super) shadow: Box<Stage4Engine>,
     master_vol: f32,
     undo: Slot,
     redo: Slot,
@@ -70,7 +70,7 @@ impl ProgramControl {
     pub fn new(sample_rate: f32, to_audio: Sender<AudioCommand>) -> Self {
         let (ret_tx, ret_rx) = bounded(RETURN_CAPACITY);
         Self {
-            shadow: standalone_engine(sample_rate),
+            shadow: Box::new(standalone_engine(sample_rate)),
             master_vol: 0.85,
             undo: Slot::Empty,
             redo: Slot::Empty,

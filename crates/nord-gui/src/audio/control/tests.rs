@@ -10,7 +10,7 @@ use nord_core::morph::{LayerId, MorphSource};
 /// A control thread plus a live engine that applies what the queue delivers.
 struct Rig {
     control: ProgramControl,
-    live: Stage4Engine,
+    live: Box<Stage4Engine>,
     rx: Receiver<AudioCommand>,
     vol: f32,
     delivered: Vec<&'static str>,
@@ -21,7 +21,7 @@ impl Rig {
         let (tx, rx) = bounded(256);
         Self {
             control: ProgramControl::new(48_000.0, tx),
-            live: standalone_engine(48_000.0),
+            live: Box::new(standalone_engine(48_000.0)),
             rx,
             vol: 0.85_f32,
             delivered: Vec::new(),
@@ -265,7 +265,7 @@ fn midi_controllers_reach_the_shadow_but_notes_do_not() {
         note: 60,
         velocity: 100,
     }));
-    let mut shadow = r.control.shadow().clone();
+    let mut shadow = Box::new(r.control.shadow().clone());
     let energy: f32 = (0..512).map(|_| shadow.render_frame()[0].abs()).sum();
     assert_eq!(
         energy, 0.0_f32,
