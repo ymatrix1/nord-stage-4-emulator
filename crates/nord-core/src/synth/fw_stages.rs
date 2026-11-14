@@ -11,6 +11,7 @@
 
 use super::fw_shape::signed_phase;
 use super::fw_super1::super1_sample;
+use super::fw_sine3::shape_sine3_core;
 use super::fw_sine_hp::{shape_sine_hp_core, OutputHighPass};
 use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
 use super::gain_dezip::SY_FRAME_RATE_HZ;
@@ -37,6 +38,8 @@ pub enum FwStage {
     ShapeSineGain,
     /// SHAPE SINE wave 5 (stage `0x122F1F`, resonant sine).
     ShapeSineRes,
+    /// SHAPE SINE wave 3 (stage `0x12377D`, warp plus two band-limited cubes).
+    ShapeSine3,
     /// SHAPE SINE wave 4 (stage `0x120DAB`, folded sine with an output high pass).
     ShapeSineHp,
 }
@@ -54,6 +57,7 @@ impl FwStage {
             (4, 1) => Some(Self::ShapeSineFold),
             (4, 2) => Some(Self::ShapeSineGain),
             (4, 5) => Some(Self::ShapeSineRes),
+            (4, 3) => Some(Self::ShapeSine3),
             (4, 4) => Some(Self::ShapeSineHp),
             _ => None,
         }
@@ -192,6 +196,7 @@ impl FwStageState {
             FwStage::ShapeSineFold => shape_sine_fold(t, i_sy, ctrl),
             FwStage::ShapeSineGain => shape_sine_gain(t, i_sy, ctrl),
             FwStage::ShapeSineRes => shape_sine_res(t, i_sy, ctrl),
+            FwStage::ShapeSine3 => shape_sine3_core(t, i_sy, ctrl),
             FwStage::ShapeSineHp => self.hp.process(shape_sine_hp_core(t, i_sy, ctrl)),
             FwStage::Super1 => super1_sample(&mut self.phases, dt, i_sy, ctrl),
             FwStage::Multi => {
@@ -292,7 +297,11 @@ mod tests {
             FwStage::from_category_wave(4, 4),
             Some(FwStage::ShapeSineHp)
         );
-        assert_eq!(FwStage::from_category_wave(4, 3), None);
+        assert_eq!(
+            FwStage::from_category_wave(4, 3),
+            Some(FwStage::ShapeSine3)
+        );
+        assert_eq!(FwStage::from_category_wave(4, 6), None);
         assert_eq!(FwStage::from_category_wave(3, 0), None);
         assert_eq!(FwStage::from_category_wave(2, 1), None);
     }
@@ -309,6 +318,7 @@ mod tests {
             FwStage::ShapeSineFold,
             FwStage::ShapeSineGain,
             FwStage::ShapeSineRes,
+            FwStage::ShapeSine3,
             FwStage::ShapeSineHp,
         ] {
             let (mut a, mut b) = (FwStageState::default(), FwStageState::default());

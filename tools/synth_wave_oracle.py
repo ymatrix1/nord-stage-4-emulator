@@ -28,6 +28,7 @@ if __package__ in (None, ""):
 import synth_stage_noise as noise
 import synth_stage_shape_sine as shape_sine
 import synth_stage_shape_sine2 as shape_sine2
+import synth_stage_shape_sine3 as shape_sine3
 import synth_stage_shapes as shapes
 import synth_stage_super1 as super1
 import synth_stage_unison as unison
@@ -51,6 +52,7 @@ STAGE_SHAPE_SINE5 = 0x122F1F
 STAGE_SHAPE_SINE2 = 0x1232A5
 STAGE_SHAPE_SINE1 = 0x1235C9
 STAGE_SHAPE_SINE4 = 0x120DAB
+STAGE_SHAPE_SINE3 = 0x12377D
 STAGE_MULTI = 0x121C54
 STAGE_SUPER1 = 0x121E9D
 UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1)
@@ -86,6 +88,7 @@ MODELS = {
     STAGE_SHAPE_SINE2: shape_sine.stage_shape_sine_2,
     STAGE_SHAPE_SINE1: shape_sine.stage_shape_sine_1,
     STAGE_SHAPE_SINE4: shape_sine2.stage_shape_sine_4,
+    STAGE_SHAPE_SINE3: shape_sine3.stage_shape_sine_3,
     STAGE_MULTI: unison.stage_multi,
     STAGE_SUPER1: super1.stage_super1,
 }

@@ -13,6 +13,7 @@ import synth_stage_noise as noise  # noqa: E402
 import synth_stage_record as rec  # noqa: E402
 import synth_stage_shape_sine as shape_sine  # noqa: E402
 import synth_stage_shape_sine2 as sine2  # noqa: E402
+import synth_stage_shape_sine3 as sine3  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
 import synth_stage_super1 as super1  # noqa: E402
 import synth_stage_unison as unison  # noqa: E402
@@ -33,6 +34,7 @@ MODELS = {
     "0x122f1f": shape_sine.stage_shape_sine_5,
     "0x120dab": sine2.stage_shape_sine_4,
     "0x121e9d": super1.stage_super1,
+    "0x12377d": sine3.stage_shape_sine_3,
 }
 
 
@@ -167,3 +169,29 @@ def test_golden5_file_is_what_the_generator_prints() -> None:
 
     path = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
     assert (path / "tests_fw_stage_golden5.rs").read_text() == g5.rust()
+
+
+def test_shape_sine_3_setup_laws_at_the_idle_spread() -> None:
+    f, s5 = m.f2u(0.01), m.f2u(0.5)
+    g, ra, rb, k, r7, c, shift = sine3.setup(f, s5)
+    assert 0.0 < float(g) < 1.5
+    # vr = 0.75 (1 - 5.5 f) at the idle spread; rA, rB are 1 / (1 -+ vr)
+    vr = 0.75 * (1 - 5.5 * float(m.ld(f)))
+    assert abs(float(ra) - 1 / (1 - vr)) < 1e-5
+    assert abs(float(rb) - 1 / (1 + vr)) < 1e-5
+    assert abs(float(c) - 2 / 3.141592653589793 * vr) < 1e-6
+    assert abs(shift - vr * 2**31) < 2**9
+    assert abs(float(r7) - 50.0) < 1e-3
+    assert float(k) > 0.0
+
+
+def test_shape_sine_3_warp_selects_the_lower_slope_below_the_knee() -> None:
+    ra, rb = m.X(2), m.X(1, 2)
+    assert sine3.warp_y(m.X(-3, 4), ra, rb) == m.X(1, 2)  # (a + 1) rA = 0.5 < 1: lower slope
+    assert sine3.warp_y(m.X(0), ra, rb) == m.X(-1, 2)  # (a + 1) rA = 2 >= 1: (a - 1) rB
+
+
+def test_shape_sine_3_golden_has_96_rows() -> None:
+    import synth_stage_golden5 as g5
+
+    assert len(g5.sine3_rows()) == 96

@@ -25,6 +25,7 @@ mod fw_filter;
 mod fw_filter_table_d;
 mod fw_filter_tables;
 mod fw_shape;
+mod fw_sine3;
 mod fw_sine_hp;
 mod fw_sine_warps;
 mod fw_stages;
