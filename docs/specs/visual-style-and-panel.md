@@ -191,3 +191,23 @@ First measured output of the D15 baker: one knob filmstrip and one fader cap wit
 | Camera | orthographic, 14 deg tilt toward player | `ASSUMED` |
 | Size, one of each asset | 420 KB (1x), 1.28 MB (2x) PNG | measured |
 | Full-panel estimate (4 knob styles, 3 fader styles) | 1.56 MB (1x), 4.62 MB (2x) PNG | counts `ASSUMED` until B2 |
+
+## Label legibility rules (B8)
+
+Printed text never goes below 7.5 px (`widgets::MIN_FONT_PX`) and must not touch anything it does
+not describe. The headless audit in `crates/nord-gui/src/panel/legibility_*.rs` enforces it per
+rule (overlap and 0.9 px gap, control bezel, clipping, section edge, group frame, knob ring; table
+in [GUI testing](../gui-testing.md)). Layout decisions it led to:
+
+- Rotary Speaker box: the frame extends 52 px left of the button column (the Master area is empty
+  there) and 30 px right, capped 3 px inside the Master section. Wide legends (`SLOW/STOP - FAST`,
+  title) are centred on the frame, narrow ones on their button. The `rotary.speed_leds` rectangle
+  (`ESTIMATED`) is widened from 20 to 33 photo px so the row holds `LED SLOW   LED FAST`.
+- Shift legends place their state LED after the measured text, not at a character-count guess.
+- Effects captions start 6.5 px below the control (clear of knob shadow and button bezel) with
+  8.5 px between stacked lines.
+- The Synth ON button prints SOLO to its right (the OLED sits right below it); the OLED soft
+  labels use two 9.5 px lines and are kept inside the glass; the vibrato selector no longer repeats
+  the VIBRATO heading (SELECT).
+- Two-word percussion names (`VOLUME SOFT`, `HARMONIC 3RD`) stack when the neighbour is closer
+  than the full name.
