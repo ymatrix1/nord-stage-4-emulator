@@ -27,6 +27,8 @@ pub struct Runner {
     pub fifo_wr: u32,
     /// First word of the command FIFO ring (`isr::FIFO_BASE` unless a `fifo` command moved it).
     pub fifo_base: u32,
+    /// An interrupt stopped at a `break` pc: (start step, saved IMASK, vector).
+    pub irq_pending: Option<(u64, u32, u8)>,
 }
 
 impl Runner {
@@ -38,6 +40,7 @@ impl Runner {
             render: Render::default(),
             fifo_wr: 0,
             fifo_base: crate::isr::FIFO_BASE,
+            irq_pending: None,
         }
     }
 
@@ -119,7 +122,12 @@ impl Runner {
                 }
                 self.render.run_steps.push(self.core.steps - start);
             }
-            Cmd::Irq { vector, max_steps } => self.run_irq(*vector, *max_steps)?,
+            Cmd::Irq {
+                vector,
+                max_steps,
+                break_pc,
+            } => self.run_irq(*vector, *max_steps, *break_pc)?,
+            Cmd::Resume { max_steps } => self.resume_irq(*max_steps)?,
             Cmd::Msg { op, addr, value } => self.push_msg(*op, *addr, *value)?,
             Cmd::Dev(addr, value) => self.core.preset_device(*addr, *value),
             Cmd::Fifo(base) => {

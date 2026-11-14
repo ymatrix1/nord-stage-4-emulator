@@ -122,9 +122,39 @@ impl LayerFxChain {
         }
     }
 
+    /// The firmware `CHOR` stage (`FirmwareFx::mod2`): `None` unless the program is `kFx2Type` 4
+    /// or 5 with its raw values (engine path otherwise).
+    fn process_fw_mod2(&mut self, l: f32, r: f32) -> Option<[f32; 2]> {
+        let (ty, rate) = (self.mod2_type_raw?, self.mod2_rate_raw?);
+        if !(4..=5).contains(&ty) {
+            self.fw_mod2 = None;
+            return None;
+        }
+        let variation = ty == 5;
+        let amount = (self.mod2_amount.clamp(0.0, 1.0) * 127.0).round() as u32;
+        let rate = u32::from(rate);
+        match &mut self.fw_mod2 {
+            Some(st) if st.variation() == variation => st.set_params(rate, amount),
+            slot => {
+                *slot = Some(Box::new(fw_mod2::FwMod2Stage::new(
+                    variation,
+                    rate,
+                    amount,
+                    self.sample_rate,
+                )));
+            }
+        }
+        self.fw_mod2.as_mut().map(|st| st.process_frame([l, r]))
+    }
+
     pub(super) fn process_mod2(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {
         if self.mod2_type == Mod2Type::Off {
             return [l, r];
+        }
+        if self.firmware_fx.mod2 {
+            if let Some(out) = self.process_fw_mod2(l, r) {
+                return out;
+            }
         }
         match self.mod2_type {
             Mod2Type::Spin => return self.process_spin(l, r, inv_fs),
