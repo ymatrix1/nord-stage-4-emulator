@@ -303,7 +303,7 @@ impl Stage4Engine {
         for (i, layer) in self.extern_out.layers.iter().enumerate() {
             t.extern_mask |= u8::from(layer.enabled) << i;
         }
-        for notes in &self.note_hold_counts {
+        for notes in self.note_hold_counts.iter() {
             for (n, layers) in notes.iter().enumerate() {
                 for (l, &c) in layers.iter().enumerate() {
                     if c > 0 {
