@@ -126,6 +126,7 @@ pub(super) fn paint_strip(
     pad(ui, p, o, sui, Btn::On, "ON");
     sui.mark("synth.fx_focus_led");
     let fx = rect_or_empty("synth.fx_focus_led", o).center();
+    crate::panel::ctl::fx_focus_caption(p, fx);
     dot(p, fx, fx_focus == 2, LED_AMBER, LED_AMBER_DIM);
 
     let blink_phase = (ui.input(|i| i.time) * 2.0) as i64 % 2 == 0;

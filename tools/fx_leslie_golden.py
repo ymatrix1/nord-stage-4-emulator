@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Golden output words of the Leslie processor from the `sharc-fx` oracle, as Rust test data.
 
-Two scenarios with the LCG noise of `fx_leslie_run.lcg_words` (exact in `f32`): the rotor running
+Four scenarios with the LCG noise of `fx_leslie_run.lcg_words` (exact in `f32`): the rotor running
 at the speed words the ARM sends (`0x22B00 / 0x26000 / 0x15D00`) and at 12 times those (the phase
-wraps several times). Each scenario keeps the first 64 calls' output words and the FNV-1a 64
+wraps several times), both with the frozen history ring (the state of the first oracle runs); the
+slow speed words with the pass routine's ring advance (4 words per call, re-based every 8
+calls, second buffer too: `RESET8`) and with a plain 4 word advance that wraps at the ring length
+(`ADV`, `fx-leslie.md` s10). Each scenario keeps the first 64 calls' output words and the FNV-1a 64
 hash of all `4 x calls` words. Derived numbers only.
 
     python tools/fx_leslie_golden.py PNO_core1_sram.bin pno_core1.script > \\
@@ -22,18 +25,23 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fx_biquad_check as fb
 import fx_leslie_check as lc
+import fx_leslie_ring as ring
 import fx_leslie_run as lr
 from fx_leslie_words import fnv
 
-SCENARIOS = (("SLOW", 1), ("X12", 12))
+#: (name, speed multiplier, ring stride, ring period); stride 0 is the frozen ring.
+SCENARIOS = (("SLOW", 1, 0, 0), ("X12", 12, 0, 0), ("RESET8", 1, 4, 8), ("ADV", 1, 4, 0))
 CALLS = 2000
 KEEP = 64
 
 
-def oracle_outputs(pno1: Path, script: Path, mult: int, calls: int, binary: Path) -> list[int]:
+def oracle_outputs(
+    pno1: Path, script: Path, mult: int, calls: int, binary: Path, stride: int = 0, period: int = 0
+) -> list[int]:
     """Output words of every call (four per call) with the LCG input."""
     lc.MULT[0] = mult
     extra = [t for a, v in lc.rotor_words().items() for t in ("--poke", f"0:{a:#x}={v:#x}")]
+    extra += ring.ring_pokes(calls, stride, period, second=True)
     args = lr.build_args(script, calls, extra, lcg=True)
     with tempfile.NamedTemporaryFile("w", suffix=".args", delete=False) as f:
         f.write("\n".join(args))
@@ -74,10 +82,9 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         f"pub(super) const CALLS: usize = {CALLS};",
         "",
     ]
-    for name, mult in SCENARIOS:
-        out.append(
-            rust(name, mult, oracle_outputs(ns.pno_core1, ns.script, mult, CALLS, ns.binary))
-        )
+    for name, mult, stride, period in SCENARIOS:
+        words = oracle_outputs(ns.pno_core1, ns.script, mult, CALLS, ns.binary, stride, period)
+        out.append(rust(name, mult, words))
     out += [
         "#[cfg(test)]",
         "mod tests {",
@@ -87,8 +94,12 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
         "    fn the_golden_blocks_have_the_documented_shape() {",
         f"        assert_eq!(SLOW_FIRST.len(), {4 * KEEP});",
         f"        assert_eq!(X12_FIRST.len(), {4 * KEEP});",
+        f"        assert_eq!(RESET8_FIRST.len(), {4 * KEEP});",
+        f"        assert_eq!(ADV_FIRST.len(), {4 * KEEP});",
         "        assert_eq!(X12_MULT, 12 * SLOW_MULT);",
         "        assert_ne!(SLOW_FNV, X12_FNV);",
+        "        assert_ne!(SLOW_FNV, RESET8_FNV);",
+        "        assert_ne!(RESET8_FNV, ADV_FNV);",
         "    }",
         "}",
         "",

@@ -20,12 +20,13 @@ pub fn controls() -> Vec<ControlEntry> {
         bean,
     });
     v.push(e("synth.oled", s, K::Oled, "SYNTH DISPLAY", 27).ui("drawn by the OLED renderer (B8d)"));
-    for (tail, label) in [
-        ("left", "LEFT DIAL"),
-        ("middle", "MIDDLE DIAL"),
-        ("right", "RIGHT DIAL"),
+    // One dial edits many parameters: the display page picks the target (`synth_dials.rs`).
+    for (tail, label, binding) in [
+        ("left", "LEFT DIAL", "dial:left"),
+        ("middle", "MIDDLE DIAL", "dial:middle"),
+        ("right", "RIGHT DIAL", "dial:right"),
     ] {
-        v.push(e(&format!("synth.dial.{tail}"), s, K::Encoder, label, 28).todo(bean));
+        v.push(e(&format!("synth.dial.{tail}"), s, K::Encoder, label, 28).bound(binding));
     }
     v.push(
         e(

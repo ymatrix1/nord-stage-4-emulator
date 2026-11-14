@@ -88,7 +88,7 @@ fn pages_exist_from_one_to_n_per_menu() {
         }
     }
     assert_eq!(all_pages().len(), 58);
-    assert_eq!(all_items().len(), 129);
+    assert_eq!(all_items().len(), 133);
 }
 
 #[test]
@@ -233,7 +233,7 @@ fn binding_totals_are_pinned() {
             Binding::Unsupported(_) => un += 1,
         }
     }
-    assert_eq!((bound, ui, un), (111, 16, 2));
+    assert_eq!((bound, ui, un), (111, 22, 0));
 }
 
 /// Wording taken from the OS v1.66 string pool (`docs/research/oled-strings-vs-firmware.md`).

@@ -10,11 +10,11 @@ use super::fw_leslie_core::{Core, P, V};
 /// Condition flags `(AN, AZ)` of a result, per element.
 pub(super) type Flags = ([bool; 2], [bool; 2]);
 
-fn lanes<F: Fp>(a: P<F>, b: P<F>, f: impl Fn(V<F>, V<F>) -> V<F>) -> P<F> {
+pub(super) fn lanes<F: Fp>(a: P<F>, b: P<F>, f: impl Fn(V<F>, V<F>) -> V<F>) -> P<F> {
     [f(a[0], b[0]), f(a[1], b[1])]
 }
 
-fn un<F: Fp>(a: P<F>, f: impl Fn(V<F>) -> V<F>) -> P<F> {
+pub(super) fn un<F: Fp>(a: P<F>, f: impl Fn(V<F>) -> V<F>) -> P<F> {
     [f(a[0]), f(a[1])]
 }
 
@@ -38,7 +38,7 @@ fn extract(x: u32, pos: u32, len: u32, signed: bool) -> u32 {
 }
 
 /// `FDEP`: the low `len` bits of `x` moved to `pos` (`fx_pe.deposit`).
-fn deposit(x: u32, pos: u32, len: u32) -> u32 {
+pub(super) fn deposit(x: u32, pos: u32, len: u32) -> u32 {
     ((u64::from(x & mask(len))) << pos.min(63)) as u32
 }
 

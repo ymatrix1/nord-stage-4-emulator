@@ -84,6 +84,7 @@ Canonical documentation for the **Nord Stage 4 Emulator** project (interoperabil
 | [research/arm-param-messages.md](research/arm-param-messages.md) | Parameter senders, channel tables, targets |
 | [research/arm-fw-emulation.md](research/arm-fw-emulation.md) | `unicorn` harness capturing real ARM to DSP messages |
 | [research/arm-organ-messages.md](research/arm-organ-messages.md) | Edit registry, organ layer, partial boot and the steady state (s10) |
+| [research/arm-oled-render.md](research/arm-oled-render.md) | Real OLED screens from the ARM emulator: panel link (EMIFA CS2), fonts, captured boot splash and Program screen, blockers |
 | [research/dsp-rx-protocol.md](research/dsp-rx-protocol.md) | How the ORG image receives data (peek/poke port, strips) |
 | [research/preset-dsp-map.md](research/preset-dsp-map.md) | Preset fields against DSP strips, packed words and conversion tables |
 
