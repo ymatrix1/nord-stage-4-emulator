@@ -114,7 +114,14 @@ pub struct SynthLayerUi {
     pub kb_hold_exclude: bool,
     // Strip
     pub octave: i8,
+    /// KB ZONE position (`kb_zone::POSITIONS`, `0` = every zone, the engine default).
     pub kb_zone: u8,
+    /// Aux KB LED: the layer is played by the aux keyboard (UI value until telemetry reads back).
+    pub aux: bool,
+    /// EXTERN (Shift+Mode): the layer sends MIDI out instead of rendering audio (manual p.46).
+    pub extern_on: bool,
+    /// Extern dial values: CC VAL 1, CC VAL 2, PROGRAM (engine defaults 0, 0, 0).
+    pub extern_vals: [u8; 3],
 }
 
 impl Default for SynthLayerUi {
@@ -179,6 +186,9 @@ impl Default for SynthLayerUi {
             kb_hold_exclude: false,
             octave: 0,
             kb_zone: 0,
+            aux: false,
+            extern_on: false,
+            extern_vals: [0; 3],
         }
     }
 }

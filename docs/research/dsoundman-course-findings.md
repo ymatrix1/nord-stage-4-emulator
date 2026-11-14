@@ -11,24 +11,24 @@
 | Location label `E:85`, bank letter plus colon plus page and slot | PL 11:25, BG 17:10 | `ProgLoc::label` (`bay_program/store.rs`) | matches | none |
 | Banks A..H exist (`H:13`, `G:82`, `E:85` seen) | PP 5:40, BG 19:35 | 8 banks (`store.rs`); manual p.12 states A-H | matches | bank count now VERIFIED |
 | Unused location shows `<empty>` | BG 19:35 (`G:82`), PP 5:45 | was `(empty)` (`nav.rs`) | differed | fixed, test |
-| Boxed `E` after the location once edited; cleared after STORE and on load | BG 17:10, PP 5:30 vs 6:20 and 6:30, ORG 5:30 | none (no dirty flag) | differs | bean ns4-ow85 |
-| Live Mode shows `Live 1` as the big title | BG 19:45 | title only in sub line | differs | bean ns4-ow85 |
-| Home rows: section icon, preset id `1:05` or source name plus size (`White Grand XL`, `Silver Grand M`), organ model plus mini drawbars | PL 11:25, BG 17:10, SG 8:40, ORG 5:30 | `oled.rs` `Summary` text rows | differs | bean ns4-ow85 |
+| Boxed `E` after the location once edited; cleared after STORE and on load | BG 17:10, PP 5:30 vs 6:20 and 6:30, ORG 5:30 | `bay_program/edited.rs` edit counter (`AudioHandle::edit_count`) | matches | fixed, tests `edited::tests`, `oled_home::tests` |
+| Live Mode shows `Live 1` as the big title | BG 19:45 | `oled_home::location_title` | matches | fixed, test `live_mode_titles_the_slot_and_drops_the_mark` |
+| Home rows: section icon, preset id `1:05` or source name plus size (`White Grand XL`, `Silver Grand M`), organ model plus mini drawbars | PL 11:25, BG 17:10, SG 8:40, ORG 5:30 | `oled_home::section_rows`: section name rows only | partly | names done; preset id, size letter, mini drawbars open (bean ns4-ow85 out of scope) |
 | Piano dial changes the piano row in place (no overlay) | SG 8:38-8:55 | `piano_overlay.rs` LIST/INFO overlay | unknown (other lane) | note to piano lane |
 | Preset screen titled `LOAD SYNTH PRESET`, id `1:12`, only `Cancel` soft button | PL 5:22 | `PIANO PRESET`, Num/Cat/Cancel (matches manual p.42) | differs from video, matches v1.6x manual | none; OS differs |
-| Preset entry shows boxed `E` until the dial loads it | PL 5:22, manual p.42 | none | unknown | covered by ns4-ow85 |
+| Preset entry shows boxed `E` until the dial loads it | PL 5:22, manual p.42 | edited mark after any preset load through the browser (loading is an edit) | unknown | ASSUMED, same counter |
 | Layer Init screen: `LAYER INIT`, `Press to initialize`, letters `AB / A / A`, soft `All Organ Piano Synth` | SP 1:16, PP 1:02 | text differed | differed | fixed, test |
 | Layer Init All leaves only Piano A on (white grand) | PP 1:06, SP 1:28 | `engine/layer_init.rs` | matches | none |
 | After Init the synth wave shows `Shape Saw`, shape 0.0 | PP 6:30 | `VaWaveform::Saw` | matches | none |
 | `STORE PROGRAM TO`: location, name at target (`<empty>`), `As: <name>` | PP 5:40-5:45 | `Replaces:` row | differed | fixed, test |
-| Name proposed as `NS4 Palette 2` | PP 5:40 | keeps current name | differs | bean ns4-qdzu |
-| `STORE PROGRAM AS`: name line, `Cat: Piano Acoustic`, soft `Abc Cat Del Ins` | PP 5:47 | `ABC`, `Category:` | differed | label fixed; categories bean ns4-qdzu |
+| Name proposed as `NS4 Palette 2` | PP 5:40 | keeps current name | differs | fixed, test (ns4-qdzu) |
+| `STORE PROGRAM AS`: name line, `Cat: Piano Acoustic`, soft `Abc Cat Del Ins` | PP 5:47 | `ABC`, `Category:` | differed | label fixed; 26 firmware categories adopted, ns4-qdzu |
 | ABC strip order: blank, a-z, A-Z, 0-9, `-` | PP 5:54-6:00 | upper case first | differed | fixed, test; tail after `-` stays ASSUMED |
 | Second STORE press writes; program shows new location without `E` | PP 6:12-6:20 | `store.rs` | matches | none |
 | LFO destination taps: Off, OSC CTRL, OSC PITCH, FILTER (both LEDs), then wraps | LFO 0:30-0:35 | cycled Filter, Pitch, Ctrl, Off | differed | fixed, test |
-| Synth OLED top row shows hints (`LFO Rate 0.08 Hz`, `LFO Destination OscPitch`, `LFO Amount 7.1`) | LFO 0:27-0:45 | none | differs | bean ns4-wxly |
+| Synth OLED top row shows hints (`LFO Rate 0.08 Hz`, `LFO Destination OscPitch`, `LFO Amount 7.1`) | LFO 0:27-0:45 | `panel/param_hint` (header row of the Synth OLED, lower half of the Program OLED) | matches (labels VERIFIED, hold time ASSUMED) | done, bean ns4-wxly |
 | LFO waveform: button opens page, first dial picks shape | LFO 1:05 narration | `SynthPage::LfoWave` | matches (text only) | none |
-| Rotor stop ANGLE screen: `Free`, `1: Front Center`, `2: Front Left`, `4: Back Left`, `6: Back Center` | ORG 10:08-10:22 | none | differs | bean ns4-uo53 |
+| Rotor stop ANGLE screen: `Free`, `1: Front Center`, `2: Front Left`, `4: Back Left`, `6: Back Center` | ORG 10:08-10:22 | `panel/rotor_angle.rs`, `organ/rotor_stop.rs` | matches (Front Right / Back Right text assumed) | bean ns4-uo53 done |
 | STOP MODE stops rotors, SLOW/FAST switches speed when active | ORG 9:32-9:55 | `bay_master.rs`, `organ/rotary.rs` | matches | none |
 | Percussion single-triggered, non-legato | ORG 6:50-7:03 | `organ/mod.rs` | matches | none |
 | Preset LED on by default; Live turns ladders off; Shift+Preset syncs | ORG 7:52-9:15 | spec section 9 | matches | none |
@@ -48,7 +48,7 @@
 ## Implications
 
 - `Verified` now: bank letters A-H, `<empty>` name, Layer Init and Store screen texts, ABC strip order up to `-`, LFO destination tap order, boxed E meaning (also manual p.13).
-- Display work (E marker, rows, hints, rotor angle) is real but larger; tracked in beans ns4-ow85, ns4-wxly, ns4-uo53, ns4-qdzu.
+- Display work: the E marker and `Live N` title are done (ns4-ow85); preset ids, size letters and mini drawbars in the section rows, hints and rotor angle stay open (ns4-wxly, ns4-uo53, ns4-qdzu).
 
 ## Follow-ups
 

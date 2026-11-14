@@ -4,6 +4,7 @@
 
 use super::ctx::{from_log, to_log, Fx};
 use super::ids::NO_CLOCK;
+use crate::panel::param_hint::fmt;
 use crate::panel::prelude::Stage4PanelState;
 use crate::panel::ui_state::fx::{next_supported, ChainUi, Unit, MOD1, MOD2, MST_LABELS};
 use nord_panel::behaviour::Trigger;
@@ -142,7 +143,10 @@ fn unit(f: &mut Fx, st: &mut Stage4PanelState, slot: usize, s: &Spec) {
         match (v.ped, v.mst) {
             (Some((ped, pos)), _) if *ped && v.has_ped => {
                 let tip = "PED position (no pedal attached: static position; Pump ducks when it rises through half)";
-                changed |= f.knob(s.rate, pos, (0.0, 1.0), tip, None);
+                if f.knob(s.rate, pos, (0.0, 1.0), tip, None) {
+                    changed = true;
+                    f.hint(s.rate, &format!("Pos {:.0} %", *pos * 100.0));
+                }
                 f.name(s.rate, "POS");
             }
             (_, Some((mst, true))) if *mst > 0 || f.shift => {
@@ -153,6 +157,7 @@ fn unit(f: &mut Fx, st: &mut Stage4PanelState, slot: usize, s: &Spec) {
                     let next = x.round().clamp(0.0, steps) as usize;
                     changed |= next != *mst;
                     *mst = next;
+                    f.hint(s.rate, MST_LABELS[next]);
                 }
                 f.name(s.rate, MST_LABELS[*mst]);
             }
@@ -172,6 +177,12 @@ fn unit(f: &mut Fx, st: &mut Stage4PanelState, slot: usize, s: &Spec) {
                 if f.knob(s.rate, &mut n, (0.0, 1.0), &tip, None) {
                     *v.rate = from_log(n, s.rate_range.0, s.rate_range.1);
                     changed = true;
+                    let text = if v.auto_wah {
+                        format!("Sens {:.2}", *v.rate)
+                    } else {
+                        fmt::hz(*v.rate)
+                    };
+                    f.hint(s.rate, &text);
                 }
                 f.name(s.rate, if v.auto_wah { "SENS" } else { "RATE" });
             }
