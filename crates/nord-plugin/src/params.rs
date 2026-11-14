@@ -110,6 +110,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "synthg", group = "Synth Gate")]
     pub synth_gate: crate::synth_gate_params::SynthGateBank,
 
+    /// Per-layer Arp Zig Zag, fractional Range and the custom Pattern (steps, accent, pan).
+    #[nested(id_prefix = "synthp", group = "Synth Pattern")]
+    pub synth_pattern: crate::synth_pattern_params::SynthPatternBank,
+
     /// Per-layer Organ B3 Bass, octave and vibrato/chorus plus Rotary switches.
     #[nested(id_prefix = "organx", group = "Organ Layers")]
     pub organ_layers: crate::organ_params::OrganLayerBank,
@@ -356,6 +360,7 @@ impl Default for Stage4Params {
             pedals: crate::aux_pedal_params::PedalBank::default(),
             aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
+            synth_pattern: crate::synth_pattern_params::SynthPatternBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
             organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
             organ_live: crate::organ_live_params::OrganLiveBank::default(),
@@ -630,6 +635,7 @@ impl Stage4Params {
         self.aux_kb.sync_to_engine(engine);
         self.pedals.sync_to_engine(engine);
         self.synth_gate.sync_to_engine(engine);
+        self.synth_pattern.sync_to_engine(engine);
         self.organ_layers.sync_to_engine(engine);
         self.layer_fx_extra.sync_to_engine(engine);
         self.layer_fx_sharing.sync_to_engine(engine);
