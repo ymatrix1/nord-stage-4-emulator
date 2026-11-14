@@ -84,16 +84,24 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     master = [(MASTER_LEVEL, 1.0)]
     if a.what == "dac":
-        pokes = [(OUT_WORD + k, a.level) for k in (0, 1)] + [(OUT_WORD + 8 + k, a.level) for k in (0, 1)]
+        pokes = [(OUT_WORD + k, a.level) for k in (0, 1)] + [
+            (OUT_WORD + 8 + k, a.level) for k in (0, 1)
+        ]
         dumps = [(TX_WORD, 4)]
         got = run(a.exe, a.image, 1, pokes, dumps)[TX_WORD][0]
-        print(f"DAC word for {a.level}: 0x{got:08X} = {struct.unpack('<i', struct.pack('<I', got))[0] / 2**31:.6f} of 2^31")
+        print(
+            f"DAC word for {a.level}: 0x{got:08X} = "
+            f"{struct.unpack('<i', struct.pack('<I', got))[0] / 2**31:.6f} of 2^31"
+        )
         return 0
     words = SMP_WORDS if a.what == "smp" else PNO_WORDS
     pokes = [(w, a.level) for w in words] + master
     out = run(a.exe, a.image, a.passes, pokes, [(OUT_WORD, 2)])[OUT_WORD]
     g = gain(bits_f32(out[0]), a.level)
-    print(f"{a.what}: input {a.level} -> output {bits_f32(out[0]):.6f}, gain {g:.5f} after {a.passes} passes")
+    print(
+        f"{a.what}: input {a.level} -> output {bits_f32(out[0]):.6f}, "
+        f"gain {g:.5f} after {a.passes} passes"
+    )
     return 0
 
 

@@ -111,6 +111,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] Piano layer level handler `0xC011A7A4` run live (`tools/arm_layer_level.py`): `(v / 127)^2`, opt-in `--firmware-piano-layer-law` ([piano-bus-convention](research/piano-bus-convention.md), D28)
 - [x] SMP post stage run live through the whole audio interrupt (`sharc-ref` `irq ... break=PC` / `resume`, `smp_post_stage.scn`): unity, `ring = bus * 2^-29`; receiver of the ring and the `0xC023195C` slew trace still open ([piano-bus-convention](research/piano-bus-convention.md) s2b, D30)
 - [ ] Decode the receiver of the SMP bus (first consumer found: `FLOAT BY -29` at pc `0x1C0940`; the ring is the SMP serial transmit buffer, its receiver and the master scale are open) to promote `firmware_bus_scale` to default (OQ20)
+- [x] Receiver of the SMP stream found in the FX image (SPORT3B ten-word frames, no multiply, unity master IIR, master gain `DM(0xB651A)` 0.1866, DAC `fix(clip(2 x, 0.999)) * 2^31`; [piano-receiver-scale](research/piano-receiver-scale.md), D39, `tools/fx_input_path.py`, `piano/downstream.rs::bus_word_dac_fraction`); the defaults stay because `DM(0xB6518)` and the `0xC023195C` target are open
 
 ---
 

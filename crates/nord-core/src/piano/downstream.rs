@@ -115,8 +115,9 @@ pub fn bus_word_dac_fraction(word: i32) -> f32 {
 /// unit: `(y << 17)` is `y / 8192 * 2^30`, so the DAC fraction is `4 * G * y / 8192`.
 ///
 /// ASSUMED (derived, not wired): [`FIRMWARE_SAMPLE_SCALE`] is `0.5`, so the receiver path is
-/// 3.5 dB above the bus reading. Not an engine default: the clip calibration of the organ (`K`)
-/// sees the same path, see `docs/research/piano-receiver-scale.md` s4.
+/// 3.5 dB above the bus reading (2.7 dB above [`LEGACY_SAMPLE_SCALE`]). Not an engine default:
+/// the master level word `DM(0xB6518)` is unresolved and the organ `K` disagrees by 17.5 dB,
+/// see `docs/research/piano-receiver-scale.md` s2.
 #[inline]
 pub fn receiver_path_sample_scale() -> f32 {
     4.0 * f32::from_bits(FX_MASTER_GAIN_WORD)
