@@ -50,3 +50,7 @@ The Rust bank equals the oracle on every line (0.16 dB, section 1), so the missi
 2. The law behind `0x3F1EB100` as a function of the layer level (a second capture with another layer level).
 3. Brightness: which stage of the real chain restores presence and brilliance (check the program's EQ and the amp tone stack against the recording with the level corrected).
 4. Drawbar edit through the ARM harness to confirm the wiring end to end (the value law is read from the image, the call path was not run).
+
+## Update 2026-11-13 (output law)
+
+The Vox word `0x3F1EB100` is the swell word of the default pedal (`Fnc_Swell = 100`), the layer level law is `(v / 127)^2`, and the program rotary drive is now imported in the firmware unit (`preset / 10`): see [organ-output-law](organ-output-law.md) and D25.

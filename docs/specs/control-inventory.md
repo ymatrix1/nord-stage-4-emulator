@@ -109,7 +109,7 @@ Answered: trademark and art, parity scope, keybed variant, per-layer IDs and Pha
 
 Conventions: a drawbar rect is its slot (8 px wide) and its LED ladder the 15 px column to its right; the three `keybed.split_leds` are one strip along the top of the keys; `program.shift.right` (the SHIFT rocker next to Layer Effects) is the only rect that lies outside its inventory section (listed in `OUTSIDE_OWN_SECTION` in the tests).
 
-What would confirm or replace the table: a higher-resolution front photo (at least 4000 px wide) or a tape measure on the instrument for the 36 estimated entries and the overall scale. The B8 renderers must not hard-code positions; they read these rects.
+What would confirm or replace the table: a higher-resolution front photo (at least 4000 px wide) or a tape measure on the instrument for the 36 estimated entries and the overall scale. The B8 renderers must not hard-code positions; they read these rects. The GUI draws them at `LAYOUT_SCALE` 2 (3120 px wide) and applies per-id nudges from `crates/nord-gui/src/panel/layout_tweaks.rs` (see `docs/gui-testing.md`); the tables themselves stay as measured.
 
 ## 7b. Engine bindings (`engine:<path>`)
 

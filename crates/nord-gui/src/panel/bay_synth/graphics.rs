@@ -8,7 +8,13 @@ use egui::{pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Stroke};
 pub(super) const FG: Color32 = Color32::from_rgb(150, 190, 230);
 
 fn text(p: &Painter, pos: Pos2, s: &str, size: f32, al: Align2, col: Color32) {
-    p.text(pos, al, s, FontId::monospace(size), col);
+    p.text(
+        pos,
+        al,
+        s,
+        FontId::monospace(size.max(crate::widgets::MIN_FONT_PX)),
+        col,
+    );
 }
 
 /// Waveform icon as `(x, y)` in `0..=1` (`y` up), `n` samples over one or two periods.

@@ -31,7 +31,7 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
             pos2(rect.left() + 2.0, *y),
             Align2::LEFT_TOP,
             s,
-            FontId::monospace(size),
+            FontId::monospace(size.max(MIN_FONT_PX)),
             color,
         );
         *y += size * 1.15;
@@ -69,7 +69,7 @@ pub fn paint(painter: &Painter, rect: Rect, text: &OledText, dim: bool) {
                 r.center(),
                 Align2::CENTER_CENTER,
                 *l,
-                FontId::monospace(f_row),
+                FontId::monospace(f_row.max(MIN_FONT_PX)),
                 Color32::WHITE,
             );
         }

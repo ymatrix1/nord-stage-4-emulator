@@ -214,7 +214,7 @@ output   T = sum_k w_k Y_k;  3 sections (DC blocker, two low-passes);  y = out_3
 | Output sections `(a0, a1, b0, b1)` | `(0.9891, -0.9944, 0.9944, 0)` high-pass, `(0.9514, 0.0305, 0.0161, 0)`, `(0.8348, 0.1035, 0.0546, 0)` low-passes (corners about 340 Hz and 1.1 kHz at `F`); redesigned at the engine rate by the bilinear transform of their analog equivalent | VERIFIED (image values), rate conversion mine |
 | Gains | `g1 -> 1.0`, `g2 -> 0` (0.001 per frame), gain word 1.0; start state settled | targets VERIFIED, word and start ASSUMED |
 | Key to row map, weights (`vox_keys.rs`) | a held key `n` drives the rows `fold(n - 36 + I[slot])` (`fold` by octaves into 0..95, `I = [0, 7, 12, 19, 19, 24, 24, 28, 31, 31, 36, 36, 36, 40, 40, 43, 48, 48, 52, 60]`) of the four default level slots 0, 2, 5, 10 (16', 8', 4', 2') with weight `2076180 / 2^23` = 0.2475 each, summed where rows fold together, times `weight_level`, no velocity, applied as the firmware sends them: instant steps on the key-down timeline of `vox_timeline.rs` (16' at tick 3, 8' and 4' at 17, 2' at 47 after the key-down; key-up 2' at 1, 8' and 4' at 7, 16' at 37; tick 1 ms ASSUMED; [organ-vox-click](../research/organ-vox-click.md)), no legacy key click on this source; the 8' slot lands on oscillator `n - 24` | VERIFIED (all 20 flags of 24 keys, [keydown-vox-flags.csv](../research/data/keydown-vox-flags.csv), test `flag_table_matches_the_capture`; weights `0x3E7D70A0` in [keydown-organ-keys.csv](../research/data/keydown-organ-keys.csv)); drawbar index 0..6 -> slots `{0}, {2}, {5}, {10}, {3, 13}, {8, 11, 16}, {15, 17, 18, 19}` with the level `[0, 629145, 838860, 1048576, 1258291, 1468006, 1677721, 1887436, 2076180][v] / 2^23` (`vox_keys::levels_from_drawbars`, the layer's drawbars drive it; drawbars 8 and 9 write no level) | VERIFIED (listing and image table, [organ-vox-click](../research/organ-vox-click.md)); the ARM call path of the edit was not run |
-| Output gain word | `DM(0x95FD1) = 0x3F1EB100` (0.61989), written by the ARM boot, multiplies the output (`vox_source::OUTPUT_LEVEL`); found by bisecting the boot words (the install alone leaves 1.0) | VERIFIED (default program), relation to the layer level ASSUMED |
+| Output gain word | `DM(0x95FD1) = 0x3F1EB100` (0.61989), written by the ARM boot, multiplies the output (`vox_source::OUTPUT_LEVEL`); found by bisecting the boot words (the install alone leaves 1.0) | VERIFIED (default program); it is the swell word of `Fnc_Swell = 100` (`520 v^2 2^-23`, [organ-output-law](../research/organ-output-law.md)), not the layer level |
 | Sine bank (36 sines, 12 buckets, rows 84..95, `vox_sines.rs`) | `ph_j += B (1 + mod) L_j`, `B = 0x7572967D`, `L_j = 0x1AE89F99 2^(j/12)` (folded 0.75 for j 24..31, 0.63 for 32..35), gains `1 / 0.1718 / 0.1660 / 0.0841` per octave group, polynomial sine `u g p(u^2)`, bucket `j`, `j - 12`, `j - 24`, `j - 32`; weighted by the key rows 84..95. Golden max 1e-3 (`vox_golden.rs` `B_PLAIN`); chord with key 90: waveform SNR 39.9 dB against the oracle. At the image base the sines run at 4.2 to 19.5 kHz and are attenuated 50 dB or more by the output sections (not pitch carriers) | VERIFIED (golden, run) |
 | Absolute pitch | oscillator 0 is 32.7032 Hz at `F` = 43,402.34 Hz (C1 + 0.0001 cent, the word is `round(C1 / F * 2^33)`); the "9.9 cent flat of the Pipe bank" of `pno-full-pass` s4 came from reading the Pipe bank at unity tune (it is on C1 at the ARM's Fine Tune word, [dsp-frame-rate](../research/dsp-frame-rate.md) s3.6) | VERIFIED (frame rate); key map ASSUMED |
 
@@ -239,6 +239,8 @@ The odd harmonics are far below the unfiltered single-note values of organ-post-
 
 ### 3.1.8 Farfisa divider (`ToneWheelSource::FarfisaWheels`, `farfisa_wheels.rs`)
 
+Status: the generator is ported; the processor `0x122B85` is not (its key-down inputs and the oracle chords are in [organ-farfisa-bass](../research/organ-farfisa-bass.md) s7). The source stays opt-in: the oracle criterion (<= 1 dB per line) cannot hold without the processor, and no video check was run.
+
 Opt-in tone source of the `Farfisa` model, the PNO core 1 generator `0x122A71` ([organ-farfisa-bass](../research/organ-farfisa-bass.md)). It is a free-running top-octave divider, not a tonewheel bank, but its 98 outputs are one signal per note, so it plugs into the 91-wheel bus: wheel `w` = note `24 + w`, oscillator `n` (semitone 0..11), row `r` = note `12 + n + 12 r` (8 rows, 9 for `n < 2`). Row 0 (notes 12..23) is below the bus and dropped; wheels 86..90 (notes 110..114) have no source and stay silent. `ToneWheelSource::FarfisaWheels` applies to `OrganModel::Farfisa` only (other models fall back to their default); `ModelDefault` on `Farfisa` stays `Legacy`. All state is in `OrganLayer::new()` (12 oscillators x 9 rows of `f32`); `advance` has no allocation or lock.
 
 ```text
@@ -259,6 +261,25 @@ y = max(b clip(u) + a y_prev, clip(u))   a = exp(-0.0047343 2^r 2^(n/12) rho)  (
 | LFO (rate `DM 0xC27D6`, depth `0xC27D7`, the Farfisa vibrato) | modelled in Python, not in Rust (the depth is an ARM word with unknown mapping) | VERIFIED in Python, not ported |
 
 Not modelled (why it stays opt-in): the processor `0x122B85` (four weighted sums of the ring, filter sections, lattice, gains; every coefficient is an ARM word that no captured burst writes, so the oracle pass is silent), the Farfisa vibrato, the per-key weights. The existing drawbar bus, percussion and rotary run unchanged on the wheel outputs. Default render hash unchanged (`25baa387b0219c08`). Tests: `farfisa_wheels::tests` (steps, wheel map, pitch, golden rows, release, sample rate, Fine Tune), `farfisa_source_tests` (resolution, host-rate pitch, Fine Tune, determinism, silent top, other models unchanged), `tools/tests/test_organ_farfisa_ref.py`, `test_organ_farfisa_oracle.py`, `test_organ_fb_pass.py`.
+
+### 3.1.9 Output level law (`output_level.rs`, `OrganLayer::output_level`)
+
+One gain stage for every firmware organ path (`Firmware` weights, `B3Wheels`, Vox); research [organ-output-law](../research/organ-output-law.md).
+
+```text
+out = K * swell_word(pedal) * layer_level^2 * bank_output          (bank_output at swell 1, level 1)
+swell_word(v)   = 520 v^2 * 2^-23   (v = 127: 0x7FFFFF * 2^-23)    VERIFIED  sender 0xC0223B90, boot word 0x3F1EB100 at v = 100
+layer_level(v)  = (v / 127)^2       (0 mutes)                      VERIFIED  handler 0xC011AB8C (disassembly)
+K               = 2.8 (+8.9 dB)                                    EMPIRICAL three clips, firmware location open
+```
+
+| `OutputLevel` | Behaviour |
+|---|---|
+| `ModelDefault` (default) | `Firmware` for Pipe1 / Pipe2 on the firmware bank (`WeightMode::Firmware` weights, `K`, squared layer level in the engine), `Legacy` for every other source |
+| `Legacy` | the built-in levels: Legacy drawbar bus 0.08 (`LEGACY_BUS_OVER_UNIT` = +14.39 dB over the ARM weight unit), the Vox boot swell word 0.6199, layer level linear |
+| `Firmware` | `K` on the weight mix / `B3Wheels` sum, the Vox word replaced by `K` (the engine pedal is the swell), layer level squared (`Stage4Engine::render_frame`) |
+
+`ns4 render-patch --organ-level default|legacy|firmware`, `FirmwareOptions::organ_level`. The program rotary drive enters the engine as `preset / 10` (the firmware drive is `v / 127`, VERIFIED, [fx-type-map](../research/fx-type-map.md) s9); `export` multiplies by 10.
 
 ### 3.2 9 Drawbar Harmonic Bus Matrix & Foldback
 

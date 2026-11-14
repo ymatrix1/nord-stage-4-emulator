@@ -27,14 +27,14 @@ pub(super) fn paint_oled(p: &Painter, o: Pos2, sui: &mut SynthUi, sample: Option
         disp.left_top() + vec2(2.0, 1.5),
         Align2::LEFT_TOP,
         v.title,
-        FontId::monospace(6.5),
+        FontId::monospace(crate::widgets::MIN_FONT_PX),
         FG,
     );
     p.text(
         pos2(disp.right() - 2.0, disp.top() + 1.5),
         Align2::RIGHT_TOP,
         v.layer.to_string(),
-        FontId::monospace(6.5),
+        FontId::monospace(crate::widgets::MIN_FONT_PX),
         FG,
     );
     let sep_y = disp.top() + 9.5;
@@ -58,14 +58,14 @@ pub(super) fn paint_oled(p: &Painter, o: Pos2, sui: &mut SynthUi, sample: Option
             pos2(x, disp.bottom() - 13.0),
             Align2::CENTER_TOP,
             &s.value,
-            FontId::monospace(6.0),
+            FontId::monospace(crate::widgets::MIN_FONT_PX),
             col,
         );
         p.text(
             pos2(x, disp.bottom() - 6.0),
             Align2::CENTER_TOP,
             s.label,
-            FontId::monospace(5.5),
+            FontId::monospace(crate::widgets::MIN_FONT_PX),
             col.gamma_multiply(0.8),
         );
     }

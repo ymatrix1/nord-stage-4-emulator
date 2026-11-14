@@ -2,26 +2,34 @@
 //! the opened `.ns4b` and loads the model the dial asked for.
 
 use super::{short_name, BackupLibraryState};
-use crate::panel::Stage4PanelState;
+use crate::panel::{piano_models, Stage4PanelState};
 
 impl BackupLibraryState {
-    /// Call once per frame before the panel is drawn: copy the piano model list into
-    /// `panel.piano_ui`, follow the loaded model with the dial position, and start loading a
-    /// model the dial requested (on the focused Piano layer).
+    /// Call once per frame before the panel is drawn: copy the piano model list and its types into
+    /// `panel.piano_ui`, follow a newly loaded model with the dial and the TYPE LEDs, and start
+    /// loading a model the dial or TYPE requested (on the focused Piano layer).
     pub fn sync_piano_ui(&mut self, panel: &mut Stage4PanelState) {
-        if panel.piano_ui.models != self.pianos {
+        if panel.piano_ui.models != self.pianos || panel.piano_ui.model_types != self.piano_types {
             panel.piano_ui.models = self.pianos.clone();
+            panel.piano_ui.model_types = self.piano_types.clone();
             let last = panel.piano_ui.models.len().saturating_sub(1);
             panel.piano_ui.model_idx = panel.piano_ui.model_idx.min(last);
+            panel.piano_ui.last_model = [None; 6];
+            panel.piano_ui.followed = None;
         }
-        if let Some(name) = panel.loaded_piano_name.as_deref() {
-            if let Some(i) = self
-                .pianos
-                .iter()
-                .position(|e| short_name(e).eq_ignore_ascii_case(name))
-            {
-                if panel.piano_ui.model_request.is_none() {
-                    panel.piano_ui.model_idx = i;
+        // Follow only when the loaded model changed: while a requested model decodes, the old
+        // name is still reported and must not pull the dial back.
+        if panel.piano_ui.model_request.is_none()
+            && panel.loaded_piano_name != panel.piano_ui.followed
+        {
+            panel.piano_ui.followed = panel.loaded_piano_name.clone();
+            if let Some(name) = panel.loaded_piano_name.as_deref() {
+                if let Some(i) = self
+                    .pianos
+                    .iter()
+                    .position(|e| short_name(e).eq_ignore_ascii_case(name))
+                {
+                    piano_models::follow_loaded(panel, i);
                 }
             }
         }
@@ -35,6 +43,7 @@ impl BackupLibraryState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nord_core::piano::PianoCategory;
 
     fn lib_with(pianos: &[&str]) -> BackupLibraryState {
         let mut lib = BackupLibraryState::new();
@@ -59,6 +68,29 @@ mod tests {
         };
         lib.sync_piano_ui(&mut panel);
         assert_eq!(panel.piano_ui.model_idx, 1);
+    }
+
+    #[test]
+    fn types_are_published_and_the_led_follows_the_loaded_model() {
+        let mut lib = lib_with(&["Piano/Grand/A.npno", "Piano/Upright/B.npno"]);
+        lib.piano_types = vec![PianoCategory::Grand, PianoCategory::Upright];
+        let mut panel = Stage4PanelState {
+            loaded_piano_name: Some("B".into()),
+            ..Stage4PanelState::default()
+        };
+        lib.sync_piano_ui(&mut panel);
+        assert_eq!(panel.piano_ui.model_types, lib.piano_types);
+        assert_eq!(panel.piano_cat, PianoCategory::Upright);
+        // A pending load of A does not pull the dial back to the still-loaded B.
+        panel.piano_ui.model_idx = 0;
+        panel.piano_ui.model_request = Some("Piano/Grand/A.npno".into());
+        lib.sync_piano_ui(&mut panel);
+        lib.sync_piano_ui(&mut panel);
+        assert_eq!(panel.piano_ui.model_idx, 0);
+        // When A arrives, the type LED follows it.
+        panel.loaded_piano_name = Some("A".into());
+        lib.sync_piano_ui(&mut panel);
+        assert_eq!(panel.piano_cat, PianoCategory::Grand);
     }
 
     #[test]

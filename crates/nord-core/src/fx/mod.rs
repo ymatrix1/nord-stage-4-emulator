@@ -21,8 +21,13 @@ mod fw_delay;
 mod fw_delay_table;
 pub mod fw_delay_time;
 mod fw_drive_tables;
+mod fw_ext40;
 pub mod fw_map;
 mod fw_params;
+mod fw_reverb;
+mod fw_rvb_core;
+mod fw_rvb_steps;
+mod fw_rvb_words;
 mod fw_rvb_wrap;
 mod fw_short_float;
 mod fw_stage;
@@ -64,7 +69,13 @@ mod tests_fw_delay_time;
 #[cfg(test)]
 mod tests_fw_map;
 #[cfg(test)]
+mod tests_fw_reverb_chain;
+#[cfg(test)]
 mod tests_fw_reverb_mix;
+#[cfg(test)]
+mod tests_fw_rvb_golden;
+#[cfg(test)]
+mod tests_fw_rvb_golden_data;
 #[cfg(test)]
 mod tests_fw_series;
 #[cfg(test)]
@@ -83,11 +94,13 @@ pub use fw_allpass::{ctx as fw_allpass_ctx, FwAllpass};
 pub use fw_amp_drive::{ctx as fw_amp_drive_ctx, DriveTables, FwAmpDrive};
 pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
+pub use fw_ext40::{Fp, E40};
 pub use fw_map::AllpassType;
 pub use fw_params::{
     compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,
     set_tone_stack, CMP_SLOPE,
 };
+pub use fw_reverb::{FwReverb, FwReverbF32};
 pub use fw_rvb_wrap::{mix2 as fw_rvb_mix2, FwRvbWrap};
 pub use fw_tone_stack::{ctx as fw_tone_stack_ctx, FwToneStack2, FwToneStack4};
 pub use master::MasterBus;
@@ -183,7 +196,8 @@ pub struct LayerFxChain {
     pub reverb_model: ReverbModel,
     pub reverb_color: ReverbColor,
     pub reverb_mix: f32,
-    /// Reverb VARIATION of Spring (longer tail) and Booth / Room (longer pre-delay), manual p.52-53;
+    /// Reverb VARIATION of Spring (longer tail; also picks firmware reverb type 1) and Booth / Room
+    /// (longer pre-delay), manual p.52-53;
     /// the right-hand types use `ReverbColor::Chorale`. Default off (bit-identical to before).
     pub reverb_variation: bool,
     /// Skips this chain's reverb (the engine sets it while Reverb GLOBAL mode is active, manual p.52).
@@ -196,6 +210,8 @@ pub struct LayerFxChain {
     pub delay_rate_raw: Option<u16>,
     fw_comp: Option<fw_stage::FwCompressorStage>,
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
+    /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
+    fw_reverb: Option<Box<FwReverb>>,
     fw_comp_amount: f32,
     clock_bpm: f32,
     dyn1: mod1_dynamic::Mod1Dyn,
@@ -297,6 +313,7 @@ impl LayerFxChain {
             delay_rate_raw: None,
             fw_comp: None,
             fw_amp: None,
+            fw_reverb: None,
             fw_comp_amount: 0.0,
             clock_bpm: 120.0,
             dyn1: mod1_dynamic::Mod1Dyn::new(),

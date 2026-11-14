@@ -275,7 +275,7 @@ pub fn draw_button(
         pos2(rect.center().x, rect.top() - 2.5),
         Align2::CENTER_BOTTOM,
         spec.label,
-        FontId::proportional(size),
+        FontId::proportional(size.max(MIN_FONT_PX)),
         fade(Color32::WHITE),
     );
     if let Some(s) = spec.shift {
@@ -288,7 +288,7 @@ pub fn draw_button(
             pos2(rect.center().x, rect.bottom() + 3.0),
             Align2::CENTER_TOP,
             s.label,
-            FontId::proportional(size * 0.9),
+            FontId::proportional((size * 0.9).max(MIN_FONT_PX)),
             if s.support.is_dimmed() {
                 col.gamma_multiply(0.45)
             } else {

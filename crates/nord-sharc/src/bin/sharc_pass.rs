@@ -15,6 +15,7 @@
 //! --raw FILE             every pass: the 6 pointer sets x 3 pairs x 4 words as little-endian u32
 //! --watch LO:LEN         list the store sites (pc, passes, address span) inside the window
 //! --dump ADDR:COUNT      print data words after the last pass      --calls  list the call targets
+//! --rec ADDR:COUNT:FILE  after every pass append COUNT DM words (little-endian u32) to FILE
 //! --no-ping-pong         keep DM(0xB0158) (default: toggled before every pass like the P0I ISR)
 //! --quiet                no per-message and per-pass lines
 //! ```
@@ -78,6 +79,7 @@ fn run(argv: &[String]) -> Result<String, String> {
     let mut out = String::new();
     let (mut left, mut right) = (Vec::new(), Vec::new());
     let mut raw: Vec<u8> = Vec::new();
+    let mut recs: Vec<Vec<u8>> = vec![Vec::new(); o.recs.len()];
     let mut writers = Writers::default();
     let mut stats = Stats::default();
     let mut calls = std::collections::BTreeSet::new();
@@ -121,6 +123,12 @@ fn run(argv: &[String]) -> Result<String, String> {
                 right.extend([f(1), f(3)]);
             }
         }
+        for ((addr, n, _), buf) in o.recs.iter().zip(recs.iter_mut()) {
+            for k in 0..*n {
+                let w = core.dm_read(addr.wrapping_add(k)).unwrap_or(0);
+                buf.extend(w.to_le_bytes());
+            }
+        }
         if !matches!(r.end, PassEnd::Idle) {
             let _ = writeln!(out, "stopped at pass {p}");
             break;
@@ -145,6 +153,9 @@ fn run(argv: &[String]) -> Result<String, String> {
     if let Some(f) = &o.wav {
         std::fs::write(f, wav_bytes(&[left, right], o.rate)).map_err(|e| format!("{f}: {e}"))?;
         let _ = writeln!(out, "wrote {f}");
+    }
+    for ((_, _, f), buf) in o.recs.iter().zip(recs) {
+        std::fs::write(f, buf).map_err(|e| format!("{f}: {e}"))?;
     }
     if let Some(f) = &o.raw {
         std::fs::write(f, raw).map_err(|e| format!("{f}: {e}"))?;
