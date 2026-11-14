@@ -3,6 +3,7 @@
 //! Spec: `docs/specs/organ-engine.md` section 4. Crossover and balance steps are VERIFIED
 //! (`types.rs`); rotor speeds, excursions and reflections are ASSUMED.
 
+use super::rotor_stop::{clamp_stop_angle, ease_phase, STOP_ANGLE_RAD};
 use super::types::{ROTARY_BUFFER_SIZE, ROTARY_CROSSOVER_HZ};
 use super::{OrganLayer, RotarySpeed};
 use std::f32::consts::TAU;
@@ -20,6 +21,7 @@ impl OrganLayer {
         self.rotary_close_mic = src.rotary_close_mic;
         self.rotary_mic_angle_deg = src.rotary_mic_angle_deg;
         self.rotary_stop_mode = src.rotary_stop_mode;
+        self.rotary_stop_angle = src.rotary_stop_angle;
         self.globals = src.globals;
     }
 
@@ -112,16 +114,21 @@ impl OrganLayer {
         if self.leslie_fw.is_some() {
             return self.process_leslie_firmware(scanner_out);
         }
-        if effective_speed == RotarySpeed::Stop && self.horn_rate_hz < 0.05 {
-            // Brake horn cleanly toward front cabinet position
-            self.horn_phase *= (1.0 - inv_fs * 6.0).max(0.0);
-        } else {
-            self.horn_phase = (self.horn_phase + TAU * self.horn_rate_hz * inv_fs) % TAU;
+        // Stopped: with an ANGLE picked the horn and rotor settle at that rest phase (manual p.53);
+        // with Free they keep the tiny residual rate and stay wherever they happen to stop.
+        let rest = (effective_speed == RotarySpeed::Stop && self.rotary_stop_angle > 0)
+            .then(|| STOP_ANGLE_RAD[usize::from(clamp_stop_angle(self.rotary_stop_angle))]);
+        match rest {
+            Some(t) if self.horn_rate_hz < 0.05 => {
+                self.horn_phase = ease_phase(self.horn_phase, t, inv_fs * 6.0);
+            }
+            _ => self.horn_phase = (self.horn_phase + TAU * self.horn_rate_hz * inv_fs) % TAU,
         }
-        if effective_speed == RotarySpeed::Stop && self.drum_rate_hz < 0.05 {
-            self.drum_phase *= (1.0 - inv_fs * 3.0).max(0.0);
-        } else {
-            self.drum_phase = (self.drum_phase + TAU * self.drum_rate_hz * inv_fs) % TAU;
+        match rest {
+            Some(t) if self.drum_rate_hz < 0.05 => {
+                self.drum_phase = ease_phase(self.drum_phase, t, inv_fs * 3.0);
+            }
+            _ => self.drum_phase = (self.drum_phase + TAU * self.drum_rate_hz * inv_fs) % TAU,
         }
 
         // Write crossover bands into pre-allocated Doppler / reflection buffers
@@ -297,5 +304,56 @@ mod tests {
         src.rotary_drive_scaled = true;
         dst.mirror_rotary_settings(&src);
         assert!(dst.rotary_drive_scaled);
+    }
+
+    /// Runs a stopped rotary with the given angle and returns the settled (horn, drum) phases.
+    fn settled_phases(angle: u8, start: f32) -> (f32, f32) {
+        let mut o = OrganLayer::new(48_000.0);
+        o.rotary_stop_mode = true;
+        o.rotary_stop_angle = angle;
+        o.horn_phase = start;
+        o.drum_phase = start;
+        // already braked: the rate ramp (4.2 s time constant) is tested elsewhere
+        o.horn_rate_hz = 0.0;
+        o.drum_rate_hz = 0.0;
+        for i in 0..(48_000 * 3) {
+            o.process_rotary(0.1 * (i as f32 * 0.05).sin(), 1.0 / 48_000.0);
+        }
+        (o.horn_phase, o.drum_phase)
+    }
+
+    #[test]
+    fn stop_angle_parks_horn_and_rotor_at_the_picked_position_from_any_start() {
+        for angle in 1..=6u8 {
+            let want = STOP_ANGLE_RAD[usize::from(angle)];
+            for start in [0.5_f32, 2.0, 4.0, 6.0] {
+                let (h, d) = settled_phases(angle, start);
+                let err = |p: f32| {
+                    let e = (p - want).rem_euclid(TAU);
+                    e.min(TAU - e)
+                };
+                assert!(
+                    err(h) < 1e-2 && err(d) < 1e-2,
+                    "angle {angle} start {start}: h={h} d={d}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn free_stop_keeps_the_phase_it_stopped_at_and_is_deterministic() {
+        let a = settled_phases(0, 2.0);
+        assert_eq!(a, settled_phases(0, 2.0));
+        let b = settled_phases(0, 4.0);
+        assert_ne!(a.0, b.0, "Free must not pull both starts to one angle");
+    }
+
+    #[test]
+    fn mirror_copies_the_stop_angle() {
+        let mut src = OrganLayer::new(48_000.0);
+        src.rotary_stop_angle = 4;
+        let mut dst = OrganLayer::new(48_000.0);
+        dst.mirror_rotary_settings(&src);
+        assert_eq!(dst.rotary_stop_angle, 4);
     }
 }

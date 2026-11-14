@@ -2,8 +2,10 @@
 
 use super::BackupLibraryState;
 use crate::audio::{AudioCommand, AudioHandle};
+use crate::panel::FwMessage;
 use crate::panel::Stage4PanelState;
-use nord_core::cbin::CbinFile;
+use nord_core::cbin::{CbinFile, ProgramDecoded, ProgramSoundRefs};
+use nord_core::synth::SynthOscMode;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -38,6 +40,7 @@ impl BackupLibraryState {
         match res {
             Ok(mut prog) => {
                 let refs = archive.resolve_program_sounds(&prog);
+                self.notices.extend(missing_sounds(&prog, &refs));
                 let active_mask = prog.global.scene_1_mask | prog.global.scene_2_mask;
                 let piano_jobs = [
                     (false, prog.piano.layer_a.enabled, 2u8, refs.piano_a),
@@ -99,6 +102,32 @@ impl BackupLibraryState {
     }
 }
 
+/// The firmware's `Piano not found` / `Sample not found` for the layers of `prog` whose sound the
+/// archive does not hold (at most one message of each kind).
+///
+/// ASSUMED: shown when an enabled piano layer, or an enabled synth layer in Sample mode, has no
+/// archive entry for its name hash / sample id; the trigger inside the firmware is not traced.
+fn missing_sounds(prog: &ProgramDecoded, refs: &ProgramSoundRefs) -> Vec<FwMessage> {
+    let synth = [
+        (&prog.synth.layer_a, &refs.synth_a),
+        (&prog.synth.layer_b, &refs.synth_b),
+        (&prog.synth.layer_c, &refs.synth_c),
+    ];
+    let mut out = Vec::new();
+    if (prog.piano.layer_a.enabled && refs.piano_a.is_none())
+        || (prog.piano.layer_b.enabled && refs.piano_b.is_none())
+    {
+        out.push(FwMessage::PianoNotFound);
+    }
+    if synth
+        .iter()
+        .any(|(l, r)| l.enabled && l.osc_mode == SynthOscMode::Sample && r.is_none())
+    {
+        out.push(FwMessage::SampleNotFound);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::support::build_synthetic_zip_stored;
@@ -107,6 +136,35 @@ mod tests {
     use nord_core::piano::NpnoSound;
     use nord_core::synth::{SynthOscMode, SynthSampleSound};
     use std::sync::Arc;
+
+    #[test]
+    fn missing_sounds_name_the_layers_the_archive_lacks() {
+        let mut prog = ProgramDecoded::default();
+        prog.piano.layer_a.enabled = false;
+        prog.piano.layer_b.enabled = false;
+        prog.synth.layer_a.enabled = false;
+        prog.synth.layer_b.enabled = false;
+        prog.synth.layer_c.enabled = false;
+        let none = ProgramSoundRefs::default();
+        assert!(missing_sounds(&prog, &none).is_empty(), "nothing enabled");
+        prog.piano.layer_b.enabled = true;
+        assert_eq!(missing_sounds(&prog, &none), vec![FwMessage::PianoNotFound]);
+        let found = ProgramSoundRefs {
+            piano_b: Some("Piano/x.npno".into()),
+            ..Default::default()
+        };
+        assert!(missing_sounds(&prog, &found).is_empty());
+        prog.synth.layer_c.enabled = true;
+        assert!(
+            missing_sounds(&prog, &found).is_empty(),
+            "a waveform layer needs no sample"
+        );
+        prog.synth.layer_c.osc_mode = SynthOscMode::Sample;
+        assert_eq!(
+            missing_sounds(&prog, &found),
+            vec![FwMessage::SampleNotFound]
+        );
+    }
 
     #[test]
     fn test_library_load_program_auto_resolves_piano_and_sample() {
