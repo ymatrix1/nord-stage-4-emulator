@@ -439,16 +439,15 @@ impl OrganLayer {
 
         // 1. Advance all 91 spinning tonewheels continuously (two lanes while the detuned
         //    ensemble's stereo blend is active, otherwise one)
-        let (tw_buses, lanes) = self.render_tonewheel_lanes_sharing(inv_fs, shared);
-
-        if self.active_key_count == 0
+        let idle = self.active_key_count == 0
             && !(self.firmware_weights() && self.weight_state.active())
             && !(self.b3_weights_active() && self.b3_weights.active())
             && !(self.farfisa_keys_active() && self.farfisa_keys.active())
             && !self.b3_bass_sounding()
             && self.click_env < 1e-6
-            && self.click_bp_state[0].abs() < 1e-6
-        {
+            && self.click_bp_state[0].abs() < 1e-6;
+        let (tw_buses, lanes) = self.render_tonewheel_lanes_sharing(inv_fs, shared, !idle);
+        if idle {
             return [0.0, 0.0];
         }
 

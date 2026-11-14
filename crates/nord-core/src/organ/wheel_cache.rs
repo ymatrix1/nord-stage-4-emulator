@@ -111,6 +111,32 @@ mod tests {
     }
 
     #[test]
+    fn an_idle_layer_skips_the_sines_but_keeps_every_phase() {
+        let inv_fs = 1.0 / 48_000.0;
+        let mut idle = OrganLayer::new(48_000.0);
+        let mut full = OrganLayer::new(48_000.0);
+        for _ in 0..3000 {
+            assert_eq!(idle.render_frame(), [0.0, 0.0]);
+            full.render_tonewheel_lanes(inv_fs); // evaluates every wheel
+        }
+        assert!(idle
+            .tonewheel_phases
+            .iter()
+            .zip(&full.tonewheel_phases)
+            .all(|(a, b)| a.to_bits() == b.to_bits()));
+        idle.note_on(60);
+        full.note_on(60);
+        for n in 0..2000 {
+            let (a, b) = (idle.render_frame(), full.render_frame());
+            assert_eq!(
+                [a[0].to_bits(), a[1].to_bits()],
+                [b[0].to_bits(), b[1].to_bits()],
+                "frame {n}"
+            );
+        }
+    }
+
+    #[test]
     fn diverged_phases_fall_back_to_the_layers_own_waveforms() {
         let mut a = OrganLayer::new(48_000.0);
         let mut b = OrganLayer::new(48_000.0);

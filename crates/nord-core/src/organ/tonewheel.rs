@@ -116,14 +116,20 @@ impl OrganLayer {
         &mut self,
         inv_fs: f32,
     ) -> ([[f32; NUM_TONEWHEELS]; 2], usize) {
-        self.render_tonewheel_lanes_sharing(inv_fs, None)
+        self.render_tonewheel_lanes_sharing(inv_fs, None, true)
     }
 
     /// [`Self::render_tonewheel_lanes`] with the legacy waveforms optionally taken from `shared`.
+    ///
+    /// With `need_signal == false` (the caller returns silence anyway) the legacy source only
+    /// advances the 91 phases and returns zeroed buses: the `sin` evaluations and the pickup and
+    /// crosstalk stages, whose results nothing reads, are skipped. The phases evolve exactly as
+    /// with the full path.
     pub(super) fn render_tonewheel_lanes_sharing(
         &mut self,
         inv_fs: f32,
         shared: Option<&WheelCache>,
+        need_signal: bool,
     ) -> ([[f32; NUM_TONEWHEELS]; 2], usize) {
         let mut raw = [[0.0f32; NUM_TONEWHEELS]; 2];
         let mut lanes = 1;
@@ -166,6 +172,14 @@ impl OrganLayer {
             }
         } else {
             let bend = self.bend_ratio;
+            if !need_signal {
+                for i in 0..NUM_TONEWHEELS {
+                    let p = self.tonewheel_phases[i];
+                    let next_p = p + TAU * self.tonewheel_freqs[i] * bend * inv_fs;
+                    self.tonewheel_phases[i] = if next_p >= TAU { next_p - TAU } else { next_p };
+                }
+                return (raw, lanes);
+            }
             let shared_raw =
                 shared.and_then(|c| c.waveforms_for(self.model, &self.tonewheel_phases));
             if let Some(w) = shared_raw {
