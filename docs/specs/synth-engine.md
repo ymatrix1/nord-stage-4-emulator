@@ -231,3 +231,18 @@ Source: [audible-genius-synth-lessons](../research/audible-genius-synth-lessons.
 | Env To Pitch | 1 octave at 10 | 1.76 octave at 10 (one amount, +5.5) | EMPIRICAL |
 | Vibrato depth | 92 cents at 10 | x1.06 (98 cents) | EMPIRICAL |
 
+
+## Extern mode, KB ZONE and Aux KB of the Synth layers (manual p.27-28, p.43-47)
+
+Spec: [midi-and-control.md](midi-and-control.md) (Extern, Aux KB), [control-inventory.md](control-inventory.md) section 9b.
+
+| Behaviour | Engine path | Panel edit | Status |
+|---|---|---|---|
+| EXTERN (Shift+Mode) of Synth layer `i` | `Stage4Engine::set_layer_extern(i, on)`: on = release the internal voices (`note_off` 0..127, no allocation) and set `extern_out.layers[i].enabled`; off = `extern_all_notes_off(i)` then clear the flag; the volume poll restarts so CC7 is only sent on a fader move | `SynthEdit::Extern { layer, on }` | manual p.46; tests `set_layer_extern_*` (`engine/tests_extern.rs`), `extern_edits_enable_the_layer_and_transmit` |
+| CC VAL 1 / CC VAL 2 / PROGRAM dials | `extern_set_cc_value`, `extern_set_program` (Bank Select MSB, LSB, Program Change) | `SynthEdit::ExternCc`, `ExternProgram` | manual p.47 |
+| KB ZONE of Synth layer | `set_layer_zone_leds(SynthA..C, leds)` (legacy router mask and firmware `kKbZone`) | `SynthEdit::Zone { layer, leds }` | stepping order `ASSUMED` (`panel/kb_zone.rs`) |
+| Aux KB LED of Synth layer | `set_layer_aux(SynthA..C, on)` (`AuxKb::layers[4..7]`) | `SynthEdit::AuxKb { layer, on }` | enable-on-switch `ASSUMED` |
+
+An Extern layer renders nothing: `layer_note_on` routes to the Extern queue before any voice allocation, so the Synth DSP never runs for it. Everything above is a field write or a ring-buffer push, so `process_block` stays allocation and lock free.
+
+Not modelled here: the Extern channel and Extern menu settings (already in `engine/settings`), per-program storage of the Extern flag (the loaded program does not set `extern_out.layers[i].enabled`; `ASSUMED` that programs store it, the CBIN field is not located: open item).

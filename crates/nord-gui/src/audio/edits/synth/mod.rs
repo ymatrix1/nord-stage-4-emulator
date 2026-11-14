@@ -13,7 +13,7 @@ pub use param::SynthParam;
 pub use pattern::PatternParam;
 
 use nord_core::engine::Stage4Engine;
-use nord_core::morph::MorphParameter;
+use nord_core::morph::{LayerId, MorphParameter};
 use nord_core::synth::SynthLayer;
 
 /// Engine layer index of Synth A (Organ A, B, Piano A, B, Synth A, B, C).
@@ -43,6 +43,25 @@ pub enum SynthEdit {
     Sustped(bool),
     /// PSTICK (Shift+Layer B): all three Synth layers follow the pitch stick.
     Pstick(bool),
+    /// KB ZONE of Synth layer `0..=2`: the zone LED set (bit `u` = zone `u + 1`).
+    Zone { layer: u8, leds: u8 },
+    /// Aux KB LED of Synth layer `0..=2`: the layer is played by the aux keyboard.
+    AuxKb { layer: u8, on: bool },
+    /// EXTERN (Shift+Mode) of Synth layer `0..=2`: MIDI out instead of audio (manual p.46).
+    Extern { layer: u8, on: bool },
+    /// CC VAL 1 / CC VAL 2 dial (`slot` 0 or 1) of an Extern layer: stores and transmits the value.
+    ExternCc { layer: u8, slot: u8, value: u8 },
+    /// PROGRAM dial of an Extern layer: Bank Select then Program Change.
+    ExternProgram { layer: u8, program: u8 },
+}
+
+/// Engine id of Synth layer `0..=2`; out-of-range values map to Synth C.
+fn layer_id(layer: u8) -> LayerId {
+    match layer {
+        0 => LayerId::SynthA,
+        1 => LayerId::SynthB,
+        _ => LayerId::SynthC,
+    }
 }
 
 /// The three synth layers, in A, B, C order.
@@ -83,6 +102,21 @@ impl SynthEdit {
                 engine.pedals.pstick[SYNTH_FIRST_LAYER..SYNTH_FIRST_LAYER + 3].fill(on);
                 engine.refresh_pedal_routing();
             }
+            Self::Zone { layer, leds } if layer < 3 => {
+                engine.set_layer_zone_leds(layer_id(layer), leds)
+            }
+            Self::AuxKb { layer, on } if layer < 3 => engine.set_layer_aux(layer_id(layer), on),
+            Self::Extern { layer, on } => engine.set_layer_extern(usize::from(layer), on),
+            Self::ExternCc { layer, slot, value } if layer < 3 && slot < 2 => {
+                engine.extern_set_cc_value(usize::from(layer), usize::from(slot), value)
+            }
+            Self::ExternProgram { layer, program } if layer < 3 => {
+                engine.extern_set_program(usize::from(layer), program)
+            }
+            Self::Zone { .. }
+            | Self::AuxKb { .. }
+            | Self::ExternCc { .. }
+            | Self::ExternProgram { .. } => {}
             Self::Group { src, group } => {
                 let [a, b, c] = layers(engine);
                 match src {
@@ -193,5 +227,63 @@ mod tests {
         assert!(!e.pedals.pstick[3] && !e.pedals.sustped[1]);
         SynthEdit::Pstick(false).apply(&mut e);
         assert_eq!(e.pedals.pstick[4..7], [false; 3]);
+    }
+
+    #[test]
+    fn zone_and_aux_edits_target_one_synth_layer() {
+        let mut e = Stage4Engine::new(48_000.0);
+        SynthEdit::Zone {
+            layer: 1,
+            leds: 0b0100,
+        }
+        .apply(&mut e);
+        assert_eq!(e.layer_zone_leds(LayerId::SynthB), 0b0100);
+        assert_eq!(e.layer_zone_leds(LayerId::SynthA), 0b1111);
+        assert_eq!(e.layer_zone_leds(LayerId::PianoB), 0b1111);
+        SynthEdit::AuxKb { layer: 2, on: true }.apply(&mut e);
+        assert!(e.aux_kb.is_aux_layer(LayerId::SynthC));
+        assert!(!e.aux_kb.is_aux_layer(LayerId::SynthA));
+        SynthEdit::Zone { layer: 9, leds: 1 }.apply(&mut e);
+        SynthEdit::AuxKb { layer: 9, on: true }.apply(&mut e);
+        assert!(!e.aux_kb.is_aux_layer(LayerId::OrganA));
+    }
+
+    #[test]
+    fn extern_edits_enable_the_layer_and_transmit() {
+        use nord_core::engine::MidiOut;
+        let mut e = Stage4Engine::new(48_000.0);
+        SynthEdit::Extern { layer: 1, on: true }.apply(&mut e);
+        assert!(e.extern_out.layers[1].enabled && !e.extern_out.layers[0].enabled);
+        SynthEdit::ExternCc {
+            layer: 1,
+            slot: 1,
+            value: 99,
+        }
+        .apply(&mut e);
+        SynthEdit::ExternProgram {
+            layer: 1,
+            program: 5,
+        }
+        .apply(&mut e);
+        let out: Vec<_> = std::iter::from_fn(|| e.pop_midi_out()).collect();
+        assert_eq!(out[0], MidiOut::control_change(13, 2, 99));
+        assert_eq!(out.last(), Some(&MidiOut::program_change(13, 5)));
+        SynthEdit::Extern {
+            layer: 1,
+            on: false,
+        }
+        .apply(&mut e);
+        assert!(!e.extern_out.layers[1].enabled);
+        SynthEdit::ExternCc {
+            layer: 5,
+            slot: 0,
+            value: 1,
+        }
+        .apply(&mut e);
+        SynthEdit::ExternProgram {
+            layer: 5,
+            program: 1,
+        }
+        .apply(&mut e);
     }
 }

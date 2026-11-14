@@ -107,23 +107,12 @@ fn every_synth_inventory_id_has_a_painted_widget() {
 }
 
 #[test]
-fn dimmed_controls_are_exactly_the_ones_without_engine_support() {
-    let mut dim: Vec<_> = synth_ids()
+fn no_synth_control_is_dimmed_any_more() {
+    let dim: Vec<_> = synth_ids()
         .into_iter()
         .filter(|id| unsupported_reason(id).is_some())
         .collect();
-    dim.sort();
-    let mut expected = [
-        "synth.aux_led.a",
-        "synth.aux_led.b",
-        "synth.aux_led.c",
-        "synth.extern",
-        "synth.kb_zone_down",
-        "synth.kb_zone_up",
-        "synth.zone_leds",
-    ];
-    expected.sort();
-    assert_eq!(dim, expected);
+    assert!(dim.is_empty(), "still dimmed: {dim:?}");
 }
 
 #[test]
