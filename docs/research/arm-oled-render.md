@@ -1,7 +1,7 @@
 # Rendering the real OLED screens from the ARM emulator
 
-- **Checked:** 2026-11-14
-- **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` (OS v1.66 ARM0 image, load base `0xC0000000`) and `bank0_SRAM.bin`; the ARM harness (`tools/arm_boot_full.py`, `tools/arm_steady.py`, `unicorn` 2.1); tools `tools/arm_panel.py` (run + capture) and `tools/arm_oled.py` (fonts, panel stream, controllers), `tools/arm_i2c.py` (I2C0 and the four EEPROMs), `tools/arm_keys.py` (key matrix), `tools/arm_screens.py` (boot once, press keys, capture frames and widget text); `tools/arm_xref.py dis` (capstone), `tools/ns4_oled_strings.py`. Prior notes: [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (the blockers), [arm-fw-emulation](arm-fw-emulation.md), [arm-organ-messages](arm-organ-messages.md) s10.
+- **Checked:** 2026-11-14 (third pass, bean `ns4-pyqg`)
+- **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` (OS v1.66 ARM0 image, load base `0xC0000000`) and `bank0_SRAM.bin`; the ARM harness (`tools/arm_boot_full.py`, `tools/arm_steady.py`, `unicorn` 2.1); tools `tools/arm_panel.py` (run + capture) and `tools/arm_oled.py` (fonts, panel stream, controllers), `tools/arm_i2c.py` (I2C0 and the four EEPROMs), `tools/arm_keys.py` (key matrix, encoders), `tools/arm_store.py` (program store), `tools/arm_screens.py` (boot once, press keys, capture frames and widget text); `tools/arm_xref.py dis` (capstone), `tools/ns4_oled_strings.py`. Prior notes: [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (the blockers), [arm-fw-emulation](arm-fw-emulation.md), [arm-organ-messages](arm-organ-messages.md) s10.
 - **Question:** the blockers of [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s5 (display path stubbed, font undecoded, draw primitive unknown, panel link unidentified): can the ARM emulator draw the firmware's own screens so that our OLED layout can be compared with the real one? Second pass (bean `ns4-2gdc`): what device does the program load talk to, how do panel buttons reach the firmware, what do the real menu / Synth / popup screens look like, and what is the capitalisation of the 19 case-only strings?
 
 Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by the command shown, **EMPIRICAL** = measured, **ASSUMED** = reading.
@@ -19,6 +19,8 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 | Real Program screen with a program name | **Not yet, but the error is gone**: the program store is four 64 KB I2C EEPROMs (`0x50..0x53`); modelled blank, the firmware formats them and the screen shows `A:11` + `<empty>` instead of `Write error` (section 6). A real name needs a populated store (record format not decoded). | partial |
 | Panel input | The scan reads `0x60000010` / `0x60000020` after a strobe at `0x60000015`; a pressed key reads 0 (section 7). `arm_keys.KeyMatrix` injects presses; 98 key bits swept, Shift and Program 3 / 4 / 7 / 8 identified, four menu screens opened. | VERIFIED (run) |
 | Case-only strings | Settled where a real screen exists: title bars upper-case mixed-case firmware strings through a per-widget flag, so `ORGAN PRESET` and `AUX KB SETTINGS` are right and `AUX KB` / `PROGRAM ORGANIZE` were wrong (section 10). | VERIFIED (hook) |
+| Program store (third pass) | A Store writes a RAM cache that the storage task flushes to the EEPROMs; the record is a chain of 128-byte clusters, `size`, `crc32` of the 824-byte body, a 24-byte name (outside the CRC), `p4sn`. `arm_store.py` stores the default program, renames it in the image and boots with it: the home screen shows `A:11` / `Studio Grand`. | VERIFIED (run, CRC check) |
+| Keys (third pass) | Program 1 / 2 / 5 / 6 = `(0x10, 0, 2 / 3 / 4 / 5)`, Store `(0x10, 0, 1)`, Page `(0x08, 0, 6)`, Layer Init = Shift + `(0x08, 0, 3)`; System, Sound, Output, Pedal menus and all 56 pages of the seven menus read; Synth pages reached through the Synth page. Encoders decode to counters, no screen reacts. Undo not found. | VERIFIED (sweeps) / EMPIRICAL |
 
 ## 2. The panel link
 
@@ -111,7 +113,7 @@ The size is garbage because the layer below returns garbage. **That layer is I2C
 
 **Result (VERIFIED, `uv run --with unicorn python tools/arm_screens.py boot ...`).** The boot reaches the main loop `0xC00A0248` after 800 M instructions with 90,086 I2C transactions (it scans all four devices, then formats). It writes one header to the blank device 0, bytes `79 B8 F8 99 01 00 00 00` (magic `0x99F8B879`, then `1`), and leaves every other byte `0xFF`. The Program screen shows `A:11` and **`<empty>`**; `Write error` is gone.
 
-**What is not done.** A real program name needs records in the EEPROMs (all 7 sound sections of an `.ns4p`, its name, the entry keys of the directory layer). The record format is not decoded; the `.ns4b` restore image under `.reference/` writes them on a unit. The cheap way to get it is to capture the I2C writes of a Store (Shift + Program ..., Store menu, `Screen::StoreAs`) and replay them as an initial EEPROM image: follow-up 1.
+**What is not done.** A real program name needs records in the EEPROMs (all 7 sound sections of an `.ns4p`, its name, the entry keys of the directory layer). The record format is not decoded; the `.ns4b` restore image under `.reference/` writes them on a unit. The cheap way to get it is to capture the I2C writes of a Store (Shift + Program ..., Store menu, `Screen::StoreAs`) and replay them as an initial EEPROM image: follow-up 1 (done in section 13).
 
 ## 7. Front-panel input (blocker 2, VERIFIED)
 
@@ -147,7 +149,7 @@ The size is garbage because the layer below returns garbage. **That layer is I2C
 | `(0x01, 1, 0..5)`, `(0x02, 1, 0..3, 5, 6)`, `(0x04, 1, 3, 4)` | effect popups (`Delay Feedback Effect`, `Mod 2 Type`, `Amp Type`, `Reverb Type`, `Compressor`, ...) | |
 | `(0x10, 0, 0)`, `(0x20, 0, 3..6)`, `(0x10, 1, 7)` | popups `Keyboard Touch`, `Acoustics`, `Unison`, `Dynamic Compression`, `Equalizer`, `Amp/EQ` | need a longer press |
 
-Not found: Program 1, 2, 5, 6 as menu keys (Shift + the `A:12` / `A:15` / `A:16` buttons only changes the location, so the System, Sound, Output and Pedal menus were not captured), the Page and Store keys, and every encoder (`0x80` columns).
+Not found in the first sweep (40-tick holds): Program 1, 2, 5, 6, the Page and Store keys and every encoder; section 12 finds them with longer holds and Shift staged.
 
 ## 8. Captured screens (VERIFIED: `arm_screens.py boot` then `press` / `sweep`)
 
@@ -201,29 +203,134 @@ The **fonts are proportional bitmaps** (glyph advance = width incl. the gap colu
 | `PROGRAM ORGANIZE` | `Program Organize` | `Program` left, `Organize` right, mixed case | **wrong, fixed** to `Program Organize` |
 | `AUX KB` | `Aux Kb Settings` | `AUX KB SETTINGS 1/3` | **wrong, fixed** |
 | `MIDI MENU`, `EXTERN MENU`, `PEDAL MENU`, `SYSTEM MENU`, `SOUND MENU`, `OUTPUT MENU` (not in the 19) | `... Settings` table `0xC02D3584..0xC02D35E4` | `MIDI SETTINGS 1/10`, `EXTERN SETTINGS 1/13` | **wrong, fixed** (`SYSTEM`, `SOUND`, `OUTPUT`, `PEDAL` follow the table: ASSUMED) |
-| `UNDO` / `REDO` soft labels, `TRANSPOSE`, `Layer Init`, `FILTER`, `VIBRATO`, `OSC PITCH`, `LEFT` / `RIGHT` (arp), `Reset All Settings`, `G#`, `II` | mixed case in the pool | no screen reached (Undo, Layer Init, the other Synth pages, the Arp page) or the real screen is a popup (`Transpose` mixed case, 8 px) | **open**, see section 11. By analogy the soft labels are mixed case (`Num`, `Cat`, `Cancel`, `Swap`, `Move`), not applied without a screen |
+| `UNDO` / `REDO` soft labels, `TRANSPOSE`, `Layer Init`, `FILTER`, `VIBRATO`, `OSC PITCH`, `LEFT` / `RIGHT` (arp), `Reset All Settings`, `G#`, `II` | mixed case in the pool | no screen reached (Undo, Layer Init, the other Synth pages, the Arp page) or the real screen is a popup (`Transpose` mixed case, 8 px) | partly settled in section 14 (Layer Init, Transpose, Filter, Vibrato, Osc Pitch); open: `UNDO`, `LEFT` / `RIGHT`. By analogy the soft labels are mixed case (`Num`, `Cat`, `Cancel`, `Swap`, `Move`), not applied without a screen |
 
-## 11. Remaining blockers (exact)
+## 11. Remaining blockers (exact, after the third pass)
 
-1. **A populated program store.** The EEPROM record format and directory keys are not decoded, so the home screen shows `<empty>` rather than a name. Capturing the I2C writes of a Store (the Store flow needs the Store key, not identified) would give it.
-2. **Keys not identified:** Program 1, 2, 5, 6 as menu keys (System, Sound, Output, Pedal menus), Page / Store / Undo / Layer Init, every encoder and dial (`0x80` kind 1 reads and the dial inputs behind SPI / ADC are not driven). The sweep presses single keys and Shift pairs; menu pages beyond page 1 need the Page keys.
-3. **Display 1** only shows the Synth page (it is blank on every other screen, as on the unit).
-4. **The widget draw path is still not hand-callable** (`0xC004064C` is used by the crash text only); every screen is reached by input, which is the faithful route.
-5. **Timing:** a tick is 200,000 instructions of virtual time (ASSUMED 1 ms); popups time out in the firmware (not measured).
+1. **Program store beyond one program.** One record (the default program, location `A:11`) is stored and renamed in the image. Not done: other locations (the directory entry layout at device 3 `0xFE98` is not decoded), the 824-byte body, a name typed through the Store As screen (Shift + Store stays on the home screen with Memory Protect forced off: the Store As handler has its own gate, not traced) and editing Memory Protect through the System menu instead of the hook at `0xC0150540`.
+2. **Encoders and dials.** The five A / B pairs of strobe `0x80` decode to +1 / -1 counters (`0xC0082A9C`, entries `[obj + 0x14] + index * 24`, indices 7, 6, 15, 14, 13), but nothing reads them within 60 ticks, so no menu value, dial value or name character can be edited. The consumer behind `0xC007AEBC` (thresholds `[obj + 0x5C / 0x60 / 0x64]`) and the SPI / ADC dial inputs are not reached.
+3. **Undo and Page previous.** Undo is Shift + Solo (manual p.42), but none of the 97 matrix keys reaches the `Nothing to Undo` handler (`0xC0132868`), alone or with Shift staged; the 42 silent keys are probably LED-only buttons. Page previous is silent in every state.
+4. **Not captured:** the `Store Disabled` multi-line message (shown through `0xC0080314`, not the text widget), the Arpeggiator page values (glyph codes), Master Clock / Octave Shift popup graphics, the real `LFO` page variants.
+5. **Row texts `B3` and `Pure Saw`** of the home screen are set (and drawn in the unit) but absent from the final frame here: ASSUMED to need a loaded sound (no DSP).
+6. **Display path and timing:** the widget draw path is still not hand-callable (`0xC004064C`); a tick is 200,000 instructions (ASSUMED 1 ms); popups time out in the firmware (not measured); a held state needs about 30 ticks for the scan to see it.
+
+## 12. Third pass: keys, menus and popups (VERIFIED: sweeps with 100-tick holds and Shift staged)
+
+Bean `ns4-pyqg`. Every key bit was pressed alone and with Shift held (100 ticks down, 60 up; `sweep_plain` / `sweep_shift` of a throw-away script around `arm_screens.Session`, 2 x 97 presses), then the menus were paged with the Page key. A key is `(strobe, port, bit)`.
+
+### 12.1 Keys (VERIFIED, plain unless noted)
+
+| Key | Function | Evidence |
+|---|---|---|
+| `(0x02, 1, 4)` | Shift | Shift + Program n opens the menus below |
+| `(0x10, 0, 2)` / `(0x10, 0, 3)` / `(0x08, 0, 2)` / `(0x04, 0, 2)` | Program 1 / 2 / 3 / 4; with Shift: **System** (`SYSTEM SETTINGS 1/6`), **Sound** (first page `PROGRAM LEVELS 1/11`), Program Organize, `AUX KB SETTINGS 1/3` | location `A:11` .. `A:14`; menu strings |
+| `(0x10, 0, 4)` / `(0x10, 0, 5)` / `(0x08, 0, 4)` / `(0x04, 0, 4)` | Program 5 / 6 / 7 / 8; with Shift: **Output** (`OUTPUT SETTINGS 1/6`), **Pedal** (`PEDAL SETTINGS 1/7`), `MIDI SETTINGS 1/10`, `EXTERN SETTINGS 1/13` | same |
+| `(0x10, 0, 1)` | **Store**: first press `STORE PROGRAM TO` (`A:11`, `<empty>`, `As:Unnamed`), second press stores and shows the name on the home screen | hooks on the Store handler `0xC01504FC`; no other key reaches it |
+| `(0x08, 0, 6)` | **Page** (next): `A:11` to `A:21` on the home screen, next page inside a menu (`1/6` to `2/6` ...); with Shift `B:11` (Bank) | menus paged to the last page |
+| `(0x08, 0, 3)` + Shift | **Layer Init**: bar `LAYER INIT` (flag set, pool string `Layer Init`), `Press to initialize`, letters `AB` `A` `A`, soft buttons `All` `Organ` `Piano` `Synth` | frame + widget strings |
+| `(0x08, 0, 3)` | Section Edit (`SECTION EDIT`, `Section editing affects` / `all enabled layers`) | as s8 |
+| `(0x10, 0, 6)` + Shift | Paste: popup `Nothing to Paste` in the lower half, home header kept | frame |
+| `(0x10, 1, 4)` + Shift | Sound Init: popup `Synth` / `Sound Init` (label y = 45, value y = 55) | frame |
+| `(0x40, 0, 4)` / `(0x40, 0, 5)` + Shift | Rotary Type (`Rotary Type` / `Close`), `ROTOR STOP ANGLE` bar with `Position` / `Free` | strings |
+| `(0x04, 0, 0)` + Shift | `Numeric Pad mode` / `On` popup (plain: `Live 1`) | strings |
+
+**Not found:** Undo (Shift + Solo per the manual p.42): no key of the 97 bits, alone or with Shift held 30 ticks before, reaches the `Nothing to Undo` handler (literal load `0xC0132868`, 2 x 97 presses with a hook there); Page previous (all silent keys also stay silent with Shift); `STORE PROGRAM AS` (Shift + Store with Memory Protect forced off stays on the home screen, the Store As handler has its own gate: not traced). The 42 keys that are silent both alone and with Shift are probably LED-only buttons (Solo, Layer, FX focus), which have no display text.
+
+**Synth keys (display 1, VERIFIED; only after the Synth page `(0x01, 1, 6)` is open, from the home screen they are silent):** `(0x08, 1, 2)` `Filter`, `(0x08, 1, 3)` `Filter Envelope` (with `---` and `0.5 ms` / `1.82 s` / `3.0 ms`), `(0x08, 1, 4)` `Amp Envelope`, `(0x10, 1, 1)` `Osc Envelope`, `(0x10, 1, 5)` `Osc Pitch` (`SEMI` / `CENT`), `(0x10, 1, 6)` `LFO`, `(0x04, 1, 1)` `Arpeggiator`, `(0x04, 1, 2)` `Vibrato` (`5.4 Hz` / `5.0` / `0.7 s`), `(0x10, 1, 0)` `  SAMPLE LIBRARY` (`Sample not found`, `Synth Mode` / `Samples`); popups `Voice Mode` / `Mono` `(0x08, 1, 0)`, `Vibrato` / `On` `(0x08, 1, 1)`, `Unison` `(0x08, 1, 5)`, `Arpeggiator Mode` / `Poly` `(0x04, 1, 0)`, `Keyboard Hold` `(0x20, 1, 2)`, `Arpeggiator/Gate` `(0x20, 1, 3)`, `Octave Shift` `(0x20, 1, 4 / 5)`.
+
+### 12.2 Memory Protect gates the Store (VERIFIED)
+
+The Store handler `0xC0150500` tests the System setting at `0xC0150540` (`cmp r0, #1`). With Memory Protect on (the default, `SYSTEM SETTINGS 1/6` shows `On`) it shows the multi-line message `Store Disabled` / `Memory Protected` / `in System menu` (pool `0xC02C0EC4`, shown by `0xC0080314`, not through the text widget hook) and stops. `tools/arm_store.py` forces r0 = 0 there (the value cannot be edited yet, see 12.4).
+
+### 12.3 Menu pages (VERIFIED, all 56 pages of the seven menus read; widget strings)
+
+Every page has a title bar `<NAME> SETTINGS<TAB>n/N` and **one** item: label (8 px) over its value (13 px), sometimes a second 8 px line (`Not connected`, `Adjust with Program dial`). The last page of three menus is an overview with a different bar title. The page labels of `nord-panel/src/menus` match the real labels nearly everywhere (the model was written from the manual); the differences are in the table of section 14.
+
+| Menu | Pages (label, first value) |
+|---|---|
+| System 6 | Memory Protect `On`; Global Transpose `None`; Fine Tune `440.0Hz` / `0 cent`; LED Intensity `High`; Reset all settings `to default values`; Version `OS v1.66` |
+| Sound 11 | **bar `PROGRAM LEVELS 1/11`**: `Adjust with Program dial` / Volume Level Offset `+0.0 dB`; then `SOUND SETTINGS 2/11` .. `11/11`: Piano Pedal Noise Level, Piano String Res Level, Organ Keyboard Trig `High`, B3 Organ Tone-Wheel `Vintage 1`, B3 Organ Click Level `Normal`, Rotary Bass/Horn level `50/50`, Rotary Rotor Speed / Rotor Acc. / Horn Speed / Horn Acc. `Normal` |
+| Output 6 | Output Routing Mode `Global`; Bus Output Channels; Organ / Piano / Synth Output Channel (`12`, `Auto`); bar `OUTPUT OVERVIEW 6/6` |
+| Pedal 7 | Control / Swell Pedal Type `Nord EP` + `Not connected`; Sustain Pedal Type `Nord SP-1`; Triple Pedal Function `Una Corda`; Rotor Pedal Type; Foot Switch Type `Single Open`; bar `PEDAL OVERVIEW 7/7` |
+| MIDI 10 | Local Control; Global Channel `1` / `16`; Organ / Piano / Synth Channel `Off`; Extern Channel `13` `14` `15`; Control Change Type `CC & NRPN`; Program Change Mode `Send & Receive`; Transpose MIDI at `In`; bar `MIDI OVERVIEW 10/10` |
+| Aux KB 3 | Aux Keyboard Enable `Off`; Aux Keyboard Layers `--` `--` `---`; Keyboard Curve `Medium` |
+| Extern 13 | Echo Global to Extern Ch `Off`; Keyboard Velocity `Medium`; Program Change MSB / LSB / PC (`--` `0`); MIDI CC #1 / #2 (`2`); ModWheel / Aftertouch / Ctrl Pedal / Swell Pedal / Volume Pedal MIDI `On` (pages 8 to 12: the order the model had **ASSUMED** is now VERIFIED); Send On Load `Off` |
+
+### 12.4 Encoders: decoded, not yet effective (EMPIRICAL)
+
+Strobe `0x80` holds five A / B pairs (port 0 bits 0 to 3, port 1 bits 0 to 5). The decoder `0xC0082A9C` adds +1 / -1 per Gray step to a per-encoder counter (`[entry + 4]`, entry = `[obj + 0x14] + index * 24`; indices 7, 6, 15, 14, 13 for pairs 0 to 4; verified with a hook, `Session.turn` / `arm_keys.encoder_steps`). A state must be held about 30 ticks because the scan reads column `0x80` once per ~10 ticks. **No screen reacted** to any pair, either direction, on the home, Organ preset, Synth and System pages: the counter is not read within 60 ticks (no memory read hook hit), so the consumer (an acceleration / event stage behind `0xC007AEBC`, thresholds at `[obj + 0x5C / 0x60 / 0x64]`) is not reached. The menu values and the Store As name entry therefore stay unedited.
+
+## 13. Program store: record layout and a real Store (VERIFIED, `tools/arm_store.py`)
+
+**Answer to blocker 1.** A Store writes into a RAM write-back cache; the firmware's storage task flushes dirty pages to the I2C EEPROMs. The harness does not schedule that task, so `arm_store.flush` calls its step `0xC0240518` by hand (service object `[+8]` = cache object `0x90048600 + 0x3C`, budgets `[+0x24]` / `[+0x28]`; 60 calls of 16 pages). After Store + Store + flush the EEPROMs hold:
+
+| Where | Bytes | Meaning |
+|---|---|---|
+| device 0 `0x00..0x07` | `79 B8 F8 99 01 00 00 00` | volume header (as after the format at boot) |
+| device 0 `0x40 + 0x80 * i` | `01 00 <i> 00` + 124 bytes | **cluster** i of the record (7 clusters, `i = 0..6`); the payload stream is the concatenation |
+| payload `+0` | `5C 03 00 00` | size = 860 = 36-byte header + 824-byte body |
+| payload `+4` | `C1 80 D3 ED` | CRC-32 (standard, reflected, init / xorout `0xFFFFFFFF`) of the 824-byte body; verified `zlib.crc32(body) == crc` and against the firmware table `0xC053F494` (equal to the standard table) |
+| payload `+8` | name, 24 bytes, NUL padded (`Unnamed`) | the **name is outside the CRC**, so it can be patched in place |
+| payload `+32` | `70 34 73 6E` (`p4sn` = `ns4p`), 4 zeros, `11 00 00 00` (location `A:11`) | header tail |
+| payload `+44` | 824-byte program body | not decoded (starts `00 00 01 39 2C 21 47 00 2B 42`) |
+| device 3 `0xFE98..0xFEB7` | `B6 4A 8A 64 80 00 00 00`, 3 x `FF FF FF FF 80 00 00 00` | directory entries (key hash + flag), one per record; layout not decoded |
+
+The fs layer call is `0xC006E688(fs, key, size = 0x338, ...)` from `0xC01052E8` (`fsWrite`; read twin `0xC006E47C`, directory walk `0xC0096264`); the cache layer is `0xC009EB20` (flush page), `0xC009EC3C`, `0xC009EEBC` (flush step, called by `0xC0240518`), `0xC009F140` (cache write).
+
+**Result.** `python tools/arm_store.py store ... --name "Studio Grand"` stores the default program, renames the record in the image (the CRC is untouched) and writes a 256 KB image under `target/oled/`. `arm_screens.py boot --eeprom <image>` boots with it in 53 s (49,157 I2C transactions instead of 90,086: no format): the home screen shows `A:11` / `Studio Grand`, Program Organize lists `A:11 Studio Grand` and `A:12 <empty>`, and the sections are read from the record (`B3`, `Piano not found` with the warning glyph, `Pure Saw`, drawbar digits `88AA09009`). The image is firmware-derived data and stays local.
+
+**Limits.** One program only (the default one); another location needs the directory entry format (key hash of the device 3 entry) or a Store with the Program key pressed first (not tried); naming by the dial / ABC soft button needs the encoders (12.4); the `B3` and `Pure Saw` row texts are set by the widgets but are not in the final frame (only the icon is drawn: the sound is not loaded without the DSP, ASSUMED), the piano row with the warning glyph is complete.
+
+## 14. Real OLED text against ours (VERIFIED strings, case included)
+
+Layout measurements are in section 9; strings below are the widget texts (`arm_screens.py`), upper-case flag `^` = the title bar upper-cased a mixed-case pool string.
+
+| Screen | Real | Ours before this pass | Ours now |
+|---|---|---|---|
+| Home name line | `Studio Grand`, 13 px | same | same |
+| Home rows | icon column, then `B3` + digits, `!Piano not found` (warning glyph `0x8A`), `Pure Saw` | `Organ B3 ...`, `Piano ...`, `Synth ...` | icon marker + source name, `!Piano not found` when no piano is loaded (`oled_icons`, `section_rows`) |
+| Menu bar | `SYSTEM SETTINGS` left, `1/6` right, inverted rows 0 to 10 | `SYSTEM SETTINGS` + sub line `1/6 Memory Protect` | inverted bar with right-aligned counter; sub line is the page title |
+| Sound page 1 bar | `PROGRAM LEVELS 1/11` | `SOUND SETTINGS` | `PROGRAM LEVELS` (`menu_screen::bar_title`) |
+| Output / Pedal / MIDI last page bar | `OUTPUT OVERVIEW 6/6`, `PEDAL OVERVIEW 7/7`, `MIDI OVERVIEW 10/10` | `... SETTINGS` | the overview titles |
+| Menu body | label 8 px (y = 15), value 13 px (y = 26), no marker | `>Label: value` rows | unchanged rows (open, section 15) |
+| Soft buttons | outlined boxes rows 53 to 63, the focused one lit (`Type` `Func` `Gain`) | filled boxes | outlined; the focused item lit (`soft_on`) |
+| Transpose | popup `Transpose` / `+1 semi` (mixed case, 8 px, y = 45 / 55) under the home header | full screen `TRANSPOSE`, `+1 st on` | popup, `Transpose` / `+1 semi` |
+| Master Clock | popup `Master Clock Tempo` + 4 boxes / `120 bpm` | full screen `MST CLK` | unchanged (carries the KBS row; open) |
+| Octave Shift | popup `Octave Shift` / `+1` + slider graphic | n/a | open |
+| Paste (empty) | popup `Nothing to Paste` | `Nothing to Paste` message | unchanged |
+| Layer Init | bar `LAYER INIT` ^, `Press to initialize`, letters `AB` `A` `A`, outlined `All` `Organ` `Piano` `Synth` | same text, no bar | bar added |
+| Preset screens | bar `ORGAN PRESET` ^, `1:01` 13 px, `<None>` / row `<empty>`, soft `Num` `Cat` `Cancel` | same text, no bar | bar added |
+| Store | bar `STORE PROGRAM TO`, `A:11`, `<empty>`, `As:Unnamed` | `STORE PROGRAM TO` text screen | unchanged (open) |
+| Sound pages | label `Volume Level Offset` (ours `Program Levels`), values `+0.0 dB` | page title only | unchanged; label differs: **open** |
+| Output pages | `Bus Output Channels`, `Organ Output Channel`, `Piano Output Channel`, `Synth Output Channel` | `Output Bus Channels (Per Program)`, `Organ/Rotary Output Channel/Bus`, ... | unchanged (model labels, **open**) |
+| Pedal pages | `Control Pedal Type`, `Swell Pedal Type`, `Sustain Pedal Type`, `Rotor Pedal Type`, `Foot Switch Type` | page titles `Control Pedal` ... with items `Type` `Func` `Gain` | unchanged (**open**) |
+| System page 6 | `Version` / `OS v1.66` | `Version and Model Info` | unchanged (**open**) |
+
+**Case-only strings (section 10 list) settled by this pass**
+
+| String | Verdict |
+|---|---|
+| `Layer Init` | real bar `LAYER INIT` (flag set on a mixed-case pool string): ours right |
+| `TRANSPOSE` | real popup is `Transpose`, mixed case: **ours wrong, fixed** (popup) |
+| `FILTER`, `FILTER ENVELOPE`, `AMP ENVELOPE` | real Synth titles `Filter`, `Filter Envelope`, `Amp Envelope` (flag clear): **ours wrong, fixed** (`SynthPage::title`) |
+| `VIBRATO`, `OSC PITCH`, `OSC ENVELOPE`, `ARPEGGIATOR` | real `Vibrato`, `Osc Pitch`, `Osc Envelope`, `Arpeggiator`: **ours wrong, fixed** |
+| `SAMPLE LIBRARY` | real `  SAMPLE LIBRARY`, literal capitals in the pool, drawn without the flag: ours right (now VERIFIED) |
+| `Reset All Settings` | real page label is `Reset all settings` (System 5/6): the model already says `Reset all settings` |
+| `LFO WAVEFORM` | the real LFO page is titled `LFO`; not changed (the page may be another LFO page): open |
+| `UNDO` / `REDO`, `LEFT` / `RIGHT` (arp), `G#`, `II` | still open: Undo key not found; the Arpeggiator page values are glyph codes of the 7 px font, not words |
 
 ## Implications
 
-- The GUI's Program home can use the measured grid (`oled_paint::grid`): title y = 3, name y = 18 at the same 13 px size, rule y = 33, rows from y = 36 every 10 px in the 8 px font. Applied.
-- The settings menus are titled `... SETTINGS` with a right-aligned page counter; ours said `... MENU`. Applied to the titles; the counter and the label / value layout are follow-up 2.
-- Titles are capitals because the title bar upper-cases the pool strings: ours were right for the Preset screens, `OSC WAVEFORM` and (pool) `SAMPLE LIBRARY`; the case-only list of [oled-strings-vs-firmware](oled-strings-vs-firmware.md) s3 is settled for those and open for the screens listed in section 10.
-- The program memory is not a file card: it is 256 KB of I2C EEPROM behind a cluster-chain file layer. Anything that wants real program names (the Program view, Organize, Store) has to start from a captured store image.
-- The panel matrix gives a way to drive the firmware as a user would, which also lets later work check parameter popups (label / value / graphic) against ours.
+- The GUI's Program home uses the measured grid (`oled_paint::grid`): title y = 3, name y = 18 at the same 13 px size, rule y = 33, rows from y = 36 every 10 px in the 8 px font; section rows now start with an icon column and use the source name (`oled_icons`, `section_rows`).
+- Title-bar screens (menus, Preset, Layer Init) are painted as an inverted bar with the page counter right-aligned (`OledText::bar`, `oled_paint::bar`); soft buttons are outlined with the focused one lit; Transpose is a popup in the lower half. The Sound menu starts with `PROGRAM LEVELS`, the last pages of Output / Pedal / MIDI are `... OVERVIEW`.
+- Titles are capitals only where the title bar upper-cases the pool string (menus, Preset, Layer Init, Section Edit, Morph assign) or the pool string is literal capitals (`OSC WAVEFORM`, `SAMPLE LIBRARY`); the Synth section pages are mixed case (`Filter`, `Vibrato`, `Osc Pitch`, `Osc Envelope`, `Filter Envelope`, `Amp Envelope`, `Arpeggiator`).
+- The program memory is a write-back cache over 256 KB of I2C EEPROM with a cluster-chain file layer; a populated image (`arm_store.py`) is the way to get real names for the Program view, Organize and Store screens.
+- The menu pages of `nord-panel/src/menus` match the real labels except the cases listed in section 14; the order of the five Device MIDI entries of the Extern menu (pages 8 to 12) is now VERIFIED.
 
 ## Follow-ups
 
-1. Capture the I2C writes of a Store and replay them as an initial EEPROM image to get a real program name, the section rows with sources and the Organize list (blocker 1).
-2. GUI: inverted title bar with a right-aligned page counter, menu body (8 px label, 13 px value), outlined soft buttons, Organize list with the inverted row (one bean each, with the measurements of section 9).
-3. GUI: Program home section rows with an icon column, source names (`B3`, `Pure Saw`) and the warning glyph (bean `ns4-aivy`; the size letter and drawbar digits are done in `ns4-bjvn`).
-4. GUI: parameter popups in the lower half of the home screen (label, value, graphic) instead of full-screen pages (`TRANSPOSE`, tempo).
-5. GUI: a proportional bitmap font with the metrics of `arm_oled.font_table` (derived metrics only, never the bitmaps).
-6. Identify Program 1, 2, 5, 6, Page, Store, Undo and Layer Init keys and the dial inputs; capture the System, Sound, Output and Pedal menus and the other Synth pages to settle the rest of the case-only list.
+1. Decode the directory entry (device 3 `0xFE98`) and the program body so that several named programs can be stored, and trace the Store As gate for a typed name.
+2. Reach the encoder consumer (`0xC007AEBC` and its event stage) to edit menu values, the dial and the Store As name; then re-capture the menu pages with changed values.
+3. GUI: menu body as one item per page (8 px label, 13 px value, optional 8 px hint) with the real labels of section 14 (`Volume Level Offset`, `Bus Output Channels`, `Control Pedal Type`, ...); Program Organize list with the inverted row; Master Clock and Octave Shift popups with their graphics (beans `ns4-9nj8`, `ns4-aivy`).
+4. GUI: a proportional bitmap font with the metrics of `arm_oled.font_table` (derived metrics only, never the bitmaps).
+5. Find Undo (Shift + Solo) and the remaining Synth / Arp pages to settle `UNDO`, `LEFT` / `RIGHT` and the real `LFO` title.

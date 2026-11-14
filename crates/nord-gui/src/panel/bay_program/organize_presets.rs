@@ -315,6 +315,7 @@ pub fn compose(ui: &ProgramUi) -> OledText {
             format!(" {}: {action}", NAMES[slot(section)]),
         ],
         soft: ["Swap", "Move", "Ok", "Undo"],
+        ..Default::default()
     }
 }
 

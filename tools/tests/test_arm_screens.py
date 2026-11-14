@@ -100,6 +100,70 @@ def test_press_holds_then_releases_and_slices_new_output() -> None:
     assert not session.keys.held
 
 
+def test_turn_walks_the_gray_states_and_leaves_the_encoder_idle() -> None:
+    session = sc.Session.__new__(sc.Session)
+    session.keys = ak.KeyMatrix()
+    session.link = ao.PanelLink()
+    session.texts = []
+    seen: list[frozenset] = []
+
+    def fake_run(ticks: int) -> None:
+        if ticks == 2:  # the dwell between states
+            seen.append(frozenset(session.keys.held))
+
+    session.run = fake_run  # type: ignore[method-assign]
+    cap = session.turn(1, 1, hold_keys=[(0x02, 1, 4)], dwell=2, after=5)
+    assert seen == [
+        frozenset({(0x80, 0, 3), (0x02, 1, 4)}),
+        frozenset({(0x80, 0, 2), (0x80, 0, 3), (0x02, 1, 4)}),
+        frozenset({(0x80, 0, 2), (0x02, 1, 4)}),
+        frozenset({(0x02, 1, 4)}),
+    ]
+    assert not session.keys.held
+    assert cap.frames == ([], [])
+
+
+def test_sweep_presses_every_key_and_holds_shift_with_it_on_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pressed: list[list[tuple[int, int, int]]] = []
+
+    class FakeSession:
+        def __init__(self, _code: Path, _sram: Path) -> None:
+            pass
+
+        def load_state(self, _data: bytes) -> None:
+            pass
+
+        def reset(self) -> None:
+            pass
+
+        def press(self, keys: list[tuple[int, int, int]], hold: int = 40) -> sc.Capture:
+            pressed.append(list(keys))
+            return sc.Capture(([], []), [sc.TextEvent(0, 0, False, "x")])
+
+    monkeypatch.setattr(sc, "Session", FakeSession)
+    state = tmp_path / "state.bin"
+    state.write_bytes(b"")
+    assert sc.cmd_sweep(Path("c"), Path("s"), state, tmp_path / "plain", 10) == 0
+    assert len(pressed) == len(ak.all_keys()) and all(len(k) == 1 for k in pressed)
+    pressed.clear()
+    assert sc.cmd_sweep(Path("c"), Path("s"), state, tmp_path / "shift", 10, shift=True) == 0
+    assert len(pressed) == len(ak.all_keys()) - 1
+    assert all(k[1] == sc.SHIFT_KEY and len(k) == 2 for k in pressed)
+    assert (tmp_path / "shift" / "summary.json").exists()
+
+
+def test_load_eeproms_splits_the_image_over_the_four_devices() -> None:
+    import arm_i2c as ai
+
+    session = sc.Session.__new__(sc.Session)
+    session.bus = ai.I2cBus()
+    blob = b"".join(bytes([i]) * ai.EEPROM_SIZE for i in range(ai.EEPROM_COUNT))
+    session.load_eeproms(blob)
+    assert [bytes(e.data[:2]) for e in session.bus.eeproms] == [bytes([i, i]) for i in range(4)]
+
+
 def test_reset_requires_a_loaded_state() -> None:
     session = sc.Session.__new__(sc.Session)
     session._saved = None
