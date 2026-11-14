@@ -129,7 +129,6 @@ pub(super) fn render_strip(
 
     // Layers A and B.
     let aux_dim = missing("Aux KB routing", AUX_BEAN);
-    let shift_dim = missing("SUSTPED / PSTICK per layer", BEAN);
     let phase = blink(ui);
     for (l, ids) in LAYER_IDS.iter().enumerate() {
         let (layer_id, focus_id, fader_id, ladder_id, aux_id) = *ids;
@@ -168,14 +167,7 @@ pub(super) fn render_strip(
         } else {
             ("organ.pstick", "PSTICK", state.organ_ui.pstick[focus])
         };
-        shift_legend(
-            ui,
-            rc(layer_id),
-            sh_id,
-            sh_text,
-            Some(sh_lit),
-            Some(&shift_dim),
-        );
+        shift_legend(ui, rc(layer_id), sh_id, sh_text, Some(sh_lit), None);
         led_row(
             ui,
             rc(focus_id),
