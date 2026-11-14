@@ -56,8 +56,31 @@ struct Stroke {
     floor: u8,
 }
 
+/// The (at most two) voices of a note-on, stored inline (no heap allocation).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VoiceList {
+    items: [VoiceLevel; 2],
+    len: usize,
+}
+
+impl VoiceList {
+    fn push(&mut self, voice: VoiceLevel) {
+        if self.len < self.items.len() {
+            self.items[self.len] = voice;
+            self.len += 1;
+        }
+    }
+}
+
+impl std::ops::Deref for VoiceList {
+    type Target = [VoiceLevel];
+    fn deref(&self) -> &[VoiceLevel] {
+        &self.items[..self.len]
+    }
+}
+
 /// One firmware voice of a note-on: the selected stroke record and its Q23 level.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct VoiceLevel {
     /// Index of the stroke record in the file.
     pub record: u16,
@@ -138,6 +161,14 @@ impl NpnoLevel {
             .filter(|&r| r != 0xFF)
     }
 
+    /// Root key the stroke record `record` belongs to (`None` for an unknown record).
+    pub fn record_root(&self, record: u16) -> Option<u8> {
+        self.roots
+            .iter()
+            .find(|(_, strokes)| strokes.iter().any(|s| s.index == record))
+            .map(|(root, _)| *root)
+    }
+
     /// `b1 + b2 + b3` of `note`.
     pub fn key_sum(&self, note: u8) -> i16 {
         let n = usize::from(note.min(127));
@@ -183,13 +214,13 @@ impl NpnoLevel {
 
     /// The voices a note-on starts, extra first voice (if any) then the main voice; empty when
     /// the note is unmapped or the root has no layer-0 stroke.
-    pub fn voices(&self, note: u8, velocity: u8) -> Vec<VoiceLevel> {
+    pub fn voices(&self, note: u8, velocity: u8) -> VoiceList {
         let velocity = velocity.clamp(1, 127);
         let t = u16::from(velocity_position(velocity));
         let Some(main) = self.pick(note, 0, t) else {
-            return Vec::new();
+            return VoiceList::default();
         };
-        let mut out = Vec::with_capacity(2);
+        let mut out = VoiceList::default();
         if TWO_VOICE_CLASSES.contains(&self.class) {
             let extra = if self.has_layer(note, 1) {
                 self.pick(note, 1, u16::from(main.floor))
@@ -403,3 +434,6 @@ mod tests {
         assert_eq!(model.key_sum(60), 48);
     }
 }
+#[cfg(test)]
+#[path = "npno_level_gains.rs"]
+mod gains;
