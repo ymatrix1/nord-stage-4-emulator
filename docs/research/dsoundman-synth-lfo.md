@@ -72,5 +72,5 @@ The hardware also spends more time at the floor than at the peak (floor fraction
 ```bash
 python tools/ag_frames.py "<clip>.mp4" --box 780,620,480,50 --fps 4 --every --start 42 --end 64 --cols 6 --scale 0.5 --out sheet.png
 ffmpeg -i "<clip>.mp4" -vn -ac 1 -ar 48000 lfo.wav
-cargo run --release -p nord-core --example ag_synth -- e.wav notes=67 wf=pulse cutoff=2600 lfo_rate=8.2 lfo_amt=8 hold=3 len=3.5 filter=lp24
+cargo run --release -p nord-tools --bin ag_synth -- e.wav notes=67 wf=pulse cutoff=2600 lfo_rate=8.2 lfo_amt=8 hold=3 len=3.5 filter=lp24
 ```

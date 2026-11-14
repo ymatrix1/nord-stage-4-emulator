@@ -29,7 +29,7 @@ scenario file --sharc-ref--> oracle dump (CSV + WAV, metadata header)
 |---|---|---|
 | Harness | `crates/nord-sharc/src/bin/sharc_ref.rs` + `sharc_ref/{script,signal,voice,exec,out}.rs` | Loads a flat SRAM image, runs a scenario on the core model, writes `PREFIX.csv` (`# key: value` metadata, one column per captured series, shortest round-trip float32 text) and with `--wav` a 32-bit float WAV |
 | Scenarios | `tools/oracle_scenarios/*.scn` | Plain text, section 7 |
-| Reference renderer | `crates/nord-core/examples/sinc_ref.rs` | Reads an oracle dump (metadata `ref.*` and the captured source ring), renders the same frames with `SincKernelSet`, prints a CSV. Options: `--accum f32|f64|ext40|ext40-near|ext40-trunc`, `--round floor|nearest`, `--kernel-from KERNEL_DUMP` (use the oracle's table to isolate arithmetic) |
+| Reference renderer | `crates/nord-tools/src/bin/sinc_ref.rs` | Reads an oracle dump (metadata `ref.*` and the captured source ring), renders the same frames with `SincKernelSet`, prints a CSV. Options: `--accum f32|f64|ext40|ext40-near|ext40-trunc`, `--round floor|nearest`, `--kernel-from KERNEL_DUMP` (use the oracle's table to isolate arithmetic) |
 | Comparator | `tools/ns4_oracle_compare.py` | Per series: max abs error and index, RMS, SNR, max ulp, bit-exact count, delay (cross-correlation with parabolic refinement), text plot and error profile. Reads CSV and WAV (PCM 16/24/32, float32). `--tol-abs`, `--tol-snr` give an exit status for scripts |
 | Regression test | `crates/nord-core/tests/oracle_stage_b.rs` (+ `tests/support/`) | Embeds the 64-frame oracle answer and 24 weights as float32 bit patterns (derived results, no firmware code); asserts the bit-exact arithmetic and the engine tolerances |
 
@@ -112,15 +112,15 @@ Delay estimate: 0.000 samples in all rows. Reading:
 ```bash
 python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DIR
 python tools/ns4_dsp_raw.py DIR/dsp_image_3_SY1SY2.bin --sram sy.bin
-cargo build --release -p nord-sharc -p nord-core --example sinc_ref
+cargo build --release -p nord-sharc -p nord-tools --bin sinc_ref
 mkdir -p target/oracle
 for n in kernel golden resample sine; do
   target/release/sharc-ref sy.bin tools/oracle_scenarios/sy_stage_b_$n.scn --out target/oracle/$n --wav
 done
-target/release/examples/sinc_ref target/oracle/kernel.csv > target/oracle/kernel.ref.csv
+target/release/sinc_ref target/oracle/kernel.csv > target/oracle/kernel.ref.csv
 python tools/ns4_oracle_compare.py target/oracle/kernel.csv target/oracle/kernel.ref.csv
 for n in golden resample sine; do
-  target/release/examples/sinc_ref target/oracle/$n.csv --accum ext40 --kernel-from target/oracle/kernel.csv > target/oracle/$n.ref.csv
+  target/release/sinc_ref target/oracle/$n.csv --accum ext40 --kernel-from target/oracle/kernel.csv > target/oracle/$n.ref.csv
   python tools/ns4_oracle_compare.py target/oracle/$n.csv target/oracle/$n.ref.csv --tol-abs 0
 done
 cargo test -p nord-core --test oracle_stage_b

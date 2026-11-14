@@ -1,7 +1,7 @@
 # Audible Genius lesson clips: measured synth and modulation behaviour
 
 - **Checked:** 2026-11-13
-- **Sources (local, never committed):** six Audible Genius "Nord Stage 4 Lesson Pack" clips in `.reference/audible-genius-nord-4/` (hardware Stage 4, panel and OLED visible, 48 kHz Opus audio, vertical 1080x1920 except Unison 4K): Delayed vibrato and aftertouch (`3zlr...nIQ`, 60 s), Unison (`qde8OVkL6RI`, 5:47), Flanger (`AdtsvmaqaVY`, 51 s), Laser zap (`0NMvKWDc-Lo`, 61 s), Pitch blip (`s0OhmMpbscU`, 62 s), Super Saw detune (`MjkV3qz8Gqk`, 59 s). Tools: `tools/ag_frames.py` (OLED change sheets), `tools/ag_audio.py` (STFT, centroid / peak tracks, spectrogram PNG), `tools/ag_pitch.py` (partial tracking, vibrato stats, exponential fit), example `ag_synth` (`cargo run --release -p nord-core --example ag_synth -- out.wav key=value ...`). Earlier readings of the same clips: [synth-0x2f-ns4decode-crosscheck](synth-0x2f-ns4decode-crosscheck.md) (unison, vibrato, laser zap, detune, blip).
+- **Sources (local, never committed):** six Audible Genius "Nord Stage 4 Lesson Pack" clips in `.reference/audible-genius-nord-4/` (hardware Stage 4, panel and OLED visible, 48 kHz Opus audio, vertical 1080x1920 except Unison 4K): Delayed vibrato and aftertouch (`3zlr...nIQ`, 60 s), Unison (`qde8OVkL6RI`, 5:47), Flanger (`AdtsvmaqaVY`, 51 s), Laser zap (`0NMvKWDc-Lo`, 61 s), Pitch blip (`s0OhmMpbscU`, 62 s), Super Saw detune (`MjkV3qz8Gqk`, 59 s). Tools: `tools/ag_frames.py` (OLED change sheets), `tools/ag_audio.py` (STFT, centroid / peak tracks, spectrogram PNG), `tools/ag_pitch.py` (partial tracking, vibrato stats, exponential fit), example `ag_synth` (`cargo run --release -p nord-tools --bin ag_synth -- out.wav key=value ...`). Earlier readings of the same clips: [synth-0x2f-ns4decode-crosscheck](synth-0x2f-ns4decode-crosscheck.md) (unison, vibrato, laser zap, detune, blip).
 - **Question:** Which quantifiable laws of the Synth (filter-envelope depth and decay, pitch-envelope depth and decay, Super Saw detune, unison, vibrato rate/depth/delay/aftertouch) and of the Mod 2 flanger do the clips pin down, and how far is the emulator from the hardware on the same settings?
 
 Tags follow `.agents/rules/provenance-in-code.md`. The audio is lossy YouTube audio with speech over most of each clip, so every number is shape or timing evidence. Emulator errors use the **same analysis pipeline on both sides** (hardware slice and emulator render), which cancels the analysis bias; that matters for vibrato (-5 %) and for the pitch-blip fit (+20 %). Nothing from the clips (video, audio, frames) is committed.
@@ -133,7 +133,7 @@ Not re-measured. The earlier PR holds the firmware table (+-2 / +-4 +-1.33 / +-6
 python tools/ag_frames.py <clip.webm> --box 205,585,310,170 --fps 4 --out sheet.png     # OLED values
 python tools/ag_audio.py <clip.wav> --png s.png --start 30 --end 60 --fmax 6000           # spectrogram
 python tools/ag_pitch.py <clip.wav> --start 12.2 --end 13.0 --fref 391.995 --harmonic 4  # vibrato stats
-cargo run --release -p nord-core --example ag_synth -- out.wav note=67 wf=supersaw detune=10 measured=1
+cargo run --release -p nord-tools --bin ag_synth -- out.wav note=67 wf=supersaw detune=10 measured=1
 ```
 
 The 48 kHz WAVs came from `ffmpeg -i <clip.webm> -vn -ac 2 -ar 48000 out.wav`. Raw per-window numbers were produced by throw-away scripts on those WAVs (peak lists per window, crossing times); the committed tools hold the reusable parts (tracking, fitting, tiling).

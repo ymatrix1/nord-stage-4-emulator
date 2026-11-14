@@ -56,6 +56,55 @@ ENCODER_PAIR_OF_ID: dict[int, int] = {7: 0, 6: 1, 15: 2, 14: 3, 13: 4}
 ID_OF_ENCODER_PAIR: dict[int, int] = {v: k for k, v in ENCODER_PAIR_OF_ID.items()}
 
 
+# VERIFIED (key-id sweep of research note s16.7: Program 1 events rewritten to each id 0..255 with
+# modifier word 0 and 1, `tools/arm_events.py key`): ids seen at the dispatcher and the screens that
+# open. `(id, flags)`; `flags` is the modifier word the event carries (1 after any Shift release).
+KEY_IDS: dict[str, tuple[int, int]] = {
+    "shift": (36, 0),  # event id of the Shift key itself
+    "page": (118, 0),
+    "store": (145, 0),
+    "program1": (146, 0),
+    "program2": (147, 0),
+    "master_clock": (16, 0),  # popup `Master Clock Tempo` / `120 bpm`
+    "transpose": (17, 0),  # popup `Transpose` / `+1 semi`
+    "undo": (21, 1),  # dialog `UNDO` / `Nothing to Undo` / `Ok` (flags 0: nothing happens)
+}
+
+
+def patch_key_entry(read32, write32, entry: int, ident_from: int, ident: int, flags: int) -> bool:  # noqa: ANN001
+    """Rewrite the key event at `entry` from `ident_from` to `ident` and `flags`."""
+    if read32(entry) != TAG_KEY or read32(entry + 8) != ident_from:
+        return False
+    write32(entry + 8, ident)
+    write32(entry + 4, flags)
+    return True
+
+
+def press_as(session, key, ident: int, flags: int, hold: int = 60, after: int = 60):  # noqa: ANN001, ANN201 - needs unicorn
+    """Press the matrix key `key` but deliver its events as key id `ident` with `flags`.
+
+    The matrix has no Solo / Undo key, so the router is reached by rewriting the event of a key
+    that exists (its id is read from the first event seen) just before the dispatcher call.
+    """
+    emu = session.emu
+    own: list[int] = []
+
+    def on_dispatch(_uc, _addr, _size, _user) -> None:  # noqa: ANN001
+        entry = emu.read32(emu.reg(13) + 4)
+        if emu.read32(entry) == TAG_KEY:
+            if not own:
+                own.append(emu.read32(entry + 8))
+            patch_key_entry(emu.read32, emu.write32, entry, own[0], ident, flags)
+
+    handle = emu.uc.hook_add(
+        emu._u.UC_HOOK_CODE, on_dispatch, begin=DISPATCH_CALL, end=DISPATCH_CALL
+    )
+    try:
+        return session.press([key], hold=hold, after=after)
+    finally:
+        emu.uc.hook_del(handle)
+
+
 @dataclass(frozen=True)
 class Event:
     """One dispatched event: its tag, the flags word, the id (key or encoder index) and value."""
@@ -122,16 +171,23 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs the 
     import arm_screens as sc
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("cmd", choices=["turn"])
+    ap.add_argument("cmd", choices=["turn", "key"])
     ap.add_argument("image", type=Path)
     ap.add_argument("sram", type=Path)
     ap.add_argument("--state", type=Path, default=Path("target/oled/state.bin"))
     ap.add_argument("--pair", type=int, default=1)
     ap.add_argument("--detents", type=int, default=3)
     ap.add_argument("--out", type=Path, default=Path("target/oled/turn"))
+    ap.add_argument("--name", choices=sorted(KEY_IDS), default="undo", help="cmd key: the id")
     ns = ap.parse_args(argv)
     session = sc.Session(ns.image, ns.sram)
     session.load_state(ns.state.read_bytes())
+    if ns.cmd == "key":
+        ident, flags = KEY_IDS[ns.name]
+        cap = press_as(session, (0x10, 0, 2), ident, flags)
+        print("strings:", cap.strings())
+        sc.save_capture(cap, ns.out, f"key_{ns.name}")
+        return 0
     cap, events = trace_turn(session, ns.pair, ns.detents)
     for ev in events:
         print(f"{ev.kind} id={ev.ident} flags={ev.flags} value={ev.delta}")

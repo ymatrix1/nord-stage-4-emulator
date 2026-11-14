@@ -53,6 +53,9 @@ pub struct Bar {
     pub soft_y: f32,
     /// Tops of the popup label and value.
     pub popup_y: [f32; 2],
+    /// Top of the first row of a program list (research note s16.5); rows are 10 px apart and the
+    /// lit row is a block one pixel above its text, 10 px high.
+    pub list_y: f32,
 }
 
 /// Real pixel rows of [`Bar`] for a display `height`.
@@ -64,6 +67,7 @@ pub fn bar(height: f32) -> Bar {
         value_y: 26.0 * k,
         soft_y: 53.0 * k,
         popup_y: [45.0 * k, 55.0 * k],
+        list_y: 13.0 * k,
     }
 }
 
@@ -127,8 +131,8 @@ mod tests {
     fn bar_rows_are_the_measured_pixel_rows_of_the_real_title_bar_screens() {
         let b = bar(64.0);
         assert_eq!(
-            (b.bar_h, b.label_y, b.value_y, b.soft_y, b.popup_y),
-            (11.0, 15.0, 26.0, 53.0, [45.0, 55.0])
+            (b.bar_h, b.label_y, b.value_y, b.soft_y, b.popup_y, b.list_y),
+            (11.0, 15.0, 26.0, 53.0, [45.0, 55.0], 13.0)
         );
         let half = bar(32.0);
         assert_eq!(

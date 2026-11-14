@@ -33,7 +33,9 @@ Compare our Program / Synth OLED geometry (rows, fonts, widths, title case) with
 - [x] Real title / row layout (13 px at the top left, 15 px pitch, rule y = 33, rows from y = 36) compared with `oled_home.rs` / `oled_paint.rs`; every difference recorded in `docs/research/arm-oled-render.md` s9.
 - [x] Fourth pass: the encoder consumer found (queue, UI task, screen routing, value widget; `tools/arm_events.py`) and the Program dial identified (pair 1): it pages menus, steps presets, opens the program list `Import into A:11` (research note s15).
 - [x] Menu values, Store As and the Synth dials: the Program dial edits every menu value once the modifier word `0xC05846AC` is cleared (`arm_screens.edit`, `tools/arm_menu_edit.py`: all 56 pages edited); the `0xC00EEEB0` step belongs to PIANO SELECT (pair 0, empty piano list); pairs 2 to 4 are the Synth TYPE / CAT / WAVE dials (`tools/arm_synth_dials.py`); `STORE PROGRAM AS` / `STORE PROGRAM TO` frames measured (research s16.1 to s16.4). Typing a name with the dial is not driven.
-- [ ] Undo (Shift + Solo) found: the dialog object exists (`0x90EFD4F0`, screen table entry 16) and the manager's show method (vtable slot 13 `0xC00DC8E8`) is known; the screen id and the Solo key id are not (s16.6).
+- [x] Undo (Shift + Solo) found: router key id 21 with the modifier word set opens the dialog; `Nothing to Undo` frame measured (research s17.1, `tools/arm_events.py key`). Left: the scan source of Solo and the `Undo to before <name>?` frame (no edit history in the harness).
+- [x] Store As: the Program dial moves the name cursor, the category focus frame is recorded; typing a character is not reached. Modifier word bit 0 explained by disassembly (set on key release, s17.2 / s17.3).
+- [x] Master Clock and Octave Shift popup frames captured (s17.4).
 
 ## Out of Scope
 
@@ -52,3 +54,4 @@ Shipping any firmware-derived pixel data (frames, font bitmaps, EEPROM images); 
 - Third pass (PR feat/arm-oled-render-3): program store populated, keys / menus / Synth pages captured, real-vs-ours table, GUI title bar / popup / icons (beans `ns4-pyqg`, `ns4-9nj8`, `ns4-aivy`).
 - Fourth pass (PR feat/arm-oled-render-4): `tools/arm_events.py` (+ tests), research note s15 (event chain, Program dial, program list screen, Undo dialog class, Store handler flags), GUI: one-item menu pages draw the value alone in 13 px (`OledText::body_big`). Left: menu value editing, Store As, Undo trigger, Master Clock / Octave Shift popup graphics, program list screen in the GUI.
 - Fifth pass (PR feat/arm-oled-render-5): `arm_screens.edit` / `MODIFIER_WORD`, `tools/arm_menu_edit.py`, `tools/arm_synth_dials.py` (+ tests), research note s16, spec v1.4; GUI: Store screens on the measured rows (`oled_store.rs`, `oled_grid.rs::Line`, painter free lines with the lit cursor cell, `Cat: <None>`), `oled_paint.rs` and `oled.rs` split below 400 lines.
+- Sixth pass (PR feat/arm-oled-render-6): `arm_events.KEY_IDS` / `press_as` / `key` CLI (+ tests), research note s17, spec v1.5; GUI: program list layout (`oled_lists.rs`), real menu labels and values (`menu_labels.rs`), Undo dialog, Master Clock popup, Synth `OSC WAVEFORM` columns.

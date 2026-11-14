@@ -6,7 +6,7 @@ Clips and variants live in ``docs/research/data/synth_validation.json``. Two sou
 * ``partA``: a Part A demo program (segment of ``emu_vs_hw_segments.json``): hardware slice and
   the video-confirmed notes from ``tools/emu_vs_hw.py``, rendered with ``ns4 render-patch``.
 * ``ag``: a steady note of an Audible Genius / DSoundman lesson clip: hardware slice cut from the
-  clip audio, rendered with the ``ag_synth`` example (key=value panel settings of the lesson).
+  clip audio, rendered with the ``ag_synth`` binary (key=value panel settings of the lesson).
 
 Every variant is scored with the metrics of ``emu_vs_hw.segment_metrics`` (6-band spectrum deltas,
 centroid, RMS, attack); ``summary`` compares each variant with ``legacy`` and applies the D22 bar
@@ -152,14 +152,19 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
     return {"clips": out}
 
 
-def verdict(result: dict[str, Any], variant: str) -> dict[str, Any]:
-    """D22 bar of ``variant`` against ``legacy`` over all clips of the result."""
+def verdict(result: dict[str, Any], variant: str, base: str = "legacy") -> dict[str, Any]:
+    """D22 bar of ``variant`` against ``base`` over all clips of the result.
+
+    Against ``legacy`` the bar also needs a majority of clips better. Against another variant
+    (an increment such as ``strip+st+tbl+kl`` over the default) only a part of the clips moves,
+    so the majority rule is dropped: mean score better and no clip over ``WORSE_DB``.
+    """
     gains, worse = [], []
     for c in result["clips"]:
         rows = {r["variant"]: r for r in c["variants"]}
-        if variant not in rows:
+        if variant not in rows or base not in rows:
             continue
-        leg, new = rows["legacy"], rows[variant]
+        leg, new = rows[base], rows[variant]
         gains.append(leg["score"] - new["score"])
         # lesson clips fix no absolute level (two Pure Saw notes differ by 13 dB), so the RMS
         # bar applies to Part A clips only
@@ -175,7 +180,7 @@ def verdict(result: dict[str, Any], variant: str) -> dict[str, Any]:
         "worse_than_bar": worse,
         "passes": bool(gains)
         and float(np.mean(gains)) > 0
-        and n_better * 2 > len(gains)
+        and (n_better * 2 > len(gains) or base != "legacy")
         and not worse,
     }
 
@@ -196,14 +201,14 @@ def table(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def summary(result: dict[str, Any]) -> str:
-    labels = sorted({r["variant"] for c in result["clips"] for r in c["variants"]} - {"legacy"})
+def summary(result: dict[str, Any], base: str = "legacy") -> str:
+    labels = sorted({r["variant"] for c in result["clips"] for r in c["variants"]} - {base})
     lines = ["| Variant | clips | mean score gain | clips better | clips over the bar | D22 |"]
     lines += ["|---|---|---|---|---|---|"]
     for lab in labels:
         for scope, sel in (("all", None), ("holdout", "holdout")):
             sub = {"clips": [c for c in result["clips"] if sel is None or c["role"] == sel]}
-            v = verdict(sub, lab)
+            v = verdict(sub, lab, base)
             lines.append(
                 f"| {lab} ({scope}) | {v['clips']} | {v['mean_gain']} | {v['better']} | "
                 f"{len(v['worse_than_bar'])} {'; '.join(v['worse_than_bar'])} | "
@@ -221,7 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--workdir", required=True)
     r.add_argument("--ag-dir", default=".", help="directory of <clip id>.wav files")
     r.add_argument("--ns4", default="target/release/ns4")
-    r.add_argument("--ag-synth", default="target/release/examples/ag_synth")
+    r.add_argument("--ag-synth", default="target/release/ag_synth")
     r.add_argument("--only", nargs="*")
     r.add_argument("--variants", help="comma separated variant labels (legacy always runs)")
     r.add_argument(
@@ -230,11 +235,13 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--out")
     s = sub.add_parser("summary", help="summarise a result JSON")
     s.add_argument("result")
+    s.add_argument("--baseline", default="legacy", help="variant the others are scored against")
     return p
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    base = args.baseline if args.cmd == "summary" else "legacy"
     if args.cmd == "summary":
         result = json.loads(Path(args.result).read_text(encoding="utf-8"))
     else:
@@ -243,7 +250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             Path(args.out).write_text(json.dumps(result, indent=1) + "\n", encoding="utf-8")
         print(table(result))
     print()
-    print(summary(result))
+    print(summary(result, base))
     return 0
 
 

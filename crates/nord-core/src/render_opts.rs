@@ -310,8 +310,9 @@ pub struct FirmwareOptions {
     /// `--synth-stages`: `SynthLayer::strip_stages` (noise, Shape Square, SUPER, MULTI firmware stages
     /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
     pub synth_stages: bool,
-    /// `--synth-knob-laws`: `SynthLayer::knob_laws` (the strip chain takes the envelope rate
-    /// indices straight from the stored knobs, `index = knob - 64`, VERIFIED run; opt-in).
+    /// `--synth-knob-laws` / `--no-synth-knob-laws`: `SynthLayer::knob_laws` (the strip chain takes
+    /// the envelope rate indices straight from the stored knobs, `index = knob - 64`, VERIFIED
+    /// run; on by default since D57, off in `--legacy-all`).
     pub synth_knob_laws: bool,
     /// `--sample-kernel key|ratio`: the `SAMPLES` oscillator picks its 12-tap kernel with the
     /// firmware key rule (`sinc::key_rule`; VERIFIED run and key field, D40) instead of the
@@ -362,7 +363,7 @@ impl Default for FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
-            synth_knob_laws: false,
+            synth_knob_laws: true,
             sample_kernel_key: true,
             sample_pitch_fw: false,
             firmware_routing: false,
@@ -383,6 +384,7 @@ impl FirmwareOptions {
             synth_chain: Some(SynthChain::Legacy),
             synth_p: None,
             synth_stages: false,
+            synth_knob_laws: false,
             piano_firmware_level: false,
             sample_kernel_key: false,
             ..Self::default()
@@ -408,7 +410,7 @@ impl FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
-            synth_knob_laws: false,
+            synth_knob_laws: true,
             sample_kernel_key: true,
             sample_pitch_fw: false,
             firmware_routing: false,
@@ -478,6 +480,9 @@ impl FirmwareOptions {
         o.synth_knob_laws |= has("--synth-knob-laws");
         if has("--no-synth-stages") {
             o.synth_stages = false;
+        }
+        if has("--no-synth-knob-laws") {
+            o.synth_knob_laws = false;
         }
         if let Some(v) = value("--sample-kernel") {
             o.sample_kernel_key = parse_sample_kernel(v)?;
@@ -759,8 +764,8 @@ impl FirmwareOptions {
         if !self.synth_stages {
             parts.push("no-stages".into());
         }
-        if self.synth_knob_laws {
-            parts.push("knob-laws".into());
+        if !self.synth_knob_laws {
+            parts.push("no-knob-laws".into());
         }
         if self.leslie_firmware {
             parts.push(format!(
@@ -933,16 +938,20 @@ mod tests {
     }
 
     #[test]
-    fn synth_knob_laws_flag_is_opt_in_and_reaches_every_synth_layer() {
-        assert!(!FirmwareOptions::default().synth_knob_laws);
-        let o = FirmwareOptions::from_args(&["--synth-knob-laws".into()]).unwrap();
-        assert!(o.synth_knob_laws && o.summary().contains("knob-laws"));
+    fn synth_knob_laws_are_the_default_and_reach_every_synth_layer() {
+        assert!(FirmwareOptions::default().synth_knob_laws);
+        assert!(FirmwareOptions::firmware_all().synth_knob_laws);
+        assert!(!FirmwareOptions::legacy_all().synth_knob_laws);
+        assert!(!FirmwareOptions::default().summary().contains("knob-laws"));
+        let o = FirmwareOptions::from_args(&["--no-synth-knob-laws".into()]).unwrap();
+        assert!(!o.synth_knob_laws && o.summary().contains("no-knob-laws"));
         let mut e = Stage4Engine::new(48_000.0);
-        assert!(!e.synth_a.knob_laws);
         o.apply_to(&mut e);
-        assert!(e.synth_a.knob_laws && e.synth_b.knob_laws && e.synth_c.knob_laws);
-        FirmwareOptions::default().apply_exact(&mut e);
         assert!(!e.synth_a.knob_laws);
+        FirmwareOptions::default().apply_to(&mut e);
+        assert!(e.synth_a.knob_laws && e.synth_b.knob_laws && e.synth_c.knob_laws);
+        let on = FirmwareOptions::from_args(&["--legacy-all".into(), "--synth-knob-laws".into()]);
+        assert!(on.unwrap().synth_knob_laws, "the flag turns it back on");
     }
 
     #[test]

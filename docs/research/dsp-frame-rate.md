@@ -129,7 +129,7 @@ python tools/dsp_frame_rate.py {literal,bank} target/fw_unpacked/bank0_CODE.bin
 python tools/dsp_frame_rate.py {delay,sy,b3}
 uv run pytest tools/tests/test_dsp_frame_rate.py
 cargo test -p nord-core --lib frame_rate   # lane_mix / firmware_bank / b3_wheels / vox_bank / hw_saw / fx::tables
-cargo run --release -p nord-core --example render_hash -- out.bin && sha256sum out.bin
+cargo run --release -p nord-tools --bin render_hash -- out.bin && sha256sum out.bin
 # 25baa387b0219c0835094150106a35ce751b9c16b68109d2a030596e78e7b59a, unchanged before and after
 ```
 

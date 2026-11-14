@@ -105,12 +105,12 @@ The engine columns compare from `counter >= 6`: before that the DSP history is z
 export NS4_CCES="C:/Analog Devices/CrossCore Embedded Studio 2.12.1"
 python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DIR
 python tools/ns4_dsp_raw.py DIR/dsp_image_4_SMP.bin --sram smp.bin
-cargo build --release -p nord-sharc -p nord-core --example smp_voice_ref
+cargo build --release -p nord-sharc -p nord-tools --bin smp_voice_ref
 target/release/ns4 backup "Nord Stage 4 Factory Restore RevK v1.66.ns4b" --extract "Piano/Grand/Bright Grand Sml 6.1.npno" target/oracle/grand.npno
 # scenario -> oracle -> compare (file name `synthetic:ORDER:NBITS:CHANNELS` needs no firmware data)
-target/release/examples/smp_voice_ref target/oracle/grand.npno target/oracle/g --step 0.5 --frames 1800
+target/release/smp_voice_ref target/oracle/grand.npno target/oracle/g --step 0.5 --frames 1800
 target/release/sharc-ref smp.bin target/oracle/g.scn --out target/oracle/g
-target/release/examples/smp_voice_ref target/oracle/grand.npno target/oracle/g --step 0.5 --frames 1800 --compare
+target/release/smp_voice_ref target/oracle/grand.npno target/oracle/g --step 0.5 --frames 1800 --compare
 # options: --stroke N --gain G --hist-off N --phase0 W --base-words K
 cargo test -p nord-core piano::smp_ && cargo test -p nord-sharc
 ```

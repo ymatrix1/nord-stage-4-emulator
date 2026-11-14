@@ -1,7 +1,7 @@
 # Research: organ audio from the real PNO Core1 DSP code, and the Rust engine against it
 
 - **Checked:** 2026-11-13
-- **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` (OS v1.66), the PNO image `SRAM/core1_sram.bin` (`tools/ns4_dsp_images.py`, `tools/ns4_dsp_ldr.py --sram`), the SHARC core model `crates/nord-sharc` with the new harness `sharc-organ` (`crates/nord-sharc/src/bin/sharc_organ.rs`, shared helpers in `crates/nord-sharc/src/harness.rs`), `tools/organ_oracle_audio.py` (new), `crates/nord-core/examples/organ_ref.rs` (new), `tools/ns4_oracle_compare.py`, `docs/research/data/arm-bank-increments.csv`. Builds on [organ-tone-source](organ-tone-source.md), [organ-tonewheel-bank](organ-tonewheel-bank.md), [arm-organ-messages](arm-organ-messages.md), [oracle-vs-engine](oracle-vs-engine.md).
+- **Sources (local, never committed):** `target/fw_unpacked/bank0_CODE.bin` (OS v1.66), the PNO image `SRAM/core1_sram.bin` (`tools/ns4_dsp_images.py`, `tools/ns4_dsp_ldr.py --sram`), the SHARC core model `crates/nord-sharc` with the new harness `sharc-organ` (`crates/nord-sharc/src/bin/sharc_organ.rs`, shared helpers in `crates/nord-sharc/src/harness.rs`), `tools/organ_oracle_audio.py` (new), `crates/nord-tools/src/bin/organ_ref.rs` (new), `tools/ns4_oracle_compare.py`, `docs/research/data/arm-bank-increments.csv`. Builds on [organ-tone-source](organ-tone-source.md), [organ-tonewheel-bank](organ-tonewheel-bank.md), [arm-organ-messages](arm-organ-messages.md), [oracle-vs-engine](oracle-vs-engine.md).
 - **Question:** Can the organ's audio be produced by the real DSP code (bank `0x122620` + mix stage `0x12268F`, post stage `0x12272D`) from parameters, and how does the Rust engine (`crates/nord-core/src/organ/`) compare, partial by partial?
 
 Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by a command in this note, **EMPIRICAL** = structure or fit read from poking or listings, **ASSUMED** = reading of a purpose.
@@ -23,7 +23,7 @@ Tags follow `.agents/rules/provenance-in-code.md`: **VERIFIED** = reproduced by 
 ```text
 ARM increments (CSV) + weights + gains + level --pokes--> sharc-organ --(bank, mix x set)--> DM(I0 ..) words
                                                                                  \--> tools/organ_oracle_audio.py --> WAV / .npy / spectrum
-OrganLayer (organ_ref example) --WAV--------------------------------------------------------------^   compare / ns4_oracle_compare.py
+OrganLayer (organ_ref binary) --WAV--------------------------------------------------------------^   compare / ns4_oracle_compare.py
 ```
 
 | Piece | File | Role |
@@ -134,13 +134,13 @@ Not changed: the 91-wheel buses, foldback, pickup, `0.08` scale, percussion, sca
 ```bash
 python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DSP
 python tools/ns4_dsp_ldr.py DSP/dsp_image_1_PNO.bin --sram SRAM
-cargo build --release -p nord-sharc --bins -p nord-core --example organ_ref
+cargo build --release -p nord-sharc --bins -p nord-tools --bin organ_ref
 python tools/organ_oracle_audio.py render  SRAM/core1_sram.bin --exe target/release/sharc-organ --out chord
 python tools/organ_oracle_audio.py render  SRAM/core1_sram.bin --exe target/release/sharc-organ --detuned --out chord_det
 python tools/organ_oracle_audio.py report  chord.f32.npy
 python tools/organ_oracle_audio.py verify  SRAM/core1_sram.bin --exe target/release/sharc-organ
 python tools/organ_oracle_audio.py table   SRAM/core1_sram.bin
-target/release/examples/organ_ref --out rust_exact ; target/release/examples/organ_ref --detuned --out rust_det
+target/release/organ_ref --out rust_exact ; target/release/organ_ref --detuned --out rust_det
 python tools/organ_oracle_audio.py compare chord.f32.npy rust_exact.wav
 python tools/organ_oracle_audio.py compare chord_det.f32.npy rust_det.wav --detuned
 python tools/ns4_oracle_compare.py chord.wav rust_exact.wav        # raw sample compare (level differs by design)

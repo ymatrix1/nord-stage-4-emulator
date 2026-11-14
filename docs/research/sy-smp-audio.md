@@ -25,7 +25,7 @@ What the harness does not model: the external-port DMA that refills the 128-fram
 | `irq VECTOR [STEPS]` | raises the interrupt through the core's interrupt controller (real IVT slot, `MODE1` register-bank swap, `RTI`) and runs until it returns. Vector 13 (IVT word 52, handler `0x1C03FD`) is unmasked for the call and also resets the harness FIFO write pointer: the firmware's own reset sets `I0 = 0x93046` (SY) or `0x92196` (SMP) |
 | `msg [op=N] ADDR VALUE` | appends `[opcode:4 \| address:28], value` to the FIFO ring and moves the DMA write index `DM(0x2400)` (the ISR reads it at `0x1C0638`); `fifo BASE` selects the ring of the image |
 | `dev ADDR VALUE` | `Core::preset_device` (device space; IOP registers such as `0x5201` are plain memory and use `poke`) |
-| `fill ... raw path=FILE chan= chans= skip=` | float32 test input from a local file (`cargo run -p nord-core --example sample_dump` writes it from an `.nsmp4`); never committed |
+| `fill ... raw path=FILE chan= chans= skip=` | float32 test input from a local file (`cargo run -p nord-tools --bin sample_dump` writes it from an `.nsmp4`); never committed |
 | `sinc_ref` | reads optional per-frame series `gainL`, `gainR`, `step` of the dump (the firmware slews them) instead of one fixed gain and ratio |
 | `core/longword.rs` | `(LW)` long-word moves (section 6) |
 
@@ -111,19 +111,19 @@ export NS4_CCES="C:/Analog Devices/CrossCore Embedded Studio 2.12.1"
 python tools/ns4_dsp_images.py target/fw_unpacked/bank0_CODE.bin --out DIR
 python tools/ns4_dsp_raw.py DIR/dsp_image_3_SY1SY2.bin --sram sy.bin
 python tools/ns4_dsp_raw.py DIR/dsp_image_4_SMP.bin --sram smp.bin
-cargo build --release -p nord-sharc -p nord-core --example sinc_ref --example sample_dump
+cargo build --release -p nord-sharc -p nord-tools --bin sinc_ref --bin sample_dump
 mkdir -p target/oracle
 # kernel table of the firmware (for the bit-exact comparison)
 target/release/sharc-ref sy.bin tools/oracle_scenarios/sy_stage_b_kernel.scn --out target/oracle/kernel
 # sine voice
 target/release/sharc-ref sy.bin tools/oracle_scenarios/sy_voice_sine.scn --out target/oracle/sv --wav
-target/release/examples/sinc_ref target/oracle/sv.csv --accum ext40 > target/oracle/sv.ref.csv
+target/release/sinc_ref target/oracle/sv.csv --accum ext40 > target/oracle/sv.ref.csv
 python tools/ns4_oracle_compare.py target/oracle/sv.csv target/oracle/sv.ref.csv
-target/release/examples/sinc_ref target/oracle/sv.csv --accum ext40 --kernel-from target/oracle/kernel.csv > target/oracle/sv.ref.csv
+target/release/sinc_ref target/oracle/sv.csv --accum ext40 --kernel-from target/oracle/kernel.csv > target/oracle/sv.ref.csv
 python tools/ns4_oracle_compare.py target/oracle/sv.csv target/oracle/sv.ref.csv --tol-abs 0
 # real factory sample (local files only)
 target/release/ns4 backup "Nord Stage 4 Factory Restore RevK v1.66.ns4b" --extract "Samp Lib/Accordion_Harm/Weltmeister 4 Accordion_PS 4.1.nsmp4" target/oracle/accordion.nsmp4
-target/release/examples/sample_dump target/oracle/accordion.nsmp4 target/oracle/accordion.f32 --start 1000 --frames 128
+target/release/sample_dump target/oracle/accordion.nsmp4 target/oracle/accordion.f32 --start 1000 --frames 128
 target/release/sharc-ref sy.bin tools/oracle_scenarios/sy_voice_sample.scn --out target/oracle/vs --wav
 # SMP dispatch check
 target/release/sharc-ref smp.bin tools/oracle_scenarios/smp_dispatch.scn --out target/oracle/smp

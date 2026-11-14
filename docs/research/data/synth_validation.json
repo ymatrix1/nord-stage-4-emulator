@@ -1,5 +1,5 @@
 {
- "note": "Synth validation set (tools/synth_validate.py, docs/research/synth-validation.md). partA clips are segments of emu_vs_hw_segments.json; ag clips are steady notes of the Audible Genius lesson clips (hardware window in the clip audio, rendered with the ag_synth example). role: fit = used to fit the P table row of its wave, holdout = never used for a fit. Only derived numbers are committed, no audio. Variants: legacy = classic chain; strip = firmware strip chain with unit P and the legacy waveforms; strip+p = the single Smooth Lead block; st = firmware stage oscillators; tbl = per-wave P table. strip+st+tbl is the engine default since D22.",
+ "note": "Synth validation set (tools/synth_validate.py, docs/research/synth-validation.md). partA clips are segments of emu_vs_hw_segments.json; ag clips are steady notes of the Audible Genius lesson clips (hardware window in the clip audio, rendered with the ag_synth binary). role: fit = used to fit the P table row of its wave, holdout = never used for a fit. Only derived numbers are committed, no audio. Variants: legacy = classic chain; strip = firmware strip chain with unit P and the legacy waveforms; strip+p = the single Smooth Lead block; st = firmware stage oscillators; tbl = per-wave P table. strip+st+tbl is the engine default since D22. kl = --synth-knob-laws (verified ADR rate indices from the stored knobs; only the partA clips carry knobs, the ag clips are layers built in code and render the same).",
  "variants": [
   {
    "label": "legacy",
@@ -72,6 +72,21 @@
     "strip",
     "--synth-p",
     "table"
+   ],
+   "ag": {
+    "chain": "strip",
+    "stages": "1",
+    "p": "table"
+   }
+  },
+  {
+   "label": "strip+st+tbl+kl",
+   "flags": [
+    "--synth-chain",
+    "strip",
+    "--synth-p",
+    "table",
+    "--synth-knob-laws"
    ],
    "ag": {
     "chain": "strip",

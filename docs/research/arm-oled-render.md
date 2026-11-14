@@ -459,6 +459,64 @@ With the modifier word clear or set, turning the dial on the home screen opens t
 
 **Undo remains unreached.** Next step: find the id of the Undo screen (`0xC02D49B4` objects carry no id; the id literals sit in the key router tables near `0xC018BB74`: `0x14A`, `0x1B9`, `0x1C6`) and call slot 13 with it, or post a key event (`0xC053F9D0`, `{tag, flags, key id, 1}`) with the Solo key id into the UI ring (`0xC007B5A8..0xC007B5B8` is the post sequence).
 
+## 17. Sixth pass: the key-id router, Undo, Store As name entry, Master Clock / Octave Shift (VERIFIED unless marked)
+
+Bean `ns4-2gdc`. Reproduce (after `arm_screens.py boot`): `uv run --with unicorn python tools/arm_events.py key <CODE> <SRAM> --state target/oled/state.bin --name undo` (also `master_clock`, `transpose`); frames stay under `target/oled/` (git-ignored).
+
+### 17.1 Answer to blocker 3 (s16.6): Undo is key id 21, delivered with the modifier word set
+
+The matrix has no Solo / Undo bit, so the router was driven from the event side. A hook on the dispatcher call (`0xC00A035C`, entry pointer at `[sp + 4]`, words `{tag, flags, id, value}`) rewrites the id (word 2) and the flags (word 1) of the key event of a real key (Program 1, id 146). Sweeping the id over 0 to 255 with flags 0 and 1 (about 3 s per run, state restored each time):
+
+| id (flags) | Screen / text |
+|---|---|
+| 21 (**1**) | `UNDO` / `Nothing to Undo` / `Ok` (**the Undo dialog**); with flags 0 nothing happens |
+| 16 (0) | popup `Master Clock Tempo` + beat boxes / `120 bpm` |
+| 17 (0) | popup `Transpose` / `+1 semi` |
+| 0 .. 5, 32 .. 38 | effect pages (`Delay Feedback Effect`, `Reverb Type`, `Mod 2 Type`, `Amp Type`, `Compressor` ...) |
+| 6 | Synth waveform page (`3 (7)`) |
+| 48, 49 | `MORPH A.TOUCH ASSIGN`, `MORPH PEDAL ASSIGN` |
+
+Real key ids seen at the dispatcher: Shift 36, Page 118, Store 145, Program 1 / 2 = 146 / 147 (`arm_events.KEY_IDS`). The Undo id 21 needs flags bit 0, the state after a Shift release, which fits the manual (Shift + Solo, p.42). Solo itself is therefore a key of another scan source (id 21 is not produced by any of the 98 matrix bits); it was **not** found, only its router id.
+
+Undo dialog frame (128 x 64 grid, ink rows): inverted bar rows 0 to 10 with `UNDO` unlit and **no counter**; `Nothing to Undo` 8 px, ink rows 16 to 23 from x = 0; one outlined `Ok` box rows 53 to 63 in the **fourth** soft slot (x 97 to 126), not lit. Display 1 is blank. Not reached: `Undo to before <name>?`: no edit history exists in the harness (a Store, a dial change and an Organize step were tried before Undo, all still `Nothing to Undo`); the soft buttons of the dialog did not react to Program keys 2 / 3.
+
+### 17.2 Store As name entry (blocker 4)
+
+A Shift tap (40 ticks), then Store (60 ticks) with Memory Protect forced off opens `STORE PROGRAM AS` (`Unnamed`, `Cat:` `<None>`, soft `Abc` `Cat` `Del` `Ins`). Driving it (state restored per row):
+
+| Action | Result |
+|---|---|
+| Program dial (pair 1), modifier word left alone, 2 detents | the screen stays; the lit cursor cell moves right (to the second character) |
+| Abc held, Program dial 3 detents | cursor on the fourth character (`a` of `Unnamed`); no character row appeared (corrects s16.3: that row needs another trigger) |
+| Abc released, then dial | the whole `Cat:` value `<None>` is a lit block and the `Cat` soft button is lit, the name unlit: the focus moved to the category field |
+| Pairs 0, 2, 3, 4 after `arm_screens.edit` (modifier word cleared) | the screen closes to the home screen (`A:11` / `<empty>`) |
+| Program keys 2 to 5 as soft buttons | open the Sound / Output menus: in the harness they act as `Shift + Program n` (the word is still set after the Shift tap); the Store As soft buttons are not reached this way |
+
+Typing characters with the dial is **not** reached; the cursor, the category focus and the lit `Cat` box are. `oled_store.rs` already draws the cursor cell; the category focus frame is recorded here only.
+
+### 17.3 Modifier word `0xC05846AC`: why bit 0 stays set (VERIFIED by disassembly, reading ASSUMED)
+
+The key post routine has two variants (disassembly of `0xC007B4C0..0xC007B810`): on a **press** it ANDs the word with the complement of the key mask (`and r2, r2, r5` at `0xC007B588`, store at `0xC007B590`) and posts `{tag, word, id, 1}`; on a **release** it ORs the mask in (`orr r3, r3, r5` at `0xC007B794`, store at `0xC007B79C`) and posts `{tag, word, id, 0}`. Probe events agree: the Shift press carries flags 0, the Shift release flags 1, and every later event (encoder events copy the word in `0xC007B0BC`) carries 1. So bit 0 means "Shift is up", set by the first release and kept while the key is up; the word is 0 after the boot only because no release has been posted yet, so `0` reads as "Shift down". ASSUMED: the paging behaviour of the Program dial after a Shift tap (s16.2) follows from a screen test on this word and was not checked against a real unit.
+
+### 17.4 Master Clock and Octave Shift popups
+
+| Popup | Frame |
+|---|---|
+| Master Clock (key id 16) | home header kept (`A:11` / `<empty>`, rule y = 33); label `Master Clock Tempo` (8 px, y = 45) with **four beat boxes** at the right edge (glyph codes `0x83 0x82 0x82 0x82`: the first filled); value `120 bpm` (y = 55). Display 1 unchanged |
+| Octave Shift (key `(0x20, 1, 4)` / `(0x20, 1, 5)` with the Synth page open) | home header (with the boxed `E` mark), label `Octave Shift` (y = 45), value `-1` at the left (y = 55) and a **slider graphic** at the right edge (13 glyph cells; the marker sits left of the centre for `-1`), `0` after the next press |
+
+### 17.5 Program list on display 1 and Import
+
+Turning the Program dial while the Master Clock popup is open opened the same list (`Import into A:11`, rows `A:11` to `A:15`, selected row second, soft `Ok` first and `Cancel` fourth); display 1 stays blank, as in s16.5. The list is the browse widget of the Program dial, so the GUI uses one layout for the LIST view and the Organize destination picker (`oled_lists.rs`).
+
+### 17.6 GUI changes of this pass (`ns4-9nj8`)
+
+- Program list layout (`oled_lists.rs`, `OledText::sel`, `Bar::list_y`): list icon in the bar, rows at y = 13 + 10 i without a focus marker, the selected row a lit block; used by the LIST view and the Program Organize page (`Program` left, `Organize` right).
+- Menu labels of s14 (`menu_labels.rs`): `Volume Level Offset`, `Bus Output Channels`, `Organ / Piano / Synth Output Channel`, `Control / Swell / Sustain / Rotor Pedal Type`, `Foot Switch Type`, `Control Change Type`, `Version`; values `None` / `+3 semi`, `+0.0 dB`, ` 0 dB`, and the two-part Fine Tune `440.8Hz<TAB>+3 cent` (hertz = `440 * 2^(cents / 1200)` reproduces all six measured pairs; the second part is right-aligned).
+- Synth `OSC WAVEFORM`: wave index `1 (6)` with a space, caption `SHAPE: 0.0` for a Shape wave, the TYPE / CAT / WAVE labels as small inverted tabs.
+- Undo dialog (bar `UNDO`, `Nothing to Undo`, `Ok` in the fourth slot; `Redo` third, ASSUMED) and the Master Clock popup (`Master Clock Tempo` / `120 bpm`, KBS state appended, ASSUMED).
+- Not done: the display 1 blank while a list is open, the beat boxes and the octave slider graphics, the `Undo to before <name>?` wording with a real item name, the category focus frame of Store As.
+
 ## Implications
 
 - The GUI's Program home uses the measured grid (`oled_paint::grid`): title y = 3, name y = 18 at the same 13 px size, rule y = 33, rows from y = 36 every 10 px in the 8 px font; section rows now start with an icon column and use the source name (`oled_icons`, `section_rows`).
@@ -480,3 +538,4 @@ With the modifier word clear or set, turning the dial on the home screen opens t
 6. Fifth pass (done): menu values edited (the Program dial with the modifier word cleared, s16.2), Store As frame measured (s16.3), the three Synth dials identified (s16.4).
 7. Undo (Shift + Solo): find the Undo screen id for the manager's slot 13 or the Solo key id for a posted key event (s16.6); drive name entry in Store As (dial = character); find what clears bit 0 of the modifier word `0xC05846AC` after a Shift release.
 8. GUI: the program list `Import into A:11` (s16.5), the Synth `OSC WAVEFORM` page with the TYPE / CAT / WAVE columns (s16.4), two-part menu values (`440.8Hz` / `+3 cent`), the Master Clock / Octave Shift popup graphics.
+7. Sixth pass (done, s17): Undo found (router id 21 with flags 1), Master Clock / Octave Shift frames, Store As cursor and category focus, GUI program list / menu labels / two-part values. Open: the scan source of Solo, the `Undo to before <name>?` frame (needs an edit history), typing a character in Store As, the display 1 blank during lists.

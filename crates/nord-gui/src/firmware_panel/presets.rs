@@ -53,6 +53,7 @@ pub fn copy_engine(dst: &mut FirmwareOptions, src: &FirmwareOptions, engine: Eng
         Engine::Synth => {
             dst.synth_chain = src.synth_chain;
             dst.synth_stages = src.synth_stages;
+            dst.synth_knob_laws = src.synth_knob_laws;
             dst.synth_p = src.synth_p;
             dst.filter_engine = src.filter_engine;
             dst.measured_laws = src.measured_laws;

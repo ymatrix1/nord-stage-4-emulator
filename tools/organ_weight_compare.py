@@ -8,7 +8,7 @@ DSP), at `--keyoff` calls a full update with `wB = 0` and `a` 0.0042715 on all 9
 side is `organ_ref --weights firmware` with the same notes, drawbars, velocity and key-off frame.
 
     python tools/organ_weight_compare.py SRAM/core1_sram.bin --oracle target/release/sharc-organ \
-        --rust target/release/examples/organ_ref [--notes 60,64,67] [--drawbars 888000000]
+        --rust target/release/organ_ref [--notes 60,64,67] [--drawbars 888000000]
 
 Reports the level ratio and SNR per lane over the steady part, the attack and release envelope
 error (block rms against the oracle steady rms) and the full-signal SNR after one gain.
