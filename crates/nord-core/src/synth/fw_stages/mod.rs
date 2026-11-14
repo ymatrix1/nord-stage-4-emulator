@@ -16,6 +16,7 @@ use super::fw_sine_hp::{shape_sine_hp_core, OutputHighPass};
 use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
 use super::fw_sub::sub_core;
 use super::fw_super1::super1_sample;
+use super::fw_super2::{prepare, super24_sample, Super24State};
 use super::fw_sync::sync2_core;
 use super::fw_sync1::sync1_core;
 use super::fw_sync3::sync3_core;
@@ -39,6 +40,8 @@ pub enum FwStage {
     Super,
     /// SUPER wave 1 (stage `0x121E9D`, seven detuned band-limited squares).
     Super1,
+    /// SUPER waves 2..4 (stage `0x124985`, four detuned voices on a band-limited wavetable).
+    Super24,
     /// MULTI, all six waves (stage `0x121C54`, three octave saws).
     Multi,
     /// SHAPE wave 3 (stage `0x120F55`, a cosine bump with two band-limiting cubes).
@@ -99,6 +102,10 @@ impl FwStage {
             (3, 4) => Some(Self::Shape4),
             (6, 0) => Some(Self::Super),
             (6, 1) => Some(Self::Super1),
+            (6, 2..=4) => {
+                prepare(); // parse the tables here, not in the audio thread
+                Some(Self::Super24)
+            }
             (5, _) => Some(Self::Multi),
             (4, 0) => Some(Self::ShapeSine),
             (4, 1) => Some(Self::ShapeSineFold),
@@ -126,6 +133,8 @@ pub struct FwStageState {
     pub counter: u32,
     /// MISC 1 low-pass state.
     pub lp: f32,
+    /// SUPER 2..4 phases, hold and biquad states.
+    pub s24: Super24State,
 }
 
 impl Default for FwStageState {
@@ -137,6 +146,7 @@ impl Default for FwStageState {
             pink: [0.0; PINK_ROWS],
             counter: 0,
             lp: 0.0,
+            s24: Super24State::default(),
         }
     }
 }
@@ -198,6 +208,7 @@ impl FwStageState {
                 self.hp.process(y)
             }
             FwStage::Super1 => super1_sample(&mut self.phases, dt, i_sy, ctrl),
+            FwStage::Super24 => super24_sample(&mut self.s24, dt, i_sy, ctrl),
             FwStage::Multi => {
                 let mut sum = 0.0;
                 for (ph, c) in self.phases.iter_mut().zip(MULTI_OCTAVES) {
@@ -226,6 +237,9 @@ mod tests {
         );
         assert_eq!(FwStage::from_category_wave(6, 0), Some(FwStage::Super));
         assert_eq!(FwStage::from_category_wave(6, 1), Some(FwStage::Super1));
+        assert_eq!(FwStage::from_category_wave(6, 2), Some(FwStage::Super24));
+        assert_eq!(FwStage::from_category_wave(6, 4), Some(FwStage::Super24));
+        assert_eq!(FwStage::from_category_wave(6, 5), None);
         assert_eq!(FwStage::from_category_wave(5, 4), Some(FwStage::Multi));
         assert_eq!(FwStage::from_category_wave(4, 0), Some(FwStage::ShapeSine));
         assert_eq!(
@@ -275,6 +289,7 @@ mod tests {
             FwStage::ShapeSquare,
             FwStage::Super,
             FwStage::Super1,
+            FwStage::Super24,
             FwStage::Sync2,
             FwStage::Sync3,
             FwStage::Sync1,
