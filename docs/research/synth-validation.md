@@ -1,7 +1,7 @@
 # Synth default validation: legacy vs strip vs strip + per-wave P
 
 - **Checked:** 2026-11-14
-- **Sources (local, never committed):** Nord Stage 4 demo Part A (`_zksT69H30c`, nine synth programs, `tools/emu_vs_hw.py` segments), the Audible Genius lesson clips in `.reference/audible-genius-nord-4/` (pitch blip `s0OhmMpbscU`, laser zap `0NMvKWDc-Lo`, Super Saw detune `MjkV3qz8Gqk`), the factory backup, `tools/synth_validate.py` (new), example `ag_synth`, `ns4 render-patch`, the program sweep (`crates/nord-core/examples/program_sweep.rs`). Nothing from the clips (audio, video, frames) is committed; the derived numbers are in `docs/research/data/synth_validation_results.json`, the clip set in `docs/research/data/synth_validation.json`.
+- **Sources (local, never committed):** Nord Stage 4 demo Part A (`_zksT69H30c`, nine synth programs, `tools/emu_vs_hw.py` segments), the Audible Genius lesson clips in `.reference/audible-genius-nord-4/` (pitch blip `s0OhmMpbscU`, laser zap `0NMvKWDc-Lo`, Super Saw detune `MjkV3qz8Gqk`), the factory backup, `tools/synth_validate.py` (new), example `ag_synth`, `ns4 render-patch`, the program sweep (`crates/nord-tools/src/bin/program_sweep.rs`). Nothing from the clips (audio, video, frames) is committed; the derived numbers are in `docs/research/data/synth_validation_results.json`, the clip set in `docs/research/data/synth_validation.json`.
 - **Question:** Does the firmware strip chain with the stage oscillators and an EMPIRICAL per-wave P table reproduce hardware synth sounds better than the legacy chain on clips that were not used for the fit, so that it can become the synth default (D22)? Which P values are per wave and which are common?
 
 Tags follow `.agents/rules/provenance-in-code.md`. The audio is lossy YouTube audio, the replay velocity is one value (100) for every Part A note, and the lesson clips fix no absolute level, so every number is shape evidence with the stated uncertainty.
@@ -172,6 +172,34 @@ Cross-validation caveat: with 15 clips and five LP12 clips, the LP12 factor is c
 
 Still open: `pad_silk` (13 dB too bright, an envelope or velocity issue, not the cutoff factor), `filter_bank` and `sine_pluck` stay above legacy (4.37 against 3.15, 6.40 against 5.99; `sine_pluck` presence -17 dB is the SHAPE SINE words / wheel morph of the program, not a filter effect), the knob to strip word law needs a hardware run with an active voice (the ARM sends the cutoff only with a sounding voice, [synth-voice-control](synth-voice-control.md) s3), and `x3` above shows why the answer cannot come from the stage equations alone.
 
+## Knob-law re-score (D57, 2026-11-14)
+
+Harness restored as `crates/nord-tools` (`ag_synth`, `render_hash`, `program_sweep`, ... as release binaries, D57). All 15 clips re-run with the variant `strip+st+tbl+kl` (the default plus `--synth-knob-laws`, [synth-knob-laws](synth-knob-laws.md)); `python tools/synth_validate.py summary result.json --baseline strip+st+tbl` scores an increment against the default (mean score better, no clip over `WORSE_DB`; the majority rule only applies against `legacy`).
+
+| Clip | Role | Legacy | Default (`strip+st+tbl`) | + knob laws | Delta | Attack ms default / kl (hw) | Presence dB default / kl | RMS dB default / kl |
+|---|---|---|---|---|---|---|---|---|
+| lead_smooth | fit | 4.93 | 0.69 | 0.69 | 0.00 | 35.0 / 35.0 (19.8) | -2.0 / -2.0 | -0.9 / -0.9 |
+| lead_crunch | holdout | 8.33 | 1.23 | 1.23 | 0.00 | 65.3 / 65.3 (65.5) | +2.4 / +2.4 | +2.2 / +2.2 |
+| pad_silk | fit | 6.53 | 7.62 | 7.62 | 0.00 | 42.4 / 42.4 (61.2) | +13.2 / +13.2 | +1.1 / +1.1 |
+| mega_line | holdout | 2.98 | 2.53 | 2.53 | 0.00 | 30.8 / 30.8 (59.1) | -3.1 / -3.1 | -3.2 / -3.2 |
+| sci_fi_80s | fit | 2.03 | 1.39 | 1.39 | 0.00 | 80.7 / 80.7 (97.1) | +1.4 / +1.4 | -10.4 / -10.4 |
+| filter_bank | fit | 3.15 | 4.37 | 4.33 | -0.04 | 15.9 / 14.8 (11.0) | -3.9 / -3.3 | +0.6 / +0.5 |
+| phat_3osc | holdout | 3.21 | 2.59 | 2.59 | 0.00 | 106.4 / 106.4 (26.1) | +3.3 / +3.3 | +0.9 / +0.9 |
+| sweep_12db | holdout | 21.38 | 3.04 | 1.97 | -1.07 | 64.1 / 64.2 (46.8) | -5.1 / -2.4 | +7.6 / +7.3 |
+| sine_pluck | holdout | 5.99 | 6.40 | 6.52 | +0.12 | 60.0 / 57.3 (77.8) | -18.4 / -18.6 | +5.3 / +5.3 |
+| ag_blip_saw / square | fit | 5.28 / 3.29 | 5.31 / 3.29 | same | 0.00 | none | +0.0 / +0.1 | -14.1 / -14.0 |
+| ag_zap_saw | holdout | 8.99 | 6.59 | 6.59 | 0.00 | none | +1.7 | -4.3 |
+| ag_supersaw_0 / 3 / 10 | holdout | 11.31 / 6.83 / 4.96 | 4.38 / 6.02 / 4.96 | same | 0.00 | none | +1.0 / -1.5 / -0.7 | -7.9 / -4.8 / -6.6 |
+| **mean (15)** | | 6.61 | **4.03** | **3.96** | -0.07 | | | |
+| **mean holdout (9)** | | 8.22 | 4.19 | 4.09 | -0.10 | | | |
+
+Result: the increment passes the D22 bar (`summary --baseline strip+st+tbl`: mean gain +0.07 over 15 clips, +0.11 over the 9 hold-outs, 0 clips over the bar). Only the three Part A clips whose stored knob maps to a different table step than the displayed-time search move; the lesson clips are layers built in code and carry no knobs. `sweep_12db` (hold-out) gains 1.07 (presence -5.1 -> -2.4 dB), `sine_pluck` loses 0.12, `filter_bank` gains 0.04. The path is therefore the default (D57).
+
+Findings of the re-run, not caused by the knob laws:
+
+- The default (`strip+st+tbl`) mean is 4.03, not the 3.93 of the table above: `mega_line` 1.87 -> 2.53 and `sci_fi_80s` 0.24 -> 1.39 moved since that table (later engine changes; the cause was not bisected), the other clips match it.
+- Against `legacy` the default no longer clears the bar of `summary`: `sci_fi_80s` RMS -0.4 -> -10.4 dB and `sine_pluck` RMS +2.0 -> +5.3 dB (the bar counts RMS for Part A clips). The scores themselves are better than legacy on 9 of 15 clips.
+
 ## Stop point
 
 Time box (about 120 min) reached after: the 15-clip set and the scoring tool, the per-wave table with the SHAPE law, the flip, the workspace checks and the sweep. Not done: second hold-out clips for Pure Square, SHAPE SQUARE, SHAPE SINE and MULTI (no program with a single such wave and a clean video window was found among the 67 Part A programs); the Part A programs that mix synth with organ or piano; the DSoundman LFO and pad clips; the Ladder24 filter (type 2 is not a low pass, `phat_3osc`, `sci_fi_80s` and `mega_line` use it or LP12 with the strip law as is); a per-filter-type cutoff factor.
@@ -193,10 +221,11 @@ Time box (about 120 min) reached after: the 15-clip set and the scoring tool, th
 ## Reproduce
 
 ```bash
-cargo build --release -p nord-core --bins --examples
+cargo build --release -p nord-core --bins -p nord-tools --bins
 python tools/synth_validate.py run --video <PartA.webm> --backup <factory.ns4b> --workdir <scratch> \
     --ag-dir <dir with s0OhmMpbscU.wav 0NMvKWDc-Lo.wav MjkV3qz8Gqk.wav> --out result.json
 python tools/synth_validate.py summary result.json
+python tools/synth_validate.py summary result.json --baseline strip+st+tbl   # an increment over the default
 # fit one row: replaces "table" in the table variants, e.g. the SUPER row
 python tools/synth_validate.py run ... --only pad_silk mega_line --variants strip+st+tbl \
     --p-table "table:super=2/0/1/0.5/1.5"

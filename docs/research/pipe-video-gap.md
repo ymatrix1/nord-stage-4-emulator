@@ -1,7 +1,7 @@
 # Pipe organ against the Part A video: where the gap is (and is not)
 
 **Checked:** 2026-11-13
-**Sources:** `NEW NORD STAGE 4 - PROGRAMAS PRESETS DEMO (PART A) [_zksT69H30c].webm` and the factory `.ns4b` (both local, git-ignored); `ns4 convert` of `Program/Bank A/Space Drama II.ns4p`; `tools/emu_vs_hw.py` (variants with program edits, spec `data/emu_vs_hw_segments.json`); the new `tools/mix_fit.py`; the SHARC oracle `sharc-organ` on the PNO image (`tools/organ_oracle_audio.py`, derived from `target/fw_unpacked/bank0_CODE.bin`); `crates/nord-core/examples/organ_ref.rs` (new `--mode pipe`); `organ/pipe_lines.rs` (new test). Raw rows: [data/pipe_video_gap_results.json](data/pipe_video_gap_results.json). Builds on [emulator-vs-hardware-audio](emulator-vs-hardware-audio.md), [organ-oracle-audio](organ-oracle-audio.md), [organ-model-paths](organ-model-paths.md), [keydown-zones](keydown-zones.md), [dsp-frame-rate](dsp-frame-rate.md), [arm-boot-state](arm-boot-state.md).
+**Sources:** `NEW NORD STAGE 4 - PROGRAMAS PRESETS DEMO (PART A) [_zksT69H30c].webm` and the factory `.ns4b` (both local, git-ignored); `ns4 convert` of `Program/Bank A/Space Drama II.ns4p`; `tools/emu_vs_hw.py` (variants with program edits, spec `data/emu_vs_hw_segments.json`); the new `tools/mix_fit.py`; the SHARC oracle `sharc-organ` on the PNO image (`tools/organ_oracle_audio.py`, derived from `target/fw_unpacked/bank0_CODE.bin`); `crates/nord-tools/src/bin/organ_ref.rs` (new `--mode pipe`); `organ/pipe_lines.rs` (new test). Raw rows: [data/pipe_video_gap_results.json](data/pipe_video_gap_results.json). Builds on [emulator-vs-hardware-audio](emulator-vs-hardware-audio.md), [organ-oracle-audio](organ-oracle-audio.md), [organ-model-paths](organ-model-paths.md), [keydown-zones](keydown-zones.md), [dsp-frame-rate](dsp-frame-rate.md), [arm-boot-state](arm-boot-state.md).
 **Question:** [emulator-vs-hardware-audio](emulator-vs-hardware-audio.md) put the Pipe2 clip (A:38 Space Drama II) at brilliance (3 to 8 kHz) -11.2 dB, presence -5.9 dB, stereo width 0.33 against 0.74, and scored the pre-bank `Legacy` waveform (3.99) better than the firmware bank (4.95). Is that a Pipe bank error (copy mix, ladder, post stage, level staging), or something else in the clip?
 
 Tags follow `.agents/rules/provenance-in-code.md`. Numbers are shape evidence from a lossy live recording; the oracle numbers are VERIFIED.
@@ -100,7 +100,7 @@ uv run python tools/mix_fit.py <scratch>/organ_pipe/hw.wav <scratch>/organ_pipe/
 # oracle lines (see organ-oracle-audio.md s7 for the SRAM / DSP images)
 uv run python tools/organ_oracle_audio.py render SRAM/core1_sram.bin --exe target/release/sharc-organ \
     --notes 84,88,91 --drawbars 888888888 --out hi
-target/release/examples/organ_ref --mode pipe --notes 84,88,91 --drawbars 888888888 --weights firmware --out hi_rust
+target/release/organ_ref --mode pipe --notes 84,88,91 --drawbars 888888888 --weights firmware --out hi_rust
 uv run python tools/organ_oracle_audio.py compare hi.f32.npy hi_rust.wav --notes 84,88,91 --drawbars 888888888
 cargo test -p nord-core --lib pipe_lines
 ```

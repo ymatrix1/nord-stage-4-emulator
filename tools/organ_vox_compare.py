@@ -9,7 +9,7 @@ exact 12-TET frequency (`cycles_per_frame`), relative to the fundamental of the 
     python tools/pno_full_pass.py run SRAM/core1_sram.bin --exe target/release/sharc-pass \
         --script docs/research/data/pno-pass-install-vox.script \
         --script docs/research/data/pno-pass-vox-weights-c4e4g4.script --passes 20000 --out vox
-    cargo run --release -p nord-core --example organ_ref -- --mode vox --rate 43402.34375 \
+    cargo run --release -p nord-tools --bin organ_ref -- --mode vox --rate 43402.34375 \
         --frames 40000 --out rust_vox
     python tools/organ_vox_compare.py vox.f32.npy rust_vox.csv
 """

@@ -1,4 +1,4 @@
-//! Knob to strip word laws of the ARM edit ids (opt-in `SynthLayer::knob_laws`).
+//! Knob to strip word laws of the ARM edit ids (`SynthLayer::knob_laws`, on by default since D57).
 //!
 //! The first edit capture wrote plain integers into the Q16.16 value cells, so every integer knob
 //! saw position 0 and looked value independent. Re-driven with `knob << 16`
@@ -193,6 +193,7 @@ mod tests {
     fn the_strip_chain_reads_the_knobs_only_when_the_flag_is_on() {
         use super::super::StripEnvRecords;
         let mut s = layer_with_knobs();
+        s.knob_laws = false;
         let search = s.strip_params();
         s.knob_laws = true;
         let direct = s.strip_params();
@@ -212,6 +213,7 @@ mod tests {
         assert_eq!(s.strip_params(), search);
         // a layer without knobs keeps the search whatever the flag says
         let mut plain = super::super::SynthLayer::new(48_000.0);
+        plain.knob_laws = false;
         let before = plain.strip_params();
         plain.knob_laws = true;
         assert_eq!(plain.strip_params(), before);

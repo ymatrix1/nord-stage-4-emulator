@@ -201,7 +201,7 @@ The 11 PHAS programs, 9 FLANG, SPIN (11) and with 4 to 7 the CHOR / VIBE program
 
 1. ENS: find the left voice words (s8.3). SPIN, PHAS 1 and the Mod 1 routines are done ([fx-mod-types](fx-mod-types.md) s7).
 2. Capture the missing amounts `v = 64 .. 78` and the organ / synth type-switch words.
-3. Compare a hardware recording of a chorus program against `ns4 render-patch --firmware-fx`.
+3. Compare a hardware recording of a chorus program against `ns4 render-patch --firmware-fx`: first clip done on a scope sawtooth ([fx-chorus-hw-clip](fx-chorus-hw-clip.md), D57); open: a dry / wet pair with known knob positions.
 
 ## Reproduce
 

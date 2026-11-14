@@ -1,6 +1,6 @@
 # SY1SY2 with a real decoded factory sample (128 frames of 'Weltmeister 4 Accordion_PS 4.1', local only):
 #   ns4 backup "Nord Stage 4 Factory Restore RevK v1.66.ns4b" --extract "Samp Lib/Accordion_Harm/Weltmeister 4 Accordion_PS 4.1.nsmp4" target/oracle/accordion.nsmp4
-#   cargo run -p nord-core --example sample_dump -- target/oracle/accordion.nsmp4 target/oracle/accordion.f32 --start 1000 --frames 128
+#   cargo run -p nord-tools --bin sample_dump -- target/oracle/accordion.nsmp4 target/oracle/accordion.f32 --start 1000 --frames 128
 # Same sequence as sy_voice_sine.scn; a sample voice started through the real command sequence and the real audio ISR.
 #
 # Sequence (docs/research/sy-smp-audio.md section 3): FIFO reset interrupt (vector 13), message

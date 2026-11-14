@@ -105,7 +105,7 @@ This also explains the "line box tail" of [b3-generator](b3-generator.md) s4: `D
 ```bash
 python tools/organ_farfisa_oracle.py verify SRAM/core1_sram.bin --exe target/release/sharc-chain
 python tools/organ_farfisa_oracle.py tables SRAM/core1_sram.bin
-cargo run --release -p nord-core --example farfisa_ref -- 60000 farf_rust60k.csv
+cargo run --release -p nord-tools --bin farfisa_ref -- 60000 farf_rust60k.csv
 python tools/organ_farfisa_oracle.py compare SRAM/core1_sram.bin --exe target/release/sharc-chain \
     --frames 4000 --rust farf_rust.csv                      # Python model + Rust
 ```

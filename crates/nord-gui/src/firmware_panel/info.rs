@@ -115,6 +115,14 @@ pub const STAGES: SwitchInfo = sw(
     Mixed,
     "Bit-exact firmware stages (noise, Shape Square, SUPER, MULTI, SHAPE SINE) on the strip chain; on by default, off with --no-synth-stages.",
 );
+/// Envelope rates from the stored knobs (`--synth-knob-laws` / `--no-synth-knob-laws`).
+pub const KNOB_LAWS: SwitchInfo = sw(
+    "Synth",
+    "--synth-knob-laws",
+    "Knob envelope laws",
+    Verified,
+    "Strip envelope rates straight from the stored knobs (index = knob - 64, VERIFIED run, D55); on by default since D57, off with --no-synth-knob-laws.",
+);
 /// Oscillator P table (`--synth-p`).
 pub const P_TABLE: SwitchInfo = sw(
     "Synth",
@@ -326,7 +334,7 @@ pub const ROUTING: SwitchInfo = sw(
 );
 
 /// All switches in bar order.
-pub const ALL: [SwitchInfo; 32] = [
+pub const ALL: [SwitchInfo; 33] = [
     TONE,
     B3_TAIL,
     FARFISA,
@@ -342,6 +350,7 @@ pub const ALL: [SwitchInfo; 32] = [
     PIANO_LAYER_LAW,
     CHAIN,
     STAGES,
+    KNOB_LAWS,
     P_TABLE,
     FILTER,
     MEASURED,

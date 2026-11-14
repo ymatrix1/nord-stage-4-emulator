@@ -392,3 +392,7 @@ Multi-contact keying feeding multi-tab resonant bandpass filter banks:
 ### 6.3 Liturgical Pipe Models
 - **Pipe 1:** Pure principal flutes with characteristic chiff wind transient on note-on.
 - **Pipe 2:** Rich swell/mixture plenum with subtle pipe chorus detune ($\pm 2\text{ cents}$) across adjacent ranks.
+
+## 7. Implementation note: shared and skipped tonewheel waveforms (TD-14)
+
+The legacy (float phase) tonewheel source evaluates `sin` per wheel and sample. A wheel's waveform is a pure function of the model and the wheel phase, so (`organ/wheel_cache.rs`) a second layer reuses the first layer's waveforms of the same sample when the model matches and all 91 `f32` phases are bit-identical (two layers that start together and run at the same sample rate, bend and fine tune stay in lockstep); any difference falls back to the layer's own evaluation. A layer with no held key, tail or click (`render_frame` returns silence) only advances its 91 phases with the same arithmetic and skips the sines and the pickup / crosstalk stage, whose results nothing reads. Both are bit-identical to the unoptimised path (tests in `organ/wheel_cache.rs`, `ns4 bench` hashes unchanged, [HOST_COMPATIBILITY](../HOST_COMPATIBILITY.md) 7.1). The drawbar sum (`organ/drawbar_sum.rs`) keeps its summation order (keys ascending, drawbars ascending, `gain * bus * key_gain * dip * 0.08` per term); only its loop invariants (the nine drawbar gains, the foldback table) are hoisted.

@@ -84,7 +84,7 @@ The strip law is `R(i) = 0.36083 + 0.0079301 i` with `i = knob - 52` and `fc = f
 
 ## 7. Clips
 
-The 15-clip set cannot be re-scored in this change: the examples that `tools/synth_validate.py` drives (`ag_synth`, `render_hash`, `program_sweep`) were removed from the tree by `de45f6de`, and the opt-in path moves only the envelope times (index of the nearest table value equals `knob - 64` for most knobs, so the render differs by one table step, ratio 0.7 to 1.4 on plateaus, and the decay constant by 0.18 -> 0.217). The D22 bar therefore stays unproven for `--synth-knob-laws`; the default is unchanged and `render_hash` too.
+Re-scored in D57 (harness restored as `crates/nord-tools`, [synth-validation](synth-validation.md) s "Knob-law re-score"): the 15-clip mean falls from 4.03 to 3.96, three Part A clips move (`sweep_12db` 3.04 -> 1.97, `filter_bank` 4.37 -> 4.33, `sine_pluck` 6.40 -> 6.52), the other twelve are identical (their stored knob equals the table search, and the six lesson clips are layers built in code with no knobs). No clip gets worse by more than 0.2 dB in presence or RMS, so the D22 bar holds for the increment and `--synth-knob-laws` became the default (`--no-synth-knob-laws` turns it off). `render_hash` is unchanged.
 
 ## Implications
 
@@ -94,7 +94,7 @@ The 15-clip set cannot be re-scored in this change: the examples that `tools/syn
 
 ## Follow-ups
 
-1. Re-run the clip set with `--synth-knob-laws` (restore the examples or move them to `tools/`) and flip per D22 if the bar holds.
+1. ~~Re-run the clip set with `--synth-knob-laws` and flip per D22 if the bar holds.~~ Done in D57 (flipped).
 2. Hardware sweep of the cutoff knob per filter type (s6).
 3. Wire `kCmpResponse` (attack / release pairs) and the delay feedback filter words into `FirmwareFx` (s2 table).
 4. A loaded-program capture for the silent ids of s5.

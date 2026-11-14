@@ -20,6 +20,7 @@ mod arp;
 mod arp_order;
 mod dsp;
 mod fw_adr_chain;
+mod fw_coef_memo;
 mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_table_d;
@@ -94,7 +95,6 @@ pub use perf::{
     PATTERN_PRESET_MAX,
 };
 pub use sample_osc::{SampleInterpolation, SAMPLE_INTERPOLATION};
-use strip_map::strip_cutoff_hz;
 pub use strip_map::{
     attack_index, attack_seconds, cutoff_hz_from_word, decay_index, decay_seconds,
     strip_word_for_cutoff, STRIP_PASS_FRAMES,
@@ -255,7 +255,7 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
-    /// Strip chain only, opt-in (default off): the envelope rate indices come straight from the
+    /// Strip chain only, on by default since D57: the envelope rate indices come straight from the
     /// stored knobs (`strip_knobs`, `fw_knob_laws.rs`: index = knob - 64, VERIFIED run) instead of
     /// the ASSUMED displayed-time search of `strip_map.rs`. Layers without knobs keep the search.
     pub knob_laws: bool,
@@ -417,7 +417,7 @@ impl SynthLayer {
             p_wave: PWave::Other,
             strip_stage: None,
             strip_stages: true,
-            knob_laws: false,
+            knob_laws: true,
             strip_knobs: None,
             sample_kernel_by_key: true,
             sample_pitch_fw: false,

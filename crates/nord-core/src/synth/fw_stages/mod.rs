@@ -22,6 +22,7 @@ use super::fw_sync1::sync1_core;
 use super::fw_sync3::sync3_core;
 use super::fw_sync6::{sync6_core, sync7_core, sync8_core};
 use super::gain_dezip::SY_FRAME_RATE_HZ;
+use crate::phase_wrap::wrap_pos;
 
 mod laws;
 pub(in crate::synth) use laws::fade;
@@ -171,7 +172,7 @@ impl FwStageState {
                 for (ph, rho) in self.phases.iter_mut().zip(SUPER_RATIOS) {
                     let dt_j = dt * (rho * u + 1.0 - u);
                     sum += saw_diff(*ph, dt_j);
-                    *ph = (*ph + dt_j) % 1.0;
+                    *ph = wrap_pos(*ph + dt_j, 1.0);
                 }
                 // ASSUMED: equal voice weights summing to one
                 sum * g * 0.125
@@ -194,7 +195,7 @@ impl FwStageState {
             FwStage::SubOsc => {
                 // the firmware phase advances at half the pitch increment (saw at `2 u`)
                 let y = sub_core(self.phases[0], dt, i_sy, ctrl);
-                self.phases[0] = (self.phases[0] + 0.5 * dt) % 1.0;
+                self.phases[0] = wrap_pos(self.phases[0] + 0.5 * dt, 1.0);
                 y
             }
             FwStage::MiscPink => {
@@ -204,7 +205,7 @@ impl FwStageState {
             FwStage::MiscLowpass => lowpass_sample(&mut self.lp, &mut self.noise),
             FwStage::MiscFm => {
                 let y = fm_core(t, self.phases[0], i_sy, ctrl);
-                self.phases[0] = (self.phases[0] + dt * fm_ratio(i_sy, ctrl)) % 1.0;
+                self.phases[0] = wrap_pos(self.phases[0] + dt * fm_ratio(i_sy, ctrl), 1.0);
                 self.hp.process(y)
             }
             FwStage::Super1 => super1_sample(&mut self.phases, dt, i_sy, ctrl),
@@ -215,7 +216,7 @@ impl FwStageState {
                     let dt_v = dt * c;
                     // the fade of each voice is folded into its weight (`0x243A3C`)
                     sum += saw_diff(*ph, dt_v) * fade(2.0 * i_sy * c);
-                    *ph = (*ph + dt_v) % 1.0;
+                    *ph = wrap_pos(*ph + dt_v, 1.0);
                 }
                 // ASSUMED: equal voice weights summing to one
                 sum * (1.0 / 3.0)
@@ -317,7 +318,7 @@ mod tests {
                 let x = a.sample(stage, t, dt, 220.0, 0.5);
                 assert!(x.is_finite() && x.abs() < 8.0, "{stage:?}: {x}");
                 assert_eq!(x.to_bits(), b.sample(stage, t, dt, 220.0, 0.5).to_bits());
-                t = (t + dt) % 1.0;
+                t = wrap_pos(t + dt, 1.0);
             }
         }
     }

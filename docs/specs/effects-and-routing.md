@@ -158,6 +158,10 @@ Structure VERIFIED by the manual (pp. 48-53); every waveform shape constant belo
 | Still dimmed | TO ROTARY on the Organ slot (inert), Mod 1 MST CLK on RM and A-WAH (the Amp VARIATION is no longer dimmed: it has its own voicing, section 2.3) |
 | UI-only | Per-unit ON state, LAYER EFFECTS ON, focus, GROUP / GLOBAL sources and tap tempo live in `FxUi`; after a program load the legacy `mod1_type`, `delay_on`, `reverb_model` and knob fields are adopted into the focused chain (`StateEcho`), the other five slots keep their last panel view |
 
+### 2.10 Output buses and the plugin audio ports (`ns4-ux21`)
+
+`OutputRouting` (`engine/output_routing.rs`) sends each source to one of the four physical outputs. `Stage4Engine::render_frame_multi` returns all four; `render_frame` is its first two channels, so the main pair is the same in every host layout. The plugin (`nord-plugin/src/audio_out.rs`) exposes outputs 1-2 as the main stereo port and outputs 3-4 as one stereo aux output port; a source routed to 3-4 leaves the main port and appears on the aux port, and the aux port is exact zeros when nothing is routed there. The single-output choices `1` and `2` go to one channel of the main port, `3` and `4` to one channel of the aux port. Spec: [daw-plugin.md](daw-plugin.md) section Audio ports.
+
 ## 3. Master Bus: Global Compressor & Reconstruction Stage
 
 After summing all 7 active layers:
@@ -294,3 +298,7 @@ stays finite, bounded by the makeup and free of denormals, for amounts 0, 0.3, 1
 0.250858 dB` (`VERIFIED`, closed form). They differ by 0.34 %, which is 0.05 dB at +-60 counts (15.00 against 15.05 dB). The
 link from a preset count to the ladder is not decoded, so the Rust step stays 0.25 dB and the factory range stays +-15 dB
 exactly; switching is a one-line change (TD-10).
+
+## 5. Implementation note: cabinet evaluation order (TD-14)
+
+The firmware amp cabinet (`fx/fw_cabinet.rs`) is a 400-tap FIR per channel. Its output for frame `n` is `a + b`: `a` the sequential float sum over taps `k < LEN - slot` and `b` over `k >= LEN - slot`, where `slot` is the position of the newest sample in a 400-slot circular history that moves down by one per frame. The split and the addition order are part of the output (float addition is not associative), so the optimised code keeps them: the history is linear and time ordered, both channels advance in one pass, and the four frames of a drive block (`FwAmpStage` releases four frames at once, so the cabinet input of the next four frames is known) run as four lanes of one pass. Tests in `fx/fw_cabinet.rs` compare frame, block and mixed use bit for bit with the plain iterator-sum formulation over every ring phase; the `ns4 bench` output hashes are unchanged (`HOST_COMPATIBILITY` 7.1). Latency is unchanged (none in the cabinet, 4 frames in the drive stage).

@@ -44,6 +44,8 @@ pub struct SynthVoice {
     /// Firmware filter states (`FilterEngine::Firmware`), left and right.
     pub fw_filter: FwFilter,
     pub fw_filter_right: FwFilter,
+    /// Memo of the filter prologue (`fw_coef_memo.rs`).
+    pub fw_memo: fw_coef_memo::FwCoefMemo,
     /// Firmware strip chain state (`SynthChain::FirmwareStrip`).
     pub strip: StripVoice,
     pub sample_zone_idx: Option<usize>,
@@ -85,6 +87,7 @@ impl Default for SynthVoice {
             filter_right: ZdfFilter::default(),
             fw_filter: FwFilter::default(),
             fw_filter_right: FwFilter::default(),
+            fw_memo: fw_coef_memo::FwCoefMemo::default(),
             strip: StripVoice::default(),
             sample_zone_idx: None,
             sample_pos: 0.0,

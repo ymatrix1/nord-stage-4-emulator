@@ -3,6 +3,7 @@
 //! Spec: `docs/specs/piano-engine.md`
 
 use crate::cbin::piano_sample::NpnoInstrument;
+use crate::phase_wrap::wrap_pos;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -1423,6 +1424,10 @@ impl PianoLayer {
             _ => 1.0,
         };
 
+        let mut dec_release_sample: Option<f32> = None;
+        let mut dec_soft: Option<f32> = None;
+        let mut dec_hard: Option<f32> = None;
+        let mut dec_sustain: Option<f32> = None;
         for v in &mut self.voices {
             if !v.active {
                 continue;
@@ -1455,7 +1460,7 @@ impl PianoLayer {
                     }
                 } else {
                     let p = v.phase;
-                    v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
+                    v.phase = wrap_pos(p + TAU * v.freq * bend32 * inv_fs, TAU);
                     let m = p.sin()
                         + 0.45 * v.amp * (2.0 * p).sin()
                         + 0.20 * v.amp * v.amp * (3.0 * p).sin();
@@ -1464,14 +1469,16 @@ impl PianoLayer {
             } else {
                 // Harmonic piano wave model (fundamental + 2nd + 3rd partials with velocity brightness)
                 let p = v.phase;
-                v.phase = (p + TAU * v.freq * bend32 * inv_fs) % TAU;
+                v.phase = wrap_pos(p + TAU * v.freq * bend32 * inv_fs, TAU);
                 let m = p.sin()
                     + 0.45 * v.amp * (2.0 * p).sin()
                     + 0.20 * v.amp * v.amp * (3.0 * p).sin();
                 if unison_on && !v.is_release_sample {
                     let pd = v.phase_detune;
-                    v.phase_detune =
-                        (pd + TAU * v.freq * bend32 * unison_detune_ratio * inv_fs) % TAU;
+                    v.phase_detune = wrap_pos(
+                        pd + TAU * v.freq * bend32 * unison_detune_ratio * inv_fs,
+                        TAU,
+                    );
                     let d = pd.sin() + 0.45 * v.amp * (2.0 * pd).sin();
                     (0.75 * m + 0.25 * d, 0.25 * m + 0.75 * d)
                 } else {
@@ -1488,13 +1495,18 @@ impl PianoLayer {
             sum_l += sig_l * voice_gain;
             sum_r += sig_r * voice_gain;
 
+            // The decay factors depend on the sample rate only; each is evaluated at most once
+            // per frame, on first use (the same `exp` of the same argument, so bit-identical).
             if v.is_release_sample {
-                v.env *= (-inv_fs / 1.15).exp();
+                v.env *= *dec_release_sample.get_or_insert_with(|| (-inv_fs / 1.15).exp());
             } else if v.releasing {
-                let decay_time = if v.soft_release { 0.180 } else { 0.080 };
-                v.env *= (-inv_fs / decay_time).exp();
+                if v.soft_release {
+                    v.env *= *dec_soft.get_or_insert_with(|| (-inv_fs / 0.180).exp());
+                } else {
+                    v.env *= *dec_hard.get_or_insert_with(|| (-inv_fs / 0.080).exp());
+                }
             } else if v.stroke_idx.is_none() {
-                v.env *= (-inv_fs / 1.8).exp();
+                v.env *= *dec_sustain.get_or_insert_with(|| (-inv_fs / 1.8).exp());
             }
             if v.env < 1e-4 {
                 v.active = false;
