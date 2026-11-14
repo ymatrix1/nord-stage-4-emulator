@@ -282,6 +282,18 @@ Each key routes 9 contact switches to the 9 drawbar buses (`0..=8` level steps).
 - **Volume Switch:** `Normal` ($0\text{ dB}$ percussion boost, $-3\text{ dB}$ main drawbar attenuation) or `Soft` ($-6\text{ dB}$ percussion level, $0\text{ dB}$ drawbar attenuation).
 - **Single-Trigger Logic:** Percussion fires only when transitioning from 0 keys held on the layer to $\ge 1$ key held; legato playing does not re-trigger the percussion envelope until all keys in the layer are released.
 
+### 3.3.1 POLY percussion, Preset / Drawbar Live, shared vibrato (manual p.20-21, OS v1.6x)
+
+All three are opt-in; defaults reproduce the previous render bit for bit (`render_hash` and the golden tests are unchanged).
+
+| Feature | Engine field / method | Behaviour | Status |
+|---|---|---|---|
+| POLY percussion (Shift+Volume) | `OrganLayer::percussion_poly` (`percussion_poly.rs`) | Every new key stroke starts its own percussion envelope (per key, 128 floats, no allocation); the percussion partial of each held key is scaled by its own envelope (`perc_env_for`). Single mode (default) keeps the layer-wide envelope. Decay times and gains are the existing ones. Test `only_poly_mode_gives_the_second_note_a_fresh_percussion_attack` | manual behaviour VERIFIED (p.20), decay/gain ASSUMED as in 3.3 |
+| Preset vs Drawbar Live | `OrganLayer::drawbar_live`, `live_drawbars: [u8; 9]`, `active_drawbars()`, `set_live_drawbar`, `sync_preset_to_live` (`preset_live.rs`); `Stage4Engine::sync_organ_preset(LayerId)` | Preset on (default): the stored `drawbars` drive the sound. Live: `live_drawbars` (the physical bars) drive it, `drawbar_morph_applicable()` is `false`. SYNC copies live into the stored preset. Global drawbar MIDI CCs always move `live_drawbars` and edit the stored `drawbars` only outside Live mode | manual behaviour VERIFIED (p.21); "morph does not apply in Live" ASSUMED |
+| Shared Vox / Farf vibrato | `Stage4Engine::organ_shared_vibrato`, `apply_organ_sharing()` (`engine/organ_modes.rs`, run by `process_block`) | When on and both layers are Vox (or both Farfisa), Organ B takes Organ A's `scanner_mode`. B3 and Pipe keep per-layer vibrato on/off | sharing rule VERIFIED (p.20-21); layer A as source ASSUMED (hardware check: load a program with different stored values per layer) |
+
+Not modelled: the live Percussion and Vibrato On/Off buttons in Drawbar Live mode (one stored value per layer), and the manual's "percussion only for the B3 model" (the engine applies percussion on every model since before this change; gating it would alter existing renders, see `docs/OPEN-QUESTIONS.md` candidates). B3 Bass mode (`b3_bass_mode`) uses the legacy drawbar sum; poly percussion and Live drawbars act on it and are covered by tests (`poly_with_b3_bass_and_every_model_stays_finite`, `live_mode_works_for_b3_bass_and_firmware_weights`). Sources: manual p.20-21 only; no web sources used.
+
 ### 3.4 Key Click & Crosstalk
 
 - **Key Click:** On note-on and note-off, a short $2.5\text{ ms}$ bandpass-filtered impulse burst ($f_c \approx 1.8\text{ kHz}$) simulates physical palladium contact bounce.

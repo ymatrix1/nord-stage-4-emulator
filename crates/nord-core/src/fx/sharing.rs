@@ -49,6 +49,7 @@ impl LayerFxChain {
         self.mod1_variation = src.mod1_variation;
         self.mod1_ped = src.mod1_ped;
         self.mod1_ped_pos = src.mod1_ped_pos;
+        self.mod1_sync_beats = src.mod1_sync_beats;
         self.mod2_type = src.mod2_type;
         self.mod2_rate_hz = src.mod2_rate_hz;
         self.mod2_amount = src.mod2_amount;
