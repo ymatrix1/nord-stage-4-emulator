@@ -164,7 +164,7 @@ mod tests {
     }
 
     fn raw_layer(model: SawModel, note: u8) -> Vec<f32> {
-        let mut s = SynthLayer::new(48_000.0);
+        let mut s = SynthLayer::legacy(48_000.0);
         s.filter_on = false;
         s.saw_model = model;
         s.attack_sec = 0.0005;
