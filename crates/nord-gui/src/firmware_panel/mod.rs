@@ -2,7 +2,7 @@
 //!
 //! * CLI: `nord-stage4 --firmware-all | --legacy-all | --tone-source ... | --measured-laws ...`
 //!   (same flags as `ns4 render-patch`, parsed by `FirmwareOptions::from_args`).
-//! * In-app engine bar with a dropdown per engine path, sent as
+//! * In-app engine bar (`bar.rs`; tooltips from `info.rs`) with a dropdown per engine path, sent as
 //!   `AudioCommand::SetFirmwareOptions` and applied on the audio thread between blocks.
 //! * Headless `--self-test <out.wav>`: builds the engine, applies the options and renders one
 //!   second without opening a window.
@@ -11,11 +11,12 @@
 
 use crate::audio::{apply_audio_command, AudioCommand, AudioHandle};
 use nord_core::engine::Stage4Engine;
-use nord_core::organ::ToneWheelSource;
 use nord_core::render;
 use nord_core::render_opts::FirmwareOptions;
-use nord_core::synth::{FilterEngine, SynthChain};
 use std::path::{Path, PathBuf};
+
+pub mod bar;
+pub mod info;
 
 /// Headless-run request parsed from `--self-test <out.wav>` / `--dump-options`.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -121,53 +122,12 @@ impl FirmwarePanelState {
         audio.send_command(AudioCommand::SetFirmwareOptions(self.opts));
     }
 
-    /// Engine-path bar shown above the panel: one dropdown per engine, presets and the active
-    /// set. Changes are sent to the audio thread immediately. Returns true when options changed.
+    /// Engine-path bar shown above the panel: presets, one group of dropdowns per engine and the
+    /// active set. Changes are sent to the audio thread immediately. Returns true when options
+    /// changed.
     pub fn show_bar(&mut self, ui: &mut egui::Ui, audio: &AudioHandle) -> bool {
         let before = self.opts;
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Firmware preset").clicked() {
-                self.opts = FirmwareOptions::firmware_all();
-            }
-            if ui.button("Legacy preset").clicked() {
-                self.opts = FirmwareOptions::legacy_all();
-            }
-            let o = &mut self.opts;
-            dropdown(ui, "Organ", "fw_tone", &mut o.tone_source, &TONES);
-            if o.tone_source == Some(ToneWheelSource::B3Wheels) {
-                dropdown(
-                    ui,
-                    "B3 tail",
-                    "fw_tail",
-                    &mut o.b3_tail,
-                    &[(None, "On (default)"), (Some(false), "Off")],
-                );
-            }
-            dropdown(ui, "Synth chain", "fw_chain", &mut o.synth_chain, &CHAINS);
-            dropdown(
-                ui,
-                "Synth filter",
-                "fw_filter",
-                &mut o.filter_engine,
-                &FILTERS,
-            );
-            ui.checkbox(&mut o.measured_laws, "Measured laws");
-            dropdown(
-                ui,
-                "Piano level",
-                "fw_piano",
-                &mut o.piano_firmware_level,
-                &[(false, "Legacy"), (true, "Firmware")],
-            );
-            dropdown(
-                ui,
-                "FX amp",
-                "fw_fx",
-                &mut o.firmware_fx,
-                &[(false, "Engine"), (true, "Firmware")],
-            );
-            ui.label(format!("Engine: {}", self.opts.summary()));
-        });
+        bar::show(ui, &mut self.opts);
         let changed = before != self.opts;
         if changed {
             self.push(audio);
@@ -176,50 +136,10 @@ impl FirmwarePanelState {
     }
 }
 
-type Choice<T> = (T, &'static str);
-
-const TONES: [Choice<Option<ToneWheelSource>>; 6] = [
-    (None, "Model default"),
-    (Some(ToneWheelSource::Legacy), "Legacy"),
-    (Some(ToneWheelSource::Firmware), "Pipe (firmware)"),
-    (Some(ToneWheelSource::B3Wheels), "B3 wheels (firmware)"),
-    (Some(ToneWheelSource::Vox), "Vox bank (firmware)"),
-    (Some(ToneWheelSource::FarfisaWheels), "Farfisa (firmware)"),
-];
-const CHAINS: [Choice<Option<SynthChain>>; 2] = [
-    (None, "Classic"),
-    (Some(SynthChain::FirmwareStrip), "Firmware strip"),
-];
-const FILTERS: [Choice<Option<FilterEngine>>; 2] = [
-    (None, "ZDF (default)"),
-    (Some(FilterEngine::Firmware), "Firmware"),
-];
-
-/// Labelled combo box over `choices` bound to `value`.
-fn dropdown<T: PartialEq + Copy>(
-    ui: &mut egui::Ui,
-    label: &str,
-    id: &str,
-    value: &mut T,
-    choices: &[Choice<T>],
-) {
-    ui.label(label);
-    let shown = choices
-        .iter()
-        .find(|(v, _)| v == value)
-        .map_or("?", |(_, n)| *n);
-    egui::ComboBox::from_id_salt(id)
-        .selected_text(shown)
-        .show_ui(ui, |ui| {
-            for (v, name) in choices {
-                ui.selectable_value(value, *v, *name);
-            }
-        });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nord_core::synth::SynthChain;
 
     fn args(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -237,11 +157,6 @@ mod tests {
             });
         });
         assert!(!changed, "no input means no change");
-        let names: Vec<_> = TONES.iter().map(|c| c.1).collect();
-        let mut dedup = names.clone();
-        dedup.sort_unstable();
-        dedup.dedup();
-        assert_eq!(names.len(), dedup.len());
     }
 
     #[test]
@@ -285,5 +200,66 @@ mod tests {
         let same = run_self_test(&FirmwareOptions::default(), None).unwrap();
         assert!(same.contains("rms diff vs defaults 0.00000"));
         let _ = std::fs::remove_file(wav);
+    }
+
+    #[test]
+    fn every_switch_survives_the_command_channel_and_reverts() {
+        use nord_core::render_opts::RotaryDrive;
+        let (handle, rx) = AudioHandle::new();
+        let mut panel = FirmwarePanelState::new(FirmwareOptions {
+            amp_path: Some(false),
+            rotary_drive: RotaryDrive::Unity,
+            piano_bus_scale: true,
+            firmware_routing: true,
+            synth_shape_milli: Some(300),
+            ..FirmwareOptions::firmware_all()
+        });
+        panel.push(&handle);
+        let mut engine = Stage4Engine::new(48_000.0);
+        let mut vol = 1.0;
+        apply_audio_command(rx.try_recv().unwrap(), &mut engine, &mut vol);
+        assert!(!engine.fx_chains[0].firmware_fx.amp && engine.organ_a.rotary_drive_unity);
+        assert!(engine.piano_b.firmware_bus_scale && engine.synth_a.strip_shape == Some(0.3));
+        panel.opts = FirmwareOptions::default();
+        panel.push(&handle);
+        apply_audio_command(rx.try_recv().unwrap(), &mut engine, &mut vol);
+        assert!(engine.fx_chains[0].firmware_fx.amp && !engine.organ_a.rotary_drive_unity);
+        assert!(!engine.piano_b.firmware_bus_scale && engine.synth_a.strip_shape.is_none());
+    }
+
+    #[test]
+    fn bar_shows_every_group_and_status_line_in_a_headless_context() {
+        let (handle, rx) = AudioHandle::new();
+        let mut panel = FirmwarePanelState::new(FirmwareOptions {
+            tone_source: Some(nord_core::organ::ToneWheelSource::B3Wheels),
+            ..FirmwareOptions::default()
+        });
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1580.0, 472.0),
+            )),
+            ..Default::default()
+        };
+        let mut changed = true;
+        let mut height = f32::NAN;
+        let mut shapes = 0;
+        for _ in 0..2 {
+            let out = ctx.run(raw.clone(), |ctx| {
+                let r = egui::TopBottomPanel::top("bar").show(ctx, |ui| {
+                    changed = panel.show_bar(ui, &handle);
+                });
+                height = r.response.rect.height();
+            });
+            shapes = out.shapes.len();
+        }
+        assert!(
+            !changed && rx.try_recv().is_err(),
+            "nothing sent without input"
+        );
+        // the bar at the default window size must leave room for the panel below it
+        assert!(height < 140.0, "bar height {height}");
+        assert!(shapes > 0);
     }
 }
