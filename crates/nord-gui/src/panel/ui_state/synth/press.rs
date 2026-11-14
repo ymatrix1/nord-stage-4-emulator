@@ -5,7 +5,7 @@ use super::layer::SynthLayerUi;
 use super::page::SynthPage;
 use super::tables::{PRIORITIES, VIBRATO_MODES};
 use super::{Scope, SynthUi};
-use crate::audio::{SynthGroup, SynthParam};
+use crate::audio::{SynthEdit, SynthGroup, SynthParam};
 use nord_panel::behaviour::{cycle, Trigger};
 
 impl SynthUi {
@@ -15,7 +15,7 @@ impl SynthUi {
         match (b, t) {
             (Btn::On, Trigger::Hold) => self.solo = !self.solo,
             (Btn::On, _) => self.section_on = !self.section_on,
-            (Btn::Mode, _) if shifted => self.open(SynthPage::Extern),
+            (Btn::Mode, _) if shifted => self.toggle_extern(),
             (Btn::Mode, _) => {
                 let v = !self.layer().sample_mode;
                 self.layer_mut().sample_mode = v;
@@ -130,14 +130,37 @@ impl SynthUi {
             (Btn::OctaveDown | Btn::OctaveUp, _) => {
                 let dir = if b == Btn::OctaveUp { 1 } else { -1 };
                 if shifted {
-                    let z = (i32::from(self.layer().kb_zone) + dir).clamp(0, 3) as u8;
+                    let z = crate::panel::kb_zone::step(self.layer().kb_zone, dir > 0);
                     self.layer_mut().kb_zone = z;
+                    self.out.push(SynthEdit::Zone {
+                        layer: self.focus.min(2) as u8,
+                        leds: crate::panel::kb_zone::leds(z),
+                    });
                 } else {
                     let o = (i32::from(self.layer().octave) + dir).clamp(-3, 3) as i8;
                     self.edit(Scope::Layer, SynthParam::Octave(o), |l| l.octave = o);
                 }
             }
         }
+    }
+
+    /// EXTERN (Shift+Mode, manual p.46): switch the focused layer into or out of Extern mode and
+    /// show the Extern page while it is on. ASSUMED: leaving Extern returns to the waveform page.
+    fn toggle_extern(&mut self) {
+        let on = !self.layer().extern_on;
+        self.layer_mut().extern_on = on;
+        self.out.push(SynthEdit::Extern {
+            layer: self.focus.min(2) as u8,
+            on,
+        });
+        self.page = if on {
+            SynthPage::Extern
+        } else {
+            SynthPage::Waveform
+        };
+        self.list_view = false;
+        self.info_view = false;
+        self.dial_acc = [0.0; 3];
     }
 
     /// Apply `f` to the arp run/kind selection and send the resulting engine mode.
@@ -184,6 +207,20 @@ mod tests {
         assert!(!s.layer().sample_mode);
         shifted(&mut s, Btn::Mode);
         assert_eq!(s.page, SynthPage::Extern);
+        assert!(s.layer().extern_on);
+        assert_eq!(
+            s.take_edits().last(),
+            Some(&SynthEdit::Extern { layer: 0, on: true })
+        );
+        shifted(&mut s, Btn::Mode);
+        assert!(!s.layer().extern_on && s.page == SynthPage::Waveform);
+        assert_eq!(
+            s.take_edits(),
+            vec![SynthEdit::Extern {
+                layer: 0,
+                on: false
+            }]
+        );
     }
 
     #[test]
@@ -338,7 +375,15 @@ mod tests {
         shifted(&mut s, Btn::OctaveUp);
         shifted(&mut s, Btn::OctaveDown);
         assert_eq!(s.layer().kb_zone, 1);
-        assert!(s.take_edits().is_empty(), "KB ZONE is UI-only");
+        let zones: Vec<_> = s
+            .take_edits()
+            .into_iter()
+            .filter_map(|e| match e {
+                SynthEdit::Zone { layer, leds } => Some((layer, leds)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(zones, vec![(0, 0b0001), (0, 0b0010), (0, 0b0001)]);
         assert_eq!(s.layer().octave, 2);
     }
 
