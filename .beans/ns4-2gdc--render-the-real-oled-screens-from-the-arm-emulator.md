@@ -31,6 +31,9 @@ Compare our Program / Synth OLED geometry (rows, fonts, widths, title case) with
 - [x] Findings (fonts, row structure) recorded in the research note; compared with `bay_program/oled_home.rs`: the real big title is the 13 px font at (1, 3), next line at y = 18.
 - [x] Case-only differences settled where a screen was reached: title bars upper-case through a widget flag (`ORGAN PRESET`, `AUX KB SETTINGS` right; `AUX KB`, `PROGRAM ORGANIZE`, `... MENU` wrong and fixed). Third pass: `Layer Init` right, `TRANSPOSE` / `FILTER` / `VIBRATO` / `OSC PITCH` wrong and fixed (research note s14). Open: `UNDO`, `LEFT` / `RIGHT`.
 - [x] Real title / row layout (13 px at the top left, 15 px pitch, rule y = 33, rows from y = 36) compared with `oled_home.rs` / `oled_paint.rs`; every difference recorded in `docs/research/arm-oled-render.md` s9.
+- [x] Fourth pass: the encoder consumer found (queue, UI task, screen routing, value widget; `tools/arm_events.py`) and the Program dial identified (pair 1): it pages menus, steps presets, opens the program list `Import into A:11` (research note s15).
+- [ ] Menu values, Store As name entry and the editing screens of the Synth dials captured: blocked (parameter step `0xC00EEEB0` returns without a change: empty value container; Store As belongs to the `As:` screen object, not to the Store handler).
+- [ ] Undo (Shift + Solo) found: the dialog class and refresh method `0xC01327BC` are found, the constructor and trigger are not (s15.4).
 
 ## Out of Scope
 
@@ -47,3 +50,4 @@ Shipping any firmware-derived pixel data (frames, font bitmaps, EEPROM images); 
 - Follow-up beans: `ns4-9nj8` (GUI title bar / menu body / popups), `ns4-aivy` (home rows), `ns4-pyqg` (populate the program store).
 - Left: populated program store (record format), keys for Program 1 / 2 / 5 / 6, Page, Store, Undo, Layer Init, encoders; GUI follow-ups 2 to 5 of the research note.
 - Third pass (PR feat/arm-oled-render-3): program store populated, keys / menus / Synth pages captured, real-vs-ours table, GUI title bar / popup / icons (beans `ns4-pyqg`, `ns4-9nj8`, `ns4-aivy`).
+- Fourth pass (PR feat/arm-oled-render-4): `tools/arm_events.py` (+ tests), research note s15 (event chain, Program dial, program list screen, Undo dialog class, Store handler flags), GUI: one-item menu pages draw the value alone in 13 px (`OledText::body_big`). Left: menu value editing, Store As, Undo trigger, Master Clock / Octave Shift popup graphics, program list screen in the GUI.
