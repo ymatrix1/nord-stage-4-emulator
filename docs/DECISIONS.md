@@ -538,6 +538,16 @@ unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
 - **Why:** The stage equals the oracle word for word (1840 of 1840), so the DSP is verified; only the strip word to position law is not (the stage reads a log-frequency position, the other stages the tangent coefficient `R`), hence ASSUMED and opt-in per D22.
 - **Alternatives:** Keep `Lp4` for `Ladder24` (rejected: different shape and resonance); feed `R` straight to the position word (rejected: the table runs 8 Hz to 28 kHz over `0..0.95`, so 6 kHz would play near 400 Hz); make the stage the default outside `--synth-stages` (rejected until the ARM cutoff word for type 2 is traced).
 - **Impact:** Ladder24 layers change sound under the firmware strip chain with stage oscillators (the default of `SynthLayer::new`, off in `legacy_all`); the test `strip_filter_matches_the_firmware_engine_when_the_cutoff_is_in_range` now pins `Lp24`. OQ22 narrows.
+
+### D53. SHAPE waves 3 and 4 are modelled and wired opt-in; SUPER 2..4 waits for its wavetable
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-stages-rest-11`; evidence [synth-stage-models-11](research/synth-stage-models-11.md))
+- **Context:** Ten ANALOG layers had no stage model: SHAPE 3 (`0x120F55`), SHAPE 4 (`0x12145E`) and SUPER 2..4 (`0x124985`, 8 layers).
+- **Decision:** Port SHAPE 3 and 4 (`synth/fw_shape34.rs`, `FwStage::Shape3 / Shape4`) behind `--synth-stages`; do not port `0x124985` until its wavetable source is known.
+- **Why:** SHAPE 3 and 4 equal the oracle word for word (320 of 320 each). `0x124985` reads a wavetable at `0x08030000` and a PM table at `0x9631F` that the oracle only has from the ARM boot log, and the boot log does not carry the wavetable, so a port would play silence or an invented table.
+- **Alternatives:** Port `0x124985` with a synthetic band-limited table (rejected: it would be a sound design guess presented as a firmware stage); commit a poked random table (rejected: no musical content).
+- **Impact:** SHAPE waves 3 and 4 change sound under the firmware strip chain with stage oscillators; defaults and `render_hash` of the legacy chain are unchanged. ANALOG coverage 304 of 312; OQ22 narrows.
 D49. layer mode flag Reverb GLOBAL; verified exposed opt-in; level defaults stay
 
 `feat/organ-k-derivation`; [piano-receiver-scale](research/piano-receiver-scale.md) s6, `tools/arm_master_level.py modes`)
