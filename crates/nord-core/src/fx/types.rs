@@ -10,6 +10,10 @@ pub enum Mod1Type {
     AutoPan,
     RingMod,
     Wah,
+    /// Envelope-follower auto-wah (manual p.49). Appended: host indices of earlier variants are stable.
+    AutoWah,
+    /// Ducking LFO (manual p.50), see `mod1_dynamic.rs`.
+    Pump,
 }
 
 /// Modulation Slot 2 modes (`Mod 2`).
@@ -20,6 +24,10 @@ pub enum Mod2Type {
     Flanger,
     Phaser,
     Vibe,
+    /// Rotating-speaker style effect (manual p.51), see `mod2_spin.rs`. Appended: earlier indices stable.
+    Spin,
+    /// Eminent-style three-line ensemble (manual p.50), see `mod2_spin.rs`.
+    Ensemble,
 }
 
 /// Amp simulation modes (`Amp Sim / EQ`).

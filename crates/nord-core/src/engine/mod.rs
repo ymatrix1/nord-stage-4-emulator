@@ -28,6 +28,7 @@ mod layer_init;
 mod live_slots;
 mod midi_dispatch;
 mod morph_clip;
+mod organ_modes;
 mod pedals;
 mod program;
 mod program_fx;
@@ -62,6 +63,7 @@ pub use undo::UndoOp;
 #[cfg(test)]
 mod tests_sharing;
 
+pub use organ_modes::model_shares_vibrato;
 pub use sharing::FxSharing;
 
 /// Complete 7-layer Nord Stage 4 real-time DSP engine.
@@ -70,6 +72,9 @@ pub struct Stage4Engine {
     pub sample_rate: f32,
     pub organ_a: OrganLayer,
     pub organ_b: OrganLayer,
+    /// Vox / Farf vibrato shared by both organ layers (manual p.20-21); default off, see
+    /// [`Self::apply_organ_sharing`].
+    pub organ_shared_vibrato: bool,
     pub piano_a: PianoLayer,
     pub piano_b: PianoLayer,
     pub synth_a: SynthLayer,
@@ -123,6 +128,7 @@ impl Stage4Engine {
             sample_rate: fs,
             organ_a: OrganLayer::new(fs),
             organ_b: OrganLayer::new(fs),
+            organ_shared_vibrato: false,
             piano_a: PianoLayer::new(fs),
             piano_b: PianoLayer::new(fs),
             synth_a: SynthLayer::new(fs),
@@ -261,6 +267,7 @@ impl Stage4Engine {
         let frames = left.len().min(right.len());
         self.extern_sync_volume();
         self.apply_fx_sharing();
+        self.apply_organ_sharing();
         for i in 0..frames {
             let [l, r] = self.render_frame();
             left[i] = l;

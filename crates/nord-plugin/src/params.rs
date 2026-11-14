@@ -118,6 +118,10 @@ pub struct Stage4Params {
     #[nested(id_prefix = "organx", group = "Organ Layers")]
     pub organ_layers: crate::organ_params::OrganLayerBank,
 
+    /// Per-layer POLY percussion, Preset / Drawbar Live (+ SYNC) and shared Vox/Farf vibrato.
+    #[nested(id_prefix = "organz", group = "Organ Live")]
+    pub organ_live: crate::organ_live_params::OrganLiveBank,
+
     /// Per-layer Organ model override, key click, rotary on/angle, fine tune, crosstalk, detune.
     #[nested(id_prefix = "organy", group = "Organ Layers Extra")]
     pub organ_extra: crate::organ_extra_params::OrganExtraBank,
@@ -359,6 +363,7 @@ impl Default for Stage4Params {
             synth_gate: crate::synth_gate_params::SynthGateBank::default(),
             organ_layers: crate::organ_params::OrganLayerBank::default(),
             organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
+            organ_live: crate::organ_live_params::OrganLiveBank::default(),
             piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
             layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
             layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank::default(),
@@ -764,6 +769,7 @@ impl Stage4Params {
 
         // Per-layer extras override the global Organ/Piano blocks above.
         self.organ_extra.sync_to_engine(engine);
+        self.organ_live.sync_to_engine(engine);
         self.piano_extra.sync_to_engine(engine);
     }
 }

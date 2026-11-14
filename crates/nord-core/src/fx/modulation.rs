@@ -9,17 +9,34 @@ fn soft_square(x: f32, k: f32) -> f32 {
 }
 
 impl LayerFxChain {
+    /// Mod 1 LFO rate: Master Clock (`mod1_sync_beats`) for A-Pan / Trem / Wah / Pump, else the Rate knob.
+    #[inline]
+    pub(super) fn mod1_effective_rate_hz(&self) -> f32 {
+        match (self.mod1_sync_beats, self.mod1_type) {
+            (Some(beats), t) if t != Mod1Type::RingMod && beats > 0.0 => {
+                self.clock_bpm / 60.0 / beats
+            }
+            _ => self.mod1_rate_hz,
+        }
+    }
+
     pub(super) fn process_mod1(&mut self, l: f32, r: f32, inv_fs: f32) -> [f32; 2] {
         if self.mod1_type == Mod1Type::Off {
             return [l, r];
         }
+        // Appended types with their own state (dynamics driven, no shared LFO phase).
+        match self.mod1_type {
+            Mod1Type::AutoWah => return self.process_awah(l, r, inv_fs),
+            Mod1Type::Pump => return self.process_pump(l, r, inv_fs),
+            _ => {}
+        }
         let phase = self.mod1_phase;
         let lfo = phase.sin();
-        self.mod1_phase = (self.mod1_phase + TAU * self.mod1_rate_hz * inv_fs) % TAU;
+        self.mod1_phase = (self.mod1_phase + TAU * self.mod1_effective_rate_hz() * inv_fs) % TAU;
         let amt = self.mod1_amount.clamp(0.0, 1.0);
         let var = self.mod1_variation;
         match self.mod1_type {
-            Mod1Type::Off => [l, r],
+            Mod1Type::Off | Mod1Type::AutoWah | Mod1Type::Pump => [l, r],
             Mod1Type::Tremolo => {
                 // VARIATION: square wave shape (manual p.49), soft-clipped sine (ASSUMED k = 6).
                 let w = if var { soft_square(lfo, 6.0) } else { lfo };
@@ -73,6 +90,11 @@ impl LayerFxChain {
         if self.mod2_type == Mod2Type::Off {
             return [l, r];
         }
+        match self.mod2_type {
+            Mod2Type::Spin => return self.process_spin(l, r, inv_fs),
+            Mod2Type::Ensemble => return self.process_ensemble(l, r, inv_fs),
+            _ => {}
+        }
         let lfo_l = self.mod2_phase.sin();
         let lfo_r = self.mod2_phase.cos();
         self.mod2_phase = (self.mod2_phase + TAU * self.mod2_rate_hz * inv_fs) % TAU;
@@ -86,7 +108,7 @@ impl LayerFxChain {
         };
 
         match self.mod2_type {
-            Mod2Type::Off => [l, r],
+            Mod2Type::Off | Mod2Type::Spin | Mod2Type::Ensemble => [l, r],
             Mod2Type::Chorus | Mod2Type::Vibe | Mod2Type::Flanger => {
                 let (base_ms, depth_ms, fb_gain, wet_scale) = match self.mod2_type {
                     // VARIATION: vintage pedal chorus, wider and deeper (manual p.50), ASSUMED values.

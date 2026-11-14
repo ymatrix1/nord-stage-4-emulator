@@ -16,6 +16,7 @@ pub mod fx_sharing_params;
 pub mod midi;
 pub mod morph_assign;
 pub mod organ_extra_params;
+pub mod organ_live_params;
 pub mod organ_params;
 pub mod param_snapshot;
 pub mod params;

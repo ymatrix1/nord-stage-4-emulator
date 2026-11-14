@@ -38,9 +38,10 @@ impl OrganLayer {
         if firmware {
             // Smoothed firmware weights through the mix stage (level L, ASSUMED 1.0): the bus
             // already carries the wheel signals (x table, no per-wheel calibration).
+            let drawbars = *self.active_drawbars();
             let wa = self.weight_state.step(
                 &self.held_notes,
-                &self.drawbars,
+                &drawbars,
                 self.octave_shift.clamp(-2, 2),
                 self.sample_rate,
             );
@@ -65,7 +66,7 @@ impl OrganLayer {
             let legacy_drawbars = if firmware {
                 &[][..]
             } else {
-                &self.drawbars[..]
+                &self.active_drawbars()[..]
             };
             for (db_idx, &level) in legacy_drawbars.iter().enumerate() {
                 if level == 0 {
@@ -86,7 +87,11 @@ impl OrganLayer {
                 let tw = foldback_tonewheel(base_midi + perc_offset);
                 let perc_gain = if self.percussion_soft { 0.06 } else { 0.12 };
                 for (acc, bus) in dry.iter_mut().zip(buses.iter()).take(lanes) {
-                    *acc += self.percussion_env * bus[tw] * perc_gain * key_gain * perc_scale;
+                    *acc += self.perc_env_for(note as usize)
+                        * bus[tw]
+                        * perc_gain
+                        * key_gain
+                        * perc_scale;
                 }
             }
         }

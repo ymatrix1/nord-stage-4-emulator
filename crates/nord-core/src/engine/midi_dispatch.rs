@@ -94,7 +94,11 @@ impl Stage4Engine {
                     cc::DRAWBAR_1_16..=cc::DRAWBAR_9_1 => {
                         let idx = (controller - cc::DRAWBAR_1_16) as usize;
                         let step = ((norm * 8.0).round() as u8).min(8);
-                        self.organ_a.drawbars[idx] = step;
+                        // the physical bar always moves; the stored preset only follows in Preset mode
+                        self.organ_a.live_drawbars[idx] = step;
+                        if !self.organ_a.drawbar_live {
+                            self.organ_a.drawbars[idx] = step;
+                        }
                     }
                     cc::SUSTAIN_PEDAL => self.set_sustain_pedal(PedalSource::Global, value),
                     cc::SOSTENUTO_PEDAL => {
