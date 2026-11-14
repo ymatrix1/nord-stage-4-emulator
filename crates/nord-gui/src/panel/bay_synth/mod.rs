@@ -153,6 +153,14 @@ mod tests {
     use crate::panel::support::shapes_painted;
 
     #[test]
+    fn the_display_rect_covers_the_layout_rectangle_of_display_1() {
+        let o = pos2(0.0, 0.0);
+        assert!(
+            display_rect(o).contains_rect(crate::panel::layout_px::rect_or_empty("synth.oled", o))
+        );
+    }
+
+    #[test]
     fn render_bay_synth_paints_shapes() {
         let n = shapes_painted(render_bay_synth);
         assert!(n > 300, "render_bay_synth painted only {n} shapes");

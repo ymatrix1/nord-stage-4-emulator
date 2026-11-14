@@ -38,8 +38,8 @@ pub mod oled_hint;
 pub mod oled_home;
 pub mod oled_icons;
 pub mod oled_lists;
-pub mod oled_popup;
 pub mod oled_paint;
+pub mod oled_popup;
 pub mod oled_store;
 pub mod organize;
 pub mod organize_presets;
@@ -173,7 +173,10 @@ pub(super) fn render_bay_program(
         .program_ui
         .begin_frame(now, &keys, &state.prog_id, &state.prog_title);
     state.program_ui.sync_edits(audio_handle.edit_count());
-    state.program_ui.clock.observe_step(state.telemetry.arp_step());
+    state
+        .program_ui
+        .clock
+        .observe_step(state.telemetry.arp_step());
     state.program_ui.undo_blocked = state.telemetry.undo_blocked();
     state.program_ui.redo_available = state.telemetry.redo_available();
 
@@ -309,6 +312,26 @@ mod tests {
     use super::*;
     use crate::panel::support::shapes_painted;
     use nord_core::piano::label::PianoSize;
+
+    #[test]
+    fn display_1_is_blanked_while_a_program_list_is_open_and_the_octave_is_watched() {
+        let blank = |screen| {
+            shapes_painted(move |_ui, p, rect, s, _a| {
+                s.program_ui.screen = screen;
+                after_synth(p, rect, s);
+            })
+        };
+        let home = blank(model::Screen::Home);
+        assert!(blank(model::Screen::List) >= home + 2);
+        assert!(blank(model::Screen::Import) >= home + 2);
+        let mut s = Stage4PanelState::default();
+        s.program_ui.now_ms = 5;
+        s.synth_ui.layer_mut().octave = 0;
+        shapes_painted(|_ui, p, rect, _s, _a| after_synth(p, rect, &mut s));
+        s.synth_ui.layer_mut().octave = -1;
+        shapes_painted(|_ui, p, rect, _s, _a| after_synth(p, rect, &mut s));
+        assert_eq!(s.program_ui.octave_popup().map(|(_, v)| v), Some(-1));
+    }
 
     #[test]
     fn render_bay_program_paints_shapes() {

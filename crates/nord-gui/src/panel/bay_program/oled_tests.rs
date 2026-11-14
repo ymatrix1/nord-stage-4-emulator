@@ -94,7 +94,20 @@ fn clock_transpose_morph_numpad_and_message_text() {
     let t = compose(&u, &sum());
     let (label, value) = t.popup.clone().unwrap();
     assert_eq!(label, "Master Clock Tempo");
-    assert!(value.starts_with("120 bpm	"), "{value}");
+    assert_eq!(value, "120 bpm", "the measured value row, KBS off");
+    assert_eq!(
+        t.graphic,
+        Some(crate::panel::bay_program::oled_popup::Graphic::Beats(0))
+    );
+    u.clock.kbs = crate::panel::bay_program::model::KbsMode::Soft;
+    u.clock.beat = 2;
+    let t = compose(&u, &sum());
+    assert_eq!(t.popup.unwrap().1, "120 bpm\tKBS Soft");
+    assert_eq!(
+        t.graphic,
+        Some(crate::panel::bay_program::oled_popup::Graphic::Beats(2))
+    );
+    u.screen = Screen::Clock;
     assert_eq!(t.big, "A:11", "the home header stays above the popup");
     u.screen = Screen::Transpose;
     u.transp.dial(2);
@@ -158,4 +171,20 @@ fn menu_titles_are_the_settings_titles_the_display_prints() {
     }
     // Program Organize is a list page with its own header: mixed case.
     assert_eq!(MenuId::Organize.title(), "Program Organize");
+}
+
+#[test]
+fn the_octave_popup_shows_label_value_and_slider_on_the_home_screen_only() {
+    use crate::panel::bay_program::oled_popup::Graphic;
+    let mut u = ProgramUi::default();
+    u.now_ms = 10;
+    assert_eq!(compose(&u, &sum()).popup, None);
+    u.popups.watch_octave(4, 0, 10);
+    u.popups.watch_octave(4, -1, 11);
+    let t = compose(&u, &sum());
+    assert_eq!(t.popup, Some(("Octave Shift".into(), "-1".into())));
+    assert_eq!(t.graphic, Some(Graphic::Slider(-1)));
+    assert_eq!(t.big, "A:11", "the home header stays above the popup");
+    u.screen = Screen::Transpose;
+    assert_eq!(compose(&u, &sum()).graphic, None, "another popup wins");
 }

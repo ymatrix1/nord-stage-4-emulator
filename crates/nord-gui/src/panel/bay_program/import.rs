@@ -138,7 +138,11 @@ mod tests {
     fn the_dial_opens_the_list_only_when_enabled_and_steps_the_location() {
         let mut u = ui_with(&[]);
         u.dial(1, false);
-        assert_eq!(u.screen, Screen::Home, "off by default: the dial steps programs");
+        assert_eq!(
+            u.screen,
+            Screen::Home,
+            "off by default: the dial steps programs"
+        );
         assert_eq!(u.loc.label(), "A:12");
         let mut u = ui_with(&[]);
         u.import.on_dial = true;
@@ -173,7 +177,10 @@ mod tests {
         let out = u.soft_down(1);
         assert_eq!(u.screen, Screen::Home);
         assert_eq!(out.len(), 1, "one recall of the chosen program");
-        assert_eq!((u.loc.label().as_str(), u.title.as_str()), ("A:11", "Three"));
+        assert_eq!(
+            (u.loc.label().as_str(), u.title.as_str()),
+            ("A:11", "Three")
+        );
         assert!(u.message.as_ref().unwrap().0.contains("A:13 into A:11"));
         u.open_import();
         u.dial(5, false);

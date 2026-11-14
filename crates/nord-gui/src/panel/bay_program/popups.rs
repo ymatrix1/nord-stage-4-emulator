@@ -35,7 +35,9 @@ impl Popups {
 
     /// Octave value while the popup is up at `now_ms`.
     pub fn octave(&self, now_ms: u32) -> Option<i8> {
-        self.shown.filter(|&(_, until)| now_ms < until).map(|(v, _)| v)
+        self.shown
+            .filter(|&(_, until)| now_ms < until)
+            .map(|(v, _)| v)
     }
 
     /// The popup needs a repaint to go away.

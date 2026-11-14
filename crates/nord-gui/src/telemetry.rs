@@ -192,6 +192,16 @@ mod tests {
     }
 
     #[test]
+    fn the_clock_step_is_none_without_an_engine_and_follows_the_engine() {
+        assert_eq!(PanelTelemetry(None).arp_step(), None);
+        let t = nord_core::engine::Telemetry {
+            arp_step: 2,
+            ..Default::default()
+        };
+        assert_eq!(PanelTelemetry(Some(t)).arp_step(), Some(2));
+    }
+
+    #[test]
     fn handle_round_trips_a_published_snapshot() {
         let h = TelemetryHandle::new();
         assert!(h.latest().get().is_none(), "nothing published yet");

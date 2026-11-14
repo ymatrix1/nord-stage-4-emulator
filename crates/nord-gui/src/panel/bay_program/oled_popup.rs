@@ -94,7 +94,10 @@ mod tests {
         assert_eq!((slider_cell(-9), slider_cell(9)), (0, 12));
         let (m_minus, m_zero) = (slider_marker(disp(), -1), slider_marker(disp(), 0));
         assert!(m_minus.center().x < m_zero.center().x);
-        assert!(m_zero.right() <= 126.0 && m_minus.left() >= 70.0, "right edge, 13 cells");
+        assert!(
+            m_zero.right() <= 126.0 && m_minus.left() >= 70.0,
+            "right edge, 13 cells"
+        );
     }
 
     #[test]
@@ -107,9 +110,8 @@ mod tests {
 
     #[test]
     fn every_graphic_paints_shapes_and_a_lit_box_replaces_an_outline() {
-        let paint_it = |g| {
-            shapes_painted(move |_ui, p, _rect, _s, _a| paint(p, disp(), g, Color32::WHITE))
-        };
+        let paint_it =
+            |g| shapes_painted(move |_ui, p, _rect, _s, _a| paint(p, disp(), g, Color32::WHITE));
         assert_eq!(paint_it(Graphic::Beats(0)), paint_it(Graphic::Beats(3)));
         assert!(paint_it(Graphic::Beats(1)) >= 4);
         assert!(paint_it(Graphic::Slider(-1)) >= 4);

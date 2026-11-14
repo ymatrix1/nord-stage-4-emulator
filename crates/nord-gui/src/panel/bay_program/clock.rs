@@ -120,6 +120,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_beat_counts_the_wraps_of_the_engine_step() {
+        let mut c = ClockUi::default();
+        for step in [0, 1, 2, 3, 0, 1] {
+            c.observe_step(Some(step));
+        }
+        assert_eq!(c.beat, 1, "3 to 0 is the next beat");
+        c.observe_step(None);
+        assert_eq!(c.beat, 1, "no engine keeps the beat");
+        for step in [2, 3, 0, 3, 0, 3, 0] {
+            c.observe_step(Some(step));
+        }
+        assert_eq!(c.beat, 0, "four wraps come back to the first box");
+    }
+
+    #[test]
     fn four_taps_at_500_ms_make_120_bpm() {
         let mut c = ClockUi::default();
         c.bpm = 90.0;
