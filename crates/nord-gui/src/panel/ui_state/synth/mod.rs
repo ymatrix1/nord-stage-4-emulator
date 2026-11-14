@@ -8,6 +8,8 @@
 mod buttons;
 mod dials;
 mod dials_pages;
+#[cfg(test)]
+mod dials_table_tests;
 mod groups;
 mod knobs;
 mod layer;
