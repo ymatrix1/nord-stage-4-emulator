@@ -242,7 +242,7 @@ pub fn step_value(item: &MenuItem, v: Value, delta: i32) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nord_panel::menus::find_item;
+    use nord_panel::menus::{find_item, ItemKind};
 
     fn open(m: Menu) -> MenuUi {
         let mut u = MenuUi::default();
@@ -302,16 +302,16 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_items_and_actions_never_change() {
-        let mut u = open(Menu::Organize);
-        u.step_page(1); // the Preset page keeps Unsupported items
-        assert!(matches!(u.focused_item().binding, Binding::Unsupported(_)));
+    fn actions_never_change_with_the_dial() {
+        let mut u = open(Menu::Midi);
+        u.step_page(9); // MIDI overview: one action
+        assert_eq!(u.focused_item().kind, ItemKind::Action);
         assert!(u.dial(1).is_none());
-        let before = u.value(u.focused_item());
-        assert_eq!(before, u.focused_item().default);
+        assert_eq!(u.value(u.focused_item()), Value::None);
         let mut o = open(Menu::Organize);
         o.step_page(1);
-        o.soft(1);
+        o.soft(2); // Swap
+        assert_eq!(o.focused_item().id, "organize.2.swap");
         assert!(o.dial(1).is_none());
     }
 
