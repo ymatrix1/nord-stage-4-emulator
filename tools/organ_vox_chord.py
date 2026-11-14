@@ -10,7 +10,7 @@ is reused; the key-down messages are rebuilt from the verified key map
     python tools/organ_vox_chord.py 45,52,57,61 > chord.script
     python tools/pno_full_pass.py run SRAM/core1_sram.bin --exe target/release/sharc-pass \
         --script chord.script --passes 12000 --out chord
-    cargo run --release -p nord-core --example organ_ref -- --mode vox --rate 43402.34375 \
+    cargo run --release -p nord-tools --bin organ_ref -- --mode vox --rate 43402.34375 \
         --frames 12000 --notes 45,52,57,61 --out rust_chord
     python tools/organ_partials.py vox chord.f32.npy rust_chord.csv --keys 45,52,57,61 --skip 3000
 """

@@ -111,3 +111,36 @@ def test_table_and_summary_render_every_variant():
     assert "| a | fit | legacy | 6.00 |" in t and "| a | fit | new | 1.00 |" in t
     s = sv.summary(res)
     assert "new (all)" in s and "new (holdout)" in s and "pass" in s
+
+
+def test_verdict_against_another_variant_drops_the_majority_rule():
+    res = {
+        "clips": [
+            {
+                "id": "a",
+                "source": "partA",
+                "role": "fit",
+                "wave": "saw",
+                "variants": [
+                    row("legacy", 6.0, -9, 3),
+                    row("base", 3.0, -2, 1),
+                    row("kl", 2.0, -2, 1),
+                ],
+            },
+            {
+                "id": "b",
+                "source": "partA",
+                "role": "holdout",
+                "wave": "saw",
+                "variants": [
+                    row("legacy", 6.0, -9, 3),
+                    row("base", 3.0, -2, 1),
+                    row("kl", 3.0, -2, 1),
+                ],
+            },
+        ]
+    }
+    assert sv.verdict(res, "kl")["better"] == 2  # both beat legacy
+    v = sv.verdict(res, "kl", "base")
+    assert v["passes"] and v["better"] == 1 and v["mean_gain"] == 0.5
+    assert "kl (all)" in sv.summary(res, "base") and "base (all)" not in sv.summary(res, "base")

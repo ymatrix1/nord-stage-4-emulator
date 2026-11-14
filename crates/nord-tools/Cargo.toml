@@ -1,0 +1,12 @@
+[package]
+name = "nord-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Evaluation harness binaries (golden render hash, program sweep, synth validation, oracle references) for the Nord Stage 4 Emulator. Not published."
+publish = false
+
+[dependencies]
+nord-core = { path = "../nord-core" }
+serde_json = "1.0"

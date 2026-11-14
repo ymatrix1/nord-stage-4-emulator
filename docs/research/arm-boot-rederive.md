@@ -1,7 +1,7 @@
 # The two boot words `DM 0xB2ECF` / `0xB2FF0`, and the B3 tail on the corrected state
 
 - **Checked:** 2026-11-13
-- **Sources (local, never committed):** the boot log of [arm-bulk-tables](arm-bulk-tables.md), `tools/organ_b3_proc.py`, `tools/organ_fb_pass.py`, `tools/organ_partials.py`, `tools/pno_full_pass.py`, `sharc-pass`, `crates/nord-core/examples/organ_ref.rs`, the ARM harness (`arm_edit_capture.py`, `arm_model_paths.py`). Builds on [arm-boot-state](arm-boot-state.md). Derived data: [data/b3-tail-gain-bootstate.csv](data/b3-tail-gain-bootstate.csv) (34 points, derived numbers only).
+- **Sources (local, never committed):** the boot log of [arm-bulk-tables](arm-bulk-tables.md), `tools/organ_b3_proc.py`, `tools/organ_fb_pass.py`, `tools/organ_partials.py`, `tools/pno_full_pass.py`, `sharc-pass`, `crates/nord-tools/src/bin/organ_ref.rs`, the ARM harness (`arm_edit_capture.py`, `arm_model_paths.py`). Builds on [arm-boot-state](arm-boot-state.md). Derived data: [data/b3-tail-gain-bootstate.csv](data/b3-tail-gain-bootstate.csv) (34 points, derived numbers only).
 - **Question:** what does the real model install do with `DM 0xB2ECF` (`0xBDA3D70B`) and `0xB2FF0` (`0xBD851EB8`); with the answer applied, what are the B3 tail and the B3 Bass lines, and how do the Rust paths compare?
 
 Tags: **VERIFIED** = reproduced by a command, **EMPIRICAL** = measured, **ASSUMED** = reading.

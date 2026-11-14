@@ -39,7 +39,7 @@ Not mapped: the key-down message `(layer<<29)|(0x0B on/0x08 off)<<24|((note-60)&
 
 ## 3. Oracle check (end to end of the stage words)
 
-`cargo run --release -p nord-core --example synth_strip_e2e > strip.json`, then `python tools/synth_strip_e2e.py strip.json` (env `NS4_SHARC_ORG`, `NS4_ORG_IMAGE`, as in [synth-adr-and-strip-law](synth-adr-and-strip-law.md) Reproduce). The Rust example derives the words from the panel mappings above (Smooth Lead: cutoff 370 Hz, resonance 0.516; envelope at the fast table end) and the script feeds the same words to the ORG core 2 pass of the OS v1.66 image.
+`cargo run --release -p nord-tools --bin synth_strip_e2e > strip.json`, then `python tools/synth_strip_e2e.py strip.json` (env `NS4_SHARC_ORG`, `NS4_ORG_IMAGE`, as in [synth-adr-and-strip-law](synth-adr-and-strip-law.md) Reproduce). The Rust example derives the words from the panel mappings above (Smooth Lead: cutoff 370 Hz, resonance 0.516; envelope at the fast table end) and the script feeds the same words to the ORG core 2 pass of the OS v1.66 image.
 
 | Check | Oracle run | Result |
 |---|---|---|

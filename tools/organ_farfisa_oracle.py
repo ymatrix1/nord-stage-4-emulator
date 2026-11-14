@@ -160,7 +160,7 @@ def report(name: str, ref: np.ndarray, test: np.ndarray) -> None:
 
 
 def read_rust_csv(path: str, frames: int) -> np.ndarray:
-    """`frame,row,osc,value` rows of `examples/farfisa_ref.rs` to `[frame, row, oscillator]`."""
+    """`frame,row,osc,value` rows of `farfisa_ref` (nord-tools) to `[frame, row, oscillator]`."""
     data = np.loadtxt(path, delimiter=",")
     out = np.zeros((frames, ROWS, OSC), dtype=np.float32)
     for f, r, n, v in data:

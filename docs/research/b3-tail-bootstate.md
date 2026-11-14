@@ -1,7 +1,7 @@
 # B3 tail on the full boot state: ported table, chords, hardware clip
 
 - **Checked:** 2026-11-13
-- **Sources (local, never committed):** [arm-boot-rederive](arm-boot-rederive.md) (boot log, corrected tail), `docs/research/data/keydown-organ-keys.csv`, `tools/pno_full_pass.py`, `tools/organ_partials.py`, `tools/emu_vs_hw.py` (video `_zksT69H30c`, factory `.ns4b`, local only), `crates/nord-core/examples/organ_ref.rs`, `ns4` release binary.
+- **Sources (local, never committed):** [arm-boot-rederive](arm-boot-rederive.md) (boot log, corrected tail), `docs/research/data/keydown-organ-keys.csv`, `tools/pno_full_pass.py`, `tools/organ_partials.py`, `tools/emu_vs_hw.py` (video `_zksT69H30c`, factory `.ns4b`, local only), `crates/nord-tools/src/bin/organ_ref.rs`, `ns4` release binary.
 - **Question:** with the oracle on the corrected state, does the Rust B3 path (tail table plus key weights) reproduce the oracle chords, and does the hardware clip allow the default flip (D22)?
 
 Tags: **VERIFIED** = reproduced by a command, **EMPIRICAL** = measured, **ASSUMED** = reading.
