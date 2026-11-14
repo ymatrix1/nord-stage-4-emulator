@@ -10,7 +10,7 @@ pub use fx::FxUi;
 pub use organ::OrganUi;
 pub use piano::PianoUi;
 pub use program::ProgramUi;
-pub use synth::SynthUi;
+pub use synth::*;
 
 #[cfg(test)]
 mod tests {
