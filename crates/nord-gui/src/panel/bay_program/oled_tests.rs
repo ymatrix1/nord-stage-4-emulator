@@ -36,7 +36,19 @@ fn menus_list_and_preset_screens_have_their_titles() {
     u.open_menu(MenuId::Pedal);
     let t = compose(&u, &sum());
     assert_eq!(t.big, "PEDAL SETTINGS");
-    assert_eq!(t.sub, "1/7 Control Pedal");
+    assert_eq!(t.sub, "Control Pedal");
+    // VERIFIED (ARM frame): the counter is right-aligned in the inverted title bar and the lit
+    // soft button is the focused item.
+    assert_eq!(t.bar.as_deref(), Some("1/7"));
+    assert_eq!(t.soft_on, Some(0));
+    assert!(
+        t.plain().starts_with(
+            "PEDAL SETTINGS 1/7
+"
+        ),
+        "{}",
+        t.plain()
+    );
     assert!(t.rows[0].starts_with(">Type: Nord EP"), "{:?}", t.rows);
     // A menu screen set without `open_menu` shows the title and manual page only.
     u.screen = Screen::Menu(MenuId::Midi);
@@ -82,7 +94,10 @@ fn clock_transpose_morph_numpad_and_message_text() {
     assert_eq!(compose(&u, &sum()).sub, "120 BPM");
     u.screen = Screen::Transpose;
     u.transp.dial(2);
-    assert_eq!(compose(&u, &sum()).sub, "+2 st on");
+    let t = compose(&u, &sum());
+    assert_eq!(t.popup, Some(("Transpose".into(), "+2 semi".into())));
+    assert_eq!(t.big, "A:11", "the home header stays above the popup");
+    assert!(t.plain().contains("+2 semi"));
     u.morph.double_tap(SOURCES[0]);
     u.dial(2, false);
     u.screen = Screen::Morph(SOURCES[0]);
