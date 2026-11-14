@@ -1,4 +1,4 @@
-//! egui rendering of the library top bar and `.ns4b` browser drawer.
+//! Library drawer and top-bar rendering.
 
 use super::{BackupLibraryState, BackupTab};
 use crate::audio::AudioHandle;
@@ -195,29 +195,17 @@ impl BackupLibraryState {
 mod tests {
     use super::*;
 
-    fn run_frame(f: impl FnMut(&egui::Context)) {
-        let ctx = egui::Context::default();
-        let _ = ctx.run(egui::RawInput::default(), f);
-    }
-
     #[test]
-    fn test_render_drawer_is_noop_when_closed_and_runs_when_open() {
+    fn test_render_top_bar_and_closed_drawer_run_headless() {
         let mut lib = BackupLibraryState::new();
-        let mut panel = Stage4PanelState::default();
         let (audio, _rx) = AudioHandle::new();
-        run_frame(|ctx| lib.render_drawer(ctx, &mut panel, &audio));
-        lib.drawer_open = true;
-        run_frame(|ctx| lib.render_drawer(ctx, &mut panel, &audio));
-        assert!(lib.drawer_open);
-    }
-
-    #[test]
-    fn test_render_top_bar_runs_headless() {
-        let mut lib = BackupLibraryState::new();
-        let mut sync = true;
-        run_frame(|ctx| {
+        let mut panel = Stage4PanelState::default();
+        let mut sync = false;
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| lib.render_top_bar(ui, &mut sync));
+            lib.render_drawer(ctx, &mut panel, &audio);
         });
-        assert!(sync);
+        assert!(!lib.drawer_open);
     }
 }

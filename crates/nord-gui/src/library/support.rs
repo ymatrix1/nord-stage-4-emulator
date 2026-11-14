@@ -1,12 +1,6 @@
-//! Shared test fixtures: synthetic `.ns4b` (PKZIP) archives written to the temp dir.
+//! Shared test fixtures for the library submodules.
 
-use std::path::PathBuf;
-
-/// `meta.xml` payload decoding to "v166 build 2934".
-pub const META: &[u8] = b"<backup file_version=\"1\" backup_format_version=\"1\" product_id=\"46\" product_version=\"166\" product_build=\"2934\" manager_version=\"786\" manager_build=\"1234\"/>";
-
-/// Builds a minimal STORED-method PKZIP archive from `(name, bytes)` pairs (CRC left 0).
-pub fn build_synthetic_zip_stored(files: &[(&str, &[u8])]) -> Vec<u8> {
+pub(super) fn build_synthetic_zip_stored(files: &[(&str, &[u8])]) -> Vec<u8> {
     let mut out = Vec::new();
     let mut central = Vec::new();
 
@@ -66,24 +60,14 @@ pub fn build_synthetic_zip_stored(files: &[(&str, &[u8])]) -> Vec<u8> {
     out
 }
 
-/// Writes a synthetic `.ns4b` to the temp dir (unique per process and `tag`) and returns its path.
-pub fn write_temp_ns4b(tag: &str, files: &[(&str, &[u8])]) -> PathBuf {
-    let mut path = std::env::temp_dir();
-    path.push(format!("ns4_gui_{tag}_{}.ns4b", std::process::id()));
-    std::fs::write(&path, build_synthetic_zip_stored(files)).expect("write temp ns4b");
-    path
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nord_core::cbin::Ns4BackupArchive;
 
     #[test]
-    fn test_write_temp_ns4b_round_trips_through_archive_reader() {
-        let path = write_temp_ns4b("support", &[("meta.xml", META), ("a/b.ns4p", b"xyz")]);
-        let archive = Ns4BackupArchive::open(&path).expect("open synthetic archive");
-        assert!(archive.entries().iter().any(|e| e.name == "a/b.ns4p"));
-        let _ = std::fs::remove_file(&path);
+    fn test_synthetic_zip_has_local_and_end_records() {
+        let zip = build_synthetic_zip_stored(&[("a.txt", b"hi")]);
+        assert_eq!(&zip[0..4], &[0x50, 0x4B, 0x03, 0x04]);
+        assert!(zip.windows(4).any(|w| w == [0x50, 0x4B, 0x05, 0x06]));
     }
 }

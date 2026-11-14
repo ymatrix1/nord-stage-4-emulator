@@ -25,6 +25,19 @@ Maps incoming MIDI velocity $v \in [1, 127]$ to normalized gain/timbre excitatio
 - **`Medium` (Default):** $\left(\dfrac{v}{127}\right)^{1.00}$ (linear response)
 - **`Heavy`:** $\left(\dfrac{v}{127}\right)^{1.55}$ (wider pianissimo dynamic control)
 
+### Downstream level after the voice (`piano/downstream.rs`)
+
+Voice output stage (VERIFIED, `smp_voice.rs`): `bus += (y << 17) * gain >> 31`, so a bus word read as a fraction of Q31 full scale is `(y / 8192) * 0.5 * gain` (`FIRMWARE_SAMPLE_SCALE`). The engine sample path multiplies `y / 8192` by `LEGACY_SAMPLE_SCALE = 0.55` (ASSUMED, legacy); `PianoLayer::firmware_bus_scale` (default `false`, `ns4 render-patch --firmware-piano-bus`) uses 0.5 (-0.83 dB). The receiver's full-scale convention is ASSUMED. After the voice the engine adds no level at default settings (layer level 1.0, master compressor amount 0, FX off, timbre `Off`, dyn comp 0, unison 0; string resonance < 1e-5 of RMS), measured in [piano-downstream-level](../research/piano-downstream-level.md) (D24). The video comparison level depends on the replay velocity (0.37 dB per step), see that note.
+
+### Firmware velocity -> level law (opt-in, `piano/velocity_level.rs`)
+
+VERIFIED against the real firmware (OS v1.66, `docs/research/piano-sound-load.md` sections 6 and 7; Clavinet D6, Bright Grand, Amber Upright, note 60, 79 velocities): the piano class level method `0xC00A1EB4` stores the Q23 voice amplitude
+
+$$n = \mathrm{rec}[\mathtt{0x5E}] + 2X + 60 - (b_1 + b_2 + b_3), \qquad A = G[n mod 60] \gg \lfloor n / 60 
+floor,\quad G[k] = \mathrm{round}(2^{23} \cdot 2^{-k/60})$$
+
+(`piano/level_q23.rs`; 60 steps per octave, 0.1003 dB per step). `X` is the velocity attenuation `clamp(d + ((128 - c) T) >> 7, 0, 249)`, `T` a byte of the firmware velocity curve for the internal velocity (`0..=1023`), `(c, d)` = `(0x13, 0)` for the zone used; it falls from 170 (velocity 1) to 0 (velocity 121 and above) and was identical for the three sounds swept. `rec[0x5E]` is a field of the selected stroke record (depends on the root key and the velocity layer; file specific), `b1 + b2 + b3` are three signed per-key bytes of the sound object (40 / 49 / 54 at note 60 for the three sounds; they vary with the note). The module provides the `X` table (VERIFIED at 79 velocities, EMPIRICAL interpolation between), the stroke step function (EMPIRICAL between swept velocities) and the index formula; it is **not wired into the default render** (`render_hash` unchanged). `rec[0x5E]`, the stroke choice and the per-key bytes are read from the `.npno` by `piano/npno_level.rs` (`NpnoSound::firmware_level`); `PianoLayer::firmware_velocity_level` (default `true`, D23) makes a note-on of an `.npno` sound start the firmware's voices (`NpnoLevel::voices`: main voice, plus an extra first voice on classes 1, 2, 3, 5, 6) with the gain `level_q23 / 2^23` each (`piano/extra_voice.rs`); the touch curve remains for SFZ/WAV, synthetic sounds and damper-down notes. Open: the downstream level calibration against the hardware recording and the SMP slew times.
+
 ---
 
 ## 3. Key Release
@@ -92,7 +105,7 @@ When a pre-decoded `.npno` or open SFZ/WAV (`NpnoSound::from_sfz_str` / `from_sf
    $$
    r = 2^{\frac{(n - n_{\text{root}}) + \frac{c}{100}}{12}}, \qquad \text{sample\_step} = r \cdot \frac{f_{\text{s, stroke}}}{f_{\text{s, engine}}}
    $$
-3. **SMP 6-Tap Q31 Sample Interpolation (`SampleInterp::SmpQ31`, default):**
+3. **SMP 6-Tap Q31 Sample Interpolation (`SampleInterp::SmpQ31Hw`, default; `SmpQ31` is the f32 form):**
    All fractional sample lookups (including `35 kHz -> 48 kHz` `.npno` hardware sample-rate conversion and semitone transposition) use the kernel the SMP DSP image applies (`crates/nord-core/src/piano/q31_kernel.rs`; see "SMP sample interpolation" below). `SampleInterp::Cubic` selects the earlier zero-allocation 4-point Catmull-Rom spline over `[p_{k-1}, p_k, p_{k+1}, p_{k+2}]` (`PianoLayer::sample_interp`).
 4. **Resilient Fallback:**
    If no sample is loaded, or if the note is outside the mapped multisample zones, the engine smoothly falls back to the mathematical harmonic oscillator bank.
@@ -128,7 +141,7 @@ Source: [smp-kernel-fit](../research/smp-kernel-fit.md) (VERIFIED, `tools/ns4_sm
 
 The table is built once (`SmpKernel::shared()`, called in `PianoLayer::new`); `render_frame` only reads a `&'static` table (6 MACs per channel, no allocation, no lock).
 
-`PianoLayer::sample_interp` selects the path: `SmpQ31` (default, hardware parity) or `Cubic` (Catmull-Rom). Measured worst-case error of interpolating a sine at fractional positions (kernel vs Catmull-Rom, Python model in the research note): 0.05 fs -71 / -66 dB, 0.10 fs -55 / -47 dB, 0.15 fs -50 / -35 dB, 0.20 fs -55 / -27 dB, 0.25 fs -36 / -19 dB, 0.30 fs -22 / -14 dB. The unit test `test_sine_tone_error_against_ideal_and_cubic` pins the kernel below the cubic error at 0.2 fs. Like the hardware, the kernel is a fixed interpolator with no anti-alias filtering for upward transposition.
+`PianoLayer::sample_interp` selects the path: `SmpQ31Hw` (default, hardware parity: the integer MAC `SmpKernel::interpolate_hw` for integer `.npno` strokes, `LoadedPianoStroke::integer_pcm`; float WAV / SFZ strokes use the f32 kernel), `SmpQ31` (f32 kernel for all strokes) or `Cubic` (Catmull-Rom). Measured worst-case error of interpolating a sine at fractional positions (kernel vs Catmull-Rom, Python model in the research note): 0.05 fs -71 / -66 dB, 0.10 fs -55 / -47 dB, 0.15 fs -50 / -35 dB, 0.20 fs -55 / -27 dB, 0.25 fs -36 / -19 dB, 0.30 fs -22 / -14 dB. The unit test `test_sine_tone_error_against_ideal_and_cubic` pins the kernel below the cubic error at 0.2 fs. Like the hardware, the kernel is a fixed interpolator with no anti-alias filtering for upward transposition.
 
 `piano/smp_unpack.rs` models the voice-loop residual unpacker (LSB-first, 16 payload bits per 32-bit word, `FEXT`/`FDEP (SE)`, widths 1..16) and the 4-tap integer predictor; tests prove it equals `cbin::sample` decoding of the same synthetic residuals for widths 1..16 and orders 0..4.
 

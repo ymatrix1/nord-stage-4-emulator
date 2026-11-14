@@ -1,4 +1,4 @@
-//! Stereo frame to interleaved device-buffer conversion (F32 / I16).
+//! Sample-format helpers for the CPAL output callback.
 
 /// Converts a normalized float [-1.0, 1.0] to a signed 16-bit PCM integer [-32767, 32767].
 #[inline]

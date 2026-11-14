@@ -6,9 +6,20 @@ impl SynthLayer {
     /// Renders a single stereo frame `[left, right]` across all 16 polyphonic voices.
     pub fn render_frame(&mut self) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        let strip = if self.strip_chain() {
+            Some(self.strip_params())
+        } else {
+            None
+        };
+        if self.gain_dezipper || self.strip_chain() {
+            self.control_tick();
+        }
+
+        self.update_hold();
 
         // 1. Advance LFO
-        self.lfo_phase = (self.lfo_phase + TAU * self.lfo_rate_hz * inv_fs) % TAU;
+        let lfo_hz = self.lfo_hz();
+        self.lfo_phase = (self.lfo_phase + TAU * lfo_hz * inv_fs) % TAU;
         let lfo_val = match self.lfo_shape {
             LfoShape::Triangle => 1.0 - 4.0 * ((self.lfo_phase / TAU) - 0.5).abs(),
             LfoShape::Saw => 2.0 * (self.lfo_phase / TAU) - 1.0,
@@ -21,7 +32,7 @@ impl SynthLayer {
                 }
             }
             LfoShape::SampleAndHold => {
-                if self.lfo_phase < (TAU * self.lfo_rate_hz * inv_fs) {
+                if self.lfo_phase < (TAU * lfo_hz * inv_fs) {
                     self.lfo_sh_val = ((self.lfo_phase * 1234.56).sin() * 43_758.547).fract();
                 }
                 self.lfo_sh_val
@@ -49,6 +60,13 @@ impl SynthLayer {
             }
             _ => 1.0,
         };
+        // Pitch stick: exactly 1.0 (no powf) while the stick is centred.
+        let pitch_cents = self.bend_cents + self.master_tune_cents;
+        let pitch_mod = if pitch_cents == 0.0 {
+            pitch_mod
+        } else {
+            pitch_mod * 2.0f32.powf(pitch_cents / 1200.0)
+        };
 
         let bank = wavetable_bank();
         let sample_sound = self.sample_sound.as_deref();
@@ -73,6 +91,21 @@ impl SynthLayer {
         self.vib_phase =
             (self.vib_phase + TAU * self.vibrato_rate_hz.clamp(0.1, 20.0) * inv_fs) % TAU;
         let vib_sin = self.vib_phase.sin();
+        // Opt-in measured laws (`measured.rs`); the defaults keep the older scales.
+        let (tau_frac, env_octaves, oenv_pitch_oct) = if self.measured_laws {
+            (
+                ENV_DECAY_TAU_FRACTION_MEASURED,
+                FILTER_ENV_OCTAVES_MEASURED,
+                OSC_ENV_PITCH_OCTAVES_MEASURED,
+            )
+        } else {
+            (ENV_DECAY_TAU_FRACTION, FILTER_ENV_OCTAVES, 1.0)
+        };
+        let vib_scale = if self.measured_laws {
+            VIBRATO_DEPTH_SCALE_MEASURED
+        } else {
+            1.0
+        };
         let uni_level = usize::from(self.unison.min(3));
         let uni_count = UNISON_VOICE_COUNT[uni_level];
         // Per voice gains: constant power over the partner voices, measured weak-channel leakage.
@@ -84,13 +117,53 @@ impl SynthLayer {
         let weak = UNISON_WEAK_CHANNEL_GAIN;
         let pan_norm = 1.0 / (1.0 + weak * weak).sqrt();
 
+        // ASSUMED (strip chain only): the ANALOG SHAPE category is built from the saw helper
+        // `0x12501F`, so a decoded `Triangle` of that category plays as the firmware saw.
+        let shape_stage = if strip.is_some()
+            && self.osc_shape_category
+            && self.waveform == VaWaveform::Triangle
+        {
+            self.strip_shape
+        } else {
+            None
+        };
+        let waveform = if strip.is_some()
+            && self.osc_shape_category
+            && self.waveform == VaWaveform::Triangle
+            && shape_stage.is_none()
+        {
+            VaWaveform::Saw
+        } else {
+            self.waveform
+        };
+        let saw_model = if strip.is_some() {
+            SawModel::FirmwareSy
+        } else {
+            self.saw_model
+        };
+        let dezip = self.gain_dezipper || strip.is_some();
+        let dezip_pole = if dezip {
+            gain_pole_for(self.sample_rate)
+        } else {
+            0.0
+        };
+
         for v in &mut self.voices {
             if !v.active {
                 continue;
             }
 
             // Envelope advance (OS v1.66 hardware floors: 0.5 ms attack, 3.0 ms decay/release, >=44 s decay = Hold)
-            if v.gate {
+            if let Some(sp) = &strip {
+                let (amp, fenv) = v.strip.advance(sp, v.gate);
+                v.amp_env = amp;
+                v.fenv = fenv;
+                if !v.gate && amp < 1e-4 {
+                    v.amp_env = 0.0;
+                    v.active = false;
+                    continue;
+                }
+            } else if v.gate {
                 if v.amp_env < 0.999 {
                     let atk = self.attack_sec.max(0.0005);
                     v.amp_env += (1.0 - v.amp_env) * (inv_fs / atk).min(1.0);
@@ -131,7 +204,7 @@ impl SynthLayer {
                         v.oenv_attack_done = true;
                     }
                 } else if self.osc_env_decay_sec < 44.0 {
-                    let dec = (self.osc_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
+                    let dec = (self.osc_env_decay_sec * tau_frac).max(0.003);
                     v.oenv -= v.oenv * (inv_fs / dec).min(1.0);
                 }
             } else {
@@ -153,7 +226,7 @@ impl SynthLayer {
             // blip" clip, Env Amt +5.5 shows ~6-7 semitone onset peaks (+6.6 predicted), accuracy
             // limited to ~1 semitone by 5 ms onset detection. ASSUMED: +/-0.5 of Osc Ctrl range.
             let env_pitch = if self.osc_env_to_pitch {
-                2.0f32.powf(osc_env_mod)
+                2.0f32.powf(osc_env_mod * oenv_pitch_oct)
             } else {
                 1.0
             };
@@ -170,11 +243,14 @@ impl SynthLayer {
                     self.vibrato_ctrl.clamp(0.0, 1.0)
                 }
             };
-            let vib_pitch = 2.0f32.powf(vib_amount * self.vibrato_depth_cents * vib_sin / 1200.0);
+            let vib_pitch =
+                2.0f32.powf(vib_amount * self.vibrato_depth_cents * vib_scale * vib_sin / 1200.0);
 
             // Filter envelope: dedicated ADR, or mirror the amp decay (legacy).
             let fenv_peak = 1.0 - self.filter_env_vel_amount.clamp(0.0, 1.0) * (1.0 - v.velocity);
-            let filter_env_level = if self.filter_env_dedicated {
+            let filter_env_level = if strip.is_some() && self.filter_env_dedicated {
+                v.fenv * fenv_peak
+            } else if self.filter_env_dedicated {
                 if v.gate {
                     if !v.fenv_attack_done {
                         let atk = self.filter_env_attack_sec.max(0.0005);
@@ -184,7 +260,7 @@ impl SynthLayer {
                             v.fenv_attack_done = true;
                         }
                     } else if self.filter_env_decay_sec < 44.0 {
-                        let dec = (self.filter_env_decay_sec * ENV_DECAY_TAU_FRACTION).max(0.003);
+                        let dec = (self.filter_env_decay_sec * tau_frac).max(0.003);
                         v.fenv -= v.fenv * (inv_fs / dec).min(1.0);
                     }
                 } else {
@@ -213,8 +289,11 @@ impl SynthLayer {
                             let dt_k = (f_k * inv_fs).clamp(1e-5, 0.49);
                             let t_k = v.uni_phase[k];
                             let s_k = Self::render_va(
-                                self.waveform,
+                                waveform,
+                                saw_model,
+                                shape_stage,
                                 self.supersaw_detune,
+                                self.measured_laws,
                                 self.pulse_width,
                                 self.lfo_dest,
                                 self.lfo_amount,
@@ -234,8 +313,11 @@ impl SynthLayer {
                     } else {
                         (
                             Self::render_va(
-                                self.waveform,
+                                waveform,
+                                saw_model,
+                                shape_stage,
                                 self.supersaw_detune,
+                                self.measured_laws,
                                 self.pulse_width,
                                 self.lfo_dest,
                                 self.lfo_amount,
@@ -317,8 +399,11 @@ impl SynthLayer {
                         }
                     } else {
                         let va = Self::render_va(
-                            self.waveform,
+                            waveform,
+                            saw_model,
+                            shape_stage,
                             self.supersaw_detune,
+                            self.measured_laws,
                             self.pulse_width,
                             self.lfo_dest,
                             self.lfo_amount,
@@ -345,16 +430,31 @@ impl SynthLayer {
                 1.0
             };
             let env_scale = if self.filter_env_amount.abs() > 1e-4 {
-                2.0f32.powf(
-                    self.filter_env_amount.clamp(-1.0, 1.0) * FILTER_ENV_OCTAVES * filter_env_level,
-                )
+                2.0f32
+                    .powf(self.filter_env_amount.clamp(-1.0, 1.0) * env_octaves * filter_env_level)
             } else {
                 1.0
             };
             let voice_cutoff =
                 (eff_cutoff * kb_track_scale * env_scale).clamp(14.0, 0.48 * self.sample_rate);
 
-            let filtered_l = if self.filter_on {
+            // Firmware filter family: coefficients once per voice and sample (no allocation).
+            let fw_kind = FwFilterType::from_model(self.filter_model);
+            let fw_co =
+                (strip.is_some() || self.filter_engine == FilterEngine::Firmware).then(|| {
+                    let fc = if strip.is_some() {
+                        strip_cutoff_hz(voice_cutoff)
+                    } else {
+                        voice_cutoff
+                    };
+                    FwCoefs::from_params(fw_kind, fc, self.resonance, self.sample_rate)
+                });
+
+            let filtered_l = if !self.filter_on {
+                raw_osc_l
+            } else if let Some(co) = &fw_co {
+                v.fw_filter.process(raw_osc_l, co, fw_kind)
+            } else {
                 v.filter.process(
                     raw_osc_l,
                     self.filter_model,
@@ -363,15 +463,28 @@ impl SynthLayer {
                     self.filter_drive,
                     self.sample_rate,
                 )
+            };
+            // Strip chain: the ARM key word carries `g(vel)` (ASSUMED linear level, `key_velocity.rs`).
+            let vel_level = if strip.is_some() && self.strip_key_velocity {
+                key_velocity_gain(v.velocity)
             } else {
-                raw_osc_l
+                v.velocity
             };
             let amp_vel = (1.0 - self.amp_velocity.clamp(0.0, 1.0))
-                + self.amp_velocity.clamp(0.0, 1.0) * v.velocity;
-            let env_gain = v.amp_env * amp_vel * v.gain * 0.25;
-            mix_l += filtered_l * env_gain;
+                + self.amp_velocity.clamp(0.0, 1.0) * vel_level;
+            let voice_gain = if dezip {
+                v.smoothed_gain(dezip_pole)
+            } else {
+                v.gain
+            };
+            let env_gain = v.amp_env * amp_vel * voice_gain * 0.25;
+            let (mut out_l, mut out_r) = (filtered_l * env_gain, filtered_l * env_gain);
             if let Some(osc_r) = raw_osc_r {
-                let filtered_r = if self.filter_on {
+                let filtered_r = if !self.filter_on {
+                    osc_r
+                } else if let Some(co) = &fw_co {
+                    v.fw_filter_right.process(osc_r, co, fw_kind)
+                } else {
                     v.filter_right.process(
                         osc_r,
                         self.filter_model,
@@ -380,59 +493,27 @@ impl SynthLayer {
                         self.filter_drive,
                         self.sample_rate,
                     )
-                } else {
-                    osc_r
                 };
-                mix_r += filtered_r * env_gain;
-            } else {
-                mix_r += filtered_l * env_gain;
+                out_r = filtered_r * env_gain;
             }
+            if v.pan != 0.0 {
+                let (gl, gr) = pan_gains(v.pan);
+                out_l *= gl;
+                out_r *= gr;
+            }
+            mix_l += out_l;
+            mix_r += out_r;
         }
 
+        if self.arp_mode == ArpMode::Gate {
+            let g = self.perf.gate_level;
+            if self.perf.pattern_on && self.perf.cur_pan != PatternPan::Center {
+                let (gl, gr) = pan_gains(self.perf.cur_pan.position());
+                return [mix_l * g * gl, mix_r * g * gr];
+            }
+            return [mix_l * g, mix_r * g];
+        }
         [mix_l, mix_r]
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[inline]
-    fn render_va(
-        waveform: VaWaveform,
-        supersaw_detune: f32,
-        pulse_width: f32,
-        lfo_dest: LfoDestination,
-        lfo_amount: f32,
-        lfo_val: f32,
-        t: f32,
-        dt: f32,
-        eff_freq: f32,
-        inv_fs: f32,
-        supersaw_phases: &mut [f32; 7],
-    ) -> f32 {
-        match waveform {
-            VaWaveform::Saw => (2.0 * t - 1.0) - poly_blep(t, dt),
-            VaWaveform::SuperSaw => {
-                let mut sum = 0.0f32;
-                let detune_scale = supersaw_detune.clamp(0.0, 1.0);
-                for (i, &det) in SUPERSAW_DETUNES.iter().enumerate() {
-                    let f_osc = eff_freq * (1.0 + det * detune_scale * 0.08);
-                    let dt_i = (f_osc * inv_fs).clamp(1e-5, 0.49);
-                    let p_i = supersaw_phases[i];
-                    let saw = (2.0 * p_i - 1.0) - poly_blep(p_i, dt_i);
-                    sum += saw;
-                    supersaw_phases[i] = (p_i + dt_i) % 1.0;
-                }
-                sum * (1.0 / 7.0)
-            }
-            VaWaveform::Pulse => {
-                let mut pw = pulse_width.clamp(0.05, 0.95);
-                if lfo_dest == LfoDestination::OscCtrl {
-                    pw = (pw + lfo_amount * lfo_val * 0.4).clamp(0.05, 0.95);
-                }
-                let base = if t < pw { 1.0 } else { -1.0 };
-                base + poly_blep(t, dt) - poly_blep((t + 1.0 - pw) % 1.0, dt)
-            }
-            VaWaveform::Triangle => 1.0 - 4.0 * (t - 0.5).abs(),
-            VaWaveform::Sine => (TAU * t).sin(),
-        }
     }
 }
 

@@ -9,7 +9,13 @@ pub struct SynthVoice {
     pub gate: bool,
     pub note: u8,
     pub velocity: f32,
+    /// Pattern pan `-1..=1` (`0` = unpanned, bit-identical mix).
+    pub pan: f32,
     pub gain: f32,
+    /// Gain target latched at the control tick (`gain_dezip.rs`).
+    pub gain_target: f32,
+    /// Smoothed gain applied when the de-zipper is on.
+    pub gain_state: f32,
     pub freq_hz: f32,
     pub phase: f32,
     pub mod_phase: f32,
@@ -28,11 +34,16 @@ pub struct SynthVoice {
     pub age_sec: f32,
     /// Unison detuned oscillator phases (low, high).
     pub uni_phase: [f32; 4],
-    pub uni_supersaw: [[f32; 7]; 4],
-    pub supersaw_phases: [f32; 7],
+    pub uni_supersaw: [[f32; SUPERSAW_VOICES]; 4],
+    pub supersaw_phases: [f32; SUPERSAW_VOICES],
     pub amp_env: f32,
     pub filter: ZdfFilter,
     pub filter_right: ZdfFilter,
+    /// Firmware filter states (`FilterEngine::Firmware`), left and right.
+    pub fw_filter: FwFilter,
+    pub fw_filter_right: FwFilter,
+    /// Firmware strip chain state (`SynthChain::FirmwareStrip`).
+    pub strip: StripVoice,
     pub sample_zone_idx: Option<usize>,
     pub sample_pos: f64,
     pub sample_step: f64,
@@ -47,7 +58,10 @@ impl Default for SynthVoice {
             gate: false,
             note: 0,
             velocity: 0.8,
+            pan: 0.0,
             gain: 1.0,
+            gain_target: 1.0,
+            gain_state: 0.0,
             freq_hz: 440.0,
             phase: 0.0,
             mod_phase: 0.0,
@@ -66,6 +80,9 @@ impl Default for SynthVoice {
             amp_env: 0.0,
             filter: ZdfFilter::default(),
             filter_right: ZdfFilter::default(),
+            fw_filter: FwFilter::default(),
+            fw_filter_right: FwFilter::default(),
+            strip: StripVoice::default(),
             sample_zone_idx: None,
             sample_pos: 0.0,
             sample_step: 1.0,

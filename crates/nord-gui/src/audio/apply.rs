@@ -1,12 +1,18 @@
-//! Applies an `AudioCommand` to the `Stage4Engine` on the DSP thread.
+//! Applies `AudioCommand`s to the `Stage4Engine` on the audio thread.
 
-use super::command::AudioCommand;
+use super::AudioCommand;
 use nord_core::engine::Stage4Engine;
 use nord_core::organ::ScannerMode;
 
 /// Applies a single `AudioCommand` to the `Stage4Engine` and `master_vol`.
 pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_vol: &mut f32) {
     match cmd {
+        AudioCommand::Organ(e) => e.apply(engine),
+        AudioCommand::Piano(e) => e.apply(engine),
+        AudioCommand::Synth(e) => e.apply(engine),
+        AudioCommand::Fx(e) => e.apply(engine),
+        AudioCommand::Program(e) => e.apply(engine),
+        AudioCommand::SwapState(s) => s.apply(engine),
         AudioCommand::Midi(ev) => engine.handle_midi(ev),
         AudioCommand::SetMasterVolume(v) => *master_vol = v.clamp(0.0, 1.0),
         AudioCommand::SetDrawbars(d) => engine.organ_a.drawbars = d,
@@ -156,6 +162,7 @@ pub fn apply_audio_command(cmd: AudioCommand, engine: &mut Stage4Engine, master_
                 }
             }
         }
+        AudioCommand::SetFirmwareOptions(opts) => opts.apply_exact(engine),
         AudioCommand::LoadProgram(prog) => {
             engine.apply_program(&prog);
         }
@@ -183,6 +190,7 @@ mod tests {
     use super::*;
     use nord_core::organ::OrganModel;
     use std::sync::Arc;
+
     #[test]
     fn test_apply_audio_command_updates_engine() {
         let mut engine = Stage4Engine::new(48_000.0);

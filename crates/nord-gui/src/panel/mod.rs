@@ -1,36 +1,111 @@
 //! Full 6-Bay Top Control Surface and 88-Key Interactive Keybed Layout.
 //!
-//! Spec: `docs/specs/visual-style-and-panel.md`
-//!
-//! - `state`: `Stage4PanelState`; `program`: applying a decoded program
-//! - `bay_*`: one renderer per front-panel bay; `keybed`: 88-key keyboard
+//! Spec: `docs/specs/visual-style-and-panel.md`. One file per bay (Phase 6b B4).
 
-mod bay_fx;
+mod aux_flag;
+mod bay_effects;
 mod bay_master;
 mod bay_organ;
 mod bay_piano;
+mod bay_piano_select;
 mod bay_program;
 mod bay_synth;
+mod ctl;
+mod kb_zone;
 mod keybed;
-mod program;
+pub mod layout_px;
+mod layout_tweaks;
+#[cfg(test)]
+mod legibility_tests;
+mod organ_drawbars;
+mod organ_logic;
+#[cfg(test)]
+mod organ_master_tests;
+mod organ_preset;
+#[cfg(test)]
+mod organ_rewire_tests;
+mod organ_strip;
+mod organ_widgets;
+#[cfg(test)]
+mod piano_click_tests;
+mod piano_logic;
+mod piano_overlay;
+mod piano_widgets;
+#[cfg(test)]
+mod sim;
 mod state;
 #[cfg(test)]
 mod support;
+#[cfg(test)]
+mod telemetry_wiring_tests;
+#[cfg(test)]
+mod tests;
+pub mod ui_state;
+pub mod view;
 
+/// Names every bay file needs; imported with `use super::prelude::*;`.
+mod prelude {
+    pub use super::state::Stage4PanelState;
+    pub use crate::audio::{apply_audio_command, AudioCommand, AudioHandle};
+    pub use crate::style::*;
+    pub use crate::widgets::*;
+    pub use egui::Painter;
+    pub use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke, StrokeKind, Ui};
+    pub use nord_core::engine::Stage4Engine;
+    pub use nord_core::fx::{Mod1Type, Mod2Type, ReverbModel};
+    pub use nord_core::midi::MidiEvent;
+    pub use nord_core::organ::{OrganModel, RotarySpeed, ScannerMode};
+    pub use nord_core::piano::{PianoCategory, PianoTimbre, VelocityTouch};
+    pub use nord_core::synth::{FilterModel, SynthOscMode, VaWaveform};
+}
+
+pub use bay_program::catalog::LoadRequest;
 pub use state::Stage4PanelState;
 
-use crate::audio::{apply_audio_command, AudioHandle};
-use crate::style::*;
-use crate::widgets::*;
-use egui::{pos2, vec2, Align2, Color32, Sense, Stroke, StrokeKind, Ui};
-use nord_core::engine::Stage4Engine;
+use bay_effects::render_bay_effects;
+use bay_master::render_bay_master;
+use bay_organ::render_bay_organ;
+use bay_piano::render_bay_piano;
+use bay_program::render_bay_program;
+use bay_synth::render_bay_synth;
+use keybed::render_keybed;
+use prelude::*;
 
-/// Renders the entire hardware front panel and synchronizes edits with the DSP audio handle.
+/// Draw the whole front panel (or the focused section) at the current view.
 pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
-    let panel_size = vec2(1560.0, 420.0);
-    let (panel_rect, _) = ui.allocate_exact_size(panel_size, Sense::hover());
+    // One lock-free read of the engine per frame; the bays take what they show from it.
+    let now_ms = (ui.input(|i| i.time) * 1000.0) as u32;
+    state.telemetry = audio_handle.telemetry().latest();
+    state.leds.update(&state.telemetry, now_ms);
+    if state.telemetry.get().is_some() {
+        // LED ladders and activity LEDs follow the engine, not only mouse input.
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(33));
+    }
+    let ctx = ui.ctx().clone();
+    let cursor = ui.cursor().min;
+    state
+        .view
+        .handle_keys(&ctx, view::panel_origin(state.view.focus, cursor));
+    view::apply_zoom(&ctx, &state.view);
+    let focus = state.view.focus;
+    let (visible, _) = ui.allocate_exact_size(view::content_size(focus), Sense::hover());
+    let panel_rect = Rect::from_min_size(view::panel_origin(focus, visible.min), view::PANEL_SIZE);
+    if focus.is_some() {
+        ui.set_clip_rect(visible.intersect(ui.clip_rect()));
+    }
     let painter = ui.painter().clone();
+    render_panel_at(ui, &painter, panel_rect, state, audio_handle);
+}
 
+/// Draw every bay and the keybed into `panel_rect` (logical size [`view::PANEL_SIZE`]).
+fn render_panel_at(
+    ui: &mut Ui,
+    painter: &Painter,
+    panel_rect: Rect,
+    state: &mut Stage4PanelState,
+    audio_handle: &AudioHandle,
+) {
     // 1. Outer Chassis Background
     painter.rect_filled(panel_rect, 6.0, CHASSIS_RED);
     painter.rect_stroke(
@@ -42,7 +117,7 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
 
     // Chassis branding (top left and top right)
     label(
-        &painter,
+        painter,
         pos2(panel_rect.left() + 20.0, panel_rect.top() + 6.0),
         "nord stage 4",
         13.0,
@@ -50,60 +125,39 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
         Align2::LEFT_TOP,
     );
     label(
-        &painter,
+        painter,
         pos2(panel_rect.right() - 20.0, panel_rect.top() + 6.0),
-        "CLAVIA DMI AB • SWEDEN",
+        "OPEN-SOURCE EMULATOR",
         10.0,
         Color32::from_gray(210),
         Align2::RIGHT_TOP,
     );
 
-    bay_master::render_bay_master(ui, &painter, panel_rect, state, audio_handle);
-    bay_organ::render_bay_organ(ui, &painter, panel_rect, state, audio_handle);
-    bay_piano::render_bay_piano(ui, &painter, panel_rect, state, audio_handle);
-    bay_program::render_bay_program(ui, &painter, panel_rect, state, audio_handle);
-    bay_synth::render_bay_synth(ui, &painter, panel_rect, state, audio_handle);
-    bay_fx::render_bay_fx(ui, &painter, panel_rect, state, audio_handle);
-    keybed::render_keybed(ui, panel_rect, state, audio_handle);
-}
-
-impl Stage4PanelState {
-    /// Renders the front panel directly targeting a synchronous engine (e.g. for testing/offline rendering).
-    pub fn ui(&mut self, ui: &mut Ui, engine: &mut Stage4Engine) {
-        let (audio_handle, rx) = AudioHandle::new();
-        render_stage4_panel(ui, self, &audio_handle);
-
-        while let Ok(cmd) = rx.try_recv() {
-            apply_audio_command(cmd, engine, &mut self.master_volume);
+    // Section headers toggle the focus view; registered first so controls on top win.
+    for s in view::FOCUSABLE {
+        let hdr = view::header_px(s, panel_rect.min);
+        let resp = ui
+            .interact(hdr, ui.id().with(("section_header", s)), Sense::click())
+            .on_hover_text("Click or press Z: zoom this section (Esc: back, 1-5: jump)");
+        if resp.clicked() {
+            state.view.toggle(s);
         }
     }
+
+    render_bay_master(ui, painter, panel_rect, state, audio_handle);
+    render_bay_organ(ui, painter, panel_rect, state, audio_handle);
+    render_bay_piano(ui, painter, panel_rect, state, audio_handle);
+    render_bay_program(ui, painter, panel_rect, state, audio_handle);
+    render_bay_synth(ui, painter, panel_rect, state, audio_handle);
+    render_bay_effects(ui, painter, panel_rect, state, audio_handle);
+    render_keybed(ui, panel_rect, state, audio_handle);
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::audio::AudioCommand;
-
+mod frame_tests {
     #[test]
-    fn test_panel_state_audio_sync() {
-        let mut state = Stage4PanelState::default();
-        let (audio_handle, rx) = AudioHandle::new();
-        state.organ_drawbars[0] = 5;
-        audio_handle.send_command(AudioCommand::SetDrawbars(state.organ_drawbars));
-
-        match rx.try_recv() {
-            Ok(AudioCommand::SetDrawbars(d)) => {
-                assert_eq!(d[0], 5);
-            }
-            _ => panic!("Expected SetDrawbars"),
-        }
-    }
-
-    #[test]
-    fn test_render_full_panel_headless_paints_shapes() {
-        let shapes = support::run_panel_frame(|ui, _painter, _rect, state, audio| {
-            render_stage4_panel(ui, state, audio);
-        });
-        assert!(shapes > 1000);
+    fn full_panel_paints_all_bays_and_keybed() {
+        let n = super::support::shapes_for_full_panel();
+        assert!(n > 1000, "full panel painted only {n} shapes");
     }
 }

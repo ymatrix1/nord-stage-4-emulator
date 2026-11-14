@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 
 const SAMPLE_RATE: f32 = 48_000.0;
-const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame]...";
+const RENDER_USAGE: &str = "usage: ns4 render-patch <file.ns4p | entry-in-backup> [--backup <file.ns4b> [--program-file <edited.ns4p>]] [--wav <out.wav>] [--note N | --notes 60,64,67 | --events <notes.json> [--confirmed-only]] [--velocity V] [--frames F] [--hold F] [--sustain] [--cc ctrl:val@frame] [--tone-source default|legacy|firmware|vox|b3wheels] [--filter-engine zdf|firmware] [--synth-chain legacy|strip] [--b3-tail on|off] [--amp-path engine|firmware] [--rotary-drive engine|unity|scaled] [--firmware-fx] [--legacy-piano-level] [--firmware-routing] [--measured-laws] [--firmware-all|--legacy-all]...";
 
 fn run_cli(args: &[String]) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("info");
@@ -270,6 +270,26 @@ fn run_cli(args: &[String]) -> Result<String, String> {
                 engine.apply_program(&prog);
             }
 
+            nord_core::render_opts::FirmwareOptions::from_args(args)?.apply_to(&mut engine);
+            nord_core::render_opts::apply_amp_path(
+                &mut engine,
+                match flag("--amp-path").map(String::as_str) {
+                    None => None,
+                    Some("firmware") => Some(true),
+                    Some("engine") => Some(false),
+                    Some(v) => return Err(format!("invalid --amp-path '{v}' (expected engine|firmware)")),
+                },
+            );
+            match flag("--rotary-drive").map(String::as_str) {
+                None | Some("engine") => {}
+                Some("unity") => nord_core::render_opts::apply_rotary_unity(&mut engine, true),
+                Some("scaled") => nord_core::render_opts::apply_rotary_scaled(&mut engine),
+                Some(v) => {
+                    return Err(format!("invalid --rotary-drive '{v}' (expected engine|unity|scaled)"))
+                }
+            }
+
+
             let events_path = flag("--events");
             let notes = match flag("--notes") {
                 Some(v) => render::parse_notes(v)?,
@@ -432,8 +452,10 @@ Wrote {wav_path} ({} bytes, 32-bit float stereo)", wav.len()));
             }
             Ok(out)
         }
+        "store-program" => nord_core::store_cli::store_program(&args[2..]),
+        "export-live" => nord_core::store_cli::export_live(&args[2..]),
         other => Err(format!(
-            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | render-demo | render-patch <path>)"
+            "unknown command '{other}' (expected: info | inspect <path> [--json] [--verify] [--unpack <dir>] | backup <path.ns4b> [...] | convert <path> ... | store-program <base> <out> | export-live <dir> <slots...> | render-demo | render-patch <path>)"
         )),
     }
 }
@@ -533,6 +555,40 @@ mod tests {
         assert!(res.contains("RMS level"));
 
         let _ = fs::remove_file(ns4p_path);
+    }
+
+    #[test]
+    fn test_cli_render_patch_firmware_flags() {
+        let raw = ProgramDecoded::default()
+            .to_cbin_file(0, 1)
+            .unwrap()
+            .to_bytes();
+        let ns4p = env::temp_dir().join("ns4_rp_fwflags.ns4p");
+        fs::write(&ns4p, &raw).unwrap();
+        let s = |x: &str| x.to_string();
+        let base = |extra: &[&str]| {
+            let mut a = vec![
+                s("ns4"),
+                s("render-patch"),
+                ns4p.to_string_lossy().to_string(),
+                s("--frames"),
+                s("512"),
+            ];
+            a.extend(extra.iter().map(|x| s(x)));
+            run_cli(&a)
+        };
+        assert!(base(&[
+            "--tone-source",
+            "vox",
+            "--filter-engine",
+            "firmware",
+            "--firmware-fx",
+            "--legacy-piano-level"
+        ])
+        .is_ok());
+        assert!(base(&["--tone-source", "bogus"]).is_err());
+        assert!(base(&["--filter-engine", "bogus"]).is_err());
+        let _ = fs::remove_file(ns4p);
     }
 
     #[test]

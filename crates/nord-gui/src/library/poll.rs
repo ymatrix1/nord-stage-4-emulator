@@ -1,14 +1,36 @@
-//! Draining decoded results from worker threads and RT-safe `Arc` retirement.
+//! Result polling: dispatches decoded background jobs to the audio thread and panel state.
 
 use super::{BackupLibraryState, LibraryLoadOutcome};
 use crate::audio::{AudioCommand, AudioHandle};
-use crate::panel::Stage4PanelState;
+use crate::panel::{LoadRequest, Stage4PanelState};
 use nord_core::synth::SynthOscMode;
 use std::sync::Arc;
 
 impl BackupLibraryState {
+    /// Hands the backup names to the Program area (LIST, Preset Library, Num order) and runs the
+    /// load requests it queued (program dial, program buttons, preset browser).
+    pub fn sync_program_panel(&mut self, panel: &mut Stage4PanelState, audio: &AudioHandle) {
+        panel
+            .program_ui
+            .sync_catalog(&self.programs, &self.pianos, &self.samples);
+        for req in panel.program_ui.take_requests() {
+            match req {
+                LoadRequest::Program(entry) => self.load_program_entry(&entry, panel, audio),
+                LoadRequest::Piano { entry, slot_b } => {
+                    self.piano_slot_b = slot_b;
+                    self.request_piano_entry(&entry);
+                }
+                LoadRequest::Sample { entry, layer } => {
+                    self.synth_layer_idx = layer.min(2);
+                    self.request_sample_entry(&entry);
+                }
+            }
+        }
+    }
+
     /// Polls decoded results from background threads and dispatches them to `AudioHandle` and `Stage4PanelState`.
     pub fn poll_results(&mut self, panel: &mut Stage4PanelState, audio: &AudioHandle) {
+        self.sync_program_panel(panel, audio);
         while let Ok(outcome) = self.result_rx.try_recv() {
             self.pending_jobs = self.pending_jobs.saturating_sub(1);
             match outcome {
@@ -97,51 +119,49 @@ impl BackupLibraryState {
         }
         self.reap_retired_sounds();
     }
-
-    /// Drops retired `Arc` sound allocations only once the audio thread has released its reference.
-    pub fn reap_retired_sounds(&mut self) {
-        self.retired_pianos.retain(|arc| Arc::strong_count(arc) > 1);
-        self.retired_samples
-            .retain(|arc| Arc::strong_count(arc) > 1);
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nord_core::piano::NpnoSound;
 
     #[test]
-    fn test_retired_arc_reaping_respects_audio_thread_ownership() {
+    fn test_program_panel_receives_names_and_its_requests_are_run() {
         let mut lib = BackupLibraryState::new();
-        let (audio_handle, rx) = AudioHandle::new();
+        let (audio, _rx) = AudioHandle::new();
         let mut panel = Stage4PanelState::default();
-
-        let sound_a = Arc::new(NpnoSound::new_synthetic("A", 60, &[0.1, -0.1], 48000.0));
-        let sound_b = Arc::new(NpnoSound::new_synthetic("B", 60, &[0.2, -0.2], 48000.0));
-        let _ = lib.result_tx.send(LibraryLoadOutcome::Piano {
-            key: "shared_slot".to_string(),
-            slot_b: false,
-            sound: Arc::clone(&sound_a),
-            from_program: false,
+        lib.programs = vec!["Program/Bank A/One.ns4p".to_string()];
+        lib.pianos = vec!["Piano/p.npno".to_string()];
+        lib.sync_program_panel(&mut panel, &audio);
+        assert_eq!(panel.program_ui.catalog.programs.len(), 1);
+        panel
+            .program_ui
+            .requests
+            .push(LoadRequest::Program("Program/Bank A/One.ns4p".into()));
+        panel.program_ui.requests.push(LoadRequest::Piano {
+            entry: "Piano/p.npno".into(),
+            slot_b: true,
         });
-        lib.poll_results(&mut panel, &audio_handle);
-        assert_eq!(panel.loaded_piano_name.as_deref(), Some("A"));
+        lib.sync_program_panel(&mut panel, &audio);
+        assert!(panel.program_ui.requests.is_empty(), "queue drained");
+        assert!(lib.piano_slot_b, "slot B was requested");
+        assert!(
+            lib.error_message.is_some(),
+            "no archive open is reported, not dropped"
+        );
+    }
 
-        // Second replacement pushes `sound_a` to `retired_pianos` while audio queue still holds a ref
-        let _ = lib.result_tx.send(LibraryLoadOutcome::Piano {
-            key: "shared_slot".to_string(),
-            slot_b: false,
-            sound: Arc::clone(&sound_b),
-            from_program: false,
-        });
-        lib.poll_results(&mut panel, &audio_handle);
-        assert_eq!(lib.retired_pianos.len(), 1);
-
-        // Drain audio queue (dropping audio thread's Arc refs), keep local `sound_a` cleared, then reap
-        drop(sound_a);
-        while rx.try_recv().is_ok() {}
-        lib.reap_retired_sounds();
-        assert_eq!(lib.retired_pianos.len(), 0);
+    #[test]
+    fn test_poll_results_reports_error_outcome() {
+        let mut lib = BackupLibraryState::new();
+        let (audio, _rx) = AudioHandle::new();
+        let mut panel = Stage4PanelState::default();
+        lib.pending_jobs = 1;
+        let _ = lib
+            .result_tx
+            .send(LibraryLoadOutcome::Error("boom".to_string()));
+        lib.poll_results(&mut panel, &audio);
+        assert_eq!(lib.pending_jobs, 0);
+        assert_eq!(lib.error_message.as_deref(), Some("boom"));
     }
 }

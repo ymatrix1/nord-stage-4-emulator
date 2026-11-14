@@ -1,12 +1,17 @@
-//! Shared Nord Stage 4 front panel (Phase 6b, decision D15).
+//! Nord Stage 4 front-panel control inventory.
 //!
-//! Only `render` touches egui; `inventory`, `layout`, `model` and `behavior` are toolkit-free so
-//! control state and hit-testing can be unit-tested without a GUI context.
-//!
-//! Specs: `docs/specs/control-inventory.md`, `docs/specs/visual-style-and-panel.md`
+//! One machine-checked list of every front-panel control documented in the
+//! OS v1.6x manual (ch. 3-9), shared by the standalone app and the plugin
+//! editor, plus the behaviour layer (`behaviour/`: gestures, SHIFT, latch, pot
+//! pick-up, Live Mode, `PanelHost`). Layout rects (`layout/`) exist; renderers follow in B6-B8;
+//! see `docs/specs/control-inventory.md`.
 
-pub mod behavior;
+pub mod behaviour;
 pub mod inventory;
 pub mod layout;
-pub mod model;
-pub mod render;
+pub mod menus;
+pub mod types;
+
+pub use inventory::all_controls;
+pub use layout::{panel_rect, rect_for, section_rect, Rect};
+pub use types::{Access, Binding, ControlEntry, ControlKind, Layer, Provenance, Section};

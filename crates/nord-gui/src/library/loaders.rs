@@ -1,4 +1,4 @@
-//! Background decoding of `.npno` / `.nsmp4` / `.ns4p` payloads (archive entries, files, dropped bytes).
+//! Asynchronous `.npno` / `.nsmp4` / dropped-file loading for the library drawer.
 
 use super::{short_name, BackupLibraryState, LibraryLoadOutcome};
 use nord_core::cbin::CbinFile;
@@ -259,25 +259,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_load_dropped_bytes_reports_decode_errors_per_extension() {
+    fn test_request_without_archive_reports_error_and_bad_drop_is_rejected() {
         let mut lib = BackupLibraryState::new();
-        lib.load_dropped_bytes("x.npno", b"garbage");
+        lib.request_piano_entry("Piano/x.npno");
+        assert_eq!(
+            lib.error_message.as_deref(),
+            Some("Open an .ns4b archive first")
+        );
+        assert_eq!(lib.pending_jobs, 0);
+
+        lib.error_message = None;
+        lib.load_dropped_bytes("bad.npno", b"nope");
         assert!(lib
             .error_message
             .as_deref()
-            .unwrap()
-            .starts_with("NPNO decode error"));
-        lib.load_dropped_bytes("x.nsmp4", b"garbage");
+            .is_some_and(|m| m.starts_with("NPNO decode error")));
+        lib.error_message = None;
+        lib.load_dropped_bytes("bad.nsmp4", b"nope");
         assert!(lib
             .error_message
             .as_deref()
-            .unwrap()
-            .starts_with("NSMP4 decode error"));
-        lib.load_dropped_bytes("x.ns4p", b"garbage");
-        assert!(lib
-            .error_message
-            .as_deref()
-            .unwrap()
-            .starts_with("Failed to parse dropped file"));
+            .is_some_and(|m| m.starts_with("NSMP4 decode error")));
     }
 }

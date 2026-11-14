@@ -82,6 +82,77 @@ pub struct Stage4Params {
     #[nested(id_prefix = "fxsel", group = "Layer FX Selectors")]
     pub layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank,
 
+    /// Per-layer Piano Soft Release, Unison, Dyn Comp and Octave Shift.
+    #[nested(id_prefix = "pianox", group = "Piano Layers")]
+    pub piano_layers: crate::piano_params::PianoLayerBank,
+
+    /// Per-layer Synth voice, kb track and envelope amounts.
+    #[nested(id_prefix = "synthx", group = "Synth Layers")]
+    pub synth_layers: crate::synth_params::SynthLayerBank,
+
+    /// Per-program Transpose and Program Levels.
+    #[nested(id_prefix = "prog", group = "Program")]
+    pub program: crate::program_params::ProgramParams,
+
+    /// Per-layer Synth LFO, Arpeggiator and Vibrato.
+    #[nested(id_prefix = "synthm", group = "Synth Mod")]
+    pub synth_mod: crate::synth_mod_params::SynthModBank,
+
+    /// Pedal menu settings, Swell and per-layer SUSTPED / PSTICK.
+    #[nested(id_prefix = "ped", group = "Pedals")]
+    pub pedals: crate::aux_pedal_params::PedalBank,
+
+    /// Triple Pedal assignments and Sustain Pedal Type.
+    #[nested(id_prefix = "pedx", group = "Pedal Assign")]
+    pub pedal_assign: crate::pedal_assign_params::PedalAssignParams,
+
+    /// System / Sound / Output menu settings (global transpose, fine tune, rotary, mono).
+    #[nested(id_prefix = "sys", group = "System Menu")]
+    pub settings: crate::settings_params::SettingsParams,
+
+    /// Aux KB enable, channel, curve and layer assignment.
+    #[nested(id_prefix = "auxkb", group = "Aux KB")]
+    pub aux_kb: crate::aux_pedal_params::AuxKbParams,
+
+    /// Per-layer Synth Gate, Pattern, KB Hold / Sync and Master Clock sync.
+    #[nested(id_prefix = "synthg", group = "Synth Gate")]
+    pub synth_gate: crate::synth_gate_params::SynthGateBank,
+
+    /// Per-layer Arp Zig Zag, fractional Range and the custom Pattern (steps, accent, pan).
+    #[nested(id_prefix = "synthp", group = "Synth Pattern")]
+    pub synth_pattern: crate::synth_pattern_params::SynthPatternBank,
+
+    /// Per-layer Organ B3 Bass, octave and vibrato/chorus plus Rotary switches.
+    #[nested(id_prefix = "organx", group = "Organ Layers")]
+    pub organ_layers: crate::organ_params::OrganLayerBank,
+
+    /// Per-layer POLY percussion, Preset / Drawbar Live (+ SYNC) and shared Vox/Farf vibrato.
+    #[nested(id_prefix = "organz", group = "Organ Live")]
+    pub organ_live: crate::organ_live_params::OrganLiveBank,
+
+    /// Per-layer Organ model override, key click, rotary on/angle, fine tune, crosstalk, detune.
+    #[nested(id_prefix = "organy", group = "Organ Layers Extra")]
+    pub organ_extra: crate::organ_extra_params::OrganExtraBank,
+
+    /// Per-layer Piano String Resonance and Pedal Noise switches.
+    #[nested(id_prefix = "pianoy", group = "Piano Layers Extra")]
+    pub piano_extra: crate::piano_extra_params::PianoExtraBank,
+
+    /// Per-layer FX extras: mod amounts, EQ mid freq, filter res, variations, delay analog.
+    #[nested(id_prefix = "fxx", group = "Layer FX Extra")]
+    pub layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank,
+
+    /// Per-layer FX variations, Wah PED, delay division, GLOBAL / GROUP sharing.
+    #[nested(id_prefix = "fxy", group = "Layer FX Sharing")]
+    pub layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank,
+
+    /// Editor window size, persisted with the plugin state (not a host parameter).
+    #[persist = "editor-state"]
+    pub editor_state: std::sync::Arc<nih_plug_egui::EguiState>,
+    /// Per-layer Mod 1 Master Clock division and Reverb VARIATION.
+    #[nested(id_prefix = "fxz", group = "Layer FX Variation")]
+    pub layer_fx_variation: crate::fx_variation_params::LayerFxVariationBank,
+
     // ==========================================
     // Organ Section
     // ==========================================
@@ -297,6 +368,24 @@ impl Default for Stage4Params {
             morph_assign: crate::morph_assign::MorphAssignParams::default(),
             layer_fx: crate::fx_params::LayerFxBank::default(),
             layer_fx_selectors: crate::fx_selectors::LayerFxSelectorBank::default(),
+            piano_layers: crate::piano_params::PianoLayerBank::default(),
+            synth_layers: crate::synth_params::SynthLayerBank::default(),
+            program: crate::program_params::ProgramParams::default(),
+            synth_mod: crate::synth_mod_params::SynthModBank::default(),
+            pedals: crate::aux_pedal_params::PedalBank::default(),
+            pedal_assign: crate::pedal_assign_params::PedalAssignParams::default(),
+            aux_kb: crate::aux_pedal_params::AuxKbParams::default(),
+            settings: crate::settings_params::SettingsParams::default(),
+            synth_gate: crate::synth_gate_params::SynthGateBank::default(),
+            synth_pattern: crate::synth_pattern_params::SynthPatternBank::default(),
+            organ_layers: crate::organ_params::OrganLayerBank::default(),
+            organ_extra: crate::organ_extra_params::OrganExtraBank::default(),
+            organ_live: crate::organ_live_params::OrganLiveBank::default(),
+            piano_extra: crate::piano_extra_params::PianoExtraBank::default(),
+            layer_fx_extra: crate::fx_extra_params::LayerFxExtraBank::default(),
+            layer_fx_sharing: crate::fx_sharing_params::LayerFxSharingBank::default(),
+            editor_state: crate::editor::default_editor_state(),
+            layer_fx_variation: crate::fx_variation_params::LayerFxVariationBank::default(),
             aftertouch: FloatParam::new(
                 "Aftertouch",
                 0.0,
@@ -558,6 +647,20 @@ impl Stage4Params {
         self.morph_assign.sync_to_engine(engine);
         self.layer_fx.sync_to_engine(engine);
         self.layer_fx_selectors.sync_to_engine(engine);
+        self.piano_layers.sync_to_engine(engine);
+        self.synth_layers.sync_to_engine(engine);
+        self.program.sync_to_engine(engine);
+        self.synth_mod.sync_to_engine(engine);
+        self.settings.sync_to_engine(engine);
+        self.aux_kb.sync_to_engine(engine);
+        self.pedals.sync_to_engine(engine);
+        self.pedal_assign.sync_to_engine(engine);
+        self.synth_gate.sync_to_engine(engine);
+        self.synth_pattern.sync_to_engine(engine);
+        self.organ_layers.sync_to_engine(engine);
+        self.layer_fx_extra.sync_to_engine(engine);
+        self.layer_fx_sharing.sync_to_engine(engine);
+        self.layer_fx_variation.sync_to_engine(engine);
 
         // Morph controllers
         engine.morph_controllers.mod_wheel = self.mod_wheel.value();
@@ -685,6 +788,11 @@ impl Stage4Params {
             s.decay_sec = dec;
             s.release_sec = rel;
         }
+
+        // Per-layer extras override the global Organ/Piano blocks above.
+        self.organ_extra.sync_to_engine(engine);
+        self.organ_live.sync_to_engine(engine);
+        self.piano_extra.sync_to_engine(engine);
     }
 }
 

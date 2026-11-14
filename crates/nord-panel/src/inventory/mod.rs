@@ -1,66 +1,45 @@
-//! Machine-checked list of front-panel controls (`docs/specs/control-inventory.md` §2-§4).
-//!
-//! Skeleton: the types and validator exist; the entries are filled per section by B2/B8.
+//! The control inventory, one file per section (`docs/specs/control-inventory.md`).
 
-mod types;
+mod common;
+mod effects;
+mod keybed;
+mod master;
+mod organ;
+mod piano;
+mod program;
+mod program_perf;
+mod synth;
+mod synth_perf;
 
-pub use types::{Binding, ControlEntry, ControlId, ControlKind, Layer, Provenance, Section};
+use crate::types::ControlEntry;
 
-/// Every control of the panel. Empty until B2 (`ns4-3n0d`) verifies the list against the manual.
-pub const ALL: &[ControlEntry] = &[];
-
-/// Problems found by [`validate`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InventoryError {
-    DuplicateId(&'static str),
-    EmptySource(&'static str),
-}
-
-/// Checks the rules of spec §4 that need no layout or host data: unique ids, non-empty source.
-pub fn validate(entries: &[ControlEntry]) -> Vec<InventoryError> {
-    let mut errors = Vec::new();
-    for (i, e) in entries.iter().enumerate() {
-        if entries[..i].iter().any(|o| o.id == e.id) {
-            errors.push(InventoryError::DuplicateId(e.id.0));
-        }
-        if e.source.trim().is_empty() {
-            errors.push(InventoryError::EmptySource(e.id.0));
-        }
-    }
-    errors
+/// Every front-panel control, in panel order (left to right).
+pub fn all_controls() -> Vec<ControlEntry> {
+    let mut v = Vec::new();
+    v.extend(master::controls());
+    v.extend(organ::controls());
+    v.extend(piano::controls());
+    v.extend(program::controls());
+    v.extend(program_perf::controls());
+    v.extend(synth::controls());
+    v.extend(synth_perf::controls());
+    v.extend(effects::controls());
+    v.extend(keybed::controls());
+    v
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod tests;
 
-    fn entry(id: &'static str, source: &'static str) -> ControlEntry {
-        ControlEntry {
-            id: ControlId(id),
-            section: Section::Organ,
-            kind: ControlKind::Drawbar,
-            layer: Some(Layer::A),
-            manual_page: 0,
-            provenance: Provenance::Assumed,
-            source,
-            binding: Binding::UiOnly("test"),
-        }
-    }
+#[cfg(test)]
+mod order_tests {
+    use super::all_controls;
+    use crate::types::Section;
 
     #[test]
-    fn test_skeleton_inventory_is_valid() {
-        assert!(validate(ALL).is_empty());
-    }
-
-    #[test]
-    fn test_validate_flags_duplicates_and_empty_sources() {
-        let list = [entry("a", "p. 1"), entry("a", " ")];
-        assert_eq!(
-            validate(&list),
-            vec![
-                InventoryError::DuplicateId("a"),
-                InventoryError::EmptySource("a")
-            ]
-        );
+    fn sections_appear_in_panel_groups() {
+        let all = all_controls();
+        assert_eq!(all.first().map(|c| c.section), Some(Section::Master));
+        assert_eq!(all.last().map(|c| c.section), Some(Section::Keybed));
     }
 }

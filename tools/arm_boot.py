@@ -126,18 +126,21 @@ def _signed(value: int) -> int:
 
 # ----- peripheral models ----------------------------------------------------------------------
 def install_tick(emu: ae.ArmEmu, step: int = 5000) -> dict[str, int]:
-    """Advance the 64-bit tick at `TICK_ADDRESS` by `step` on every read.
+    """Advance the 64-bit tick at `TICK_ADDRESS` by `state["step"]` on every read.
 
     ASSUMED: the real tick is a hardware timer count; busy-wait loops only need it to grow.
-    Returns the state dict (`t` = current value) so a test can observe it.
+    Returns the state dict (`t` = current value, `step` = increment per read; set it to 0 once
+    the harness injects the real timer interrupt, see `arm_steady`) so a test can observe it.
     """
-    state = {"t": 0}
+    state = {"t": 0, "step": step}
 
     def hook(uc, _access, _address, _size, _value, _user) -> None:  # noqa: ANN001
-        state["t"] += step
-        uc.mem_write(TICK_ADDRESS, struct.pack("<Q", state["t"]))
+        if state["step"]:
+            state["t"] += state["step"]
+            uc.mem_write(TICK_ADDRESS, struct.pack("<Q", state["t"]))
 
     emu.uc.hook_add(emu._u.UC_HOOK_MEM_READ, hook, begin=TICK_ADDRESS, end=TICK_ADDRESS + 7)
+    emu.tick_state = state  # exposed so `arm_steady.snapshot` can save and restore the time base
     return state
 
 

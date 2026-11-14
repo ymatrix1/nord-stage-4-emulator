@@ -1,12 +1,20 @@
-//! Front-panel bay: organ layers, model, vibrato/chorus, percussion and drawbars.
+//! Bay 2: Organ of the front panel (manual p.18-22).
+//!
+//! Controls sit at their `nord_panel::layout` positions. The shared strip lives in
+//! `organ_strip.rs`, the drawbars in `organ_drawbars.rs`; this file has the section frame, the
+//! model selector, PRESET/SYNC, vibrato/chorus and the percussion buttons.
 
-use crate::audio::{AudioCommand, AudioHandle};
-use crate::panel::Stage4PanelState;
-use crate::widgets::*;
-use egui::{pos2, vec2, Align2, Color32, Painter, Rect, Stroke, StrokeKind, Ui};
-use nord_core::organ::{OrganModel, ScannerMode};
+use super::ctl::{gesture_button, led_small, shift_legend, tag, Face};
+use super::layout_px::{rect_or_empty, to_px};
+use super::organ_drawbars::render_drawbars;
+use super::organ_logic::{model_index, scanner_for, vib_index, MODELS, VIB_TYPES};
+use super::organ_preset::render_preset;
+use super::organ_strip::render_strip;
+use super::prelude::*;
+use crate::audio::OrganEdit;
+use nord_panel::behaviour::{cycle, Trigger};
 
-/// Draws and drives the bay: organ layers, model, vibrato/chorus, percussion and drawbars.
+/// Draw this bay and apply its input to `state` / the audio thread.
 pub(super) fn render_bay_organ(
     ui: &mut Ui,
     painter: &Painter,
@@ -14,294 +22,239 @@ pub(super) fn render_bay_organ(
     state: &mut Stage4PanelState,
     audio_handle: &AudioHandle,
 ) {
-    // =========================================================================
-    // BAY 2: ORGAN SECTION (Slate: x: 122..488, y: 24..300)
-    // =========================================================================
-    let bay2 = Rect::from_min_max(
-        pos2(panel_rect.left() + 122.0, panel_rect.top() + 24.0),
-        pos2(panel_rect.left() + 488.0, panel_rect.top() + 300.0),
+    let origin = panel_rect.min;
+    let frame = to_px(
+        nord_panel::layout::section_rect(nord_panel::Section::Organ),
+        origin,
     );
-    section_frame(painter, bay2, "ORGAN SECTION");
+    section_frame(painter, frame, "ORGAN");
+    render_strip(ui, origin, state, audio_handle);
+    render_model(ui, painter, origin, state, audio_handle);
+    render_preset(ui, painter, origin, state, audio_handle);
+    render_vibrato(ui, painter, origin, state, audio_handle);
+    render_percussion(ui, painter, origin, state, audio_handle);
+    render_drawbars(ui, painter, origin, state, audio_handle);
+}
 
-    // Organ Layer A & B Strips
-    let fader_a = Rect::from_min_size(
-        pos2(bay2.left() + 12.0, bay2.top() + 32.0),
-        vec2(32.0, 160.0),
-    );
-    if layer_strip(
+fn render_model(
+    ui: &mut Ui,
+    painter: &Painter,
+    origin: egui::Pos2,
+    state: &mut Stage4PanelState,
+    audio: &AudioHandle,
+) {
+    let btn = rect_or_empty("organ.model", origin);
+    let idx = model_index(state.organ_model, state.organ_ui.b3_bass);
+    let face = Face {
+        tip: "ORGAN MODEL: B3, B3 Bass, Vox, Farf, Pipe 1, Pipe 2",
+        ..Face::black()
+    };
+    if let Some(Trigger::Primary) = gesture_button(
         ui,
-        fader_a,
-        "org_a",
-        &mut state.organ_a_level,
-        &mut state.organ_a_active,
+        &mut state.organ_ui.trackers,
+        btn,
+        "organ.model",
+        false,
+        face,
     ) {
-        audio_handle.send_command(AudioCommand::SetOrganLevel(if state.organ_a_active {
-            state.organ_a_level
-        } else {
-            0.0
-        }));
-        audio_handle.send_command(AudioCommand::SetLayerActive(0, state.organ_a_active));
+        let (model, b3_bass) = MODELS[cycle(idx, MODELS.len(), true)];
+        state.organ_model = model;
+        state.organ_ui.b3_bass = b3_bass;
+        audio.send_command(AudioCommand::Organ(OrganEdit::Model { model, b3_bass }));
     }
-    label(
-        painter,
-        pos2(fader_a.center().x, fader_a.bottom() + 10.0),
-        "A",
-        11.0,
-        Color32::WHITE,
-        Align2::CENTER_CENTER,
-    );
-
-    let fader_b = Rect::from_min_size(
-        pos2(bay2.left() + 48.0, bay2.top() + 32.0),
-        vec2(32.0, 160.0),
-    );
-    if layer_strip(
-        ui,
-        fader_b,
-        "org_b",
-        &mut state.organ_b_level,
-        &mut state.organ_b_active,
-    ) {
-        audio_handle.send_command(AudioCommand::SetOrganBLevel(if state.organ_b_active {
-            state.organ_b_level
-        } else {
-            0.0
-        }));
-        audio_handle.send_command(AudioCommand::SetLayerActive(1, state.organ_b_active));
+    // Above the model LEDs and their names, not over them.
+    let leds = rect_or_empty("organ.model_leds", origin);
+    tag(painter, btn, "ORGAN MODEL", btn.top() - leds.top() + 6.0);
+    // Six LEDs, two columns of three, with the model names beside them.
+    let names = [("B3", "BASS"), ("VOX", "FARF"), ("PIPE1", "PIPE2")];
+    for i in 0..MODELS.len() {
+        let c = pos2(
+            leds.left() + leds.width() * if i % 2 == 0 { 0.2 } else { 0.8 },
+            leds.top() + leds.height() * ((i / 2) as f32 + 0.5) / 3.0,
+        );
+        led_small(painter, c, i == idx, LED_RED, LED_RED_DIM, 1.5);
     }
-    label(
-        painter,
-        pos2(fader_b.center().x, fader_b.bottom() + 10.0),
-        "B",
-        11.0,
-        Color32::WHITE,
-        Align2::CENTER_CENTER,
-    );
-
-    // Organ Model Selector (B3, Vox, Farf, Pipe1, Pipe2)
-    let model_rect = Rect::from_min_size(
-        pos2(bay2.left() + 90.0, bay2.top() + 38.0),
-        vec2(84.0, 80.0),
-    );
-    let org_models = [
-        OrganModel::B3,
-        OrganModel::Vox,
-        OrganModel::Farfisa,
-        OrganModel::Pipe1,
-        OrganModel::Pipe2,
-    ];
-    let cur_m_idx = org_models
-        .iter()
-        .position(|m| *m == state.organ_model)
-        .unwrap_or(0);
-    if let Some(new_idx) = triangle_matrix_selector(
-        ui,
-        model_rect,
-        "sel_org_model",
-        &["B3", "VOX", "FARF"],
-        &["PIPE1", "PIPE2"],
-        cur_m_idx,
-    ) {
-        state.organ_model = org_models[new_idx % org_models.len()];
-        audio_handle.send_command(AudioCommand::SetOrganModel(state.organ_model));
-    }
-    label(
-        painter,
-        pos2(model_rect.center().x, bay2.top() + 29.0),
-        "ORGAN MODEL",
-        9.0,
-        Color32::from_gray(230),
-        Align2::CENTER_CENTER,
-    );
-
-    // Vib / Chorus Box
-    let vib_rect = Rect::from_min_size(
-        pos2(bay2.left() + 182.0, bay2.top() + 38.0),
-        vec2(84.0, 80.0),
-    );
-    let sc_modes = [
-        ScannerMode::V1,
-        ScannerMode::V2,
-        ScannerMode::V3,
-        ScannerMode::C1,
-        ScannerMode::C2,
-        ScannerMode::C3,
-    ];
-    let cur_sc_idx = sc_modes
-        .iter()
-        .position(|m| *m == state.scanner_mode)
-        .unwrap_or(5);
-    if let Some(new_sc) = triangle_matrix_selector(
-        ui,
-        vib_rect,
-        "sel_vib",
-        &["V1", "V2", "V3"],
-        &["C1", "C2", "C3"],
-        cur_sc_idx,
-    ) {
-        state.scanner_mode = sc_modes[new_sc % sc_modes.len()];
-        audio_handle.send_command(AudioCommand::SetScannerMode(state.scanner_mode));
-    }
-    label(
-        painter,
-        pos2(vib_rect.center().x, bay2.top() + 29.0),
-        "VIB/CHORUS",
-        9.0,
-        Color32::from_gray(230),
-        Align2::CENTER_CENTER,
-    );
-
-    // B3 Percussion Box
-    let perc_rect = Rect::from_min_size(
-        pos2(bay2.left() + 274.0, bay2.top() + 38.0),
-        vec2(84.0, 80.0),
-    );
-    painter.rect_filled(perc_rect, 3.0, Color32::from_rgb(20, 24, 28));
-    painter.rect_stroke(
-        perc_rect,
-        3.0,
-        Stroke::new(1.0_f32, Color32::from_gray(60)),
-        StrokeKind::Inside,
-    );
-    label(
-        painter,
-        pos2(perc_rect.center().x, bay2.top() + 29.0),
-        "B3 PERCUSSION",
-        9.0,
-        Color32::from_gray(230),
-        Align2::CENTER_CENTER,
-    );
-
-    let p_on_rect = Rect::from_min_size(
-        pos2(perc_rect.left() + 6.0, perc_rect.top() + 14.0),
-        vec2(32.0, 16.0),
-    );
-    if nord_button(ui, p_on_rect, "btn_perc_on", state.perc_on) {
-        state.perc_on = !state.perc_on;
-        audio_handle.send_command(AudioCommand::SetPercussion {
-            enabled: state.perc_on,
-            soft: state.perc_soft,
-            fast: state.perc_fast,
-            third: state.perc_third,
-        });
-    }
-    label(
-        painter,
-        pos2(p_on_rect.center().x, p_on_rect.center().y),
-        "ON",
-        8.5,
-        Color32::WHITE,
-        Align2::CENTER_CENTER,
-    );
-
-    let p_soft_rect = Rect::from_min_size(
-        pos2(perc_rect.right() - 38.0, perc_rect.top() + 14.0),
-        vec2(32.0, 16.0),
-    );
-    if nord_button(ui, p_soft_rect, "btn_perc_soft", state.perc_soft) {
-        state.perc_soft = !state.perc_soft;
-        audio_handle.send_command(AudioCommand::SetPercussion {
-            enabled: state.perc_on,
-            soft: state.perc_soft,
-            fast: state.perc_fast,
-            third: state.perc_third,
-        });
-    }
-    label(
-        painter,
-        pos2(p_soft_rect.center().x, p_soft_rect.center().y),
-        "SOFT",
-        8.5,
-        Color32::WHITE,
-        Align2::CENTER_CENTER,
-    );
-
-    let p_fast_rect = Rect::from_min_size(
-        pos2(perc_rect.left() + 6.0, perc_rect.top() + 38.0),
-        vec2(32.0, 16.0),
-    );
-    if nord_button(ui, p_fast_rect, "btn_perc_fast", state.perc_fast) {
-        state.perc_fast = !state.perc_fast;
-        audio_handle.send_command(AudioCommand::SetPercussion {
-            enabled: state.perc_on,
-            soft: state.perc_soft,
-            fast: state.perc_fast,
-            third: state.perc_third,
-        });
-    }
-    label(
-        painter,
-        pos2(p_fast_rect.center().x, p_fast_rect.center().y),
-        "FAST",
-        8.5,
-        Color32::WHITE,
-        Align2::CENTER_CENTER,
-    );
-
-    let p_3rd_rect = Rect::from_min_size(
-        pos2(perc_rect.right() - 38.0, perc_rect.top() + 38.0),
-        vec2(32.0, 16.0),
-    );
-    if nord_button(ui, p_3rd_rect, "btn_perc_3rd", state.perc_third) {
-        state.perc_third = !state.perc_third;
-        audio_handle.send_command(AudioCommand::SetPercussion {
-            enabled: state.perc_on,
-            soft: state.perc_soft,
-            fast: state.perc_fast,
-            third: state.perc_third,
-        });
-    }
-    label(
-        painter,
-        pos2(p_3rd_rect.center().x, p_3rd_rect.center().y),
-        "3RD",
-        8.5,
-        Color32::WHITE,
-        Align2::CENTER_CENTER,
-    );
-
-    // 9 Physical Drawbars (16', 5 1/3', 8', 4', 2 2/3', 2', 1 3/5', 1 1/3', 1')
-    let db_footages = [
-        "16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'",
-    ];
-    let mut db_changed = false;
-    for (i, &footage) in db_footages.iter().enumerate() {
-        let is_white = matches!(i, 2 | 3 | 5 | 8);
-        let x = bay2.left() + 94.0 + (i as f32) * 29.5;
-        let db_rect = Rect::from_min_size(pos2(x, bay2.top() + 128.0), vec2(27.0, 128.0));
-        if drawbar(
-            ui,
-            db_rect,
-            &format!("db_{i}"),
-            &mut state.organ_drawbars[i],
-            is_white,
-        ) {
-            db_changed = true;
-        }
+    for (row, (l, r)) in names.iter().enumerate() {
+        let y = leds.top() + leds.height() * (row as f32 + 0.5) / 3.0;
         label(
             painter,
-            pos2(db_rect.center().x, db_rect.bottom() + 8.0),
-            footage,
-            8.5,
+            pos2(leds.left() - 3.0, y),
+            l,
+            5.0,
             Color32::WHITE,
-            Align2::CENTER_CENTER,
+            Align2::RIGHT_CENTER,
+        );
+        label(
+            painter,
+            pos2(leds.right() + 3.0, y),
+            r,
+            5.0,
+            Color32::WHITE,
+            Align2::LEFT_CENTER,
         );
     }
-    if db_changed {
-        audio_handle.send_command(AudioCommand::SetDrawbars(state.organ_drawbars));
+    super::ctl::mark(ui, "organ.model_leds");
+}
+
+fn render_vibrato(
+    ui: &mut Ui,
+    painter: &Painter,
+    origin: egui::Pos2,
+    state: &mut Stage4PanelState,
+    audio: &AudioHandle,
+) {
+    let focus = state.organ_ui.focus_layer;
+    let (ty, _) = state.organ_vib_of(focus);
+    let sel = rect_or_empty("organ.vibrato_selector", origin);
+    let face = Face {
+        tip: "VIB/CHORUS type V1-V3, C1-C3 (layer in focus)",
+        ..Face::black()
+    };
+    if let Some(Trigger::Primary) = gesture_button(
+        ui,
+        &mut state.organ_ui.trackers,
+        sel,
+        "organ.vibrato_selector",
+        false,
+        face,
+    ) {
+        let next = VIB_TYPES[cycle(vib_index(ty), VIB_TYPES.len(), true)];
+        let on = state.organ_vib_of(focus).1;
+        state.set_organ_vib(focus, next, on);
+        send_scanner(state, audio, focus);
+    }
+    let cur = vib_index(ty);
+    for i in 0..6 {
+        let c = pos2(
+            sel.left() + sel.width() * ((i % 3) as f32 + 0.5) / 3.0,
+            sel.top() - 5.0 - 5.0 * (1 - i / 3) as f32,
+        );
+        led_small(painter, c, i == cur, LED_RED, LED_RED_DIM, 1.5);
+    }
+    tag(painter, sel, "VIB/CHORUS", 16.0);
+    for (l, id, text) in [
+        (0, "organ.vibrato_on.a", "A"),
+        (1, "organ.vibrato_on.b", "B"),
+    ] {
+        let rect = rect_or_empty(id, origin);
+        let on = state.organ_vib_of(l).1;
+        let face = Face {
+            led: Some(on),
+            tip: "VIB/CHORUS ON for this layer",
+            ..Face::black()
+        };
+        if let Some(Trigger::Primary) =
+            gesture_button(ui, &mut state.organ_ui.trackers, rect, id, false, face)
+        {
+            let ty = state.organ_vib_of(l).0;
+            state.set_organ_vib(l, ty, !on);
+            send_scanner(state, audio, l);
+        }
+        tag(painter, rect, text, 6.5);
+    }
+}
+
+fn send_scanner(state: &Stage4PanelState, audio: &AudioHandle, layer: usize) {
+    let (ty, on) = state.organ_vib_of(layer);
+    audio.send_command(AudioCommand::Organ(OrganEdit::Scanner {
+        layer: layer as u8,
+        mode: scanner_for(ty, on),
+    }));
+}
+
+fn send_percussion(state: &Stage4PanelState, audio: &AudioHandle) {
+    audio.send_command(AudioCommand::SetPercussion {
+        enabled: state.perc_on,
+        soft: state.perc_soft,
+        fast: state.perc_fast,
+        third: state.perc_third,
+    });
+}
+
+fn render_percussion(
+    ui: &mut Ui,
+    painter: &Painter,
+    origin: egui::Pos2,
+    state: &mut Stage4PanelState,
+    audio: &AudioHandle,
+) {
+    for (id, text, shift_fn) in [
+        ("organ.perc_on", "ON", false),
+        ("organ.perc_volume", "VOLUME SOFT", true),
+        ("organ.perc_decay", "DECAY FAST", false),
+        ("organ.perc_third", "HARMONIC 3RD", false),
+    ] {
+        let rect = rect_or_empty(id, origin);
+        let lit = match id {
+            "organ.perc_on" => state.perc_on,
+            "organ.perc_volume" => state.perc_soft,
+            "organ.perc_decay" => state.perc_fast,
+            _ => state.perc_third,
+        };
+        let face = Face {
+            led: Some(lit),
+            tip: text,
+            ..Face::black()
+        };
+        match gesture_button(ui, &mut state.organ_ui.trackers, rect, id, shift_fn, face) {
+            Some(Trigger::Primary) => {
+                match id {
+                    "organ.perc_on" => state.perc_on = !state.perc_on,
+                    "organ.perc_volume" => state.perc_soft = !state.perc_soft,
+                    "organ.perc_decay" => state.perc_fast = !state.perc_fast,
+                    _ => state.perc_third = !state.perc_third,
+                }
+                send_percussion(state, audio);
+            }
+            Some(Trigger::Shifted) => {
+                state.organ_ui.perc_poly = !state.organ_ui.perc_poly;
+                audio.send_command(AudioCommand::Organ(OrganEdit::PercPoly(
+                    state.organ_ui.perc_poly,
+                )));
+            }
+            _ => {}
+        }
+        tag(painter, rect, text, 8.0);
+        if id == "organ.perc_volume" {
+            shift_legend(
+                ui,
+                rect,
+                "organ.perc_poly",
+                "POLY",
+                Some(state.organ_ui.perc_poly),
+                None,
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::panel::support::run_panel_frame;
+    use crate::panel::support::shapes_painted;
 
     #[test]
-    fn test_render_bay_organ_draws_shapes_headless() {
-        let shapes = run_panel_frame(|ui, painter, rect, state, audio| {
-            render_bay_organ(ui, painter, rect, state, audio);
-        });
-        assert!(shapes > 0);
+    fn render_bay_organ_paints_shapes() {
+        let n = shapes_painted(render_bay_organ);
+        assert!(n > 300, "render_bay_organ painted only {n} shapes");
+    }
+
+    #[test]
+    fn scanner_and_percussion_commands_carry_state() {
+        let (audio, rx) = AudioHandle::new();
+        let mut s = Stage4PanelState::default();
+        s.set_organ_vib(1, nord_core::organ::ScannerMode::V2, true);
+        send_scanner(&s, &audio, 1);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AudioCommand::Organ(OrganEdit::Scanner { layer: 1, mode }))
+                if mode == nord_core::organ::ScannerMode::V2
+        ));
+        s.perc_soft = true;
+        send_percussion(&s, &audio);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AudioCommand::SetPercussion { soft: true, .. })
+        ));
     }
 }

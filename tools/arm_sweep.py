@@ -4,7 +4,9 @@
 For each id of `docs/research/arm-edit-params.csv` whose name matches a filter, `sweep` calls
 `0xC00D051C(store, 0, &{id, 1}, value)` on the organ layer store (`layer + 0x5AB4`) and logs the
 messages the firmware sends to the fake DSP ports (`arm_emu.Message`). Run it on an emulator that
-`arm_boot_full.boot_full` has advanced.
+`arm_boot_full.boot_full` has advanced. This isolated-layer sweep only reaches the 11 ids the
+store setter accepts; `arm_edit_capture.py` drives the real layer clients of the steady state
+(`arm_steady.py`) and reaches the vibrato, percussion, model and piano ids.
 
     uv run --with unicorn python tools/arm_sweep.py target/fw_unpacked/bank0_CODE.bin \
         target/fw_unpacked/bank0_SRAM.bin --boot-insns 800000000 --csv docs/research/arm-sweep.csv

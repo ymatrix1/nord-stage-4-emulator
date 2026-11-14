@@ -89,6 +89,8 @@ pub enum ArpMode {
     UpDown,
     Random,
     Poly,
+    /// Rhythmic gate of the held notes (manual p.35); notes sound normally and are gated.
+    Gate,
 }
 
 #[cfg(test)]

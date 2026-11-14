@@ -4,7 +4,7 @@
 
 Specifies the MIDI Control Change (`CC`), Bank Select, Program Change, and Aftertouch mapping for the Nord Stage 4 Emulator (`NordStage4` / `MIDIOutKeyboard` in firmware).
 
-Implemented in [`crates/nord-core/src/midi.rs`](../../crates/nord-core/src/midi.rs) and [`crates/nord-core/src/engine.rs`](../../crates/nord-core/src/engine.rs).
+Implemented in [`crates/nord-core/src/midi.rs`](../../crates/nord-core/src/midi.rs) and [`crates/nord-core/src/engine/`](../../crates/nord-core/src/engine/mod.rs).
 
 ---
 
@@ -18,7 +18,36 @@ MIDI channels are represented internally as `0..15` and displayed to users as ch
 
 These channel roles follow the [Nord Stage 4 User Manual, OS v1.6x](https://www.nordkeyboards.com/wt/documents/951/Nord%20Stage%204%20User%20Manual%20v1.6X-Edition-N.pdf), MIDI chapter. The hardware also provides per-section `Sect On` settings, a separate Aux KB channel, MIDI receive filters, and NRPN support; those controls are outside this channel-routing change.
 
-In this engine, incoming CC and channel aftertouch affect global controls only when received on the configured Global Channel. Layer-channel CC/NRPN receive filters and the separate Aux KB routing mode are not modeled by this change.
+In this engine, incoming CC and channel aftertouch affect global controls only when received on the configured Global Channel. Layer-channel CC/NRPN receive filters are not modeled. Aux KB routing is described in section 2a.
+
+## 2a. Aux KB, pedals, pitch stick and Extern (Phase 6b B9d, `ns4-ymci`)
+
+Source: manual OS v1.6x p.21-22, p.26-28, p.43-47, p.55-56, p.59-64. Code: `engine/aux_kb.rs`, `engine/pedals.rs`, `engine/pedal_assign.rs`, `engine/extern_out.rs`, `midi.rs` (`MidiEvent::PitchBend`).
+
+| Area | Behaviour | Status |
+|---|---|---|
+| Aux KB | `AuxKb { enabled, channel (default 16), layers[7], curve }`. A layer in Aux KB mode ignores the Global channel (internal keybed) and answers only the Aux KB channel, bypassing keyboard zones. Direct layer channels still win. | Manual p.43-45 |
+| Aux KB panel LED | `Stage4Engine::set_layer_aux(layer, on)` (`engine/zone_assign.rs`) sets `layers[i]` and, when switching on, `enabled`; the Organ / Piano Aux KB LEDs (`aux_led.a/b`) send it via `OrganEdit::AuxKb` / `PianoEdit::AuxKb` and display the UI flag until telemetry reads the routing back | switch-on enabling `ASSUMED` |
+| Aux curve | Soft/Medium/Hard: identity for Medium, power law 0.7 / 1.4 otherwise | `ASSUMED` exponents |
+| SUSTPED | Per layer. Default On for Piano A/B only (the previous hard-wired behaviour), Off elsewhere. Organ and Synth layers defer note release while the pedal is down (`held` bitmask, no allocation); Pianos use their damper model | Manual p.18, p.28 |
+| Aux sustain/bend | `CC64` and pitch bend on the Aux KB channel reach Aux layers regardless of SUSTPED/PSTICK; the internal pedal needs the flag | Manual p.45 |
+| Half pedaling | Sustain value `>= 64` = down. Between 20 % and 50 % depth the Pianos use the slow soft-release decay (`PianoLayer::damper_half`) | Manual p.26; band and mapping `ASSUMED` |
+| Sostenuto, soft | `CC66`, `CC67` on the Global channel stand for the TP-2 Middle / Left pedals and go through `triple_pedal`; with the default assignments (Sostenuto / Una Corda) they drive the Piano layers exactly as before | Manual p.27 |
+| Triple Pedal assignments | `triple_pedal(unit, pedal, value)`; `TripleFunc`: Una Corda (Left default), Sostenuto (Middle default), Panel Assigned, Layer Scene Hold/Toggle, Pump, Mst Clk Tap, Synth Vibrato, Program Up/Down, Rotor Hold/Toggle, Control (TP-2 only). Left/Middle of a TP-1 (`SustainPedalType::Tp1`) share the list and are ignored ("Sustain Only") when a TP-2 is attached. Switch functions act on the press edge (`>= 64`); Una Corda, Sostenuto, Pump, Synth Vibrato and Control follow the continuous value. Panel Assigned resolves through `triple.panel_assigned` (Layer Scene II taken as Hold, `ASSUMED`). The function list is the manual's (p.60); retailer listings of the TP-2 agree on it (https://www.kirstein.de/en/Pedals-and-Buttons/Clavia-Nord-Triple-Pedal-2.html, https://www.perfectcircuit.com/nord-ntp2-triple-pedal-2.html; `EMPIRICAL`, secondary sources, no behaviour detail) | Manual p.26, p.60 |
+| Pump | The Pump FX type does not exist yet: `PedalState::pump_value()` exposes `0..1`. When Pump lands, feed it to `mod1_ped_pos` of the chains in Mod 1 PED mode | Open |
+| Synth Vibrato pedal | Writes `SynthLayer::vibrato_ctrl` of all Synth layers (audible in vibrato mode PED) | Manual p.60 |
+| Program Up/Down | The engine does not own the program list: `take_program_step()` returns the net presses (`+1` / `-1`) since the last call; the host loads the neighbouring program | Manual p.60 |
+| Mst Clk Tap | `tap_tempo()`: an interval between two taps of `0.2..2.0` s sets `master_clock.bpm = 60 / interval` and re-snaps delay times; a longer gap starts a new sequence. Sample-counted (`render_frame` ticks), no allocation. Window and last-interval-only law `ASSUMED` | Manual p.60 |
+| Sustain Pedal Type | `SustainPedalType { Sp1, Sp2, Tp1, NormallyOpen, NormallyClosed }` conditions the jack value (Global source only, never Aux KB): `Sp1` / `NormallyOpen` binary, `NormallyClosed` inverted, `Sp2` / `Tp1` continuous. The hardware default is SP-1, but the engine default is `Sp2` so continuous `CC64` half pedaling keeps working and existing renders stay identical. Control / Swell pedal brand ranges (Roland, Yamaha, ...) are analog calibrations with no MIDI equivalent: not modelled | Manual p.26, p.60 |
+| Control pedal | `CC11` is the Morph source; `Ctrl + Swell` also drives Swell; gain 1-10 | Manual p.60 |
+| Swell | `CC4` scales the Organ layers. B3 floor 0.1 (-20 dB, `ASSUMED`); other models reach 0. Function `Volume` scales the master mix, `Wheel Morph` mirrors the mod wheel | Manual p.22, p.60 |
+| Rotor pedal, foot switch | `rotor_pedal(down)` and `foot_switch(down)`; Toggle/Hold; foot switch can switch Layer Scene or the rotor; Sustain+Rotor Hold/Toggle on the sustain jack. No MIDI CC exists for these jacks in the manual, so they are API/host-parameter inputs only | Manual p.53, p.61 |
+| Pitch stick | `MidiEvent::PitchBend` (14 bit). PSTICK per layer with range 1-12 semitones (default 2). Applied to Synth layers through `SynthLayer::bend_cents` (exactly neutral at centre). Organ and Piano bend is not implemented | Manual p.28 |
+| Extern mode | A Synth layer with `extern_out.layers[i].enabled` emits MIDI instead of audio. Notes are transposed by the octave shift, limited by the keyboard zones (crossfade gain scales velocity) and the sent pitch is remembered so Note Off always matches. CC VAL 1/2 (`extern_set_cc_value`), Bank Select + Program Change (`extern_set_program`), Send On Load, CC7 from the layer fader (`extern_sync_volume`, run once per `process_block`), CC64 and pitch bend forwarded when the layer's SUSTPED/PSTICK are on | Manual p.46-47, p.63-64 |
+| Output queue | `MidiOutQueue`: fixed 256-entry ring buffer; backends drain with `pop_midi_out()`; overflow drops the newest event and counts it (`dropped()`). No allocation on the audio path | `ASSUMED` capacity |
+| Channel helpers | `set_global_channel`, `set_layer_channel`, `set_aux_channel` take panel numbers 1-16 or `None` (Off); `route_for(layer, channel)` resolves `NoteRoute::{Layer, Aux, Global}` | Manual p.62 |
+
+Not modelled: Echo Global To Extern (the emulator has no separate internal keybed, so Global notes always reach Extern layers inside their zone), Extern device filters (mod wheel, aftertouch, control/swell/volume pedal forwarding), Extern keyboard velocity curve, Piano/Organ pitch bend, the Pump FX itself (the pedal value is exposed), TP-2 jack detection, the plugin MIDI output port for Extern.
 
 ---
 
@@ -69,7 +98,7 @@ In this engine, incoming CC and channel aftertouch affect global controls only w
 
 ## 4. Audio Host and MIDI Event Delivery Specification
 
-Implemented in [`crates/nord-gui/src/audio/`](../../crates/nord-gui/src/audio/mod.rs).
+Implemented in [`crates/nord-gui/src/audio.rs`](../../crates/nord-gui/src/audio.rs).
 
 ### 4.1 Audio Output Formats & Channel Layout
 - **Sample Formats:**
@@ -83,3 +112,55 @@ Implemented in [`crates/nord-gui/src/audio/`](../../crates/nord-gui/src/audio/mo
 - The `AudioHandle` provides a bounded queue (`bounded(1024)`) connecting MIDI/UI threads to the real-time audio thread.
 - **Non-critical events** (continuous controllers, pitch bend, note-on) use non-blocking `try_send` and drop on queue saturation to preserve real-time responsiveness and avoid latency spikes.
 - **Critical note-lifecycle events** (`NoteOff`, `AllNotesOff` / `CC123`, `AllSoundOff` / `CC120`, and `SustainPedal(0)` / `CC64=0`) use a retry timeout (`send_timeout`) allowing the audio thread to drain before delivery, ensuring keys and pedal states are never left permanently stuck.
+
+---
+
+## 5. Menu model (`ns4-yfht`)
+
+Manual OS v1.6x ch. 11 (p.57-63) plus Organize (p.45-46) is modelled as toolkit-free data in [`crates/nord-panel/src/menus/`](../../crates/nord-panel/src/menus/mod.rs), one file per menu. A `MenuPage { menu, page, title, items }` holds `MenuItem { id, label, kind, default, manual_page, provenance, binding, note }`; `kind` is `Toggle`, `Enum(choices)`, `Int`, `Float` or `Action`. Binding uses the control-inventory scheme: `Bound("<host id>")` (a `nord-plugin` parameter), `Bound("engine:<path>")` (an engine field without host parameter), `UiOnly(reason)`, `Unsupported(bean)`. Channels use `0 = Off`.
+
+| Menu (SHIFT + Program) | Pages | Items | Notes |
+|---|---:|---:|---|
+| System (1) | 6 | 6 | transpose, fine tune bound; memory protect, LED, reset, version `UiOnly` |
+| Sound (2) | 11 | 11 | all bound except Organ trigger point |
+| Organize (3) | 2 | 7 | Swap/Move: `Unsupported` |
+| Aux KB (4) | 3 | 5 | all bound to `auxkb_*` |
+| Output (5) | 6 | 21 | routing `Unsupported`; `sys_mono` is the emulator's Mono Output |
+| Pedal (6) | 7 | 19 | Func/Gain/Right/Rotor bound; jack types `UiOnly`; Triple Pedal Left/Middle `Unsupported` |
+| MIDI (7) | 10 | 23 | channels bound to engine fields; filters and PC modes `Unsupported` |
+| Extern (8) | 13 | 37 | Extern layer fields bound; Device toggles, velocity, Echo `Unsupported` |
+
+Totals: 58 pages, 129 items; 61 bound, 11 `UiOnly`, 57 `Unsupported` (bean `ns4-zb9o`). Tests (`menus/tests.rs`): unique ids, pages `1..n` per menu, defaults match the kind and lie in range, every `Bound` host id or engine path exists in the sources, every `Unsupported` bean exists in `.beans/`.
+
+Provenance: names, ranges, defaults and page numbers come from the manual text (`VERIFIED`). `ASSUMED`: Program Levels range, 0.5 dB step of the two piano levels, pedal gain default/step, foot switch defaults, Device page order, Preset Organize ranges. Web sources (names only, no values copied): Stage 3 Sound menu <https://manualshive.com/en/manual/nord/stage-3/1701214?page=20>, Stage 4 user forum <https://www.norduserforum.com/viewtopic.php?p=183703>; they did not change any value.
+
+### 5.1 Menu screens in the Program bay
+
+Shift+Program 1..8 opens the menu on the Program OLED (`panel/bay_program/menu_screen.rs`, state in `panel/ui_state/menu.rs` as `MenuUi`, behaviour in `bay_program/menu_actions.rs`). Layout: title line, `n/N <page title>`, then one row per item (`>` marks the focus) with its value. PAGE-/PAGE+ (and BANK) step pages and stop at the ends; Program 1-4 are soft buttons that focus an item (an `Action` item runs); on a page with more than four items (Output pages 2 and 5) soft 1-3 are items and soft 4 is `More`. The PROGRAM dial steps the focused item (toggle follows the sign, enum and int clamp, float snaps to its step grid). Shift/Exit leaves; values stay in `ProgramUi::menu`.
+
+| Binding | Behaviour |
+|---|---|
+| `Bound` | the edit is sent as `ProgramEdit::Settings(SettingsEdit { id, value })` and applied on the DSP thread by `audio/edits/settings/` (plain field writes, no allocation): `GlobalSettings` via `set_global_settings`, `set_program_level_db`, `pedals`, `pedals.triple.set_func`, `aux_kb`, `set_global_channel` / `set_layer_channel` / `set_aux_channel`, `extern_out.layers` |
+| `UiOnly` | value kept in `MenuUi` only (LED Intensity, jack types, version info) |
+| `Unsupported` | row dimmed and shows the bean id; the dial does nothing |
+
+System page 5 Reset All Settings restores every default and sends the bound ones; it keeps Memory Protect. Memory Protect (page 1, default On, manual p.57) blocks STORE to a bank location with the message "Memory Protect is on"; storing to a Live slot is exempt.
+
+Mapping notes: the Aux KB synth choices (`---`, `A--`, `-B-`, `--C`, `AB-`, `A-C`, `-BC`, `ABC`) are mapped to layer masks by label (the host parameter `auxkb_synth` is a plain bitmask, so its index differs for `--C`, `AB-`); pedal Left/Middle and Sustain Type (Pedal pages 3-4) are `Bound` to the `pedal_assign` state; Foot Switch SW A choices without an engine function map to Off; Extern bank `--` (-1) is stored as 0. Still `Unsupported`: Organ Trigger Point, Output routing (pages 1-5 except Mono), Organize, MIDI Local Control / Sect On / Type / Ctrl / Dev / PC / Transpose At, Extern Echo / Velocity / Device MIDI, Pedal SW B.
+
+### Engine-audible settings (`engine/settings.rs`)
+
+`GlobalSettings` (defaults equal the pre-menu hard-coded values) is applied by `Stage4Engine::set_global_settings` (idempotent, no allocation).
+
+| Setting | Effect | Status |
+|---|---|---|
+| Global Transpose +/-6 | added to the per-program transpose; held keys release at their start pitch | text `VERIFIED` |
+| Fine Tune +/-50 ct | Organ wheels (`fine_tune_cents` + master), Piano voices started afterwards, Synth pitch | range `VERIFIED`; mapping implemented, hardware cents unmeasured |
+| Piano Pedal Noise / String Res +/-6 dB | linear gain on the pedal thump / sympathetic resonance | range `VERIFIED` |
+| B3 Tonewheel Mode | crosstalk factor Clean 0, Vintage 1 1.0, Vintage 2 1.5 | factors `ASSUMED`; confirm with a hardware single-key spectrum |
+| B3 Click Level | High = 2x click amplitude | `ASSUMED` |
+| Rotary Bass/Horn | band gains `2 * share`, 50/50 = 1.0 | `ASSUMED` |
+| Rotor/Horn speed, acceleration | speed 0.85 / 1 / 1.15, time constant 1.5 / 1 / 0.67 | `ASSUMED`; confirm by timing a Slow-Fast change |
+| Mono output | both channels carry `(L+R)/2` | implemented |
+
+Program Levels (`prog_level_db`) and per-program Transpose already existed. Not honoured: Organ trigger point, LED intensity (`UiOnly`), output bus routing, MIDI filters, Local Control.

@@ -5,14 +5,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Shared Nord Stage 4 front-panel inventory, layout, behaviour and egui rendering (standalone app and plugin editor)"
+description = "Nord Stage 4 front-panel control inventory (shared by the standalone GUI and the plugin editor)"
 
 [lib]
 name = "nord_panel"
 path = "src/lib.rs"
-
-# egui only: no cpal, midir or nih_plug. egui is pinned to the minor that eframe 0.31 (nord-gui)
-# and nih_plug_egui (egui-baseview) use; see docs/DECISIONS.md D15.
-[dependencies]
-egui = "0.31"
-

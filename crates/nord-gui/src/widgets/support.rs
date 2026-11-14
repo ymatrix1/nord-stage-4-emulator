@@ -1,19 +1,18 @@
-//! Shared widget-test fixtures: run one headless egui frame and count painted shapes.
+//! Shared headless egui fixture for the widget tests.
 
-use egui::{pos2, vec2, Rect, Ui};
+use egui::{CentralPanel, Context, RawInput, Ui};
 
-/// Rect from `(x, y, w, h)`.
-pub fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
-    Rect::from_min_size(pos2(x, y), vec2(w, h))
-}
-
-/// Runs `f` once inside a headless `CentralPanel` frame; returns the number of shapes painted.
-pub fn run_in_ui(mut f: impl FnMut(&mut Ui)) -> usize {
-    let ctx = egui::Context::default();
-    let out = ctx.run(egui::RawInput::default(), |ctx| {
-        egui::CentralPanel::default().show(ctx, |ui| f(ui));
+/// Runs `f` once inside a headless central panel.
+pub(super) fn with_ui(f: impl FnOnce(&mut Ui)) {
+    let ctx = Context::default();
+    let mut f = Some(f);
+    let _ = ctx.run(RawInput::default(), |ctx| {
+        CentralPanel::default().show(ctx, |ui| {
+            if let Some(f) = f.take() {
+                f(ui);
+            }
+        });
     });
-    out.shapes.len()
 }
 
 #[cfg(test)]
@@ -21,12 +20,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_run_in_ui_reports_painted_shapes() {
-        let n = run_in_ui(|ui| {
-            ui.painter()
-                .rect_filled(rect(0.0, 0.0, 10.0, 10.0), 0.0, egui::Color32::RED);
-        });
-        assert!(n >= 1);
-        assert_eq!(rect(1.0, 2.0, 3.0, 4.0).size(), vec2(3.0, 4.0));
+    fn test_with_ui_runs_closure_once() {
+        let mut calls = 0;
+        with_ui(|_ui| calls += 1);
+        assert_eq!(calls, 1);
     }
 }

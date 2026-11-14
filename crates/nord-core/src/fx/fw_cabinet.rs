@@ -1,0 +1,120 @@
+//! Firmware amp cabinet (routine `0x122A1D`, module `0xC0442A94`) as a measured impulse response.
+//!
+//! The routine (a 130 tap FIR over the stereo pair stream followed by a bank of biquad sections
+//! with state in PM, scaled by the `0.0078125` / `128` pair around it) is **exactly linear, time
+//! invariant and channel independent** in the `sharc-fx` oracle with the real context: shifted and
+//! scaled impulses give word identical results, the cross channel is zero (`tools/fx_amp_cabinet.py`
+//! checks it while measuring). Its whole behaviour is therefore the impulse response in
+//! [`super::fw_cabinet_taps`]; this stage convolves with the first 400 samples (99.9999 % of the
+//! energy). No latency (the output of frame `n` uses inputs up to `n`).
+//!
+//! VERIFIED: the taps are oracle words; `tests_cabinet_golden.rs` (drive stage then cabinet on a
+//! broadband seeded signal) bounds the truncation error. The structure of the routine (which
+//! sections are IIR) is not transliterated; the second routine `0x122B1D` (a variant with an extra
+//! mix path) is not modelled. The response was measured with the organ unit's context (PNO image,
+//! `I1 = 0xE376A`); the same cabinet in the piano and synth units is ASSUMED.
+
+use super::fw_cabinet_taps::{TAPS_1, TAPS_3, TAPS_5};
+
+/// Taps kept per cabinet.
+pub(super) const LEN: usize = TAPS_1.len();
+
+/// A table of float words as floats (compile time).
+const fn floats(words: &[u32; LEN]) -> [f32; LEN] {
+    let mut out = [0.0; LEN];
+    let mut i = 0;
+    while i < LEN {
+        out[i] = f32::from_bits(words[i]);
+        i += 1;
+    }
+    out
+}
+
+static TWIN: [f32; LEN] = floats(&TAPS_1);
+static JC: [f32; LEN] = floats(&TAPS_3);
+static SMALL: [f32; LEN] = floats(&TAPS_5);
+
+/// The cabinet of amp type `kind` (`kAmpTypeNew` 1..=6; pairs share a cabinet).
+pub(super) fn taps_for(kind: u8) -> Option<&'static [f32; LEN]> {
+    match kind {
+        1 | 2 => Some(&TWIN),
+        3 | 4 => Some(&JC),
+        5 | 6 => Some(&SMALL),
+        _ => None,
+    }
+}
+
+/// Stereo FIR with a circular history; allocation free and `Copy`.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct FwCabinet {
+    taps: &'static [f32; LEN],
+    hist: [[f32; LEN]; 2],
+    pos: usize,
+}
+
+impl FwCabinet {
+    /// Cabinet of amp type `kind`, or `None` for a type without one.
+    pub(super) fn new(kind: u8) -> Option<Self> {
+        Some(Self {
+            taps: taps_for(kind)?,
+            hist: [[0.0; LEN]; 2],
+            pos: 0,
+        })
+    }
+
+    /// One stereo frame through the cabinet.
+    #[inline]
+    pub(super) fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
+        // `hist[c][pos]` is the newest sample; older ones follow at increasing (wrapping) index.
+        self.pos = if self.pos == 0 { LEN - 1 } else { self.pos - 1 };
+        let mut out = [0.0; 2];
+        for (ch, y) in out.iter_mut().enumerate() {
+            let h = &mut self.hist[ch];
+            h[self.pos] = frame[ch];
+            let (newer, older) = h.split_at(self.pos);
+            let (t_head, t_tail) = self.taps.split_at(older.len());
+            let a: f32 = older.iter().zip(t_head).map(|(x, t)| x * t).sum();
+            let b: f32 = newer.iter().zip(t_tail).map(|(x, t)| x * t).sum();
+            *y = a + b;
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_impulse_reproduces_the_taps_and_the_tail_ends() {
+        for kind in [1u8, 3, 5] {
+            let mut c = FwCabinet::new(kind).unwrap();
+            let taps = taps_for(kind).unwrap();
+            for (n, want) in taps.iter().copied().chain([0.0; 10]).enumerate() {
+                let x = if n == 0 { 1.0 } else { 0.0 };
+                let y = c.process_frame([x, -x]);
+                assert!(
+                    (y[0] - want).abs() < 1e-7 && (y[1] + want).abs() < 1e-7,
+                    "{kind} {n}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pairs_share_a_cabinet_and_other_types_have_none() {
+        assert!(std::ptr::eq(taps_for(1).unwrap(), taps_for(2).unwrap()));
+        assert!(std::ptr::eq(taps_for(5).unwrap(), taps_for(6).unwrap()));
+        assert!(!std::ptr::eq(taps_for(1).unwrap(), taps_for(3).unwrap()));
+        assert!(taps_for(0).is_none() && taps_for(7).is_none() && FwCabinet::new(9).is_none());
+    }
+
+    #[test]
+    fn the_cabinets_are_lossy_and_have_the_measured_energy() {
+        // Impulse response energies from the oracle: 0.0736, 0.0396, 0.1248.
+        for (kind, want) in [(1u8, 0.0736f32), (3, 0.0396), (5, 0.1248)] {
+            let e: f32 = taps_for(kind).unwrap().iter().map(|t| t * t).sum();
+            assert!((e - want).abs() < 2e-4, "{kind}: {e}");
+        }
+    }
+}

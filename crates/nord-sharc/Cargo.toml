@@ -19,6 +19,18 @@ name = "sharc-bank"
 path = "src/bin/sharc_bank.rs"
 
 [[bin]]
+name = "sharc-organ"
+path = "src/bin/sharc_organ.rs"
+
+[[bin]]
+name = "sharc-chain"
+path = "src/bin/sharc_chain.rs"
+
+[[bin]]
+name = "sharc-pass"
+path = "src/bin/sharc_pass.rs"
+
+[[bin]]
 name = "sharc-org"
 path = "src/bin/sharc_org.rs"
 

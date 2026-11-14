@@ -1,4 +1,6 @@
 // Declaration-only crate root: the SHARC ADSP-214xx VISA decoder (Track B test oracle, see
 // `docs/specs/sharc-core.md`).
 pub mod core;
+pub mod harness;
+pub mod runner;
 pub mod visa;

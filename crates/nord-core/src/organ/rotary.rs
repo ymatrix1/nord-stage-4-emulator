@@ -8,13 +8,41 @@ use super::{OrganLayer, RotarySpeed};
 use std::f32::consts::TAU;
 
 impl OrganLayer {
+    /// Copies the shared Rotary Speaker controls of `src` (speed, drive, mic, angle, stop mode).
+    ///
+    /// Manual p.48: the Rotary is one instance per Program; its speed and drive are common to every
+    /// sound routed through it. Used by the engine's `TO ROTARY` bus.
+    pub fn mirror_rotary_settings(&mut self, src: &OrganLayer) {
+        self.rotary_speed = src.rotary_speed;
+        self.rotary_drive = src.rotary_drive;
+        self.rotary_drive_unity = src.rotary_drive_unity;
+        self.rotary_close_mic = src.rotary_close_mic;
+        self.rotary_mic_angle_deg = src.rotary_mic_angle_deg;
+        self.rotary_stop_mode = src.rotary_stop_mode;
+        self.globals = src.globals;
+    }
+
+    /// Runs a mono external signal (a Piano / Synth layer routed `TO ROTARY`) through the rotary.
+    ///
+    /// Allocation free; uses the layer's own rotor state, so call it on a dedicated bus instance.
+    #[inline]
+    pub fn process_external_rotary(&mut self, x: f32) -> [f32; 2] {
+        self.process_rotary(x, 1.0 / self.sample_rate)
+    }
+
     /// Processes Model 122 Rotary Speaker with Doppler delay, Close Mic, Angle, Stop Mode, and cabinet reflections.
     pub(super) fn process_rotary(&mut self, scanner_out: f32, inv_fs: f32) -> [f32; 2] {
-        let driven = ((1.0 + 3.0 * self.rotary_drive) * scanner_out).tanh();
+        let gain = 1.0 + 3.0 * self.rotary_drive;
+        let driven = (gain * scanner_out).tanh();
+        let driven = if self.rotary_drive_unity {
+            driven / gain
+        } else {
+            driven
+        };
         let alpha = (TAU * ROTARY_CROSSOVER_HZ * inv_fs).clamp(0.01, 0.99);
         self.lp_state += alpha * (driven - self.lp_state);
-        let bass = self.lp_state;
-        let treble = driven - bass;
+        let bass = self.lp_state * self.globals.bass_gain;
+        let treble = (driven - self.lp_state) * self.globals.horn_gain;
 
         let effective_speed = if self.rotary_stop_mode {
             RotarySpeed::Stop
@@ -26,8 +54,13 @@ impl OrganLayer {
             RotarySpeed::Slow => (0.80, 0.67),
             RotarySpeed::Fast => (6.85, 5.70),
         };
-        self.horn_rate_hz += (target_horn - self.horn_rate_hz) * (inv_fs / 0.7).min(1.0);
-        self.drum_rate_hz += (target_drum - self.drum_rate_hz) * (inv_fs / 4.2).min(1.0);
+        // Rotary Horn/Rotor Speed and Acc menu entries (factors are exactly 1.0 by default).
+        let target_horn = target_horn * self.globals.horn_speed_scale;
+        let target_drum = target_drum * self.globals.rotor_speed_scale;
+        self.horn_rate_hz += (target_horn - self.horn_rate_hz)
+            * (inv_fs / (0.7 * self.globals.horn_tau_scale)).min(1.0);
+        self.drum_rate_hz += (target_drum - self.drum_rate_hz)
+            * (inv_fs / (4.2 * self.globals.rotor_tau_scale)).min(1.0);
 
         if effective_speed == RotarySpeed::Stop && self.horn_rate_hz < 0.05 {
             // Brake horn cleanly toward front cabinet position
@@ -140,6 +173,49 @@ mod tests {
             stopped.horn_rate_hz,
             stopped.drum_rate_hz
         );
+    }
+
+    #[test]
+    fn unity_drive_law_keeps_the_small_signal_gain_and_the_clip_level() {
+        let level = |unity: bool, amp: f32| {
+            let mut o = OrganLayer::new(48_000.0);
+            o.rotary_drive = 2.44;
+            o.rotary_drive_unity = unity;
+            let mut peak = 0.0f32;
+            for i in 0..4096 {
+                let x = amp * (i as f32 * 0.05).sin();
+                let [l, _] = o.process_rotary(x, 1.0 / 48_000.0);
+                if i > 2048 {
+                    peak = peak.max(l.abs());
+                }
+            }
+            peak
+        };
+        // engine law: +18 dB on a quiet input; unity law: about the input level (rotary losses aside)
+        assert!(level(false, 0.001) > 5.0 * level(true, 0.001));
+        assert!(level(true, 0.001) < 0.002);
+        // a loud input clips below 1/g under the unity law
+        assert!(level(true, 4.0) < 0.2);
+    }
+
+    #[test]
+    fn external_rotary_is_stereo_and_mirrors_settings() {
+        let mut src = OrganLayer::new(48_000.0);
+        src.rotary_speed = RotarySpeed::Fast;
+        src.rotary_drive = 0.9;
+        src.rotary_close_mic = true;
+        let mut bus = OrganLayer::new(48_000.0);
+        bus.mirror_rotary_settings(&src);
+        assert_eq!(bus.rotary_speed, RotarySpeed::Fast);
+        assert_eq!(bus.rotary_drive, 0.9);
+        assert!(bus.rotary_close_mic);
+        let mut diff = 0.0f32;
+        for i in 0..8192 {
+            let [l, r] = bus.process_external_rotary(0.5 * (i as f32 * 0.07).sin());
+            assert!(l.is_finite() && r.is_finite());
+            diff += (l - r).abs();
+        }
+        assert!(diff > 1.0, "rotary output is not stereo");
     }
 
     #[test]

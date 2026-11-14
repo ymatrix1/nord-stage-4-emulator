@@ -1,22 +1,8 @@
 //! Command line of `sharc-org`: option parsing into [`Options`].
-use crate::audio::{parse_spec, BufSpec};
-use crate::msg::{parse_msg, parse_rx_irq, parse_script, Msg, STRIP_BASE};
-use crate::pass::PassConfig;
-
-pub fn parse_number(s: &str) -> Option<u32> {
-    match s.strip_prefix("0x") {
-        Some(hex) => u32::from_str_radix(hex, 16).ok(),
-        None => s.parse().ok(),
-    }
-}
-
-/// A data value: number, `0x` hex or `f<float>` (float bit pattern).
-pub fn parse_value(s: &str) -> Option<u32> {
-    match s.strip_prefix('f') {
-        Some(f) => f.parse::<f32>().ok().map(f32::to_bits),
-        None => parse_number(s),
-    }
-}
+use nord_sharc::runner::audio::{parse_spec, BufSpec};
+use nord_sharc::runner::msg::{parse_msg, parse_rx_irq, parse_script, Msg, STRIP_BASE};
+use nord_sharc::runner::pass::PassConfig;
+use nord_sharc::runner::{parse_number, parse_value};
 
 /// `A=V` into an (address, value) pair.
 fn parse_assign(s: &str) -> Result<(u32, u32), String> {
@@ -63,6 +49,8 @@ pub struct Options {
     pub csv: Option<String>,
     pub dumps: Vec<(u32, u32)>,
     pub watch: Option<(u32, u32, usize)>,
+    pub rwatch: Option<(u32, u32, usize)>,
+    pub trace: Option<(u32, u32, usize)>,
     pub boot_stores: bool,
     pub coverage: bool,
     pub flags: Vec<(u8, bool)>,
@@ -159,6 +147,28 @@ pub fn parse_args(args: &[String]) -> Result<Options, String> {
                     .map_or(Ok(100_000), |l| num(l.into(), "--watch limit"))?;
                 o.watch = Some((lo, len, limit as usize));
             }
+            "--rwatch" => {
+                // LO:LEN[:LIMIT] logs every load from the window during the passes
+                let s = need(&mut it, a)?;
+                let mut f = s.split(':');
+                let lo = num(f.next().unwrap_or("").into(), "--rwatch lo")?;
+                let len = num(f.next().unwrap_or("").into(), "--rwatch len")?;
+                let limit = f
+                    .next()
+                    .map_or(Ok(100_000), |l| num(l.into(), "--rwatch limit"))?;
+                o.rwatch = Some((lo, len, limit as usize));
+            }
+            "--trace" => {
+                // LO:HI[:LIMIT] logs the registers before every step with pc in LO..=HI
+                let s = need(&mut it, a)?;
+                let mut f = s.split(':');
+                let lo = num(f.next().unwrap_or("").into(), "--trace lo")?;
+                let hi = num(f.next().unwrap_or("").into(), "--trace hi")?;
+                let limit = f
+                    .next()
+                    .map_or(Ok(10_000), |l| num(l.into(), "--trace limit"))?;
+                o.trace = Some((lo, hi, limit as usize));
+            }
             "--dump" => {
                 let s = need(&mut it, a)?;
                 let (addr, n) = s.split_once(':').ok_or("--dump needs ADDR:COUNT")?;
@@ -226,6 +236,16 @@ mod tests {
             (o.flags.clone(), o.bufs.len(), o.watch),
             (vec![(1, true)], 1, Some((0x9_0000, 16, 100_000)))
         );
+        let o = parse_args(&args(&[
+            "img",
+            "--rwatch",
+            "0xC0DC0:16",
+            "--trace",
+            "0x10:0x20:5",
+        ]))
+        .unwrap();
+        assert_eq!(o.rwatch, Some((0xC_0DC0, 16, 100_000)));
+        assert_eq!(o.trace, Some((0x10, 0x20, 5)));
         // a bare --diff covers everything and does not eat the next option
         let o = parse_args(&args(&["img", "--diff", "--lenient"])).unwrap();
         assert_eq!((o.diff, o.lenient), (Some((0, u32::MAX)), true));
@@ -237,6 +257,8 @@ mod tests {
             &["img", "--rx-irq", "P4I"],
             &["img", "--buf", "zz"],
             &["img", "--watch", "5"],
+            &["img", "--rwatch", "5"],
+            &["img", "--trace", "5"],
             &["img", "--diff", "5"],
             &["img", "--bogus"],
             &[],

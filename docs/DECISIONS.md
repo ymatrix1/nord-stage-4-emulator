@@ -22,6 +22,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D14](#d14-nih-plug-framework-for-clap-vst3-and-au-daw-plugin-architecture) | 2026-11-11 | NIH-plug framework for CLAP, VST3, and AU DAW plugin architecture | accepted |
 | [D15](#d15-hybrid-blender-baked-sprite--egui-painter-25d-rendering) | 2026-11-12 | Hybrid Blender-baked sprite + egui painter 2.5D rendering on `nih_plug_egui` | accepted |
 | [D16](#d16-phase-6b-scope-original-art-functional-or-stub-controls-ha88-first-additive-host-ids) | 2026-11-12 | Phase 6b scope: original art, functional-or-stub controls, HA88 first, additive host IDs | accepted |
+| [D17](#d17-chip-identity-fx-pno-and-org-run-on-adsp-2157x-sharc-sy1sy2-and-smp-on-adsp-2148x) | 2026-11-12 | Chip identity: FX, PNO and ORG on ADSP-2157x (SHARC+), SY1SY2 and SMP on ADSP-2148x | accepted |
+| [D18](#d18-rust-sharc-oracle-validated-against-the-adi-cycle-accurate-simulator) | 2026-11-12 | Rust SHARC oracle validated against the ADI cycle-accurate simulator (headless `TpsdkServer` runner) | accepted |
+| [D19](#d19-arm-firmware-emulation-harness-unicorn-as-the-parameter-stream-source) | 2026-11-12 | ARM firmware emulation harness (`unicorn`) as the parameter-stream source | accepted |
+| [D20](#d20-derived-values-only-no-firmware-bytes-in-the-repository) | 2026-11-12 | Derived values only: no firmware bytes in the repository | accepted |
+| [D21](#d21-organ-model-to-dsp-path-map) | 2026-11-13 | Organ model to DSP path map (B3, Vox, Pipe) | accepted |
+| [D22](#d22-opt-in-firmware-paths-in-nord-core-defaults-change-only-when-verified-end-to-end) | 2026-11-13 | Opt-in firmware paths in `nord-core`; defaults change only when verified end to end | accepted |
+| [D25](#d25-the-organ-output-level-law-pipe-takes-it-by-default-b3wheels-vox-and-routing-stay-opt-in) | 2026-11-13 | The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in | accepted |
 
 ---
 
@@ -46,6 +53,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** Emulating three parallel SHARC DSPs + an ARM MCU at the instruction level without bootroms or ASIC schematics is infeasible in real time, whereas native mathematical modeling of B3 tonewheels, ZDF filters, and modal resonators achieves 95%+ sonic parity at a fraction of the CPU load.
 - **Alternatives:** Low-level SHARC/ARM instruction emulator (blocked by missing bootrom and custom inter-DSP buses).
 - **Impact:** Firmware parser (`firmware.rs`) is used for static inspection and table extraction; audio synthesis runs natively in `nord-core`.
+- **Update 2026-11-13:** the engine stays HLE. The SHARC core model in `crates/nord-sharc` is a test oracle for single routines and passes, not a runtime emulator ([D18](#d18-rust-sharc-oracle-validated-against-the-adi-cycle-accurate-simulator)); the original blocker (no boot ROM) does not apply because the oracle loads the images the way the ARM loads them.
 
 ### D3. Pure physical modeling for the Organ Engine (91 tonewheels + Rotary 122)
 
@@ -174,7 +182,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 
 - **Status:** accepted 2026-11-12
 - **Decided by:** Yuri Olive
-- **Context:** Phase 6b ([ROADMAP](ROADMAP.md#phase-6b-11-hardware-parity--25d-panel-ns4-xc5n)) needs a 2.5D panel (depth, shadows, materials) shared by the standalone app and the plugin editor. `nord-gui` is `eframe` 0.31 on the `glow` (OpenGL) backend; the plugin editor uses `nih_plug_egui`, which runs on `baseview` + OpenGL. Checked 2026-11-12: the nih-plug checkout in the cargo cache pins `egui-baseview` (commit `ec70c3f`, 2025-02-04), which depends on `egui` / `egui_glow` 0.31, the same minor as `nord-gui` (`Cargo.lock`: egui 0.31.1); `nih_plug_egui` exposes only the OpenGL backend. **Verified by compiling 2026-11-13 (B4):** with `nih_plug_egui` (git `robbert-vdh/nih-plug`, resolves `egui-baseview` rev `ec70c3f`) added temporarily as a dev-dependency of `nord-panel`, `cargo check -p nord-panel --tests` passed and `cargo tree -i egui` showed one `egui v0.31.1` used by `eframe` 0.31.1 (`nord-gui`), `egui-baseview` (`nih_plug_egui`) and `nord-panel`; `cargo tree -d` lists no second `egui`. The dev-dependency was then removed again (not a normal dependency of `nord-panel`). Drawing is GUI-thread only and must never lock the engine.
+- **Context:** Phase 6b ([ROADMAP](ROADMAP.md#phase-6b-11-hardware-parity--25d-panel-ns4-xc5n)) needs a 2.5D panel (depth, shadows, materials) shared by the standalone app and the plugin editor. `nord-gui` is `eframe` 0.31 on the `glow` (OpenGL) backend; the plugin editor uses `nih_plug_egui`, which runs on `baseview` + OpenGL. Checked 2026-11-12: the nih-plug checkout in the cargo cache pins `egui-baseview` (commit `ec70c3f`, 2025-02-04), which depends on `egui` / `egui_glow` 0.31, the same minor as `nord-gui` (`Cargo.lock`: egui 0.31.1); `nih_plug_egui` exposes only the OpenGL backend. **Verified by compiling 2026-11-14:** `nord-plugin` depends on `nord-gui` (`eframe` 0.31.1) and `nih_plug_egui` (`egui-baseview` rev `ec70c3f`) and `cargo tree -i egui` shows a single `egui v0.31.1` shared by `eframe`, `egui-baseview`, `egui-winit`, `egui_glow` and `nord-gui`; `cargo tree -d` lists no second `egui`. `nord-panel` itself is toolkit-free today (no egui dependency); if it gains one it must stay on `egui = "0.31"`. Drawing is GUI-thread only and must never lock the engine.
 - **Decision:**
   - **Toolkit:** `nih_plug_egui` for the plugin editor, `eframe` for the standalone app, one shared `crates/nord-panel`. `nord-panel` pins egui 0.31 and upgrades only together with `nih_plug_egui`. Control state and hit-testing stay free of egui types so only the drawing layer is toolkit-specific.
   - **Baker:** hardware parts (chassis, plates, fader slots, knob caps, fader caps, buttons, keys) are modelled in Blender from our own geometry and rendered offline (scripted, headless) at 1x and 2x: static plates as atlases, knobs as 64-128 frame filmstrips (or one frame rotated for symmetric caps), fader caps and buttons as separate sprites so their shadows stay on their own layer. `xtask bake-panel` packs the committed renders into atlases deterministically. Flat vector layers (silkscreen text, section outlines, lines) are drawn with `tiny-skia` in the same command.
@@ -205,3 +213,106 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** Original art removes the trademark and copyright risk at no cost in quality. Functional-or-stub keeps the panel honest about what works. Host parameter IDs are a stable contract for saved DAW projects, so only additions are safe.
 - **Alternatives:** Photo-derived art (rejected: rights); full menus before release (delays the visual goal); renaming per-layer IDs (breaks saved projects); all keybed variants up front (more layout work for no early benefit).
 - **Impact:** Unblocks B7 art direction, B8d/B9d scope, B8g layout and B9a-c parameter work. The remaining Phase 6b unknown is OQ13 (hardware behaviour).
+
+
+### D17. Chip identity: FX, PNO and ORG run on ADSP-2157x (SHARC+), SY1SY2 and SMP on ADSP-2148x
+
+- **Status:** accepted 2026-11-12
+- **Decided by:** Yuri Olive (accepted by merging PR #63; evidence in [sharc-chip-identity](research/sharc-chip-identity.md))
+- **Context:** The oracle assumed ADSP-21489 for all five DSP images. The FX, PNO and ORG images address `0x31xxxxxx` registers and `0x28xxxxxx` core aliases that the 2148x map does not have.
+- **Decision:** Model FX, PNO and ORG (two cores each) as **ADSP-2157x** (SC57x family, dual SHARC+; most likely ADSP-21571; the A5 core is unused) and SY1SY2 and SMP as **ADSP-2148x** (most likely ADSP-21489). The ARM host is the TI AM1705. SHARC+ differences (system-register write masks, DO encoding, L2 at `0x20000000`, SEC0, SPI2 peek port, descriptor DMA, TRU) are modelled in `core/periph/` and selected per image (`--sc57x`, `Core::sharc_plus`).
+- **Why:** Register census: every `0x2xxxxxxx..0x3xxxxxxx` immediate in the three images maps into one CCES `ADSP_21571_device.h` block (VERIFIED). SY1SY2 and SMP start with the 2148x SPI-slave boot kernel (HWR table 24-10), and the Nord Piano 4 board photo shows two ADSP-21489. The family is **high** confidence, the exact 2157x part (21571 vs 21573) **medium**.
+- **Alternatives:** Keep ADSP-21489 for everything (wrong peripheral map, the ORG init never completes); model SC58x (ruled out by TRU numbers and SPU/RCU placement).
+- **Impact:** `crates/nord-sharc/src/core/periph/`, per-chip flag masks ([sharc-plus](research/sharc-plus.md)), two simulator targets in `sim_batch.py` (21489, 21571). Open: probes P1..P8 ([ROADMAP](ROADMAP.md) 7b.1) and the exact 2157x part (OQ in [OPEN-QUESTIONS](OPEN-QUESTIONS.md)).
+
+### D18. Rust SHARC oracle validated against the ADI cycle-accurate simulator
+
+- **Status:** accepted 2026-11-12
+- **Decided by:** Yuri Olive (accepted by merging PRs #74, #77, #94; spec [sharc-core](specs/sharc-core.md))
+- **Context:** D2 keeps the engine HLE, but engine constants and algorithms had no ground truth beyond static reading. The firmware's own DSP routines are available as VISA code in `bank0_CODE@0x440000..0x52FFFF`.
+- **Decision:** Build `crates/nord-sharc`, a Rust core model that runs single routines and whole passes of the five DSP images, and treat the CCES 2.12.1 **cycle-accurate ADI simulator** as the reference for the model itself. The simulator is driven headless through CCES's own `TpsdkServer` API (`docs/research/sharc-seq/sim_run.py`, `sim_batch.py`; 32-bit Python 3.6, needs a CCES licence that this repo never touches). Every modelled behaviour has a measured fixture and a Rust test (`*_measured.rs`, `census_regress.rs`). Engine parity is then checked as oracle vs `nord-core` through `sharc-ref`, `sharc-organ`, `sharc-pass` and `sharc-fx` ([oracle-vs-engine](research/oracle-vs-engine.md), [organ-oracle-audio](research/organ-oracle-audio.md)).
+- **Why:** Two links, each testable: model vs simulator (every firmware instruction form diffed, 12 gaps fixed, [sharc-census-diff](research/sharc-census-diff.md)), and engine vs oracle (bit exact or within stated ulps). It needs no SHARC hardware and no boot ROM.
+- **Alternatives:** Compare only against recordings (no routine-level evidence); run the simulator directly in CI (licensed, 32-bit, slow, not redistributable); a full-system emulator (the D2 reasons still hold).
+- **Impact:** Simulator output is committed as measured fixtures; the simulator itself is a local development tool. CI runs the Rust model against the fixtures only. Oracle speed is an open item ([ROADMAP](ROADMAP.md) 7b.1).
+
+### D19. ARM firmware emulation harness (`unicorn`) as the parameter-stream source
+
+- **Status:** accepted 2026-11-12
+- **Decided by:** Yuri Olive (accepted by merging PR #80 and the follow-ups #85, #98, #105, #108)
+- **Context:** The DSP images are driven by ARM messages (3-word pokes `(0x28000000 + 4 w, 0, value)` and two-word controller messages, [arm-dsp-protocol](research/arm-dsp-protocol.md), [arm-param-messages](research/arm-param-messages.md)). Reading the ARM code statically gave wrong or incomplete maps (for example the idle B3 slot of [organ-model-paths](research/organ-model-paths.md), corrected in [b3-tone-source](research/b3-tone-source.md)).
+- **Decision:** Run the real host firmware (`bank0_CODE.bin`, OS v1.66, ARM926EJ-S) under `unicorn` (`tools/arm_emu.py`, `arm_boot.py`, `arm_boot_full.py`, `arm_steady.py`), boot it to the main event loop, drive edit ids through the real layer clients and capture every ARM to DSP message as `(target, address, value)`. The captured scripts replay into the oracle (`--msg-script`, `--script`). The harness stubs only what is not modelled: SPI/flash downloads, UI event queue, keybed link, DSP comm flow control.
+- **Why:** The messages are produced by the firmware's own code, so key to wheel maps, weight senders and slot owners are measured, not guessed. A state reached by the real boot also shows which installs are shared (slot allocator de-duplication).
+- **Alternatives:** Static xref only (misses state-dependent installs); a full ARM system emulator with peripherals (large effort, no extra evidence for the DSP side).
+- **Impact:** `tools/arm_*.py`; `unicorn` is pinned in the `dev` dependency group, `capstone` is added per run (`uv run --with capstone`); nothing of it is linked into `nord-core`. The stubs bound what can be captured: no key-down yet, no sample maps ([ROADMAP](ROADMAP.md) 7b.2).
+
+### D20. Derived values only: no firmware bytes in the repository
+
+- **Status:** accepted 2026-11-12
+- **Decided by:** Yuri Olive (rule 6 of [AGENTS.md](../AGENTS.md), applied to every research note since PR #80)
+- **Context:** The oracle and the ARM harness read the Nord OS v1.66 images and the factory backup. These are the vendor's copyrighted binaries (`.reference/` and `target/fw_unpacked/` stay git-ignored).
+- **Decision:** Only derived values are committed: addresses, routine pcs, table indices, field widths, message words, small integers, closed-form equations, constants that a unit test pins, and measured simulator output of our own probes. No firmware or sample bytes, no disassembly listings of vendor code, no unpacked images. Research notes list their sources as `(local, never committed)` and carry a Reproduce section. Unit tests use synthetic or measured fixtures. A table the code needs is committed as a closed form (for example `round(2^23 * 2^(-n/60))`) with the command that compares it with the local image.
+- **Why:** Keeps the project in the interoperability and research scope of the PRD, keeps the repository small, and makes every claim reproducible from a legally owned update file.
+- **Alternatives:** Commit trimmed binary fixtures (rights risk, size); keep all findings private (not reviewable).
+- **Impact:** Checks that need local files are scripts under `tools/` run by hand, and `VERIFIED` tags name the command ([provenance-in-code](../.agents/rules/provenance-in-code.md)). Data files under `docs/research/data/` are limited to the value classes above.
+
+### D21. Organ model to DSP path map
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (accepted by merging PRs #116, #122, #126; evidence [organ-model-paths](research/organ-model-paths.md), [b3-tone-source](research/b3-tone-source.md), [b3-generator](research/b3-generator.md))
+- **Context:** Several notes attributed the PNO core 1 oscillator bank `0x122620` to the B3 tonewheels, then to string resonance, and listed the B3 tone source as unlocated. The firmware slot allocator de-duplicates shared generators, so the settled-state sweep saw only idle re-installs.
+- **Decision:** `Edt_Org_kModel` (string pool order `B3, Vox, Farfisa, Pipe1, Pipe2, B3 Bass`) selects these PNO core 1 routines:
+
+| Model | Generator | Processor / mix stage | Status |
+|---|---|---|---|
+| B3 (0) | `0x121BBE` (slot 1) | `0x121E2B` | VERIFIED (run): nine Hammond drawbar partials, bin ratios 1 : 2.04 : 3.04 ... 16.26 |
+| Vox (1) | `0x12272D` | `0x1229B3` | VERIFIED (run): chord at 12-TET ratios; weights come from the ARM sender `0xC0224468` |
+| Farfisa (2) | `0x122A71` (shared) | `0x122B85` | EMPIRICAL (not replayed) |
+| Pipe1 (3), Pipe2 (4) | `0x122620` (92-wheel bank) | `0x12268F` (mix stage) | VERIFIED; the two differ in one word, `DM(0x9594E)` |
+| B3 Bass (5) | `0x121BBE` | `0x122296` | EMPIRICAL (not replayed) |
+
+  All messages go to PNO core 1 only; no organ id reaches ORG, SY, SMP or FX. The Rust engine follows the map: `ToneWheelSource::ModelDefault` uses the firmware bank for Pipe1 / Pipe2; B3 uses `Legacy` by default and `B3Wheels` (generator ladder and wheel tables) as an opt-in; Vox, Farfisa and B3 Bass stay on `Legacy`.
+- **Why:** Each row is reproduced by `tools/arm_slot_owners.py` (`boot`, `fresh`, `chips`) and `tools/arm_model_paths.py`, then replayed through `sharc-chain` / `sharc-pass`. The earlier readings "tonewheel bank = B3" and "string resonance" are superseded.
+- **Alternatives:** One shared tonewheel model for B3 and Pipe (disproved: Pipe selects the bank, B3 the generator); treating the B3 processor as the oscillator (it is an 80-tap dot product of the generator ring plus three all-pass stages).
+- **Impact:** [organ-engine](specs/organ-engine.md) s3.1.1 and s3.1.6; TD-04; the oscillator-bank role question leaves [OPEN-QUESTIONS](OPEN-QUESTIONS.md). Open: Farfisa and B3 Bass replays, B3 per-key weights, Vox weights.
+
+### D22. Opt-in firmware paths in `nord-core`; defaults change only when verified end to end
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PRs #87 and #117 reverted two default changes that lacked end-to-end evidence; #127 and #129 follow the rule)
+- **Context:** The first firmware-bank port became the B3 default and was later disproved (the bank is the Pipe generator). Golden renders (`render_hash`) and user presets depend on defaults.
+- **Decision:** Firmware-derived behaviour enters `nord-core` behind a switch with the old behaviour as default: `ToneWheelSource::{ModelDefault, Firmware, Legacy, B3Wheels}`, `WeightMode::{Legacy, Firmware}`, `VibratoLink`, `DrawbarLaw`, `SawModel::{Classic, Firmware}`, `SynthLayer::gain_dezipper`, `SampleInterp`, the `fx` paths `amp_fw_coeffs`, `master_iir_enabled`, `MasterBus::set_fw_compressor`, and the `fx/fw_*` routine ports. A default changes only when (1) the algorithm is `VERIFIED` against the oracle, (2) the mapping from the preset or ARM message into it is `VERIFIED`, not `ASSUMED`, and (3) the PR re-baselines `render_hash` and lists the changed segments. Constants carry `VERIFIED` / `EMPIRICAL` / `ASSUMED` tags.
+- **Why:** A routine that matches the DSP bit for bit proves nothing if the ARM-side mapping into it is a guess; the Pipe/B3 mix-up is the example. Opt-in paths keep every claim testable (golden tests) without moving audio that nobody asked to move.
+- **Alternatives:** Switch defaults as soon as a routine matches (rejected after #87); keep firmware paths in research tools only (the engine would never benefit).
+- **Impact:** Open defaults are tracked in TD-04, TD-10 and TD-11. The `render_hash` SHA-256 is recorded in each PR that touches it.
+- **Update 2026-11-13 (amp):** `FirmwareFx::amp` became the default for Twin, JC and Small (and their variations) after the rule was met: algorithm and words VERIFIED against the oracle (drive stage golden, cabinet impulse response and chain golden), the ARM mapping VERIFIED (`kAmpTypeNew` words captured from the ARM, `kAmpDrive` = `127 drive / 10`), and the end-to-end comparison with the video improves (Vox score 3.98 to 1.30, RMS +0.2 to +0.5 dB). `FirmwareFx::OFF` / `--amp-path engine` keep the old path. `render_hash` `25baa387...` to `c7f06ca7ff6f8663be3bf2af772c6d6854f23593808ff3382d1895cf5f5ddbd5`. Open: JC and Small have no recording, piano and synth cabinets are ASSUMED equal ([fx-type-map](research/fx-type-map.md) s11).
+- **Update 2026-11-13 (routing):** `FirmwareRouting::{Off, On}` (`ns4 render-patch --firmware-routing`) makes the engine follow the program's section / layer enables and per-layer KB zones. Default stays `Off`: the zone-enable rule is VERIFIED on the ARM firmware, but the meaning of the 12 `kKbZone` codes is EMPIRICAL (the firmware key-range writer is not found, OQ23), so criterion (2) is not met and `render_hash` is unchanged ([engine-routing](research/engine-routing.md)).
+
+### D23. The firmware piano level is the default for `.npno` sounds
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PR for `feat/piano-extra-voice`; evidence [piano-sound-load](research/piano-sound-load.md) sections 9 to 11)
+- **Context:** D22 keeps firmware paths opt-in until the algorithm and the mapping into it are VERIFIED. The piano velocity response was the touch curve `VelocityTouch` (ASSUMED powers) plus a shaping rule.
+- **Decision:** `PianoLayer::firmware_velocity_level` defaults to `true`. For an `.npno` sound the note-on starts the firmware's voices (`NpnoLevel::voices`) with the gain `level_q23 / 2^23` each; SFZ/WAV and synthetic sounds and damper-down notes keep the legacy path. `ns4 render-patch --legacy-piano-level` restores the old response.
+- **Why:** The level law, the stroke selection, the per-key bytes, the extra-voice rule and the gain word equal the real firmware (ARM run with the loaded sound) in 96 of 96 random notes on four sounds and 12 of 12 SMP record gains; the mapping from note and velocity into them is derived from the file, not guessed (D22 conditions 1 and 2).
+- **Alternatives:** Stay opt-in (kept the ASSUMED touch curve although the firmware law is known); make the SFZ/WAV path follow the same law (no stroke records, no model).
+- **Impact:** `render_hash` `25baa387...` unchanged (synthetic piano only); the `.npno` piano renders change. The emulator-versus-hardware piano gap does not shrink (RMS +11.8 -> +12.2 dB on Velvet Grand): the excess level is downstream of the voice and is tracked in the research note.
+
+### D24. The SMP bus scale of the piano stays opt-in
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PR for `feat/piano-downstream-level`; evidence [piano-downstream-level](research/piano-downstream-level.md))
+- **Context:** After D23 the Velvet Grand segment reads about +12 dB against the recording. The firmware path after the voice was traced: the SMP output stage `bus += (y << 17) * gain >> 31` (VERIFIED), the layer level, master, string resonance, dyn comp and unison of the engine.
+- **Decision:** Add `PianoLayer::firmware_bus_scale` (`ns4 render-patch --firmware-piano-bus`, `piano/downstream.rs`): the sample path uses 0.5 (bus word read as a fraction of `2^31`) instead of the legacy 0.55. Default `false`.
+- **Why:** The bus word is VERIFIED but the receiver's full-scale convention is not decoded (ASSUMED), and the video check improves by 0.83 dB only (+12.2 to +11.4 dB), not to within 3 dB (D22). The large gap is the fixed replay velocity 100 and the unknown recording gain: velocity 64 reads +4.8 dB, and against the oracle-verified Pipe path the piano is +2.4 dB.
+- **Alternatives:** Make 0.5 the default now (changes every `.npno` render by 0.83 dB on an assumption); attenuate the piano layer by 12 dB to match the video (fits a replay artefact, would be wrong at the real velocities).
+- **Impact:** `render_hash` unchanged. No engine stage other than the 0.55 constant differs from the firmware at default settings.
+
+### D25. The organ output level law; Pipe takes it by default, B3Wheels, Vox and routing stay opt-in
+
+- **Status:** accepted 2026-11-13
+- **Decided by:** Yuri Olive (PR for `feat/organ-output-level-law`; evidence [organ-output-law](research/organ-output-law.md))
+- **Context:** Vox needed +14 dB, B3 +9.3 dB (drive fixed) and Pipe +14.4 dB (legacy bus) for the video level; the Vox gain word `0x3F1EB100` was assumed to follow the layer level.
+- **Decision:** One law `K * swell_word * level^2` (`organ/output_level.rs`). Swell word `520 v^2 2^-23` (sender `0xC0223B90`, default pedal 100 = 0.6199) and layer level `(v / 127)^2` (handler `0xC011AB8C`) are VERIFIED from the firmware; `K = 2.8` is EMPIRICAL (three clips). `OutputLevel::ModelDefault` applies it to Pipe on the firmware bank; `--organ-level legacy|firmware` overrides. The program rotary drive is imported as `preset / 10` (firmware `v / 127`). B3Wheels, Vox and `FirmwareRouting` stay opt-in.
+- **Why:** Pipe meets the bar (oracle lines 0.00 dB, RMS +3.3, crest -0.4, sub +1.3, mid +0.7 dB; score 4.95 to 3.25). B3Wheels fails the oracle criterion (2 start-phase lines) and presence (-19.9 dB); Vox fails mid (+7.6 dB) and the 1.5 to 8 kHz bands; routing has an EMPIRICAL zone table.
+- **Alternatives:** Fit one gain per model (rejected: hides the structure); flip B3 and Vox on RMS alone (rejected: D22 criteria).
+- **Impact:** `render_hash` `c7f06ca7...` unchanged (the dump has no Pipe layer or program rotary). Program renders change: rotary drive 10 times lower in the engine unit, Pipe level.

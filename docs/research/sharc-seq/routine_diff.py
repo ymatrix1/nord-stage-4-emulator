@@ -42,10 +42,15 @@ def main():
     ap.add_argument('--rand', action='append', default=[])
     ap.add_argument('--code', default='122600:122900', help='short-word range copied from the image (must be free in the probe)')
     ap.add_argument('--target', default='21489', choices=['21489', '21571'], help='simulator (21571 = SHARC+, ~140 s start-up)')
+    ap.add_argument('--rand-ptr', default=None, help='LO:HI: fill the --rand ranges with addresses in this range instead of random words')
     ap.add_argument('--cases', type=int, default=20)
     ap.add_argument('--mode1', type=lambda s: int(s, 16), default=0xE10000, help='MODE1 at the call')
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--i1', type=lambda s: int(s, 16), default=None, help='set I1 to this DM address')
+    ap.add_argument('--scenario', choices=['post', 'output'], help='inputs from tools/organ_post_ref.py (synthetic_inputs / output_inputs, seed = --seed + case)')
+    ap.add_argument('--watch', action='append', default=[], help='LO:HI: DM words read back (no random fill)')
+    ap.add_argument('--reg', action='append', default=[], help='NAME=HEX: set a register of the start state (i0, i2, m1, ...)')
+    ap.add_argument('--rand-float', action='append', default=[], help='LO:HI: fill with random floats in [-4, 4) instead of random words')
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     img = open(a.image, 'rb').read()
@@ -54,7 +59,7 @@ def main():
     rnd = random.Random(a.seed)
     names = cd.layout()
     scr = [rnd.getrandbits(32) for _ in range(cd.SCR_WORDS)]
-    lines = ['scr ' + ' '.join('%08X' % w for w in scr)]
+    lines = (['plus'] if a.target == '21571' else []) + ['scr ' + ' '.join('%08X' % w for w in scr)]
     code_lo, code_hi = rng(a.code)
     code = mem[code_lo * 2:code_hi * 2]
     parcels = struct.unpack('<%dH' % (len(code) // 2), code)
@@ -63,7 +68,7 @@ def main():
         lo, hi = rng(r)
         words = struct.unpack('<%dI' % (hi - lo), mem[lo * 4:hi * 4])
         lines.append('dm %x %s' % (lo, ' '.join('%08X' % w for w in words)))
-    for r in a.rand:
+    for r in a.rand + a.rand_float + a.watch:
         lo, hi = rng(r)
         lines.append('watch %x %d' % (lo, hi - lo))
     syms = {l.split()[1]: int(l.split()[2], 16) for l in open(a.fixture) if l.startswith('sym ')}
@@ -73,10 +78,34 @@ def main():
         st[names.index('m8')] = 0
         if a.i1 is not None:
             st[names.index('i1')] = a.i1
+        for kv in a.reg:
+            k, v = kv.split('=')
+            st[names.index(k)] = int(v, 16)
         chunks = ''
+        if a.scenario:
+            import organ_post_ref as pr
+            pk = pr.synthetic_inputs(a.seed + _) if a.scenario == 'post' else pr.output_inputs(a.seed + _)
+            run = []   # contiguous addresses go into one chunk (one simulator write)
+            for ad in sorted(pk):
+                if not run or ad != run[-1][0] + 1:
+                    run.append([ad, []])
+                else:
+                    run[-1][0] = ad
+                run[-1][1].append(pk[ad] & 0xFFFFFFFF)
+            for last, ws in run:
+                chunks += ' | %x %s' % (last - len(ws) + 1, ' '.join('%08X' % w for w in ws))
+        for r in a.rand_float:
+            lo, hi = rng(r)
+            words = ['%08X' % struct.unpack('<I', struct.pack('<f', rnd.uniform(-4, 4)))[0] for _ in range(hi - lo)]
+            chunks += ' | %x %s' % (lo, ' '.join(words))
         for r in a.rand:
             lo, hi = rng(r)
-            chunks += ' | %x %s' % (lo, ' '.join('%08X' % rnd.getrandbits(32) for _ in range(hi - lo)))
+            if a.rand_ptr:
+                plo, phi = rng(a.rand_ptr)
+                words = ['%08X' % rnd.randrange(plo, phi) for _ in range(hi - lo)]
+            else:
+                words = ['%08X' % rnd.getrandbits(32) for _ in range(hi - lo)]
+            chunks += ' | %x %s' % (lo, ' '.join(words))
         lines.append(CALL_PARCELS + ' ' + ' '.join('%08X' % w for w in st) + chunks)
     cases = os.path.join(a.work, 'rcases.txt')
     open(cases, 'w').write('\n'.join(lines) + '\n')

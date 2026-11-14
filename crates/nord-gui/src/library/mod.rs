@@ -4,9 +4,10 @@
 //! retained `Arc` references on the UI thread so the real-time CPAL audio callback never drops
 //! heap allocations when hot-swapping instruments.
 
-mod archive;
 mod loaders;
+mod piano_bridge;
 mod poll;
+mod program;
 #[cfg(test)]
 mod support;
 mod ui;
@@ -16,6 +17,8 @@ use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded};
 use nord_core::piano::NpnoSound;
 use nord_core::synth::SynthSampleSound;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -131,9 +134,77 @@ impl BackupLibraryState {
         }
         None
     }
+
+    /// Indexes an `.ns4b` PKZIP archive and refreshes the sorted `.ns4p` / `.npno` / `.nsmp4` catalogs.
+    pub fn open_backup_path(&mut self, path: &Path) -> Result<(), String> {
+        let archive = Ns4BackupArchive::open(path).map_err(|e| format!("{e}"))?;
+        let mut reader = BufReader::new(
+            File::open(path).map_err(|e| format!("failed to reopen '{}': {e}", path.display()))?,
+        );
+        let manifest_summary = archive
+            .read_manifest(&mut reader)
+            .ok()
+            .map(|m| format!("v{} build {}", m.product_version, m.product_build));
+
+        let mut programs: Vec<String> = archive
+            .entries_with_ext(".ns4p")
+            .into_iter()
+            .map(|e| e.name.clone())
+            .collect();
+        programs.sort();
+
+        let mut pianos: Vec<String> = archive
+            .entries_with_ext(".npno")
+            .into_iter()
+            .map(|e| e.name.clone())
+            .collect();
+        pianos.sort();
+
+        let mut samples: Vec<String> = archive
+            .entries_with_ext(".nsmp4")
+            .into_iter()
+            .map(|e| e.name.clone())
+            .collect();
+        samples.sort();
+
+        // Retire any cached sounds from a previous archive cleanly on the UI thread later
+        for (_, arc) in self.piano_cache.drain() {
+            self.retired_pianos.push(arc);
+        }
+        for (_, arc) in self.sample_cache.drain() {
+            self.retired_samples.push(arc);
+        }
+
+        let file_label = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("backup.ns4b");
+        self.status_message = format!(
+            "Loaded {file_label}: {} .ns4p, {} .npno, {} .nsmp4",
+            programs.len(),
+            pianos.len(),
+            samples.len()
+        );
+        self.error_message = None;
+        self.path_input = path.display().to_string();
+        self.backup_path = Some(path.to_path_buf());
+        self.archive = Some(Arc::new(archive));
+        self.manifest_summary = manifest_summary;
+        self.programs = programs;
+        self.pianos = pianos;
+        self.samples = samples;
+        self.reap_retired_sounds();
+        Ok(())
+    }
+
+    /// Drops retired `Arc` sound allocations only once the audio thread has released its reference.
+    pub fn reap_retired_sounds(&mut self) {
+        self.retired_pianos.retain(|arc| Arc::strong_count(arc) > 1);
+        self.retired_samples
+            .retain(|arc| Arc::strong_count(arc) > 1);
+    }
 }
 
-/// File stem of `path` (used as a display title), falling back to the whole string.
 fn short_name(path: &str) -> &str {
     Path::new(path)
         .file_stem()
@@ -143,21 +214,80 @@ fn short_name(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    use super::support::build_synthetic_zip_stored;
     use super::*;
+    use crate::audio::{AudioCommand, AudioHandle};
+    use crate::panel::Stage4PanelState;
+    use std::io::Write;
 
     #[test]
-    fn test_short_name_strips_directory_and_extension() {
-        assert_eq!(short_name("Program/Bank A/Warm Stage.ns4p"), "Warm Stage");
-        assert_eq!(short_name("plain"), "plain");
-    }
+    fn test_library_open_backup_and_load_program_and_reap() {
+        let prog = ProgramDecoded {
+            name: "Warm Stage".to_string(),
+            ..Default::default()
+        };
+        let prog_bytes = prog.to_cbin_file(0, 0).expect("to_cbin_file").to_bytes();
+        let meta = b"<backup file_version=\"1\" backup_format_version=\"1\" product_id=\"46\" product_version=\"166\" product_build=\"2934\" manager_version=\"786\" manager_build=\"1234\"/>";
 
-    #[test]
-    fn test_new_library_starts_closed_and_empty() {
-        let lib = BackupLibraryState::default();
-        assert!(!lib.drawer_open);
-        assert!(lib.auto_close_on_load);
-        assert!(lib.programs.is_empty() && lib.pianos.is_empty() && lib.samples.is_empty());
-        assert_eq!(lib.active_tab, BackupTab::Programs);
-        assert_eq!(lib.status_message, "No .ns4b backup loaded");
+        let zip_bytes = build_synthetic_zip_stored(&[
+            ("meta.xml", meta),
+            ("Program/Bank A/Warm Stage.ns4p", &prog_bytes),
+            ("Piano/Grand/Dummy.npno", b"not-decoded-until-clicked"),
+            ("Samp Lib/Keys/Dummy.nsmp4", b"not-decoded-until-clicked"),
+        ]);
+
+        let mut tmp_path = std::env::temp_dir();
+        tmp_path.push(format!(
+            "ns4_gui_lib_test_{}_{}.ns4b",
+            std::process::id(),
+            prog_bytes.len()
+        ));
+        {
+            let mut f = File::create(&tmp_path).expect("create temp ns4b");
+            f.write_all(&zip_bytes).expect("write zip");
+        }
+
+        let mut lib = BackupLibraryState::new();
+        lib.open_backup_path(&tmp_path).expect("open backup");
+        assert_eq!(lib.programs, vec!["Program/Bank A/Warm Stage.ns4p"]);
+        assert_eq!(lib.pianos, vec!["Piano/Grand/Dummy.npno"]);
+        assert_eq!(lib.samples, vec!["Samp Lib/Keys/Dummy.nsmp4"]);
+        assert_eq!(lib.manifest_summary.as_deref(), Some("v166 build 2934"));
+
+        let (audio_handle, rx) = AudioHandle::new();
+        let mut panel = Stage4PanelState::default();
+        lib.load_program_entry("Program/Bank A/Warm Stage.ns4p", &mut panel, &audio_handle);
+        assert_eq!(panel.prog_title, "Warm Stage");
+        assert!(matches!(rx.try_recv(), Ok(AudioCommand::LoadProgram(_))));
+
+        // Verify retired Arc reaping respects audio thread ownership
+        let sound_a = Arc::new(NpnoSound::new_synthetic("A", 60, &[0.1, -0.1], 48000.0));
+        let sound_b = Arc::new(NpnoSound::new_synthetic("B", 60, &[0.2, -0.2], 48000.0));
+        let _ = lib.result_tx.send(LibraryLoadOutcome::Piano {
+            key: "shared_slot".to_string(),
+            slot_b: false,
+            sound: Arc::clone(&sound_a),
+            from_program: false,
+        });
+        lib.poll_results(&mut panel, &audio_handle);
+        assert_eq!(panel.loaded_piano_name.as_deref(), Some("A"));
+
+        // Second replacement pushes `sound_a` to `retired_pianos` while audio queue still holds a ref
+        let _ = lib.result_tx.send(LibraryLoadOutcome::Piano {
+            key: "shared_slot".to_string(),
+            slot_b: false,
+            sound: Arc::clone(&sound_b),
+            from_program: false,
+        });
+        lib.poll_results(&mut panel, &audio_handle);
+        assert_eq!(lib.retired_pianos.len(), 1);
+
+        // Drain audio queue (dropping audio thread's Arc refs), keep local `sound_a` cleared, then reap
+        drop(sound_a);
+        while rx.try_recv().is_ok() {}
+        lib.reap_retired_sounds();
+        assert_eq!(lib.retired_pianos.len(), 0);
+
+        let _ = std::fs::remove_file(&tmp_path);
     }
 }

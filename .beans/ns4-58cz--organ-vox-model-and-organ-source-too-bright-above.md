@@ -18,3 +18,6 @@ A:84 Vintage Vox J3 (organ Vox model, Twin amp): with the amp switched off the e
 
 ## Out of Scope
 Cabinet voicings.
+
+## Progress (feat/organ-vox-complete)
+Vox oracle criterion met (start phases, 36-sine bank, instant weights; docs/research/organ-vox-start-state.md). Video check still fails: mid +4.2 dB, RMS -5.9 dB, crest 29.4 vs 16.1 dB (legacy key click, unknown level L). Remains opt-in.

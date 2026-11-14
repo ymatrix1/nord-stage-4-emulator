@@ -1,7 +1,7 @@
 ---
 # ns4-z6fi
 title: 'Phase 6b B8d: section renderer - program and both OLEDs'
-status: todo
+status: in-progress
 type: task
 created_at: 2026-11-12T21:36:09Z
 updated_at: 2026-11-12T21:36:09Z
@@ -31,3 +31,4 @@ Every Nord Stage 4 front-panel control from the manual exists in the emulator wi
 - Renaming or removing host parameter IDs shipped by the DAW plugin (stable contract)
 
 ## Summary of Changes
+Standalone (`nord-gui`): all 56 Program ids drawn at layout rectangles; 8 menu pages, Solo and Pedal Tap dimmed with a tooltip (`panel/bay_program/coverage_tests.rs`). Open: golden image, menu contents, plugin editor.

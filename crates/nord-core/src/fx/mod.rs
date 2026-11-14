@@ -8,24 +8,89 @@ use std::f32::consts::TAU;
 mod amp_eq;
 mod biquad;
 mod delay;
+mod firmware_fx;
+mod fw_allpass;
+mod fw_amp_drive;
+mod fw_amp_stage;
+mod fw_amp_types;
+mod fw_cabinet;
+mod fw_cabinet_taps;
 mod fw_coeffs;
+mod fw_compressor;
+mod fw_delay;
+mod fw_delay_table;
+pub mod fw_delay_time;
+mod fw_drive_tables;
+pub mod fw_map;
+mod fw_params;
+mod fw_rvb_wrap;
+mod fw_short_float;
+mod fw_stage;
+mod fw_tone_stack;
+mod fw_words;
+mod master;
 mod master_iir;
+mod mod1_dynamic;
+mod mod2_spin;
 mod modulation;
 mod reverb;
+mod reverb_variation;
+mod sharing;
 #[cfg(test)]
 mod support;
 mod tables;
 #[cfg(test)]
+mod tests_allpass_golden;
+#[cfg(test)]
+mod tests_amp_golden;
+#[cfg(test)]
 mod tests_biquad_golden;
+#[cfg(test)]
+mod tests_cabinet_golden;
 #[cfg(test)]
 mod tests_chain;
 #[cfg(test)]
+mod tests_compressor_golden;
+#[cfg(test)]
 mod tests_delay;
 #[cfg(test)]
+mod tests_delay_golden;
+#[cfg(test)]
+mod tests_firmware_fx;
+#[cfg(test)]
+mod tests_fw_amp_chain;
+#[cfg(test)]
+mod tests_fw_delay_time;
+#[cfg(test)]
+mod tests_fw_map;
+#[cfg(test)]
+mod tests_fw_reverb_mix;
+#[cfg(test)]
+mod tests_fw_series;
+#[cfg(test)]
+mod tests_lfo_golden;
+#[cfg(test)]
 mod tests_master_golden;
+#[cfg(test)]
+mod tests_resonant_golden;
+#[cfg(test)]
+mod tests_rvb_wrap_golden;
 mod types;
 
 pub use biquad::*;
+pub use firmware_fx::FirmwareFx;
+pub use fw_allpass::{ctx as fw_allpass_ctx, FwAllpass};
+pub use fw_amp_drive::{ctx as fw_amp_drive_ctx, DriveTables, FwAmpDrive};
+pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
+pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
+pub use fw_map::AllpassType;
+pub use fw_params::{
+    compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,
+    set_tone_stack, CMP_SLOPE,
+};
+pub use fw_rvb_wrap::{mix2 as fw_rvb_mix2, FwRvbWrap};
+pub use fw_tone_stack::{ctx as fw_tone_stack_ctx, FwToneStack2, FwToneStack4};
+pub use master::MasterBus;
 pub use tables::*;
 pub use types::*;
 
@@ -71,9 +136,20 @@ pub struct LayerFxChain {
     pub mod1_type: Mod1Type,
     pub mod1_rate_hz: f32,
     pub mod1_amount: f32,
+    /// Mod 1 VARIATION (manual p.49): harder pan / square tremolo / stereo ring mod. Default off.
+    pub mod1_variation: bool,
+    /// Mod 1 PED mode (manual p.49, Wah): the filter position follows `mod1_ped_pos` instead of the LFO.
+    pub mod1_ped: bool,
+    /// Wah PED position `0..=1` (pedal / Rate knob; ASSUMED 0.5 centre default).
+    pub mod1_ped_pos: f32,
+    /// Master Clock sync of the Mod 1 rate (A-Pan / Trem / Wah / Pump, manual p.50): beats per cycle; `Some` overrides
+    /// `mod1_rate_hz` with `bpm / 60 / beats` Hz. Not used by Ring Mod (pitch). Default `None`.
+    pub mod1_sync_beats: Option<f32>,
     pub mod2_type: Mod2Type,
     pub mod2_rate_hz: f32,
     pub mod2_amount: f32,
+    /// Mod 2 VARIATION (manual p.50): vintage chorus, mono flanger / vibe, Bi-Phase phaser. Default off.
+    pub mod2_variation: bool,
     pub amp_cabinet: AmpCabinet,
     /// `Type II` / `Very Small Speaker` variation flag (stored; not yet modelled, ASSUMED no DSP difference).
     pub amp_variation: bool,
@@ -107,7 +183,23 @@ pub struct LayerFxChain {
     pub reverb_model: ReverbModel,
     pub reverb_color: ReverbColor,
     pub reverb_mix: f32,
+    /// Reverb VARIATION of Spring (longer tail) and Booth / Room (longer pre-delay), manual p.52-53;
+    /// the right-hand types use `ReverbColor::Chorale`. Default off (bit-identical to before).
+    pub reverb_variation: bool,
+    /// Skips this chain's reverb (the engine sets it while Reverb GLOBAL mode is active, manual p.52).
+    pub bypass_reverb: bool,
     pub morph: FxMorphSet,
+    /// Opt-in firmware closed forms (delay mix law, firmware compressor). Default all off.
+    pub firmware_fx: FirmwareFx,
+    /// 14 bit `kDlyRateClkDiv` value (`0..=16383`) of the program; read only with
+    /// `firmware_fx.delay_time` (the engine sets it from the preset). `None`: engine time.
+    pub delay_rate_raw: Option<u16>,
+    fw_comp: Option<fw_stage::FwCompressorStage>,
+    fw_amp: Option<fw_amp_stage::FwAmpStage>,
+    fw_comp_amount: f32,
+    clock_bpm: f32,
+    dyn1: mod1_dynamic::Mod1Dyn,
+    spin: mod2_spin::SpinState,
     mod1_phase: f32,
     wah_state_l: [f32; 2],
     wah_state_r: [f32; 2],
@@ -151,6 +243,7 @@ pub struct LayerFxChain {
     rev_ap_bufs: Box<[[f32; 512]; FDN_SIZE]>,
     rev_ap_indices: [usize; FDN_SIZE],
     reverb_chorale_phase: f32,
+    rev_predelay: reverb_variation::RevPredelay,
 }
 
 impl LayerFxChain {
@@ -162,9 +255,14 @@ impl LayerFxChain {
             mod1_type: Mod1Type::Off,
             mod1_rate_hz: 4.0,
             mod1_amount: 0.4,
+            mod1_variation: false,
+            mod1_ped: false,
+            mod1_ped_pos: 0.5,
+            mod1_sync_beats: None,
             mod2_type: Mod2Type::Off,
             mod2_rate_hz: 0.8,
             mod2_amount: 0.35,
+            mod2_variation: false,
             amp_cabinet: AmpCabinet::Off,
             amp_variation: false,
             amp_fw_coeffs: false,
@@ -191,8 +289,18 @@ impl LayerFxChain {
             delay_mix: 0.25,
             reverb_model: ReverbModel::Stage,
             reverb_color: ReverbColor::Normal,
+            reverb_variation: false,
             reverb_mix: 0.15,
+            bypass_reverb: false,
             morph: FxMorphSet::default(),
+            firmware_fx: FirmwareFx::DEFAULT,
+            delay_rate_raw: None,
+            fw_comp: None,
+            fw_amp: None,
+            fw_comp_amount: 0.0,
+            clock_bpm: 120.0,
+            dyn1: mod1_dynamic::Mod1Dyn::new(),
+            spin: mod2_spin::SpinState::new(),
             mod1_phase: 0.0,
             wah_state_l: [0.0; 2],
             wah_state_r: [0.0; 2],
@@ -234,6 +342,7 @@ impl LayerFxChain {
             rev_ap_bufs: Box::new([[0.0; 512]; FDN_SIZE]),
             rev_ap_indices: [0; FDN_SIZE],
             reverb_chorale_phase: 0.0,
+            rev_predelay: reverb_variation::RevPredelay::new(),
         }
     }
 
@@ -274,10 +383,14 @@ impl LayerFxChain {
     /// Processes a single stereo frame `[left, right]` through all 5 layer FX stages at `bpm`.
     pub fn process_frame_with_bpm(&mut self, frame: [f32; 2], bpm: f32) -> [f32; 2] {
         let inv_fs = 1.0 / self.sample_rate;
+        self.clock_bpm = bpm;
         let [l1, r1] = self.process_mod1(frame[0], frame[1], inv_fs);
         let [l2, r2] = self.process_mod2(l1, r1, inv_fs);
         let [l3, r3] = self.process_amp_eq_comp(l2, r2, inv_fs);
         let [l4, r4] = self.process_delay(l3, r3, bpm, inv_fs);
+        if self.bypass_reverb {
+            return [l4, r4];
+        }
         self.process_reverb(l4, r4, inv_fs)
     }
 
@@ -287,73 +400,16 @@ impl LayerFxChain {
     }
 }
 
-/// Global Master Compressor and Burr-Brown `PCM1791A` + JRC `NJM4580M` output reconstruction stage.
-#[derive(Debug, Clone, Copy)]
-pub struct MasterBus {
-    pub compressor_amount: f32,
-    /// Run the summed bus through the firmware 4-section master IIR before the compressor
-    /// (`fw_coeffs::MASTER_IIR_WORDS`). Default `false`; the position in the chain is ASSUMED.
-    pub master_iir_enabled: bool,
-    iir: master_iir::MasterIir,
-    env: f32,
-    recon_lp_l: f32,
-    recon_lp_r: f32,
-}
-
-impl Default for MasterBus {
-    fn default() -> Self {
-        Self {
-            compressor_amount: 0.25,
-            master_iir_enabled: false,
-            iir: master_iir::MasterIir::new(),
-            env: 0.0,
-            recon_lp_l: 0.0,
-            recon_lp_r: 0.0,
-        }
-    }
-}
-
-impl MasterBus {
-    /// Processes the summed 7-layer stereo signal through the Master Compressor and DAC stage.
-    pub fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
-        let [l, r] = if self.master_iir_enabled {
-            self.iir.process_frame(frame)
-        } else {
-            frame
-        };
-        let peak = l.abs().max(r.abs());
-        self.env = 0.99 * self.env + 0.01 * peak;
-
-        let amt = self.compressor_amount.clamp(0.0, 1.0);
-        let gain = if self.env > 0.5 {
-            1.0 / (1.0 + amt * (self.env - 0.5) * 2.0)
-        } else {
-            1.0 + 0.15 * amt
-        };
-
-        let cl = (l * gain).clamp(-1.0, 1.0);
-        let cr = (r * gain).clamp(-1.0, 1.0);
-
-        // Post-DAC Burr-Brown PCM1791A + NJM4580M stage:
-        // The hardware PCM1791A features a flat passband within +/-0.002 dB up to 21.8 kHz.
-        // A gentle 0.985 alpha preserves crisp treble (<0.15 dB roll-off at 20 kHz) without in-band damping.
-        self.recon_lp_l += 0.985 * (cl - self.recon_lp_l);
-        self.recon_lp_r += 0.985 * (cr - self.recon_lp_r);
-        [self.recon_lp_l, self.recon_lp_r]
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn default_chain_and_master_bus_pass_finite_audio() {
+    fn default_chain_passes_finite_audio() {
         let mut fx = LayerFxChain::new(48_000.0);
-        let mut bus = MasterBus::default();
         for n in 0..512 {
             let x = (n as f32 * 0.03).sin() * 0.5;
-            let [l, r] = bus.process_frame(fx.process_frame([x, x]));
+            let [l, r] = fx.process_frame([x, x]);
             assert!(l.is_finite() && r.is_finite());
         }
     }

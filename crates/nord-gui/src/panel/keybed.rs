@@ -1,266 +1,247 @@
-//! 88-key interactive keybed with split-point markers.
+//! 88-key interactive keybed with the green split-point LEDs (Phase 6b B8g, `ns4-jpgx`).
+//!
+//! Placed with the layout rectangles `keybed.keys` and `keybed.split_leds`. Mouse input plays
+//! the engine through the MIDI path; with SET KEY armed the next key sets the selected split
+//! point instead of only sounding.
 
-use crate::audio::AudioHandle;
-use crate::panel::Stage4PanelState;
-use crate::style::*;
-use egui::{pos2, vec2, Color32, Rect, Sense, Stroke, StrokeKind, Ui};
-use nord_core::midi::MidiEvent;
+#![cfg_attr(test, allow(clippy::field_reassign_with_default))]
 
-/// 88-Key Piano Keyboard with interactive mouse clicking and Triple Split-Point visual markers.
+use super::layout_px::rect_or_empty;
+use super::prelude::*;
+
+/// First and last MIDI note of the 88-key keybed (A0..C8).
+pub const FIRST_NOTE: u8 = 21;
+pub const LAST_NOTE: u8 = 108;
+/// White keys of the 88-key range.
+pub const WHITE_KEYS: usize = 52;
+
+/// Black-key pitch classes.
+fn is_black(midi: u8) -> bool {
+    matches!(midi % 12, 1 | 3 | 6 | 8 | 10)
+}
+
+/// Black key geometry relative to the white key width.
+const BLACK_W: f32 = 0.64;
+const BLACK_H: f32 = 0.62;
+
+/// Note under the point `(rel_x, rel_y)` of a keybed `white_w` per white key and `height` tall;
+/// black keys sit on top.
+pub fn key_at(rel_x: f32, rel_y: f32, white_w: f32, height: f32) -> Option<u8> {
+    if rel_x < 0.0 || rel_y < 0.0 || rel_y > height {
+        return None;
+    }
+    let mut w_idx = 0usize;
+    for midi in FIRST_NOTE..=LAST_NOTE {
+        if is_black(midi) {
+            let kx = w_idx as f32 * white_w - white_w * BLACK_W * 0.5;
+            if rel_x >= kx && rel_x <= kx + white_w * BLACK_W && rel_y <= height * BLACK_H {
+                return Some(midi);
+            }
+        } else {
+            w_idx += 1;
+        }
+    }
+    let target = (rel_x / white_w).floor() as usize;
+    (FIRST_NOTE..=LAST_NOTE)
+        .filter(|&m| !is_black(m))
+        .nth(target)
+}
+
+/// X offset (from the keybed's left edge) of the middle of `note`'s key; notes outside the
+/// keybed clamp to its ends.
+pub fn note_x(note: u8, white_w: f32) -> f32 {
+    let note = note.clamp(FIRST_NOTE, LAST_NOTE);
+    let whites_before = (FIRST_NOTE..note).filter(|&m| !is_black(m)).count() as f32;
+    if is_black(note) {
+        whites_before * white_w
+    } else {
+        (whites_before + 0.5) * white_w
+    }
+}
+
+fn release_held(state: &mut Stage4PanelState, audio_handle: &AudioHandle) {
+    if let Some(old) = state.mouse_held_note.take() {
+        audio_handle.send_midi(MidiEvent::NoteOff {
+            channel: 0,
+            note: old,
+            velocity: 0,
+        });
+    }
+}
+
+/// 88-key keyboard with mouse playing and the three split-point LEDs.
 pub(super) fn render_keybed(
     ui: &mut Ui,
     panel_rect: Rect,
     state: &mut Stage4PanelState,
     audio_handle: &AudioHandle,
 ) {
-    let keybed_rect = Rect::from_min_size(
-        pos2(panel_rect.left() + 10.0, panel_rect.top() + 310.0),
-        vec2(panel_rect.width() - 20.0, 100.0),
-    );
-    let resp = ui.interact(
-        keybed_rect,
-        ui.id().with("stage4_keybed"),
-        Sense::click_and_drag(),
-    );
+    let keys = rect_or_empty("keybed.keys", panel_rect.min);
+    let led_strip = rect_or_empty("keybed.split_leds", panel_rect.min);
+    let resp = ui.interact(keys, ui.id().with("stage4_keybed"), Sense::click_and_drag());
     let painter = ui.painter().clone();
+    let white_w = keys.width() / WHITE_KEYS as f32;
 
-    // Dark chassis lip behind keys
-    painter.rect_filled(keybed_rect.expand(2.0), 3.0, Color32::from_rgb(12, 14, 16));
+    painter.rect_filled(keys.expand(2.0), 3.0, Color32::from_rgb(12, 14, 16));
 
-    // 88 keys: A0 (MIDI 21) .. C8 (MIDI 108)
-    // 52 natural (white) keys
-    let num_white = 52;
-    let white_width = keybed_rect.width() / num_white as f32;
-
-    // Mouse Interaction Tracking (fixes sticking notes!)
     if resp.is_pointer_button_down_on() {
         if let Some(pos) = resp.interact_pointer_pos() {
-            let rel_x = pos.x - keybed_rect.left();
-            let mut clicked_midi: Option<u8> = None;
-
-            // Check black keys first (top layer)
-            let mut w_idx = 0;
-            for midi in 21u8..=108u8 {
-                let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
-                if is_black {
-                    let kx = (w_idx as f32) * white_width - (white_width * 0.32);
-                    let kw = white_width * 0.64;
-                    let kh = keybed_rect.height() * 0.62;
-                    let rel_y = pos.y - keybed_rect.top();
-                    if rel_x >= kx && rel_x <= (kx + kw) && rel_y <= kh {
-                        clicked_midi = Some(midi);
-                        break;
-                    }
-                } else {
-                    w_idx += 1;
-                }
-            }
-
-            // If not on black key, find white key
-            if clicked_midi.is_none() {
-                let target_w = (rel_x / white_width).floor() as usize;
-                let mut curr_w = 0;
-                for midi in 21u8..=108u8 {
-                    let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
-                    if !is_black {
-                        if curr_w == target_w {
-                            clicked_midi = Some(midi);
-                            break;
-                        }
-                        curr_w += 1;
-                    }
-                }
-            }
-
-            // Update held note if changed
-            if state.mouse_held_note != clicked_midi {
-                if let Some(old_note) = state.mouse_held_note.take() {
-                    audio_handle.send_midi(MidiEvent::NoteOff {
-                        channel: 0,
-                        note: old_note,
-                        velocity: 0,
-                    });
-                }
-                if let Some(new_note) = clicked_midi {
-                    state.mouse_held_note = Some(new_note);
+            let new = key_at(
+                pos.x - keys.left(),
+                pos.y - keys.top(),
+                white_w,
+                keys.height(),
+            );
+            if state.mouse_held_note != new {
+                release_held(state, audio_handle);
+                if let Some(n) = new {
+                    state.mouse_held_note = Some(n);
                     audio_handle.send_midi(MidiEvent::NoteOn {
                         channel: 0,
-                        note: new_note,
+                        note: n,
                         velocity: 100,
                     });
+                    for c in state.program_ui.key_pressed(n) {
+                        audio_handle.send_command(c);
+                    }
                 }
             }
         }
     } else {
-        // Pointer released: release any mouse-held note
-        if let Some(old_note) = state.mouse_held_note.take() {
-            audio_handle.send_midi(MidiEvent::NoteOff {
-                channel: 0,
-                note: old_note,
-                velocity: 0,
-            });
-        }
+        release_held(state, audio_handle);
     }
 
-    // Render 52 White keys
-    let mut w_idx = 0;
-    for midi in 21u8..=108u8 {
-        let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
-        if !is_black {
-            let kx = keybed_rect.left() + (w_idx as f32) * white_width;
-            let k_rect = Rect::from_min_size(
-                pos2(kx, keybed_rect.top() + 2.0),
-                vec2(white_width - 1.0, keybed_rect.height() - 4.0),
-            );
-            let is_pressed =
-                state.midi_active_keys[midi as usize] || state.mouse_held_note == Some(midi);
-            let fill = if is_pressed {
-                Color32::from_rgb(220, 240, 255)
-            } else {
-                Color32::from_gray(248)
-            };
-            painter.rect_filled(k_rect, 2.0, fill);
-            painter.rect_stroke(
-                k_rect,
-                2.0,
-                Stroke::new(1.0_f32, Color32::from_gray(170)),
-                StrokeKind::Inside,
-            );
-            w_idx += 1;
+    let pressed = |state: &Stage4PanelState, m: u8| {
+        state.midi_active_keys[m as usize] || state.mouse_held_note == Some(m)
+    };
+    let mut w_idx = 0usize;
+    for midi in FIRST_NOTE..=LAST_NOTE {
+        if is_black(midi) {
+            continue;
         }
-    }
-
-    // Render 36 Black keys overlay
-    w_idx = 0;
-    for midi in 21u8..=108u8 {
-        let is_black = matches!(midi % 12, 1 | 3 | 6 | 8 | 10);
-        if is_black {
-            let kx = keybed_rect.left() + (w_idx as f32) * white_width - (white_width * 0.32);
-            let k_rect = Rect::from_min_size(
-                pos2(kx, keybed_rect.top() + 2.0),
-                vec2(white_width * 0.64, keybed_rect.height() * 0.62),
-            );
-            let is_pressed =
-                state.midi_active_keys[midi as usize] || state.mouse_held_note == Some(midi);
-            let fill = if is_pressed {
-                Color32::from_rgb(90, 110, 140)
-            } else {
-                Color32::from_rgb(24, 26, 30)
-            };
-            painter.rect_filled(k_rect, 2.0, fill);
-            painter.rect_stroke(
-                k_rect,
-                2.0,
-                Stroke::new(1.0_f32, Color32::BLACK),
-                StrokeKind::Inside,
-            );
+        let k = Rect::from_min_size(
+            pos2(keys.left() + w_idx as f32 * white_w, keys.top() + 2.0),
+            vec2(white_w - 1.0, keys.height() - 4.0),
+        );
+        let fill = if pressed(state, midi) {
+            Color32::from_rgb(220, 240, 255)
         } else {
+            Color32::from_gray(248)
+        };
+        painter.rect_filled(k, 2.0, fill);
+        painter.rect_stroke(
+            k,
+            2.0,
+            Stroke::new(1.0_f32, Color32::from_gray(170)),
+            StrokeKind::Inside,
+        );
+        w_idx += 1;
+    }
+    w_idx = 0;
+    for midi in FIRST_NOTE..=LAST_NOTE {
+        if !is_black(midi) {
             w_idx += 1;
+            continue;
         }
+        let k = Rect::from_min_size(
+            pos2(
+                keys.left() + w_idx as f32 * white_w - white_w * BLACK_W * 0.5,
+                keys.top() + 2.0,
+            ),
+            vec2(white_w * BLACK_W, keys.height() * BLACK_H),
+        );
+        let fill = if pressed(state, midi) {
+            Color32::from_rgb(90, 110, 140)
+        } else {
+            Color32::from_rgb(24, 26, 30)
+        };
+        painter.rect_filled(k, 2.0, fill);
+        painter.rect_stroke(
+            k,
+            2.0,
+            Stroke::new(1.0_f32, Color32::BLACK),
+            StrokeKind::Inside,
+        );
     }
 
-    // Split point red LEDs on keybed lip (F3/F#3 = MIDI 53, C5/C#5 = MIDI 72)
-    let split_led1 = pos2(
-        keybed_rect.left() + 20.0 * white_width,
-        keybed_rect.top() + 2.0,
-    );
-    let split_led2 = pos2(
-        keybed_rect.left() + 32.0 * white_width,
-        keybed_rect.top() + 2.0,
-    );
-    painter.circle_filled(split_led1, 2.5, LED_RED);
-    painter.circle_filled(split_led2, 2.5, LED_RED);
+    // Split-point LEDs (green): lit for each active point while the split is on (manual p.15, p.39).
+    let split = &state.program_ui.split;
+    let lit = split.leds();
+    for (i, note) in split.notes.into_iter().enumerate() {
+        let c = pos2(keys.left() + note_x(note, white_w), led_strip.center().y);
+        let (core, bloom) = (if lit[i] { LED_GREEN } else { LED_GREEN_DIM }, lit[i]);
+        painter.circle_filled(c, 3.5, Color32::from_rgb(14, 16, 19));
+        painter.circle_filled(c, 2.6, core);
+        if bloom {
+            painter.circle_stroke(c, 4.2, Stroke::new(1.2_f32, LED_GREEN.gamma_multiply(0.4)));
+        }
+    }
+    resp.on_hover_text("88 keys: click or drag to play. SET KEY then a key moves the split point");
+    state.program_ui.mark("keybed.keys");
+    state.program_ui.mark("keybed.split_leds");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::AudioCommand;
+    use crate::panel::support::shapes_painted;
 
     #[test]
-    fn test_keybed_mouse_interaction_no_stuck_notes() {
-        // Enforce the rule: "every error must become a test if possible"
-        // Regression test for non-stop sustaining/stuck notes on mouse click/drag.
-        let mut state = Stage4PanelState::default();
-        let (audio_handle, rx) = AudioHandle::new();
+    fn keybed_paints_88_keys_and_three_leds() {
+        let n = shapes_painted(|ui, _p, rect, state, audio| render_keybed(ui, rect, state, audio));
+        assert!(n >= 88 + 3 * 2, "keybed painted only {n} shapes");
+    }
 
-        // 1. Mouse down on Middle C (MIDI 60)
-        let clicked = Some(60u8);
-        if state.mouse_held_note != clicked {
-            if let Some(old) = state.mouse_held_note.take() {
-                audio_handle.send_midi(MidiEvent::NoteOff {
-                    channel: 0,
-                    note: old,
-                    velocity: 0,
-                });
-            }
-            if let Some(new_n) = clicked {
-                state.mouse_held_note = Some(new_n);
-                audio_handle.send_midi(MidiEvent::NoteOn {
-                    channel: 0,
-                    note: new_n,
-                    velocity: 100,
-                });
-            }
-        }
-        assert_eq!(state.mouse_held_note, Some(60));
-        match rx.try_recv() {
-            Ok(AudioCommand::Midi(MidiEvent::NoteOn { note, velocity, .. })) => {
-                assert_eq!(note, 60);
-                assert_eq!(velocity, 100);
-            }
-            _ => panic!("Expected NoteOn(60)"),
-        }
+    #[test]
+    fn there_are_52_white_and_36_black_keys() {
+        let black = (FIRST_NOTE..=LAST_NOTE).filter(|&m| is_black(m)).count();
+        assert_eq!(black, 36);
+        assert_eq!(usize::from(LAST_NOTE - FIRST_NOTE) + 1 - black, WHITE_KEYS);
+    }
 
-        // 2. Mouse drag across to D4 (MIDI 62)
-        let dragged = Some(62u8);
-        if state.mouse_held_note != dragged {
-            if let Some(old) = state.mouse_held_note.take() {
-                audio_handle.send_midi(MidiEvent::NoteOff {
-                    channel: 0,
-                    note: old,
-                    velocity: 0,
-                });
-            }
-            if let Some(new_n) = dragged {
-                state.mouse_held_note = Some(new_n);
-                audio_handle.send_midi(MidiEvent::NoteOn {
-                    channel: 0,
-                    note: new_n,
-                    velocity: 100,
-                });
-            }
-        }
-        assert_eq!(state.mouse_held_note, Some(62));
-        // Verify NoteOff(60) was sent before NoteOn(62)
-        match rx.try_recv() {
-            Ok(AudioCommand::Midi(MidiEvent::NoteOff { note, .. })) => assert_eq!(note, 60),
-            _ => panic!("Expected NoteOff(60)"),
-        }
-        match rx.try_recv() {
-            Ok(AudioCommand::Midi(MidiEvent::NoteOn { note, velocity, .. })) => {
-                assert_eq!(note, 62);
-                assert_eq!(velocity, 100);
-            }
-            _ => panic!("Expected NoteOn(62)"),
-        }
-
-        // 3. Mouse release: Must emit NoteOff(62) and leave no stuck notes!
-        if let Some(old) = state.mouse_held_note.take() {
-            audio_handle.send_midi(MidiEvent::NoteOff {
-                channel: 0,
-                note: old,
-                velocity: 0,
-            });
-        }
-        assert!(state.mouse_held_note.is_none());
-        match rx.try_recv() {
-            Ok(AudioCommand::Midi(MidiEvent::NoteOff { note, .. })) => assert_eq!(note, 62),
-            _ => panic!("Expected NoteOff(62) on mouse release"),
-        }
-        assert!(
-            rx.try_recv().is_err(),
-            "No dangling audio commands should remain"
+    #[test]
+    fn key_at_finds_white_and_black_keys() {
+        let (w, h) = (10.0, 100.0);
+        assert_eq!(
+            key_at(1.0, 90.0, w, h),
+            Some(21),
+            "A0 is the first white key"
         );
+        assert_eq!(
+            key_at(10.0, 10.0, w, h),
+            Some(22),
+            "A#0 sits between the first two whites"
+        );
+        assert_eq!(
+            key_at(10.0, 90.0, w, h),
+            Some(23),
+            "below the black key it is white B0"
+        );
+        assert_eq!(key_at(519.0, 90.0, w, h), Some(108), "last white key is C8");
+        assert_eq!(key_at(-1.0, 10.0, w, h), None);
+        assert_eq!(key_at(600.0, 10.0, w, h), None, "past the last key");
+    }
+
+    #[test]
+    fn note_x_places_the_split_leds_on_their_keys() {
+        let w = 10.0;
+        assert_eq!(note_x(21, w), 5.0);
+        let c4 = note_x(60, w);
+        let f_sharp3 = note_x(54, w);
+        assert!(c4 > f_sharp3);
+        assert_eq!(note_x(0, w), note_x(21, w), "clamped");
+        assert_eq!(
+            note_x(22, w),
+            10.0,
+            "a black key is centred on the white-key boundary"
+        );
+    }
+
+    #[test]
+    fn split_leds_light_for_active_points_only() {
+        let mut state = Stage4PanelState::default();
+        assert_eq!(state.program_ui.split.leds(), [false; 3]);
+        state.program_ui.split.on = true;
+        assert_eq!(state.program_ui.split.leds(), [false, true, false]);
     }
 }
