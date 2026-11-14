@@ -35,7 +35,7 @@ fn menus_list_and_preset_screens_have_their_titles() {
     let mut u = ProgramUi::default();
     u.open_menu(MenuId::Pedal);
     let t = compose(&u, &sum());
-    assert_eq!(t.big, "PEDAL MENU");
+    assert_eq!(t.big, "PEDAL SETTINGS");
     assert_eq!(t.sub, "1/7 Control Pedal");
     assert!(t.rows[0].starts_with(">Type: Nord EP"), "{:?}", t.rows);
     // A menu screen set without `open_menu` shows the title and manual page only.
@@ -111,4 +111,20 @@ fn undo_and_paste_messages_use_the_firmware_wording() {
     u.copied = None;
     u.soft_down(1);
     assert_eq!(u.message.as_ref().unwrap().0, "Nothing to Paste");
+}
+
+#[test]
+fn menu_titles_are_the_settings_titles_the_display_prints() {
+    // Frames of the ARM emulator: the title bar upper-cases the `... Settings` strings.
+    assert_eq!(MenuId::AuxKb.title(), "AUX KB SETTINGS");
+    assert_eq!(MenuId::Midi.title(), "MIDI SETTINGS");
+    assert_eq!(MenuId::Extern.title(), "EXTERN SETTINGS");
+    for m in MenuId::ALL {
+        if m != MenuId::Organize {
+            assert!(m.title().ends_with(" SETTINGS"), "{m:?}");
+            assert_eq!(m.title(), m.title().to_uppercase(), "{m:?}");
+        }
+    }
+    // Program Organize is a list page with its own header: mixed case.
+    assert_eq!(MenuId::Organize.title(), "Program Organize");
 }
