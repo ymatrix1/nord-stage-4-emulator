@@ -171,6 +171,7 @@ The firmware filter engine also runs `FwFilterType::Lp2` (stage `0x1253BD`, one 
 | `0x1235C9` | SHAPE SINE 1 | half-cycle magnitude stretched by `1 / (1 - w)`, clipped at 1 | `shape_sine_fold` (< 2e-6) | VERIFIED (idle shape word) |
 | `0x1232A5` | SHAPE SINE 2 | phase amplified by `rho` and clipped, offset `1 - 1/rho`, level `-g` | `shape_sine_gain` (< 2e-6) | VERIFIED (idle shape word) |
 | `0x122F1F` | SHAPE SINE 5 | `cos / (1 + k^2 + 2 k sin)` | `shape_sine_res` (< 2e-5) | VERIFIED (idle shape word) |
+| `0x120DAB` | SHAPE SINE 4 | `y = \|sine (1 + s5) + (1 - s5)\|`, cubic dip `w^3 k` where `y ir < 1`, offset `p(s5)`, saw fade `g`, then a one-pole output high pass `y_k = (x_k - x_(k-1)) + c y_(k-1)`, `c = 0x3F7F9DB2` | `shape_sine_hp_core` (< 2e-5) + `OutputHighPass` (`synth/fw_sine_hp.rs`) | VERIFIED (idle shape word; `c` idle value, writer not located: ASSUMED constant) |
 
 `FwStage::from_category_wave` maps the decoded category / wave; `synth_params.rs` sets `SynthLayer::strip_stage`; the strip chain plays it only with `strip_stages` (`--synth-stages`), otherwise the legacy waveform stays (default renders and `render_hash` unchanged). One lane per voice with the mix weights folded into one level; the real ratios and weights are P-block words of the unknown writer (OQ22). Evidence and the oracle method: [synth-stage-models](../research/synth-stage-models.md). The `kFltType` to filter stage map is partial: [synth-filter-type-map](../research/synth-filter-type-map.md).
 
