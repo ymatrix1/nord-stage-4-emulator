@@ -81,9 +81,23 @@ pub const SMP_RING_PER_BUS_WORD: f32 = 1.0 / 536_870_912.0;
 /// VERIFIED (run): with the level word `DM(0xB6518)` at 1.0 the stage multiplies the master
 /// buffer by this word and negates it; PNO lanes and the SMP stream reach the output words with
 /// the same gain, -0.1862 (PNO) and -0.1869 (SMP) after 5000 passes of `sharc-org`
-/// (`tools/fx_input_path.py`, `docs/research/piano-receiver-scale.md`). ASSUMED: that the ARM
-/// leaves `DM(0xB6518)` at 1.0 (it is 0 in the image and no writer was found).
+/// (`tools/fx_input_path.py`, `docs/research/piano-receiver-scale.md`). The level word
+/// `DM(0xB6518)` is written by the ARM ([`master_level_word`]); it is 1.0 at the defaults.
 pub const FX_MASTER_GAIN_WORD: u32 = 0x3E3F_1412;
+
+/// FX Core1 master level word `DM(0xB6518)` as the ARM sends it: the squared volume event
+/// `(volume / 127)^2` times the `Fnc_Volume` knob taper (`1.0` at knob 127).
+///
+/// VERIFIED (run): `tools/arm_master_level.py run` calls the firmware sender `0xC01897A4` in the
+/// settled emulator and reads the word it sends to `0x282D9460` (FX core 1): volume 127 gives
+/// `0x3F800000`, 100 gives `0x3F1EB866`, 64 gives `0x3E820610`, 0 gives 0; the squared law is
+/// the disassembly `0xC01898E4..0xC018990C`. ASSUMED: that the hardware fires the volume event
+/// (default 127) at start-up; the boot harness does not, so the mixer keeps `mult = 0.0`.
+#[inline]
+pub fn master_level_word(volume: u8, taper: f32) -> f32 {
+    let x = f32::from(volume.min(127)) / 127.0;
+    x * x * taper
+}
 
 /// DAC conversion of the FX Core1 pass: `word = fix(clip(2 * x, 0.999)) * 2^31`.
 ///
@@ -271,6 +285,18 @@ mod tests {
         assert!((bus_word_dac_fraction(w) - 0.1866).abs() < 1e-6);
         // a full-scale unity stroke (2^30, ring 2.0) reads 0.7464 of 2^31 through the receiver path
         assert!((bus_word_dac_fraction(1 << 30) - 0.7464).abs() < 1e-6);
+    }
+
+    #[test]
+    fn master_level_word_is_the_squared_volume_times_the_taper() {
+        assert_eq!(master_level_word(127, 1.0), 1.0);
+        // words of the firmware sender (tools/arm_master_level.py run)
+        assert!((master_level_word(100, 1.0) - f32::from_bits(0x3F1E_B866)).abs() < 2e-7);
+        assert!((master_level_word(64, 1.0) - f32::from_bits(0x3E82_0610)).abs() < 2e-7);
+        assert_eq!(master_level_word(0, 1.0), 0.0);
+        assert!((master_level_word(127, 0.2362) - 0.2362).abs() < 1e-7);
+        // a level above 127 is clamped like the 7-bit controller
+        assert_eq!(master_level_word(200, 1.0), 1.0);
     }
 
     #[test]
