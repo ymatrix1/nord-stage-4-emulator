@@ -20,6 +20,7 @@ fn run(u: &mut ProgramUi, e: &mut Stage4Engine, cmds: Vec<AudioCommand>) {
 fn store_as_names_with_abc_cat_ins_del_then_stores() {
     let mut e = Stage4Engine::new(48_000.0);
     let mut u = ProgramUi::default();
+    u.menu.set_memory_protect(false);
     u.title = "Rusty".into();
     u.store_as();
     assert_eq!(u.screen, Screen::StoreAs);

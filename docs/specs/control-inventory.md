@@ -68,13 +68,13 @@ Source: the manual text (`.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pd
 | Keybed | - | - | - | 1 | 1 (keys) | 2 |
 | **Total** | | | | | | **273** |
 
-By binding: `Bound` 138, `UiOnly` 49, `Unsupported` 86. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 75 controls. Morphable: 35.
+By binding: `Bound` 138, `UiOnly` 57, `Unsupported` 78. By provenance: `Verified` 250, `Assumed` 23, `Empirical` 0 (no panel-photo check yet). Shift or Hold access: 75 controls. Morphable: 35.
 
 Modelling choices: a button with its own LED is one entry; standalone LEDs, LED groups and ladders are separate entries; a Shift function printed under a control is its own entry (`access: Shift`); SOLO is both a Hold gesture on each section ON and a dedicated Program button (p.42).
 
 ## Gap list
 
-The old code-review gap list is replaced by the 86 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
+The old code-review gap list is replaced by the 78 `Unsupported` entries, each tied to a bean (`ns4-4w9l` synth, `ns4-e3zs` effects, `ns4-h7he` the Piano Select dial and the Synth strip's ON / KB ZONE, `ns4-ymci` program/menus/Extern, `ns4-q6p7` behaviour layer). Controls the manual documents that the earlier list missed: organ PRESET LED / Drawbar Live and per-layer vibrato ON, Poly percussion, piano KB TOUCH and DYN COMP, the three Synth OLED dials with INFO/LIST, Mod 2 as a separate unit with its own Variation, Delay effect Variation and Analog mode, Amp Sim Variation and filter select, and the Reverb Bright/Dark mode.
 
 ## 5b. Behaviour layer
 
@@ -124,7 +124,9 @@ What would confirm or replace the table: a higher-resolution front photo (at lea
 | Mst Clk | tap tempo from 4 taps (manual p.40), reset after 2 s; KBS is UI-only | `ASSUMED` (2 s) |
 | Morph | hold or latch a source, dial = depth, PAGE = target (7 layer levels, 3 synth cutoffs); knob-move assign needs bay hooks | step 0.05 `ASSUMED` |
 | Live Mode | every slot switch stores the slot (bays do not report edits yet) | `ASSUMED` |
-| Dimmed | 8 menu pages (title screens only), SOLO (needs Layer buttons), PEDAL TAP (no pedal input) | follow-up `ns4-ymci` |
+| Menus | Shift+Program 1..8 open the 8 menu screens of `nord_panel::menus` (UiOnly entries: the items are bound in the model, see `midi-and-control.md` section 5.1); PAGE steps pages, Program 1-4 are soft buttons (3 items + More on pages with more than four), the dial edits the focused item, Shift/Exit leaves | flow per manual p.44, p.57-64 |
+| Memory Protect | System page 1, default On; blocks STORE to a bank location, Live programs exempt (Sound Manager is not in the GUI) | `VERIFIED` (manual p.57) |
+| Dimmed | SOLO (needs Layer buttons), PEDAL TAP (no pedal input) | follow-up `ns4-ymci` |
 
 Allocating engine operations run on the audio thread today: TD-12 in [TECH_DEBT](../TECH_DEBT.md).
 

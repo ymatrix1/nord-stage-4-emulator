@@ -32,10 +32,15 @@ fn split_screen_has_note_and_xfade_rows_with_soft_buttons() {
 #[test]
 fn menus_list_and_preset_screens_have_their_titles() {
     let mut u = ProgramUi::default();
-    u.screen = Screen::Menu(MenuId::Pedal);
+    u.open_menu(MenuId::Pedal);
     let t = compose(&u, &sum());
     assert_eq!(t.big, "PEDAL MENU");
-    assert!(t.sub.contains("p.60") && t.rows[0].contains("Not supported"));
+    assert_eq!(t.sub, "1/7 Control Pedal");
+    assert!(t.rows[0].starts_with(">Type: Nord EP"), "{:?}", t.rows);
+    // A menu screen set without `open_menu` shows the title and manual page only.
+    u.screen = Screen::Menu(MenuId::Midi);
+    let t = compose(&u, &sum());
+    assert!(t.sub.contains("p.62") && t.rows.is_empty());
     u.sync_catalog(
         &["P/a.ns4p".into(), "P/b.ns4p".into()],
         &["x/p.npno".into()],

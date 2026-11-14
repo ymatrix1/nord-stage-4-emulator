@@ -206,8 +206,8 @@ fn binding_provenance_and_morph_totals_are_pinned() {
     let all = all_controls();
     let b = |f: fn(&Binding) -> bool| all.iter().filter(|c| f(&c.binding)).count();
     assert_eq!(b(|x| matches!(x, Binding::Bound(_))), 138);
-    assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 49);
-    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 86);
+    assert_eq!(b(|x| matches!(x, Binding::UiOnly(_))), 57);
+    assert_eq!(b(|x| matches!(x, Binding::Unsupported(_))), 78);
     let assumed = all
         .iter()
         .filter(|c| c.provenance == Provenance::Assumed)

@@ -130,9 +130,23 @@ Manual OS v1.6x ch. 11 (p.57-63) plus Organize (p.45-46) is modelled as toolkit-
 | MIDI (7) | 10 | 23 | channels bound to engine fields; filters and PC modes `Unsupported` |
 | Extern (8) | 13 | 37 | Extern layer fields bound; Device toggles, velocity, Echo `Unsupported` |
 
-Totals: 58 pages, 129 items; 56 bound, 12 `UiOnly`, 61 `Unsupported` (bean `ns4-zb9o`). Tests (`menus/tests.rs`): unique ids, pages `1..n` per menu, defaults match the kind and lie in range, every `Bound` host id or engine path exists in the sources, every `Unsupported` bean exists in `.beans/`.
+Totals: 58 pages, 129 items; 61 bound, 11 `UiOnly`, 57 `Unsupported` (bean `ns4-zb9o`). Tests (`menus/tests.rs`): unique ids, pages `1..n` per menu, defaults match the kind and lie in range, every `Bound` host id or engine path exists in the sources, every `Unsupported` bean exists in `.beans/`.
 
 Provenance: names, ranges, defaults and page numbers come from the manual text (`VERIFIED`). `ASSUMED`: Program Levels range, 0.5 dB step of the two piano levels, pedal gain default/step, foot switch defaults, Device page order, Preset Organize ranges. Web sources (names only, no values copied): Stage 3 Sound menu <https://manualshive.com/en/manual/nord/stage-3/1701214?page=20>, Stage 4 user forum <https://www.norduserforum.com/viewtopic.php?p=183703>; they did not change any value.
+
+### 5.1 Menu screens in the Program bay
+
+Shift+Program 1..8 opens the menu on the Program OLED (`panel/bay_program/menu_screen.rs`, state in `panel/ui_state/menu.rs` as `MenuUi`, behaviour in `bay_program/menu_actions.rs`). Layout: title line, `n/N <page title>`, then one row per item (`>` marks the focus) with its value. PAGE-/PAGE+ (and BANK) step pages and stop at the ends; Program 1-4 are soft buttons that focus an item (an `Action` item runs); on a page with more than four items (Output pages 2 and 5) soft 1-3 are items and soft 4 is `More`. The PROGRAM dial steps the focused item (toggle follows the sign, enum and int clamp, float snaps to its step grid). Shift/Exit leaves; values stay in `ProgramUi::menu`.
+
+| Binding | Behaviour |
+|---|---|
+| `Bound` | the edit is sent as `ProgramEdit::Settings(SettingsEdit { id, value })` and applied on the DSP thread by `audio/edits/settings/` (plain field writes, no allocation): `GlobalSettings` via `set_global_settings`, `set_program_level_db`, `pedals`, `pedals.triple.set_func`, `aux_kb`, `set_global_channel` / `set_layer_channel` / `set_aux_channel`, `extern_out.layers` |
+| `UiOnly` | value kept in `MenuUi` only (LED Intensity, jack types, version info) |
+| `Unsupported` | row dimmed and shows the bean id; the dial does nothing |
+
+System page 5 Reset All Settings restores every default and sends the bound ones; it keeps Memory Protect. Memory Protect (page 1, default On, manual p.57) blocks STORE to a bank location with the message "Memory Protect is on"; storing to a Live slot is exempt.
+
+Mapping notes: the Aux KB synth choices (`---`, `A--`, `-B-`, `--C`, `AB-`, `A-C`, `-BC`, `ABC`) are mapped to layer masks by label (the host parameter `auxkb_synth` is a plain bitmask, so its index differs for `--C`, `AB-`); pedal Left/Middle and Sustain Type (Pedal pages 3-4) are `Bound` to the `pedal_assign` state; Foot Switch SW A choices without an engine function map to Off; Extern bank `--` (-1) is stored as 0. Still `Unsupported`: Organ Trigger Point, Output routing (pages 1-5 except Mono), Organize, MIDI Local Control / Sect On / Type / Ctrl / Dev / PC / Transpose At, Extern Echo / Velocity / Device MIDI, Pedal SW B.
 
 ### Engine-audible settings (`engine/settings.rs`)
 
