@@ -289,15 +289,39 @@ EMPIRICAL: numbers of the firmware routine on the real instance of the synth uni
 
 Reading (EMPIRICAL): the multi-tap reverbs are shorter and darker than types 0, 1 (T60 0.55 to 1.22 s against 4.3 and 5.4 s; wet-to-input -4.5 to -8.7 dB below 500 Hz, -34 to -38 dB at 8 to 16 kHz). Types 8 and 9 have the same first echo and nearly the same band shape (the pair structure of s3: two types per module); types 10 and 11 are the same to within 0.5 dB. The UI names stay at the s3 reading (size rises with `0xB0F0D`); no program-decode evidence was gathered.
 
-**Not done (the port).** There is no Python model of `0x120D8A` / `0x120FDB` yet, so there is no Rust port: the core needs the forms `FPACK` / `FUNPACK` / `FDEP` / `FEXT` (16:16) and the `I6` / `I5` pre-modify forms in `tools/fx_pe.py` and `tools/fx_rvbcore_gen.py`, about 120 core instructions plus the 150 of the wrapper (three fs/4 biquad stages, hold, second bank at PM `0x9437F`, mix with `c[-28]`, `c[42]`, `c[43]`). Next steps: (1) extend `fx_pe` / `fx_model_*` with the packed-float forms and model the core on the layout of `fx_rvbmulti.layout` (first ring `B2 = c[-15]` at SDRAM word `0x08020000`, `L2 = c[-14]` = 20480 words; second ring `B6 = c[-24]` in DM, `L6 = c[-23]` = 3140 words); (2) check word for word against `sharc-fx --trace` as in s6; (3) generate steps with `tools/fx_rvbcore_gen.py`, golden test against `fx-rvbmulti-golden.csv`, opt-in `FirmwareFx::reverb` for types 2..11, then the video check and D22.
+**Port status.** Done in s14 (below): model, oracle check, Rust port, golden test.
+
+## 14. Types 2..11: model and Rust port (seventh pass, 2026-11-14)
+
+**Result: the wrapper `0x120FDB` plus the packed core `0x120D8A` are ported and bit exact for the nine captured types.** The forms the s13 plan listed (`FPACK`, `FUNPACK`, `FDEP`, `FEXT` 16:16, `IF NOT SZ`) were already in `tools/fx_pe.py` or the Leslie generator except `BTGL` and the `x OR FDEP y` form, so no hand transliteration was needed.
+
+| Step | File | Evidence |
+|---|---|---|
+| listing to model | `tools/fx_rvbmulti_gen.py` (reuses `fx_leslie_gen.py`, adds `FPACK`, `FUNPACK`, `BTGL`, `x OR FDEP y`, `IF NOT SZ`) writes `tools/fx_model_rvbmulti.py`: `core` (`0x120D8A`, one `do` loop of 7 passes), `wrapper` (`0x120FDB`, `CALL 0x120D8A` at `0x1210B4`); operations in `tools/fx_rvbmulti_ops.py` | no unsupported form |
+| model against the oracle | `python tools/fx_rvbmulti_check.py check SRAM/core2_sram.bin --type T --calls 20`: every register file (R, S, I, M, L, B) before every instruction of `sharc-fx --trace` | **9,660 of 9,660 steps** for each of the types 2, 3, 4, 5, 7, 8, 9, 10, 11 (483 instructions per call); `outputs --type 2` and `--type 11` over 3,200 calls (model registers carried across calls, the 8 output words of every call compared): 3,200 of 3,200 identical |
+| Rust | `tools/fx_rvbmulti_rust_gen.py` writes `fx/fw_rvbm_steps_core.rs`, `fw_rvbm_steps_wrap.rs` (one line per instruction, the same `Core<F>` register machine as the Leslie port, memory as windows `ROW` 108, `IN` 8, PM 144, ring 3,168, SDRAM line 20,480 words, all allocated in `new`), `fw_rvbm_words.rs` (the 34 instance words of core 2 row 0 and the 64 type words of each type) and `tests_fw_rvbm_golden_data.rs` (the CSV fingerprints); `fx/fw_rvbm.rs` is the API (`ReverbMulti<F>`, `FwReverbMulti` = `E40`, `FwReverbMultiF32`), `fx/fw_rvbm_ops.rs` the packed-float operations | `--check` and `tools/tests/test_fx_rvbmulti_gen.py` fail on a stale file |
+| golden test | `tests_fw_rvbm_golden.rs`: impulse at `kRvbAmt` 127 and noise at 63, 3,600 calls (28,800 words) per case, 9 types, 18 cases | `FwReverbMulti` (40-bit registers) reproduces the oracle fingerprints of [data/fx-rvbmulti-golden.csv](data/fx-rvbmulti-golden.csv) in all 18 cases: hash of every word, non-zero count and first call with output equal. The `f32` path stays within 2 % of the peak on 600 noise calls |
+
+The routine is allocation free after `new` (a type change runs `set_type`: clear and reload, no allocation) and runs on the **real instance of the synth unit L6** (core 2 row 0): the words of the other piano and synth rows differ only in the pointers into their own memory, which the port replaces by its windows. The organ rows (zero in the image) and type 6 (no captured block) return `None` from `ReverbMulti::new`.
+
+**Engine wiring (opt-in).** `FirmwareFx::reverb` now also covers `ReverbModel::{Booth, Room, Stage, Hall, Cathedral}`: model and variation flag map to `kRvbType` 2/3, 4/5, 6/7, 8/9, 10/11 (`LayerFxChain::fw_multi_type`); Stage without the variation flag is type 6 and stays on the FDN. The instance is built on first use (one allocation, as for the Spring path) and retyped in place afterwards; `kRvbAmt` is mapped by `fw_map::reverb_send` / `reverb_dry` into `c[-31]`, `c[-30]` (the same law as types 0, 1; the captured words of 63 are `0x3EBB0410`, `0x3F6E4FB0`). The routine mixes dry and wet itself and has a **latency of 4 frames**.
+
+| Item | Status | Tag |
+|---|---|---|
+| Wrapper and core algorithm, words of the synth units | bit exact against the oracle (18 golden cases, 9,660 traced steps per type) | VERIFIED |
+| The `kRvbAmt` words of the multi-tap module | the two captured points (127, 63) are the golden inputs; other values use the type 0, 1 law | VERIFIED at 127, 63; ASSUMED between |
+| Model and variation flag to `kRvbType` | by size order of the type words (s3) onto the pairs | ASSUMED (UI names not read from a program) |
+| Piano and synth unit rows other than L6, organ rows | not covered | open |
+| Comparison with the hardware clips | **not done** in this pass: the Part A programs that use Room, Stage, Hall and Cathedral have to be identified first, then the s10 method; the default stays on the engine FDN (D22, D26) | open |
+
 
 ## Implications
 
-- The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are not ported, but their real instance is known and the oracle responses and golden fingerprints exist (s13).
+- The reverb dry / send law is exact, and types 0 and 1 are reproduced word for word in Rust (s10, opt-in `FirmwareFx::reverb`); types 2..11 are ported as well (s14, wrapper `0x120FDB` plus core `0x120D8A`, bit exact on nine types, opt-in); the video comparison and the organ rows are open.
 - `kCmpResponse` is closed: no word depends on it.
 
 ## Follow-ups
 
 1. A hardware clip with a clean release into a Spring reverb (decay), and the SPRING name check of types 0, 1; then re-run the s10 comparison and revisit the default (D22).
-3. Types 2..11: module `0xC02BB44C`, wrapper `0x120FDB` plus packed multi-tap core `0x120D8A`, not `0x123ABE` / `0x12314A` / `0x12329B` (s11). Unblocked by s13 (the pointer words are static in the image for the piano and synth rows): model the core with the packed-float forms, generate the Rust steps, match `fx-rvbmulti-golden.csv`. Organ rows (zero) stay open.
+3. Types 2..11: ported and verified against the oracle (s14). Open: the hardware comparison for Booth, Room, Stage, Hall and Cathedral programs (then D22 / D31: flip `FirmwareFx::reverb` only if it scores better than the FDN), type 6 (no ARM capture), the organ rows (zero in the image: how does the organ part's reverb get its words?), the UI names of the type pairs.
 4. Leslie: capture the rotor words over many ARM ticks per `kEffectsLeslieSpeed` value.

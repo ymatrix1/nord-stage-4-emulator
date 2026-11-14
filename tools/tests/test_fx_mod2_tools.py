@@ -8,10 +8,10 @@ from pathlib import Path
 import fx_golden_mod2_rest as gr
 import fx_leslie_gen as lg
 import fx_listing_gen as lgen
+import fx_mod2_rust_gen as rg
 import fx_model_mod2 as mm
 import fx_model_mod2_gen as gen
 import fx_models
-import fx_mod2_rust_gen as rg
 import fx_oracle as fo
 from fx_pe import M32
 

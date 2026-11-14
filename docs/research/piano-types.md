@@ -22,6 +22,18 @@ Hardware order inside a type (header `location_index`): Grand White Grand XL, Ro
 
 No name or hash heuristic is needed. A `.npno` outside the backup (dropped file) carries the same header; only a file with an unreadable header falls back to the folder name, then to `Misc`.
 
+## Size letter (2026-11-14)
+
+The manual (p.24 "About Piano size") names four sizes, Small (Sml), Medium (Med), Large (Lrg) and Extra Large (XL), and the display prints a letter after the model name (`Pearl Upright  L`, `Silver Grand M`, `White Grand XL`; DSoundman course PL 11:25, SG 8:40). The header name of an `.npno` (32 bytes at file offset `0x48`, `NpnoInstrument::name`) is `<model>#<detail padded> <size>`, for example `Pearl Upright#GRT 120   Lrg` and `White Grand#Stw B     XL`.
+
+| Item | Evidence |
+|---|---|
+| 30 of 38 models carry a size token as last word of the header name (Grand 8, Upright 7, Digital 6 (Ballad EP1 Med, DigiGrand 1 and 2 Sml, DX RubbaTines and FullTines Lrg, Hybrid EP Sml), Electric EP1 to EP9 (Lrg, Lrg, Lrg, Lrg, XL, XL, Med, XL, XL)); the other 8 (Clav 4, Wurlitzer 1 and 2, Marimba, Vibraphone) have none | VERIFIED: `python tools/npno_types.py "<backup>.ns4b"` prints `30 with a size token; header vs file name size mismatches: 0` |
+| The token equals the one in the entry file name (`White Grand XL 6.3.npno`) for all 38 | same command |
+| Acoustic sizes match the manual's table: Sml has no damper-down strokes; Med has damper strokes on 17 to 28 keys; Lrg and XL on 41 to 67 keys (stroke records `flags_hi == 1`) | EMPIRICAL (one-off script over the stroke tables, no tool kept; the Sml / Med / Lrg split of Grand and Upright follows the manual text) |
+
+`nord_core::piano::label::PianoLabel::parse` turns the header name into `(model, size)`; the Program OLED Layers view prints `Piano <model>  <letter>`. Letters `S`, `M`, `L`, `XL` are ASSUMED (`S` never seen on the footage).
+
 ## Implications
 
 - The GUI library lists models as `(entry, type)` in hardware order from 16 header bytes per entry (no sample data is read).

@@ -44,19 +44,35 @@ pub fn name_line(ui: &ProgramUi) -> String {
     ui.title.clone()
 }
 
+/// Drawbar positions as digits, 16' first (`888000000`); values above 8 print as 8.
+pub fn bars_text(bars: &[u8; 9]) -> String {
+    bars.iter().map(|&b| char::from(b'0' + b.min(8))).collect()
+}
+
 /// One row per section that has a layer on, named as the hardware names its sections.
 ///
-/// ASSUMED: section names only. Hardware also prints the preset id (`1:05`) or source name with a
-/// size letter (`XL`, `M`) and mini drawbars for the organ (course footage PL 11:25, BG 17:10,
-/// SG 8:40, ORG 5:30); the size letter and preset id have no source in the emulator yet.
+/// Organ rows end with the drawbar positions as nine digits (`888000000`, B3 only) and Piano rows
+/// with the size letter of the loaded library file (`Pearl Upright  L`); both have a data source
+/// (`organ_drawbars`, the `.npno` header name, see `nord_core::piano::label`).
+///
+/// ASSUMED: the text form of the mini drawbars (hardware draws small bars) and the two-space gap
+/// before the size letter (course footage PL 11:25, BG 17:10, SG 8:40, ORG 5:30). The preset id
+/// (`1:05`) the hardware prints before a preset name has no source: a program stores no preset
+/// link, and the emulator loads models rather than `.ns4o` / `.ns4n` / `.ns4y` presets (ns4-bjvn).
 pub fn section_rows(sum: &Summary) -> Vec<String> {
     let on = |a: usize| sum.layers_on[a] || sum.layers_on[a + 1];
     let mut rows = Vec::new();
     if on(0) {
-        rows.push(format!("Organ {}", sum.organ));
+        rows.push(match sum.organ_bars {
+            Some(bars) => format!("Organ {} {}", sum.organ, bars_text(&bars)),
+            None => format!("Organ {}", sum.organ),
+        });
     }
     if on(2) {
-        rows.push(format!("Piano {}", sum.piano));
+        rows.push(match sum.piano_size {
+            Some(size) => format!("Piano {}  {}", sum.piano, size.letter()),
+            None => format!("Piano {}", sum.piano),
+        });
     }
     if on(4) || sum.layers_on[6] {
         rows.push(format!("Synth {}", sum.synth));
@@ -96,8 +112,27 @@ mod tests {
             piano: "Grand".into(),
             synth: "Saw".into(),
             layers_on: [true, false, false, false, false, false, true],
+            ..Default::default()
         };
         assert_eq!(section_rows(&sum), ["Organ B3", "Synth Saw"]);
         assert!(section_rows(&Summary::default()).is_empty());
+    }
+
+    #[test]
+    fn organ_rows_show_the_drawbars_and_piano_rows_the_size_letter() {
+        let sum = Summary {
+            organ: "B3".into(),
+            piano: "Pearl Upright".into(),
+            piano_size: Some(nord_core::piano::label::PianoSize::Large),
+            organ_bars: Some([8, 8, 8, 0, 0, 0, 0, 0, 0]),
+            layers_on: [true, false, true, false, false, false, false],
+            ..Default::default()
+        };
+        assert_eq!(
+            section_rows(&sum),
+            ["Organ B3 888000000", "Piano Pearl Upright  L"]
+        );
+        assert_eq!(bars_text(&[0, 1, 2, 3, 4, 5, 6, 7, 8]), "012345678");
+        assert_eq!(bars_text(&[9; 9]), "888888888");
     }
 }

@@ -31,7 +31,7 @@ SREG = re.compile(r"^s(\d+)$")
 DAGREG = re.compile(r"^([imlb])(\d+)$")
 
 
-#: Track AV / AC of fixed add and subtract (`tools/fx_listing_gen.py`; the Leslie model needs neither).
+#: Track AV / AC of fixed add / subtract and float flags (`tools/fx_listing_gen.py`; Leslie: no).
 AVAC = False
 
 

@@ -28,9 +28,9 @@ from fx_pe import (  # noqa: F401
     fext_p,
     ffix,
     ffloat,
-    frecips,
     fmul,
     fpass,
+    frecips,
     fsub,
     iadd,
     imm,
@@ -101,7 +101,11 @@ def iflags(kind, a, b):
         exact = signed32(x) + signed32(y) if kind == "add" else signed32(x) - signed32(y)
         carry = x + y > M32 if kind == "add" else x >= y
         r = (x + y if kind == "add" else x - y) & M32
-        for lst, v in zip(out, (bool(r & 0x80000000), r == 0, not -(1 << 31) <= exact < 1 << 31, carry), strict=True):
+        for lst, v in zip(
+            out,
+            (bool(r & 0x80000000), r == 0, not -(1 << 31) <= exact < 1 << 31, carry),
+            strict=True,
+        ):
             lst.append(v)
     return out
 
@@ -152,7 +156,14 @@ def cond_lane(m, kind, lane, old, new):
 
 
 def cond_of(_m, kind):
-    return {"ne": cond_ne, "eq": cond_eq, "ge": cond_ge, "tf": cond_tf, "av": cond_av, "ac": cond_ac}[kind]
+    return {
+        "ne": cond_ne,
+        "eq": cond_eq,
+        "ge": cond_ge,
+        "tf": cond_tf,
+        "av": cond_av,
+        "ac": cond_ac,
+    }[kind]
 
 
 def cond_tf(m, old, new):

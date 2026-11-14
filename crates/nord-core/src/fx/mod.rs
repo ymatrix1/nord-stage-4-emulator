@@ -39,6 +39,7 @@ mod fw_leslie_main_c;
 mod fw_leslie_main_d;
 mod fw_leslie_main_e;
 mod fw_leslie_ops;
+mod fw_leslie_ring;
 pub mod fw_map;
 mod fw_mod1;
 mod fw_mod2;
@@ -53,6 +54,11 @@ mod fw_rvb_core;
 mod fw_rvb_steps;
 mod fw_rvb_words;
 mod fw_rvb_wrap;
+mod fw_rvbm;
+mod fw_rvbm_ops;
+mod fw_rvbm_steps_core;
+mod fw_rvbm_steps_wrap;
+mod fw_rvbm_words;
 mod fw_short_float;
 mod fw_stage;
 mod fw_tone_stack;
@@ -117,6 +123,10 @@ mod tests_fw_rvb_golden;
 #[cfg(test)]
 mod tests_fw_rvb_golden_data;
 #[cfg(test)]
+mod tests_fw_rvbm_golden;
+#[cfg(test)]
+mod tests_fw_rvbm_golden_data;
+#[cfg(test)]
 mod tests_fw_series;
 #[cfg(test)]
 mod tests_lfo_golden;
@@ -139,6 +149,7 @@ pub use fw_compressor::{ctx as fw_compressor_ctx, FwCompressor};
 pub use fw_delay::{ctx as fw_delay_ctx, DelayIo, FwDelay};
 pub use fw_ext40::{Fp, E40};
 pub use fw_leslie::{FwLeslie, FwLeslieE40};
+pub use fw_leslie_ring::RingAdvance;
 pub use fw_map::AllpassType;
 pub use fw_params::{
     compressor_for_amount, set_allpass, set_amp_drive, set_compressor_amount, set_delay,
@@ -146,6 +157,7 @@ pub use fw_params::{
 };
 pub use fw_reverb::{FwReverb, FwReverbF32};
 pub use fw_rvb_wrap::{mix2 as fw_rvb_mix2, FwRvbWrap};
+pub use fw_rvbm::{FwReverbMulti, FwReverbMultiF32};
 pub use fw_tone_stack::{ctx as fw_tone_stack_ctx, FwToneStack2, FwToneStack4};
 pub use master::MasterBus;
 pub use tables::*;
@@ -270,6 +282,9 @@ pub struct LayerFxChain {
     fw_amp: Option<fw_amp_stage::FwAmpStage>,
     /// The firmware Spring reverb (`firmware_fx.reverb`), built when first needed.
     fw_reverb: Option<Box<FwReverb>>,
+    /// The firmware multi-tap reverb (`firmware_fx.reverb`, `kRvbType` 2..11), built when first
+    /// needed and retyped in place afterwards.
+    fw_reverb_multi: Option<Box<FwReverbMulti>>,
     fw_comp_amount: f32,
     clock_bpm: f32,
     dyn1: mod1_dynamic::Mod1Dyn,
@@ -379,6 +394,7 @@ impl LayerFxChain {
             fw_comp: None,
             fw_amp: None,
             fw_reverb: None,
+            fw_reverb_multi: None,
             fw_comp_amount: 0.0,
             clock_bpm: 120.0,
             dyn1: mod1_dynamic::Mod1Dyn::new(),

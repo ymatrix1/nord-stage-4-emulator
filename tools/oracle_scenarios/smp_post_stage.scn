@@ -1,0 +1,33 @@
+# SMP post stage 0x1C0918..0x1C0A70 driven live: constant bus words through the real audio interrupt.
+# `irq 17 break=0x1c0918` stops the interrupt before the post stage, the pokes put bus words on
+# DM(0x9404E..) (the voice bus; the interrupt does not clear them), `resume` finishes it. The gate
+# words DM(0x9403E, 42, 46 (+1)) are what the ARM writes as 1.0 for the piano ids (arm-organ-messages);
+# their smoothed states DM(0x94040, 44, 48 (+1)) start open here. Result: ring[0] -> bus * 2^-29
+# (steady state gain 1.0, 0.938 after 300 interrupts, one-pole constant 0.99 per interrupt).
+# docs/research/piano-bus-convention.md s2.  Run: sharc-ref smp.bin tools/oracle_scenarios/smp_post_stage.scn --out target/oracle/post
+meta rate 48000
+warmup 0x1c11e0 100000 flag12=1
+poke 0x5201 0x40
+fifo 0x92196
+irq 13
+poke 0x9268B 0
+poke 0x9268A 0
+poke 0x94040 f1.0
+poke 0x94041 f1.0
+poke 0x94044 f1.0
+poke 0x94045 f1.0
+poke 0x94048 f1.0
+poke 0x94049 f1.0
+poke 0x9403e f1.0
+poke 0x9403f f1.0
+poke 0x94042 f1.0
+poke 0x94043 f1.0
+poke 0x94046 f1.0
+poke 0x94047 f1.0
+loop 300
+irq 17 break=0x1c0918
+poke 0x9404E 0x20000000
+poke 0x9404F 0x20000000
+resume
+capture ring 0xB2000 12
+end

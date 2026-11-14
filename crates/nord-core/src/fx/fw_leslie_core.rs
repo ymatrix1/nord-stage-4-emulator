@@ -16,6 +16,7 @@ use super::fw_ext40::Fp;
 use super::fw_leslie_data_a as data_a;
 use super::fw_leslie_data_b as data_b;
 use super::fw_leslie_data_c as data_c;
+use super::fw_leslie_ring::RingAdvance;
 
 /// A register element: a data word or a float.
 #[derive(Clone, Copy, Debug)]
@@ -85,6 +86,8 @@ pub(super) struct Core<F: Fp> {
     win: [(u32, u32, u32); MAX_WINDOWS],
     nwin: usize,
     mem: Box<[u32]>,
+    ring: RingAdvance,
+    calls: u64,
     #[cfg(test)]
     pcs: Vec<u32>,
     #[cfg(test)]
@@ -118,6 +121,8 @@ impl<F: Fp> Core<F> {
             win,
             nwin: n,
             mem: vec![0u32; total as usize].into_boxed_slice(),
+            ring: RingAdvance::ADVANCE,
+            calls: 0,
             #[cfg(test)]
             pcs: Vec::new(),
             #[cfg(test)]
@@ -144,6 +149,42 @@ impl<F: Fp> Core<F> {
         c
     }
 
+    /// A machine with zeroed memory windows `(base, words)` and no boot state: the multi-tap
+    /// reverb (`fw_rvbm.rs`) lays out its own instance. Allocates once, here.
+    pub(super) fn blank(windows: &[(u32, u32)]) -> Self {
+        assert!(windows.len() <= MAX_WINDOWS, "too many memory windows");
+        let mut win = [(0, 0, 0); MAX_WINDOWS];
+        let mut total = 0u32;
+        for (k, &(base, len)) in windows.iter().enumerate() {
+            win[k] = (base, len, total);
+            total += len;
+        }
+        Core {
+            rg: [[V::W(0); 2]; 16],
+            i: [0; 16],
+            m: [0; 16],
+            l: [0; 16],
+            b: [0; 16],
+            an: [false; 2],
+            az: [false; 2],
+            tf: [false; 2],
+            win,
+            nwin: windows.len(),
+            mem: vec![0u32; total as usize].into_boxed_slice(),
+            ring: RingAdvance::FROZEN,
+            calls: 0,
+            #[cfg(test)]
+            pcs: Vec::new(),
+            #[cfg(test)]
+            stray: 0,
+        }
+    }
+
+    /// Zeroes every memory window (no allocation).
+    pub(super) fn clear_memory(&mut self) {
+        self.mem.fill(0);
+    }
+
     /// Sets the three rotor speed words (`0xB2F25`, `0xB2F26`, `0xB2FA1`).
     pub(super) fn set_speed_words(&mut self, w: [u32; 3]) {
         for (a, v) in SPEED_WORDS.into_iter().zip(w) {
@@ -151,11 +192,22 @@ impl<F: Fp> Core<F> {
         }
     }
 
+    /// Sets how the history ring pointers move between calls (default: the firmware's).
+    pub(super) fn set_ring(&mut self, ring: RingAdvance) {
+        self.ring = ring;
+    }
+
     /// One call: the signal pair `io = [L0, R0, L1, R1]` is processed in place; returns the pair.
     pub(super) fn call(&mut self, io: [f32; 4]) -> [f32; 4] {
         for (k, v) in io.iter().enumerate() {
             self.wr(IO + k as u32, v.to_bits());
         }
+        if self.ring.stride != 0 {
+            for (a, v) in self.ring.pointers(self.calls) {
+                self.wr(a, v);
+            }
+        }
+        self.calls = self.calls.wrapping_add(1);
         self.i[0] = IO;
         self.i[1] = STATE;
         self.m[0] = 0;
@@ -195,7 +247,7 @@ impl<F: Fp> Core<F> {
         self.slot(a).map_or(0, |s| self.mem[s])
     }
 
-    fn wr(&mut self, a: u32, w: u32) {
+    pub(super) fn wr(&mut self, a: u32, w: u32) {
         if let Some(s) = self.slot(a) {
             self.mem[s] = w;
         } else {

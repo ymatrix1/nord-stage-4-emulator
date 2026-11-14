@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import random
 import sys
-from fractions import Fraction
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from fractions import Fraction
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -159,7 +159,9 @@ def fix_phas0(rng: random.Random, mem: dict[int, int], count: int) -> None:
 SPECS: dict[str, Spec] = {
     "vibe": Spec("vibe", 0x123C84, 0x123DB3, gen.vibe, fixup=fix_vibe, blocks=0x14),
     "flang": Spec("flang", 0x12348D, 0x123538, gen.flang, fixup=fix_flang, blocks=2),
-    "phas0": Spec("phas0", 0x12379B, 0x1238FB, gen.phas0, fixup=fix_phas0, blocks=0x1B, span=(0.0, 0.2)),
+    "phas0": Spec(
+        "phas0", 0x12379B, 0x1238FB, gen.phas0, fixup=fix_phas0, blocks=0x1B, span=(0.0, 0.2)
+    ),
     "phas1": Spec("phas1", 0x1238FC, 0x1239CF, gen.phas1, fixup=fix_phas1, blocks=4, ring=False),
 }
 

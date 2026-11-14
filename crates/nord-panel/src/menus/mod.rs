@@ -19,9 +19,6 @@ mod system;
 #[cfg(test)]
 mod tests;
 
-/// Bean tracking menu behaviour the engine cannot honour yet.
-pub(crate) const GAP: &str = "ns4-zb9o";
-
 /// Item id of System page 1 "Memory Protect" (manual p.57); the Program bay gates STORE on it.
 pub const ID_MEMORY_PROTECT: &str = "system.1.memory_protect";
 

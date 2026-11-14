@@ -2,7 +2,7 @@
 
 use super::OrganLayer;
 use crate::engine::Stage4Engine;
-use crate::fx::FwLeslie;
+use crate::fx::{FwLeslie, RingAdvance};
 use crate::render_opts::{apply_leslie_firmware, FirmwareOptions};
 
 const FS: f32 = 48_000.0;
@@ -59,6 +59,12 @@ fn the_option_parses_and_applies_to_both_layers() {
     let g = FirmwareOptions::from_args(&["--leslie-gain-db".into(), "40.5".into()]).unwrap();
     assert_eq!(g.leslie_gain_mdb, 40_500);
     assert!(FirmwareOptions::from_args(&["--leslie".into(), "x".into()]).is_err());
+    let r = |v: &str| FirmwareOptions::from_args(&["--leslie-ring".into(), v.into()]);
+    assert_eq!(r("frozen").unwrap().leslie_ring, RingAdvance::FROZEN);
+    assert_eq!(r("firmware").unwrap().leslie_ring, RingAdvance::PASS_RESET8);
+    assert_eq!(r("advance").unwrap().leslie_ring, RingAdvance::ADVANCE);
+    assert!(r("x").is_err());
+    assert_eq!(FirmwareOptions::default().leslie_ring, RingAdvance::ADVANCE);
     assert!(
         !FirmwareOptions::default().leslie_firmware,
         "off by default"
@@ -72,10 +78,10 @@ fn the_option_parses_and_applies_to_both_layers() {
 }
 
 #[test]
-fn the_firmware_leslie_replaces_the_engine_rotary_at_its_booted_level() {
+fn the_firmware_leslie_with_a_frozen_ring_is_the_booted_minus_50_db() {
     let mut engine = OrganLayer::new(FS);
     let mut fw = OrganLayer::new(FS);
-    fw.leslie_fw = Some(Box::new(FwLeslie::new()));
+    fw.leslie_fw = Some(Box::new(FwLeslie::with_ring(RingAdvance::FROZEN)));
     let (a, b) = (run(&mut engine, 4000), run(&mut fw, 4000));
     assert!(b.iter().flatten().all(|v| v.is_finite()));
     let (ra, rb) = (rms(&a[2000..]), rms(&b[2000..]));
@@ -100,5 +106,18 @@ fn stop_mode_freezes_the_firmware_rotor() {
     assert!(
         (first - last).abs() < 0.05 * first.max(1e-9),
         "no modulation: {first} vs {last}"
+    );
+}
+
+#[test]
+fn the_advancing_ring_lifts_the_firmware_leslie_to_the_level_of_its_input() {
+    let mut fw = OrganLayer::new(FS);
+    fw.leslie_fw = Some(Box::new(FwLeslie::new()));
+    let b = run(&mut fw, 4000);
+    assert!(b.iter().flatten().all(|v| v.is_finite()));
+    let db = 20.0 * (rms(&b[2000..]) / 0.0707).log10();
+    assert!(
+        (-25.0..10.0).contains(&db),
+        "within 25 dB of the input, got {db}"
     );
 }

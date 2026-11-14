@@ -16,8 +16,9 @@ use super::{fw_flang, fw_phas0, fw_phas1, fw_vibe};
 /// Frame block (`I0`).
 const IO_BASE: u32 = 0xB1000;
 
-/// Which routine runs.
+/// Which routine runs. FLANG and PHAS are verified ports without a wired stage yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(super) enum Routine {
     /// `kFx2Type` 6, 7: `0x123C84`.
     Vibe,

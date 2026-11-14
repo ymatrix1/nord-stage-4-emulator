@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E501
 """Generate the Rust ports of the Mod 2 routines from `tools/fx_model_mod2_gen.py`.
 
 The Python model (one `step(pc, ...)` per instruction; generated from the ADI listing by
@@ -34,7 +35,7 @@ FILES = {
 #: Pair functions taken over by name (all in `fw_pe.rs` / `fw_pe_ops.rs`).
 PAIR_FNS = {
     "fmul", "fadd", "fsub", "fabs", "ffloat", "ftrunc", "iadd", "isub", "ishl", "fpass", "favg",
-    "fclip", "imax", "imin", "frecips",
+    "fclip", "frecips",
 }  # fmt: skip
 CONDS = {"ne": "Ne", "eq": "Eq", "av": "Av", "ac": "Ac"}
 PE_EXPORTS = [
@@ -42,8 +43,7 @@ PE_EXPORTS = [
     "ftrunc", "iadd", "imm",
 ]  # fmt: skip
 OPS_EXPORTS = [
-    "Cond", "favg", "fclip", "fl_add_sub", "fl_float", "fl_int", "fpass", "frecips", "imax", "imin",
-    "ishl", "isub",
+    "Cond", "favg", "fclip", "fl_add_sub", "fl_float", "fl_int", "fpass", "frecips", "ishl", "isub",
 ]  # fmt: skip
 
 

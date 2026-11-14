@@ -15,6 +15,7 @@ use super::fw_words::val;
 #[derive(Clone, Copy)]
 pub(super) enum Cond {
     Ne,
+    #[allow(dead_code)] // used by the flanger routine, which has no wired stage yet
     Eq,
     Av,
     Ac,
@@ -64,6 +65,7 @@ impl<M: Mem> Pe<M> {
         [0, 1].map(|c| if self.holds(cond, c) { new[c] } else { old[c] })
     }
 
+    #[allow(dead_code)] // used by the flanger routine, which has no wired stage yet
     /// One element of a conditional exchange (`IF cond Rx <-> Sy`).
     pub(super) fn cond_lane(&self, cond: Cond, lane: usize, old: u32, new: u32) -> u32 {
         if self.holds(cond, lane) {
@@ -143,15 +145,6 @@ pub(super) fn fclip(a: P, b: P) -> P {
         let (x, y) = (val(a[c]), val(b[c]).abs());
         x.clamp(-y, y).to_bits()
     })
-}
-
-/// `Rn = MAX / MIN (Rx, Ry)` of signed words.
-pub(super) fn imax(a: P, b: P) -> P {
-    [0, 1].map(|c| (a[c] as i32).max(b[c] as i32) as u32)
-}
-
-pub(super) fn imin(a: P, b: P) -> P {
-    [0, 1].map(|c| (a[c] as i32).min(b[c] as i32) as u32)
 }
 
 /// VERIFIED: `RECIPS` seed fraction by the 7 MSBs of the input fraction (`float_seeds.rs`).
@@ -241,8 +234,6 @@ mod tests {
         assert_eq!(fclip(f(-3.0), f(1.0))[0], (-1.0f32).to_bits());
         assert_eq!(favg(f(1.0), f(2.0))[0], 1.5f32.to_bits());
         assert_eq!(fpass(f(0.25)), f(0.25));
-        assert_eq!(imax([(-2i32) as u32, 1], [3, 0]), [3, 1]);
-        assert_eq!(imin([(-2i32) as u32, 1], [3, 0]), [(-2i32) as u32, 0]);
         assert_eq!(isub([5, 1], [3, 2]), [2, u32::MAX]);
     }
 
