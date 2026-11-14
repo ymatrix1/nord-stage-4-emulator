@@ -11,12 +11,12 @@
 | Location label `E:85`, bank letter plus colon plus page and slot | PL 11:25, BG 17:10 | `ProgLoc::label` (`bay_program/store.rs`) | matches | none |
 | Banks A..H exist (`H:13`, `G:82`, `E:85` seen) | PP 5:40, BG 19:35 | 8 banks (`store.rs`); manual p.12 states A-H | matches | bank count now VERIFIED |
 | Unused location shows `<empty>` | BG 19:35 (`G:82`), PP 5:45 | was `(empty)` (`nav.rs`) | differed | fixed, test |
-| Boxed `E` after the location once edited; cleared after STORE and on load | BG 17:10, PP 5:30 vs 6:20 and 6:30, ORG 5:30 | none (no dirty flag) | differs | bean ns4-ow85 |
-| Live Mode shows `Live 1` as the big title | BG 19:45 | title only in sub line | differs | bean ns4-ow85 |
-| Home rows: section icon, preset id `1:05` or source name plus size (`White Grand XL`, `Silver Grand M`), organ model plus mini drawbars | PL 11:25, BG 17:10, SG 8:40, ORG 5:30 | `oled.rs` `Summary` text rows | differs | bean ns4-ow85 |
+| Boxed `E` after the location once edited; cleared after STORE and on load | BG 17:10, PP 5:30 vs 6:20 and 6:30, ORG 5:30 | `bay_program/edited.rs` edit counter (`AudioHandle::edit_count`) | matches | fixed, tests `edited::tests`, `oled_home::tests` |
+| Live Mode shows `Live 1` as the big title | BG 19:45 | `oled_home::location_title` | matches | fixed, test `live_mode_titles_the_slot_and_drops_the_mark` |
+| Home rows: section icon, preset id `1:05` or source name plus size (`White Grand XL`, `Silver Grand M`), organ model plus mini drawbars | PL 11:25, BG 17:10, SG 8:40, ORG 5:30 | `oled_home::section_rows`: section name rows only | partly | names done; preset id, size letter, mini drawbars open (bean ns4-ow85 out of scope) |
 | Piano dial changes the piano row in place (no overlay) | SG 8:38-8:55 | `piano_overlay.rs` LIST/INFO overlay | unknown (other lane) | note to piano lane |
 | Preset screen titled `LOAD SYNTH PRESET`, id `1:12`, only `Cancel` soft button | PL 5:22 | `PIANO PRESET`, Num/Cat/Cancel (matches manual p.42) | differs from video, matches v1.6x manual | none; OS differs |
-| Preset entry shows boxed `E` until the dial loads it | PL 5:22, manual p.42 | none | unknown | covered by ns4-ow85 |
+| Preset entry shows boxed `E` until the dial loads it | PL 5:22, manual p.42 | edited mark after any preset load through the browser (loading is an edit) | unknown | ASSUMED, same counter |
 | Layer Init screen: `LAYER INIT`, `Press to initialize`, letters `AB / A / A`, soft `All Organ Piano Synth` | SP 1:16, PP 1:02 | text differed | differed | fixed, test |
 | Layer Init All leaves only Piano A on (white grand) | PP 1:06, SP 1:28 | `engine/layer_init.rs` | matches | none |
 | After Init the synth wave shows `Shape Saw`, shape 0.0 | PP 6:30 | `VaWaveform::Saw` | matches | none |
@@ -48,7 +48,7 @@
 ## Implications
 
 - `Verified` now: bank letters A-H, `<empty>` name, Layer Init and Store screen texts, ABC strip order up to `-`, LFO destination tap order, boxed E meaning (also manual p.13).
-- Display work (E marker, rows, hints, rotor angle) is real but larger; tracked in beans ns4-ow85, ns4-wxly, ns4-uo53, ns4-qdzu.
+- Display work: the E marker and `Live N` title are done (ns4-ow85); preset ids, size letters and mini drawbars in the section rows, hints and rotor angle stay open (ns4-wxly, ns4-uo53, ns4-qdzu).
 
 ## Follow-ups
 

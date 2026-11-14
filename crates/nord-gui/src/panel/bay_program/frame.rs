@@ -34,6 +34,7 @@ impl ProgramUi {
             self.title = prog_title.to_string();
             self.last_prog_id = prog_id.to_string();
             self.preset_name = false;
+            self.mark_clean();
             self.extern_led_until = now_ms.saturating_add(700); // Send On Load: a very long blink
         }
 

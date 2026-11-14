@@ -266,14 +266,17 @@ impl ProgramUi {
                 loc,
                 name,
                 category,
-            } => self.library.put(
-                loc,
-                UserProgram {
-                    name,
-                    category,
-                    state,
-                },
-            ),
+            } => {
+                self.library.put(
+                    loc,
+                    UserProgram {
+                        name,
+                        category,
+                        state,
+                    },
+                );
+                self.mark_clean(); // STORE clears the boxed `E`
+            }
             PendingSnapshot::Live(slot) => self.library.put_live(slot, state),
         }
     }
