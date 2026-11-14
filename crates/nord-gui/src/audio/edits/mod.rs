@@ -6,7 +6,7 @@ mod piano;
 mod program;
 mod synth;
 
-pub use fx::FxEdit;
+pub use fx::{chain_of_slot, FxEdit, FxFlag, FxFloat, FX_SLOTS};
 pub use organ::OrganEdit;
 pub use piano::PianoEdit;
 pub use program::ProgramEdit;
@@ -22,7 +22,6 @@ mod tests {
             std::mem::size_of::<OrganEdit>(),
             std::mem::size_of::<PianoEdit>(),
             std::mem::size_of::<SynthEdit>(),
-            std::mem::size_of::<FxEdit>(),
             std::mem::size_of::<ProgramEdit>(),
         ];
         assert!(sizes.iter().all(|&s| s == 0));
