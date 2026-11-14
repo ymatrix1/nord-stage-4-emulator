@@ -9,6 +9,7 @@ use super::types::{HAMMOND_GEAR_RATIOS, HAMMOND_MOTOR_HZ, NUM_TONEWHEELS};
 use super::vibrato_bank::{clamp_fine_tune, wheel_hz};
 use super::{
     level_for_scanner, OrganLayer, OrganModel, ToneWheelSource, VibratoLevel, VibratoLink,
+    WheelCache,
 };
 use std::f32::consts::TAU;
 
@@ -110,9 +111,19 @@ impl OrganLayer {
     /// Lane `x = m00 a + m01 b`, `y = m10 a + m11 b` with the smoothed matrix of
     /// [`LaneMixer`]; in steady state this is the oracle's mix stage (VERIFIED), the lane split
     /// before the linear pickup and crosstalk stages is equivalent to splitting after them.
+    #[cfg(test)]
     pub(super) fn render_tonewheel_lanes(
         &mut self,
         inv_fs: f32,
+    ) -> ([[f32; NUM_TONEWHEELS]; 2], usize) {
+        self.render_tonewheel_lanes_sharing(inv_fs, None)
+    }
+
+    /// [`Self::render_tonewheel_lanes`] with the legacy waveforms optionally taken from `shared`.
+    pub(super) fn render_tonewheel_lanes_sharing(
+        &mut self,
+        inv_fs: f32,
+        shared: Option<&WheelCache>,
     ) -> ([[f32; NUM_TONEWHEELS]; 2], usize) {
         let mut raw = [[0.0f32; NUM_TONEWHEELS]; 2];
         let mut lanes = 1;
@@ -155,22 +166,35 @@ impl OrganLayer {
             }
         } else {
             let bend = self.bend_ratio;
-            for (i, sig) in raw[0].iter_mut().enumerate() {
-                let p = self.tonewheel_phases[i];
-                *sig = match self.model {
-                    OrganModel::B3 => {
-                        // Bottom 12 Hammond complex wheels carry 2nd & 3rd harmonic warmth
-                        if i < 12 {
-                            (p.sin() + 0.18 * (2.0 * p).sin() + 0.09 * (3.0 * p).sin()) * 0.85
-                        } else {
-                            p.sin()
+            let shared_raw =
+                shared.and_then(|c| c.waveforms_for(self.model, &self.tonewheel_phases));
+            if let Some(w) = shared_raw {
+                raw[0] = *w;
+            } else {
+                for (i, sig) in raw[0].iter_mut().enumerate() {
+                    let p = self.tonewheel_phases[i];
+                    *sig = match self.model {
+                        OrganModel::B3 => {
+                            // Bottom 12 Hammond complex wheels carry 2nd & 3rd harmonic warmth
+                            if i < 12 {
+                                (p.sin() + 0.18 * (2.0 * p).sin() + 0.09 * (3.0 * p).sin()) * 0.85
+                            } else {
+                                p.sin()
+                            }
                         }
-                    }
-                    OrganModel::Pipe1 => p.sin(),
-                    OrganModel::Vox | OrganModel::Farfisa | OrganModel::Pipe2 => {
-                        0.7 * p.sin() + 0.3 * (2.0 * p).sin()
-                    }
-                };
+                        OrganModel::Pipe1 => p.sin(),
+                        OrganModel::Vox | OrganModel::Farfisa | OrganModel::Pipe2 => {
+                            0.7 * p.sin() + 0.3 * (2.0 * p).sin()
+                        }
+                    };
+                }
+            }
+            if shared_raw.is_none() {
+                self.wheel_cache
+                    .store(self.model, &self.tonewheel_phases, &raw[0]);
+            }
+            for i in 0..NUM_TONEWHEELS {
+                let p = self.tonewheel_phases[i];
                 let next_p = p + TAU * self.tonewheel_freqs[i] * bend * inv_fs;
                 self.tonewheel_phases[i] = if next_p >= TAU { next_p - TAU } else { next_p };
             }

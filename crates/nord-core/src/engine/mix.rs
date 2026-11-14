@@ -35,7 +35,9 @@ impl Stage4Engine {
 
         let mut raw_layers = [
             self.organ_a.render_frame(),
-            self.organ_b.render_frame(),
+            // Organ B takes A's tonewheel waveforms while their phases are bit-identical.
+            self.organ_b
+                .render_frame_sharing(Some(self.organ_a.wheel_cache())),
             self.piano_a.render_frame(),
             self.piano_b.render_frame(),
             self.synth_a.render_frame(),
