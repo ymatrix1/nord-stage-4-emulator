@@ -113,6 +113,8 @@ mod tests_osc_lfo;
 #[cfg(test)]
 mod tests_pattern_edit;
 #[cfg(test)]
+mod tests_pattern_tie;
+#[cfg(test)]
 mod tests_perf;
 #[cfg(test)]
 mod tests_sample_pitch;

@@ -28,6 +28,8 @@ impl SynthLayer {
 
         if count == 0 {
             self.release_arp_notes();
+            self.perf.tie_out = false;
+            self.perf.tied_in = false;
             self.arp_step = 0;
             return;
         }
@@ -43,9 +45,15 @@ impl SynthLayer {
         } else {
             self.arp_sample_counter -= sixteenth_sec;
 
-            // Release previous arp note
-            self.release_arp_notes();
+            // Release the previous arp note, unless a `Q` step ties it into this one.
+            let keep = self.pattern_keeps_notes();
+            if !keep {
+                self.release_arp_notes();
+            }
             if self.pattern_rest() {
+                if keep && self.perf.cur_len == 0 {
+                    self.release_arp_notes();
+                }
                 return;
             }
 

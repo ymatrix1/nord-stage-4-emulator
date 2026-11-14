@@ -102,12 +102,26 @@ pub struct PerfState {
     pub(super) gate_step: usize,
     pub(super) gate_level: f32,
     pub(super) cur_len: u8,
+    /// The step that just started continues a `Q` tie (its note is already sounding).
+    pub(super) tied_in: bool,
+    /// The step that just started ties into the next one (gate code `Q`).
+    pub(super) tie_out: bool,
     pub(super) cur_accent: bool,
     pub(super) cur_pan: PatternPan,
     /// Pan handed to the voice the arpeggiator is triggering (`0` for every other note).
     pub(super) voice_pan: f32,
     pub(super) phys_keys: [bool; 128],
     pub(super) hold_latched: bool,
+}
+
+impl PerfState {
+    /// The custom pattern plays: it was edited (`pattern_custom`) or the preset dial is 0.
+    ///
+    /// VERIFIED: dial value 0 is not a table entry; the firmware restores the saved custom pattern
+    /// words for it (`GlueArpPtnPreset` `0xC0102F30` / `0xC010FDAC`, `tools/ns4_arp_gate.py dial`).
+    pub fn plays_custom(&self) -> bool {
+        self.pattern_custom || self.pattern_preset == 0
+    }
 }
 
 impl Default for PerfState {
@@ -133,6 +147,8 @@ impl Default for PerfState {
             gate_step: 0,
             gate_level: 1.0,
             cur_len: PLAIN_GATE_EIGHTHS,
+            tied_in: false,
+            tie_out: false,
             cur_accent: false,
             cur_pan: PatternPan::Center,
             voice_pan: 0.0,
@@ -173,22 +189,35 @@ impl SynthLayer {
     }
 
     /// Takes the next pattern step (gate length in eighths) and advances the pattern.
+    ///
+    /// Sets `tied_in` / `tie_out` from the firmware's pattern compiler rule (`0xC02424DC`): a `Q`
+    /// step ties into the following step, never across the end of the pattern.
     fn next_pattern_len(&mut self) -> u8 {
-        if self.perf.pattern_custom {
-            let c = self.perf.custom;
-            let len = usize::from(c.len.clamp(2, 16));
-            let idx = self.perf.gate_step % len;
-            self.perf.gate_step = (idx + 1) % len;
-            self.perf.cur_accent = c.accent[idx];
-            self.perf.cur_pan = c.pan[idx];
-            return c.gate[idx];
-        }
-        let p = PATTERN_PRESETS[usize::from(self.perf.pattern_preset) % PATTERN_PRESET_COUNT];
-        let idx = self.perf.gate_step % usize::from(p.len);
-        self.perf.gate_step = (idx + 1) % usize::from(p.len);
-        self.perf.cur_accent = false;
-        self.perf.cur_pan = p.pan[idx];
-        p.steps[idx]
+        let custom = self.perf.custom;
+        let preset = PATTERN_PRESETS[usize::from(self.perf.pattern_preset) % PATTERN_PRESET_COUNT];
+        let plays_custom = self.perf.plays_custom();
+        let len = if plays_custom {
+            usize::from(custom.len.clamp(2, 16))
+        } else {
+            usize::from(preset.len)
+        };
+        let idx = self.perf.gate_step % len;
+        self.perf.gate_step = (idx + 1) % len;
+        let (gate, tie, accent, pan) = if plays_custom {
+            (
+                custom.gate[idx],
+                custom.tie[idx],
+                custom.accent[idx],
+                custom.pan[idx],
+            )
+        } else {
+            (preset.steps[idx], preset.tie[idx], false, preset.pan[idx])
+        };
+        self.perf.cur_accent = accent;
+        self.perf.cur_pan = pan;
+        self.perf.tied_in = self.perf.tie_out;
+        self.perf.tie_out = tie && gate > 0 && idx + 1 < len;
+        gate
     }
 
     /// Velocity of an arp/poly note: boosted on an accented pattern step.
@@ -209,13 +238,21 @@ impl SynthLayer {
         }
     }
 
-    /// Arp/Poly: advances the pattern at a step boundary; `true` when this step is a rest.
+    /// Arp/Poly: the previous step tied into the one that starts now, so its notes keep sounding.
+    pub(super) fn pattern_keeps_notes(&self) -> bool {
+        self.perf.pattern_on && self.perf.tie_out
+    }
+
+    /// Arp/Poly: advances the pattern at a step boundary; `true` when this step triggers no new
+    /// note (a rest, or the continuation of a `Q` tie).
     pub(super) fn pattern_rest(&mut self) -> bool {
         if !self.perf.pattern_on {
+            self.perf.tie_out = false;
+            self.perf.tied_in = false;
             return false;
         }
         self.perf.cur_len = self.next_pattern_len();
-        self.perf.cur_len == 0
+        self.perf.cur_len == 0 || self.perf.tied_in
     }
 
     /// Arp/Poly with a pattern: ends the note after the step's gate length.
@@ -296,6 +333,8 @@ impl SynthLayer {
         self.arp_step = 0;
         self.perf.gate_counter = 0.0;
         self.perf.gate_step = 0;
+        self.perf.tie_out = false;
+        self.perf.tied_in = false;
         self.perf.cur_len = self.step_len();
         if self.perf.lfo_clock_sync {
             self.lfo_phase = 0.0;

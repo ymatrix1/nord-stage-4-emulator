@@ -1,9 +1,9 @@
 # Synth arpeggiator / gate pattern presets
 
-- **Checked:** 2026-11-14 (first pass 2026-11-13: table not found; second pass: table recovered)
+- **Checked:** 2026-11-14 (first pass 2026-11-13: table not found; second pass: table recovered; third pass: gate lengths, dial value 0, program import, preset-edited marker, section 7)
 - **Sources:**
   - Local, never committed: `.reference/Nord Stage 4 Factory Restore RevK v1.66.ns4b` (384 `.ns4y` synth presets), `target/fw_unpacked/bank0_CODE.bin` and `bank0_SRAM.bin` (OS v1.66), `.reference/ns4decode_pkg/ns4decode_pkg/ns4decode.py` and `ns4maps.py` (third party, MIT), `.reference/Nord Stage 4 User Manual v1.6X-Edition-N.pdf`, `.reference/DSoundman-course/*.srt`.
-  - In repo: [arm-edit-params.csv](arm-edit-params.csv), [arp-preset-table.csv](arp-preset-table.csv) (result), `tools/arm_xref.py`, `tools/arm_emu.py`, `tools/ns4_arp_patterns.py`, `tools/ns4_arp_presets.py` (new, tests in `tools/tests/test_ns4_arp_presets.py`).
+  - In repo: [arm-edit-params.csv](arm-edit-params.csv), [arp-preset-table.csv](arp-preset-table.csv) (result), `tools/arm_xref.py`, `tools/arm_emu.py`, `tools/ns4_arp_patterns.py`, `tools/ns4_arp_presets.py` (tests in `tools/tests/test_ns4_arp_presets.py`), `tools/ns4_arp_gate.py` (third pass, tests in `tools/tests/test_ns4_arp_gate.py`).
   - Web (text not copied): https://www.nordkeyboards.com/products/nord-wave-2/specifications/ ("30+ editable presets"), https://www.norduserforum.com/viewtopic.php?t=25610 (search snippet only: the Stage 4 arp pattern "cannot be edited" beyond the factory patterns), a search for the preset names (`Alien Font`, `Ringaracka`, `RWGate`, found by step 2 below) returned no page that lists them.
 - **Question:** What are the real factory arpeggiator / gate pattern presets of the Nord Stage 4 synth (the engine's 8 presets in `synth/perf.rs` were `ASSUMED`), and how does a `.ns4y` store a pattern?
 
@@ -26,7 +26,7 @@ python tools/ns4_arp_presets.py check ".reference/Nord Stage 4 Factory Restore R
 | 2 | The consumer is the Glue object `GlueArpPtnPreset %c` (string `0xC02B75D8`, vtable `0xC02B7C10`). Its vtable method `0xC0102F30` is the change listener (ids `0x114`, `0x118`) and `0xC010FDAC` is the update method. With `[obj+0xEC] == 2` (preset changed) it reads the dial via `0xC00247E0` (param lookup), indexes a table and computes the words. | VERIFIED: vtable words at `0xC02B7C18..0xC02B7C24`; `python tools/arm_xref.py dis target/fw_unpacked/bank0_CODE.bin 0xC010FF50 0xC0110050`. |
 | 3 | The table is **28 structs of 20 bytes at `0xC02BA860`** (`bank0_CODE.bin` file offset `0x2BA860`): `name*` (+0), `flag` (+4, byte), `steps` (+8, 8 or 16), `A*` (+12), `B*` (+16). `A` and `B` are strings with one character per step: `S` (short), `L` (long), other = rest (`_`). `B` is empty when `flag` = 0. The first pass missed it because it looked for the 32-bit words; the table stores them as text. | VERIFIED: `read_struct` in `tools/ns4_arp_presets.py` (test `test_read_struct_decodes_one_entry` on a synthetic image; real image: `table` command). |
 | 4 | The routine turns the strings into three words: **Dur (`0x118`)**, **Pan (`0x119`)**, **Acc (`0x117`) = 0**, and writes Length (`0x116`) = steps - 1. Dur code per step: rest 3 (`.`); `S` 0 (`E`); `L` followed by a played step 2 (`Q`); `L` followed by a rest (or the last step) 1 (`q`). Pan comes from the merge of `A` and `B` (flag 1 only): 0 `C`, 1 `L`, 2 `R`. Re-implementing the merge was avoided: the tool **runs the real routine** from `0xC010FF50` to `0xC010FE00` on the ARM emulator (`tools/arm_emu.py`, `unicorn`) with the dial read stubbed, and reads r8 (Dur), r6 (Pan), r7 (Acc) and `[sp+4]`. | VERIFIED: the apply code `0xC010FE00..0xC010FEF4` stores r8 to `0x118`, r6 to `0x119`, r7 to `0x117`, `[sp+4]` to `0x116` (literal pools `0xC011069C..0xC01106A4`); emulation output in [arp-preset-table.csv](arp-preset-table.csv). |
-| 5 | Dial value 0 is not a table entry. The parameter default is 0, the default pattern is 8 steps `E`, all centred (the factory backup holds it in 4 layers), so index 0 of the engine is that pattern. | ASSUMED for the identity (no firmware code path for 0 was traced: the emulated index -1 reads the preceding data and is meaningless); the pattern itself is EMPIRICAL (`EEEEEEEE`, 4 factory layers). |
+| 5 | Dial value 0 is not a table entry. **Superseded by section 7.1:** the firmware treats 0 as "the saved custom pattern" (restored into the pattern words), not as a built-in default pattern. | VERIFIED (section 7.1) |
 | 6 | Preset names are the string just before each `A` (struct field `name*`). They are not copied into the repo (short Nord-authored titles); `python tools/ns4_arp_presets.py table ...` prints them. | Tool output (column `name`). |
 
 ## 3. Cross-check against the factory programs (angle 2)
@@ -57,12 +57,55 @@ Five fields in the `0x32` Layer block (bits relative to the layer base `248 / 65
 | Item | Status |
 |---|---|
 | Steps, gate code and pan of presets 1..28 | VERIFIED (firmware routine; 5 presets equal factory layers exactly and 2 more in gate, section 3) |
-| Preset 0 = default pattern | ASSUMED (section 2 row 5) |
-| Gate durations of `E`, `q`, `Q` in eighths (4, 6, 8) | ASSUMED: the firmware shows only that `Q` is a long step before a played step and `q` a long step before a rest; the durations are unmeasured |
+| Preset 0 = the saved custom pattern (default: 8 steps `E`, centred) | VERIFIED (listener and update method replayed, section 7.1); the default pattern itself EMPIRICAL (`EEEEEEEE`, 4 factory layers) |
+| Gate durations: `E` 4 eighths, `q` 8, `Q` 8 + tie into the next step (was ASSUMED 4, 6, 8) | VERIFIED relative to the firmware pattern compiler (section 7.2); one slot = half a step in time EMPIRICAL |
 | Accent of presets | VERIFIED 0 (`r7` = 0 in the apply code) |
 
-## 6. Implications and follow-ups
+## 6. Implications and follow-ups (second pass, all four closed in section 7)
 
-- The preset dial now matches the hardware in count, order, length, rhythm and pan; the sound of the gate lengths is still approximate.
-- The Pattern page display of the hardware draws the strings (`S`/`L`/`_`) and the merge of `A` and `B` (code `0xC010FDAC..0xC01106A8`, also a "preset dirty" comparison against the current words); the emulator does not model the dirty marker yet.
-- Follow-ups: (1) measure the gate duration of `E`, `q`, `Q` (recording of presets 10, 12 or 24, which contain `q`); (2) decode the pattern words in `crates/nord-core/src/cbin/synth_preset.rs` and import factory patterns into `CustomPattern`; (3) model `Edt_Syn_kArpPtnPresetDirty` (the hardware shows a preset as edited once a step changes); (4) trace what the hardware does for dial value 0.
+- The preset dial matches the hardware in count, order, length, rhythm and pan.
+- Open after the second pass: the gate durations of `E q Q`, the meaning of dial value 0, importing factory patterns from programs, and the "preset edited" marker. Section 7 answers each.
+
+## 7. Third pass
+
+### 7.1 Dial value 0 (VERIFIED)
+
+The listener `0xC0102F30` (events of `0x114` and `0x118`) and the update method `0xC010FDAC` keep these fields in the Glue object: `[+0xE8]` snapshot flag, `[+0xEC]` mode (1 restore, 2 apply preset), `[+0xF0]` the previous dial value, and a cache of the four pattern words (`[+0xF4]` Dur, `[+0xF8]` Pan, `[+0xFC]` Acc, `[+0x100]` Length, read from the registry slots `0x460`, `0x464`, `0x45C`, `0x458`). `python tools/ns4_arp_gate.py dial` runs both routines on the ARM emulator:
+
+| Event | Snapshot | Mode | What the update method does |
+|---|---|---|---|
+| dial 0 to a preset (1..28) | 1 | 2 | caches the current words, then writes the table words (section 2) |
+| preset to preset | 0 | 2 | writes the table words (the cached custom words stay) |
+| dial to 0 | 0 | 1 | **writes the cached words back** to `0x118`, `0x119`, `0x117`, `0x116` and sets `0x114` to 0 |
+| gate (`0x118`) edit while a preset is selected | 1 | 1 | caches the edited words, writes them back and **sets the dial to 0** |
+| gate edit at dial 0 | 1 | 0 | nothing |
+
+So 0 is the user's own pattern (the words a program stores), and a gate edit on a preset turns the dial to 0: that is the "preset edited -> custom" behaviour. Only `0x114` and `0x118` are listened to: pan, accent and length edits do not change the dial. Registry slot `0x450` is `0x114` (slots go in steps of 4 from `0x114`: Len `0x116` at `0x458`, then Acc, Dur, Pan).
+
+### 7.2 Gate durations (VERIFIED relative, EMPIRICAL absolute)
+
+Where the words are consumed: the Glue update method copies Dur, Pan and Acc into the per-layer arp object (`[obj+0x18/0x1C/0x20]`, table `0xC054CBD0`, `0xC011DF64..0xC011DF80`) and calls the **pattern compiler `0xC02424DC`**. `[obj+0x24]` is `steps * 2` (`0xC011C510..0xC011C524`): the compiler works in two **slots** per step, and the step code of slot `s` is `(Dur >> (s & ~1)) & 3`. It writes one record `{type, tick, pan, acc}` per slot: type 0 or 1 note on (1 = on without a preceding off), 2 hold, 3 note off; `tick` is the arp note index. `python tools/ns4_arp_gate.py gates` runs the real compiler. Result:
+
+| Code | Slots on | Eighths of a step | Next step |
+|---|---|---|---|
+| `E` | 1 | 4 | independent note |
+| `q` | 2 | 8 (a full step) | independent note |
+| `Q` | 2, then held | 8 plus the next step's own gate | **tied**: the next step does not trigger and the arpeggio does not advance (same tick) |
+| `.` | 0 | 0 | rest (note off at its first slot) |
+
+Examples (type per slot, slot 0 first): `EE` = `0303`; `QE` = `0223` (one note of 3 slots = 12 eighths); `Qq.` = one note of 4 slots; `EEq.` = `03030232` (the `q` lasts two slots and ends at the rest). The first step of a cycle never continues a tie, so a `Q` on the last step lasts a full step. The per-step engine rule (`E` 4, `q` 8, `Q` 8 + tie, `.` 0) reproduces every note of the 29 presets and of all 1360 gate strings of 2 to 5 steps (0 differences, `check_gates`).
+
+Limits: that **one slot is half a step in time** is structural (two slots per step in the compiler; the manual, p.36, says the arpeggiator plays 1/8 notes and one step is one 1/8 note), but the player that walks the records was not located (the ARM scan for readers of the Dur registry slot found only the Glue, the compiler input copy and the OLED grid drawer `0xC012CB2C`), so the absolute duration is EMPIRICAL. Presets 10, 12, 22 and 24 (`q`) become full-step notes instead of the earlier 6/8.
+
+### 7.3 Importing factory patterns (done)
+
+`cbin/synth_pattern.rs` decodes the fields of section 4 from the Layer block (`SynthLayerDecoded::pattern`, lossless pack) and `apply_decoded_layer` imports them: `CustomPattern::from_words(steps, gate, accent, pan)` (gate `E` 4, `q` 8, `Q` 8 + tie, `.` 0; accent digit 1; pan `C L R`), `pattern_on` from the enable bit, preset dial 0. A layer whose pattern bits are all zero (blank payload) keeps the engine default. Tests use synthetic payloads built in memory (the words of preset 13); no firmware or factory data is committed.
+
+### 7.4 Preset edited marker (modelled)
+
+`Edt_Syn_kArpPtnPresetDirty` (`0x115`) appears only as a parameter of the pattern page (`0xC01290D0`, page builders `0xC01A89D8` and `0xC01AA2CC`); no code that writes it was found, so its display role is ASSUMED. The behaviour that is VERIFIED is section 7.1: a gate edit turns the dial to 0. Engine: `SynthLayer::pattern_dial_value()` (0 while the custom pattern plays), `select_pattern_preset(v)`, and `set_step_gate` copies the playing preset into the custom pattern first (`customize_preset`). The GUI wiring of the dial readout (`panel/bay_program`, `panel/ctl.rs`) is not part of this change.
+
+### 7.5 Implications and follow-ups
+
+- Factory programs reproduce their stored pattern; the pattern dial reads 0 for them.
+- Follow-ups: locate the record player to confirm the slot duration in time; show `pattern_dial_value()` in the OLED (GUI lane); decode the arp mode bits (`+136`, 2 bits) of a program so Poly / Gate programs load in their mode; the `q`-then-played-step records (type 1) only occur in user patterns and are played as a retrigger.
