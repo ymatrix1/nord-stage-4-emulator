@@ -136,6 +136,18 @@ impl SynthLayer {
         } else {
             self.waveform
         };
+        // ASSUMED (opt-in `strip_stages`): the modelled ANALOG stages play instead of the legacy
+        // waveform; the shape word of Shape Square is the strip shape (idle 0.5), SUPER spread = Osc Ctrl.
+        let stage_osc = if strip.is_some() && self.strip_stages {
+            self.strip_stage
+        } else {
+            None
+        };
+        let stage_ctrl = if self.strip_stage == Some(FwStage::ShapeSquare) {
+            self.strip_shape.unwrap_or(0.5)
+        } else {
+            self.supersaw_detune
+        };
         let saw_model = if strip.is_some() {
             SawModel::FirmwareSy
         } else {
@@ -278,7 +290,9 @@ impl SynthLayer {
 
             let (raw_osc_l, raw_osc_r) = match self.osc_mode {
                 SynthOscMode::Analog => {
-                    if uni_count > 0 {
+                    if let Some(stage) = stage_osc {
+                        (v.stage.sample(stage, t, dt, eff_freq, stage_ctrl), None)
+                    } else if uni_count > 0 {
                         let mut acc = (0.0f32, 0.0f32);
                         for (k, voice) in UNISON_VOICES[uni_level][..uni_count]
                             .iter()

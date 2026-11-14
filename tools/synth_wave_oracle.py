@@ -25,6 +25,9 @@ from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+import synth_stage_noise as noise
+import synth_stage_shapes as shapes
+import synth_stage_unison as unison
 import synth_wave_model as m
 
 # VERIFIED (`docs/research/org-stage-map.md` s2-s3, listing of the pass): stage-A call frame.
@@ -37,6 +40,13 @@ STAGE_PULSE = 0x121B99
 STAGE_SINE = 0x120CD0
 STAGE_TRIANGLE = 0x121183
 STAGE_SHAPE_SAW = 0x12169D
+STAGE_NOISE = 0x121FD8
+STAGE_SHAPE_SQUARE = 0x121AB5
+STAGE_SUPER = 0x121D6D
+STAGE_MULTI = 0x121C54
+UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI)
+PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
+NOISE_STATE = 0xB2EF9  # DM state word of lane x (lane y one above)
 PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not duplicated in SIMD)
 DEVS = ("0x282c0380=1", "0x3108d008=5")
 
@@ -52,6 +62,10 @@ MODELS = {
     STAGE_SINE: m.stage_sine,
     STAGE_TRIANGLE: m.stage_triangle,
     STAGE_SHAPE_SAW: m.stage_shape_saw,
+    STAGE_NOISE: noise.stage_noise,
+    STAGE_SHAPE_SQUARE: shapes.stage_shape_square,
+    STAGE_SUPER: unison.stage_super,
+    STAGE_MULTI: unison.stage_multi,
 }
 
 
@@ -66,11 +80,20 @@ def pokes(lanes: list[m.Lane]) -> dict[int, int]:
         for off, w in zip((-14, -16, -12, -10), ln.weights, strict=True):
             d[PARAM + off + i] = w
         d[PARAM + 16 + i] = ln.out_gain
+        d[NOISE_STATE + i] = ln.state
         d[PULSE_WORD] = lanes[0].pulse
+        for j, (rho, ph) in enumerate(zip(ln.ratios, ln.phases, strict=False)):
+            d[PARAM - 32 + 2 * j + i] = rho
+            d[PHASE_TABLE + 2 * j + i] = ph
+    for k, c in enumerate(lanes[0].octaves):
+        d[unison.MULTI_OCTAVES_ADDR + k] = c
+    for j, grp in enumerate(lanes[0].groups):
+        for k, w in enumerate(grp):
+            d[PARAM - 16 + 4 * j + k] = w
     return d
 
 
-def random_lanes(rng: random.Random) -> list[m.Lane]:
+def random_lanes(rng: random.Random, unison: bool = False) -> list[m.Lane]:
     """Two lanes with random phases, ratios (2^-2 .. 2^5.3), weights, gain and pulse word."""
     lanes = [
         m.Lane(
@@ -84,12 +107,21 @@ def random_lanes(rng: random.Random) -> list[m.Lane]:
             weights=tuple(fbits(rng.uniform(-0.5, 0.5)) for _ in range(4)),
             out_gain=fbits(rng.uniform(0.5, 1.5)),
             pulse=0,
+            state=rng.getrandbits(32),
         )
         for _ in range(2)
     ]
     pulse = rng.getrandbits(32)
+    octaves = tuple(fbits(2 ** rng.uniform(-1, 1.0)) for _ in range(3))
+    groups = tuple(tuple(fbits(rng.uniform(-0.3, 0.3)) for _ in range(4)) for _ in range(8))
     for ln in lanes:
         ln.pulse = pulse
+        if not unison:
+            continue
+        ln.ratios = tuple(fbits(2 ** rng.uniform(-2, 3.0)) for _ in range(8))
+        ln.phases = tuple(rng.getrandbits(32) for _ in range(8))
+        ln.groups = groups
+        ln.octaves = octaves
     return lanes
 
 
@@ -106,6 +138,8 @@ def run_pass(
             cmd += ["--dev", dev]
         cmd += ["--passes", "1", "--msg-base", "0", "--msg-script", str(sp)]
         cmd += ["--buf", f"{RECORD - 38:#x}:64:f32", "--buf", f"{PULSE_WORD - 8:#x}:24:f32"]
+        cmd += ["--buf", f"{NOISE_STATE - 2:#x}:8:f32"]
+        cmd += ["--buf", f"{PARAM - 32:#x}:64:f32", "--buf", f"{PHASE_TABLE:#x}:16:f32"]
         cmd += ["--csv", str(cp)]
         r = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if "fault" in r.stdout or not cp.exists():
@@ -120,7 +154,7 @@ def compare(
     """`(equal words, total words)` of model against oracle over random trials."""
     equal = total = 0
     for seed in range(1, trials + 1):
-        lanes = random_lanes(random.Random(seed))
+        lanes = random_lanes(random.Random(seed), stage in UNISON_STAGES)
         got = run_pass(sharc_org, image, lanes, stage)
         for i, ln in enumerate(lanes):
             ln.pitch = got[RECORD - 29 + i]
@@ -128,6 +162,7 @@ def compare(
             ln.shape_b = got[RECORD + 19 + i]
             if stage == STAGE_SHAPE_SAW:
                 ln.shape_a = got[RECORD - 5 + i]
+            ln.spread = got[RECORD - 5 + i]
         model = MODELS[stage]
         want, _, _ = model(lanes)
         for i in (0, 1):

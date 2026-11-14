@@ -134,6 +134,7 @@ impl SynthLayer {
             mod_feedback_state: 0.0,
             mod_env: 1.0,
             supersaw_phases: SUPERSAW_PHASE_INITS,
+            stage: FwStageState::default(),
             amp_env: 0.01,
             filter: self.voices[idx].filter,
             filter_right: self.voices[idx].filter_right,

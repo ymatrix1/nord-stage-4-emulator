@@ -66,7 +66,7 @@ The oscillator stages share one skeleton: pitch and two ratios give two incremen
 | `0x12169D` | SHAPE (3, 1) Shape Saw (182 factory layers) | `0x12501F` twice at amplitude 0.5, the second shifted by `2 FIX(-w 2^30)`, `w = DM(-5, I2)` (idle 0.5) | `stage_shape_saw`: 320 of 320 (the shape word only takes the idle value in the oracle) |
 | `0x1212D3` | SHAPE (3, 0) Shape Triangle | `0x1251D4` parabola difference | 320 of 320 (section 1) |
 
-Six recorded oracle cases per new stage are in [data/synth-stage-oracle-cases.json](data/synth-stage-oracle-cases.json). Six recorded oracle cases per new stage are in the JSON. Not modelled: SUB OSC, SYNC, Shape Square / Half Sine / Parabolic, SHAPE SINE, MULTI, SUPER, MISC.
+Six recorded oracle cases per new stage are in [data/synth-stage-oracle-cases.json](data/synth-stage-oracle-cases.json). Six recorded oracle cases per new stage are in the JSON. Modelled since in [synth-stage-models](synth-stage-models.md): noise, Shape Square, SUPER wave 0, MULTI. Not modelled: SUB OSC, SYNC, Shape Half Sine / Parabolic, SHAPE SINE, SUPER 1..4, MISC.
 
 ## 7. Preset category / wave against the edit-id domain (VERIFIED by range)
 

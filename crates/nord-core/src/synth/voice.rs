@@ -36,6 +36,8 @@ pub struct SynthVoice {
     pub uni_phase: [f32; 4],
     pub uni_supersaw: [[f32; SUPERSAW_VOICES]; 4],
     pub supersaw_phases: [f32; SUPERSAW_VOICES],
+    /// Firmware stage oscillator state (`fw_stages.rs`, strip chain with `strip_stages`).
+    pub stage: FwStageState,
     pub amp_env: f32,
     pub filter: ZdfFilter,
     pub filter_right: ZdfFilter,
@@ -77,6 +79,7 @@ impl Default for SynthVoice {
             uni_phase: UNISON_START_PHASES,
             uni_supersaw: [SUPERSAW_PHASE_INITS; 4],
             supersaw_phases: SUPERSAW_PHASE_INITS,
+            stage: FwStageState::default(),
             amp_env: 0.0,
             filter: ZdfFilter::default(),
             filter_right: ZdfFilter::default(),

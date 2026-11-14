@@ -25,7 +25,7 @@ const FOUR_THIRDS: f32 = 1.333_333_4;
 
 /// Signed phase `x` of the helper (`FLOAT R0 BY -31`, -1..1) for a phase in cycles.
 #[inline]
-fn signed_phase(p: f32) -> f32 {
+pub(super) fn signed_phase(p: f32) -> f32 {
     let q = p - p.floor();
     2.0 * if q >= 0.5 { q - 1.0 } else { q }
 }

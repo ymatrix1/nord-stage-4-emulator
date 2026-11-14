@@ -6,7 +6,7 @@
 use crate::cbin::{cutoff_hz_to_norm, SynthLayerDecoded};
 use crate::morph::MorphParameter;
 use crate::synth::{
-    ArpMode, NotePriority, SynthLayer, SynthOscMode, VaWaveform, VibratoMode, FM_RATIOS,
+    ArpMode, FwStage, NotePriority, SynthLayer, SynthOscMode, VaWaveform, VibratoMode, FM_RATIOS,
     NUM_WAVETABLES,
 };
 
@@ -40,6 +40,11 @@ fn apply_oscillator(synth: &mut SynthLayer, dec: &SynthLayerDecoded) {
     synth.osc_mode = dec.osc_mode;
     synth.waveform = dec.waveform;
     synth.osc_shape_category = dec.osc_mode == SynthOscMode::Analog && dec.osc_category == 3;
+    synth.strip_stage = if dec.osc_mode == SynthOscMode::Analog {
+        FwStage::from_category_wave(dec.osc_category, dec.osc_wave)
+    } else {
+        None
+    };
     synth.fm_amount = ctrl_norm;
     synth.fm_ratio = FM_RATIOS[usize::from(dec.wave_id) % FM_RATIOS.len()];
     synth.fm_feedback = if (dec.wave_id & 1) != 0 { 0.25 } else { 0.0 };
