@@ -6,7 +6,7 @@ mod piano;
 mod program;
 mod synth;
 
-pub use fx::FxEdit;
+pub use fx::{chain_of_slot, FxEdit, FxFlag, FxFloat, FX_SLOTS};
 pub use organ::OrganEdit;
 pub use piano::PianoEdit;
 pub use program::{CopyItem, MorphTarget, ProgramEdit, SplitCfg};
