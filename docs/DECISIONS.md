@@ -37,7 +37,7 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D38](#d38-the-samples-defaults-stay-the-sample-loader-0xc01d710c-runs-but-the-voice-update-is-not-reached) | 2026-11-14 | The SAMPLES defaults stay; the sample loader `0xC01D710C` runs but the voice update is not reached | accepted |
 | [D46](#d46-the-samples-kernel-rule-by-key-is-the-default-the-voice-key-is-the-effective-key) | 2026-11-14 | The SAMPLES kernel rule by key is the default; the voice key is the effective key | accepted |
 | [D47](#d47-the-samples-pitch-law-stays-opt-in-the-voice-update-runs-in-the-harness-with-a-queue-pump-and-one-dsp-status-bit) | 2026-11-14 | The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit | accepted |
-| [D48](#d48-cbin-checksum-is-crc-32-from-0x2c-preset-files-re-encode-by-bit-merge-and-load-through-the-program-section-functions) | 2026-11-14 | `CBIN` checksum is CRC-32 from `0x2C`; preset files re-encode by bit merge and load through the program section functions | accepted |
+| [D51](#d51-cbin-checksum-is-crc-32-from-0x2c-preset-files-re-encode-by-bit-merge-and-load-through-the-program-section-functions) | 2026-11-14 | `CBIN` checksum is CRC-32 from `0x2C`; preset files re-encode by bit merge and load through the program section functions | accepted |
 | [D39](#d39-the-fx-receiver-of-the-smp-stream-is-found-unity-with-one-common-path-the-piano-defaults-stay) | 2026-11-14 | The FX receiver of the SMP stream is found: unity, one path for piano and organ; the piano defaults stay | accepted |
 | [D45](#d45-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
@@ -428,7 +428,7 @@ cabinet taps fingerprint response test.
 - **Alternatives:** Forge the status bit in the firmware image (rejected: a harness hook is enough and visible); rebuild `sample_pitch_fw` on the per-zone fields now (rejected: the source of those fields in the sample map is not decoded).
 - **Impact:** None on renders; a new tool and tests; OQ22 and TD-08 narrowed.
 
-### D48. `CBIN` checksum is CRC-32 from `0x2C`; preset files re-encode by bit merge and load through the program section functions
+### D51. `CBIN` checksum is CRC-32 from `0x2C`; preset files re-encode by bit merge and load through the program section functions
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (PR for `feat/preset-library-store-load`; evidence [cbin-and-presets](specs/cbin-and-presets.md) section 5.6)
