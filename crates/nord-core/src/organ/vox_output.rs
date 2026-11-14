@@ -25,7 +25,8 @@ const GAIN_STEP: f64 = 0.001;
 /// VERIFIED: gain targets after the ARM install of model 1 (`G + 0 = 1.0`, `G + 1 = 0`,
 /// `docs/research/organ-model-paths.md` section 4).
 const GAIN_TARGETS: [f32; 2] = [1.0, 0.0];
-/// ASSUMED: the gain word `DM(G + 0xB)` is the image default 1.0 (no ARM message found).
+/// The image default of the gain word `DM(G + 0xB)`; the value the ARM boot writes (0.6199) is applied
+/// by `VoxSource` (`OUTPUT_LEVEL`), so this module stays comparable to the golden model.
 const GAIN_WORD: f32 = 1.0;
 
 /// VERIFIED (image parameter block, `sharc-chain --dump 0xE2CC0:64`): section coefficients
