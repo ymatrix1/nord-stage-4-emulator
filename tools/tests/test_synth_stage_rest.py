@@ -9,12 +9,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import synth_stage_misc as misc  # noqa: E402
 import synth_stage_noise as noise  # noqa: E402
 import synth_stage_record as rec  # noqa: E402
 import synth_stage_shape_sine as shape_sine  # noqa: E402
 import synth_stage_shape_sine2 as sine2  # noqa: E402
 import synth_stage_shape_sine3 as sine3  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
+import synth_stage_sub as sub  # noqa: E402
 import synth_stage_super1 as super1  # noqa: E402
 import synth_stage_sync as sync  # noqa: E402
 import synth_stage_sync1 as sync1  # noqa: E402
@@ -46,6 +48,10 @@ MODELS = {
     "0x1239be": sync6.stage_sync6,
     "0x123c7c": sync7.stage_sync7,
     "0x123fe9": sync6.stage_sync8,
+    "0x122030": misc.stage_misc0,
+    "0x122151": misc.stage_misc1,
+    "0x122417": misc.stage_misc2,
+    "0x12179a": sub.stage_sub_osc,
 }
 
 
