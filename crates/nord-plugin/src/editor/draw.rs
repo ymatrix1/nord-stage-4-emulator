@@ -81,7 +81,7 @@ pub fn draw_dim_overlay(ui: &mut Ui, origin: egui::Pos2, coverage: &Coverage) ->
         ui.painter().rect_stroke(
             rect,
             3.0,
-            Stroke::new(1.0, Color32::from_black_alpha(90)),
+            Stroke::new(1.0_f32, Color32::from_black_alpha(90)),
             StrokeKind::Inside,
         );
         ui.interact(rect, Id::new(("dimmed", id)), Sense::click_and_drag())
