@@ -118,6 +118,10 @@ Ranking criterion: size of the spectral/level/width gap that survives every vari
 - Add segments for delay/compressor programs (e.g. Boxxx, A:28, Pipe1 plus delay) to exercise `FirmwareFx`.
 - Replace the pure-Python spectrum in `video_ref.analyze_wav` with numpy; the 16-variant run takes about 6 minutes, nearly all in analysis.
 
+## Update: Pipe clip is synth-dominated (2026-11-13)
+
+The `organ_pipe` clip has two synth layers on. Section isolation, the oracle line check (0.00 dB per line, three chords) and a power-mix fit are in [pipe-video-gap](pipe-video-gap.md): the synth section alone scores 2.45, the organ alone 6.4 to 6.5, and the Legacy waveform "wins" only by filling the synth's treble deficit. The Pipe default stays the firmware bank.
+
 ## Update: B3 and Vox with the captured key-down weights (2026-11-13)
 
 `ToneWheelSource::B3Wheels` now applies the captured per-wheel amplitudes and per-key footage weights and `Vox` the captured four-footage key map ([organ-keydown-weights](organ-keydown-weights.md)); both stay opt-in. Re-run of `organ_b3` and `organ_vox` (same clips): B3 `b3wheels` RMS gap +14.9 to +3.1 dB, clipping 10.3 % to 0.022 % of samples, crest 5.6 to 17.5 dB (hardware 17.7), presence +1.3 dB, brilliance +8.0 dB, score 4.83 to 4.76; Vox `vox` score 7.66 to 3.44 (default 5.68), mid +9.9 dB, presence and brilliance -2.3 and -2.5 dB, RMS -6.5 dB. The default rows are unchanged. Raw table: [organ-keydown-weights](organ-keydown-weights.md) section 4.
@@ -125,3 +129,6 @@ Ranking criterion: size of the spectral/level/width gap that survives every vari
 Update 2 (B3 tail): with the processor tail's amplitude response (`b3_tail.rs`, [organ-b3-tail](organ-b3-tail.md)) the `b3wheels` row of `organ_b3` becomes sub +16.8, low -3.0, mid -11.9, presence +1.2, brilliance +7.4 dB, RMS -2.6 dB, crest 23.1 dB, 0.021 % at full scale, score 8.07 (4.76 without the tail, default 4.83): the oracle-faithful chain is 12 dB too dark in the mid band against the recording, so the default stays Legacy.
 
 Update 3 (stage ablation): the B3 mid deficit of the tail variant and the Vox mid excess are not post-chain effects (rotary, reverb, vibrato, firmware FX, delay, EQ, modulation move the mid band by under 1 dB; the Twin amp lifts Vox presence and brilliance). See [b3-vox-video-gap](b3-vox-video-gap.md).
+
+Update 4 (piano downstream level): the piano `+12 dB` (all notes, velocity 100) is not an engine stage. At replay velocity 64 it is +4.8 dB (`--confirmed-only` +2.3), against the Pipe yardstick (oracle-verified absolute scale, +7.3 dB) the piano is +2.4 dB; brilliance flips from +5.4 to -15.3 dB between velocity 100 and 64. The only engine-side difference is the 0.83 dB sample scale (`--firmware-piano-bus`). Variants `piano-bus`, `vel-64`, `vel-64-piano-bus` are in the segment spec. See [piano-downstream-level](piano-downstream-level.md).
+

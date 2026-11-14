@@ -70,6 +70,11 @@ pub enum MidiEvent {
         channel: u8,
         program: u8,
     },
+    /// 14-bit pitch bend, `0..=16383`, centre `8192`.
+    PitchBend {
+        channel: u8,
+        value: u16,
+    },
 }
 
 impl MidiEvent {
@@ -117,6 +122,10 @@ impl MidiEvent {
                 channel,
                 pressure: bytes[1] & 0x7F,
             }),
+            0xE0 if bytes.len() >= 3 => Some(Self::PitchBend {
+                channel,
+                value: (u16::from(bytes[2] & 0x7F) << 7) | u16::from(bytes[1] & 0x7F),
+            }),
             _ => None,
         }
     }
@@ -157,6 +166,14 @@ mod tests {
             Some(MidiEvent::ChannelAftertouch {
                 channel: 2,
                 pressure: 99
+            })
+        );
+        // LSB 0x01, MSB 0x40 -> 8193 (one step above centre).
+        assert_eq!(
+            MidiEvent::from_bytes(&[0xE3, 0x01, 0x40]),
+            Some(MidiEvent::PitchBend {
+                channel: 3,
+                value: 8193
             })
         );
     }
