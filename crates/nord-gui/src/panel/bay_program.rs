@@ -28,6 +28,7 @@ pub mod name;
 pub mod nav;
 pub mod oled;
 pub mod oled_paint;
+pub mod organize;
 pub mod soft;
 pub mod split;
 pub mod store;

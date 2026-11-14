@@ -233,5 +233,5 @@ fn binding_totals_are_pinned() {
             Binding::Unsupported(_) => un += 1,
         }
     }
-    assert_eq!((bound, ui, un), (111, 11, 7));
+    assert_eq!((bound, ui, un), (111, 16, 2));
 }
