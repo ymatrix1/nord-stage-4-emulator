@@ -13,7 +13,7 @@ use super::presets::{
 use super::synth_osc::map_osc_mode_and_wave;
 use super::synth_osc::wave_from_flat_index;
 use super::synth_pattern::SynthPatternDecoded;
-use crate::synth::{FilterModel, SynthOscMode, VaWaveform};
+use crate::synth::{EnvKnobs, FilterModel, StripKnobs, SynthOscMode, VaWaveform};
 use serde::{Deserialize, Serialize};
 
 /// Decoded single Synth layer configuration (`0x32` Layer + `0x2F` Sound).
@@ -85,6 +85,9 @@ pub struct SynthLayerDecoded {
     pub filter_env_attack_ms: f32,
     pub filter_env_decay_ms: f32,
     pub filter_env_release_ms: f32,
+    /// Raw amp and filter envelope knobs (`0..=127`) of a decoded program: the ARM writes the rate
+    /// index `knob - 64` (`synth/fw_knob_laws.rs`). `None` for a layer built in code.
+    pub knobs: Option<StripKnobs>,
     /// Filter envelope depth follows velocity (on/off on the panel).
     pub filter_velocity: bool,
     pub osc_env_attack_ms: f32,
@@ -158,6 +161,7 @@ impl Default for SynthLayerDecoded {
             filter_env_attack_ms: 10.0,
             filter_env_decay_ms: 300.0,
             filter_env_release_ms: 250.0,
+            knobs: None,
             filter_velocity: false,
             osc_env_attack_ms: 10.0,
             osc_env_decay_ms: 300.0,
@@ -326,10 +330,12 @@ fn unpack_synth_layer_pair(
     let (lfo_amt_raw, _) = read_morph(r, sound_base + 164, 7, 127)?;
 
     r.set_bit_pos(sound_base + 195)?;
-    let env_attack_ms = ENV_ATTACK_MS_TABLE[(r.read_bits(7)? as usize).min(127)];
+    let atk_raw = r.read_bits(7)? as usize;
+    let env_attack_ms = ENV_ATTACK_MS_TABLE[atk_raw.min(127)];
     let dcy_raw = r.read_bits(7)? as usize;
     let env_decay_ms = ENV_DECAY_MS_TABLE[dcy_raw.min(127)];
-    let env_release_ms = ENV_RELEASE_MS_TABLE[(r.read_bits(7)? as usize).min(127)];
+    let rel_raw = r.read_bits(7)? as usize;
+    let env_release_ms = ENV_RELEASE_MS_TABLE[rel_raw.min(127)];
     r.set_bit_pos(sound_base + 216)?;
     let amp_velocity = r.read_bits(2)? as u8;
 
@@ -414,6 +420,18 @@ fn unpack_synth_layer_pair(
         filter_env_attack_ms: ENV_ATTACK_MS_TABLE[fenv_atk.min(127)],
         filter_env_decay_ms: ENV_DECAY_MS_TABLE[fenv_dcy.min(127)],
         filter_env_release_ms: ENV_RELEASE_MS_TABLE[fenv_rel.min(127)],
+        knobs: Some(StripKnobs {
+            amp: EnvKnobs {
+                attack: atk_raw.min(127) as u8,
+                decay: dcy_raw.min(127) as u8,
+                release: rel_raw.min(127) as u8,
+            },
+            filter: EnvKnobs {
+                attack: fenv_atk.min(127) as u8,
+                decay: fenv_dcy.min(127) as u8,
+                release: fenv_rel.min(127) as u8,
+            },
+        }),
         filter_velocity,
         osc_env_attack_ms: ENV_ATTACK_MS_TABLE[oenv_atk.min(127)],
         osc_env_decay_ms: ENV_DECAY_MS_TABLE[oenv_dcy.min(127)],

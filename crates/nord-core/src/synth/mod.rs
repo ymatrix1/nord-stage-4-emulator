@@ -24,6 +24,7 @@ mod fw_env_rates;
 mod fw_filter;
 mod fw_filter_table_d;
 mod fw_filter_tables;
+mod fw_knob_laws;
 mod fw_ladder;
 mod fw_ladder_tables;
 mod fw_misc;
@@ -92,7 +93,12 @@ pub use strip_map::{
     attack_index, attack_seconds, cutoff_hz_from_word, decay_index, decay_seconds,
     strip_word_for_cutoff, STRIP_PASS_FRAMES,
 };
+pub use fw_knob_laws::{
+    cutoff_word_for_knob, rate_index_for_knob, rate_word_for_knob, unit_word_for_knob, EnvKnobs,
+    StripKnobs, DECAY_DISPLAY_TAU,
+};
 pub use strip_path::{StripEnvRecords, StripParams, StripVoice, SynthChain};
+use strip_path::StripKey;
 pub use voice::SynthVoice;
 #[cfg(test)]
 mod tests_envelope;
@@ -243,6 +249,12 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
+    /// Strip chain only, opt-in (default off): the envelope rate indices come straight from the
+    /// stored knobs (`strip_knobs`, `fw_knob_laws.rs`: index = knob - 64, VERIFIED run) instead of
+    /// the ASSUMED displayed-time search of `strip_map.rs`. Layers without knobs keep the search.
+    pub knob_laws: bool,
+    /// Raw envelope knobs of the loaded program (set by the decoded-layer import).
+    pub strip_knobs: Option<StripKnobs>,
     /// `SAMPLES` oscillator only (default on, D40): pick the 12-tap kernel with the firmware key
     /// rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
     /// VERIFIED: the voice update stores the played key (`[voice + 8]`) and sends the kernel base
@@ -251,7 +263,7 @@ pub struct SynthLayer {
     /// `SAMPLES` oscillator only, opt-in (default off): the note-to-step ratio follows the firmware
     /// exponent tables (`sinc::pitch_law::key_ratio`) instead of exact `2^(n/12)`.
     pub sample_pitch_fw: bool,
-    strip_cache: Option<([f32; 8], StripParams)>,
+    strip_cache: Option<(StripKey, StripParams)>,
     ctrl_counter: u32,
     pub pulse_width: f32,
     pub fm_amount: f32,
@@ -399,6 +411,8 @@ impl SynthLayer {
             p_wave: PWave::Other,
             strip_stage: None,
             strip_stages: true,
+            knob_laws: false,
+            strip_knobs: None,
             sample_kernel_by_key: true,
             sample_pitch_fw: false,
             osc_shape_category: false,

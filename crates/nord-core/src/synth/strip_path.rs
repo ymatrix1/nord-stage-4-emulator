@@ -69,6 +69,32 @@ impl StripEnvRecords {
     }
 }
 
+impl StripEnvRecords {
+    /// Records straight from the stored rate knobs (`fw_knob_laws.rs`: rate index = knob - 64,
+    /// VERIFIED run); decay knob 127 is Hold. No time search, no displayed-time assumption.
+    pub fn from_knobs(k: EnvKnobs, sustain: f32) -> Self {
+        let hold = k.decay >= 127;
+        let dec = if hold { RATE_INDEX_MAX } else { rate_index_for_knob(k.decay) };
+        Self {
+            attack: FwAdrRecord {
+                a: 1.0,
+                b: attack_coeff(rate_index_for_knob(k.attack) as f32),
+                thr: 0.0,
+            },
+            decay: FwAdrRecord {
+                a: decay_release_coeff(dec as f32),
+                b: 0.0,
+                thr: if hold { 1.0 } else { sustain.clamp(0.0, 1.0) },
+            },
+            release: FwAdrRecord {
+                a: decay_release_coeff(rate_index_for_knob(k.release) as f32),
+                b: 0.0,
+                thr: 0.0,
+            },
+        }
+    }
+}
+
 /// Everything the render loop reads for the strip chain; rebuilt when a panel value changes.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StripParams {
@@ -79,10 +105,15 @@ pub struct StripParams {
 }
 
 /// Cache key: the panel values `StripParams` is a function of.
-pub(super) type StripKey = [f32; 8];
+pub(super) type StripKey = [f32; 15];
 
 impl SynthLayer {
     fn strip_key(&self) -> StripKey {
+        let k = self.active_knobs().map_or([-1.0; 7], |k| {
+            let e = |v: EnvKnobs| [f32::from(v.attack), f32::from(v.decay), f32::from(v.release)];
+            let (a, f) = (e(k.amp), e(k.filter));
+            [1.0, a[0], a[1], a[2], f[0], f[1], f[2]]
+        });
         [
             self.attack_sec,
             self.decay_sec,
@@ -92,7 +123,19 @@ impl SynthLayer {
             self.filter_env_decay_sec,
             self.filter_env_release_sec,
             self.sample_rate,
+            k[0],
+            k[1],
+            k[2],
+            k[3],
+            k[4],
+            k[5],
+            k[6],
         ]
+    }
+
+    /// The envelope knobs the chain uses: only with `knob_laws` on and a program that carries them.
+    fn active_knobs(&self) -> Option<StripKnobs> {
+        self.strip_knobs.filter(|_| self.knob_laws)
     }
 
     /// Strip parameters of the current panel values (recomputed only when they changed).
@@ -103,19 +146,29 @@ impl SynthLayer {
                 return p;
             }
         }
+        let (amp, filter) = match self.active_knobs() {
+            Some(k) => (
+                StripEnvRecords::from_knobs(k.amp, self.sustain_level),
+                StripEnvRecords::from_knobs(k.filter, 0.0),
+            ),
+            None => (
+                StripEnvRecords::from_panel(
+                    self.attack_sec,
+                    self.decay_sec,
+                    self.release_sec,
+                    self.sustain_level,
+                ),
+                StripEnvRecords::from_panel(
+                    self.filter_env_attack_sec,
+                    self.filter_env_decay_sec,
+                    self.filter_env_release_sec,
+                    0.0,
+                ),
+            ),
+        };
         let p = StripParams {
-            amp: StripEnvRecords::from_panel(
-                self.attack_sec,
-                self.decay_sec,
-                self.release_sec,
-                self.sustain_level,
-            ),
-            filter: StripEnvRecords::from_panel(
-                self.filter_env_attack_sec,
-                self.filter_env_decay_sec,
-                self.filter_env_release_sec,
-                0.0,
-            ),
+            amp,
+            filter,
             period_frames: STRIP_PASS_FRAMES * self.sample_rate / SY_FRAME_RATE_HZ,
         };
         self.strip_cache = Some((key, p));
