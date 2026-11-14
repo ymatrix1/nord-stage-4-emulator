@@ -808,7 +808,9 @@ mod tests {
     #[test]
     fn sample_kernel_flag_selects_the_firmware_key_rule_on_every_layer() {
         assert!(FirmwareOptions::default().sample_kernel_key);
-        assert!(!FirmwareOptions::default().summary().contains("sample-kernel"));
+        assert!(!FirmwareOptions::default()
+            .summary()
+            .contains("sample-kernel"));
         let o = FirmwareOptions::from_args(&["--sample-kernel".into(), "key".into()]).unwrap();
         assert!(o.sample_kernel_key);
         let mut e = Stage4Engine::new(48_000.0);
