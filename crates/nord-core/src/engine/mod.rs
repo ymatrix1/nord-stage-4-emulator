@@ -77,6 +77,7 @@ mod tests_routing;
 mod undo;
 mod undo_ops;
 mod zone_assign;
+pub mod zone_table;
 
 pub use clipboard::{Clip, ClipboardError, LayerClip};
 pub use fx_params::FxParams;

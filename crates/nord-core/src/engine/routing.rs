@@ -11,12 +11,12 @@
 //!    `section.enable & (section.layer_mask >> i) & 1`, for the organ, piano and synth sections.
 //!    The decode already combines the file's `section_enable_i / ii` with the layer enables
 //!    (`combine_scene_mask`); an all-zero scene mask now means silence instead of a fallback.
-//! 2. **Layer accepts note** = the note lies in a region of the layer's zone set. A layer's code maps
-//!    to a set of the four LED zones ([`zone_leds`]); the active split points (`Low`, `Mid`, `High`
-//!    flags of `split_zone_enabled`) cut the keyboard into regions, and an inactive point joins the
-//!    LED zones next to it (manual p.39: with only the Mid point active, the two leftmost LEDs are
-//!    the lower region and the two rightmost the upper one). Crossfades keep the existing widths.
+//! 2. **Layer accepts note** = the note lies in the key range the firmware derives from the layer's
+//!    zone code and the split state ([`zone_table`], VERIFIED against the ARM functions and the zone
+//!    objects of all 384 factory programs): lower and upper bound with their crossfade widths
+//!    (0, 6, 12 keys half width) and the smaller of the two firmware fade curves as gain.
 
+use super::zone_table;
 use super::*;
 use crate::cbin::kb_zone;
 use crate::morph::SplitPoint;
@@ -59,77 +59,47 @@ impl Default for ProgramRouting {
     }
 }
 
-/// LED zone set (bit `u` = zone `u + 1`) of a `kKbZone` code.
-///
-/// EMPIRICAL / ASSUMED: the 12-value enumeration is not decoded in the firmware (the zone range
-/// writer is unknown, `docs/research/keydown-zones.md` section 8). Over 384 factory programs the
-/// codes `0` and `6` appear as the lower / upper half of a Mid-only split (`B3 Chords n Solo`,
-/// `B3 Bassline`, `Quintet Bass Spl`: `0` the bass part), `4` as another lower half, and `1`, `2`, `3`
-/// as single zones of 3- and 4-zone splits (`Choral Pad`, `Silver Rush`, `Guitar Concerto`); `5`
-/// (firmware default) and `9` are on every layer of non-split programs. Codes `5`, `9` and the rare
-/// `10`, `11` therefore mean "all zones" here (a layer spans the whole keyboard), `7` and `8` the
-/// 3-zone ranges.
-pub const fn zone_leds(code: u8) -> u8 {
-    match code {
-        0 => 0b0001,
-        1 => 0b0010,
-        2 => 0b0100,
-        3 => 0b1000,
-        4 => 0b0011,
-        6 => 0b1100,
-        7 => 0b0111,
-        8 => 0b1110,
-        _ => 0b1111,
-    }
-}
+/// LED zone set (bit `u` = zone `u + 1`) of each firmware case 0..=10 (case 10 = empty range).
+const CASE_LEDS: [u8; 11] = [
+    0b0001, 0b0010, 0b0100, 0b1000, 0b0011, 0b0110, 0b1100, 0b0111, 0b1110, 0b1111, 0,
+];
 
-/// Linear weight of the region below a split point (1 below, 0 above, ramped over `±width`).
-fn below_weight(note: f32, split: &SplitPoint) -> f32 {
-    let w = split.crossfade.half_semitones();
-    let ks = f32::from(split.midi_note);
-    if w <= 0.0 {
-        return if note < ks { 1.0 } else { 0.0 };
-    }
-    ((ks + w - note) / (2.0 * w)).clamp(0.0, 1.0)
+/// LED zone set (bit `u` = zone `u + 1`) of a `kKbZone` code when all three split points are active.
+///
+/// VERIFIED: row 7 of the firmware case table `0xC02CB230` ([`zone_table::CASE_TABLE`], read back
+/// from the ARM image by `tools/arm_zone_map.py --check`): codes `0..=11` cover zone 1, zone 2,
+/// zones 1-2, zones 2-3, zones 1-3, all, zones 2-4, zones 2-3, zones 3-4, zone 3, zone 4, zone 4.
+/// With fewer active points the firmware joins the zones next to an inactive point
+/// ([`zone_table::zone_range`] does exactly that).
+pub const fn zone_leds(code: u8) -> u8 {
+    let code = if code > 11 { 11 } else { code as usize };
+    CASE_LEDS[zone_table::CASE_TABLE[7][code][0] as usize]
 }
 
 impl ProgramRouting {
-    /// Gain (`0.0..=1.0`) of `layer` for the key `note`, given the split points of the program.
+    /// Key range of `layer` from its zone code and the split points of the program.
+    ///
+    /// The point keys map to the nearest position setting (`SPLIT_NOTES`), the crossfade enums to
+    /// the width settings `0 / 1 / 2` (0, 6, 12 keys half width).
+    pub fn zone_range(&self, layer: LayerId, points: &[SplitPoint; 3]) -> zone_table::ZoneRange {
+        let pos = points.map(|p| zone_table::split_setting_of(p.midi_note));
+        let widths = points.map(|p| match p.crossfade {
+            crate::morph::CrossfadeWidth::Off => 0,
+            crate::morph::CrossfadeWidth::Small => 1,
+            crate::morph::CrossfadeWidth::Large => 2,
+        });
+        zone_table::zone_range(
+            self.kb_zone[layer as usize],
+            self.split_active,
+            pos,
+            widths,
+            0,
+        )
+    }
+
+    /// Gain (`0.0..=1.0`) of `layer` for the key `note`: the firmware's smaller-of-two-curves gain.
     pub fn zone_gain(&self, layer: LayerId, note: u8, points: &[SplitPoint; 3]) -> f32 {
-        let leds = zone_leds(self.kb_zone[layer as usize]);
-        // Active points in Low, Mid, High order; LED zone `u` lies in region
-        // "number of active points below it".
-        let mut active = [None::<&SplitPoint>; 3];
-        let mut count = 0;
-        let mut region_of_led = [0usize; 4];
-        for u in 1..4 {
-            if self.split_active[u - 1] {
-                active[count] = Some(&points[u - 1]);
-                count += 1;
-            }
-            region_of_led[u] = count;
-        }
-        let mut regions = 0u8;
-        for (u, &r) in region_of_led.iter().enumerate() {
-            if leds & (1 << u) != 0 {
-                regions |= 1 << r;
-            }
-        }
-        let k = f32::from(note);
-        let mut below = [1.0f32; 3];
-        for (b, p) in below.iter_mut().zip(active.iter().flatten()) {
-            *b = below_weight(k, p);
-        }
-        let mut gain = 0.0;
-        for r in 0..=count {
-            if regions & (1 << r) == 0 {
-                continue;
-            }
-            let above_prev = if r > 0 { 1.0 - below[r - 1] } else { 1.0 };
-            let under_next = if r < count { below[r] } else { 1.0 };
-            gain += above_prev * under_next;
-        }
-        gain.clamp(0.0, 1.0)
+        self.zone_range(layer, points).gain(note)
     }
 }
 
@@ -215,12 +185,15 @@ mod tests {
     }
 
     #[test]
-    fn zone_codes_map_to_led_sets() {
-        assert_eq!(zone_leds(0), 0b0001);
-        assert_eq!(zone_leds(6), 0b1100);
-        assert_eq!(zone_leds(5), 0b1111);
-        assert_eq!(zone_leds(9), 0b1111);
-        assert_eq!(zone_leds(11), 0b1111);
+    fn zone_codes_map_to_led_sets_of_the_firmware_table() {
+        let want = [
+            0b0001, 0b0010, 0b0011, 0b0110, 0b0111, 0b1111, 0b1110, 0b0110, 0b1100, 0b0100, 0b1000,
+            0b1000,
+        ];
+        for (code, leds) in want.iter().enumerate() {
+            assert_eq!(zone_leds(code as u8), *leds, "code {code}");
+        }
+        assert_eq!(zone_leds(200), zone_leds(11));
     }
 
     #[test]
@@ -252,36 +225,40 @@ mod tests {
     fn inactive_low_point_joins_zones_one_and_two() {
         // Mid (60) and High (72) active: regions {1,2} | {3} | {4}.
         let r = ProgramRouting {
-            kb_zone: [0, 1, 2, 3, 4, 6, 5],
+            kb_zone: [0, 0, 9, 10, 0, 5, 5],
             split_active: [false, true, true],
             ..ProgramRouting::default()
         };
         let mut pts = points(60, CrossfadeWidth::Off);
         pts[2].midi_note = 72;
-        // codes 0, 1, 4 all cover the joined lower region
+        // code 0 covers the joined lower region (zones 1-2)
         for layer in [LayerId::OrganA, LayerId::OrganB, LayerId::SynthA] {
             assert_eq!(r.zone_gain(layer, 59, &pts), 1.0);
             assert_eq!(r.zone_gain(layer, 60, &pts), 0.0);
         }
-        // code 2 = zone 3 only: the 60..71 region
+        // code 9 = zone 3 only: the 60..71 region
         assert_eq!(r.zone_gain(LayerId::PianoA, 59, &pts), 0.0);
         assert_eq!(r.zone_gain(LayerId::PianoA, 65, &pts), 1.0);
         assert_eq!(r.zone_gain(LayerId::PianoA, 72, &pts), 0.0);
-        // code 3 = zone 4 only
+        // code 10 = zone 4 only
         assert_eq!(r.zone_gain(LayerId::PianoB, 72, &pts), 1.0);
         assert_eq!(r.zone_gain(LayerId::PianoB, 71, &pts), 0.0);
     }
 
     #[test]
-    fn crossfade_gains_sum_to_one_across_the_split() {
+    fn crossfade_gain_is_the_smaller_firmware_curve() {
         let r = mid_only([0, 6, 5, 5, 5, 5, 5]);
         let pts = points(60, CrossfadeWidth::Small);
-        for note in 50..=70 {
-            let lo = r.zone_gain(LayerId::OrganA, note, &pts);
+        // width setting 1: 6 keys half width around key 60 (the fade covers keys 54..=65)
+        assert_eq!(r.zone_gain(LayerId::OrganB, 60, &pts), 0.5);
+        assert_eq!(r.zone_gain(LayerId::OrganA, 53, &pts), 1.0);
+        assert_eq!(r.zone_gain(LayerId::OrganB, 53, &pts), 0.0);
+        assert_eq!(r.zone_gain(LayerId::OrganB, 66, &pts), 1.0);
+        assert_eq!(r.zone_gain(LayerId::OrganA, 66, &pts), 0.0);
+        for note in 54..=65 {
             let hi = r.zone_gain(LayerId::OrganB, note, &pts);
-            assert!((lo + hi - 1.0).abs() < 1e-6, "note {note}");
+            assert!(hi > 0.0 && hi < 1.0, "note {note}");
         }
-        assert!((r.zone_gain(LayerId::OrganA, 60, &pts) - 0.5).abs() < 1e-6);
     }
 
     #[test]

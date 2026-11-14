@@ -1,6 +1,6 @@
 # Engine layer routing: section enables, layer zones and the B3 clip
 
-**Checked:** 2026-11-13
+**Checked:** 2026-11-13 (updated 2026-11-14: the zone code table is now VERIFIED, [zone-key-ranges](zone-key-ranges.md); sections 3, 4, 6 and 7 below)
 **Sources:** `docs/research/keydown-zones.md`, `docs/research/emulator-vs-hardware-audio.md`, the B3 finding of PR #194 (`feat/organ-output-level`, `organ-output-level.md`, not merged when this was written), the 384 factory programs of `Nord Stage 4 Factory Restore RevK v1.66.ns4b` (local, git-ignored), `target/fw_unpacked/bank0_{CODE,SRAM}.bin` (local, v1.66), `tools/arm_program_routing.py` (new), `tools/arm_zones.py`, `tools/arm_edit_capture.py`, `tools/emu_vs_hw.py`, `ns4 render-patch --firmware-routing` (new). Only addresses, offsets, derived values and counts are recorded; no firmware bytes.
 **Question:** The B3 clip (`B3 Chords n Solo`) sounds organ layer B in the engine but not on the hardware. Which fields of the program decide which layers sound and which keys they accept, what does the firmware do with them, and does an engine that follows them close the gap?
 
@@ -12,7 +12,7 @@ Tags: **VERIFIED** = reproduced by a command, **EMPIRICAL** = fitted to factory 
 |---|---|---|
 | Is layer B of `B3 Chords n Solo` silent because it belongs to section II? | **No.** Section I is organ only (`section_enable_i = 0b100`) with both layers on (organ `enable_i = 0b11`), section II is empty. On the ARM the zone enable byte of both organ layers is 1 in scene I (section 2). Layer B is silent on the hardware because of its **keyboard zone**: the layer blocks store `Edt_Org_kKbZone` = 0 for A and 6 for B, and the Mid split point (65) is the only active one, so A plays the keys below 65 and B the keys from 65 | VERIFIED (ARM zone bytes), EMPIRICAL (zone codes, section 3) |
 | Which fields decide which layers sound? | `section_enable_i / ii` (global bits `284..290`), per-section layer enables `enable_i / ii` (organ and piano 2 bits at `9` / `12`, synth 3 bits at `10` / `15`), the active scene. Zone byte of layer `i` = section enable AND layer-mask bit `i` | VERIFIED (ARM, 30 rows, 0 mismatches) |
-| Which fields decide which keys a layer accepts? | `split_enabled` and the three point flags `split_zone_enabled` (bits `8`, `9..11`; the firmware ids `Edt_Com_kSplitEnabled / Low / Mid / High`), the point notes and crossfades, and a **4-bit zone code per layer** (`kKbZone`: organ / piano layers `+8`, synth layers `+58`). `octave` is the 4-bit field after it | VERIFIED (field names and order), EMPIRICAL (code meaning) |
+| Which fields decide which keys a layer accepts? | `split_enabled` and the three point flags `split_zone_enabled` (bits `8`, `9..11`; the firmware ids `Edt_Com_kSplitEnabled / Low / Mid / High`), the point positions and crossfade widths, and a **4-bit zone code per layer** (`kKbZone`: organ / piano layers `+8`, synth layers `+58`). `octave` is the 4-bit field after it and does not enter the range | VERIFIED (field names and order; code meaning and key range since 2026-11-14, [zone-key-ranges](zone-key-ranges.md)) |
 | Does the engine now route like that? | Yes, behind `FirmwareRouting::On` (`--firmware-routing`); default `Off`, `render_hash` unchanged | built, tested |
 | Does it close the B3 clip gap? | see section 5 | EMPIRICAL |
 
@@ -51,11 +51,11 @@ Values over the 384 factory programs (count of layers):
 
 Only 5 and 9 occur on most layers (programs without a split); the others occur in programs whose `split_enabled` is set (48 programs). In the 2-zone programs (only the Mid point flag set) the pairs are always `0` / `6`: `B3 Chords n Solo` A 0 B 6, `B3 Jazz Split` A 0 B 6, `B3 Bassline` A 0 B 6, `B3 Praise Split` A 6 B 0, `B3 Praise Bass` A 6 B 0, `Quintet Bass Spl` synth A 6 B 0, `Funk Hit Split` synth A 6 B 0. Reading `0` = the lower region and `6` = the upper region fits the program names (the bass part of a bass split is `0`) and the hardware clip. Codes `1`, `2`, `3` appear as single zones of 3 and 4 zone splits (`Choral Pad`, `Silver Rush`, `Guitar Concerto`), `4` as another lower half (`Night Gaunts Whl`, `Horizon Whl`: synth A 4, B and C 6).
 
-The engine reads them as: `0..3` = LED zone 1..4, `4` = zones 1-2, `6` = zones 3-4, `7` = zones 1-3, `8` = zones 2-4, `5`, `9`, `10`, `11` = all four. Only `0`, `4` and `6` are tied to hardware evidence (the clip); `1`, `2`, `3` are plausible, `5` as "all" is the default, `7`, `8`, `10`, `11` are unobserved or ambiguous (**ASSUMED**). The firmware writer of the key range from the code was not found: the setters `0xC00C843C` (set range) and `0xC00C83FC` (reset range, `0 .. 0x7F`) are vtable slots 2 and 3 of the layer classes (vtables at `0xC0279510`, `0xC027A8BC`, `0xC027AD50`, `0xC027AE3C`, `0xC02B7CFC`), without direct callers; no static `bl` reaches them (OQ23).
+**Superseded 2026-11-14.** The first reading (`0..3` = LED zone 1..4, `4` = zones 1-2, `6` = zones 3-4, `7` = zones 1-3, `8` = zones 2-4) was EMPIRICAL and partly wrong: only `0`, `5` and the Mid-only `6` agree with the firmware. The ARM code behind the setters `0xC00C843C` / `0xC00C83FC` was found (they are called by `0xC010ABA4` through the layer vtable, [zone-key-ranges](zone-key-ranges.md) section 2) and the code to range map (a byte table at `0xC02CB230` plus the bound functions `0xC01B0DC4` / `0xC01B0C40`) is now VERIFIED: with four zones `0` = zone 1, `1` = zone 2, `2` = zones 1-2, `3` = zones 2-3, `4` = zones 1-3, `5` = all, `6` = zones 2-4, `7` = zones 2-3, `8` = zones 3-4, `9` = zone 3, `10` = zone 4, `11` = zone 4; fewer active points join the zones next to an inactive point. 384 of 384 factory programs match the ARM zone objects.
 
 ## 4. Engine
 
-`engine/routing.rs`: `FirmwareRouting::{Off, On}`, `ProgramRouting` (exact scene masks, legacy masks, codes, point flags), `zone_leds(code)`. `apply_program` records the routing facts of the program; `set_firmware_routing` installs the legacy or the exact scene masks, so the switch can be set before or after the program is applied. `handle_midi` asks `keybed_gain(layer, note)`: `Off` the old `KeybedSplitRouter::note_gain`, `On` the region weights of section 6 of [morph-and-zones](../specs/morph-and-zones.md). The decode reads the seven codes into `GlobalProgramDecoded::kb_zone` (read-only, lossless pack). Units: 13 new tests (code table, Mid-only halves, joined zones with an inactive Low point, crossfade unity sum, no split, scene II, mode swap, before / after order, direct layer channel, `kb_zone` decode, flag parsing).
+`engine/routing.rs`: `FirmwareRouting::{Off, On}`, `ProgramRouting` (exact scene masks, legacy masks, codes, point flags), `zone_leds(code)` (firmware table since 2026-11-14), `engine/zone_table.rs` (VERIFIED key range model). `apply_program` records the routing facts of the program; `set_firmware_routing` installs the legacy or the exact scene masks, so the switch can be set before or after the program is applied. `handle_midi` asks `keybed_gain(layer, note)`: `Off` the old `KeybedSplitRouter::note_gain`, `On` the region weights of section 6 of [morph-and-zones](../specs/morph-and-zones.md). The decode reads the seven codes into `GlobalProgramDecoded::kb_zone` (read-only, lossless pack). Units: 13 new tests (code table, Mid-only halves, joined zones with an inactive Low point, crossfade unity sum, no split, scene II, mode swap, before / after order, direct layer channel, `kb_zone` decode, flag parsing).
 
 Layers sound only in their zone (bit-identical self-consistency check: the render of the whole program with `--firmware-routing` equals the legacy render of the same program with the layers outside the played zone switched off by editing `layer_*_enabled`; SHA-256 prefixes of the WAVs, `ns4 render-patch --notes N`, velocity 100):
 
@@ -68,7 +68,7 @@ Layers sound only in their zone (bit-identical self-consistency check: the rende
 | `Funk Hit Split` (synth A 6, B 0, Mid 65) | 44 | B | identical (`b8c774adb00d`) |
 | | 84 | A | identical (`86b63ea59fd0`) |
 
-This proves the engine implements the rule, not that the rule is the hardware's (section 3).
+This proved the engine implements the rule (the table of that day was EMPIRICAL); the rule is now the firmware's ([zone-key-ranges](zone-key-ranges.md)). The split keys of these programs moved with the decode fix (`B3 Chords n Solo` Mid setting 4 is key 60, `B3 Praise Split` setting 3 is key 53); the hash prefixes above are those of the old table.
 
 ## 5. Clip comparison with the routing on
 
@@ -99,15 +99,31 @@ What it says:
 - Presence and brilliance stay dark (-12.5 / -4.7 dB with `b3wheels`, -11.0 / -9.0 with the Legacy source): this is the open tone / rotary part, not routing. The spectrum score improves for `b3wheels` (5.54 to 4.42, better than the Legacy default 4.83) but not for the Legacy source (4.83 to 5.01), because removing layer B takes away the only energy that was filling presence and brilliance there.
 - The other five segments are single-layer or unsplit sections: the routing leaves them identical (the legacy decode already gave the same layers there), so nothing regressed.
 
+Note (2026-11-14): the table used Mid = 65 (old 10-entry decode table). The firmware key for the stored setting is 60, so notes 60..64 of the clip belong to layer B, not A; the clip rows above were not re-measured (the video is local-only). The sub / crest / full-scale conclusions hold for the 97 notes below 60.
+
 ## 6. Decision (D22)
 
 | Criterion | Status |
 |---|---|
 | (1) algorithm verified | the rule (enable AND mask) is VERIFIED on the ARM; the region weights are the existing crossfade law (ASSUMED shape) |
-| (2) mapping verified, not assumed | **not met**: the code to zone-set table is EMPIRICAL (clip plus factory names), the firmware key-range writer is not found |
-| (3) re-baseline `render_hash` | not needed: default stays `Off`, hash unchanged |
+| (2) mapping verified, not assumed | **met for the key range** (2026-11-14): the code to key range map is read from the ARM tables and equals the zone objects of 384 / 384 factory programs ([zone-key-ranges](zone-key-ranges.md)). **Not met for the layer enables of some programs**: section 7 (OQ25) |
+| (3) re-baseline `render_hash` | not needed: the default stays `Off`, hash unchanged |
 
-`FirmwareRouting` therefore stays **opt-in** and is not part of `--firmware-all`. To flip the default: find the writer of the zone key range (OQ23) or a second clip of a split program (a `0` / `6` or `1` / `2` / `3` program with hardware audio), then re-run section 5 and re-baseline.
+`FirmwareRouting` therefore stays **opt-in** and is not part of `--firmware-all`. To flip the default: explain the nine programs whose scene I has no layer (section 7), re-run the sweep clean and re-baseline.
+
+## 7. OQ25: programs with a section on and no layer enabled
+
+Under `--firmware-routing` 9 of 384 programs render silent in scene I: `Vox Like Me`, `Vox Rising Sun`, `Vox Inna-Gadda`, `Vox Im Down`, `Vox DC5` (organ section on, `enable_i` = `enable_ii` = 0 for the organ, scene II section off), `Burning Lead` (synth section on, synth layers 0), `LoFi Piano` (synth section on, layers 0), `Farfisa II` (organ section on, scene I layers 0, scene II layer B), `70s CP Strings` (piano and synth sections on, scene I layers 0, scene II synth A). Bits are decoded as in section 2 (`python` one-liner in the reproduce section).
+
+What the ARM says (VERIFIED, run): the zone enable byte is `section enable AND layer mask bit`, and the section table entry `(enable = 1, layer mask = 0, focus 0 / 1 / 2)` leaves **all** layers of the organ, piano and synth sections at 0 for every focus value. So if the loader copies the file's 2-bit `enable_i` to the layer mask, these programs are silent in scene I on the hardware too. The loader itself (the code that fills the section table scene A / B from the program) is not run by the harness, which is why this cannot be closed here.
+
+| Hypothesis | Evidence |
+|---|---|
+| The factory files carry an empty scene I (author state, harmless on hardware because the hardware starts on a different scene or normalises) | the five Vox programs have both scenes empty, which would make them silent in either scene; unlikely for factory programs (ASSUMED, no recording) |
+| The loader normalises "section on, no layer" to layer A (or the focused layer) | not seen in the table-level run above; would need the loader |
+| The layer enable of these programs lives in other bits (focus bits `8` / `11` of the section block read as enables) | the focus bits of these programs are 0 as well (`kLayerFocusOrg_I`, bit 8 and 11 of the organ block) |
+
+Decision: keep `FirmwareRouting` opt-in (D22). Next step: run the program load path of the firmware in the harness (section table scene A written by the loader) or record `Vox Like Me` on the hardware.
 
 ## Implications
 
@@ -117,10 +133,10 @@ What it says:
 
 ## Follow-ups
 
-1. Find the writer of the zone key range from `kKbZone` (vtable slot 2 of the layer classes, `0xC00C843C`, no static callers; likely the program load or the KB ZONE button path) and replace the ASSUMED table by the firmware's.
+1. ~~Find the writer of the zone key range from `kKbZone`~~ done 2026-11-14: [zone-key-ranges](zone-key-ranges.md).
 2. Run the program load path of the firmware in the harness (section table filled by the load, not by the test) so the file bit to table field mapping is executed, not by name.
 3. Octave range limit of a zone, Live-mode scene focus, `Edt_Sys_kMIDIOrgSectionEnable` (MIDI section enables), the virtual channel map (OQ23).
-4. A second hardware clip of a split program to confirm the codes `1`, `2`, `3` and `4`.
+4. A second hardware clip of a split program (the codes are now read from the firmware; the clip would confirm the end-to-end level of the crossfade). Re-run section 5 with the corrected Mid key 60.
 
 ## Reproduce
 
