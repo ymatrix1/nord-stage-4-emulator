@@ -36,8 +36,8 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D26](#d26-fx-mod-1-a-pan-and-trem-use-the-firmware-routines-behind-firmwarefxmod1) | 2026-11-14 | FX Mod 1: A-PAN and TREM use the firmware routines behind `FirmwareFx::mod1` | accepted |
 | [D35](#d35-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
 | [D38](#d38-the-samples-defaults-stay-the-sample-loader-0xc01d710c-runs-but-the-voice-update-is-not-reached) | 2026-11-14 | The SAMPLES defaults stay; the sample loader `0xC01D710C` runs but the voice update is not reached | accepted |
-| [D40](#d40-the-samples-kernel-rule-by-key-is-the-default-the-voice-key-is-the-effective-key) | 2026-11-14 | The SAMPLES kernel rule by key is the default; the voice key is the effective key | accepted |
-| [D41](#d41-the-samples-pitch-law-stays-opt-in-the-voice-update-runs-in-the-harness-with-a-queue-pump-and-one-dsp-status-bit) | 2026-11-14 | The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit | accepted |
+| [D46](#d46-the-samples-kernel-rule-by-key-is-the-default-the-voice-key-is-the-effective-key) | 2026-11-14 | The SAMPLES kernel rule by key is the default; the voice key is the effective key | accepted |
+| [D47](#d47-the-samples-pitch-law-stays-opt-in-the-voice-update-runs-in-the-harness-with-a-queue-pump-and-one-dsp-status-bit) | 2026-11-14 | The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit | accepted |
 | [D39](#d39-the-fx-receiver-of-the-smp-stream-is-found-unity-with-one-common-path-the-piano-defaults-stay) | 2026-11-14 | The FX receiver of the SMP stream is found: unity, one path for piano and organ; the piano defaults stay | accepted |
 | [D37](#d37-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D27](#d27-the-synth-waveform-browser-uses-the-firmwares-category-tree-the-program-category-id-stays-unmapped) | 2026-11-14 | The Synth waveform browser uses the firmware's category tree; the program category id stays unmapped | proposed |
@@ -417,7 +417,7 @@ cabinet taps fingerprint response test.
 - **Alternatives:** Flip on the structural evidence (rejected, as in D35 and D37); forge the voice groups (rejected without a decoded registration path).
 - **Impact:** None on renders or `render_hash`; the probe tool and its tests gain the loader driver.
 
-### D40. The SAMPLES kernel rule by key is the default; the voice key is the effective key
+### D46. The SAMPLES kernel rule by key is the default; the voice key is the effective key
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (PR for `feat/arm-sy-voice-update`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) section 12)
@@ -427,7 +427,7 @@ cabinet taps fingerprint response test.
 - **Alternatives:** Keep it opt-in until the voice stores with Octave Shift or transpose are captured too (rejected: the engine does not apply them to the synth layer, the record level shows the effective key); also flip `--sample-pitch fw` (rejected, D41).
 - **Impact:** `render_hash` changes (sample section only, 96,002 of 560,000 floats differ, largest difference 1.6e-4; `b1c91b53...` becomes `31577ee1...`); `FirmwareOptions::summary` prints `sample-kernel=ratio` instead of `sample-kernel=key`; tests updated.
 
-### D41. The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit
+### D47. The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit
 
 - **Status:** accepted 2026-11-14
 - **Decided by:** Yuri Olive (PR for `feat/arm-sy-voice-update`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) section 12)

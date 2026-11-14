@@ -237,12 +237,12 @@ Uses count a path once per layer or enabled FX unit that needs it; one layer or 
 | `synth.osc=Analog` | 193 | 314 | assumed | assumed | synth-engine: VA waveforms approximate the strip stages |
 | `synth.osc=Fm` | 25 | 38 | assumed | assumed | synth-engine: FM ratio index decoded, wave audio ASSUMED |
 | `synth.osc=Sample` | 119 | 215 | verified | verified | synth-engine: .nsmp4 PCM played through the verified 12-tap sinc kernels (kernel choice ASSUMED) |
-| `synth.sample.kernel=0` | 115 | 208 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D40, default); zone pitch key and tune of the sample map ASSUMED |
-| `synth.sample.kernel=1` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D40, default); zone pitch key and tune of the sample map ASSUMED |
-| `synth.sample.kernel=2` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D40, default); zone pitch key and tune of the sample map ASSUMED |
-| `synth.sample.kernel=3` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D40, default); zone pitch key and tune of the sample map ASSUMED |
-| `synth.sample.kernel=4` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D40, default); zone pitch key and tune of the sample map ASSUMED |
-| `synth.sample.kernel=5` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D40, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=0` | 115 | 208 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=1` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=2` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=3` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=4` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
+| `synth.sample.kernel=5` | 119 | 215 | assumed | assumed | synth-sample-kernel-rule: kernel chosen by key, VERIFIED run of the ARM chain and key field (D46, default); zone pitch key and tune of the sample map ASSUMED |
 | `synth.osc=Wavetable` | 12 | 14 | unmodelled | unmodelled | synth-engine: WAVE bank is a synthetic 64-table placeholder |
 
 | Configuration | verified | assumed | unmodelled |
