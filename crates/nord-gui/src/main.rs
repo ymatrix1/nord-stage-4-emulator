@@ -8,13 +8,16 @@ use nord_gui::audio::start_audio_and_midi;
 use nord_gui::firmware_panel::{self, FirmwarePanelState, HeadlessRequest};
 use nord_gui::library::BackupLibraryState;
 use nord_gui::panel::{render_stage4_panel, Stage4PanelState};
+use nord_gui::screenshot::{self, ShotPlan};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 struct CliArgs {
     screenshot_target: Option<PathBuf>,
+    screenshot_scale: Option<f32>,
+    screenshot_section: Option<nord_panel::Section>,
     initial_program: Option<PathBuf>,
     initial_backup: Option<PathBuf>,
     initial_piano: Option<PathBuf>,
@@ -33,6 +36,10 @@ fn parse_cli_args<I: IntoIterator<Item = String>>(args: I) -> CliArgs {
             if let Some(path) = iter.next() {
                 parsed.screenshot_target = Some(PathBuf::from(path));
             }
+        } else if arg == "--screenshot-scale" {
+            parsed.screenshot_scale = iter.next().and_then(|v| v.parse().ok());
+        } else if arg == "--screenshot-section" {
+            parsed.screenshot_section = iter.next().and_then(|v| screenshot::parse_section(&v));
         } else if arg == "--program" || arg == "-p" {
             if let Some(path) = iter.next() {
                 parsed.initial_program = Some(PathBuf::from(path));
@@ -65,12 +72,17 @@ fn parse_cli_args<I: IntoIterator<Item = String>>(args: I) -> CliArgs {
     parsed
 }
 
+/// Hard limit for `--screenshot` runs; the process exits non-zero when the PNG never arrives.
+const SCREENSHOT_TIMEOUT_S: u64 = 20;
+
 struct Stage4App {
     state: Stage4PanelState,
     library: BackupLibraryState,
     audio_handle: nord_gui::audio::AudioHandle,
     active_keys: Arc<[AtomicBool; 128]>,
     screenshot_target: Option<PathBuf>,
+    shot: Option<ShotPlan>,
+    shot_requested: bool,
     frame_count: u32,
     firmware: FirmwarePanelState,
 }
@@ -87,11 +99,18 @@ impl Stage4App {
             library: BackupLibraryState::new(),
             audio_handle,
             active_keys,
-            screenshot_target: cli.screenshot_target,
+            screenshot_target: None,
+            shot: cli
+                .screenshot_target
+                .map(|t| ShotPlan::new(t, cli.screenshot_section, cli.screenshot_scale)),
+            shot_requested: false,
             frame_count: 0,
             firmware: FirmwarePanelState::new(cli.firmware),
         };
         app.firmware.push(&app.audio_handle);
+        if let Some(plan) = &app.shot {
+            app.state.view = plan.view();
+        }
 
         if let Some(path) = cli.initial_program {
             if let Ok(bytes) = std::fs::read(&path) {
@@ -197,7 +216,7 @@ impl eframe::App for Stage4App {
             *pressed = self.active_keys[i].load(Ordering::Relaxed);
         }
 
-        if self.screenshot_target.is_none() {
+        if self.shot.is_none() {
             egui::TopBottomPanel::top("ns4_library_bar")
                 .frame(
                     egui::Frame::NONE
@@ -234,37 +253,60 @@ impl eframe::App for Stage4App {
                     });
             });
 
-        // Screenshot capture support (CLI flag or F12 key)
-        let f12_pressed = ctx.input(|i| i.key_pressed(egui::Key::F12));
-        if f12_pressed && self.screenshot_target.is_none() {
+        // Screenshot capture: F12 (whole window) or the CLI plan (section crop at a fixed zoom).
+        if let Some(plan) = &self.shot {
+            let native = ctx.native_pixels_per_point().unwrap_or(1.0);
+            let phys = ctx.input(|i| i.screen_rect().size()) * ctx.pixels_per_point();
+            if !self.shot_requested {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                    screenshot::inner_size_command(plan, native),
+                ));
+                if plan.ready(self.frame_count, phys) {
+                    self.shot_requested = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+                }
+            }
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::F12)) && self.screenshot_target.is_none() {
             self.screenshot_target = Some(PathBuf::from("screenshot.png"));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
-        } else if self.screenshot_target.is_some() && self.frame_count == 2 {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
         }
 
-        ctx.input(|i| {
-            for event in &i.raw.events {
-                if let egui::Event::Screenshot { image, .. } = event {
-                    if let Some(target) = self.screenshot_target.take() {
-                        let [w, h] = image.size;
-                        let pixels: Vec<u8> = image
-                            .pixels
-                            .iter()
-                            .flat_map(|c| [c.r(), c.g(), c.b(), c.a()])
-                            .collect();
-                        if let Some(rgba) = image::RgbaImage::from_raw(w as u32, h as u32, pixels) {
-                            if let Err(e) = rgba.save(&target) {
-                                eprintln!("Failed to save screenshot: {e}");
-                            } else {
-                                println!("Screenshot saved to {}", target.display());
-                            }
+        let events = ctx.input(|i| i.raw.events.clone());
+        for event in &events {
+            if let egui::Event::Screenshot { image, .. } = event {
+                if let Some(plan) = self.shot.take() {
+                    let ok = match plan.crop(image) {
+                        Some(rgba) => rgba.save(&plan.target).map_err(|e| e.to_string()),
+                        None => Err("empty crop".to_string()),
+                    };
+                    match ok {
+                        Ok(()) => {
+                            println!("Screenshot saved to {}", plan.target.display());
+                            // Clean exit 0 (the normal close path ends with 0xcfffffff on Windows).
+                            std::process::exit(0);
                         }
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        Err(e) => {
+                            eprintln!("Failed to save screenshot: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                } else if let Some(target) = self.screenshot_target.take() {
+                    let [w, h] = image.size;
+                    let pixels: Vec<u8> = image
+                        .pixels
+                        .iter()
+                        .flat_map(|c| [c.r(), c.g(), c.b(), c.a()])
+                        .collect();
+                    if let Some(rgba) = image::RgbaImage::from_raw(w as u32, h as u32, pixels) {
+                        match rgba.save(&target) {
+                            Ok(()) => println!("Screenshot saved to {}", target.display()),
+                            Err(e) => eprintln!("Failed to save screenshot: {e}"),
+                        }
                     }
                 }
             }
-        });
+        }
 
         // Request repaint if keys are pressed or audio is playing
         ctx.request_repaint_after(std::time::Duration::from_millis(16));
@@ -302,11 +344,25 @@ wrote {}",
     }
     let cli = parse_cli_args(argv);
 
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1580.0, 472.0])
+        .with_min_inner_size([960.0, 360.0])
+        .with_title(firmware_panel::window_title(&cli.firmware));
+    if cli.screenshot_target.is_some() {
+        // Non-intrusive: off-screen, no focus, no taskbar entry, and a hard timeout.
+        viewport = viewport
+            .with_position([-32000.0, -32000.0])
+            .with_active(false)
+            .with_taskbar(false)
+            .with_min_inner_size([16.0, 16.0]);
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_secs(SCREENSHOT_TIMEOUT_S));
+            eprintln!("nord-stage4: screenshot timed out after {SCREENSHOT_TIMEOUT_S} s");
+            std::process::exit(3);
+        });
+    }
     let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1580.0, 472.0])
-            .with_min_inner_size([960.0, 360.0])
-            .with_title(firmware_panel::window_title(&cli.firmware)),
+        viewport,
         ..Default::default()
     };
 
