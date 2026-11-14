@@ -38,6 +38,7 @@ Layer Synth/Piano/Organ Output (Stereo)
 - **`Phaser`:** 4-stage / 6-stage all-pass cascade swept by LFO.
 - **`Ensemble`** (`fx/mod2_spin.rs`, manual p.50): mono input into three modulated lines (centre 9 ms, depth 3 ms, 120 degrees apart) at the Rate; wet 0.6 x AMOUNT; VARIATION = mono.
 - **`Spin`** (`fx/mod2_spin.rs`, manual p.51): neutral rotating-speaker style effect, no separate rotor/horn. The Rate is approached with a 0.8 s exponential ramp (`spin_rate_hz`); Doppler delay (0.8 + 0.25 m) * amt ms, then an 800 Hz split with amplitude modulation 1 + depth * amt * m per band, m = sin(phase + ch * 90 degrees). Normal: treble depth 0.6, low 0.15; VARIATION swaps them (movement shifts to lower frequencies).
+- **Firmware routines (opt-in `FirmwareFx::mod2`, D32, D37):** `CHOR` (`kFx2Type` 4, 5) and `VIBE` (6, 7) run the FX core 2 routines `0x122E24`, `0x122F77`, `0x123C84` through `fx/fw_mod2.rs` and `fx/fw_vibe_stage.rs` (4 frame latency, delays in DSP frames at 43,402 Hz). `FLANG` (`0x12348D`), `PHAS` (`0x12379B`, `0x1238FC`) are verified and ported as routines (`fw_flang.rs`, `fw_phas0.rs`, `fw_phas1.rs`) but not wired; `ENS`, `SPIN` are not modelled. See [fx-mod2-types](../research/fx-mod2-types.md).
 
 ### 2.3 Slot 3 — Amp Simulation, Drive & 3-Band Semi-Parametric EQ
 

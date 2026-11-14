@@ -425,3 +425,13 @@ Velvet Grand (level 127) reads same flag on.
 - **Why:** The words and the routine are VERIFIED, but the joint mid gain by frequency law, the interpolation between 11 captured indices, the organ unit's routine layout and the engine versus 43,402 Hz rate are not, and no hardware clip isolates an EQ setting, so D22 does not allow a default switch.
 - **Alternatives:** Switch the EQ gain to the ladder (rejected: refuted by the words); flip the default (rejected: no end to end check); rescale the words to the engine rate (rejected: loses the bit-for-bit words, deferred until the full capture exists).
 - **Impact:** `render_hash` unchanged (flag default off). With the flag the layer gains 2 frames of latency, the boost side tops out at 14.77 dB, and the mid band has a firmware width and centre (frequencies 1.106 times higher at 48 kHz).
+
+### D37. FX Mod 2: VIBE uses the firmware routine behind `FirmwareFx::mod2`; FLANG and PHAS are ported as routines only
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/fx-mod2-rest`; evidence [fx-mod2-types](research/fx-mod2-types.md) s7)
+- **Context:** VIBE is used by 45 of 156 Mod 2 programs (the second most used type after CHOR). The engine renders it as an assumed modulated delay. The firmware routine is `0x123C84` (`kFx2Type` 6 and 7, module `0xC0279128`). FLANG (`0x12348D`, types 2, 3), PHAS 0 (`0x12379B`) and PHAS 1 (`0x1238FC`) cover 9, 11 and the rest of the Mod 2 programs.
+- **Decision:** Generate the models from the ADI listing with committed tools (`tools/fx_listing_gen.py` to `tools/fx_model_mod2_gen.py`, harness `tools/fx_model_mod2.py`, check `tools/fx_models.py`), generate the Rust ports from the models (`tools/fx_mod2_rust_gen.py` to `fx/fw_vibe.rs`, `fw_flang.rs`, `fw_phas0.rs`, `fw_phas1.rs`), wire only VIBE (`fx/fw_vibe_stage.rs`) behind `FirmwareFx::mod2` (in `ALL`, not `DEFAULT`).
+- **Why:** The four routines reproduce the oracle word for word (`tools/fx_models.py check`, per-instruction trace); VIBE has its parameter laws from `fx-param-fits.csv` (exact at the 11 samples). FLANG and PHAS have no wired stage because their type words and laws are not decoded into a stage yet; wiring them would need the same work as VIBE s6.
+- **Alternatives:** Hand-translate each routine as for CHOR (rejected: error prone, the generator is reusable); wire all four at once (rejected: unverified laws).
+- **Impact:** `FirmwareFx::ALL` changes VIBE programs (4 frame latency, firmware phase increment and depth); the default `render_hash` is unchanged. Type 7 uses the type 6 words (ASSUMED, OQ21).
