@@ -167,6 +167,17 @@ pub fn parse_amp_path(v: &str) -> Result<bool, String> {
     }
 }
 
+/// Parses `--sample-kernel`: `key` (firmware rule, true) or `ratio` (ASSUMED rule, false).
+pub fn parse_sample_kernel(v: &str) -> Result<bool, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "key" => Ok(true),
+        "ratio" => Ok(false),
+        _ => Err(format!(
+            "invalid --sample-kernel '{v}' (expected key|ratio)"
+        )),
+    }
+}
+
 /// Applies the opt-in firmware switches to every layer of `engine`.
 pub fn apply_firmware_options(
     engine: &mut Stage4Engine,
@@ -225,6 +236,10 @@ pub struct FirmwareOptions {
     /// `--synth-stages`: `SynthLayer::strip_stages` (noise, Shape Square, SUPER, MULTI firmware stages
     /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
     pub synth_stages: bool,
+    /// `--sample-kernel key|ratio`: the `SAMPLES` oscillator picks its 12-tap kernel with the
+    /// firmware key rule (`sinc::key_rule`, VERIFIED run, key field ASSUMED) instead of the ASSUMED
+    /// ratio rule. Off by default until a program level check against hardware exists.
+    pub sample_kernel_key: bool,
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
@@ -260,6 +275,7 @@ impl Default for FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
+            sample_kernel_key: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -298,6 +314,7 @@ impl FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
+            sample_kernel_key: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -348,6 +365,9 @@ impl FirmwareOptions {
         o.synth_stages |= has("--synth-stages");
         if has("--no-synth-stages") {
             o.synth_stages = false;
+        }
+        if let Some(v) = value("--sample-kernel") {
+            o.sample_kernel_key = parse_sample_kernel(v)?;
         }
         o.firmware_routing |= has("--firmware-routing");
         if has("--legacy-routing") {
@@ -413,6 +433,7 @@ impl FirmwareOptions {
         self.set_shape(engine);
         self.set_p_block(engine);
         self.set_stages(engine);
+        self.set_sample_kernel(engine);
         if self.measured_laws {
             self.set_measured_laws(engine);
         }
@@ -480,6 +501,7 @@ impl FirmwareOptions {
         self.set_shape(engine);
         self.set_p_block(engine);
         self.set_stages(engine);
+        self.set_sample_kernel(engine);
         self.set_organ_level(engine);
     }
 
@@ -513,6 +535,12 @@ impl FirmwareOptions {
             s.p_block = p;
             s.p_table = table;
         }
+    }
+
+    fn set_sample_kernel(&self, engine: &mut Stage4Engine) {
+        engine.synth_a.sample_kernel_by_key = self.sample_kernel_key;
+        engine.synth_b.sample_kernel_by_key = self.sample_kernel_key;
+        engine.synth_c.sample_kernel_by_key = self.sample_kernel_key;
     }
 
     fn set_stages(&self, engine: &mut Stage4Engine) {
@@ -568,6 +596,9 @@ impl FirmwareOptions {
         }
         if !self.synth_stages {
             parts.push("no-stages".into());
+        }
+        if self.sample_kernel_key {
+            parts.push("sample-kernel=key".into());
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
@@ -677,6 +708,20 @@ mod tests {
         };
         m.apply_to(&mut a);
         assert!(a.synth_a.measured_laws && a.synth_b.measured_laws && a.synth_c.measured_laws);
+    }
+
+    #[test]
+    fn sample_kernel_flag_selects_the_firmware_key_rule_on_every_layer() {
+        assert!(!FirmwareOptions::default().sample_kernel_key);
+        let o = FirmwareOptions::from_args(&["--sample-kernel".into(), "key".into()]).unwrap();
+        assert!(o.sample_kernel_key && o.summary().contains("sample-kernel=key"));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert!(e.synth_a.sample_kernel_by_key && e.synth_b.sample_kernel_by_key);
+        assert!(e.synth_c.sample_kernel_by_key);
+        let r = FirmwareOptions::from_args(&["--sample-kernel".into(), "ratio".into()]).unwrap();
+        assert!(!r.sample_kernel_key);
+        assert!(parse_sample_kernel("bogus").is_err());
     }
 
     #[test]
