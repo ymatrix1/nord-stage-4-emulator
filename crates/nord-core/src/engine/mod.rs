@@ -233,7 +233,14 @@ impl Stage4Engine {
         for (i, raw) in raw_layers.into_iter().enumerate() {
             self.fx_chains[i].apply_morph(&self.morph_controllers);
             let [fx_l, fx_r] = self.fx_chains[i].process_frame_with_bpm(raw, self.master_clock.bpm);
-            let gain = self.layer_levels[i].evaluate(&self.morph_controllers) * self.program_gain;
+            let level = self.layer_levels[i].evaluate(&self.morph_controllers);
+            // organ layers follow the firmware level law `(v / 127)^2` when it is selected
+            let level = match i {
+                0 => self.organ_a.level_law().layer_gain(level),
+                1 => self.organ_b.level_law().layer_gain(level),
+                _ => level,
+            };
+            let gain = level * self.program_gain;
             // TO ROTARY (Piano / Synth layers): the mono sum after the fader feeds the shared rotary.
             if i >= 2 && self.fx_chains[i].amp_cabinet == AmpCabinet::ToRotary {
                 rot_in += 0.5 * (fx_l + fx_r) * gain;
