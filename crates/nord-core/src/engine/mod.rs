@@ -30,6 +30,7 @@ pub use pedals::{
     ControlFunc, FootSwitchFunc, PedalSource, PedalState, RightPedal, RotorFunc, SwellFunc,
     B3_SWELL_FLOOR, HALF_PEDAL_MIN,
 };
+pub use pstick::{PSTICK_DEFAULT_RANGE, PSTICK_MAX_RANGE, PSTICK_MIN_RANGE};
 
 mod aux_kb;
 mod clipboard;
@@ -54,6 +55,7 @@ mod program;
 mod program_export;
 mod program_fx;
 mod program_ops;
+mod pstick;
 mod routing;
 mod section_edit;
 mod settings;
@@ -77,6 +79,7 @@ mod tests_routing;
 mod undo;
 mod undo_ops;
 mod zone_assign;
+pub mod zone_table;
 
 pub use clipboard::{Clip, ClipboardError, LayerClip};
 pub use fx_params::FxParams;

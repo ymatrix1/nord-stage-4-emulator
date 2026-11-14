@@ -115,6 +115,26 @@ def test_organ_piano_synth_paths():
     assert "routing.engines=organ+piano+synth" in paths["program"]
 
 
+def test_sample_layers_list_the_reachable_kernels_of_the_key_rule():
+    s = {
+        "osc_mode": "Sample",
+        "filter_on": False,
+        "unison": 0,
+        "arp_enabled": False,
+        "mono": False,
+        "lfo_dest": "None",
+    }
+    paths = ps._synth_paths(s, True, True, [1, 2, 3])
+    assert [p for p in paths if p.startswith("synth.sample.kernel=")] == [
+        "synth.sample.kernel=1",
+        "synth.sample.kernel=2",
+        "synth.sample.kernel=3",
+    ]
+    assert not [p for p in ps._synth_paths(s, True, True) if "kernel=" in p]
+    for k in range(6):
+        assert ps.status(f"synth.sample.kernel={k}")[0] == "assumed"
+
+
 def test_b3_bass_flag_replaces_the_b3_model_path():
     rec = record(masks=(0b01, 0))
     assert "organ.model=B3" in ps.program_paths(rec)["organ_a"]

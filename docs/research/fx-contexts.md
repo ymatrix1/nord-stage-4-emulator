@@ -77,8 +77,8 @@ Routines are the core 2 pcs of [fx-chain-install](fx-chain-install.md) s2 (core 
 
 | Slot | Type | Module (list#entry) | Core 2 routines | Note |
 |---|---|---|---|---|
-| Fx1 | 0, 1 | `0xC02BAF54#1` (run 1) | `0x122D93` | |
-| Fx1 | 2, 3 | `0xC02BB030#1` (run 32) | `0x122C39` (all-pass, modelled) | |
+| Fx1 | 0, 1 | `0xC02BAF54#1` (run 1) | `0x122D93` | **A-PAN soft / hard**, modelled and ported ([fx-mod-types](fx-mod-types.md) s2) |
+| Fx1 | 2, 3 | `0xC02BB030#1` (run 32) | `0x122C39` (modelled) | **TREM soft / hard** at mix 0 ([fx-mod-types](fx-mod-types.md) s3), not an all-pass |
 | Fx1 | 4, 5 | `0xC02BB10C#1` (run 23) | `0x1239D0` | cross-fade `v / 127` |
 | Fx1 | 6, 7 | `0xC0279290#0` (run 11) | `0x123E9B` | |
 | Fx1 | 8, 9 | only `0xC04414C4#0` (waveshaper) | `0x123DD2` | |
@@ -142,7 +142,7 @@ So the "phase" of s4 is the **drive amount** and the table pointers `c[-0x15]`, 
 
 Mapping to the model names of [fx-routine-models](fx-routine-models.md) s6 is EMPIRICAL (position only). Series samples: `fx-param-fits.csv` (slot Amp, type 7..9).
 
-### 5.4 All-pass / phaser `0x122C39` (module `0xC02BB030#1`, Fx1 types 2 and 3)
+### 5.4 Tremolo `0x122C39` (module `0xC02BB030#1`, Fx1 types 2 and 3; formerly "all-pass / phaser", role corrected in [fx-mod-types](fx-mod-types.md) s3)
 
 | Id | Word | Closed form |
 |---|---|---|

@@ -1,4 +1,12 @@
-# Continuous Delivery: builds cross-platform release binaries on version tags (v*.*.*)
+# Continuous Delivery: builds release archives for Linux, Windows and macOS.
+#
+#   push tag vX.Y.Z      -> build, verify, then publish a GitHub Release
+#   dispatch + tag input -> same, for an existing tag (checked out at that tag)
+#   dispatch, no tag     -> DRY RUN: build, package, verify, upload artifacts only
+#
+# Tests are not repeated here: ci.yml already runs the full suite on every
+# v* tag push, and docs/RELEASING.md requires a green CI on the commit before tagging.
+# See docs/RELEASING.md.
 name: Release
 
 on:
@@ -8,44 +16,100 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing version tag to build and publish (e.g. v0.1.0)'
+        description: 'Existing tag to publish (e.g. v0.1.0). Leave empty for a dry run that only uploads artifacts.'
         required: false
         type: string
 
 permissions:
-  contents: write
+  contents: read
+
+# Never cancel a release in flight; two runs for one tag queue instead.
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan (tag and publish decision)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - name: Decide tag and whether to publish
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag=""
+          if [ "$EVENT" = "push" ]; then
+            tag="$REF_NAME"
+          elif [ -n "$INPUT_TAG" ]; then
+            tag="$INPUT_TAG"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            tag="$REF_NAME" # dispatch started "from" a tag
+          fi
+          if [ -z "$tag" ]; then
+            echo "Dry run: no tag. Artifacts only, nothing is published."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::'$tag' is not vMAJOR.MINOR.PATCH[-prerelease]"
+            exit 1
+          fi
+          # Publishing never creates a tag: it must already exist on the remote.
+          git ls-remote --exit-code --tags "https://github.com/$REPO" "refs/tags/$tag" > /dev/null \
+            || { echo "::error::tag $tag does not exist in $REPO"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag (sparse, for the version check)
+        if: steps.plan.outputs.tag != ''
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ steps.plan.outputs.tag }}
+          sparse-checkout: |
+            Cargo.toml
+            tools
+
+      - name: Tag must equal the Cargo.toml workspace version
+        if: steps.plan.outputs.tag != ''
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: python3 tools/release_package.py --check-tag "$TAG"
+
   build:
     name: Build (${{ matrix.target }})
+    needs: plan
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            archive: ns4-linux-x86_64.tar.gz
-            bin: ns4
-            gui_bin: nord-stage4
-            plugin_bin: nord-plugin-standalone
+            exe: ''
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            archive: ns4-windows-x86_64.zip
-            bin: ns4.exe
-            gui_bin: nord-stage4.exe
-            plugin_bin: nord-plugin-standalone.exe
-          - os: macos-latest
+            exe: '.exe'
+          - os: macos-latest # Apple silicon (arm64)
             target: aarch64-apple-darwin
-            archive: ns4-macos-arm64.tar.gz
-            bin: ns4
-            gui_bin: nord-stage4
-            plugin_bin: nord-plugin-standalone
+            exe: ''
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (at the tag when there is one)
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.tag != '' && format('refs/tags/{0}', needs.plan.outputs.tag) || github.sha }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -54,65 +118,83 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+          save-if: false # release runs are rare; do not pay for a cache upload
 
-      - name: Install Linux system dependencies (ALSA, X11, JACK)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Linux system dependencies (ALSA, JACK, X11/GL)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev libxi-dev libgl-dev libjack-jackd2-dev pkg-config
+          sudo rm -f /etc/resolv.conf
+          printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" | sudo tee /etc/resolv.conf
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: Updating apt and installing dependencies..."
+            if sudo apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=20 && \
+               sudo apt-get install -y --no-install-recommends -o Acquire::Retries=5 libasound2-dev libudev-dev libjack-jackd2-dev libgl-dev libx11-dev libx11-xcb-dev libxcursor-dev libxrandr-dev libxi-dev libxext-dev libxfixes-dev libxrender-dev libxinerama-dev pkg-config; then
+              echo "Dependencies installed successfully."
+              break
+            fi
+            sleep 5
+          done
 
-      - name: Build release binaries
+      # Separate invocations on purpose: one combined `cargo build -p a -p b -p c`
+      # would unify nord-gui features across the three packages.
+      - name: Build release binaries and plugin bundles
+        shell: bash
         run: |
-          cargo build --release --locked --target ${{ matrix.target }} -p nord-core --bin ns4
-          cargo build --release --locked --target ${{ matrix.target }} -p nord-gui --bin nord-stage4
-          cargo build --release --locked --target ${{ matrix.target }} -p nord-plugin --bin nord-plugin-standalone
-          cargo xtask bundle nord-plugin --release --locked --target ${{ matrix.target }}
+          set -euo pipefail
+          cargo build --release --locked --target "${{ matrix.target }}" -p nord-core --bin ns4
+          cargo build --release --locked --target "${{ matrix.target }}" -p nord-gui --bin nord-stage4
+          cargo build --release --locked --target "${{ matrix.target }}" -p nord-plugin --bin nord-plugin-standalone
+          cargo xtask bundle nord-plugin --release --locked --target "${{ matrix.target }}"
 
-      - name: Run release tests
-        run: cargo test --release --locked --target ${{ matrix.target }} --workspace
+      - name: Smoke test the CLI
+        shell: bash
+        run: target/${{ matrix.target }}/release/ns4${{ matrix.exe }} info
 
-      - name: Package archive (Unix)
-        if: runner.os != 'Windows'
+      - name: Package archive and SHA256 file
+        shell: bash
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
         run: |
-          mkdir -p dist
-          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" dist/
-          cp "target/${{ matrix.target }}/release/${{ matrix.gui_bin }}" dist/
-          cp "target/${{ matrix.target }}/release/${{ matrix.plugin_bin }}" dist/
-          cp -r target/bundled/nord-plugin.clap dist/
-          cp -r target/bundled/nord-plugin.vst3 dist/
-          cp README.md dist/
-          tar -C dist -czf "${{ matrix.archive }}" "${{ matrix.bin }}" "${{ matrix.gui_bin }}" "${{ matrix.plugin_bin }}" nord-plugin.clap nord-plugin.vst3 README.md
-          shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+          set -euo pipefail
+          args=(--target "${{ matrix.target }}" --out dist)
+          if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
+          python tools/release_package.py "${args[@]}"
 
-      - name: Package archive (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Verify archive (layout, forbidden content, plugin exports, checksum)
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" dist/
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.gui_bin }}" dist/
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.plugin_bin }}" dist/
-          Copy-Item -Recurse "target/bundled/nord-plugin.clap" dist/
-          Copy-Item -Recurse "target/bundled/nord-plugin.vst3" dist/
-          Copy-Item README.md dist/
-          Compress-Archive -Path "dist/${{ matrix.bin }}", "dist/${{ matrix.gui_bin }}", "dist/${{ matrix.plugin_bin }}", "dist/nord-plugin.clap", "dist/nord-plugin.vst3", "dist/README.md" -DestinationPath "${{ matrix.archive }}" -Force
-          $hash = (Get-FileHash -Algorithm SHA256 "${{ matrix.archive }}").Hash.ToLower()
-          "$hash  ${{ matrix.archive }}" | Set-Content -Encoding ascii "${{ matrix.archive }}.sha256"
+          set -euo pipefail
+          for archive in dist/*.zip dist/*.tar.gz; do
+            [ -e "$archive" ] || continue
+            python tools/release_verify.py "$archive" --target "${{ matrix.target }}"
+          done
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
           path: |
-            ${{ matrix.archive }}
-            ${{ matrix.archive }}.sha256
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
           retention-days: 14
 
   publish:
     name: Publish GitHub Release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.tag != ''
-    runs-on: ubuntu-latest
+    needs: [plan, build]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the release and upload assets; no other job has this
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -120,17 +202,27 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Combine SHA256SUMS
+      - name: Combine and check SHA256SUMS.txt
+        working-directory: artifacts
         run: |
-          cd artifacts
-          cat *.sha256 > SHA256SUMS.txt
+          set -euo pipefail
+          cat ./*.sha256 > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          ls -l
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ needs.plan.outputs.tag }}
+          prerelease: ${{ contains(needs.plan.outputs.tag, '-') }}
           generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            Early release. The CLAP/VST3 plugin has not been verified in any DAW yet
+            (see docs/HOST_COMPATIBILITY.md). Builds are unsigned. Verify downloads
+            against `SHA256SUMS.txt`. Install paths per OS are in each archive's `README.txt`.
           files: |
             artifacts/*.tar.gz
             artifacts/*.zip
+            artifacts/*.sha256
             artifacts/SHA256SUMS.txt
