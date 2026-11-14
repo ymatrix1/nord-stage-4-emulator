@@ -1,8 +1,9 @@
 //! Result polling: dispatches decoded background jobs to the audio thread and panel state.
 
 use super::{BackupLibraryState, LibraryLoadOutcome};
-use crate::audio::{AudioCommand, AudioHandle};
+use crate::audio::{AudioCommand, AudioHandle, PianoEdit};
 use crate::panel::{LoadRequest, Stage4PanelState};
+use nord_core::piano::PianoCategory;
 use nord_core::synth::SynthOscMode;
 use std::sync::Arc;
 
@@ -54,6 +55,17 @@ impl BackupLibraryState {
                 } => {
                     let sound_name = sound.name.clone();
                     let zones = sound.strokes.len();
+                    // The panel type follows the model on the focused layer: header type of the
+                    // file, else the archive folder; the engine type drives the timbre sets.
+                    let category = sound
+                        .category
+                        .or_else(|| PianoCategory::from_entry_path(&key));
+                    if let Some(c) = category {
+                        if slot_b == (panel.piano_ui.focus == 1) {
+                            panel.piano_cat = c;
+                            audio.send_command(AudioCommand::Piano(PianoEdit::Category(c)));
+                        }
+                    }
                     if let Some(prev) = self.piano_cache.insert(key, Arc::clone(&sound)) {
                         self.retired_pianos.push(prev);
                     }
@@ -168,5 +180,51 @@ mod tests {
         lib.poll_results(&mut panel, &audio);
         assert_eq!(lib.pending_jobs, 0);
         assert_eq!(lib.error_message.as_deref(), Some("boom"));
+    }
+
+    fn piano_outcome(
+        key: &str,
+        slot_b: bool,
+        header_type: Option<PianoCategory>,
+    ) -> LibraryLoadOutcome {
+        let mut sound = nord_core::piano::NpnoSound::new_synthetic("x", 60, &[0.1; 64], 48_000.0);
+        sound.category = header_type;
+        LibraryLoadOutcome::Piano {
+            key: key.to_string(),
+            slot_b,
+            sound: Arc::new(sound),
+            from_program: false,
+        }
+    }
+
+    #[test]
+    fn test_loaded_piano_sets_the_panel_and_engine_type() {
+        let mut lib = BackupLibraryState::new();
+        let (audio, rx) = AudioHandle::new();
+        let mut panel = Stage4PanelState::default();
+        // The archive folder decides when the sound has no header type.
+        lib.pending_jobs = 2;
+        let _ = lib
+            .result_tx
+            .send(piano_outcome("Piano/Electric/x.npno", false, None));
+        lib.poll_results(&mut panel, &audio);
+        assert_eq!(panel.piano_cat, PianoCategory::Electric);
+        assert!(rx.try_iter().any(|c| matches!(
+            c,
+            AudioCommand::Piano(PianoEdit::Category(PianoCategory::Electric))
+        )));
+        // The header type wins; a model for the unfocused layer B leaves the type alone.
+        let _ = lib
+            .result_tx
+            .send(piano_outcome("loose.npno", true, Some(PianoCategory::Clav)));
+        lib.poll_results(&mut panel, &audio);
+        assert_eq!(panel.piano_cat, PianoCategory::Electric);
+        let _ = lib.result_tx.send(piano_outcome(
+            "loose.npno",
+            false,
+            Some(PianoCategory::Clav),
+        ));
+        lib.poll_results(&mut panel, &audio);
+        assert_eq!(panel.piano_cat, PianoCategory::Clav);
     }
 }

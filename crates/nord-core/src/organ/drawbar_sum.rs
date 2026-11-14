@@ -6,7 +6,7 @@
 use super::drawbar::{drawbar_gain_law, foldback_tonewheel, DRAWBAR_OFFSETS};
 use super::types::NUM_TONEWHEELS;
 use super::weights::UNIT_WEIGHT;
-use super::{OrganLayer, OrganModel, WeightMode};
+use super::{OrganLayer, OrganModel};
 
 impl OrganLayer {
     /// Sums drawbars and percussion of all held keys. `buses[lane]` are the tonewheel buses of
@@ -33,7 +33,8 @@ impl OrganLayer {
             1.0
         };
 
-        let firmware = self.weight_mode == WeightMode::Firmware;
+        let firmware = self.firmware_weights();
+        let bus_gain = self.level_law().bus_gain();
         let mut dry = [0.0f32; 2];
         if firmware {
             // Smoothed firmware weights through the mix stage (level L, ASSUMED 1.0): the bus
@@ -45,7 +46,7 @@ impl OrganLayer {
                 self.octave_shift.clamp(-2, 2),
                 self.sample_rate,
             );
-            let l = self.weight_level * db_bus_scale;
+            let l = self.weight_level * bus_gain * db_bus_scale;
             for (acc, bus) in dry.iter_mut().zip(buses.iter()).take(lanes) {
                 *acc = l * wa.iter().zip(bus.iter()).map(|(w, x)| w * x).sum::<f32>();
             }
@@ -53,7 +54,7 @@ impl OrganLayer {
         // Percussion keeps the legacy gains; in firmware mode they follow the ratio of the
         // firmware weight unit to the legacy 0.08 bus scale so the drawbar/percussion balance holds.
         let perc_scale = if firmware {
-            UNIT_WEIGHT * self.weight_level / 0.08
+            UNIT_WEIGHT * self.weight_level * bus_gain / 0.08
         } else {
             1.0
         };

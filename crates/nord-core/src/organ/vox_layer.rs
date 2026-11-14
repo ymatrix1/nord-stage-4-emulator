@@ -55,7 +55,7 @@ impl OrganLayer {
                 .vox_timeline
                 .step(&self.held_notes, shift, &levels, self.sample_rate);
         for t in &mut targets {
-            *t *= self.weight_level;
+            *t *= self.weight_level * self.level_law().vox_gain();
         }
         let dry = self.vox.render(&targets, vox_depth(self.scanner_mode));
         // No key click on the firmware path: the weight steps of the ARM timeline are the attack

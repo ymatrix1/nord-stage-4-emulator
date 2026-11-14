@@ -9,6 +9,7 @@ use std::f32::consts::TAU;
 use std::path::Path;
 use std::sync::Arc;
 
+pub mod category;
 pub mod downstream;
 pub mod level_q23;
 pub mod npno_level;
@@ -115,6 +116,9 @@ pub struct NpnoSound {
     /// Hardware level model parsed from the `.npno` header and stroke records (`None` for
     /// synthetic and SFZ sounds); used only when `PianoLayer::firmware_velocity_level` is set.
     pub firmware_level: Option<Arc<npno_level::NpnoLevel>>,
+    /// Piano type from the `.npno` CBIN header (`PianoCategory::from_npno_header`); `None` for
+    /// synthetic and SFZ sounds.
+    pub category: Option<PianoCategory>,
 }
 
 impl NpnoSound {
@@ -206,6 +210,7 @@ impl NpnoSound {
             strokes,
             zones,
             firmware_level: npno_level::NpnoLevel::parse(bytes).map(Arc::new),
+            category: PianoCategory::from_npno_header(bytes),
         })
     }
 
@@ -285,6 +290,7 @@ impl NpnoSound {
             strokes,
             zones: Vec::new(),
             firmware_level: None,
+            category: None,
         }
     }
 
@@ -378,6 +384,7 @@ impl NpnoSound {
             strokes,
             zones,
             firmware_level: None,
+            category: None,
         })
     }
 
@@ -1333,9 +1340,15 @@ impl PianoLayer {
         let low_a = (TAU * 120.0 * inv_fs).clamp(0.005, 0.25);
         self.timbre_low_lp += low_a * (mono - self.timbre_low_lp);
 
-        // Resonant midrange presence bell (1.2 kHz for Mid, 800 Hz scoop for Dyno2)
+        // Resonant midrange presence bell (1.2 kHz for Mid, 800 Hz scoop for Dyno2). On the
+        // Electric type SOFT/MID/BRIGHT are tailored (manual p.26): the bell sits in the upper
+        // mid-range (ASSUMED 2.2 kHz: tine "bell"/presence band; confirm by a sweep of the
+        // hardware TIMBRE steps on an EP model).
+        let electric = self.category == PianoCategory::Electric;
         let bell_hz = if self.timbre == PianoTimbre::Dyno2 {
             800.0
+        } else if electric {
+            2200.0
         } else {
             1200.0
         };
@@ -1347,6 +1360,12 @@ impl PianoLayer {
 
         let delta = match self.timbre {
             PianoTimbre::Off => 0.0,
+            // Electric SOFT: less treble and bell, ASSUMED gains (manual p.26 wording only).
+            PianoTimbre::Soft if electric => -0.55 * high - 0.30 * mid_bell,
+            // Electric MID: upper-mid presence boost, ASSUMED gain.
+            PianoTimbre::Mid if electric => 0.60 * mid_bell,
+            // Electric BRIGHT: presence plus treble, ASSUMED gains.
+            PianoTimbre::Bright if electric => 0.50 * mid_bell + 0.65 * high,
             PianoTimbre::Soft => -0.50 * high,
             PianoTimbre::Mid => 0.50 * mid_bell,
             PianoTimbre::Bright => 0.65 * high,

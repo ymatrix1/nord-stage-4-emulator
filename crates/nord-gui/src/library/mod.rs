@@ -7,6 +7,7 @@
 mod export;
 mod loaders;
 mod piano_bridge;
+mod piano_catalog;
 mod poll;
 mod program;
 #[cfg(test)]
@@ -16,7 +17,7 @@ mod ui;
 use crate::panel::bay_program::store::PER_BANK;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use nord_core::cbin::{Ns4BackupArchive, ProgramDecoded, SlotIndex};
-use nord_core::piano::NpnoSound;
+use nord_core::piano::{NpnoSound, PianoCategory};
 use nord_core::synth::SynthSampleSound;
 use std::collections::HashMap;
 use std::fs::File;
@@ -62,7 +63,10 @@ pub struct BackupLibraryState {
     pub archive: Option<Arc<Ns4BackupArchive>>,
     pub manifest_summary: Option<String>,
     pub programs: Vec<String>,
+    /// `.npno` entry names in hardware order (type, then position in the type).
     pub pianos: Vec<String>,
+    /// Piano type of each entry of `pianos` (parallel).
+    pub piano_types: Vec<PianoCategory>,
     pub samples: Vec<String>,
     pub filter: String,
     pub active_tab: BackupTab,
@@ -106,6 +110,7 @@ impl BackupLibraryState {
             manifest_summary: None,
             programs: Vec::new(),
             pianos: Vec::new(),
+            piano_types: Vec::new(),
             samples: Vec::new(),
             filter: String::new(),
             active_tab: BackupTab::Programs,
@@ -176,12 +181,9 @@ impl BackupLibraryState {
             .collect();
         programs.sort();
 
-        let mut pianos: Vec<String> = archive
-            .entries_with_ext(".npno")
-            .into_iter()
-            .map(|e| e.name.clone())
-            .collect();
-        pianos.sort();
+        let models = piano_catalog::read_models(&archive, &mut reader);
+        let pianos: Vec<String> = models.iter().map(|m| m.entry.clone()).collect();
+        let piano_types: Vec<PianoCategory> = models.iter().map(|m| m.category).collect();
 
         let mut samples: Vec<String> = archive
             .entries_with_ext(".nsmp4")
@@ -218,6 +220,7 @@ impl BackupLibraryState {
         self.manifest_summary = manifest_summary;
         self.programs = programs;
         self.pianos = pianos;
+        self.piano_types = piano_types;
         self.samples = samples;
         self.reap_retired_sounds();
         Ok(())

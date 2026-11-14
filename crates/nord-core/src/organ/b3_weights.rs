@@ -177,7 +177,7 @@ impl OrganLayer {
         } else {
             1.0
         };
-        DRY_GAIN * dip * sum
+        DRY_GAIN * self.level_law().bus_gain() * dip * sum
     }
 }
 

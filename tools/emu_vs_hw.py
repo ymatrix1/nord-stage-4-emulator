@@ -64,13 +64,52 @@ def attack_ms(mono: np.ndarray, sr: int, onsets_s: Sequence[float]) -> float | N
     return round(statistics.median(out), 1) if out else None
 
 
+T60_GAP_S = 1.0  # a release counts when no onset follows within this time
+T60_FIT_S = (0.15, 0.9)  # fit the decay between release + 0.15 s and release + 0.9 s
+T60_HOP_S = 0.01
+T60_FLOOR_DB = -75.0  # windows below this level (re 1.0) are noise
+
+
+def tail_t60_s(mono: np.ndarray, sr: int, intervals: Sequence[tuple[float, float]]) -> float | None:
+    """Median reverb decay time (T60, s) after note releases, or None.
+
+    A release at ``offset`` qualifies when no note starts within ``T60_GAP_S`` after it and the
+    clip continues that long. The power in 10 ms hops over ``T60_FIT_S`` after the release is
+    fitted in dB; ``T60 = -60 / slope``. EMPIRICAL heuristic: the organ voice stops at the key
+    release, so the decay is the reverb tail (plus the rotary / room of the recording); overlapping
+    notes and lossy audio make single values noisy, so only the median is reported.
+    """
+    hop = max(1, int(round(T60_HOP_S * sr)))
+    n = len(mono) // hop
+    power = np.asarray(mono[: n * hop], dtype=np.float64).reshape(n, hop)
+    db = 10 * np.log10(np.maximum((power**2).mean(axis=1), 1e-12))
+    t = np.arange(n) * T60_HOP_S
+    onsets = sorted(a for a, _ in intervals)
+    out: list[float] = []
+    for _, off in intervals:
+        if off + T60_GAP_S > len(mono) / sr or any(off < a < off + T60_GAP_S for a in onsets):
+            continue
+        sel = (t >= off + T60_FIT_S[0]) & (t <= off + T60_FIT_S[1])
+        if sel.sum() < 8 or db[sel].max() < T60_FLOOR_DB:
+            continue
+        slope = float(np.polyfit(t[sel], db[sel], 1)[0])
+        if slope < -1.0:  # dB/s: faster than a 60 s decay, slower than the noise floor allows
+            out.append(-60.0 / slope)
+    return round(statistics.median(out), 2) if out else None
+
+
 def read_mono(path: Path) -> tuple[int, np.ndarray]:
     sr, left, right = video_ref.read_wav_stereo(path)
     return sr, 0.5 * (np.asarray(left) + np.asarray(right))
 
 
-def segment_metrics(hw_wav: Path, emu_wav: Path, onsets_s: Sequence[float]) -> dict[str, Any]:
-    """Spectrum / level / width deltas (emulator minus hardware) plus attack times."""
+def segment_metrics(
+    hw_wav: Path,
+    emu_wav: Path,
+    onsets_s: Sequence[float],
+    intervals: Sequence[tuple[float, float]] = (),
+) -> dict[str, Any]:
+    """Spectrum / level / width deltas (emulator minus hardware) plus attack and tail times."""
     rep = video_ref.compare_wavs(hw_wav, emu_wav)
     sr_h, hw = read_mono(hw_wav)
     sr_e, emu = read_mono(emu_wav)
@@ -87,6 +126,8 @@ def segment_metrics(hw_wav: Path, emu_wav: Path, onsets_s: Sequence[float]) -> d
         "rms_hw_dbfs": rep["hardware"]["rms_dbfs"],
         "attack_hw_ms": hw_att,
         "attack_emu_ms": emu_att,
+        "t60_hw_s": tail_t60_s(hw, sr_h, intervals) if intervals else None,
+        "t60_emu_s": tail_t60_s(emu, sr_e, intervals) if intervals else None,
     }
 
 
@@ -239,6 +280,14 @@ def note_onsets(events: Path, confirmed_only: bool = False) -> list[float]:
     return [e["onset_s"] for e in ev if e.get("confirmed", True) or not confirmed_only]
 
 
+def note_intervals(events: Path, confirmed_only: bool = False) -> list[tuple[float, float]]:
+    """`(onset, offset)` of the detected notes (video-confirmed ones only when requested)."""
+    ev = json.loads(events.read_text(encoding="utf-8"))["events"]
+    return [
+        (e["onset_s"], e["offset_s"]) for e in ev if e.get("confirmed", True) or not confirmed_only
+    ]
+
+
 def run_all(args: argparse.Namespace) -> dict[str, Any]:
     spec = load_spec(Path(args.spec))
     work = Path(args.workdir)
@@ -252,6 +301,7 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
             lo, hi = args.note_range
             events = filter_events(events, lo, hi, work / seg["id"] / f"events_{lo}_{hi}.json")
         onsets = note_onsets(events, args.confirmed_only)
+        intervals = note_intervals(events, args.confirmed_only)
         suffix = "_conf" if args.confirmed_only else ""
         rows = []
         for var in seg["variants"]:
@@ -278,7 +328,7 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
                     flags,
                 )
             )
-            m = segment_metrics(hw_wav, emu, onsets)
+            m = segment_metrics(hw_wav, emu, onsets, intervals)
             m.update(label=var["label"], score=gap_score(m))
             rows.append(m)
         results.append(
@@ -294,7 +344,7 @@ def run_all(args: argparse.Namespace) -> dict[str, Any]:
 def markdown_table(result: dict[str, Any]) -> str:
     head = (
         "| Segment | Variant | " + " | ".join(BAND_NAMES) + " | centroid Hz | RMS dB | "
-        "width hw/emu | attack hw/emu ms | score |"
+        "width hw/emu | attack hw/emu ms | T60 hw/emu s | score |"
     )
     lines = [head, "|" + "---|" * (head.count("|") - 1)]
     for seg in result["segments"]:
@@ -305,7 +355,8 @@ def markdown_table(result: dict[str, Any]) -> str:
                 + " | ".join(f"{b[k]:+.1f}" for k in BAND_NAMES)
                 + f" | {v['centroid_delta_hz']:+.0f} | {v['rms_delta_db']:+.1f} | "
                 f"{v['width_hw']:.2f}/{v['width_emu']:.2f} | "
-                f"{v['attack_hw_ms']}/{v['attack_emu_ms']} | {v['score']:.2f} |"
+                f"{v['attack_hw_ms']}/{v['attack_emu_ms']} | "
+                f"{v.get('t60_hw_s')}/{v.get('t60_emu_s')} | {v['score']:.2f} |"
             )
     return "\n".join(lines)
 

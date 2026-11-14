@@ -60,8 +60,10 @@ Every `.ns4p`, `.ns4l`, `.ns4y`, `.ns4n`, `.ns4o`, and `.ns4t` file begins with 
 | `0x14` | 4 B | `u32` LE | `schema_id_le` | Payload schema version (matches big-endian repeat at `0x2E`) |
 | `0x18` | 4 B | `u32` LE | `checksum` | 32-bit payload checksum / CRC over `+0x2E..EOF` |
 | `0x1C` | 18 B | `[u8; 18]` | `reserved` | All zeros (`0x00`) in preset files |
-| `0x2E` | 2 B | `u16` BE | `schema_id_be` | Big-endian repeat of `schema_id` (`0x0139` for `ns4p`/`ns4l`, `0x00D0` for `ns4y`, `0x00CD` for `ns4o`, `0x00CB` for `ns4n`, `0x006C` for `ns4t`) |
+| `0x2E` | 2 B | `u16` BE | `schema_id_be` | Big-endian repeat of `schema_id` (`0x0139` for `ns4p`/`ns4l`, `0x00D0` for `ns4y`, `0x00CD` for `ns4o`, `0x00CB` for `ns4n`, `0x006C` for `ns4t`) |
 | `0x30` | `N` B | Bitstream | `payload` | Bit-packed preset state (`820` B for `ns4p`/`ns4l`, `493` B for `ns4y`, `147` B for `ns4n`, `135` B for `ns4o`, `76` B for `ns4t`) |
+
+**`.npno` piano models:** `bank_index` is the piano **type** (`0` Grand, `1` Upright, `2` Electric, `3` Clav, `4` Digital, `5` Misc; the TYPE LED order and the `.ns4p` piano layer `category` field) and `location_index` is the position of the model inside its type on the hardware. VERIFIED on the 38 models of `Nord Stage 4 Factory Restore RevK v1.66.ns4b`: type equals the archive folder and positions run `0..N-1` without gaps per type (`python tools/npno_types.py <backup>`; [piano-types](../research/piano-types.md)).
 
 ### Schema ID Table
 
