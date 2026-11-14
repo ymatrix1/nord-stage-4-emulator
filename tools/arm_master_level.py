@@ -18,6 +18,9 @@ word 0 (muted) until the first volume event; with the defaults (127 and 127) the
         target/fw_unpacked/bank0_SRAM.bin --cache target/settled.snap
 
 `word` prints the law without firmware (`python tools/arm_master_level.py word 100`).
+`layer` calls the layer level sender `0xC023195C(mixer, layer, slot)` with the "active" flag
+`[mixer + 7 layer + slot + 0x140]` set and the sent-word memos cleared, and prints the DSP words
+it writes (organ chain gains in PNO core 1, FX channel gains in FX core 1).
 """
 
 from __future__ import annotations
@@ -107,6 +110,34 @@ def run(
     return 0
 
 
+LAYER_SENDER = 0xC023195C
+
+
+def layer(code: Path, sram: Path | None, cache: Path | None) -> int:  # pragma: no cover
+    import arm_edit_capture as cap
+
+    emu, _blob = cap.settled_emulator(code, sram, cache)
+    mixer = emu.read32(MIXER_GLOBAL)
+    print(
+        "scale cells [mixer + 0x150 + 4 k]:",
+        [round(bits_f32(emu.read32(mixer + 0x150 + 4 * k)), 4) for k in range(12)],
+    )
+    for lay in (0, 1):
+        for slot in range(7):
+            r8 = slot if slot < 2 else slot + 13
+            idx = 25 * lay + r8
+            emu.uc.mem_write(mixer + 7 * lay + slot + 0x140, b"")
+            for off in (0x344, 0x40C):
+                emu.write32(mixer + off + 4 * idx, 0x12345678)
+            emu.clear_messages()
+            emu.call(LAYER_SENDER, mixer, lay, slot)
+            sent = [
+                (m.chip, m.core, hex(m.dm_word), round(bits_f32(m.word2), 5)) for m in emu.messages
+            ]
+            print(f"layer {lay} slot {slot}: {sent}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -117,7 +148,13 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin CLI
     r.add_argument("image", type=Path)
     r.add_argument("sram", type=Path, nargs="?")
     r.add_argument("--cache", type=Path)
+    ly = sub.add_parser("layer", help="run the layer level sender 0xC023195C")
+    ly.add_argument("image", type=Path)
+    ly.add_argument("sram", type=Path, nargs="?")
+    ly.add_argument("--cache", type=Path)
     ns = ap.parse_args(argv)
+    if ns.cmd == "layer":
+        return layer(ns.image, ns.sram, ns.cache)
     if ns.cmd == "word":
         word = master_level_word(ns.volume, ns.taper)
         print(f"{word:.7f} {f32_bits(word):#010x}")
