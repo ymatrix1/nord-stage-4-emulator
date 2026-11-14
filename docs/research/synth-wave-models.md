@@ -61,9 +61,12 @@ The oscillator stages share one skeleton: pitch and two ratios give two incremen
 |---|---|---|---|
 | `0x1215FB` | PURE (0, 2) saw: the most common wave of the factory programs (108 layers) | `0x12501F`: falling band-limited saw `-amp g (xo - copysign(w^2, xo))`, `w = 1 - min(1, \|xf\| 0.5 / a)` | `stage_saw`: 320 of 320 words equal (`--stage 0x1215FB`) |
 | `0x121B99` | PURE (0, 3..5) square / pulse 33 / pulse 10 | `0x1250C9`: `M0 - g saw(ph) + g saw(ph - off)` with `off = 2 DM(-8, I1)` (one word for both lanes, `0xC15AE` for channel 0; `M0` = 0) | `stage_pulse`: 320 of 320 words equal (`--stage 0x121B99`) |
+| `0x120CD0` | PURE (0, 0) sine | `0x12522E`: `t (c12 + q (c14 + q (c16 + q c18)))`, `t = \|x\| - 1`, `q = t^2`, `x = (ph - 0xC0000000) 2^-30`; fade constants `0x3F30F34B`, `0x3E6BEF0F`, `0x400AE2EB` from the pitch word | `stage_sine`: 320 of 320 (`--stage 0x120CD0`) |
+| `0x121183` | PURE (0, 1) triangle | `0x1251D4` twice with a fixed half-cycle shift; fade and window from the pitch word (`a = f`), not the increment | `stage_triangle`: 320 of 320 |
+| `0x12169D` | SHAPE (3, 1) Shape Saw (182 factory layers) | `0x12501F` twice at amplitude 0.5, the second shifted by `2 FIX(-w 2^30)`, `w = DM(-5, I2)` (idle 0.5) | `stage_shape_saw`: 320 of 320 (the shape word only takes the idle value in the oracle) |
 | `0x1212D3` | SHAPE (3, 0) Shape Triangle | `0x1251D4` parabola difference | 320 of 320 (section 1) |
 
-Six recorded oracle cases per new stage are in [data/synth-stage-oracle-cases.json](data/synth-stage-oracle-cases.json). Not modelled: PURE sine (`0x120CD0`) and triangle (`0x121183`), SUB OSC, SYNC, the other SHAPE waves (Shape Saw `0x12169D` is the most common wave of the factory set, 182 layers), SHAPE SINE, MULTI, SUPER, MISC.
+Six recorded oracle cases per new stage are in [data/synth-stage-oracle-cases.json](data/synth-stage-oracle-cases.json). Six recorded oracle cases per new stage are in the JSON. Not modelled: SUB OSC, SYNC, Shape Square / Half Sine / Parabolic, SHAPE SINE, MULTI, SUPER, MISC.
 
 ## 7. Preset category / wave against the edit-id domain (VERIFIED by range)
 
@@ -86,6 +89,15 @@ Experiments with `sharc-org` on the ORG and PNO core 2 images (commands in this 
 | Pitch word law | `DM(-29, I2)` is cycles per SY frame (`f / 43402.34`): strip 0 word 2 = 0 gives 0.0060278 = 261.619 Hz = C4 exactly; the top byte is a signed step count, 12 steps give a factor of 1.9801 (not 2; 17.3 cents per octave flat if the steps are semitones; see [data/synth-pitch-word.csv](data/synth-pitch-word.csv)), the low 24 bits interpolate a table (`0xB080D`) | VERIFIED (run) |
 
 Consequence: with the oscillator increment `inc = FIX(f r 2^31)` (cycles per sample `f r / 2`), a played pitch needs `r = 2` (or a pitch word of twice the note frequency), and the idle `P[-32] = 0.077` cannot be the ratio of a running voice. Since no DSP-side routine in the pass, the setup or the key-down path writes the block, **the real P block is written from outside the ORG / PNO core 2 program**: by the other core of the same chip or by DMA (hypothesis, not tested: the oracle runs core 2 only). The ARM never sends a word into `0xC1600..0xC1700` (the captured messages in [data/synth-edit-messages.csv](data/synth-edit-messages.csv) go to `0xE0000..`, `0xC13A9..AC`, `0xC1B3C..46`, `0xB00xx`, `0x92xxx`). The next experiment is therefore on the core 1 image of the chip that plays the synth: which routine of it writes `0xC1672..` (find with `--watch` on core 1, `sharc-organ` / `sharc-bank`), fed by the same ARM messages.
+
+## 10. What is needed to get the real P block (stopped here)
+
+Searched in the time box: (a) the ORG core 1 image never stores into the core 2 alias window (the only core-2 immediates in its code are the memory-map set-up words `0x28240000`, `0x28b90000` written to system registers); core 1 does not run as a pass engine under `sharc-org` (step limit), so its stores could not be watched dynamically; (b) the ARM message tables ([arm-param-messages](arm-param-messages.md)) target only the strip arrays (`0x28B80000 + 0xF8 k`, `0x28380000 + 0xF8 k`), the controller words (`0x28B07730 + 4 i`) and the FX / PNO record bases; `DM 0xC169A` is system address `0x28B05A68` and no table reaches it; (c) the core 2 pass, setup routine and key-down path write nothing there (section 9). So the block in the image is what the DSP uses, and the contradiction with a playable pitch (ratio 0.077 against a needed 2) means one of the assumed words is wrong, which only a measurement on a playing device can settle:
+
+1. Read `DM(0xC169A .. 0xC16B0)` and the record words `DM(0xC1F96 - 32 .. + 20)` of ORG / PNO core 2 while a Smooth Lead note is held, through the SPI2 peek port ([sharc-chip-identity](sharc-chip-identity.md) s5: the ARM sends one address word and gets three words back) or an ARM-side hook of `0xC0062D28`; or
+2. a loaded program's state dump from the device (the whole core 2 DM window `0xC1000..0xC2000`), which shows the P block, the shape words and the slot records with a stage installed.
+
+Without either, the stage models of this note are exact for any P block, but the sound of a program cannot be reproduced from them.
 
 ## Implications
 
