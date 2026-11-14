@@ -12,9 +12,8 @@
 //! * the processor output is scaled by `1 - 0.84 G` and is otherwise linear in the ring, with a
 //!   measured gain per line that depends on frequency only (`bass-proc-gain.csv`).
 //!
-//! The ring itself (`wheel * generator weight`) is **not** modelled here: the generator weights
-//! (`DM 0x95122..`) shrink on shared wheels by a rule that is not decoded, so the stage takes the
-//! ring line amplitude as an input and is not wired into the render path.
+//! The ring itself (`wheel * generator weight`) is in `b3_bass_gen.rs` (research s12); the stage
+//! that combines both and runs on the wheel bus is `b3_bass_stage.rs`.
 
 const STATE_CSV: &str = include_str!("../../../../docs/research/data/bass-state.csv");
 const GAIN_CSV: &str = include_str!("../../../../docs/research/data/bass-proc-gain.csv");
@@ -152,8 +151,10 @@ impl BassState {
 
     /// Key-up: the state is replayed without the key.
     ///
-    /// ASSUMED: the firmware key-up undoes the key-down (not captured); the weights are additive,
-    /// for `G` the replay of the remaining keys in press order is used.
+    /// VERIFIED (real MIDI path, notes 60 64 67, key-up of 64, research s12): the window words
+    /// return to the sum of the remaining keys. For `G` the firmware first undoes the step of the
+    /// key, then an idle-burst rebuild leaves it 19 % above the replay (0.0107 against 0.0090 at
+    /// these small steps, 0.01 dB of output scale); the replay is used.
     pub(super) fn key_up(&mut self, key: u8) {
         let Some(pos) = self.order[..self.len].iter().position(|&k| k == key) else {
             return;
@@ -180,7 +181,13 @@ impl BassState {
         1.0 - G_SLOPE * self.g()
     }
 
+    /// Weight windows 1 and 2 (`DM 0x951F1..`, `0x95241..`).
+    pub(super) fn windows(&self) -> (&[f32; W1_WORDS], &[f32; W2_WORDS]) {
+        (&self.w1, &self.w2)
+    }
+
     /// `(window 1, window 2)` weight on ring slot `slot` (0 outside the windows).
+    #[cfg(test)]
     pub(super) fn weights_on_slot(&self, slot: usize) -> (f32, f32) {
         let a = self.w1.get(slot).copied().unwrap_or(0.0);
         let b = slot
@@ -218,6 +225,7 @@ impl BassState {
     ///
     /// The two windows add coherently (VERIFIED against the oracle chords: coherent sum max error
     /// 1.45 dB, power sum 3.1 dB).
+    #[cfg(test)]
     pub(super) fn line_amplitude(&self, slot: usize, hz: f32, ring_amp: f32) -> f32 {
         let (a, b) = self.weights_on_slot(slot);
         ring_amp * (a * self.window_gain(1, hz) + b * self.window_gain(2, hz)) * self.output_scale()

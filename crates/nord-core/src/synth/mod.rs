@@ -237,8 +237,10 @@ pub struct SynthLayer {
     /// Strip chain only, opt-in (default off): play `strip_stage` (noise, Shape Square, SUPER, MULTI)
     /// with the firmware stage models instead of the decoded legacy waveform.
     pub strip_stages: bool,
-    /// `SAMPLES` oscillator only, opt-in (default off): pick the 12-tap kernel with the firmware
-    /// key rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
+    /// `SAMPLES` oscillator only (default on, D40): pick the 12-tap kernel with the firmware key
+    /// rule (`sinc::key_rule::kernel_for_key`) instead of the ASSUMED ratio rule.
+    /// VERIFIED: the voice update stores the played key (`[voice + 8]`) and sends the kernel base
+    /// `0x9243B = 0xE4000 + 0xC00 k` for `k = key rule(key)` (`tools/arm_sy_voice.py`).
     pub sample_kernel_by_key: bool,
     /// `SAMPLES` oscillator only, opt-in (default off): the note-to-step ratio follows the firmware
     /// exponent tables (`sinc::pitch_law::key_ratio`) instead of exact `2^(n/12)`.
@@ -391,7 +393,7 @@ impl SynthLayer {
             p_wave: PWave::Other,
             strip_stage: None,
             strip_stages: true,
-            sample_kernel_by_key: false,
+            sample_kernel_by_key: true,
             sample_pitch_fw: false,
             osc_shape_category: false,
             strip_cache: None,

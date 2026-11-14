@@ -98,6 +98,14 @@ pub fn apply_farfisa_processor(engine: &mut Stage4Engine, on: Option<bool>) {
     }
 }
 
+/// Switches the B3 Bass processor stage of both organ layers (`None` leaves the engine untouched).
+pub fn apply_b3_bass_processor(engine: &mut Stage4Engine, on: Option<bool>) {
+    if let Some(on) = on {
+        engine.organ_a.set_b3_bass_processor(on);
+        engine.organ_b.set_b3_bass_processor(on);
+    }
+}
+
 /// Selects the amp path of every layer (`Some(true)` firmware drive stage and cabinet, the
 /// default; `Some(false)` the engine drive and RBJ cabinet; `None` leaves the engine untouched).
 pub fn apply_amp_path(engine: &mut Stage4Engine, firmware: Option<bool>) {
@@ -260,6 +268,10 @@ pub struct FirmwareOptions {
     /// `--farfisa-processor on|off` (`None` = off): the Farfisa key-down weights and measured line
     /// gain of the processor `0x122B85` on `--tone-source farfisa`-style `FarfisaWheels` layers.
     pub farfisa_processor: Option<bool>,
+    /// `--b3-bass-processor on|off` (`None` = off): the B3 Bass key stage (generator weights,
+    /// window words and measured line gain of the processor `0x122296`); needs `--tone-source
+    /// b3wheels` on a B3 Bass layer.
+    pub b3_bass_processor: Option<bool>,
     /// `--firmware-fx`: every `FirmwareFx` port on every FX chain.
     pub firmware_fx: bool,
     /// `--firmware-reverb`: only the firmware Spring reverb (`FirmwareFx::reverb`) on every chain,
@@ -286,8 +298,8 @@ pub struct FirmwareOptions {
     /// on the strip chain; opt-in, voice ratios and weights ASSUMED).
     pub synth_stages: bool,
     /// `--sample-kernel key|ratio`: the `SAMPLES` oscillator picks its 12-tap kernel with the
-    /// firmware key rule (`sinc::key_rule`, VERIFIED run, key field ASSUMED) instead of the ASSUMED
-    /// ratio rule. Off by default until a program level check against hardware exists.
+    /// firmware key rule (`sinc::key_rule`; VERIFIED run and key field, D40) instead of the
+    /// ASSUMED ratio rule. On by default; `ratio` (and `--legacy-all`) selects the old rule.
     pub sample_kernel_key: bool,
     /// `--sample-pitch fw|equal`: the `SAMPLES` oscillator step follows the ARM exponent tables
     /// (`sinc::pitch_law`, VERIFIED law; root and sample-rate fields ASSUMED). Off by default.
@@ -324,6 +336,7 @@ impl Default for FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             farfisa_processor: None,
+            b3_bass_processor: None,
             firmware_fx: false,
             firmware_reverb: false,
             piano_firmware_level: true,
@@ -334,7 +347,7 @@ impl Default for FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
-            sample_kernel_key: false,
+            sample_kernel_key: true,
             sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
@@ -355,6 +368,7 @@ impl FirmwareOptions {
             synth_p: None,
             synth_stages: false,
             piano_firmware_level: false,
+            sample_kernel_key: false,
             ..Self::default()
         }
     }
@@ -368,6 +382,7 @@ impl FirmwareOptions {
             synth_chain: Some(SynthChain::FirmwareStrip),
             b3_tail: None,
             farfisa_processor: None,
+            b3_bass_processor: None,
             firmware_fx: true,
             firmware_reverb: false,
             piano_firmware_level: true,
@@ -378,7 +393,7 @@ impl FirmwareOptions {
             synth_shape_milli: None,
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
-            sample_kernel_key: false,
+            sample_kernel_key: true,
             sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
@@ -422,6 +437,9 @@ impl FirmwareOptions {
         }
         if let Some(v) = value("--farfisa-processor") {
             o.farfisa_processor = Some(parse_on_off("--farfisa-processor", v)?);
+        }
+        if let Some(v) = value("--b3-bass-processor") {
+            o.b3_bass_processor = Some(parse_on_off("--b3-bass-processor", v)?);
         }
         o.firmware_fx |= has("--firmware-fx");
         o.firmware_reverb |= has("--firmware-reverb");
@@ -506,6 +524,7 @@ impl FirmwareOptions {
         engine.piano_b.firmware_layer_law = self.piano_layer_law;
         apply_b3_tail(engine, self.b3_tail);
         apply_farfisa_processor(engine, self.farfisa_processor);
+        apply_b3_bass_processor(engine, self.b3_bass_processor);
         apply_leslie_firmware_ring(
             engine,
             self.leslie_firmware,
@@ -666,6 +685,12 @@ impl FirmwareOptions {
                 if b { "on" } else { "off" }
             ));
         }
+        if let Some(b) = self.b3_bass_processor {
+            parts.push(format!(
+                "b3-bass-processor={}",
+                if b { "on" } else { "off" }
+            ));
+        }
         if self.firmware_fx {
             parts.push("fx".into());
         }
@@ -699,8 +724,8 @@ impl FirmwareOptions {
         if !self.synth_stages {
             parts.push("no-stages".into());
         }
-        if self.sample_kernel_key {
-            parts.push("sample-kernel=key".into());
+        if !self.sample_kernel_key {
+            parts.push("sample-kernel=ratio".into());
         }
         if self.sample_pitch_fw {
             parts.push("sample-pitch=fw".into());
@@ -828,15 +853,22 @@ mod tests {
 
     #[test]
     fn sample_kernel_flag_selects_the_firmware_key_rule_on_every_layer() {
-        assert!(!FirmwareOptions::default().sample_kernel_key);
+        assert!(FirmwareOptions::default().sample_kernel_key);
+        assert!(!FirmwareOptions::default()
+            .summary()
+            .contains("sample-kernel"));
         let o = FirmwareOptions::from_args(&["--sample-kernel".into(), "key".into()]).unwrap();
-        assert!(o.sample_kernel_key && o.summary().contains("sample-kernel=key"));
+        assert!(o.sample_kernel_key);
         let mut e = Stage4Engine::new(48_000.0);
         o.apply_to(&mut e);
         assert!(e.synth_a.sample_kernel_by_key && e.synth_b.sample_kernel_by_key);
         assert!(e.synth_c.sample_kernel_by_key);
         let r = FirmwareOptions::from_args(&["--sample-kernel".into(), "ratio".into()]).unwrap();
-        assert!(!r.sample_kernel_key);
+        assert!(!r.sample_kernel_key && r.summary().contains("sample-kernel=ratio"));
+        r.apply_to(&mut e);
+        assert!(!e.synth_a.sample_kernel_by_key && !e.synth_c.sample_kernel_by_key);
+        assert!(!FirmwareOptions::legacy_all().sample_kernel_key);
+        assert!(FirmwareOptions::firmware_all().sample_kernel_key);
         assert!(parse_sample_kernel("bogus").is_err());
     }
 
@@ -927,6 +959,7 @@ mod tests {
             measured_laws: true,
             b3_tail: Some(false),
             farfisa_processor: None,
+            b3_bass_processor: None,
             ..FirmwareOptions::firmware_all()
         };
         on.apply_exact(&mut e);
@@ -1041,6 +1074,7 @@ mod tests {
             tone_source: Some(ToneWheelSource::B3Wheels),
             b3_tail: Some(false),
             farfisa_processor: None,
+            b3_bass_processor: None,
             ..Default::default()
         };
         let mut e = Stage4Engine::new(48_000.0);
@@ -1074,6 +1108,28 @@ mod tests {
         assert!(FirmwareOptions::legacy_all()
             .summary()
             .contains("legacy-piano"));
+    }
+
+    #[test]
+    fn b3_bass_processor_switch_parses_applies_and_describes() {
+        let o = FirmwareOptions::from_args(&args(&["--b3-bass-processor", "on"])).unwrap();
+        assert_eq!(o.b3_bass_processor, Some(true));
+        assert!(o.summary().contains("b3-bass-processor=on"));
+        let render = |on: Option<bool>| {
+            let mut e = Stage4Engine::new(48_000.0);
+            apply_b3_bass_processor(&mut e, on);
+            e.organ_a.b3_bass_mode = true;
+            e.organ_a.tonewheel_source = crate::organ::ToneWheelSource::B3Wheels;
+            e.organ_a.rotary_enabled = false;
+            e.organ_a.note_on(48);
+            (0..6_000)
+                .map(|_| e.organ_a.render_frame()[0])
+                .collect::<Vec<f32>>()
+        };
+        let (off, on) = (render(None), render(Some(true)));
+        assert!(on.iter().all(|v| v.is_finite()) && on.iter().any(|v| v.abs() > 1e-5));
+        assert_ne!(off, on);
+        assert!(parse_on_off("--b3-bass-processor", "x").is_err());
     }
 
     #[test]

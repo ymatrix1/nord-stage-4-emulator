@@ -35,11 +35,14 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 | [D30](#d30-the-smp-post-stage-is-unity-the-piano-defaults-stay-until-the-receiver-is-found) | 2026-11-14 | The SMP post stage is unity (`bus * 2^-29`); piano defaults stay until the receiver is found | accepted |
 | [D35](#d35-the-samples-kernel-rule-stays-opt-in-the-firmware-pitch-law-is-added-opt-in) | 2026-11-14 | The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in | accepted |
 | [D38](#d38-the-samples-defaults-stay-the-sample-loader-0xc01d710c-runs-but-the-voice-update-is-not-reached) | 2026-11-14 | The SAMPLES defaults stay; the sample loader `0xC01D710C` runs but the voice update is not reached | accepted |
+| [D46](#d46-the-samples-kernel-rule-by-key-is-the-default-the-voice-key-is-the-effective-key) | 2026-11-14 | The SAMPLES kernel rule by key is the default; the voice key is the effective key | accepted |
+| [D47](#d47-the-samples-pitch-law-stays-opt-in-the-voice-update-runs-in-the-harness-with-a-queue-pump-and-one-dsp-status-bit) | 2026-11-14 | The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit | accepted |
 | [D39](#d39-the-fx-receiver-of-the-smp-stream-is-found-unity-with-one-common-path-the-piano-defaults-stay) | 2026-11-14 | The FX receiver of the SMP stream is found: unity, one path for piano and organ; the piano defaults stay | accepted |
 | [D45](#d45-the-samples-defaults-stay-the-sample-set-cannot-be-served-through-the-library-loader) | 2026-11-14 | The SAMPLES defaults stay; the sample set cannot be served through the library loader | accepted |
 | [D31](#d31-the-multi-tap-reverb-types-211-is-opt-in-the-model-to-type-map-is-assumed) | 2026-11-14 | The multi-tap reverb (types 2..11) is opt-in; the model to type map is ASSUMED | accepted |
 | [D32](#d32-fx-mod-2-chor-uses-the-firmware-routines-behind-firmwarefxmod2) | 2026-11-14 | FX Mod 2: CHOR uses the firmware routines behind `FirmwareFx::mod2` | accepted |
 | [D40](#d40-fx-mod-2-phas-0-and-flang-use-the-firmware-routines-behind-firmwarefxmod2-ens-and-spin-are-verified-and-ported-only-delays-are-rescaled-to-the-engine-rate) | 2026-11-14 | FX Mod 2: PHAS 0 and FLANG use the firmware routines behind `FirmwareFx::mod2`; ENS and SPIN are verified and ported only; delays are rescaled to the engine rate | accepted |
+| [D41](#d41-the-b3-bass-stage-is-wired-opt-in-the-generator-weights-follow-a-table-of-held-writes-no-default-flips) | 2026-11-14 | The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips | accepted |
 
 ---
 
@@ -402,6 +405,26 @@ cabinet taps fingerprint response test.
 - **Alternatives:** Flip on the structural evidence (rejected, as in D35 and D37); forge the voice groups (rejected without a decoded registration path).
 - **Impact:** None on renders or `render_hash`; the probe tool and its tests gain the loader driver.
 
+### D46. The SAMPLES kernel rule by key is the default; the voice key is the effective key
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/arm-sy-voice-update`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) section 12)
+- **Context:** D22 flips a default only after an end-to-end check. D35, D37 and D38 kept `--sample-kernel key` opt-in because no SAMPLES note-on had reached the voice update, so the key field `[voice + 8]` and the kernel record write `0x9243B` were never captured.
+- **Decision:** `--sample-kernel` defaults to `key` (`FirmwareOptions::default`, `firmware_all`, `SynthLayer::new`); `--sample-kernel ratio` and `--legacy-all` keep the ASSUMED ratio rule. The GUI Firmware bar has no kernel control and follows `FirmwareOptions::default`.
+- **Why:** With the sample bound to synth layer A and the voice update run (`tools/arm_sy_voice.py`), the stores `0xC01E0A00` and `0xC01E0A10` and the record write were captured for nine keys: the stored key equals the played note, `[voice + 0x18]` is 0, and `0x9243B` equals `0xE3400 + 0xC00 k` for the kernel `k` of the rule on that key (48 and 59: 1, 60 and 71: 2, 72 and 83: 3, 84 and 95: 4, 96: 5). The ring record holds the played key plus the user's Octave Shift and global transpose, so the key is the effective key; the engine has no transposition on the synth path, so `Voice::note` is that key.
+- **Alternatives:** Keep it opt-in until the voice stores with Octave Shift or transpose are captured too (rejected: the engine does not apply them to the synth layer, the record level shows the effective key); also flip `--sample-pitch fw` (rejected, D41).
+- **Impact:** `render_hash` changes (sample section only, 96,002 of 560,000 floats differ, largest difference 1.6e-4; `b1c91b53...` becomes `31577ee1...`); `FirmwareOptions::summary` prints `sample-kernel=ratio` instead of `sample-kernel=key`; tests updated.
+
+### D47. The SAMPLES pitch law stays opt-in; the voice update runs in the harness with a queue pump and one DSP status bit
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/arm-sy-voice-update`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) section 12)
+- **Context:** D38 left the voice update `0xC01E00AC` unreached (voice groups not registered, ring consumer task not run).
+- **Decision:** (1) `tools/arm_sy_voice.py` plays the consumer: it pops the handler queue `0x9062E330` and calls the event thunks, and sets the DSP status bit `[0xC05B0454 + 4 [r5 + 4]] & [r5 + 8]` that the update waits for after the prepare message (meaning ASSUMED: "SY voice ready"). (2) `--sample-pitch fw` stays opt-in.
+- **Why:** The voice groups are registered by slot 0 at note-on; the earlier spin was the DSP handshake (20,404 resends in 3 M instructions), not missing groups. The pitch law is bit-exact on nine captured words, but the ARM feeds it a per-zone key `[zone + 0x60]` and tune `[zone + 0x10]` that the engine does not model (it uses `key - root + 60`), and the DSP step join is open (a `sharc-ref` replay of the ARM message list leaves the step at 0).
+- **Alternatives:** Forge the status bit in the firmware image (rejected: a harness hook is enough and visible); rebuild `sample_pitch_fw` on the per-zone fields now (rejected: the source of those fields in the sample map is not decoded).
+- **Impact:** None on renders; a new tool and tests; OQ22 and TD-08 narrowed.
+
 ### D45. The SAMPLES defaults stay; the sample set cannot be served through the library loader
 
 - **Status:** accepted 2026-11-14
@@ -477,12 +500,20 @@ unchanged (both flags off). Velvet Grand (level 127) reads same flag on.
 - **Alternatives:** Interpolate with the quadratic closed forms where they exist (kept the samples: one mechanism for all types); wire SPIN with an assumed rotor driver (rejected: unstable); rescale the filter coefficients too (rejected: needs a redesign of the all-pass and biquad words, not data).
 - **Impact:** `FirmwareFx::ALL` changes FLANG and PHAS 0 programs (4 frame latency); `DEFAULT` and `render_hash` unchanged. Types 1, 8 to 11 stay on the engine. OQ21 lists what remains (ENS / SPIN / PHAS 1 instance words, Mod 1 RM / A-WAH / PUMP).
 
-### D46. The master level word and the layer word targets are found; the organ chain word is 1.6; the level defaults stay
+### D41. The B3 Bass stage is wired opt-in; the generator weights follow a table of held writes; no default flips
 
 - **Status:** accepted 2026-11-14
-- **Decided by:** Yuri Olive (PR for `feat/master-level-chain`; evidence [piano-receiver-scale](research/piano-receiver-scale.md) s5, `tools/arm_master_level.py`)
-- **Context:** D39 left the writer of the FX master level word `DM(0xB6518)` (0 in the image), the chip behind the `0xC023195C` messages and the 17.5 dB gap between the organ `K = 2.8` and the piano peaks open (OQ20, OQ24).
-- **Decision:** Record that `DM(0xB6518)` is channel-table record 2 of `0xC0549E28` (FX core 1, byte address `0x282D9460`), written by two ARM senders that share the mixer object `[0xC055D720]`: `0xC01897A4` stores `(v / 127)^2` and `0xC010BE18` a 128-entry knob taper (1.0 at 127); the word is `(volume / 127)^2 * taper` = 1.0 at the defaults (`piano::downstream::master_level_word`). Record that the layer level sender `0xC023195C` writes `base + 1` / `base + 2` of the rows of table `0xC0547C58`: PNO core 1 organ chain gains (`0xB2ECF`, `0xB2EDE`, ...) and FX core 1 / 2 bus gains (`DM(0xC2780 + 15 i)`), and that the organ chain word is **1.6** at layer level 127 (scale cell `[mixer + 0x150]`), not the image default 1.0 of the oracle states. No engine default changes.
-- **Why:** The writer and the chip are verified by running the firmware senders in the settled emulator; the organ `K` is still not derivable (13.4 dB remain after the 1.6 word, the FX bus scale cells depend on a layer mode flag that is 0 in the settled state), and no hardware clip was re-run, so D22 gives no basis to flip `firmware_bus_scale`, `firmware_layer_law`, `piano_firmware_level` or the organ `K`.
-- **Alternatives:** Apply the 1.6 word to the engine organ gain and lower `K` to 1.75 (rejected: the two numbers are not independent of the unresolved FX bus gains, and the clips were not re-run); flip the piano scale to the receiver reading 0.7464 (rejected for the same reason, the organ side disagrees by 13.4 dB).
-- **Impact:** None on rendering. OQ20 and OQ24 narrow (writer and chips resolved; open: the layer mode flag and the FX bus scale cells, the source of sender A, stream edges, damper strokes). The ASSUMED master level 1.0 of D39 is the firmware default; the ASSUMED organ chain word 1.0 of the oracle states is 1.6.
+- **Decided by:** Yuri Olive (PR for `feat/organ-b3-bass-wired`; evidence [organ-farfisa-bass](research/organ-farfisa-bass.md) s12)
+- **Context:** The B3 Bass ring is `wheel x generator weight` (`DM 0x95122..`), and the weight shrinks on wheels shared by several keys. The processor part (windows, `G`, line gain) was already within 1.45 dB (s11). D22 allows a default flip only after an end-to-end check.
+- **Decision:** (1) Model the weight of a wheel as `T[note][n]`, `n` = held writes on the wheel (drawbar and percussion items of every held key), table derived from the real ARM key-down (`bass-gen-weights.csv`, `organ/b3_bass_gen.rs`); key-up removes the writes of the key. (2) Wire the stage opt-in (`OrganLayer::set_b3_bass_processor`, `--b3-bass-processor on`, `organ/b3_bass_stage.rs`): wheel bus x coefficient per wheel and window, two 511-tap FIRs from the measured window gains, output `1 - 0.84 G`. (3) Share the FIR design with the Farfisa stage (`gain_fir.rs`). (4) Flip no default.
+- **Why:** The rule is bit exact over 297 replayed writes of 9 sequences; the chord 60 64 67 is +1.1 to +2.5 dB per oracle line (not within 1 dB); the key tables are the `888888888` key-down and the real default program writes smaller window steps; the B3 clip of the presence gap plays the B3 model, so no hardware clip of a B3 Bass program exists to compare.
+- **Alternatives:** Find a closed form of `T` first (rejected: five fit families leave 0.3 to 1.3 % residual, the table is exact); flip the Bass default on the chord check (rejected: 2.5 dB at slot 48 and no clip); wait for the bit-exact `0x122296` model (rejected: the opt-in stage is useful now and does not touch defaults).
+- **Impact:** `render_hash` unchanged (flag default off, no code path changes when off). The Farfisa FIR design moves to `gain_fir.rs` with identical numerics. Open: drawbar and percussion dependence of the key tables, bit-exact processor, closed form of `T`, `G` resync after key-up, a B3 Bass clip.
+D46. master level word layer word targets found; organ chain word 1.6; level defaults stay
+
+`feat/master-level-chain`; [piano-receiver-scale](research/piano-receiver-scale.md) s5, `tools/arm_master_level.py`)
+D39 left writer FX master level word `DM(0xB6518)` (0 in image), chip behind `0xC023195C` messages 17.5 between organ `K 2.8` piano peaks open (OQ20, OQ24).
+Record that `DM(0xB6518)` channel-table record 2 `0xC0549E28` (FX core 1, byte address `0x282D9460`), written senders that share mixer object `[0xC055D720]`: `0xC01897A4` stores `(v / 127)^2` `0xC010BE18` 128-entry knob taper (1.0 127); word `(volume / 127)^2 * taper` 1.0 defaults (`piano::downstream::master_level_word`). Record that layer level sender `0xC023195C` `base + 1` / `base + 2` rows `0xC0547C58`: PNO core organ chain gains (`0xB2ECF`, `0xB2EDE`, ...) FX core / 2 gains (`DM(0xC2780 + 15 i)`), that organ chain word **1.6** layer level 127 (scale cell `[mixer + 0x150]`), image 1.0 states. No engine changes.
+writer chip verified running firmware senders in settled emulator; organ `K` still derivable (13.4 remain 1.6 word, FX scale cells depend layer mode flag that 0 in settled state), re-run, gives basis `firmware_bus_scale`, `firmware_layer_law`, `piano_firmware_level` or organ `K`.
+Apply 1.6 word engine organ gain lower `K` 1.75 numbers independent unresolved FX clips were re-run); piano scale receiver reading 0.7464 (rejected same reason, organ side disagrees 13.4 dB).
+None rendering. OQ20 OQ24 narrow (writer chips resolved; open: layer mode flag FX scale cells, source sender A, stream edges, damper strokes). ASSUMED master level 1.0 D39 firmware default; ASSUMED organ chain word 1.0 states 1.6.
