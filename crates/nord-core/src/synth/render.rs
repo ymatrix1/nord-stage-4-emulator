@@ -61,10 +61,11 @@ impl SynthLayer {
             _ => 1.0,
         };
         // Pitch stick: exactly 1.0 (no powf) while the stick is centred.
-        let pitch_mod = if self.bend_cents == 0.0 {
+        let pitch_cents = self.bend_cents + self.master_tune_cents;
+        let pitch_mod = if pitch_cents == 0.0 {
             pitch_mod
         } else {
-            pitch_mod * 2.0f32.powf(self.bend_cents / 1200.0)
+            pitch_mod * 2.0f32.powf(pitch_cents / 1200.0)
         };
 
         let bank = wavetable_bank();
