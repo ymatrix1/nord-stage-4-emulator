@@ -3,7 +3,7 @@
 use super::info::{self, SwitchInfo};
 use nord_core::organ::{OutputLevel, ToneWheelSource};
 use nord_core::render_opts::{FirmwareOptions, RotaryDrive};
-use nord_core::synth::{FilterEngine, SynthChain};
+use nord_core::synth::{FilterEngine, PSpec, PTableSpec, SynthChain};
 
 /// Dropdown entry: value, name, per-choice status hint shown when hovering the entry.
 type Choice<T> = (T, &'static str, &'static str);
@@ -59,12 +59,25 @@ const ORGAN_LEVELS: [Choice<OutputLevel>; 3] = [
     ),
 ];
 const CHAINS: [Choice<Option<SynthChain>>; 2] = [
-    (None, "Classic", "engine chain"),
+    (Some(SynthChain::Legacy), "Classic", "engine chain"),
     (
         Some(SynthChain::FirmwareStrip),
-        "Firmware strip",
-        "partly VERIFIED",
+        "Firmware strip (default)",
+        "partly VERIFIED, P table EMPIRICAL",
     ),
+];
+const P_TABLES: [Choice<Option<PSpec>>; 3] = [
+    (
+        Some(PSpec::Table(PTableSpec::BUILTIN)),
+        "Per-wave table (default)",
+        "EMPIRICAL, docs/research/synth-validation.md",
+    ),
+    (
+        Some(PSpec::Fitted),
+        "Smooth Lead fit",
+        "EMPIRICAL, one program",
+    ),
+    (None, "Off (unit P)", "no level or cutoff correction"),
 ];
 const FILTERS: [Choice<Option<FilterEngine>>; 2] = [
     (None, "ZDF (default)", "engine filter"),
@@ -171,6 +184,8 @@ pub fn show(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
             ui.horizontal(|ui| {
                 group(ui, "Synth", true, |ui| {
                     dropdown(ui, &info::CHAIN, &mut o.synth_chain, &CHAINS);
+                    checkbox(ui, &info::STAGES, &mut o.synth_stages);
+                    dropdown(ui, &info::P_TABLE, &mut o.synth_p, &P_TABLES);
                     dropdown(ui, &info::FILTER, &mut o.filter_engine, &FILTERS);
                     checkbox(ui, &info::MEASURED, &mut o.measured_laws);
                     shape(ui, &mut o.synth_shape_milli);
@@ -199,7 +214,7 @@ fn presets_and_status(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
     }
     if ui
         .button("Defaults")
-        .on_hover_text("Engine defaults (what a plain start gives)")
+        .on_hover_text("Engine defaults (what a plain start gives): firmware synth strip + P table")
         .clicked()
     {
         *o = FirmwareOptions::default();

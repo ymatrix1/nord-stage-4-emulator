@@ -75,7 +75,7 @@ Uncertainty: weight2 0.35 to 0.7, cutoff factor 1.5 to 1.75, shape 0.35 to 0.7 a
 | strip | -0.9 | -1.2 | +1.5 | -9.0 | -7.6 | +3.8 | -113 | 4.05 |
 | strip + `--synth-p fitted` | -0.1 | -0.8 | +0.3 | -0.8 | -2.9 | +0.2 | +14 | 0.97 |
 
-## 6. D22 decision: `FirmwareStrip` stays opt-in
+## 6. D22 decision: `FirmwareStrip` stays opt-in (superseded by [synth-validation](synth-validation.md): independent clips, per-wave table, default flipped)
 
 | Criterion | Result |
 |---|---|
