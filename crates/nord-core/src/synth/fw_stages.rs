@@ -10,6 +10,7 @@
 //! is open, OQ22): they are the ASSUMED constants below.
 
 use super::fw_shape::signed_phase;
+use super::fw_super1::super1_sample;
 use super::fw_sine_hp::{shape_sine_hp_core, OutputHighPass};
 use super::fw_sine_warps::{shape_sine_fold, shape_sine_gain, shape_sine_res, shape_sine_wave};
 use super::gain_dezip::SY_FRAME_RATE_HZ;
@@ -24,6 +25,8 @@ pub enum FwStage {
     ShapeSquare,
     /// SUPER wave 0 (stage `0x121D6D`, eight detuned saws).
     Super,
+    /// SUPER wave 1 (stage `0x121E9D`, seven detuned band-limited squares).
+    Super1,
     /// MULTI, all six waves (stage `0x121C54`, three octave saws).
     Multi,
     /// SHAPE SINE wave 0 (stage `0x123427`, a phase-warped sine).
@@ -45,6 +48,7 @@ impl FwStage {
             (0, 6) => Some(Self::Noise),
             (3, 2) => Some(Self::ShapeSquare),
             (6, 0) => Some(Self::Super),
+            (6, 1) => Some(Self::Super1),
             (5, _) => Some(Self::Multi),
             (4, 0) => Some(Self::ShapeSine),
             (4, 1) => Some(Self::ShapeSineFold),
@@ -102,7 +106,7 @@ pub fn noise_sample(state: u32) -> f32 {
 
 /// High-pitch fade `g = C (B + clip(A - a, +-B))` of the saw helpers, `a = 2 i_sy`.
 #[inline]
-fn fade(a: f32) -> f32 {
+pub(super) fn fade(a: f32) -> f32 {
     SAW_C * (SAW_B + (SAW_A - a).clamp(-SAW_B, SAW_B))
 }
 
@@ -189,6 +193,7 @@ impl FwStageState {
             FwStage::ShapeSineGain => shape_sine_gain(t, i_sy, ctrl),
             FwStage::ShapeSineRes => shape_sine_res(t, i_sy, ctrl),
             FwStage::ShapeSineHp => self.hp.process(shape_sine_hp_core(t, i_sy, ctrl)),
+            FwStage::Super1 => super1_sample(&mut self.phases, dt, i_sy, ctrl),
             FwStage::Multi => {
                 let mut sum = 0.0;
                 for (ph, c) in self.phases.iter_mut().zip(MULTI_OCTAVES) {
@@ -268,6 +273,7 @@ mod tests {
             Some(FwStage::ShapeSquare)
         );
         assert_eq!(FwStage::from_category_wave(6, 0), Some(FwStage::Super));
+        assert_eq!(FwStage::from_category_wave(6, 1), Some(FwStage::Super1));
         assert_eq!(FwStage::from_category_wave(5, 4), Some(FwStage::Multi));
         assert_eq!(FwStage::from_category_wave(4, 0), Some(FwStage::ShapeSine));
         assert_eq!(
@@ -297,6 +303,7 @@ mod tests {
             FwStage::Noise,
             FwStage::ShapeSquare,
             FwStage::Super,
+            FwStage::Super1,
             FwStage::Multi,
             FwStage::ShapeSine,
             FwStage::ShapeSineFold,

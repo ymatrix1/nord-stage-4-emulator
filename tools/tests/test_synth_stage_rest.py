@@ -14,6 +14,7 @@ import synth_stage_record as rec  # noqa: E402
 import synth_stage_shape_sine as shape_sine  # noqa: E402
 import synth_stage_shape_sine2 as sine2  # noqa: E402
 import synth_stage_shapes as shapes  # noqa: E402
+import synth_stage_super1 as super1  # noqa: E402
 import synth_stage_unison as unison  # noqa: E402
 import synth_wave_model as m  # noqa: E402
 import synth_wave_oracle as o  # noqa: E402
@@ -31,6 +32,7 @@ MODELS = {
     "0x1232a5": shape_sine.stage_shape_sine_2,
     "0x122f1f": shape_sine.stage_shape_sine_5,
     "0x120dab": sine2.stage_shape_sine_4,
+    "0x121e9d": super1.stage_super1,
 }
 
 
@@ -140,3 +142,28 @@ def test_shape_sine_4_setup_laws_at_the_idle_spread() -> None:
     # width law saturates for spread >= 0.1: q = 1 and `pq = f`
     assert abs(float(ir) * float(m.ld(f)) - float(sine2.INV_TWO_PI)) < 1e-6
     assert float(k) > 0.0
+
+
+def test_super1_fold_is_a_square_with_a_smoothed_edge_at_a_quarter_cycle() -> None:
+    r7 = m.mul(m.ONE, m.X(50))
+    far = super1.fold_diff([0x10000000, 0x70000000, 0x90000000, 0xE0000000], r7)
+    # away from |x| = 0.5 the bump `w` is 0 and the sample is the sign of `|x| - 0.5`
+    assert far == [-m.ONE, m.ONE, m.ONE, -m.ONE]
+    near = super1.fold_diff([0x3FF00000], r7)[0]  # just below |x| = 0.5: inside the bump
+    assert -m.ONE < near < 0
+
+
+def test_super1_runs_seven_voices_and_leaves_the_eighth_phase() -> None:
+    lanes = o.random_lanes(random.Random(5), True)
+    for ln in lanes:
+        ln.pitch, ln.spread = m.f2u(0.01), m.f2u(0.3)
+    _, last, _ = super1.stage_super1(lanes)
+    assert super1.VOICES == 7
+    assert last[0] != lanes[0].phases[6]
+
+
+def test_golden5_file_is_what_the_generator_prints() -> None:
+    import synth_stage_golden5 as g5
+
+    path = Path(__file__).resolve().parents[2] / "crates/nord-core/src/synth"
+    assert (path / "tests_fw_stage_golden5.rs").read_text() == g5.rust()

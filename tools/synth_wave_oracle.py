@@ -29,6 +29,7 @@ import synth_stage_noise as noise
 import synth_stage_shape_sine as shape_sine
 import synth_stage_shape_sine2 as shape_sine2
 import synth_stage_shapes as shapes
+import synth_stage_super1 as super1
 import synth_stage_unison as unison
 import synth_wave_model as m
 
@@ -51,7 +52,8 @@ STAGE_SHAPE_SINE2 = 0x1232A5
 STAGE_SHAPE_SINE1 = 0x1235C9
 STAGE_SHAPE_SINE4 = 0x120DAB
 STAGE_MULTI = 0x121C54
-UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI)
+STAGE_SUPER1 = 0x121E9D
+UNISON_STAGES = (STAGE_SUPER, STAGE_MULTI, STAGE_SUPER1)
 PHASE_TABLE = 0xC2336  # voice phase words, lane x at even offsets, lane y one above
 NOISE_STATE = 0xB2EF9  # DM state word of lane x (lane y one above)
 PULSE_WORD = 0xC15AE  # DM(-8, I1) of channel 0, read by both lanes (I1 is not duplicated in SIMD)
@@ -85,6 +87,7 @@ MODELS = {
     STAGE_SHAPE_SINE1: shape_sine.stage_shape_sine_1,
     STAGE_SHAPE_SINE4: shape_sine2.stage_shape_sine_4,
     STAGE_MULTI: unison.stage_multi,
+    STAGE_SUPER1: super1.stage_super1,
 }
 
 
