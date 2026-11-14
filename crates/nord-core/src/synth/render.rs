@@ -119,9 +119,18 @@ impl SynthLayer {
 
         // ASSUMED (strip chain only): the ANALOG SHAPE category is built from the saw helper
         // `0x12501F`, so a decoded `Triangle` of that category plays as the firmware saw.
+        let shape_stage = if strip.is_some()
+            && self.osc_shape_category
+            && self.waveform == VaWaveform::Triangle
+        {
+            self.strip_shape
+        } else {
+            None
+        };
         let waveform = if strip.is_some()
             && self.osc_shape_category
             && self.waveform == VaWaveform::Triangle
+            && shape_stage.is_none()
         {
             VaWaveform::Saw
         } else {
@@ -282,6 +291,7 @@ impl SynthLayer {
                             let s_k = Self::render_va(
                                 waveform,
                                 saw_model,
+                                shape_stage,
                                 self.supersaw_detune,
                                 self.measured_laws,
                                 self.pulse_width,
@@ -305,6 +315,7 @@ impl SynthLayer {
                             Self::render_va(
                                 waveform,
                                 saw_model,
+                                shape_stage,
                                 self.supersaw_detune,
                                 self.measured_laws,
                                 self.pulse_width,
@@ -390,6 +401,7 @@ impl SynthLayer {
                         let va = Self::render_va(
                             waveform,
                             saw_model,
+                            shape_stage,
                             self.supersaw_detune,
                             self.measured_laws,
                             self.pulse_width,
