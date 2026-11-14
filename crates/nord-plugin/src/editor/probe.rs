@@ -20,7 +20,7 @@ use nord_gui::audio::{
     AudioCommand as C, FxEdit, FxFlag, FxFloat, OrganEdit, PatternParam, PianoEdit, ProgramEdit,
     SettingsEdit, SynthEdit, SynthParam, SynthTarget,
 };
-use nord_panel::menus::Value;
+use nord_panel::menus::{ItemKind, Value};
 use std::collections::BTreeSet;
 
 /// Plausible in-range plain value for each FX float (used by the unit round-trip test too).
@@ -192,15 +192,18 @@ pub fn probe_commands() -> Vec<C> {
         sp(SynthParam::ArpMode(ArpMode::UpDown)),
         sp(SynthParam::VibratoMode(VibratoMode::Delay)),
     ];
-    for (id, value) in [
-        ("aux_kb.1.enable", Value::Bool(true)),
-        ("aux_kb.2.organ", Value::Index(1)),
-        ("aux_kb.2.piano", Value::Index(2)),
-        ("aux_kb.2.synth", Value::Index(4)),
-        ("aux_kb.3.curve", Value::Index(2)),
-    ] {
+    // One edit per mapped menu item, with a non-default value (the last choice, the range top, or
+    // on); `menu_table::ROWS` is the list, so a new row is probed without touching this file.
+    for r in super::menu_table::resolved() {
+        let value = match r.item.kind {
+            ItemKind::Toggle => Value::Bool(true),
+            ItemKind::Enum(c) => Value::Index(c.len() - 1),
+            ItemKind::Int { max, .. } => Value::Int(max),
+            ItemKind::Float { max, .. } => Value::Float(max),
+            ItemKind::Action => continue,
+        };
         v.push(C::Program(ProgramEdit::Settings(SettingsEdit {
-            id,
+            id: r.row.id,
             value,
         })));
     }
