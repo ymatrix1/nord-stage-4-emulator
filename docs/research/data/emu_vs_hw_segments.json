@@ -89,5 +89,15 @@
      "flags": ["--firmware-routing"],
      "edits": {"layer_levels.piano_a": 127, "layer_levels.synth_a": 89},
      "metrics": ["rms_dbfs", "pad_level_law"], "doc": "docs/research/dsoundman-piano-pad-layer.md"}
-  ]
+  ],
+  "dsoundman_segments": {
+    "note": "Spec only (not run by tools/emu_vs_hw.py yet). Videos are local and git-ignored in .reference/DSoundman-course/. Analysis: docs/research/dsoundman-course-organ-piano.md; partial levels by tools/dsm_partials.py.",
+    "segments": [
+      {"id": "dsm_b3_8", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 192.3, "to_s": 193.8, "drawbars": [0,0,8,0,0,0,0,0,0], "confidence": "high"},
+      {"id": "dsm_b3_8_4", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 198.4, "to_s": 199.0, "drawbars": [0,0,8,8,0,0,0,0,0], "confidence": "low (0.6 s window, speech)"},
+      {"id": "dsm_b3_8_4_2", "video": "SuilmCpKeps", "engine": "organ B3 + rotary slow", "note": 60, "from_s": 202.6, "to_s": 203.8, "drawbars": [0,0,8,8,0,8,0,0,0], "confidence": "low (speech)"},
+      {"id": "dsm_piano_soft", "video": "NVMtX0epXog", "engine": "piano White Grand, no fx", "from_s": 152, "to_s": 168, "timbre": "soft", "confidence": "low (music, mixed notes)"},
+      {"id": "dsm_piano_normal", "video": "NVMtX0epXog", "engine": "piano White Grand, no fx", "from_s": 113, "to_s": 140, "timbre": "normal", "confidence": "low (music, mixed notes)"}
+    ]
+  }
 }
