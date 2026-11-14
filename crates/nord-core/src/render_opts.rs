@@ -106,6 +106,42 @@ pub fn apply_rotary_scaled(engine: &mut Stage4Engine) {
     }
 }
 
+/// Rotary drive law (`--rotary-drive engine|unity|scaled`). Both opt-in laws are flags on the organ
+/// layer, so they can be switched live and back (EMPIRICAL, `docs/research/b3-rotary.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RotaryDrive {
+    /// `tanh(g x)` with the program drive passed through unchanged.
+    #[default]
+    Engine,
+    /// `tanh(g x) / g` (unity small-signal gain).
+    Unity,
+    /// Program drive rescaled from the preset unit 0..10 to the engine unit 0..1.
+    Scaled,
+}
+
+/// Parses a `--rotary-drive` value: `engine | unity | scaled`.
+pub fn parse_rotary_drive(v: &str) -> Result<RotaryDrive, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "engine" | "default" => Ok(RotaryDrive::Engine),
+        "unity" => Ok(RotaryDrive::Unity),
+        "scaled" => Ok(RotaryDrive::Scaled),
+        _ => Err(format!(
+            "invalid --rotary-drive '{v}' (expected engine|unity|scaled)"
+        )),
+    }
+}
+
+/// Parses an `--amp-path` value: `engine | firmware` (`true` = firmware drive stage).
+pub fn parse_amp_path(v: &str) -> Result<bool, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "firmware" => Ok(true),
+        "engine" => Ok(false),
+        _ => Err(format!(
+            "invalid --amp-path '{v}' (expected engine|firmware)"
+        )),
+    }
+}
+
 /// Applies the opt-in firmware switches to every layer of `engine`.
 pub fn apply_firmware_options(
     engine: &mut Stage4Engine,
@@ -158,6 +194,11 @@ pub struct FirmwareOptions {
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
+    /// `--amp-path engine|firmware`: `FirmwareFx::amp` on every chain (`None` = the engine default,
+    /// firmware drive stage on; `Some(false)` = engine drive and RBJ cabinet).
+    pub amp_path: Option<bool>,
+    /// `--rotary-drive engine|unity|scaled`.
+    pub rotary_drive: RotaryDrive,
 }
 
 /// The engine defaults: every opt-in path off, except the firmware piano level, which is the
@@ -175,6 +216,8 @@ impl Default for FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             firmware_routing: false,
+            amp_path: None,
+            rotary_drive: RotaryDrive::Engine,
         }
     }
 }
@@ -202,6 +245,8 @@ impl FirmwareOptions {
             measured_laws: false,
             synth_shape_milli: None,
             firmware_routing: false,
+            amp_path: None,
+            rotary_drive: RotaryDrive::Engine,
         }
     }
 
@@ -246,6 +291,12 @@ impl FirmwareOptions {
         if has("--legacy-routing") {
             o.firmware_routing = false;
         }
+        if let Some(v) = value("--amp-path") {
+            o.amp_path = Some(parse_amp_path(v)?);
+        }
+        if let Some(v) = value("--rotary-drive") {
+            o.rotary_drive = parse_rotary_drive(v)?;
+        }
         if let Some(v) = value("--synth-shape") {
             let x: f32 = v
                 .parse()
@@ -276,6 +327,8 @@ impl FirmwareOptions {
         if self.firmware_routing {
             engine.set_firmware_routing(FirmwareRouting::On);
         }
+        apply_amp_path(engine, self.amp_path);
+        self.set_rotary(engine);
     }
 
     /// Sets every path to exactly this value, including back to the engine default. Runs on
@@ -295,16 +348,22 @@ impl FirmwareOptions {
             s.filter_engine = filter;
             s.chain = chain;
         }
-        let fx = if self.firmware_fx {
+        let mut fx = if self.firmware_fx {
             FirmwareFx::ALL
         } else {
-            FirmwareFx::OFF
+            FirmwareFx::DEFAULT
         };
+        if let Some(amp) = self.amp_path {
+            fx.amp = amp;
+        }
         for c in engine.fx_chains.iter_mut() {
             c.firmware_fx = fx;
         }
         engine.piano_a.firmware_velocity_level = self.piano_firmware_level;
         engine.piano_b.firmware_velocity_level = self.piano_firmware_level;
+        engine.piano_a.firmware_bus_scale = self.piano_bus_scale;
+        engine.piano_b.firmware_bus_scale = self.piano_bus_scale;
+        self.set_rotary(engine);
         apply_b3_tail(engine, Some(self.b3_tail.unwrap_or(true)));
         self.set_measured_laws(engine);
         engine.set_firmware_routing(if self.firmware_routing {
@@ -313,6 +372,13 @@ impl FirmwareOptions {
             FirmwareRouting::Off
         });
         self.set_shape(engine);
+    }
+
+    fn set_rotary(&self, engine: &mut Stage4Engine) {
+        for organ in [&mut engine.organ_a, &mut engine.organ_b] {
+            organ.rotary_drive_unity = self.rotary_drive == RotaryDrive::Unity;
+            organ.rotary_drive_scaled = self.rotary_drive == RotaryDrive::Scaled;
+        }
     }
 
     fn set_shape(&self, engine: &mut Stage4Engine) {
@@ -354,6 +420,18 @@ impl FirmwareOptions {
         }
         if self.firmware_routing {
             parts.push("routing".into());
+        }
+        if self.piano_bus_scale {
+            parts.push("piano-bus".into());
+        }
+        if let Some(m) = self.synth_shape_milli {
+            parts.push(format!("shape={:.2}", f32::from(m) / 1000.0));
+        }
+        if let Some(a) = self.amp_path {
+            parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
+        }
+        if self.rotary_drive != RotaryDrive::Engine {
+            parts.push(format!("rotary={:?}", self.rotary_drive));
         }
         if parts.is_empty() {
             "defaults".into()
@@ -484,7 +562,7 @@ mod tests {
         assert_eq!(e.organ_a.tonewheel_source, ToneWheelSource::ModelDefault);
         assert_eq!(e.synth_a.filter_engine, FilterEngine::Zdf);
         assert_eq!(e.synth_a.chain, SynthChain::Legacy);
-        assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::OFF);
+        assert_eq!(e.fx_chains[0].firmware_fx, FirmwareFx::DEFAULT);
         assert!(!e.synth_a.measured_laws && e.piano_b.firmware_velocity_level);
         FirmwareOptions::legacy_all().apply_exact(&mut e);
         assert!(!e.piano_a.firmware_velocity_level && !e.piano_b.firmware_velocity_level);
@@ -505,10 +583,79 @@ mod tests {
     }
 
     #[test]
+    fn amp_path_and_rotary_drive_parse_apply_and_revert() {
+        let o = FirmwareOptions::from_args(&args(&[
+            "--amp-path",
+            "engine",
+            "--rotary-drive",
+            "scaled",
+        ]))
+        .unwrap();
+        assert_eq!(
+            (o.amp_path, o.rotary_drive),
+            (Some(false), RotaryDrive::Scaled)
+        );
+        assert!(FirmwareOptions::from_args(&args(&["--amp-path", "x"])).is_err());
+        assert!(FirmwareOptions::from_args(&args(&["--rotary-drive", "x"])).is_err());
+        assert_eq!(parse_rotary_drive("Unity"), Ok(RotaryDrive::Unity));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert!(!e.fx_chains[2].firmware_fx.amp && e.organ_a.rotary_drive_scaled);
+        let s = o.summary();
+        assert!(s.contains("amp=engine") && s.contains("rotary=Scaled"));
+        let u = FirmwareOptions {
+            rotary_drive: RotaryDrive::Unity,
+            amp_path: Some(true),
+            piano_bus_scale: true,
+            ..Default::default()
+        };
+        u.apply_exact(&mut e);
+        assert!(e.fx_chains[2].firmware_fx.amp && e.organ_b.rotary_drive_unity);
+        assert!(!e.organ_b.rotary_drive_scaled && e.piano_a.firmware_bus_scale);
+        FirmwareOptions::default().apply_exact(&mut e);
+        assert!(!e.organ_a.rotary_drive_unity && !e.piano_b.firmware_bus_scale);
+        assert_eq!(
+            e.organ_a.rotary_drive, 0.2,
+            "the stored drive is never rewritten"
+        );
+        assert!(u.summary().contains("piano-bus"));
+    }
+
+    #[test]
+    fn repeated_apply_exact_keeps_b3_wheels_and_their_phases() {
+        let o = FirmwareOptions {
+            tone_source: Some(ToneWheelSource::B3Wheels),
+            b3_tail: Some(false),
+            ..Default::default()
+        };
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_exact(&mut e);
+        e.organ_a.rotary_enabled = false;
+        e.organ_a.note_on(60);
+        let first: Vec<f32> = (0..2_000).map(|_| e.organ_a.render_frame()[0]).collect();
+        o.apply_exact(&mut e); // same options again while playing: no table rebuild, no phase reset
+        let mut fresh = Stage4Engine::new(48_000.0);
+        o.apply_exact(&mut fresh);
+        fresh.organ_a.rotary_enabled = false;
+        fresh.organ_a.note_on(60);
+        let again: Vec<f32> = (0..4_000)
+            .map(|_| fresh.organ_a.render_frame()[0])
+            .collect();
+        let cont: Vec<f32> = (0..2_000).map(|_| e.organ_a.render_frame()[0]).collect();
+        assert_eq!(first, again[..2_000]);
+        assert_eq!(cont, again[2_000..]);
+    }
+
+    #[test]
     fn summary_lists_active_paths() {
         assert_eq!(FirmwareOptions::default().summary(), "defaults");
         let s = FirmwareOptions::firmware_all().summary();
         assert!(s.contains("tone=Firmware") && s.contains("fx") && !s.contains("legacy-piano"));
+        let shaped = FirmwareOptions {
+            synth_shape_milli: Some(250),
+            ..Default::default()
+        };
+        assert!(shaped.summary().contains("shape=0.25"));
         assert!(FirmwareOptions::legacy_all()
             .summary()
             .contains("legacy-piano"));

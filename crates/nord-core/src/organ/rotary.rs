@@ -16,6 +16,7 @@ impl OrganLayer {
         self.rotary_speed = src.rotary_speed;
         self.rotary_drive = src.rotary_drive;
         self.rotary_drive_unity = src.rotary_drive_unity;
+        self.rotary_drive_scaled = src.rotary_drive_scaled;
         self.rotary_close_mic = src.rotary_close_mic;
         self.rotary_mic_angle_deg = src.rotary_mic_angle_deg;
         self.rotary_stop_mode = src.rotary_stop_mode;
@@ -32,7 +33,12 @@ impl OrganLayer {
 
     /// Processes Model 122 Rotary Speaker with Doppler delay, Close Mic, Angle, Stop Mode, and cabinet reflections.
     pub(super) fn process_rotary(&mut self, scanner_out: f32, inv_fs: f32) -> [f32; 2] {
-        let gain = 1.0 + 3.0 * self.rotary_drive;
+        let drive = if self.rotary_drive_scaled {
+            (self.rotary_drive / 10.0).clamp(0.0, 1.0)
+        } else {
+            self.rotary_drive
+        };
+        let gain = 1.0 + 3.0 * drive;
         let driven = (gain * scanner_out).tanh();
         let driven = if self.rotary_drive_unity {
             driven / gain
@@ -228,5 +234,24 @@ mod tests {
         }
         assert_eq!(ROTARY_BUFFER_SIZE, 1024);
         assert_eq!(ROTARY_CROSSOVER_HZ, 800.0);
+    }
+
+    #[test]
+    fn scaled_drive_flag_reads_the_preset_unit_without_rewriting_it() {
+        let run = |drive: f32, scaled: bool| {
+            let mut o = OrganLayer::new(48_000.0);
+            o.rotary_drive = drive;
+            o.rotary_drive_scaled = scaled;
+            (0..512)
+                .map(|i| o.process_rotary(0.3 * (i as f32 * 0.05).sin(), 1.0 / 48_000.0)[0])
+                .collect::<Vec<f32>>()
+        };
+        assert_eq!(run(2.44, true), run(0.244, false));
+        assert_ne!(run(2.44, true), run(2.44, false));
+        let mut dst = OrganLayer::new(48_000.0);
+        let mut src = OrganLayer::new(48_000.0);
+        src.rotary_drive_scaled = true;
+        dst.mirror_rotary_settings(&src);
+        assert!(dst.rotary_drive_scaled);
     }
 }
