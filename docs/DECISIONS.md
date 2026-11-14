@@ -363,3 +363,13 @@ Each decision records **Context, Decision, Why, Alternatives, Impact**, plus **S
 - **Why:** The law is verified, but the path from the stored word to the SMP voice gains (`0xC023195C`) is not traced, and the receiver of the SMP serial stream (ring `0xB2000`, 32-bit TDM floats `bus * 2^-29`) was not found, so no absolute level is verified end to end.
 - **Alternatives:** Flip the layer law by default (changes every piano program with level below 127 on an untraced path); flip the bus scale (0.83 dB on an assumption, and the true receiver scale is unknown by up to 12 dB).
 - **Impact:** `render_hash` unchanged (both flags default off). Velvet Grand (level 127) reads the same with the flag on.
+
+### D36. The SAMPLES kernel rule stays opt-in; the firmware pitch law is added opt-in
+
+- **Status:** accepted 2026-11-14
+- **Decided by:** Yuri Olive (PR for `feat/synth-sample-pitch-wave`; evidence [synth-sample-kernel-rule](research/synth-sample-kernel-rule.md) sections 7 to 9)
+- **Context:** D22 flips a default only after an end-to-end check. The kernel rule (`--sample-kernel key`) needs `[voice + 8]` to be the played key; the harness cannot load a SAMPLES program (no sample-set download), so the kernel record write `0x9243B + 0x38 k` was not captured. The ARM pitch block `0xC01E14AC..0xC01E15A4` was run for the first time.
+- **Decision:** Keep `--sample-kernel key` opt-in (structure shows `[+8]` is the key before the `[+0x18]` transposition, but the event-record link was not run). Add `sinc::pitch_law` (bit-identical to the firmware block for 23 inputs) behind `SynthLayer::sample_pitch_fw` / `--sample-pitch fw`; default off.
+- **Why:** The exponent law is VERIFIED; the place where the root key and the sample rate enter the ARM word, and the DSP conversion of the pair-block word to the Stage B step, are not traced, so the absolute step is not firmware-derived.
+- **Alternatives:** Flip the kernel default on the structural evidence (changes every SAMPLES program on an unrun field); replace the `2^(n/12)` step outright (the join with the DSP step table is open).
+- **Impact:** `render_hash` unchanged (both flags default off).

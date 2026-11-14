@@ -209,6 +209,15 @@ pub fn parse_sample_kernel(v: &str) -> Result<bool, String> {
     }
 }
 
+/// Parses `--sample-pitch`: `fw` (firmware exponent tables, true) or `equal` (exact `2^(n/12)`).
+pub fn parse_sample_pitch(v: &str) -> Result<bool, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "fw" | "firmware" => Ok(true),
+        "equal" => Ok(false),
+        _ => Err(format!("invalid --sample-pitch '{v}' (expected fw|equal)")),
+    }
+}
+
 /// Applies the opt-in firmware switches to every layer of `engine`.
 pub fn apply_firmware_options(
     engine: &mut Stage4Engine,
@@ -276,6 +285,9 @@ pub struct FirmwareOptions {
     /// firmware key rule (`sinc::key_rule`, VERIFIED run, key field ASSUMED) instead of the ASSUMED
     /// ratio rule. Off by default until a program level check against hardware exists.
     pub sample_kernel_key: bool,
+    /// `--sample-pitch fw|equal`: the `SAMPLES` oscillator step follows the ARM exponent tables
+    /// (`sinc::pitch_law`, VERIFIED law; root and sample-rate fields ASSUMED). Off by default.
+    pub sample_pitch_fw: bool,
     /// `--firmware-routing`: section / layer enables and per-layer KB zones as the program stores
     /// them ([`FirmwareRouting`]); stays out of `firmware_all` until the zone codes are verified.
     pub firmware_routing: bool,
@@ -318,6 +330,7 @@ impl Default for FirmwareOptions {
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
             sample_kernel_key: false,
+            sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -360,6 +373,7 @@ impl FirmwareOptions {
             synth_p: Some(PSpec::Table(PTableSpec::BUILTIN)),
             synth_stages: true,
             sample_kernel_key: false,
+            sample_pitch_fw: false,
             firmware_routing: false,
             amp_path: None,
             rotary_drive: RotaryDrive::Engine,
@@ -418,6 +432,9 @@ impl FirmwareOptions {
         }
         if let Some(v) = value("--sample-kernel") {
             o.sample_kernel_key = parse_sample_kernel(v)?;
+        }
+        if let Some(v) = value("--sample-pitch") {
+            o.sample_pitch_fw = parse_sample_pitch(v)?;
         }
         o.firmware_routing |= has("--firmware-routing");
         if has("--legacy-routing") {
@@ -600,6 +617,9 @@ impl FirmwareOptions {
         engine.synth_a.sample_kernel_by_key = self.sample_kernel_key;
         engine.synth_b.sample_kernel_by_key = self.sample_kernel_key;
         engine.synth_c.sample_kernel_by_key = self.sample_kernel_key;
+        engine.synth_a.sample_pitch_fw = self.sample_pitch_fw;
+        engine.synth_b.sample_pitch_fw = self.sample_pitch_fw;
+        engine.synth_c.sample_pitch_fw = self.sample_pitch_fw;
     }
 
     fn set_stages(&self, engine: &mut Stage4Engine) {
@@ -667,6 +687,9 @@ impl FirmwareOptions {
         }
         if self.sample_kernel_key {
             parts.push("sample-kernel=key".into());
+        }
+        if self.sample_pitch_fw {
+            parts.push("sample-pitch=fw".into());
         }
         if let Some(a) = self.amp_path {
             parts.push(format!("amp={}", if a { "firmware" } else { "engine" }));
@@ -793,6 +816,21 @@ mod tests {
         let r = FirmwareOptions::from_args(&["--sample-kernel".into(), "ratio".into()]).unwrap();
         assert!(!r.sample_kernel_key);
         assert!(parse_sample_kernel("bogus").is_err());
+    }
+
+    #[test]
+    fn sample_pitch_flag_selects_the_firmware_exponent_law_on_every_layer() {
+        assert!(!FirmwareOptions::default().sample_pitch_fw);
+        let o = FirmwareOptions::from_args(&["--sample-pitch".into(), "fw".into()]).unwrap();
+        assert!(o.sample_pitch_fw && o.summary().contains("sample-pitch=fw"));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert!(
+            e.synth_a.sample_pitch_fw && e.synth_b.sample_pitch_fw && e.synth_c.sample_pitch_fw
+        );
+        let r = FirmwareOptions::from_args(&["--sample-pitch".into(), "equal".into()]).unwrap();
+        assert!(!r.sample_pitch_fw);
+        assert!(parse_sample_pitch("bogus").is_err());
     }
 
     #[test]
