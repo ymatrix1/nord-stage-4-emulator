@@ -114,6 +114,15 @@ Question: with the firmware's own SY initialisation script in the DM image and t
 
 Reading: with the ring refill and the pointer table in place, the SY audio ISR, the other SY vectors that have handlers and the opcode handler bodies write nothing into the table, which is read as zero (`rec+0x2D`, the step word, stays 0 after 400 frames in `sy_isr_refill.scn`). The writer is not in the SY code, not in any ARM message this harness drives (545), and not in the image stream. Still not driven: (1) the real SDRAM stream through the external-port DMA TCBs (the entry could ride in the sample page; the TCB destinations seen are the staging buffers `0x93FF7 + 0x10 k`, not the table); (2) the ARM ring consumer `0xC01CE7D8` and the pool list users `0xC01E41B8`, `0xC01ECD74`; (3) other `.nsmp4` members (three more probed by an `agy` run with permission checks skipped at the user's request, `--notes 36 60 96 --idle-ticks 500`: Supreme Modern Fp 470 messages, Men+Women Oo Soft 470, Spitfire StringQuintet Stac 480, **0** into the window each; the members' `[zone + 0x6C]` values were not checked); (4) the missing loop-end call of the core (irrelevant while the ARM sends only opcode 0).
 
+### 7.1 Follow-ups run by `agy` (permission checks skipped at the user's request; results re-run here)
+
+| Item | Result | Tag |
+|---|---|---|
+| Ring consumer `0xC01CE7D8` (new `tools/arm_sy_ring_consumer.py`, `tools/tests/test_arm_sy_ring_consumer.py`) | One caller (`BL` at `0xC0019410`), `r0` = the synth strip object (`0x90674418` in the Carina Accordion run); `agy` calls it the strip apply routine. Called after load, bind and note-on it returns `1` and sends 393 port messages, **0** to SY or SMP, **0** into `0x93500..0x935A0` | VERIFIED (run twice, here and by `agy`) |
+| Pool list users `0xC01E41B8`, `0xC01ECD74` | `0xC01E41B8` is the literal of the note-on function `0xC01E31C8` (already covered by the note-on run); `0xC01ECD74` lies in the synth constructor `0xC01EC9D8` that builds the 56 pool objects and sends no port message | VERIFIED (listing read by `agy`; note-on run here); constructor not re-checked |
+| Loop-end call of the oracle core | Cause read from the source: `exec_flow` takes the call, then `finish_step` (`branch.rs`) sees `pc == loop end` and, while `remaining > 1`, replaces the target by the loop start and leaves the return address `0x1C064E` on the call stack. `agy` cites the programming reference (p. 4-55: no jump or call in the last three instructions of a loop) so the firmware pattern is outside the documented rules, and the handlers end in `rts (lr)` (loop re-entry), which the core does not model. Core left unchanged; behaviour on the hardware stays unmeasured. The ARM sends only opcode 0, so the pattern is never exercised | page citation not re-checked here; code reading VERIFIED by `agy`, not by a test |
+| Opcode sweep with `msg op=1..15 0x93550 0x1234` after `sy_isr_refill.scn` | no write into the window (same as the handler bodies) | VERIFIED (run by `agy`) |
+
 Decision: D111. `--sample-pitch fw` stays opt-in.
 
 Reproduce:
