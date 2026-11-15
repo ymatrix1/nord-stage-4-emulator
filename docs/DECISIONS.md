@@ -948,12 +948,15 @@ With transcribed pedal velocities median emulator-to-hardware T60 ratio default 
 Fit damper / release time constant clips gap fit, EMPIRICAL lossy reverberant audio, D22); replace default release envelope by 44 ms release release slew path's, opt-in, its absolute level open); slew level 1 8 dB under default three clips, D72).
 **Update (same PR):** Single-note show slew follows velocity (0.238 dB per velocity unit, default) constant -19.4 dB (= 0.21875 muted extra voice, open bus scale), pedal down (and slew) bypassed 25 77 clip notes; that mix, wrong decay attack parameter, explains clip gap slew. Test `pedal_down_bypasses_the_slew_voice`; decoding damper-down list follow-up.
 tests (`tools/tests/test_piano_decay.py`), data file, spec paragraph `docs/specs/piano-engine.md`, OQ20 update, item. Rust change; every are D85. Organ level `K = 2.8` EMPIRICAL: audit finds `1 / 0.21875` lane word; D72 lead pinned by test
-Claude (agent)
-D72 noted `K = 2.8` 0.23 dB `1.6 * 0.3732 / 0.21875` (organ times FX over piano slew gain). replace `K` by firmware-derived value, promoting if (D22).
-Audit FX, PNO ORG images code stored equal `2.8`, `0.21875` `1 / 0.21875` ([organ-output-law](research/organ-output-law.md) s6). None stored (all matches are non-word-aligned offsets); matches are decoded. `K` `EMPIRICAL`, `Chain` opt-in, default A unit test pins lead later decode has number hit.
-A numerical coincidence two unrelated words derivation (provenance rule: do upgrade tag without new evidence); clips separate 2.73 2.8.
-Add `chain / 0.21875` audio `K` 0.23 dB, carry false VERIFIED look); `Chain` default 13 dB under B3 / Vox clips).
-Doc comment test `organ/output_level.rs`; s6; OQ24 update. audio 
+
+### D85. Organ level `K = 2.8` stays EMPIRICAL: the image audit finds no `1 / 0.21875` lane word; the D72 lead is pinned by a test
+- **Status:** accepted
+- **Decided by:** Claude (agent)
+- **Context:** D72 noted `K = 2.8` is within 0.23 dB of `1.6 * 0.3732 / 0.21875` (organ chain word times FX path over the piano SMP slew gain). The task was to replace `K` by a firmware-derived value, promoting it only if verified end to end (D22).
+- **Decision:** Audit the FX, PNO and ORG DSP images and the ARM code for a stored word equal to `2.8`, `0.21875` or `1 / 0.21875` ([organ-output-law](research/organ-output-law.md) s6). None is a stored float in a DSP image (all matches are at non-word-aligned offsets); the first-pass ARM matches were big-endian byte noise. Second pass (unpacked SRAM, little-endian aligned ARM scan, s6.1): 2.8 occurs only as an element of interpolation tables, and `0.21875`, `1 / 0.21875`, `0.357` occur nowhere; the FX run shows no piano-side attenuation. `K` stays `EMPIRICAL`, `Chain` stays opt-in, no default moves. A unit test pins the lead so a later decode has the number to hit.
+- **Why:** A numerical coincidence of two unrelated words is not a derivation (provenance rule: do not upgrade a tag without new evidence); the clips cannot separate 2.73 from 2.8.
+- **Alternatives:** Add a `chain / 0.21875` law (rejected: same audio as `K` within 0.23 dB, would carry a false VERIFIED look); flip `Chain` as default (rejected: 13 dB under B3 / Vox clips).
+- **Impact:** Doc comment and test in `organ/output_level.rs`; research s6; OQ24 update. No audio change, `render_hash` unchanged.
 
 ### D92. The FM stages `0x124269` / `0x12453F` are ported as opt-in equation models; the FM band tables are committed as derived numbers
 - **Status:** accepted

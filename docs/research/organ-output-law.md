@@ -91,10 +91,36 @@ Before this change the same B3 default read RMS +14.9 dB with the rotary drive 8
 | Big-endian float `0x40333333` (2.8) in the FX / PNO / ORG images | ORG at `0x18B97`, `0x3C783`, PNO at `0x3A8D7`; all at byte offsets `= 3 mod 4`, so not a stored word (packed data stream); none in FX | VERIFIED (byte scan) |
 | `0x3E600000` (0.21875) | FX `0x97E`, `0x15376`, PNO `0x826` (all `= 2 mod 4`), none in ORG: instruction-stream matches, not data words | VERIFIED (byte scan) |
 | `0x40924925` (1 / 0.21875) | no match in any DSP image or the ARM code | VERIFIED (byte scan) |
-| ARM code: 3 big-endian matches of `0x3E600000` (and 14 of `0x40333333`) in `bank0_CODE.bin` | not decoded (literal pools / immediates of unrelated code are expected); a hit that feeds an organ sender would need the xref (`tools/fw_xref.py`) | open |
+| ARM code, big-endian byte matches (3 of `0x3E600000`, 14 of `0x40333333`) | **superseded by s6.1**: the ARM is little endian, the big-endian matches are unaligned byte noise | corrected |
 | Common path | unchanged: organ and piano share `0.3732` per float (s1 of [piano-receiver-scale](piano-receiver-scale.md)); organ words 1.6, piano 1.0 | VERIFIED (run, earlier) |
 
 **Result.** No firmware word was found that makes the organ-to-piano ratio `1.6 * 0.3732 / 0.21875`. The equality stays a numerical lead; `K` stays EMPIRICAL, the opt-in `chain` law stays 13 dB under the clips, and no default changes (D22 not met: nothing new is verified end to end). The remaining ways to close it are a clip with a known recording level and both instruments, or a decode of the ARM xrefs above (follow-up 5).
+
+### 6.1 Second pass: unpacked SRAM, little-endian ARM, FX mixer (review follow-up)
+
+- **Method:** `python tools/ns4_dsp_ldr.py target/DSP/dsp_image_<n>.bin --sram DIR` (loader headers removed, words aligned), then a scan of every 32-bit LE word of `core{1,2}_sram.bin` for the floats below (tolerance 64 ulp); `bank0_CODE.bin` scanned as aligned little-endian words, with an `LDR rd,[pc,#imm]` literal-pool xref over the preceding 4 KiB.
+
+| Value | Unpacked FX / PNO / ORG SRAM | ARM code (LE, aligned) | Tag |
+|---|---|---|---|
+| `2.8` | PNO core 2 and ORG core 1 / 2: `0x1614B0` (word `0x40333333`) and `0x12A27E` (`0x403332F8`); both are **table entries**: `0x1614B0` sits in a descending 0.2 step ramp `4.0, 3.8, ... 2.8 ... 1.6 ... 1.0` (the `1.6` at `0x1614BC` is the next-but-five entry), `0x12A27E` in a smooth curve `2.44, 2.50, ... 3.42` | 3 hits (`0xC04A9364`, `0xC04CDE48`, `0xC04F1A34`), the same 4.0..1.0 ramp, no literal-pool reference | VERIFIED (scan) |
+| `1/2.8` (0.357), `0.21875`, `1/0.21875`, `2.729`, `0.3732` | **no word** in any FX / PNO / ORG SRAM | **no word** (so s6 "3 ARM matches of 0.21875" was byte noise, struck) | VERIFIED (scan) |
+| `0.1866` | FX core 1 `0x16CA34` = the known output stage word `DM(0xB651A)` | none | VERIFIED |
+
+**FX input mixer.** The measured transport of [piano-receiver-scale](piano-receiver-scale.md) s1 already compares the two sources inside `0_FX`: the SMP words (`0xC0470..`) and the PNO 2D words see the same path, `0.25` in gives `0.2467 .. 0.24998` at the master buffer (unity, no `0.357`), and the layer sender writes the bus rows as organ `1.6` (PNO), piano `1.0` (SMP, Reverb GLOBAL off). So the FX unit holds **no piano-side attenuation** of `0.357` (and no organ boost beyond the 1.6 row); the review's third candidate is excluded by the run, not by a listing of the DMA descriptors.
+
+**Result.** The unpacked-SRAM and little-endian rescans find the 2.8 only as an element of two interpolation tables and find none of `0.21875`, `1/0.21875`, `0.357`. The lead of D72 is not a firmware word. Not done here: the `boot_log.jsonl` grep for senders (`0xB6518`, `0x95B42`, `0xB28xx`) and the ARM write capture on a Piano to Organ program switch (needs the local boot capture, see follow-up 5), and a clip re-measure of `K` with layer B off.
+
+### 6.2 `K` per engine (EMPIRICAL, from s4)
+
+Gain still needed on the oracle-faithful output, at swell 127 and the squared level:
+
+| Engine | Needed (dB) | As `K` | Against `K = 2.8` | Against `Chain` 0.597 |
+|---|---|---|---|---|
+| B3Wheels | +11.3 | 3.67 | +2.4 dB | +15.8 dB |
+| Vox | +9.9 | 3.12 | +0.9 dB | +14.4 dB |
+| Pipe | at most +8.2 | at most 2.57 | -0.7 dB | +12.7 dB |
+
+One `K` spans a 3.1 dB spread over three different DSP paths, so part of it may be per-path error (B3 tail, rotary drive, the Pipe clip also holding the synth), not a shared lane gain. Consistency with [organ-output-level](organ-output-level.md): that note measures the Legacy path (bus `0.08`, +14.39 dB over the ARM unit) with layer B off (+3.6 dB RMS over the clip, -1.7 dB with a note range), whereas s4 measures the firmware paths in the ARM unit; the two numbers are in different units and do not contradict each other. A single-engine re-measure (B3, layer B off, `--note-range 48 64`, rotary fixed) needs the local clips and was not run.
 
 ## Implications
 
@@ -108,4 +134,4 @@ Before this change the same B3 default read RMS +14.9 dB with the rotary drive 8
 2. Run `0xC011AB8C` with the real per-layer controller to confirm the squared law dynamically; capture a second swell value (`v = 64`) to check `520 v^2`.
 3. Remove or rescale the Legacy key click on the firmware B3 path; re-run the B3 presence.
 4. A Pipe-only and a pedal-position-known clip to replace the three-clip centring of `K`.
-5. Decode the three ARM-code literals `0x3E600000` and the 14 of `0x40333333` in `bank0_CODE.bin` (`tools/fw_xref.py`) to rule an organ lane or bus gain in or out (D85).
+5. Grep the local `boot_log.jsonl` for the senders of `DM(0xB6518)`, `0x95B42`, `0xB28xx` and capture the ARM writes on a Piano to Organ program switch (`0xC011AB8C`, the `0x1229B3` record builder); re-measure `K` on B3 alone (layer B off, note range, rotary fixed) (D85, s6.1).
