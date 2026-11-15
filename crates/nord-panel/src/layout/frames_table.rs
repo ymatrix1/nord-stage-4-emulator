@@ -274,8 +274,8 @@ pub const FRAMES: &[FrameDef] = &[
         "program.frame.split",
         Program,
         "SPLIT",
-        &["split.on_set", "split.leds"],
-        [6.0, 12.0, 6.0, 8.0],
+        &["split.on_set"],
+        [6.0, 22.0, 6.0, 8.0],
     ),
     boxed(
         "program.frame.mst_clk",
@@ -289,7 +289,7 @@ pub const FRAMES: &[FrameDef] = &[
         Program,
         "TRANSP",
         &["transp.on_set"],
-        [4.0, 14.0, 4.0, 10.0],
+        [4.0, 14.0, 2.0, 10.0],
     ),
     boxed(
         "program.frame.preset_library",
@@ -307,18 +307,13 @@ pub const FRAMES: &[FrameDef] = &[
         Program,
         "PROGRAM",
         &[
-            "program.oled",
-            "program.dial",
             "program.button.1",
             "program.button.4",
             "program.button.5",
             "program.button.8",
-            "program.page_down",
-            "program.page_up",
         ],
-        [1.2, 1.0, 4.0, 12.0],
-    )
-    .at(0.06),
+        [3.0, 19.0, 3.5, 12.0],
+    ),
 ];
 
 #[cfg(test)]

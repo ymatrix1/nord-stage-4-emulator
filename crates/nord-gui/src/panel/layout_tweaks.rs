@@ -21,25 +21,11 @@ pub const TWEAKS: &[(&str, f32, f32)] = &[
     // "ENV AMT" / "RES" touched the VELOCITY legend of the ENVELOPE button above.
     ("synth.osc.env_amt", 0.0, 4.0),
     ("synth.filter.res", 0.0, 4.0),
-    // The PROG VIEW name printed into the PANIC legend of the TRANSP button above.
-    ("program.prog_view", 0.0, 5.0),
-    ("program.preset_name", 0.0, 5.0),
-    // Program buttons 5-8: their numbers touched the legends (System, Sound, ...) of buttons 1-4.
-    ("program.button.5", 0.0, 3.0),
-    ("program.button.6", 0.0, 3.0),
-    ("program.button.7", 0.0, 3.0),
-    ("program.button.8", 0.0, 3.0),
-    ("program.menu.output", 0.0, 3.0),
-    ("program.menu.pedal", 0.0, 3.0),
-    ("program.menu.midi", 0.0, 3.0),
-    ("program.menu.extern", 0.0, 3.0),
-    // The MON/COPY name sat 1.5 px under the LAYER INIT legend of SECT EDIT.
-    ("program.mon_copy", 0.0, 3.0),
-    ("program.paste", 0.0, 3.0),
+    // The L M H legends of the SPLIT LEDs collided with the SPLIT title (the LEDs sit at the
+    // section's top edge on the photo).
+    ("split.leds", 0.0, 5.0),
     // The piano ZONE -/+ legends (now clear of the OCT bezels) printed into the zone LEDs.
     ("piano.zone_leds", 0.0, 3.0),
-    // The SPLIT name touched the L M H LED strip above its button.
-    ("split.leds", 0.0, -2.0),
     // The Mod 1 numerals need the room the LAYER FX button legend used (round 4).
     ("fx.layer_effects_on", 0.0, -10.0),
     // The "VAR" legend under the amp model button printed into the TREBLE numeral `0`.
@@ -102,21 +88,6 @@ pub const GROUP_TWEAKS: &[(&str, f32, f32)] = &[
     ("mod1.", 0.0, 6.0),
     ("mod2.", 0.0, 12.0),
     ("amp.", 0.0, 30.0),
-    // Program area: the Morph / Split / Mst Clk / Transp row moves up into the free space above
-    // it, so the Preset Library box fits between it and the display.
-    ("preset_library.", 0.0, -6.0),
-    // The PROGRAM title sits on the frame top edge left of the display, so the dial and the page
-    // buttons move down 6 px to clear it.
-    ("program.live_mode", 0.0, 6.0),
-    ("program.num_pad", 0.0, 6.0),
-    ("program.dial", 0.0, 6.0),
-    ("program.list", 0.0, 6.0),
-    ("program.page_", 0.0, 6.0),
-    ("program.bank_", 0.0, 6.0),
-    ("morph.", 0.0, -14.0),
-    ("split.", 0.0, -14.0),
-    ("mst_clk.", 0.0, -14.0),
-    ("transp.", 0.0, -14.0),
     // Piano: KB TOUCH and DYN COMP clear of the PED NOISE legend above their titles.
     ("piano.kb_touch", 0.0, 20.0),
     ("piano.dyn_comp", 0.0, 20.0),

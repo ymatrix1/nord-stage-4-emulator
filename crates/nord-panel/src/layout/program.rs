@@ -1,12 +1,24 @@
-//! Central Program area (photo crop x 841..1029): OLED, Program buttons,
+//! Central Program area (left crop x 2663..3754): OLED, Program buttons,
 //! Morph Assign, Split, Mst Clk, Transpose, Preset Library, the right-hand
-//! Solo / Section Edit / Mon-Copy column and the two SHIFT rockers.
+//! Solo / Section Edit / Mon-Copy column and the SHIFT rocker.
 //!
-//! ASSUMED: read from the 2000 px photo; higher-resolution photo confirms.
+//! VERIFIED (centres): every control listed in `data/photo_anchors_program.csv` (crop
+//! `NS4_Panel-crop-left.jpg`, mapped affinely from the crop's section outline onto
+//! [`super::section_rect`] like the Organ pass), checked by
+//! `python tools/layout_overlay.py program`, max centre error below 0.1 mm before nudges (the
+//! tables below are the mapped centres converted back to hero-photo px). Sizes keep the old reads.
+//! ASSUMED: the crop's section is 1.31x taller in mm than the real one would be at the
+//! horizontal scale (see the spec); `program.shift.right` (right crop) is placed from the
+//! hero photo only.
 
 use super::{px, Rect};
 
-/// Program button `n` (1..=8): two rows of four, 25 photo px pitch.
+/// Rectangle `w` x `h` photo px centred on `(cx, cy)` photo px.
+fn at(cx: f32, cy: f32, w: f32, h: f32) -> Rect {
+    px(cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0)
+}
+
+/// Program button `n` (1..=8): two rows of four, 25.1 photo px pitch.
 fn program_button(id: &str) -> Option<Rect> {
     let n: u32 = id
         .strip_prefix("program.button.")?
@@ -15,9 +27,7 @@ fn program_button(id: &str) -> Option<Rect> {
         .filter(|n| (1..=8).contains(n))?;
     let col = ((n - 1) % 4) as f32;
     let row = ((n - 1) / 4) as f32;
-    let x = 888.0 + 25.0 * col;
-    let y = 270.0 + 26.0 * row;
-    Some(px(x, y, x + 22.0, y + 12.0))
+    Some(at(904.6 + 25.1 * col, 286.2 + 35.3 * row, 22.0, 12.0))
 }
 
 pub fn rect(id: &str) -> Option<Rect> {
@@ -25,31 +35,31 @@ pub fn rect(id: &str) -> Option<Rect> {
         return Some(r);
     }
     Some(match id {
-        "program.oled" => px(894.0, 197.0, 979.0, 239.0),
-        "program.dial" => px(857.0, 199.0, 875.0, 217.0),
-        "program.page_down" => px(843.0, 232.0, 865.0, 244.0),
-        "program.page_up" => px(867.0, 232.0, 889.0, 244.0),
-        "program.shift.left" => px(1004.0, 283.0, 1018.0, 307.0),
+        "program.oled" => at(942.2, 210.3, 85.0, 42.0),
+        "program.dial" => at(871.8, 196.9, 18.0, 18.0),
+        "program.page_down" => at(860.0, 236.7, 22.0, 12.0),
+        "program.page_up" => at(883.4, 236.7, 22.0, 12.0),
+        "program.shift.left" => at(1016.9, 313.8, 14.0, 24.0),
         "program.shift.right" => px(1409.0, 285.0, 1423.0, 309.0),
-        "program.prog_view" => px(997.0, 161.0, 1020.0, 174.0),
-        "program.live_mode" => px(850.0, 261.0, 872.0, 273.0),
-        "program.store" => px(850.0, 168.0, 873.0, 181.0),
-        "program.solo" => px(997.0, 193.0, 1020.0, 206.0),
-        "program.section_edit" => px(997.0, 225.0, 1020.0, 238.0),
-        "program.mon_copy" => px(997.0, 252.0, 1020.0, 265.0),
-        "program.layer_scene_ii" => px(850.0, 294.0, 872.0, 306.0),
-        "program.midi_led" => px(882.0, 164.0, 887.0, 169.0),
-        "program.extern_led" => px(884.0, 178.0, 889.0, 183.0),
-        "morph.wheel" => px(848.0, 135.0, 871.0, 147.0),
-        "morph.at" => px(872.0, 135.0, 895.0, 147.0),
-        "morph.ctrlped" => px(896.0, 135.0, 919.0, 147.0),
-        "split.on_set" => px(931.0, 138.0, 953.0, 151.0),
-        "split.leds" => px(931.0, 126.0, 954.0, 131.0),
-        "mst_clk.tap_set" => px(965.0, 135.0, 988.0, 148.0),
-        "transp.on_set" => px(997.0, 135.0, 1020.0, 148.0),
-        "preset_library.organ" => px(902.0, 172.0, 924.0, 184.0),
-        "preset_library.piano" => px(926.0, 172.0, 948.0, 184.0),
-        "preset_library.synth" => px(949.0, 172.0, 971.0, 184.0),
+        "program.prog_view" => at(1014.4, 145.0, 23.0, 13.0),
+        "program.live_mode" => at(866.5, 274.0, 22.0, 12.0),
+        "program.store" => at(867.5, 153.3, 23.0, 13.0),
+        "program.solo" => at(1014.4, 186.8, 23.0, 13.0),
+        "program.section_edit" => at(1014.4, 227.7, 23.0, 13.0),
+        "program.mon_copy" => at(1014.4, 264.5, 23.0, 13.0),
+        "program.layer_scene_ii" => at(866.3, 319.2, 22.0, 12.0),
+        "program.midi_led" => at(891.7, 150.6, 5.0, 5.0),
+        "program.extern_led" => at(891.7, 167.3, 5.0, 5.0),
+        "morph.wheel" => at(866.3, 109.0, 23.0, 12.0),
+        "morph.at" => at(889.8, 109.0, 23.0, 12.0),
+        "morph.ctrlped" => at(913.2, 109.0, 23.0, 12.0),
+        "split.on_set" => at(948.7, 113.8, 22.0, 13.0),
+        "split.leds" => at(948.7, 94.3, 23.0, 5.0),
+        "mst_clk.tap_set" => at(981.6, 109.3, 23.0, 13.0),
+        "transp.on_set" => at(1014.5, 109.3, 23.0, 13.0),
+        "preset_library.organ" => at(918.9, 158.3, 22.0, 12.0),
+        "preset_library.piano" => at(942.3, 158.3, 22.0, 12.0),
+        "preset_library.synth" => at(965.6, 158.3, 22.0, 12.0),
         _ => return None,
     })
 }

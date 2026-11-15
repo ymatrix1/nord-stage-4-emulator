@@ -60,6 +60,12 @@ CROPS = {
         (250.0, 12.0, 1948.0, 1168.0),
         ("master", "organ"),
     ),
+    "program": (
+        "NS4_Panel-crop-left.jpg",
+        "program",
+        (2663.0, 0.0, 3754.0, 1146.0),
+        ("program",),
+    ),
     "piano": ("NS4-Panel-piano.max-2000x2000.format-png.png", "piano", None, ("piano",)),
     "synth": ("NS4-Panel-synth.max-2000x2000.format-png.png", "synth", None, ("synth",)),
     "effects": (
@@ -72,6 +78,7 @@ CROPS = {
 SECTION_CROP = {
     "master": "organ",
     "organ": "organ",
+    "program": "program",
     "piano": "piano",
     "synth": "synth",
     "effects": "effects",
