@@ -1,17 +1,18 @@
 //! ALU, float and short (16-bit) compute operations of [`Core`].
+use super::decode_cache::ComputeOp;
 use super::Core;
 use crate::visa::bits;
 
 /// Compute unit and opcode of a Type 2c short op, and whether it is binary (`Rn = Rn op Rx`) or
 /// takes only `Rx` as input.
-struct ShortOp {
-    unit: u64,
-    opcode: u64,
-    binary: bool,
+pub(super) struct ShortOp {
+    pub(super) unit: u64,
+    pub(super) opcode: u64,
+    pub(super) binary: bool,
 }
 
 /// The 16 short-compute operations (OP field, bits 11..8) as their full-compute equivalents.
-fn short_op(op: u64) -> Option<ShortOp> {
+pub(super) fn short_op(op: u64) -> Option<ShortOp> {
     let (unit, opcode, binary) = match op {
         0 => (0, 0x01, true),   // Rn = Rn + Rx
         1 => (0, 0x02, true),   // Rn = Rn - Rx
@@ -39,44 +40,70 @@ fn short_op(op: u64) -> Option<ShortOp> {
 }
 
 impl Core {
-    /// Executes a 23-bit compute field. Returns false when the operation is not modelled.
-    pub(super) fn compute(&mut self, c: u64) -> bool {
-        if c == 0 {
-            return true;
+    /// Executes a pre-decoded [`ComputeOp`]. Returns false when the operation is not modelled.
+    #[inline]
+    pub(super) fn exec_compute_op(&mut self, cop: ComputeOp) -> bool {
+        let mut is_cu0 = false;
+        let mut is_float_alu = false;
+        match cop {
+            ComputeOp::Nop => return true,
+            ComputeOp::Multifunction { c } => return self.multifunction(c),
+            ComputeOp::FixedAlu { op, n, x, y } => {
+                let (rx, ry) = (self.r[x as usize], self.r[y as usize]);
+                if !self.fixed_alu(u64::from(op), n as usize, rx, ry) {
+                    return false;
+                }
+                is_cu0 = true;
+            }
+            ComputeOp::FloatAlu { op, n, x, y } => {
+                if !self.float_alu(u64::from(op), n as usize, x as usize, y as usize) {
+                    return false;
+                }
+                is_cu0 = true;
+                is_float_alu = true;
+            }
+            ComputeOp::DualAddSub { c } => {
+                if !self.dual_add_sub(c) {
+                    return false;
+                }
+                is_cu0 = true;
+                is_float_alu = bits(c, 19, 12) >= 0x80;
+            }
+            ComputeOp::FloatMul { n, x, y } => {
+                self.float_mul(n as usize, x as usize, y as usize);
+            }
+            ComputeOp::FixedMult { op, n, x, y } => {
+                if !self.fixed_mult(u64::from(op), n as usize, x as usize, y as usize) {
+                    return false;
+                }
+            }
+            ComputeOp::Shifter { op, n, x, y } => {
+                if !self.shifter(u64::from(op), n as usize, x as usize, y as usize) {
+                    return false;
+                }
+            }
+            ComputeOp::Invalid => return false,
         }
-        if bits(c, 22, 22) == 1 {
-            return self.multifunction(c);
-        }
-        let cu = bits(c, 22, 20);
-        let op = bits(c, 19, 12);
-        let (n, x, y) = (
-            bits(c, 11, 8) as usize,
-            bits(c, 7, 4) as usize,
-            bits(c, 3, 0) as usize,
-        );
-        let (rx, ry) = (self.r[x], self.r[y]);
-        match (cu, op) {
-            (0, op) if op < 0x80 && self.fixed_alu(op, n, rx, ry) => {}
-            (1, 0x30) => self.float_mul(n, x, y),
-            (0, op) if op >= 0x80 && self.float_alu(op, n, x, y) => {}
-            (0, op) if matches!(op >> 4, 0x7 | 0xF) && self.dual_add_sub(c) => {}
-            (1, op) if self.fixed_mult(op, n, x, y) => {}
-            (2, op) if self.shifter(op, n, x, y) => {}
-            _ => return false,
-        }
-        if cu == 0 {
+        if is_cu0 {
             // AF (ASTAT bit 10) = the last ALU operation was floating-point.
             // VERIFIED: set by float ALU ops (`simd_measured.rs`, ASTAT after FADD/FSUB/FAVG and the
             // float dual forms) and untouched by the multiplier. ASSUMED (PRM): a fixed-point ALU
             // op clears it; every probe case started from ASTAT = 0.
-            let af = u32::from(op >= 0x80) << 10;
+            let af = u32::from(is_float_alu) << 10;
             self.sys.astat_extra[0] = self.sys.astat_extra[0] & !(1 << 10) | af;
         }
         true
     }
 
+    /// Executes a 23-bit compute field. Returns false when the operation is not modelled.
+    #[inline]
+    pub(super) fn compute(&mut self, c: u64) -> bool {
+        self.exec_compute_op(ComputeOp::decode(c))
+    }
+
     /// Short (16-bit) compute of Type 2c: OP bits 11..8, Rn 7..4, Rx 3..0. Each op is the
     /// full compute with the same name, so flags and results match the long forms.
+    #[cfg(test)]
     pub(super) fn short_compute(&mut self, c: u64) -> bool {
         let (n, x) = (bits(c, 7, 4), bits(c, 3, 0));
         let Some(op) = short_op(bits(c, 11, 8)) else {

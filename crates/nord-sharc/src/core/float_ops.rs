@@ -14,8 +14,8 @@ use super::Core;
 /// Low 8 bits of the 40-bit float registers, valid while the register still holds `tag`.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct ExtFile {
-    tag: [u32; 16],
-    lo: [u8; 16],
+    pub(super) tag: [u32; 16],
+    pub(super) lo: [u8; 16],
 }
 
 impl ExtFile {

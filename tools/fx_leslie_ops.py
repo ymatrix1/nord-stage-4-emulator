@@ -241,9 +241,9 @@ def ops(m: Machine):
         lambda k, imm_: dag_next(
             m.ir[f"i{k}"], imm_ & M32, m.ir.get(f"l{k}", 0), m.ir.get(f"b{k}", 0)
         ),
-        lambda k, j: dag_next(
-            m.ir[f"i{k}"], m.ir[f"m{j}"], m.ir.get(f"l{k}", 0), m.ir.get(f"b{k}", 0)
-        ),  # pre-modify addressing wraps like the post-modify of a circular buffer
+        lambda k, j: (m.ir[f"i{k}"] + m.ir[f"m{j}"]) & M32,
+        # pre-modify `Ii + Mm`: no write back and no circular wrap (PRM fig 6-5; the oracle's
+        # `moves.rs`; D114: ENS writes and reads its second ring at `+0x202` this way)
         m.x, m.y, m.ir, m.mem,
     )  # fmt: skip
 

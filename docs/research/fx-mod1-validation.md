@@ -27,6 +27,8 @@ D95 said the ARM writes no ENS amount or rate word: wrong, the generator did not
 
 ## 3. ENS tap registers (`B4 / L4 / B7 / L7`)
 
+> **Closed by D114 ([fx-ens-tap-registers](fx-ens-tap-registers.md)):** no code writes `L4` / `B4` in either core and none has to; the left voice is a second ring reached by a non-wrapping pre-modify, so the bullets below describe a model bug (a wrapped pre-modify), not a missing register state.
+
 * The routine (`0x123A7B`) sets `L6 = 0x200`, `M6 = 0x202`, `B6 = c[-0x20]`, and reads its taps with `I4 = MODIFY(I6, M3)` followed by `DM(M6, I4)`: the wrap of the tap pointer comes from `I6`, the pre-modify by `0x202` is linear unless `L4` is non-zero.
 * No instruction of the FX core 2 listing writes `L4` or `B4` (67,235 lines, `0x120000..0x150000`); `L6`, `L7`, `B6`, `B7` are written only by other routines and by the init (`0x120528`: zero in both register sets).
 * The oracle at the dispatcher's first `CALL (M8, I8)` (`sharc-fx --trigger 0xC02C2 --stop-at 0x1217FB --trace`): `I4 = I5 = 0xC03E8`, `L4 = B4 = L7 = B7 = 0`. This is the oracle's reset state (an ASSUMED copy of the hardware's); nothing in the code changes it.
@@ -48,7 +50,7 @@ D95 said the ARM writes no ENS amount or rate word: wrong, the generator did not
 
 ## Follow-ups
 
-1. The hardware reset value of `L4` / `B4` (or an ENS clip): then the circular taps become VERIFIED or are dropped.
+1. ~~The hardware reset value of `L4` / `B4`~~ not needed (D114); an ENS hardware clip remains open.
 2. Per-layer-kind words (D90).
 3. The ENS delay words `c[6]`, `c[7]`, `c[10]` (-167.0 frames) are not rescaled to the engine rate.
 

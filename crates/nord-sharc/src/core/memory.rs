@@ -78,11 +78,13 @@ impl Core {
         }
         if let Some(o) = sram_offset(addr) {
             self.sram[o..o + 4].copy_from_slice(&value.to_le_bytes());
+            self.invalidate_sram_cache(addr.wrapping_mul(2), 2);
             return Ok(());
         }
         if SHORT_WORDS.contains(&addr) {
             let o = addr as usize * 2;
             self.sram[o..o + 2].copy_from_slice(&(value as u16).to_le_bytes());
+            self.invalidate_sram_cache(addr, 1);
             return Ok(());
         }
         self.device_writes += 1;

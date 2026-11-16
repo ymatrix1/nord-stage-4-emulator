@@ -42,6 +42,7 @@ const EXCEPTIONS: [(u32, u8); 4] = [
 /// State of the system registers that has no other home.
 pub(super) struct SysState {
     pub(super) stky: [u32; 2],
+    /// ASTAT extra bits (`AS`, `AI`, `MN..MI`, `AF`, `SF`, `CACC`) for PEx and PEy.
     pub(super) astat_extra: [u32; 2],
     pub(super) status: Vec<[u32; 3]>,
     pub(super) pc_overflow: bool,

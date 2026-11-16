@@ -83,10 +83,6 @@ pub(super) struct Mod2State {
     pub(super) ring: [u32; RING_N],
     pub(super) ring2: [u32; RING2_N],
     scratch: [u32; SCRATCH_N],
-    /// `ENS` only: run with `B4 = B7 = ring`, `L4 = L7 = 0x200` (circular tap registers). The
-    /// routine sets only `L6`; the other length registers keep the caller's value, which is not
-    /// decoded (OQ21), so the default is linear (`false`, the oracle scenarios).
-    pub(super) circular_taps: bool,
 }
 
 impl Mod2State {
@@ -96,7 +92,6 @@ impl Mod2State {
             ring: [0; RING_N],
             ring2: [0; RING2_N],
             scratch: [0; SCRATCH_N],
-            circular_taps: false,
         }
     }
 }
@@ -156,14 +151,7 @@ pub(super) fn process(routine: Routine, st: &mut Mod2State, frames: &mut [f32]) 
     for (w, f) in io.iter_mut().zip(frames.iter()).take(4 * n) {
         *w = f.to_bits();
     }
-    let circular = routine == Routine::Ens && st.circular_taps;
     let mut pe = Pe::new(Mod2Mem { st, io }, IO_BASE, CTX_I1);
-    if circular {
-        for k in [4, 7] {
-            pe.l[k] = 0x200;
-            pe.b[k] = RING_BASE;
-        }
-    }
     match routine {
         Routine::Vibe => fw_vibe::run(&mut pe),
         Routine::Flang => fw_flang::run(&mut pe),

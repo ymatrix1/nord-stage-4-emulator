@@ -14,7 +14,7 @@ const STKY_AOS: u32 = 1 << 2;
 
 impl Core {
     /// Writes `r` to `Rn` and sets the five fixed-point ALU flags.
-    fn fixed_result(&mut self, n: usize, r: u32, ac: bool, av: bool, as_: bool) {
+    pub(super) fn fixed_result(&mut self, n: usize, r: u32, ac: bool, av: bool, as_: bool) {
         self.r[n] = r;
         self.fx.clear(n);
         let f = &mut self.flags;

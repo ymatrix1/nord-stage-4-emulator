@@ -1,0 +1,177 @@
+{
+ "video": "_zksT69H30c",
+ "note": "Variants for tools/organ_k_controls.py (D113): K=2.8 (firmware) vs chain 0.597 per organ engine; rotary drive laws on B3.",
+ "segments": [
+  {
+   "id": "organ_b3",
+   "entry": "Program/Bank A/B3 Chords n Solo.ns4p",
+   "engine": "organ B3",
+   "at_s": 238,
+   "duration_s": 25,
+   "variants": [
+    {
+     "label": "default",
+     "flags": []
+    },
+    {
+     "label": "b3-k28-unity",
+     "flags": [
+      "--tone-source",
+      "b3wheels",
+      "--firmware-routing",
+      "--organ-level",
+      "firmware",
+      "--rotary-drive",
+      "unity"
+     ],
+     "k": 2.8
+    },
+    {
+     "label": "b3-k28-scaled",
+     "flags": [
+      "--tone-source",
+      "b3wheels",
+      "--firmware-routing",
+      "--organ-level",
+      "firmware",
+      "--rotary-drive",
+      "scaled"
+     ],
+     "k": 2.8
+    },
+    {
+     "label": "b3-k28-engine",
+     "flags": [
+      "--tone-source",
+      "b3wheels",
+      "--firmware-routing",
+      "--organ-level",
+      "firmware",
+      "--rotary-drive",
+      "engine"
+     ],
+     "k": 2.8
+    },
+    {
+     "label": "b3-chain-unity",
+     "flags": [
+      "--tone-source",
+      "b3wheels",
+      "--firmware-routing",
+      "--organ-level",
+      "chain",
+      "--rotary-drive",
+      "unity"
+     ],
+     "k": 0.5971
+    },
+    {
+     "label": "b3-chain-engine",
+     "flags": [
+      "--tone-source",
+      "b3wheels",
+      "--firmware-routing",
+      "--organ-level",
+      "chain",
+      "--rotary-drive",
+      "engine"
+     ],
+     "k": 0.5971
+    }
+   ]
+  },
+  {
+   "id": "organ_vox",
+   "entry": "Program/Bank A/Vintage Vox J3.ns4p",
+   "engine": "organ Vox + Twin amp",
+   "at_s": 2360,
+   "duration_s": 11,
+   "variants": [
+    {
+     "label": "default",
+     "flags": []
+    },
+    {
+     "label": "vox-k28",
+     "flags": [
+      "--tone-source",
+      "vox",
+      "--organ-level",
+      "firmware"
+     ],
+     "k": 2.8
+    },
+    {
+     "label": "vox-chain",
+     "flags": [
+      "--tone-source",
+      "vox",
+      "--organ-level",
+      "chain"
+     ],
+     "k": 0.5971
+    }
+   ]
+  },
+  {
+   "id": "organ_pipe",
+   "entry": "Program/Bank A/Space Drama II.ns4p",
+   "engine": "organ Pipe2 + synth, reverb",
+   "at_s": 1094,
+   "duration_s": 30,
+   "variants": [
+    {
+     "label": "default",
+     "flags": []
+    },
+    {
+     "label": "pipe-k28-dry",
+     "flags": [
+      "--organ-level",
+      "firmware"
+     ],
+     "edits": {
+      "global.section_enable_i": 4,
+      "global.section_enable_ii": 4,
+      "organ.fx.mod2_enabled": false,
+      "organ.fx.reverb_enabled": false
+     },
+     "k": 2.8
+    },
+    {
+     "label": "pipe-chain-dry",
+     "flags": [
+      "--organ-level",
+      "chain"
+     ],
+     "edits": {
+      "global.section_enable_i": 4,
+      "global.section_enable_ii": 4,
+      "organ.fx.mod2_enabled": false,
+      "organ.fx.reverb_enabled": false
+     },
+     "k": 0.5971
+    }
+   ]
+  }
+ ],
+ "slope_pairs": [
+  {
+   "hi": "b3-k28-unity",
+   "lo": "b3-chain-unity"
+  },
+  {
+   "hi": "vox-k28",
+   "lo": "vox-chain"
+  },
+  {
+   "hi": "pipe-k28-dry",
+   "lo": "pipe-chain-dry"
+  }
+ ],
+ "spread_set": [
+  "b3-k28-engine",
+  "vox-k28",
+  "pipe-k28-dry"
+ ]
+}

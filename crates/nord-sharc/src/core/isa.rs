@@ -25,6 +25,7 @@ impl Core {
             let hi = u16::from_le_bytes([w[4], w[5]]);
             self.isa_code.extend_from_slice(&[hi, mid, lo]);
         }
+        self.invalidate_code_cache();
     }
 
     /// Rebuilds the ISA words covering normal-word address `addr` from the flat SRAM image after
@@ -48,6 +49,7 @@ impl Core {
             }
             self.isa_code[3 * w..3 * w + 3].copy_from_slice(&[hi, mid, lo]);
         }
+        self.invalidate_code_cache();
     }
 
     /// Whether the instruction at `pc` is an ISA-mode word: an ISA image is loaded and `pc` is

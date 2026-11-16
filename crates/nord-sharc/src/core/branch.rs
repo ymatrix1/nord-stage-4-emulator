@@ -1,22 +1,13 @@
 //! Program flow of [`Core`]: jumps, calls and returns (with delay slots), `DO UNTIL LCE` loops.
+use super::decode_cache::FlowOp;
 use super::exec::Decoded;
-use super::{sign_extend, Core, Fault, LoopFrame, Pending};
-use crate::visa::{bits, Kind};
+use super::{Core, Fault, LoopFrame, Pending};
+use crate::visa::Kind;
 
 /// Instructions that run after a delayed branch before it takes effect.
 const DELAY_SLOTS: u8 = 2;
 
 impl Core {
-    /// Takes a branch to `target`. An immediate branch returns the target (after pushing the
-    /// return address for a call); a delayed one (J bit 26) is scheduled for after its two delay
-    /// slots and execution continues at `next`.
-    #[inline]
-    fn branch(&mut self, d: &Decoded, target: u32, next: u32) -> u32 {
-        let call = bits(d.w, 39, 39) == 1;
-        self.apply_jump_modifiers(d);
-        self.take_branch(target, call, bits(d.w, 26, 26) == 1, next)
-    }
-
     /// Branch mechanics shared by the jump, call and `CJUMP` forms: a delayed branch is
     /// scheduled for after its two delay slots, an immediate one returns the target.
     pub(super) fn take_branch(&mut self, target: u32, call: bool, delayed: bool, next: u32) -> u32 {
@@ -34,54 +25,63 @@ impl Core {
         target
     }
 
-    /// Executes types 8a, 9a/9b (jump and call), 11a/11c (return) and 12a (loop set-up) and
-    /// returns the pc of the following instruction.
-    pub(super) fn exec_flow(&mut self, d: &Decoded, next: u32) -> Result<u32, Fault> {
-        let (w, pc) = (d.w, d.pc);
-        let relative = bits(w, 40, 40) == 1;
-        match d.kind() {
-            Kind::T8a if d.cond_ok => {
-                let raw = bits(w, 23, 0) as u32;
-                let target = if relative {
-                    pc.wrapping_add(sign_extend(raw, 24))
-                } else {
-                    raw
-                };
-                Ok(self.branch(d, target, next))
+    /// Executes a pre-decoded flow instruction (`T8a`, `T9a`/`T9b`, `T11a`/`T11c`, `T12a`).
+    pub(super) fn exec_flow_op(
+        &mut self,
+        d: &Decoded,
+        op: FlowOp,
+        next: u32,
+    ) -> Result<u32, Fault> {
+        match op {
+            FlowOp::JumpDirect {
+                target,
+                call,
+                delayed,
+                ..
+            } => {
+                if !d.cond_ok {
+                    return Ok(next);
+                }
+                self.apply_jump_modifiers(d);
+                Ok(self.take_branch(target, call, delayed, next))
             }
-            Kind::T9a | Kind::T9b => {
-                // JUMP|CALL (Md, Ic) or JUMP|CALL (pc + <reladdr6>); 9a only: E (bit 25) runs the
-                // compute when the condition is false instead of when it is true. Indirect
-                // target = Ic + Md on DAG2 (PM), ASSUMED from the syntax.
-                let else_form = d.kind() == Kind::T9a && bits(w, 25, 25) == 1;
-                if d.kind() == Kind::T9a && d.cond_ok != else_form {
-                    self.run_compute(d, bits(w, 22, 0))?;
+            FlowOp::JumpIndirect {
+                reg_i,
+                reg_m,
+                rel_target,
+                call,
+                delayed,
+                else_form,
+                compute,
+                ..
+            } => {
+                if let Some(cop) = compute {
+                    if d.cond_ok != else_form {
+                        self.on_each_pe(d, d.cond_ok, d.cond_y, |core| core.exec_compute_op(cop))?;
+                    }
                 }
                 if !d.cond_ok {
                     return Ok(next);
                 }
-                let target = if relative {
-                    pc.wrapping_add(sign_extend(bits(w, 32, 27) as u32, 6))
-                } else {
-                    self.i[8 + bits(w, 32, 30) as usize]
-                        .wrapping_add(self.m[8 + bits(w, 29, 27) as usize])
-                };
-                Ok(self.branch(d, target, next))
+                let target = rel_target
+                    .unwrap_or_else(|| self.i[reg_i as usize].wrapping_add(self.m[reg_m as usize]));
+                self.apply_jump_modifiers(d);
+                Ok(self.take_branch(target, call, delayed, next))
             }
-            Kind::T11a | Kind::T11c => {
-                // RTS/RTI [(DB)] [, compute]: a delayed return runs the two following
-                // instructions first. DB is bit 38 in the 16-bit form and bit 26 in the 48-bit
-                // form (VERIFIED against ADI: `0aff` and `0a3e 0400 0000` are `rts (db..)`); the
-                // 48-bit form's bit 25 selects `, ELSE compute` (compute runs when the condition
-                // fails).
-                let wide = d.kind() == Kind::T11a;
-                let compute = bits(w, 22, 0);
-                if wide && compute != 0 {
-                    let else_form = bits(w, 25, 25) == 1;
+            FlowOp::Return {
+                rti,
+                delayed,
+                else_form,
+                compute,
+                ..
+            } => {
+                if let Some(cop) = compute {
                     if else_form {
-                        self.on_each_pe(d, !d.cond_ok, !d.cond_y, |core| core.compute(compute))?;
+                        self.on_each_pe(d, !d.cond_ok, !d.cond_y, |core| {
+                            core.exec_compute_op(cop)
+                        })?;
                     } else {
-                        self.run_compute(d, compute)?;
+                        self.on_each_pe(d, d.cond_ok, d.cond_y, |core| core.exec_compute_op(cop))?;
                     }
                 }
                 if !d.cond_ok {
@@ -90,16 +90,11 @@ impl Core {
                 let ret = self
                     .call_stack
                     .pop()
-                    .ok_or_else(|| self.fault(pc, &d.insn))?;
-                if bits(w, 40, 40) == 1 {
-                    self.return_from_interrupt(); // RTI: ends the service of the interrupt
+                    .ok_or_else(|| self.fault(d.pc, &d.insn))?;
+                if rti {
+                    self.return_from_interrupt();
                 }
-                let delayed = if wide {
-                    bits(w, 26, 26)
-                } else {
-                    bits(w, 38, 38)
-                };
-                if delayed == 1 {
+                if delayed {
                     self.pending = Some(Pending {
                         slots: DELAY_SLOTS + 1,
                         target: ret,
@@ -110,20 +105,17 @@ impl Core {
                     Ok(ret)
                 }
             }
-            Kind::T12a => {
-                // The end field is always PC-relative (ADI prints no absolute form; bit 23 is not
-                // part of the offset: `0x800003` and `0x000003` both end 3 parcels on). Opcode
-                // `0x0D` (bit 40) takes the loop count from a universal register (bits 38..32)
-                // instead of the 16-bit immediate (bits 39..24).
-                let raw = bits(w, 23, 0) as u32;
-                let end = pc.wrapping_add(sign_extend(raw & 0x7F_FFFF, 23));
-                let count = if bits(w, 40, 40) == 1 {
-                    self.read_ureg(bits(w, 38, 32) as u8)
-                } else {
-                    bits(w, 39, 24) as u32
+            FlowOp::DoUntilCounter {
+                end,
+                count_ureg,
+                imm_count,
+            } => {
+                let count = match count_ureg {
+                    Some(u) => self.read_ureg(u),
+                    None => imm_count,
                 };
                 if count == 0 {
-                    return Err(self.fault(pc, &d.insn));
+                    return Err(self.fault(d.pc, &d.insn));
                 }
                 self.push_loop(LoopFrame {
                     start: next,
@@ -133,8 +125,6 @@ impl Core {
                 });
                 Ok(next)
             }
-            // conditional flow whose condition failed falls through
-            _ => Ok(next),
         }
     }
 
@@ -154,11 +144,11 @@ impl Core {
     /// End-of-step bookkeeping: loop back-edge of the innermost `DO` loop, then the countdown of
     /// a delayed branch. Returns the pc of the next instruction.
     #[inline]
-    pub(super) fn finish_step(&mut self, d: &Decoded, mut next: u32) -> u32 {
+    pub(super) fn finish_step(&mut self, pc: u32, kind: Kind, mut next: u32) -> u32 {
         if self.loops.last().is_some_and(|f| f.term.is_some()) {
-            next = self.arith_loop_step(d.pc, next);
+            next = self.arith_loop_step(pc, next);
         } else if let Some(frame) = self.loops.last_mut() {
-            if d.pc == frame.end && d.kind() != Kind::T12a {
+            if pc == frame.end && kind != Kind::T12a {
                 if frame.remaining > 1 {
                     frame.remaining -= 1;
                     next = frame.start;

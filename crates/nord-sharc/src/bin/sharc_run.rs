@@ -106,6 +106,8 @@ fn run(args: &[String]) -> Result<String, String> {
     let mut trace = 0usize;
     let mut lenient = false;
     let mut isa = false;
+    let mut use_jit = false;
+    let mut fast_float = false;
     let mut enters: Vec<(u64, u32)> = Vec::new();
     let mut sc57x: Option<usize> = None;
     let mut l2_files: Vec<(u32, String)> = Vec::new();
@@ -226,8 +228,13 @@ fn run(args: &[String]) -> Result<String, String> {
                 trace = parse_number(it.next().ok_or("--trace needs N")?).ok_or("bad --trace")?
                     as usize;
             }
+            "--jit" => use_jit = true,
+            "--fast-float" => fast_float = true,
             _ => positional.push(a.clone()),
         }
+    }
+    if use_jit && !cfg!(feature = "jit") {
+        return Err("--jit requires building nord-sharc with --features jit".to_string());
     }
     let [image, entry, max_steps] = positional.as_slice() else {
         return Err(
@@ -267,6 +274,7 @@ fn run(args: &[String]) -> Result<String, String> {
         core.enable_spi_boot(words.iter().map(|w| u32::from_le_bytes(*w)).collect());
     }
     core.lenient = lenient;
+    core.fast_float = fast_float;
     core.watch = watch;
     core.pc = entry;
     for (code, value) in registers {
@@ -314,7 +322,11 @@ fn run(args: &[String]) -> Result<String, String> {
             .min(enters.get(next_enter).map_or(max_steps, |q| q.0));
         if trace == 0 {
             let n = until.saturating_sub(core.steps).max(1);
-            fault = core.run(n);
+            fault = if use_jit {
+                core.run_auto(n)
+            } else {
+                core.run(n)
+            };
         } else if let Err(f) = core.step() {
             fault = Some(f);
         }

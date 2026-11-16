@@ -112,3 +112,16 @@ def test_the_golden_vectors_are_deterministic_and_complete():
     assert a == b and "ring_diff" in a and "ctx_out" in a
     assert gr.golden("flang") != a
     assert gr.CTX_N == 0x4B
+
+
+def test_the_pre_modify_address_does_not_wrap_in_a_circular_buffer():
+    """D114: `dm(m6, i6)` is `I6 + M6` (PRM fig 6-5, the oracle's `moves.rs`). ENS stores its second
+    ring at `I6 + 0x202` with `L6 = 0x200`; wrapping folded that write into the first ring."""
+    import fx_leslie_ops as lo
+
+    m = lo.LMachine({}, {"i6": 0xB4010, "m6": 0x202, "l6": 0x200, "b6": 0xB4000})
+    ops = lo.ops(m)
+    pre_modify = ops[8]  # the register form of the generated `plain(k, j)`
+    assert pre_modify(6, 6) == 0xB4010 + 0x202
+    post_modify_imm = ops[7]  # an immediate modify of the index does wrap
+    assert post_modify_imm(6, 0x202) == 0xB4010 + 0x202 - 0x200

@@ -179,13 +179,11 @@ pub(super) struct FwLawStage {
 
 impl FwLawStage {
     /// Stage for `kFx2Type` `ty` (0 to 3, 8 to 11), `kFx2Rate` and `kFx2Amt` in `0..=127`, at
-    /// `fs`; `None` for the other types. ENS (8, 9) runs with circular tap registers
-    /// (ASSUMED, D95; `docs/research/fx-mod2-validation.md` s5): without them its left output
-    /// stays exactly 0. `kFx2Amt` writes `c[-3]`, `c[2]`, `c[3]`, `c[4]` and `kFx2Rate` the phase increment `c[-6]` (44 knots, D100).
+    /// `fs`; `None` for the other types. ENS (8, 9) runs with `L4 = L7 = 0` like every routine
+    /// (D114: its two rings sit `0x202` words apart and are read and written by pre-modify,
+    /// no tap register is needed). `kFx2Amt` writes `c[-3]`, `c[2]`, `c[3]`, `c[4]` and `kFx2Rate` the phase increment `c[-6]` (44 knots, D100).
     pub(super) fn new(ty: u8, rate: u32, amount: u32, fs: f32) -> Option<Self> {
-        let mut me = Self::build(ty, rate, amount, fs)?;
-        me.st.circular_taps = matches!(ty, 8 | 9);
-        Some(me)
+        Self::build(ty, rate, amount, fs)
     }
 
     /// [`Self::new`] with the boot register state (the experiment of the validation note).
@@ -473,27 +471,19 @@ mod tests {
     }
 
     #[test]
-    fn the_ensemble_left_voice_needs_circular_tap_registers() {
-        // Boot row, no registers set by the caller: the left output is exactly 0 (why ENS needs
-        // `new`'s circular taps). With B4 = B7 = ring and L4 = L7 = 0x200 both outputs run: the left voice
-        // reads a mirror of the ring that only a circular tap pointer reaches. Whether the
-        // hardware has these register values is open (OQ21), so `new` sets them for ENS as an ASSUMED opt-in (D95).
-        let peak = |circular: bool| {
-            let mut st = FwLawStage::build(8, 64, 100, 48_000.0).unwrap();
-            st.st.circular_taps = circular;
-            let mut p = [0.0f32; 2];
-            for i in 0..3000 {
-                let out = st.process_frame([((i as f32) * 0.05).sin(), ((i as f32) * 0.031).cos()]);
-                p[0] = p[0].max(out[0].abs());
-                p[1] = p[1].max(out[1].abs());
-            }
-            p
-        };
-        let linear = peak(false);
-        assert_eq!(linear[0], 0.0, "left stays silent");
-        assert!(linear[1] > 0.1);
-        let circular = peak(true);
-        assert!(circular[0] > 0.1 && circular[1] > 0.1);
+    fn the_ensemble_left_voice_runs_with_linear_tap_registers() {
+        // Boot row, `L4 = L7 = 0` (the registers no code of the image writes, D114): the left
+        // output runs because the left voice lives in a second ring `0x202` words after the
+        // first and is reached by a pre-modify, which does not wrap. (Before D114 the model
+        // wrapped the pre-modify, left stayed exactly 0 and circular taps were assumed.)
+        let mut st = FwLawStage::new(8, 64, 100, 48_000.0).unwrap();
+        let mut p = [0.0f32; 2];
+        for i in 0..3000 {
+            let out = st.process_frame([((i as f32) * 0.05).sin(), ((i as f32) * 0.031).cos()]);
+            p[0] = p[0].max(out[0].abs());
+            p[1] = p[1].max(out[1].abs());
+        }
+        assert!(p[0] > 0.1 && p[1] > 0.1, "{p:?}");
     }
 
     #[test]
@@ -535,7 +525,6 @@ mod tests {
             );
             let st = FwLawStage::new(ty, 64, 64, 48_000.0).unwrap();
             assert_eq!(st.ty(), ty);
-            assert!(st.st.circular_taps);
         }
     }
 

@@ -1,7 +1,7 @@
 # Emulation coverage: oracle and audio emulator per subsystem
 
 - **Checked:** 2026-11-15
-- **Sources:** [sharc-census-diff](sharc-census-diff.md), [sharc-routine-diff](sharc-routine-diff.md), [sharc-leftovers](sharc-leftovers.md), [sharc-sy1sy2-smp](sharc-sy1sy2-smp.md), [sy-smp-audio](sy-smp-audio.md), [sy-pitch-entry-writer](sy-pitch-entry-writer.md), [synth-sample-kernel-rule](synth-sample-kernel-rule.md), [oracle-vs-engine](oracle-vs-engine.md), [arm-fw-emulation](arm-fw-emulation.md), [arm-organ-messages](arm-organ-messages.md) s10, [arm-bulk-tables](arm-bulk-tables.md), [program-coverage](program-coverage.md) with [data/program-sweep.json](data/program-sweep.json) (2026-11-14), `synth-stage-models*.md`, [synth-validation](synth-validation.md), [audio-remaining](audio-remaining.md), `crates/nord-core/src/render_opts.rs` (defaults), `docs/DECISIONS.md` (D22 to D112), `docs/TECH_DEBT.md` (TD-14, TD-15), `docs/OPEN-QUESTIONS.md`. D113 to D116 and PRs #437 to #440 are **open**, not on `main`; they are cited from the PR titles only. The `sharc-21571-handover` session note (PRs #118, #131, #142) is a sibling note, weighed as data.
+- **Sources:** [sharc-census-diff](sharc-census-diff.md), [sharc-routine-diff](sharc-routine-diff.md), [sharc-leftovers](sharc-leftovers.md), [sharc-sy1sy2-smp](sharc-sy1sy2-smp.md), [sy-smp-audio](sy-smp-audio.md), [sy-pitch-entry-writer](sy-pitch-entry-writer.md), [synth-sample-kernel-rule](synth-sample-kernel-rule.md), [oracle-vs-engine](oracle-vs-engine.md), [arm-fw-emulation](arm-fw-emulation.md), [arm-organ-messages](arm-organ-messages.md) s10, [arm-bulk-tables](arm-bulk-tables.md), [program-coverage](program-coverage.md) with [data/program-sweep.json](data/program-sweep.json) (2026-11-14), `synth-stage-models*.md`, [synth-validation](synth-validation.md), [audio-remaining](audio-remaining.md), `crates/nord-core/src/render_opts.rs` (defaults), `docs/DECISIONS.md` (D22 to D116), `docs/TECH_DEBT.md` (TD-14, TD-15), `docs/OPEN-QUESTIONS.md`. D113 to D116 (PRs #437 to #440) merged into `main` after the first draft of this note; the rows below were updated on 2026-11-16 (merge of `origin/main` up to PR #448). The `sharc-21571-handover` session note (PRs #118, #131, #142) is a sibling note, weighed as data.
 - **Question:** per subsystem, what does the project reproduce 1:1 (verified against firmware or oracle), what is fitted to hardware clips, what is assumed, what is missing, what is the default versus opt-in state, and what does closing each gap cost and change audibly?
 
 Tags: **VERIFIED** = matches firmware or oracle by a reproducible check, **EMPIRICAL** = fitted to a recording, **ASSUMED** = chosen without evidence, **unmodelled** = pass-through or absent. A default flips only when verified end to end (D22). Effort (low / medium / high) and audible impact are **estimates** (ASSUMED), not measurements. A number the repo does not hold is written `unknown`.
@@ -20,7 +20,7 @@ Tags: **VERIFIED** = matches firmware or oracle by a reproducible check, **EMPIR
 
 ## 2. ROADMAP and PRD view
 
-Counts are `- [x]` against all `- [ ]` and `- [x]` lines under each heading of `docs/ROADMAP.md` on this branch (nested sub-items count), computed by script, 2026-11-15. The Phase 2 header says its ticks mean "the model exists and is tested"; parity with the firmware is tracked in Phase 7b.
+Counts are `- [x]` against all `- [ ]` and `- [x]` lines under each heading of `docs/ROADMAP.md` on this branch (nested sub-items count), computed by script, 2026-11-15, recomputed 2026-11-16 after the merge of `origin/main`. The Phase 2 header says its ticks mean "the model exists and is tested"; parity with the firmware is tracked in Phase 7b.
 
 ### 2.1 Progress per phase and lane
 
@@ -38,10 +38,10 @@ Counts are `- [x]` against all `- [ ]` and `- [x]` lines under each heading of `
 | 7b.1 SHARC oracle, Lane E | 8 / 12 | core, census, routines | VERIFIED (section 3.1) | P2..P8 probes, SPORT/DAI, aliases, speed | medium | none today |
 | 7b.2 ARM harness, Lane E | 14 / 17 | boot, capture, tables | VERIFIED runs; the DSP side is absent | key-down capture, SY/SMP equality, real flash reads, Vox level word | high | medium |
 | 7b.3 Organ parity, Lane E | 22 / 30 | B3, Vox, Pipe, Farfisa, Bass, Leslie | mixed (section 4.1) | B3 processor, percussion, real time, Pipe clip | high | high |
-| 7b.4 Effects parity, Lane E | 22 / 27 | Mod 1, Mod 2, amp, delay, reverb | mixed (section 4.4) | ENS run, FX wiring, enable gating, reverb tail clip | medium | high |
+| 7b.4 Effects parity, Lane E | 23 / 28 | Mod 1, Mod 2, amp, delay, reverb | mixed (section 4.4) | FX wiring, enable gating, hardware clips (RM, WAH, PUMP, ENS), reverb tail clip | medium | high |
 | 7b.5 Piano parity, Lane E | 4 / 9 | transcription, velocity, levels | Felt Upright and transcription done | pitch and level laws into `PianoLayer`, Transkun adapter, velocity law, stream edges | medium | medium |
 | 7b.6 Synth parity, Lane E | 45 / 53 | stages, filters, envelopes, velocity, FM, WAVE, SAMPLE | 312 of 312 stage models; P rows EMPIRICAL | pitch entry `e`, parity remainder, hardware sweeps | high | medium |
-| **Total** | **205 / 257** (7b: 115 / 148) | | | | | |
+| **Total** | **206 / 258** (7b: 116 / 149) | | | | | |
 
 Lane E beans (`ns4-36hw`, `ns4-doy1`, `ns4-vnp2`, `ns4-qll9`, `ns4-ca0i`, `ns4-af6y`, `ns4-wzyz`) map to 7b.1 to 7b.6; this note does not read the bean files, so per-bean state is `unknown`.
 
@@ -73,13 +73,13 @@ Lane E beans (`ns4-36hw`, `ns4-doy1`, `ns4-vnp2`, `ns4-qll9`, `ns4-ca0i`, `ns4-a
 - The 7b.2 item "Engine: honour section I / II and zone flags ... Farfisa processor port; layer level law; ..." was one line with three delivered parts (routing D73, Farfisa PR #376 and D74, layer level law D25 and D87). It is split: the delivered part is ticked; the organ_b3 re-run, the Vox level word and real flash reads stay open.
 - The 7b.6 item "Remaining stage models (then SAW / SQUARE / ...) bit exact" repeated work that the ticks below it record (312 of 312 ANALOG layers). The stale half is removed; the synth parity remainder stays open.
 
-**Pending until PRs #437 to #440 merge:** tick the ENS item in 7b.4 (D114: ENS needs no tap registers); close the Transkun adapter item in 7b.5 as not adopted (D115).
+**Merged since the first draft (PRs #437 to #440):** the ENS item in 7b.4 is now ticked by #438 (D114). The Transkun adapter item in 7b.5 stays open although D115 (#439) records the adapters as not adopted: reword or close it.
 
 **Scope that grew beyond the ROADMAP**
 
 | Area | Evidence | ROADMAP state |
 |---|---|---|
-| Transcription tooling (Transkun, MuScriptor, adapter plan and training) | PRs #381, #407, #424; open #425, #430, #439 | two lines in 7b.5 only |
+| Transcription tooling (Transkun, MuScriptor, adapter plan and training) | PRs #381, #407, #424, #439; open #425, #430 | two lines in 7b.5 only |
 | Hardware validation clips (22 Part A segments, 17 synth clips, `emu_vs_hw.py`) | `emu_vs_hw_segments.json`, `synth_validation.json` | scattered ticks, no phase |
 | Listening packs (WAV A/B sets for the user) | the `listening-wavs` session; no committed file on `main` | not in the ROADMAP |
 | Firmware-derived opt-in paths (about 35 fields in `FirmwareOptions`, D22) | `render_opts.rs` | each has a tick, no summary of default flips |
@@ -176,7 +176,7 @@ Status columns: **Fw** = verified against firmware or oracle, **Clip** = fitted 
 | Percussion | 6 (8) | Asm | default | none | second engine family `0xC00BF890`, `0xC00BE348` (OQ19) | high | low |
 | Vibrato / chorus | 21 (25) | Asm (B3 tail opt-in) | default | [b3-vibrato-tail](b3-vibrato-tail.md) | enable and type words change the oracle | medium | low |
 | Leslie / rotary | 24 (35) | Asm engine rotary; Fw Leslie `0x1256AD` ported | firmware Leslie opt-in `--leslie firmware`; drive `--leslie-drive program` opt-in (D98) | oracle; presence +1.5 to +2.8 dB (inside 3 dB) with 96 sustained keys (D94) | history ring DMA (`0xB0078`), mid +3 and brilliance +5 dB | medium | medium |
-| Organ level `K = 2.8` | all organ | **EMPIRICAL** | default | no lane word in image or ARM code (D85); per engine K measured (D106); controls under measurement (D113, PR #437 open) | the firmware gain (OQ24) | medium | high (about 8.9 dB organ against piano) |
+| Organ level `K = 2.8` | all organ | **EMPIRICAL** | default | no lane word in image or ARM code (D85); per engine K measured (D106); one `K` stands under band, gate and matched-range controls, the spread is the replay stimulus (D113) | the firmware gain (OQ24) | medium | high (about 8.9 dB organ against piano) |
 | Drawbars | 44 (60) | Asm (scaling per model) | default | | dB curve not recovered | medium | low |
 
 ### 4.2 Piano
@@ -196,7 +196,7 @@ Status columns: **Fw** = verified against firmware or oracle, **Clip** = fitted 
 | Subsystem | Programs | Status | Default or opt-in | Evidence | Open gap | Effort | Audible impact |
 |---|---|---|---|---|---|---|---|
 | ANALOG stage families | 193 programs, 312 layers | **Fw: 312 of 312 layers have a bit-exact stage model** (`synth-stage-models-12` s5; the batches list which stage covers which wave; this note does not re-derive the per-wave split); levels per wave EMPIRICAL (saw 0.4, pulse 0.27, SHAPE 0.6, MULTI 0.26, SUPER 2.0) | stage chain default since D59 (`synth_chain` FirmwareStrip, `synth_stages` true); P table EMPIRICAL | 15 clips: mean score 6.6 to 4.1; 9 better, 3 equal, 3 worse | SHAPE word law at idle only; P rows for waves without a clip: unknown count | medium | medium |
-| Filters per type | 132 Lp12, 88 Lp24, 52 Ladder24, 18 BandPass, 11 HighPass (programs) | stages Fw (442 of 442 filter layers bit-exact); type map and per-type cutoff factors **EMPIRICAL** (D108: factors are not stage physics; derived replacement scores worse, 3.88 / 3.20 against 2.18 on 12 clips) | default ZDF filter (`filter_engine` None); firmware filter opt-in | cutoff law of a voice VERIFIED, exponential (D102) | stage call rate per frame, resonance word, `kFltType` link; LP24 SUPER factor 4.4 (D116, PR #440 open) | medium | medium |
+| Filters per type | 132 Lp12, 88 Lp24, 52 Ladder24, 18 BandPass, 11 HighPass (programs) | stages Fw (442 of 442 filter layers bit-exact); type map and per-type cutoff factors **EMPIRICAL** (D108: factors are not stage physics; derived replacement scores worse, 3.88 / 3.20 against 2.18 on 12 clips) | default ZDF filter (`filter_engine` None); firmware filter opt-in | cutoff law of a voice VERIFIED, exponential (D102) | stage call rate per frame, resonance word, `kFltType` link; LP24 SUPER factor 4.4 does not hold on three more clips (D116); opt-in `--synth-super-lp24` | medium | medium |
 | Envelopes | 289 (581) | Fw records bit-exact; panel mapping Asm | default (knob laws on since D57) | | pass = 2 SY frames ASSUMED; ARM tick 1 or 24 kHz (OQ22) | medium | medium (envelope times) |
 | LFO | 38 filter, 50 OscCtrl, 33 pitch (programs) | pitch-depth table VERIFIED; rate and amount scales Asm (OQ7) | default | | | medium | low |
 | Arpeggiator | 32 (49) | Asm (pattern table not located) | default | [synth-arp-patterns](synth-arp-patterns.md) | gate 2/3 versus 1/2 step (OQ32); clock 24 kHz (OQ22) | low | low to medium |
@@ -217,7 +217,7 @@ Status columns: **Fw** = verified against firmware or oracle, **Clip** = fitted 
 | Compressor | 117 (204) | Fw routine, parameters and bus position Asm | opt-in (`--firmware-fx`) | | | medium | low |
 | EQ | 265 (503) | Asm (RBJ biquads, gain step and Q) | default | FREQ2 `20 * 1000^(v/1e6)` Hz EMPIRICAL (6 %) | | low | low |
 | Mod 1 | 90 (124) | laws captured at 44 values (D100); engine models, constants Asm; PUMP is a verified module (`0x122D2C`, [fx-mod-types](fx-mod-types.md) s7) but its clock: hardware 2.11 Hz against 6.1 Hz free-run is reported by the coordinating session and **not recorded in a repo file** (unverified here) | default | | PUMP clock source, RM and A-WAH hardware clips | medium | medium (PUMP 9 programs, A-PAN 50) |
-| Mod 2 | 158 (260): CHOR 93, VIBE 45, PHAS 12, SPIN 11, FLANG 10, ENS 3 | CHOR, VIBE, FLANG, PHAS 0 run the firmware routines behind `FirmwareFx::mod2`; SPIN and ENS wired through the law stage; ENS tap model bug fixed (D114, PR #438 open) | opt-in | laws on a dense ARM grid (D90); chorus clip `fx-chorus-hw-clip` | only chorus has a clip; per-layer-kind words | medium | medium |
+| Mod 2 | 158 (260): CHOR 93, VIBE 45, PHAS 12, SPIN 11, FLANG 10, ENS 3 | CHOR, VIBE, FLANG, PHAS 0 run the firmware routines behind `FirmwareFx::mod2`; SPIN and ENS wired through the law stage; ENS tap registers closed, no taps needed (D114) | opt-in | laws on a dense ARM grid (D90); chorus clip `fx-chorus-hw-clip` | only chorus has a clip; per-layer-kind words | medium | medium |
 | Delay | 155 (252); feedback FX 68 | Fw time and mix words; loop is the engine's | opt-in `delay_laws` | | feedback FX approximated | medium | low |
 | Reverb | 358 (756): BOOTH 195, ROOM 150, SPRING 57 | engine FDN default; per-type colour words decoded and ported (D91); firmware tails 0.5 to 1.35 s | opt-in `--firmware-reverb` | `fx_reverb` clip | hardware tail clip (Hall, Cathedral), type 6, Spring colour (OQ21c) | medium | high (all reverbs) |
 | FX defaults | | words derived (D101) | opt-in `--fx-defaults firmware` | only chorus has a clip | init-patch clip (OQ34) | low | low |
@@ -275,5 +275,4 @@ The 119 unmodelled uses: Wavetable 14 (12 programs), SHAPE SINE 32 (30), MULTI 4
 1. Regenerate `program-sweep.json` on current `main` and store per-program path sets, so the count of programs with an unmodelled path is known and the stale rows of section 4 are corrected.
 2. Correct `sharc-routine-diff.md` for PR #131 (post and output stages) and move the session-note numbers into a research file.
 3. Run the instruction census on the 21571 simulator (about 4 h).
-4. Merge D113 to D116 (PRs #437 to #440) and refresh the rows tagged open in [audio-remaining](audio-remaining.md).
-5. Benchmark the opt-in ports in real time before any default flip.
+4. Benchmark the opt-in ports in real time before any default flip.

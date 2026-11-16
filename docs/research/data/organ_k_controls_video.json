@@ -1,0 +1,901 @@
+{
+ "rows": {
+  "b3-k28-unity": {
+   "segment": "organ_b3",
+   "k_used": 2.8,
+   "controls": {
+    "broadband": {
+     "emu_db": -27.79,
+     "hw_db": -20.53,
+     "delta_db": -7.26,
+     "k_needed": 6.46,
+     "crest_delta_db": -1.15,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -28.12,
+     "hw_db": -21.43,
+     "delta_db": -6.69,
+     "k_needed": 6.05,
+     "crest_delta_db": 0.07,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -27.86,
+     "hw_db": -21.16,
+     "delta_db": -6.71,
+     "k_needed": 6.06,
+     "crest_delta_db": -1.08,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -27.86,
+     "hw_db": -20.98,
+     "delta_db": -6.88,
+     "k_needed": 6.18,
+     "crest_delta_db": -1.03,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -27.15,
+     "hw_db": -20.61,
+     "delta_db": -6.55,
+     "k_needed": 5.95,
+     "crest_delta_db": -1.24,
+     "kept": 0.836
+    },
+    "notes": {
+     "emu_db": -27.23,
+     "hw_db": -20.74,
+     "delta_db": -6.49,
+     "k_needed": 5.91,
+     "crest_delta_db": -1.31,
+     "kept": 0.864
+    },
+    "matched_48up": {
+     "emu_db": -32.15,
+     "hw_db": -21.57,
+     "delta_db": -10.59,
+     "k_needed": 9.47,
+     "crest_delta_db": 3.22,
+     "kept": 0.004
+    },
+    "matched_48_64": {
+     "emu_db": -32.15,
+     "hw_db": -21.57,
+     "delta_db": -10.59,
+     "k_needed": 9.47,
+     "crest_delta_db": 3.22,
+     "kept": 0.004
+    }
+   }
+  },
+  "b3-k28-scaled": {
+   "segment": "organ_b3",
+   "k_used": 2.8,
+   "controls": {
+    "broadband": {
+     "emu_db": -27.05,
+     "hw_db": -20.53,
+     "delta_db": -6.51,
+     "k_needed": 5.93,
+     "crest_delta_db": -0.34,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -27.38,
+     "hw_db": -21.43,
+     "delta_db": -5.94,
+     "k_needed": 5.55,
+     "crest_delta_db": 0.43,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -27.12,
+     "hw_db": -21.16,
+     "delta_db": -5.96,
+     "k_needed": 5.56,
+     "crest_delta_db": -0.29,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -27.11,
+     "hw_db": -20.98,
+     "delta_db": -6.13,
+     "k_needed": 5.67,
+     "crest_delta_db": -0.33,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -26.41,
+     "hw_db": -20.61,
+     "delta_db": -5.8,
+     "k_needed": 5.46,
+     "crest_delta_db": -0.45,
+     "kept": 0.836
+    },
+    "notes": {
+     "emu_db": -26.48,
+     "hw_db": -20.74,
+     "delta_db": -5.74,
+     "k_needed": 5.42,
+     "crest_delta_db": -0.52,
+     "kept": 0.864
+    },
+    "matched_48up": {
+     "emu_db": -31.48,
+     "hw_db": -21.57,
+     "delta_db": -9.91,
+     "k_needed": 8.76,
+     "crest_delta_db": 3.3,
+     "kept": 0.004
+    },
+    "matched_48_64": {
+     "emu_db": -31.48,
+     "hw_db": -21.57,
+     "delta_db": -9.91,
+     "k_needed": 8.76,
+     "crest_delta_db": 3.3,
+     "kept": 0.004
+    }
+   }
+  },
+  "b3-k28-engine": {
+   "segment": "organ_b3",
+   "k_used": 2.8,
+   "controls": {
+    "broadband": {
+     "emu_db": -23.02,
+     "hw_db": -20.53,
+     "delta_db": -2.49,
+     "k_needed": 3.73,
+     "crest_delta_db": -1.15,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -23.35,
+     "hw_db": -21.43,
+     "delta_db": -1.92,
+     "k_needed": 3.49,
+     "crest_delta_db": 0.07,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -23.09,
+     "hw_db": -21.16,
+     "delta_db": -1.94,
+     "k_needed": 3.5,
+     "crest_delta_db": -1.08,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -23.09,
+     "hw_db": -20.98,
+     "delta_db": -2.1,
+     "k_needed": 3.57,
+     "crest_delta_db": -1.03,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -22.38,
+     "hw_db": -20.61,
+     "delta_db": -1.78,
+     "k_needed": 3.44,
+     "crest_delta_db": -1.24,
+     "kept": 0.836
+    },
+    "notes": {
+     "emu_db": -22.46,
+     "hw_db": -20.74,
+     "delta_db": -1.71,
+     "k_needed": 3.41,
+     "crest_delta_db": -1.31,
+     "kept": 0.864
+    },
+    "matched_48up": {
+     "emu_db": -27.38,
+     "hw_db": -21.57,
+     "delta_db": -5.81,
+     "k_needed": 5.47,
+     "crest_delta_db": 3.22,
+     "kept": 0.004
+    },
+    "matched_48_64": {
+     "emu_db": -27.38,
+     "hw_db": -21.57,
+     "delta_db": -5.81,
+     "k_needed": 5.47,
+     "crest_delta_db": 3.22,
+     "kept": 0.004
+    }
+   }
+  },
+  "b3-chain-unity": {
+   "segment": "organ_b3",
+   "k_used": 0.5971,
+   "controls": {
+    "broadband": {
+     "emu_db": -40.57,
+     "hw_db": -20.53,
+     "delta_db": -20.03,
+     "k_needed": 5.99,
+     "crest_delta_db": 6.69,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -41.07,
+     "hw_db": -21.43,
+     "delta_db": -19.64,
+     "k_needed": 5.73,
+     "crest_delta_db": 5.56,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -41.04,
+     "hw_db": -21.16,
+     "delta_db": -19.88,
+     "k_needed": 5.89,
+     "crest_delta_db": 0.3,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -40.94,
+     "hw_db": -20.98,
+     "delta_db": -19.96,
+     "k_needed": 5.94,
+     "crest_delta_db": 1.77,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -40.33,
+     "hw_db": -20.61,
+     "delta_db": -19.72,
+     "k_needed": 5.78,
+     "crest_delta_db": 0.14,
+     "kept": 0.836
+    },
+    "notes": {
+     "emu_db": -40.4,
+     "hw_db": -20.74,
+     "delta_db": -19.66,
+     "k_needed": 5.74,
+     "crest_delta_db": 0.08,
+     "kept": 0.864
+    },
+    "matched_48up": {
+     "emu_db": -45.48,
+     "hw_db": -21.57,
+     "delta_db": -23.91,
+     "k_needed": 9.37,
+     "crest_delta_db": 3.36,
+     "kept": 0.004
+    },
+    "matched_48_64": {
+     "emu_db": -45.48,
+     "hw_db": -21.57,
+     "delta_db": -23.91,
+     "k_needed": 9.37,
+     "crest_delta_db": 3.36,
+     "kept": 0.004
+    }
+   }
+  },
+  "b3-chain-engine": {
+   "segment": "organ_b3",
+   "k_used": 0.5971,
+   "controls": {
+    "broadband": {
+     "emu_db": -35.8,
+     "hw_db": -20.53,
+     "delta_db": -15.26,
+     "k_needed": 3.46,
+     "crest_delta_db": 6.69,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -36.3,
+     "hw_db": -21.43,
+     "delta_db": -14.87,
+     "k_needed": 3.31,
+     "crest_delta_db": 5.56,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -36.26,
+     "hw_db": -21.16,
+     "delta_db": -15.11,
+     "k_needed": 3.4,
+     "crest_delta_db": 0.3,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -36.17,
+     "hw_db": -20.98,
+     "delta_db": -15.18,
+     "k_needed": 3.43,
+     "crest_delta_db": 1.77,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -35.56,
+     "hw_db": -20.61,
+     "delta_db": -14.95,
+     "k_needed": 3.34,
+     "crest_delta_db": 0.14,
+     "kept": 0.836
+    },
+    "notes": {
+     "emu_db": -35.63,
+     "hw_db": -20.74,
+     "delta_db": -14.89,
+     "k_needed": 3.31,
+     "crest_delta_db": 0.08,
+     "kept": 0.864
+    },
+    "matched_48up": {
+     "emu_db": -40.71,
+     "hw_db": -21.57,
+     "delta_db": -19.14,
+     "k_needed": 5.41,
+     "crest_delta_db": 3.36,
+     "kept": 0.004
+    },
+    "matched_48_64": {
+     "emu_db": -40.71,
+     "hw_db": -21.57,
+     "delta_db": -19.14,
+     "k_needed": 5.41,
+     "crest_delta_db": 3.36,
+     "kept": 0.004
+    }
+   }
+  },
+  "vox-k28": {
+   "segment": "organ_vox",
+   "k_used": 2.8,
+   "controls": {
+    "broadband": {
+     "emu_db": -27.4,
+     "hw_db": -26.64,
+     "delta_db": -0.76,
+     "k_needed": 3.06,
+     "crest_delta_db": 1.12,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -27.56,
+     "hw_db": -27.59,
+     "delta_db": 0.03,
+     "k_needed": 2.79,
+     "crest_delta_db": 0.69,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -29.62,
+     "hw_db": -31.35,
+     "delta_db": 1.72,
+     "k_needed": 2.3,
+     "crest_delta_db": 2.12,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -29.47,
+     "hw_db": -29.47,
+     "delta_db": -0.0,
+     "k_needed": 2.8,
+     "crest_delta_db": -0.48,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -29.4,
+     "hw_db": -31.12,
+     "delta_db": 1.72,
+     "k_needed": 2.3,
+     "crest_delta_db": 2.11,
+     "kept": 0.95
+    },
+    "notes": {
+     "emu_db": -29.32,
+     "hw_db": -31.04,
+     "delta_db": 1.72,
+     "k_needed": 2.3,
+     "crest_delta_db": 2.11,
+     "kept": 0.931
+    },
+    "matched_48up": {
+     "emu_db": -29.34,
+     "hw_db": -30.88,
+     "delta_db": 1.54,
+     "k_needed": 2.34,
+     "crest_delta_db": -0.4,
+     "kept": 0.796
+    },
+    "matched_48_64": {
+     "emu_db": -29.6,
+     "hw_db": -29.14,
+     "delta_db": -0.46,
+     "k_needed": 2.95,
+     "crest_delta_db": 1.08,
+     "kept": 0.211
+    }
+   }
+  },
+  "vox-chain": {
+   "segment": "organ_vox",
+   "k_used": 0.5971,
+   "controls": {
+    "broadband": {
+     "emu_db": -40.75,
+     "hw_db": -26.64,
+     "delta_db": -14.12,
+     "k_needed": 3.03,
+     "crest_delta_db": 0.98,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -40.92,
+     "hw_db": -27.59,
+     "delta_db": -13.32,
+     "k_needed": 2.77,
+     "crest_delta_db": 0.34,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -42.93,
+     "hw_db": -31.35,
+     "delta_db": -11.58,
+     "k_needed": 2.27,
+     "crest_delta_db": 1.89,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -42.78,
+     "hw_db": -29.47,
+     "delta_db": -13.3,
+     "k_needed": 2.76,
+     "crest_delta_db": -0.72,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -42.71,
+     "hw_db": -31.12,
+     "delta_db": -11.58,
+     "k_needed": 2.27,
+     "crest_delta_db": 1.89,
+     "kept": 0.95
+    },
+    "notes": {
+     "emu_db": -42.62,
+     "hw_db": -31.04,
+     "delta_db": -11.58,
+     "k_needed": 2.27,
+     "crest_delta_db": 1.89,
+     "kept": 0.931
+    },
+    "matched_48up": {
+     "emu_db": -42.62,
+     "hw_db": -30.88,
+     "delta_db": -11.74,
+     "k_needed": 2.31,
+     "crest_delta_db": -0.23,
+     "kept": 0.796
+    },
+    "matched_48_64": {
+     "emu_db": -42.92,
+     "hw_db": -29.14,
+     "delta_db": -13.78,
+     "k_needed": 2.92,
+     "crest_delta_db": 1.82,
+     "kept": 0.211
+    }
+   }
+  },
+  "pipe-k28-dry": {
+   "segment": "organ_pipe",
+   "k_used": 2.8,
+   "controls": {
+    "broadband": {
+     "emu_db": -25.12,
+     "hw_db": -26.0,
+     "delta_db": 0.88,
+     "k_needed": 2.53,
+     "crest_delta_db": -1.14,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -25.12,
+     "hw_db": -27.91,
+     "delta_db": 2.79,
+     "k_needed": 2.03,
+     "crest_delta_db": -0.49,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -26.65,
+     "hw_db": -27.0,
+     "delta_db": 0.35,
+     "k_needed": 2.69,
+     "crest_delta_db": 0.29,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -26.6,
+     "hw_db": -26.84,
+     "delta_db": 0.24,
+     "k_needed": 2.72,
+     "crest_delta_db": -0.85,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -26.65,
+     "hw_db": -27.0,
+     "delta_db": 0.35,
+     "k_needed": 2.69,
+     "crest_delta_db": 0.29,
+     "kept": 1.0
+    },
+    "notes": {
+     "emu_db": -26.65,
+     "hw_db": -27.0,
+     "delta_db": 0.35,
+     "k_needed": 2.69,
+     "crest_delta_db": 0.29,
+     "kept": 1.0
+    },
+    "matched_48up": {
+     "emu_db": -27.42,
+     "hw_db": -25.47,
+     "delta_db": -1.96,
+     "k_needed": 3.51,
+     "crest_delta_db": 0.97,
+     "kept": 0.207
+    },
+    "matched_48_64": {
+     "emu_db": -29.3,
+     "hw_db": -25.34,
+     "delta_db": -3.96,
+     "k_needed": 4.42,
+     "crest_delta_db": 1.38,
+     "kept": 0.048
+    }
+   }
+  },
+  "pipe-chain-dry": {
+   "segment": "organ_pipe",
+   "k_used": 0.5971,
+   "controls": {
+    "broadband": {
+     "emu_db": -38.09,
+     "hw_db": -26.0,
+     "delta_db": -12.09,
+     "k_needed": 2.4,
+     "crest_delta_db": 6.8,
+     "kept": 1.0
+    },
+    "broadband_mono": {
+     "emu_db": -38.09,
+     "hw_db": -27.91,
+     "delta_db": -10.19,
+     "k_needed": 1.93,
+     "crest_delta_db": 7.46,
+     "kept": 1.0
+    },
+    "band": {
+     "emu_db": -40.06,
+     "hw_db": -27.0,
+     "delta_db": -13.06,
+     "k_needed": 2.68,
+     "crest_delta_db": 0.29,
+     "kept": 1.0
+    },
+    "band_wide_nohole": {
+     "emu_db": -39.77,
+     "hw_db": -26.84,
+     "delta_db": -12.93,
+     "k_needed": 2.65,
+     "crest_delta_db": 3.4,
+     "kept": 1.0
+    },
+    "active": {
+     "emu_db": -40.06,
+     "hw_db": -27.0,
+     "delta_db": -13.06,
+     "k_needed": 2.68,
+     "crest_delta_db": 0.29,
+     "kept": 1.0
+    },
+    "notes": {
+     "emu_db": -40.06,
+     "hw_db": -27.0,
+     "delta_db": -13.06,
+     "k_needed": 2.68,
+     "crest_delta_db": 0.29,
+     "kept": 1.0
+    },
+    "matched_48up": {
+     "emu_db": -40.83,
+     "hw_db": -25.47,
+     "delta_db": -15.36,
+     "k_needed": 3.5,
+     "crest_delta_db": 0.95,
+     "kept": 0.207
+    },
+    "matched_48_64": {
+     "emu_db": -42.72,
+     "hw_db": -25.34,
+     "delta_db": -17.38,
+     "k_needed": 4.42,
+     "crest_delta_db": 1.37,
+     "kept": 0.048
+    }
+   }
+  }
+ },
+ "note_stats": {
+  "organ_b3": {
+   "mean_velocity": 0.0,
+   "notes": 101,
+   "density_per_s": 4.04,
+   "mean_dur_s": 0.498,
+   "mean_poly": 2.014
+  },
+  "organ_vox": {
+   "mean_velocity": 0.0,
+   "notes": 36,
+   "density_per_s": 3.273,
+   "mean_dur_s": 0.519,
+   "mean_poly": 1.699
+  },
+  "organ_pipe": {
+   "mean_velocity": 0.0,
+   "notes": 259,
+   "density_per_s": 8.633,
+   "mean_dur_s": 0.633,
+   "mean_poly": 5.468
+  }
+ },
+ "slopes": [
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "broadband",
+   "slope": 0.952,
+   "crest_delta_emu_db": -7.84,
+   "k_needed_gap_db": 0.66
+  },
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "broadband_mono",
+   "slope": 0.965,
+   "crest_delta_emu_db": -5.49,
+   "k_needed_gap_db": 0.47
+  },
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "band",
+   "slope": 0.982,
+   "crest_delta_emu_db": -1.38,
+   "k_needed_gap_db": 0.25
+  },
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "band_wide_nohole",
+   "slope": 0.975,
+   "crest_delta_emu_db": -2.8,
+   "k_needed_gap_db": 0.34
+  },
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "active",
+   "slope": 0.982,
+   "crest_delta_emu_db": -1.38,
+   "k_needed_gap_db": 0.25
+  },
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "notes",
+   "slope": 0.981,
+   "crest_delta_emu_db": -1.39,
+   "k_needed_gap_db": 0.25
+  },
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "matched_48up",
+   "slope": 0.993,
+   "crest_delta_emu_db": -0.14,
+   "k_needed_gap_db": 0.09
+  },
+  {
+   "pair": "b3-k28-unity vs b3-chain-unity",
+   "control": "matched_48_64",
+   "slope": 0.993,
+   "crest_delta_emu_db": -0.14,
+   "k_needed_gap_db": 0.09
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "broadband",
+   "slope": 0.995,
+   "crest_delta_emu_db": 0.14,
+   "k_needed_gap_db": 0.09
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "broadband_mono",
+   "slope": 0.995,
+   "crest_delta_emu_db": 0.35,
+   "k_needed_gap_db": 0.06
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "band",
+   "slope": 0.992,
+   "crest_delta_emu_db": 0.23,
+   "k_needed_gap_db": 0.11
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "band_wide_nohole",
+   "slope": 0.992,
+   "crest_delta_emu_db": 0.24,
+   "k_needed_gap_db": 0.12
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "active",
+   "slope": 0.992,
+   "crest_delta_emu_db": 0.22,
+   "k_needed_gap_db": 0.11
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "notes",
+   "slope": 0.991,
+   "crest_delta_emu_db": 0.22,
+   "k_needed_gap_db": 0.11
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "matched_48up",
+   "slope": 0.989,
+   "crest_delta_emu_db": -0.17,
+   "k_needed_gap_db": 0.11
+  },
+  {
+   "pair": "vox-k28 vs vox-chain",
+   "control": "matched_48_64",
+   "slope": 0.992,
+   "crest_delta_emu_db": -0.74,
+   "k_needed_gap_db": 0.09
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "broadband",
+   "slope": 0.966,
+   "crest_delta_emu_db": -7.94,
+   "k_needed_gap_db": 0.46
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "broadband_mono",
+   "slope": 0.966,
+   "crest_delta_emu_db": -7.95,
+   "k_needed_gap_db": 0.44
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "band",
+   "slope": 0.999,
+   "crest_delta_emu_db": 0.0,
+   "k_needed_gap_db": 0.03
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "band_wide_nohole",
+   "slope": 0.981,
+   "crest_delta_emu_db": -4.25,
+   "k_needed_gap_db": 0.23
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "active",
+   "slope": 0.999,
+   "crest_delta_emu_db": 0.0,
+   "k_needed_gap_db": 0.03
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "notes",
+   "slope": 0.999,
+   "crest_delta_emu_db": 0.0,
+   "k_needed_gap_db": 0.03
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "matched_48up",
+   "slope": 0.999,
+   "crest_delta_emu_db": 0.02,
+   "k_needed_gap_db": 0.02
+  },
+  {
+   "pair": "pipe-k28-dry vs pipe-chain-dry",
+   "control": "matched_48_64",
+   "slope": 1.0,
+   "crest_delta_emu_db": 0.01,
+   "k_needed_gap_db": 0.0
+  }
+ ],
+ "spread": [
+  {
+   "control": "broadband",
+   "k_needed": {
+    "b3-k28-engine": 3.73,
+    "vox-k28": 3.06,
+    "pipe-k28-dry": 2.53
+   },
+   "spread_db": 3.37
+  },
+  {
+   "control": "broadband_mono",
+   "k_needed": {
+    "b3-k28-engine": 3.49,
+    "vox-k28": 2.79,
+    "pipe-k28-dry": 2.03
+   },
+   "spread_db": 4.71
+  },
+  {
+   "control": "band",
+   "k_needed": {
+    "b3-k28-engine": 3.5,
+    "vox-k28": 2.3,
+    "pipe-k28-dry": 2.69
+   },
+   "spread_db": 3.65
+  },
+  {
+   "control": "band_wide_nohole",
+   "k_needed": {
+    "b3-k28-engine": 3.57,
+    "vox-k28": 2.8,
+    "pipe-k28-dry": 2.72
+   },
+   "spread_db": 2.36
+  },
+  {
+   "control": "active",
+   "k_needed": {
+    "b3-k28-engine": 3.44,
+    "vox-k28": 2.3,
+    "pipe-k28-dry": 2.69
+   },
+   "spread_db": 3.5
+  },
+  {
+   "control": "notes",
+   "k_needed": {
+    "b3-k28-engine": 3.41,
+    "vox-k28": 2.3,
+    "pipe-k28-dry": 2.69
+   },
+   "spread_db": 3.42
+  },
+  {
+   "control": "matched_48up",
+   "k_needed": {
+    "b3-k28-engine": 5.47,
+    "vox-k28": 2.34,
+    "pipe-k28-dry": 3.51
+   },
+   "spread_db": 7.38
+  },
+  {
+   "control": "matched_48_64",
+   "k_needed": {
+    "b3-k28-engine": 5.47,
+    "vox-k28": 2.95,
+    "pipe-k28-dry": 4.42
+   },
+   "spread_db": 5.36
+  }
+ ]
+}

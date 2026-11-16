@@ -7,17 +7,18 @@
 //! (`M8..M15`), 26..23 PM data register, 22..0 compute (Type 1a only). Both accesses use the
 //! index before the instruction and post-modify it; stores read their registers before the
 //! compute runs.
+use super::decode_cache::DualMoveOp;
 use super::exec::Decoded;
 use super::{Core, Fault};
-use crate::visa::{bits, Kind};
+use crate::visa::bits;
 
 impl Core {
-    pub(super) fn exec_dual_move(&mut self, d: &Decoded) -> Result<(), Fault> {
-        let w = d.w;
-        let (dmi, dmm) = (bits(w, 43, 41) as usize, bits(w, 40, 38) as usize);
-        let (pmi, pmm) = (bits(w, 32, 30) as usize + 8, bits(w, 29, 27) as usize + 8);
-        let (dm_reg, pm_reg) = (bits(w, 36, 33) as u8, bits(w, 26, 23) as u8);
-        let (dm_write, pm_write) = (bits(w, 44, 44) == 1, bits(w, 37, 37) == 1);
+    /// Executes a pre-decoded dual data move (`T1a` / `T1b`).
+    pub(super) fn exec_dual_move_op(&mut self, d: &Decoded, op: DualMoveOp) -> Result<(), Fault> {
+        let (dmi, dmm) = (op.dmi as usize, op.dmm as usize);
+        let (pmi, pmm) = (op.pmi as usize, op.pmm as usize);
+        let (dm_reg, pm_reg) = (op.dm_reg, op.pm_reg);
+        let (dm_write, pm_write) = (op.dm_write, op.pm_write);
         let (dm_addr, pm_addr) = (
             self.dag_out(dmi, self.i[dmi]),
             self.dag_out(pmi, self.i[pmi]),
@@ -25,15 +26,14 @@ impl Core {
         let (dm_next, pm_next) = (self.modified(dmi, dmm), self.modified(pmi, pmm));
         let dm_captured = self.capture(dm_reg);
         let pm_captured = self.capture(pm_reg);
-        if d.kind() == Kind::T1a {
+        if let Some(cop) = op.compute {
             // no condition field in this type: bits 37..33 are data, so run on both elements
-            let c = bits(w, 22, 0);
             // VERIFIED (census diff, 340 cases): a multiplier-plus-ALU compute in this form leaves
             // MN, MV, MU, MI (ASTAT bits 6..9) and the sticky bits MOS..MIS (STKY 6..9) as they
             // were; a multiplier-only compute updates them as usual
             let keep = (self.sys.astat_extra, self.sys.stky);
-            self.on_each_pe(d, true, true, |core| core.compute(c))?;
-            if bits(c, 22, 22) == 1 {
+            self.on_each_pe(d, true, true, |core| core.exec_compute_op(cop))?;
+            if bits(op.compute_raw, 22, 22) == 1 {
                 const MULT: u32 = 0xF << 6;
                 for y in 0..2 {
                     let e = &mut self.sys.astat_extra[y];

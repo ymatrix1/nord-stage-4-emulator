@@ -42,4 +42,18 @@ path = "src/bin/sharc_ref.rs"
 name = "sharc-fx"
 path = "src/bin/sharc_fx.rs"
 
+[features]
+jit = [
+    "dep:cranelift-codegen",
+    "dep:cranelift-frontend",
+    "dep:cranelift-jit",
+    "dep:cranelift-module",
+    "dep:cranelift-native",
+]
+
 [dependencies]
+cranelift-codegen = { version = "0.116", optional = true }
+cranelift-frontend = { version = "0.116", optional = true }
+cranelift-jit = { version = "0.116", optional = true }
+cranelift-module = { version = "0.116", optional = true }
+cranelift-native = { version = "0.116", optional = true }

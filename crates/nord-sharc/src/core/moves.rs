@@ -1,5 +1,6 @@
 //! Data and register transfers of [`Core`]: immediates, DM/PM moves with the various addressing
 //! forms, register-to-register moves, `Dreg <-> CDreg` swaps, bit operations and index modify.
+use super::decode_cache::MoveOp;
 use super::exec::Decoded;
 use super::{sign_extend, Core, Fault};
 use crate::visa::{bits, ureg_load, Kind};
@@ -93,6 +94,75 @@ impl Core {
             }
         }
         Ok(())
+    }
+
+    /// Executes a pre-decoded move instruction (`MoveOp`), falling back to `exec_move` for `Other`.
+    pub(super) fn exec_move_op(&mut self, d: &Decoded, op: MoveOp) -> Result<(), Fault> {
+        match op {
+            MoveOp::LoadImm { ureg, value } => {
+                self.write_ureg(ureg, value);
+                if self.simd() && (ureg < 16 || ureg >> 4 == 5) {
+                    self.write_ureg(if ureg < 16 { 0x50 | ureg } else { ureg & 15 }, value);
+                } else if self.simd() && (ureg == 0x76 || ureg == 0x78) {
+                    self.write_ureg(ureg + 1, value);
+                }
+                Ok(())
+            }
+            MoveOp::DirectMem { addr, ureg, write } => self.mem_transfer(d, addr, ureg, write),
+            MoveOp::RegSwap { r, s, .. } => {
+                if d.cond_ok || self.simd() && d.cond_y {
+                    if let Some(cop) = match op {
+                        MoveOp::RegSwap { compute, .. } => compute,
+                        _ => None,
+                    } {
+                        self.on_each_pe(d, d.cond_ok, d.cond_y, |core| core.exec_compute_op(cop))?;
+                    }
+                    self.swap_rs(r as usize, s as usize);
+                }
+                Ok(())
+            }
+            MoveOp::RegMove {
+                src, dst, compute, ..
+            } => {
+                if d.cond_ok || self.simd() && d.cond_y {
+                    let cap = self.capture_move(src);
+                    if let Some(cop) = compute {
+                        self.on_each_pe(d, d.cond_ok, d.cond_y, |core| core.exec_compute_op(cop))?;
+                    }
+                    self.apply_move_if(dst, src, &cap, d.cond_ok, !self.simd() || d.cond_y);
+                }
+                Ok(())
+            }
+            MoveOp::DagMem {
+                ii,
+                mi,
+                ureg,
+                write,
+                post_modify,
+                cond,
+                compute,
+            } => {
+                if cond == 31 || d.cond_ok || self.simd() && d.cond_y {
+                    let (ii, mi) = (ii as usize, mi as usize);
+                    let (addr, update) = if post_modify {
+                        (self.dag_out(ii, self.i[ii]), Some(self.modified(ii, mi)))
+                    } else {
+                        (self.dag_out(ii, self.i[ii].wrapping_add(self.m[mi])), None)
+                    };
+                    let captured = self.capture(ureg);
+                    if let Some(cop) = compute {
+                        self.on_each_pe(d, d.cond_ok, d.cond_y, |core| core.exec_compute_op(cop))?;
+                    }
+                    self.mem_transfer_with(d, addr, ureg, write, captured)?;
+                    self.broadcast_load(ii, ureg, write);
+                    if let Some(u) = update {
+                        self.i[ii] = u;
+                    }
+                }
+                Ok(())
+            }
+            MoveOp::Other => self.exec_move(d),
+        }
     }
 
     /// Executes the move and modify types: 3a/3b/3c, 4a/4b, 5a/5b, 7a/7b, 14a, 15a/15b, 16a,

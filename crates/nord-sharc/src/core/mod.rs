@@ -29,6 +29,7 @@ mod census_regress;
 mod compute_adi;
 mod dag;
 mod dag_modes;
+mod decode_cache;
 mod dualmove;
 mod exec;
 #[cfg(test)]
@@ -50,6 +51,8 @@ mod interrupts;
 #[cfg(test)]
 mod irq_scenarios;
 mod isa;
+#[cfg(feature = "jit")]
+mod jit;
 mod longword;
 #[cfg(test)]
 mod loops_measured;
@@ -142,12 +145,12 @@ pub struct Flags {
 
 /// Loop stack entry of `DO ... UNTIL cond` (`arith_loop`) and `DO ... UNTIL LCE`.
 #[derive(Debug, Clone, Copy, Default)]
-struct LoopFrame {
-    start: u32,
-    end: u32,
-    remaining: u32,
+pub(super) struct LoopFrame {
+    pub(super) start: u32,
+    pub(super) end: u32,
+    pub(super) remaining: u32,
     /// Termination condition code of an arithmetic loop (Type 13a); `None` for a counter loop.
-    term: Option<u8>,
+    pub(super) term: Option<u8>,
     /// Address whose execution evaluates the termination condition (`arith_loop`); `u32::MAX` =
     /// never.
     check: u32,
@@ -189,6 +192,9 @@ pub struct Core {
     pub mr: [i128; 2],
     /// When set, compute operations that are not modelled are skipped and counted instead of faulting.
     pub lenient: bool,
+    /// When set, the Level-2 JIT lowers `FloatMul` and `FADD`/`FSUB` to native IEEE-754 `f32`
+    /// instead of calling 40-bit software helpers.
+    pub fast_float: bool,
     /// SHARC+ core (ADSP-2157x): the system-register write masks differ from the ADSP-2148x
     /// (`sysregs.rs`). Set by `enable_sc57x` and by a `plus` line in census cases.
     pub sharc_plus: bool,
@@ -226,7 +232,7 @@ pub struct Core {
     pub flags_y: Flags,
     pub mr_y: [i128; 2],
     /// Low 8 bits of the 40-bit float registers of PEx and PEy (see `float_ops`).
-    fx: float_ops::ExtFile,
+    pub(super) fx: float_ops::ExtFile,
     fx_y: float_ops::ExtFile,
     /// Number of instructions executed.
     pub steps: u64,
@@ -240,11 +246,11 @@ pub struct Core {
     pub device_reads: u64,
     pub device_writes: u64,
     call_stack: Vec<u32>,
-    loops: Vec<LoopFrame>,
+    pub(super) loops: Vec<LoopFrame>,
     pending: Option<Pending>,
     irq: interrupts::IrqState,
     timer: timer::TimerState,
-    sys: sysregs::SysState,
+    pub(in crate::core) sys: sysregs::SysState,
     banks: banks::Banks,
     /// Circular buffer wraps of `I7` (bit 0) and `I15` (bit 1) since the last instruction ended
     /// (set while an address is computed, see `dag_modes`).
@@ -254,6 +260,13 @@ pub struct Core {
     isa_code: Vec<u16>,
     /// Optional peripheral models ([`periph`]); `None` keeps the plain device store.
     periph: Option<Box<periph::Periph>>,
+    /// Direct-mapped Level-1 decode cache (allocated lazily on first `step`).
+    decode_cache: Option<Box<decode_cache::DecodeCache>>,
+    /// Monotonic generation for O(1) cache invalidation on ISA/code reloads.
+    code_gen: u64,
+    /// Optional Level-2 Cranelift JIT engine (allocated lazily on first `run_jit`).
+    #[cfg(feature = "jit")]
+    jit: Option<Box<jit::JitEngine>>,
 }
 
 #[inline]
@@ -281,6 +294,7 @@ impl Core {
             ustat: [0; 4],
             mr: [0; 2],
             lenient: false,
+            fast_float: false,
             sharc_plus: false,
             skipped: 0,
             first_skipped: None,
@@ -320,6 +334,10 @@ impl Core {
             cb_wrap: std::cell::Cell::new(0),
             isa_code: Vec::new(),
             periph: None,
+            decode_cache: None,
+            code_gen: 1,
+            #[cfg(feature = "jit")]
+            jit: None,
         }
     }
 
@@ -361,7 +379,11 @@ impl Core {
     }
 
     /// Whether condition code `c` holds for PEx (`y` = false) or PEy.
+    #[inline]
     fn cond_for(&self, y: bool, c: u64) -> bool {
+        if c == 31 {
+            return true;
+        }
         let f = if y { self.flags_y } else { self.flags };
         let af = self.sys.astat_extra[usize::from(y)] >> 10 & 1 == 1;
         let sat = self.mode1 & float::MODE1_ALUSAT != 0;
@@ -429,6 +451,19 @@ impl Core {
             }
         }
         None
+    }
+
+    /// Runs using the Level-2 Cranelift JIT when the `jit` feature is enabled, otherwise falls
+    /// back to [`Core::run`].
+    pub fn run_auto(&mut self, max_steps: u64) -> Option<Fault> {
+        #[cfg(feature = "jit")]
+        {
+            self.run_jit(max_steps)
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            self.run(max_steps)
+        }
     }
 }
 

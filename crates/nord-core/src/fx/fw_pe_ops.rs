@@ -45,10 +45,15 @@ pub(super) fn dag_next(i: u32, step: u32, len: u32, base: u32) -> u32 {
 }
 
 impl<M: Mem> Pe<M> {
-    /// Pre-modify address `Ii + Mm` (no write back); wraps inside the circular buffer of `Ii`
-    /// like the post-modify (VERIFIED: `ENS` against the oracle, `dm(m6,i6)` with `L6 = 0x200`).
+    /// Pre-modify address `Ii + Mm`: no write back and **no circular wrap**.
+    ///
+    /// VERIFIED: PRM fig 6-5 (the DAG outputs `I + M`; only the post-modify wraps), the oracle
+    /// (`nord-sharc` `moves.rs`, test `pre_modify_with_a_register_does_not_wrap_or_update`) and
+    /// `python tools/fx_models.py check ens core2_sram.bin --scenarios 200`: 200/200 bit
+    /// identical with `L4 = L6 = L7 = 0` (D114). ENS stores its second ring at `I6 + 0x202`
+    /// with `L6 = 0x200`; a wrapping pre-modify folded that write back into the first ring.
     pub(super) fn plain(&self, i: usize, m: usize) -> u32 {
-        dag_next(self.i[i], self.m[m], self.l[i], self.b[i])
+        self.i[i].wrapping_add(self.m[m])
     }
 
     /// `Ii` modified by an immediate, wrapping inside the circular buffer.
@@ -342,12 +347,14 @@ mod tests {
     }
 
     #[test]
-    fn pre_modify_addresses_wrap_in_a_circular_buffer_like_immediate_modifies() {
+    fn pre_modify_addresses_do_not_wrap_but_immediate_modifies_do() {
         let mut pe = Pe::new(Flat(vec![0; 8]), 0, 4);
         pe.m[3] = 7;
         assert_eq!(pe.plain(1, 3), 11, "L = 0: a plain add");
         (pe.b[6], pe.i[6], pe.l[6], pe.m[6]) = (16, 23, 8, 2);
-        assert_eq!(pe.plain(6, 6), 17, "23 + 2 = 25 >= 24: 25 - 8");
+        assert_eq!(pe.plain(6, 6), 25, "pre-modify: no wrap (D114)");
+        (pe.m[6], pe.l[6]) = (0x202, 0x200);
+        assert_eq!(pe.plain(6, 6), 23 + 0x202, "ENS: second ring at +0x202");
         (pe.b[6], pe.i[6], pe.l[6]) = (16, 23, 8);
         assert_eq!(pe.dmodi(6, 2), 17, "23 + 2 = 25 >= 24: 25 - 8");
     }

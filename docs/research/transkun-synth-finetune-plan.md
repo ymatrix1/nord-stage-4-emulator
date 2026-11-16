@@ -12,7 +12,7 @@ Tags: **VERIFIED** = run in this session (command and number given); **ASSUMED**
 2. Its attention uses raw `nn.Parameter` q/k/v matrices, not `nn.Linear` (VERIFIED, 36 tensors, 2.36 M params). Stock PEFT `target_modules` reaches only the other 50 Linear and 5 Conv2d layers (6.9 M weights); q/k/v needs `target_parameters` (VERIFIED with PEFT 0.21.3) or a 20-line wrapper.
 3. The velocity output is a 128-way categorical per detected note, trained by log-likelihood (VERIFIED in `log_prob`). That is the head to adapt; velocity is only scored on notes the CRF finds, so recall and velocity are two separate problems.
 4. Rendering is not the bottleneck: the heaviest tested program (Horizon Whl) renders at 4.5x real time on one core and about 84x aggregate with 32 workers (VERIFIED). Training eats about 60 s of audio per second (bf16, VERIFIED on dummy audio).
-5. **Recommendation:** start with **LoRA rank 16** on all Linear and Conv2d layers plus q/k/v (via wrapper), full training of the velocity and refined onset/offset heads; run **LoKr as the second arm with the same data and seed**; hold full fine-tune back unless both plateau (section 6). PEFT supports both on every layer except `ConvTranspose1d`, and raw q/k/v via `target_parameters` (VERIFIED, section 4).
+5. **Order (user decision):** **LoKr first** and stop if it meets the targets in section 7.2; **LoRA** only if LoKr misses; full fine-tune only if both plateau. Same data, seed and step budget. PEFT supports both on every layer except `ConvTranspose1d`, and raw q/k/v through `target_parameters` (VERIFIED, section 4). The Phase 1 dataset (20.2 h) is rendered and the base-model baseline on its held-out programs is measured (section 6.1): onset F1 0.546, velocity MAE 26.1, no better than predicting the median (26.8).
 
 ## 2. Model facts (VERIFIED, `inspect_model.py`, `lora_count.py`)
 
@@ -132,47 +132,90 @@ Conclusions:
 - **About 80 h of audio per hour of rendering (measured end to end by the Phase 1 tool: 0.5 h in 30 s, section 6.1)** for the heaviest program, much more for light ones; a 50 h dataset costs under 40 minutes of CPU. Disk: stereo float32 is 0.35 MB/s; store 16-bit mono 44.1 kHz WAV (0.088 MB/s, 16 GB for 50 h) because Transkun reads integer PCM.
 - **Dataset target:** start with **20 h** (about 1,100 programs x 65 s phrases is 20 h; many more phrase variants per program are cheaper than more programs), scale to 50 h only if held-out F1 is still rising. Programs matter more than hours: the factory bank has the synth, organ and piano programs; hold out whole programs for validation.
 
-### 6.1 Phase 1 tool run (VERIFIED, PR #425)
+### 6.1 Phase 1 dataset (VERIFIED, PR #425, `tools/synth_dataset.py`, `tools/synth_ds_check.py`)
 
-`python tools/synth_dataset.py extract ...` took 4 s for 384 programs. `render --hours 0.5 --workers 24` rendered 30 items of 60 s in 30 s (about 60 h of audio per hour, includes resampling and WAV writing), 154 MB (308 MB per hour), 0 silent renders, velocity median 47, and `transkun.Data.prepareIntervals` printed no note-merge message on any item. The renders peaked above full scale on some programs; the tool scales peaks above 0.95 (Transkun normalises gain per segment).
+`extract` took 4 s for 384 programs. `render --hours 20 --workers 24 --seed 1` took **2,332 s (38.9 min) wall** with augmentation (about 31x real time aggregate; without augmentation 0.5 h took 30 s, about 60x), 6.0 GB of 16-bit mono 44.1 kHz WAV (about 300 MB per hour), stored in `C:/tmp/ns4-ft-data` (never committed; raw float renders are deleted per item).
+
+| Item | Value |
+|---|---|
+| Items | 1,200 phrases of 60 s (about 60.4 s with tail): 20.18 h, **train 17.92 h, val 2.25 h** |
+| Programs | 384 factory programs round-robin, 3 or 4 items each; **val = 43 whole programs, train = 341, overlap 0** (split by hash of the program name); includes the organ and piano programs (forgetting control; no engine tag, the mix is whatever the factory set holds) |
+| Notes | 186,758 (2.57 per second), velocity median 59; histogram by 16 from 0: 15,449 / 27,015 / 29,352 / 29,572 / 28,399 / 25,477 / 20,579 / 10,915 |
+| Pitch | octaves from MIDI 21: 268 / 18,442 / 37,367 / 43,931 / 43,448 / 34,926 / 8,376 / 0 (main range 36 to 96, 25 % of items 28 to 100) |
+| Phrase kinds | mixed 237, repeats 234, arpeggio 262, chords 218, melody 249 |
+| Velocity modes | skewed 634, loud 175, ramp 206, uniform 185 (ASSUMED mix) |
+| Pedal | 24.2 % of items carry sustain CC 64 presses (ASSUMED 25 %); note offsets stay at key-up |
+| Augmentation | tilt 60 %, codec round trip (AAC / MP3 / Opus via ffmpeg) 49.9 %, pink noise 49.9 %, final peak -24 to -1 dBFS; all ASSUMED ranges |
+| Silent renders | 0 (raw peak under -60 dBFS counts as silent) |
+| Alignment check (120 items) | for isolated notes the fundamental energy rises 6 dB at the listed onset in a median share of 1.0 of notes per item, median lag 3.4 ms; worst items are slow-attack organ and pad programs (zero or few isolated notes pass), not misalignments |
+| Transkun note rules | `prepareIntervals` printed no merge message on the 30-item smoke set |
+
+**Baseline of base Transkun 2.0 on the held-out split** (`tools/synth_eval.py`, 134 non-silent val items, 21,445 notes, 769 s on the GPU, match: exact pitch and onset within 50 ms, greedy one-to-one):
+
+| Subset | Precision | Recall | F1 | Velocity MAE | Velocity r |
+|---|---|---|---|---|---|
+| all | 0.524 | 0.569 | **0.546** | **26.06** | 0.285 |
+| arpeggio / chords / melody / mixed / repeats (F1) | | | 0.657 / 0.434 / 0.487 / 0.562 / 0.487 | 24.6 to 27.6 | 0.17 to 0.36 |
+| vel mode skewed / loud / ramp / uniform (F1) | | | 0.512 / 0.459 / 0.685 / 0.592 | 24.3 / 29.0 / 27.4 / 29.1 | |
+
+Predicting the val median (57) for every note gives a velocity MAE of 26.8 and uniform 100 gives 44.1, so the base velocity head carries almost no information on synth renders (r 0.28).
+
+**Hardware-clip baselines** (`tools/emu_vs_hw.py`, `ns4` built from `origin/main` of 2026-11-15, default variant only; score = `gap_score`, lower is better; 'uniform 100' replays the video-detected notes at velocity 100, 'base Transkun' replays the committed `piano_events__zksT69H30c.json` stream):
+
+| Clip | Uniform 100 | Base Transkun | Base Transkun recall at +-150 ms (video-confirmed notes) |
+|---|---|---|---|
+| Horizon Whl | 1.89 | 3.53 | 0.20 |
+| Leaky Stabs II | 1.95 | 3.97 | 0.14 |
+| Grand Pad | 2.19 | 1.43 | 0.25 |
+| mean | 2.01 | 2.98 | 0.20 |
 
 ## 7. Plan, phases and commands
 
-**Phase 1: data (CPU, parallel, one session).** Extract programs; generate note sequences (random phrases, chords, arpeggios, repeats, realistic lengths; velocity 1..127 skewed to soft like the real clips, median about 45 per [piano-transcription](piano-transcription.md) section 3; no same-pitch overlaps; sustain pedal events for piano); render with `ns4 render-patch --events`; write int16 mono 44.1 kHz WAV plus a note-list pickle in `DatasetMaestro` format.
-Augmentations (ASSUMED useful, ablate): random gain (Transkun already normalises gain), light EQ tilt, codec round trip (video audio is lossy), noise floor, 0 to 2 s of room-like reverb on dry programs. Provenance: a script `tools/ns4_synth_dataset.py` with tests, outputs under `C:\tmp\ns4-ft-data`, never committed.
+**Phase 1: data (done, PR #425).**
 
 ```bash
-python tools/ns4_synth_dataset.py extract --backup ".reference/Nord Stage 4 Factory Restore RevK v1.66.ns4b" --out C:/tmp/ns4-ft-data/programs
-python tools/ns4_synth_dataset.py render --programs C:/tmp/ns4-ft-data/programs --hours 20 --workers 24 --seed 1 --out C:/tmp/ns4-ft-data
+python tools/synth_dataset.py extract --backup ".reference/Nord Stage 4 Factory Restore RevK v1.66.ns4b" --out C:/tmp/ns4-ft-data
+python tools/synth_dataset.py render --out C:/tmp/ns4-ft-data --hours 20 --workers 24 --seed 1
+python tools/synth_ds_check.py C:/tmp/ns4-ft-data --sample 120 --out C:/tmp/ns4-ft-data/stats.json
+C:/tmp/ns4-ft-venv/Scripts/python.exe tools/synth_eval.py C:/tmp/ns4-ft-data --split val --out C:/tmp/ns4-ft-data/base_val.json
 ```
 
-**Phase 2: training (GPU).** Arms, same data, same seed, same step budget (about 20k steps at batch 4, 16 s segments, `max_lr` 2e-4 for adapters, 2e-5 for any full fine-tune, early stopping on held-out programs):
+**Phase 2: training (GPU), not started; waits for user approval of section 7.2.** Arms, same data, same seed, same step budget (about 20k steps at batch 4, 16 s segments, `max_lr` 2e-4 for adapters, 2e-5 for any full fine-tune, early stopping on held-out programs):
 
-| Arm | Trainable | Notes |
-|---|---|---|
-| A: LoRA r=16 | adapters (1.18 M) + heads (0.86 M) | first choice |
-| B: LoKr r=8 | adapters + heads | same targets; fewer weights per layer, Kronecker structure may fit the conv layers better |
-| C: full fine-tune | 13.6 M | only if A and B plateau |
-
-Layer names in the regex are VERIFIED (`named_modules`); the q/k/v entries exist only after the wrapper. Mix per batch: 70 % synth renders, 30 % piano and organ renders from the same pipeline (forgetting control). The piano path keeps using the base weights: the adapter is a separate `adapter_model.safetensors` loaded only for synth clips, so the base `2.0.pt` stays bit-identical (check by SHA-256 before and after).
-
-**Phase 3: evaluation protocol.**
-
-| # | Check | Metric | Pass |
+| Order | Arm | Trainable | Notes |
 |---|---|---|---|
-| 1 | Held-out **programs** (not phrases) rendered by the emulator, same pipeline | note F1 at onset +-50 ms (mir_eval, exact pitch, no offset), velocity MAE, velocity Pearson r, over the detected-and-matched notes | F1 well above base Transkun and not collapsing on unseen programs; velocity MAE under 12 (ASSUMED threshold, base Transkun is the reference) |
-| 2 | Piano regression: base vs base + adapter disabled | transcriptions of the committed piano clips identical; with adapter **enabled**, F1 and velocity vs base on emulator piano renders | disabled = bit-identical output; enabled may differ (report it) |
-| 3 | Hardware synth clips (`synth_horizon`, `synth_leaky`, `pianopad_grand`; no ground truth) | recall / precision at +-150 ms against the video-confirmed notes (`tools/transcribe_agree.py`, Transkun baseline 0.20 / 0.14 / 0.25 recall, [synth-transcription-muscriptor](synth-transcription-muscriptor.md) section 2) | recall above 0.40 on at least two of three clips |
-| 4 | Replay score: `tools/emu_vs_hw.py --events-from <adapter stream>` against **uniform velocity 100** and against **base Transkun** | band deltas, RMS delta, per-note level correlation (`tools/note_env.py` slope) | adapter stream beats both on the mean absolute band delta |
-| 5 | Listening WAVs for the user | same folder layout as `C:\tmp\listen-2026-11-15` | user judgement |
+| 1 | LoKr r=8 | adapters (about 37 k measured on the Linear and Conv2d layers) + heads (0.86 M) | user's first choice; the adapter part is small, so if it underfits raise to r=16 or `decompose_both=True` inside the same arm before moving on (counts as the same arm) |
+| 2 | LoRA r=16 | adapters (1.18 M with q/k/v) + heads (0.86 M) | only if LoKr misses the targets |
+| 3 | full fine-tune | 13.6 M | only if both plateau |
 
-Checks 1 and 2 are cheap and automated; check 3 is the true target and is noisy (video-confirmed notes bound agreement, not truth, as in the earlier notes); check 4 is the metric the project cares about.
+Layer names in the regex are VERIFIED (`named_modules`). Mix per batch: 70 % synth renders, 30 % piano and organ renders (forgetting control; the dataset has no engine tag, so take the 30 % from the programs whose name contains Piano, Grand, Upright, Organ, B3 or Vox, ASSUMED). The piano path keeps using the base weights: the adapter is a separate `adapter_model.safetensors` loaded only for synth clips, so the base `2.0.pt` stays bit-identical (check by SHA-256 before and after).
 
-**Decision criteria between arms** (after arms A and B at the same step budget):
-- Pick the arm with the higher held-out F1 at 50 ms plus lower velocity MAE; break ties by hardware recall (check 3), then by smaller adapter.
-- If A and B differ by under 1 F1 point and 1 velocity unit, take **LoRA** (the PEFT default, fewer moving parts).
-- If both stay below the check 1 threshold or held-out loss plateaus well above the training loss, run arm C. Expect forgetting: only acceptable because the base file stays separate.
-- If held-out emulator F1 is high but hardware recall (check 3) does not move, stop: the problem is the emulator-to-hardware domain gap (ASSUMED the main risk), not capacity. Next step is more augmentation, not a larger adapter.
+**Phase 3: evaluation protocol.** Scripts: `tools/synth_eval.py` (held-out, base model today, `--adapter` in Phase 2), `tools/transcribe_agree.py` (hardware recall), `tools/emu_vs_hw.py --events-from <stream>` (replay score). Listening WAVs for the user go in the layout of `C:\tmp\listen-2026-11-15`.
+
+### 7.2 Targets before training (PROPOSED, for user approval; derived from the baselines in section 6.1)
+
+All six must hold for an arm to count as good enough. Numbers marked 'base' are measured; the targets are judgement calls (ASSUMED) and the user may change them before Phase 2 starts.
+
+| # | Check | Base (measured) | Target (proposed) |
+|---|---|---|---|
+| T1 | Held-out programs (43 programs, 134 items): onset F1 at +-50 ms | 0.546 | **>= 0.75** |
+| T2 | Held-out recall at +-50 ms (precision must not fall below base) | recall 0.569, precision 0.524 | **recall >= 0.75, precision >= 0.70** |
+| T3 | Held-out velocity MAE (matched notes) and Pearson r | MAE 26.06, r 0.285 (median predictor: 26.8) | **MAE <= 13, r >= 0.75** |
+| T4 | Piano non-regression: with the adapter **disabled** the transcription of every committed piano stream is bit-identical (SHA-256 of `2.0.pt` and of re-run `piano_events_*` streams); with the adapter **enabled** on emulator piano-class val items, F1 and velocity MAE are reported (informational, the adapter is not used for piano) | n/a | **bit-identical when disabled: pass or fail** |
+| T5 | Hardware recall at +-150 ms vs video-confirmed notes (`transcribe_agree.py`) | 0.20 / 0.14 / 0.25 (Horizon / Leaky / Grand Pad) | **>= 0.40 on at least two of the three clips and no clip below base** |
+| T6 | Replay score `emu_vs_hw.py --events-from <adapter stream>` (lower is better) | uniform 100: 1.89 / 1.95 / 2.19 (mean 2.01); base Transkun: 3.53 / 3.97 / 1.43 (mean 2.98) | **each clip <= its uniform-100 score and mean <= 1.80 (10 % better than uniform 100)**; also reported against base Transkun |
+
+Rationale: T1, T2 ask for a clear step up on programs the adapter never saw (about +0.2 F1) without being impossible given reverb tails (base F1 by phrase kind runs 0.43 to 0.66). T3 asks to halve the base velocity error; ASSUMED because the dataset velocity is the emulator's input law, not a hardware truth. T5 doubles base recall on the two hardest clips. T6 is the project metric: replaying the adapter's notes and velocities must beat the uniform-100 replay that is used today.
+
+### 7.3 Decision and stop rule
+
+1. Train **LoKr** (arm 1, including its one allowed rank bump). Evaluate T1 to T6.
+2. **All of T1 to T6 pass: stop.** No LoRA, no full fine-tune. Record the decision (next free D) with the scores.
+3. T1 to T4 pass but T5 or T6 fail: **stop anyway** and report. Held-out emulator scores are good while the hardware ones are not, so the cause is the emulator-to-hardware gap (ASSUMED main risk), not adapter capacity; the next step is more augmentation or a better emulator, not another arm.
+4. T1 to T3 miss while the held-out loss still improves (more than 1 % over the last 20 % of steps): continue LoKr for the same step budget once; if still missing, run **LoRA** (arm 2) with identical data, seed and budget.
+5. Both arms miss T1 to T3 and the held-out loss has plateaued (under 1 % improvement over the last 20 % of steps, training loss still falling): run **full fine-tune** (arm 3). Forgetting is acceptable only because the base file stays separate (T4).
+6. Budget cap: at most 2 runs per arm (one per rank setting). After that, stop and report the numbers.
+7. Between arms, pick the winner by held-out F1, then velocity MAE, then hardware recall, then the smaller adapter; a tie within 1 F1 point and 1 velocity unit goes to LoKr (the user's first choice).
 
 ## 8. Risks
 
@@ -181,7 +224,7 @@ Checks 1 and 2 are cheap and automated; check 3 is the true target and is noisy 
 | Emulator-to-hardware domain gap (unverified synth voicing, filters, FX); the model learns the emulator, not the keyboard | augmentation; hold out programs; **check 3 on real clips** is the gate |
 | Same synthetic "velocity" for hardware: the emulator velocity law is itself an estimate; a velocity head trained on it predicts emulator-velocity | velocity MAE only means something against the emulator; on hardware use the replay level match (check 4), not an absolute velocity claim |
 | Reverb tails and overlapping notes cap recall | include reverb programs and long releases; report recall by program class |
-| Pedal symbols never appear on synth clips | train with pedal events only on piano renders; ignore pedal on synth in evaluation |
+| Pedal symbols rarely matter on synth clips | 24 % of items carry pedal presses (ground-truth note offsets stay at key-up); the pedal output is ignored in evaluation |
 | `ncls` missing, `Data.py` indexing | own iterator (section 2.1) |
 | Raw q/k/v with LoKr untested; reentrant checkpoint needs grad-requiring input | LoRA via `target_parameters`; keep `inputConv` adapted |
 | bf16 and the CRF normaliser | compare fp32 vs bf16 loss on one batch before using bf16 |
@@ -192,16 +235,77 @@ Checks 1 and 2 are cheap and automated; check 3 is the true target and is noisy 
 
 `C:\tmp\ns4-ft-probe\inspect_model.py` (params, layer census), `lora_count.py` (adapter parameter arithmetic), `peft_check.py` (section 4, run with `C:/tmp/ns4-ft-venv\Scripts\python.exe -I`), `bench_step.py` (dummy-batch step: builds `Note` lists with no same-pitch overlap, calls `model.log_prob`, backward, `AdamW.step`, reports `torch.cuda.max_memory_allocated`). Run with `C:\tmp\ns4-transcribe\venv\Scripts\python.exe -I <script>`. Render timing: `ns4 render-patch` as in section 6, workers via `xargs -P`. These are throw-away measurement scripts and are not committed; the numbers above are the record.
 
+## 10. Phase 2 results (VERIFIED runs; stop rule triggered)
+
+Checked 2026-11-15. Runs: LoKr r16 (1,038,200 trainable) and LoRA r16 alpha 32, dropout 0 (1,869,812 trainable; PEFT rejects dropout with `target_parameters`, VERIFIED error), AdamW lr 2e-4, batch 4 x 16 s, seed 1, fp32, 3000 steps each (about 1.7 to 1.9 s/step). Tools: `synth_train.py` (`--resume`, `--schedule wsd`), `synth_eval.py`, `synth_vel_check.py`, `synth_hw_eval.py`, `scale_adapter` in `synth_adapter.py`. Local outputs (not committed): `C:/tmp/ns4-ft-runs/{lokr1,lora1,eval}`.
+
+### 10.1 Held-out emulator split (134 items, 43 programs, step 3000, onset +-50 ms)
+
+| Model | F1 | Precision | Recall | Velocity MAE | Velocity r |
+|---|---|---|---|---|---|
+| base | 0.546 | 0.524 | 0.569 | 26.06 | 0.285 |
+| LoKr | 0.629 | 0.803 | 0.517 | 25.11 | 0.298 |
+| LoRA | 0.748 | 0.841 | 0.673 | 22.84 | 0.463 |
+
+`synth_vel_check.py` splits programs by Spearman rho between note velocity and onset loudness (weak = rho < 0.3: 128 of 379 programs; 39 of 134 val items, 6098 of 21,445 notes). LoRA responsive items: F1 0.813, velocity MAE 20.97, r 0.549; weak items: F1 0.549, MAE 30.2, r 0.100. Velocity MAE <= 13 is out of reach on the weak third because the render carries no velocity information there.
+
+Targets: T1 missed (0.748 < 0.75), T2 missed (recall 0.673 < 0.75, precision passes), T3 missed (MAE 22.84, r 0.463).
+
+### 10.2 Hardware clips (T5; recall at +-150 ms vs video-confirmed notes)
+
+| Model | Horizon Whl | Leaky Stabs II | Grand Pad | Notes output (Horizon) |
+|---|---|---|---|---|
+| base | 0.203 | 0.146 | 0.233 | 257 |
+| LoRA step 3000 | 0.006 | 0.042 | 0.082 | 6 |
+| LoKr step 3000 | 0.012 | 0.035 | 0.062 | 19 |
+
+T5 failed on all three clips and every clip is below base. The collapse is already there at LoRA step 500 (Horizon 0.012), so it is not progressive over-fitting.
+
+Probes that did not explain it:
+
+| Probe | Result |
+|---|---|
+| Input gain -12 to +18 dB | no change |
+| Adapter strength 0.25 / 0.5 / 0.75 (LoRA, Horizon / Leaky / Grand) | 0.110 / 0.073 / 0.226; 0.052 / 0.062 / 0.212; 0.023 / 0.062 / 0.144; monotonic, never above base (s = 0 reproduces base exactly) |
+| LoKr strength 0.25 / 0.5 / 0.75 | 0.157 / 0.111 / 0.233; 0.041 / 0.076 / 0.219; 0.017 / 0.059 / 0.144 |
+| Val items sped up 2x (denser) | LoRA F1 0.748 to 0.620, base flat at 0.566; real but does not explain the collapse |
+| Emulator replay of the clips' notes (`emu_default.wav`) | adapters also output only 3 to 6 notes |
+
+T4 (piano bit-identical with the adapter disabled) was not run: the adapter lives in a separate folder and the base `2.0.pt` is untouched, but no SHA-256 check was recorded. T6 was not run: with 6 to 54 notes per clip the replay score is meaningless.
+
+Stop rule 7.3 step 3 applies: held-out emulator scores up, hardware scores down. Decision: D115.
+
+### 10.3 Dataset defects found after the runs
+
+An independent read (Antigravity `agy`, plan mode, read only) listed defects. Status after my own check:
+
+| # | Defect | Status |
+|---|---|---|
+| 1 | `synth_dataset.py` renders without `--backup`. Grand Pad: no backup = placeholder piano (peak 0.2339, RMS 0.0476, no sound refs printed); with `--backup "Program/Bank A/Grand Pad.ns4p"` = Astoria Grand + White Grand (peak 0.5072, RMS 0.0801). Agy counts 150 programs with piano layers and 113 with synth-sample layers affected, val included. **Effect measured (`C:/tmp/ns4-ft-probe/backup_probe.py`, 40 val items, no augmentation, +-50 ms): LoRA F1 0.762 without backup, 0.748 with; base 0.571 both. The placeholder sound is a small effect, not the cause of the hardware collapse.** | **CONFIRMED** defect, effect small (program counts SUSPECTED) |
+| 2 | Labels are the input phrase; 124 of 384 programs shift octave or pitch, 48 use splits, 39 arp / pattern / hold, 30 are mono, so the sounded notes differ from the labels. LoRA F1 on the Horizon program's own training items is 0.00 to 0.06 (agy). | SUSPECTED |
+| 3 | Phrase generator is single-stream (no overlapping two-handed polyphony); hardware clips run 4.9 to 8.2 confirmed notes/s against 2.6 mean (max 4.4) in the data. | density VERIFIED (section 6.1 stats), polyphony SUSPECTED |
+| 4 | Hardware event streams (`vr/*.json`) carry chromatic clusters from low-frequency FFT resolution; the replay renders heuristic peaks too. The hardware "truth" is partly noisy, base numbers included. | SUSPECTED |
+| 5 | Sustain pedal labels are trained though the default `sustped` leaves CC64 without effect on 234 synth / organ programs. | SUSPECTED |
+| 6 | `SegmentSampler` does not sample boundary-padded segments (upstream begins in [-16, dur]); augmentation is weaker than upstream (no reverb, pitch, EQ). | SUSPECTED |
+
+Checked clean by agy and not by me: note clipping at segment edges, `has_onset` / `has_offset` flags, program-hash split without overlap, `scale_adapter`, resume and optimizer state.
+
+### 10.4 Next step (needs user approval)
+
+The `--backup` fix alone will not close the hardware gap (section 10.3 item 1). A corrected dataset before any new arm: render with `--backup`, labels from the sounded notes (apply octave / split / arp or drop those programs), overlapping polyphony and 5 to 8 notes/s phrases, pedal labels only where the program honours CC64. Then rerun LoRA with the same budget. Not started.
+
 ## Implications
 
 - Adapter training is practical on the existing GPU in hours, with rendering a small share of the budget.
-- The first real engineering step is an own dataset iterator (small, testable); PEFT configs already run.
+- The data exist (20.2 h, 43 held-out programs) and the base baseline is measured; the next engineering step is an own dataset iterator plus the training script, then the approved targets decide when to stop.
 - Success is decided on hardware clips, not on held-out emulator renders.
 
 ## Follow-ups
 
 - [x] Confirm PEFT LoRA / LoKr on Linear, Conv2d and raw q/k/v (section 4).
-- [ ] Phase 1: `tools/ns4_synth_dataset.py` (extract, phrase generator, render, write dataset) with tests; 20 h.
-- [ ] fp32 vs bf16 loss comparison on one real batch.
-- [ ] Phase 2 and 3 as above; record a decision (next free D) with the chosen arm and the hardware-clip scores.
+- [x] Phase 1: `tools/synth_dataset.py` (extract, phrase generator, render, write dataset) with tests; 20 h.
+- [ ] fp32 vs bf16 loss comparison on one real batch (not needed until a new run).
+- [x] Phase 2 (LoKr, LoRA) and 3: both arms fail T5; recorded as D115 (section 10).
+- [ ] Measure which of section 10.3 items 2 to 4 drives the hardware gap (label mismatch, density, noisy reference), then a corrected dataset (items 1 to 5) and one LoRA rerun; waits for user approval.
+- [ ] T4 SHA-256 check of `2.0.pt` and re-run piano streams with the adapter disabled.
 - [ ] Confirm the checkpoint licence with the upstream author if weights are ever to leave the machine.
