@@ -476,6 +476,16 @@ impl Core {
             self.run(max_steps)
         }
     }
+
+    /// Advances the core by `cycles` cycles using the JIT when `use_jit` and the `jit` feature
+    /// are enabled, or the interpreter otherwise.
+    pub fn run_for_cycles(&mut self, cycles: u64, use_jit: bool) -> Option<Fault> {
+        if use_jit {
+            self.run_auto(cycles)
+        } else {
+            self.run(cycles)
+        }
+    }
 }
 
 #[cfg(test)]

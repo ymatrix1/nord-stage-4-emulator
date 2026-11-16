@@ -159,3 +159,32 @@ fn bench_jit_polyphony_8_and_32_voices() {
         );
     }
 }
+
+#[test]
+#[ignore = "multicore polyphony benchmark: run with cargo test --release -p nord-sharc --features jit --lib bench_multicore_4x8_32_voices -- --ignored --nocapture"]
+fn bench_multicore_4x8_32_voices() {
+    const FRAMES: u32 = 128; // 2.667 ms @ 48 kHz
+    const RT_BUDGET_MS: f64 = 128.0 / 48.0;
+    let (program, per_core_steps) = build_polyphony_program(8, FRAMES);
+
+    let cores: Vec<Core> = (0..4)
+        .map(|_| {
+            let mut c = init_polyphony_core(&program, 8, FRAMES, false);
+            // Warm up JIT block compilation before timing parallel quantum execution.
+            let _ = c.run_jit(10);
+            c
+        })
+        .collect();
+    let mut sched = crate::scheduler::MultiCoreScheduler::new(cores);
+    let t0 = Instant::now();
+    assert_eq!(sched.run_quantum(per_core_steps - 10, true), Ok(()));
+    let dt = t0.elapsed();
+    let ms = dt.as_secs_f64() * 1e3;
+    let total_steps = per_core_steps * 4;
+    eprintln!(
+        "multicore 4x8=32v x {FRAMES}f ({total_steps} total steps, budget {RT_BUDGET_MS:.2} ms): \
+         jit-exact {ms:.2} ms ({:.2} Msteps/s agg, {:.2}x RT)",
+        total_steps as f64 / 1e6 / dt.as_secs_f64(),
+        RT_BUDGET_MS / ms,
+    );
+}

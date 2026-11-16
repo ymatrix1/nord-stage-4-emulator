@@ -3,4 +3,5 @@
 pub mod core;
 pub mod harness;
 pub mod runner;
+pub mod scheduler;
 pub mod visa;
