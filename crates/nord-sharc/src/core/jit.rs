@@ -1736,4 +1736,85 @@ mod tests {
         assert_eq!(jit.watch_addrs, interp.watch_addrs);
         assert_eq!(jit.watch_hits.len(), interp.watch_hits.len());
     }
+
+    #[test]
+    fn jit_isa_mode_block_and_sram_write_match_interpreter() {
+        fn isa_bytes(words: &[[u16; 3]]) -> Vec<u8> {
+            let mut out = Vec::with_capacity(words.len() * 6);
+            for &[hi, mid, lo] in words {
+                out.extend_from_slice(&lo.to_le_bytes());
+                out.extend_from_slice(&mid.to_le_bytes());
+                out.extend_from_slice(&hi.to_le_bytes());
+            }
+            out
+        }
+
+        // ISA-mode 48-bit block:
+        // 0: R1 = 0x1420                     (T17a)
+        // 1: R3 = R1 + R2                    (T2a)
+        // 2: IF TRUE DM(I2, M0) = R1         (T3a store, post-modify)
+        // 3: DO (+2) UNTIL LCE, LCNTR = 3    (T12a)
+        // 4:   IF TRUE DM(I2, M0) = R3       (T3a store, post-modify)
+        // 5:   R3 = R3 + R2                  (T2a)
+        let image = isa_bytes(&[
+            [0x0f81, 0x0000, 0x1420],
+            [0x013e, 0x0000, 0x1312],
+            [0x543e, 0x8080, 0x0000],
+            [0x0c00, 0x0300, 0x0002],
+            [0x543e, 0x8180, 0x0000],
+            [0x013e, 0x0000, 0x1332],
+        ]);
+        let mut interp = super::Core::new(&[]);
+        let mut jit = super::Core::new(&[]);
+        for c in [&mut interp, &mut jit] {
+            c.load_isa(&image);
+            c.pc = super::super::isa::ISA_BASE;
+            c.r[2] = 0x10;
+            c.i[2] = 0x9_0100;
+            c.m[0] = 1;
+        }
+        // 3 setup insns + 1 DO + 3 * 2 loop body insns = 10 steps
+        assert_eq!(interp.run(10), None);
+        assert_eq!(jit.run_jit(10), None);
+        assert_eq!((jit.pc, jit.steps), (interp.pc, interp.steps));
+        assert_eq!((jit.r, jit.i), (interp.r, interp.i));
+        assert_eq!(jit.flags, interp.flags);
+        assert!(jit.loops.is_empty());
+        for addr in 0x9_0100..0x9_0104 {
+            assert_eq!(jit.dm_read(addr), interp.dm_read(addr));
+        }
+
+        // Also test an ISA-mode block writing into the ISA Block-0 normal-word window (0x9_2000)
+        // AND overwriting a cached VISA block at 0x12_0000 (nw 0x9_0000).
+        let visa_prog = [0x0F80u16, 0x0001]; // R0 = 1 at 0x12_0000
+        let isa_writer = isa_bytes(&[
+            [0x543e, 0x8080, 0x0000], // DM(I2, M0) = R1 (writes 0x9_2000)
+            [0x543e, 0x8080, 0x0000], // DM(I2, M0) = R1 (writes 0x9_0000 after I2 update)
+        ]);
+        let mut interp2 = core_with(&visa_prog);
+        let mut jit2 = core_with(&visa_prog);
+        for c in [&mut interp2, &mut jit2] {
+            c.load_isa(&isa_writer);
+            c.r[1] = 0x0002_0F80; // R0 = 2
+            c.i[2] = 0x9_2000;
+            c.m[0] = (-0x2000i32) as u32;
+        }
+        // Cache VISA block at 0x12_0000 first.
+        assert_eq!(interp2.run(1), None);
+        assert_eq!(jit2.run_jit(1), None);
+        assert_eq!((interp2.r[0], jit2.r[0]), (1, 1));
+        // Run ISA-mode block at ISA_BASE writing 0x9_2000 then 0x9_0000.
+        interp2.pc = super::super::isa::ISA_BASE;
+        jit2.pc = super::super::isa::ISA_BASE;
+        assert_eq!(interp2.run(2), None);
+        assert_eq!(jit2.run_jit(2), None);
+        assert_eq!(jit2.dm_read(0x9_2000), interp2.dm_read(0x9_2000));
+        // Re-execute VISA block at 0x12_0000: must observe R0 = 2.
+        interp2.pc = 0x12_0000;
+        jit2.pc = 0x12_0000;
+        assert_eq!(interp2.run(1), None);
+        assert_eq!(jit2.run_jit(1), None);
+        assert_eq!(jit2.r[0], 2);
+        assert_eq!(jit2.r[0], interp2.r[0]);
+    }
 }

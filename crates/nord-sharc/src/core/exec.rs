@@ -147,7 +147,10 @@ impl Core {
             w: d.w,
             op,
         };
-        if !isa && pc >= 0x12_0000 {
+        // Normal-word SRAM begins at 0x9_0000 (`memory.rs::SRAM_WORDS`, 4 bytes/word); in VISA
+        // mode `pc` counts 16-bit short words (2 per normal word), so SRAM starts at 0x12_0000.
+        const VISA_SRAM_SHORT_BASE: u32 = 0x9_0000 * 2;
+        if !isa && pc >= VISA_SRAM_SHORT_BASE {
             let nw_lo = pc / 2;
             let nw_hi = (pc + (d.insn.len as u32).saturating_sub(1)) / 2;
             self.sram_code_nw_lo = self.sram_code_nw_lo.min(nw_lo);
