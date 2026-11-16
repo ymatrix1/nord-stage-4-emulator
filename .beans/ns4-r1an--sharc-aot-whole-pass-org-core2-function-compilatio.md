@@ -3,10 +3,14 @@
 title: 'sharc-aot: whole-pass ORG Core2 function compilation + 1:1 diff'
 status: todo
 type: task
+priority: normal
 created_at: 2026-11-16T21:59:22Z
-updated_at: 2026-11-16T21:59:22Z
+updated_at: 2026-11-16T22:14:00Z
 parent: ns4-zp6a
+blocked_by:
+    - ns4-ev09
 ---
+
 
 ## Context
 1,971 dynamic blocks (4,208 PCs) execute per 8-voice pass; single-block dispatch cannot hit 46.08 us/pass.

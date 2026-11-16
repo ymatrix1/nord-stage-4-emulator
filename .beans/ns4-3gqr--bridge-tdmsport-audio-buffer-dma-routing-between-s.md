@@ -3,10 +3,14 @@
 title: 'bridge: TDM/SPORT audio buffer DMA routing between SHARC cores'
 status: todo
 type: task
+priority: normal
 created_at: 2026-11-16T22:04:08Z
-updated_at: 2026-11-16T22:04:08Z
+updated_at: 2026-11-16T22:14:02Z
 parent: ns4-zp6a
+blocked_by:
+    - ns4-cedp
 ---
+
 
 ## Context
 L2 DMA descriptors (0x20004000..0x20004160, dsp-rx-protocol.md) move 40-word pass buffers (0xB0000/28/50/78/C8 and 0xC0000 twins) between Core1 and Core2, driven by P4I (Core1) and mailbox 0xB00E2 (Core2) at 21,701 Hz.
