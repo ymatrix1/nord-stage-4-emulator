@@ -1,5 +1,7 @@
 # Synth filter type: what `kFltType` installs on the strip
 
+> **Update 2026-11-16 (D121, [synth-filter-links](synth-filter-links.md) s1):** the `+0x74 -> +0x7C` link is a block copy at pc `0xC01BDD60`; strip word 1 equals the identity stage table for 18 of 18 layers of six factory programs. Raw type 3 (stage `0x1257B2`) is used by 61 of 988 filter-on factory layers, so "no factory use known" below is wrong.
+
 - **Checked:** 2026-11-14 (second pass)
 - **Sources (local, never committed):** OS v1.66 `bank0_CODE.bin` / `bank0_SRAM.bin` in the ARM harness (`tools/arm_edit_capture.py` settled snapshot, `docs/research/arm-edit-params.csv`), `capstone` ARM listings of the apply function `0xC00171B0` region and of `0xC01CCF84`, ORG core 2 image with `sharc-org` (`tools/synth_stage_oracle.py`, `tools/synth_filter_lp12.py`), `docs/research/data/program-sweep.json`. Builds on [synth-wave-stages](synth-wave-stages.md) and [pno-module-chain](pno-module-chain.md) s5.
 - **Question:** Which strip stage (strip word 1) does each `Edt_Syn_kFltType` value install?

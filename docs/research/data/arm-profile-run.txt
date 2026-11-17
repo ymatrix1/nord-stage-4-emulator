@@ -1,0 +1,20 @@
+tools/arm_profile.py, second run (host noise: the first run measured plain 23.71 ms, timed 25.36 ms, hooks 1.79 ms, inject_irq 0.49 ms, nohooks 18.6 MIPS)
+
+settling 800 ticks ...
+plain tick wall (ms): {'mean': 18.14, 'median': 17.63, 'worst': 27.92}
+timed tick wall (ms): {'mean': 23.72, 'median': 24.58, 'worst': 32.71}
+instructions per tick: 200000, plain harness MIPS 11.0
+hook callbacks: 1.61 ms per tick (timer overhead included); inject_irq 0.46 ms per tick
+  0x400 install_tick.<locals>.hook: 7411 calls/tick, 1.431 ms/tick
+  0x400 ArmEmu.enable_poll_breaker.<locals>.hook: 22 calls/tick, 0.136 ms/tick
+  0x400 install_i2c.<locals>.on_read: 13 calls/tick, 0.026 ms/tick
+  0x400 install_panel_link.<locals>.on_read: 0 calls/tick, 0.007 ms/tick
+  0x800 install_gpio_echo.<locals>.hook: 1 calls/tick, 0.006 ms/tick
+  0x800 install_panel_link.<locals>.on_write: 1 calls/tick, 0.002 ms/tick
+  0x800 install_i2c.<locals>.on_write: 0 calls/tick, 0.001 ms/tick
+  0x70 ArmEmu._on_unmapped: 0 calls/tick, 0.000 ms/tick
+  0x800 ArmEmu.install_dsp_ports.<locals>.hook: 0 calls/tick, 0.000 ms/tick
+  0x4 ArmEmu._stub_hook: 0 calls/tick, 0.000 ms/tick
+without the no-op tick hook (1 removed), tick wall (ms): {'mean': 12.06, 'median': 12.44, 'worst': 17.18} MIPS 16.6
+nohooks (33 hooks removed): 20000000 insns in 0.830 s = 24.1 MIPS 
+ceiling (synthetic loop, no hooks): 186.3 MIPS

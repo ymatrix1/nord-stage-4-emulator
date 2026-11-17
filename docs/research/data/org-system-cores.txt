@@ -1,0 +1,25 @@
+sharc-sys, all messages of the load phase before pass 0 (300 passes after 16 warm-up); timing lines omitted, host noisy
+
+## org-core2
+316 passes (16 warm-up), 912 messages delivered, all idle: true
+steps per pass: first 4309 min 3171 max 6377 mean 6279.6
+
+## pno-core2
+316 passes (16 warm-up), 912 messages delivered, all idle: true
+steps per pass: first 4311 min 3172 max 6378 mean 6280.6
+
+## org-core1
+316 passes (16 warm-up), 912 messages delivered, all idle: true
+steps per pass: first 4322 min 3182 max 6388 mean 6290.6
+
+## pno-core1
+316 passes (16 warm-up), 7340 messages delivered, all idle: true
+steps per pass: first 7880 min 7881 max 7891 mean 7889.7
+
+## fx-core2
+2 passes (16 warm-up), 1905 messages delivered, all idle: false
+steps per pass: first 3220 min 0 max 0 mean 0.0
+
+## fx-core1
+316 passes (16 warm-up), 1840 messages delivered, all idle: true
+steps per pass: first 3366 min 3367 max 3370 mean 3369.6

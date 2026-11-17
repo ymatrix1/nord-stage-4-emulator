@@ -220,10 +220,18 @@ Strip types 49..53 select the FM stages `0x124269` (stage 1) and `0x12453F` (sta
 
 The default render is unchanged (D22).
 
-### 4.6 Derived filter laws (`synth/fw_filter_law.rs`, opt-in `--synth-filter-law`, `--synth-fw-resonance`)
+### 4.6 Derived filter laws (`synth/fw_filter_law.rs`, opt-in `--synth-fw-filter`, `--synth-filter-law`, `--synth-fw-resonance`)
 
-Every stage of the family (`0x1253BD`, `0x12566E`, `0x125913`, `0x125A50`) takes the frame word `R` and has the nominal cutoff `atan(R) / pi` cycles per sample, whatever the type (VERIFIED, [synth-filter-type-corners](../research/synth-filter-type-corners.md), table [synth-filter-type-corners.csv](../research/data/synth-filter-type-corners.csv)). The ARM `kFltRes` word `knob / 127 - 0.5` reaches the stage as the position `idx = 64 + 33.25 w`, 47.38 to 80.62 (VERIFIED run, idle LFO scale ASSUMED neutral). `SynthLayer::fw_resonance` applies that position; `SynthLayer::fw_filter_law = Some(u)` also replaces the row and type cutoff factors by `u` on the display Hz (`u = 2 / 1.971` or `1 / 1.971`, the stage rate `2 F` or `F` is open). Both default off: the fitted factors of `p_type.rs` score better on 12 clips (D108).
-
+Every stage of the family (`0x1253BD`, `0x12566E`, `0x125913`, `0x125A50`) takes the frame word `R` and has the nominal cutoff `atan(R) / pi` cycles per sample, whatever the type (VERIFIED, [synth-filter-type-corners](../research/synth-filter-type-corners.md), table [synth-filter-type-corners.csv](../research/data/synth-filter-type-corners.csv)). The three links of the chain were measured on the real firmware in [synth-filter-links](../research/synth-filter-links.md) (D121):
+
+| Link | Result | Status |
+|---|---|---|
+| `kFltType` to stage | strip word 1 = `STAGE_TABLE[file type]`, identity table `bank0_CODE@0x2F72F0` (0 `0x1253BD`, 1 `0x12566E`, 2 `0x12549D`, 3 `0x1257B2`, 4 `0x125913`, 5 `0x125A50`, 6 off `0x125B79`); 18 of 18 layers of 6 factory programs, [synth-filter-type-link.csv](../research/data/synth-filter-type-link.csv). No per-type factor in any ARM word. Raw type 3 is the stage `0x1257B2`, which has no Rust model (`filter_model_of_type` maps it to LP12; 61 of 988 filter-on factory layers) | VERIFIED run |
+| Resonance word to position | `kFltRes` word `w = knob / 127 - 0.5`; the pass smooths it (`0.995 w10 + 0.005 w`, once per pass); settled position `128 knob / 127` clipped at `127.999`. The old `64 + 33.25 w` (47.4 .. 80.6) was the transient at pass 59. A sounding voice, filter envelope amount, LFO amount and strip words 10 / 20 do not change it. [synth-res-position.csv](../research/data/synth-res-position.csv) | VERIFIED oracle |
+| Stage calls per pass | 16 per pass (one per slot, 4 samples each) for every stage; stage rate `2 F` if a pass is two frames. [synth-stage-calls.csv](../research/data/synth-stage-calls.csv) | VERIFIED calls, pass = 2 frames ASSUMED |
+
+`SynthLayer::fw_resonance` applies the settled position; `SynthLayer::fw_filter_law = Some(u)` also replaces the row and type cutoff factors by `u` on the display Hz (`u = 2 / 1.971 = 1.0147` for `2 F`). `--synth-fw-filter` is the shortcut for `--synth-filter-law 1.015` (the measured chain). All default off: the fitted factors of `p_type.rs` score better on the 12 clips ([synth-filter-links](../research/synth-filter-links.md) s5).
+
 Opt-in `--synth-super-lp24 <factor>` (`SynthLayer::super_lp24_scale`, `synth/p_type.rs::row_type_cutoff_scale_with`) replaces only the SUPER wave 0 / LP24 type factor (default 4.4, EMPIRICAL); every other row and type is unchanged, and `--synth-filter-law` still overrides all factors. D116 ([synth-super-lp24-clips](../research/synth-super-lp24-clips.md)): 4.4 is not confirmed on three more Part A clips; 2.0 scores a four-clip mean of 2.44 / 2.58 against 3.17 / 3.95 under two unverified note lists, so the default stays.
 
 ## 5. Envelopes, LFO & Arpeggiator

@@ -155,7 +155,7 @@ impl Core {
         }
     }
 
-    fn set_f40(&mut self, n: usize, v: u64) {
+    pub(super) fn set_f40(&mut self, n: usize, v: u64) {
         self.r[n] = (v >> 8) as u32;
         self.fx.tag[n] = self.r[n];
         self.fx.lo[n] = v as u8;
@@ -174,7 +174,7 @@ impl Core {
         }
     }
 
-    fn float_result(&mut self, n: usize, o: Out) {
+    pub(super) fn float_result(&mut self, n: usize, o: Out) {
         self.set_f40(n, o.v);
         self.apply(o);
     }
@@ -189,6 +189,11 @@ impl Core {
     pub(super) fn float_mul(&mut self, n: usize, x: usize, y: usize) {
         let mode = Mode::from_mode1(self.mode1);
         let o = float::mul(self.f40(x), self.f40(y), mode);
+        self.mul_result(n, o);
+    }
+
+    /// Writes a multiplier result: the register, the multiplier flags and the sticky bits.
+    pub(super) fn mul_result(&mut self, n: usize, o: Out) {
         self.set_f40(n, o.v);
         // VERIFIED (simulator): the multiplier sets MN, MV, MU, MI (ASTAT bits 6..9) and leaves
         // the ALU flags alone.

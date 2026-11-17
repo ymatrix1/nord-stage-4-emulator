@@ -1,0 +1,84 @@
+{
+ "program": "B3 Chords n Solo",
+ "frame_rate": 43402.34375,
+ "phases": {
+  "load": {
+   "ticks": 800,
+   "messages": {
+    "PNO core 2": 912,
+    "ORG core 1": 912,
+    "ORG core 2": 912,
+    "SMP path 1": 1516,
+    "PNO core 1": 7340,
+    "FX core 2": 1905,
+    "FX core 1": 1840
+   },
+   "arm_tick_seconds": {
+    "n": 784,
+    "mean": 0.016342388520199015,
+    "median": 0.014583299998776056,
+    "worst": 0.06922819999454077
+   }
+  },
+  "idle": {
+   "ticks": 300,
+   "messages": {
+    "PNO core 1": 3
+   },
+   "arm_tick_seconds": {
+    "n": 284,
+    "mean": 0.01768418485911573,
+    "median": 0.017032550000294577,
+    "worst": 0.03007660000002943
+   }
+  },
+  "key1": {
+   "ticks": 40,
+   "messages": {
+    "PNO core 1": 126
+   },
+   "arm_tick_seconds": {
+    "n": 24,
+    "mean": 0.021889908332620205,
+    "median": 0.021723099998780526,
+    "worst": 0.024695800006156787
+   }
+  },
+  "key1_off": {
+   "ticks": 40,
+   "messages": {
+    "PNO core 1": 59
+   },
+   "arm_tick_seconds": {
+    "n": 24,
+    "mean": 0.0208569791654251,
+    "median": 0.021771149993583094,
+    "worst": 0.02366569999139756
+   }
+  },
+  "key8": {
+   "ticks": 40,
+   "messages": {
+    "PNO core 1": 907
+   },
+   "arm_tick_seconds": {
+    "n": 24,
+    "mean": 0.021593179166908765,
+    "median": 0.021494099994015414,
+    "worst": 0.024323200006620027
+   }
+  },
+  "key8_off": {
+   "ticks": 40,
+   "messages": {
+    "PNO core 1": 789
+   },
+   "arm_tick_seconds": {
+    "n": 24,
+    "mean": 0.021540949998476815,
+    "median": 0.02173979999497533,
+    "worst": 0.026801999993040226
+   }
+  }
+ }
+}

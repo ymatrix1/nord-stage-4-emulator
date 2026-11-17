@@ -132,12 +132,13 @@ impl TablePos {
 
     /// Position of the panel resonance `0..1`.
     ///
-    /// ASSUMED: linear `0 -> index 0 (Q = 0.5)` to `1 -> index 127 (Q = 90.5)`; the firmware path
-    /// strip word -> `W28` is open (`synth-stage-equations.md` section 4). Confirm by sweeping
-    /// Resonance on hardware and fitting the peak height against `Q = 1 / B[idx]`.
+    /// VERIFIED (settled value, `tools/synth_filter_links.py res`): linear `0 -> index 0 (Q = 0.5)`
+    /// to `1 -> index 127 (Q = 90.5)`, the firmware position being `128 knob / 127` (inputs above
+    /// 1 up to `128 / 127` reach the clip `127.999`). What the hardware does with that position
+    /// (the Q the ear hears) is not captured.
     pub fn from_resonance(resonance: f32) -> Self {
         let r = if resonance.is_finite() {
-            resonance.clamp(0.0, 1.0)
+            resonance.clamp(0.0, 128.0 / FW_TABLE_INDEX_MAX as f32)
         } else {
             0.0
         };

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Resonance word to stage table position in the ORG core 2 pass (SHARC oracle probe).
 
+**Superseded (D121):** this probe reads `W28` after 60 passes, which is the smoother transient
+(`128 (1 - 0.995^60) = 33.25`), not the settled value `128 knob / 127`; use
+`tools/synth_filter_links.py res`. Kept as the record of the 60 pass reading.
+
 The ARM writes `kFltRes` as the float word `-0.5 + knob / 127` into the layer common block word 7
 (`docs/research/synth-knob-laws.md` s3). This tool writes it for channel 0 (with a voice word and
 a cutoff, as `tools/synth_cutoff_note_probe.py`), runs 60 passes and reads the stage position word

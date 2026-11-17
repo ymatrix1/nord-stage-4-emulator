@@ -1,5 +1,7 @@
 # Synth filter type factors: what the SHARC stages say, and what they do not
 
+> **Update 2026-11-16 (D121, [synth-filter-links](synth-filter-links.md)):** the resonance position range 47.4 .. 80.6 below is the 60-pass transient of the pass smoother; the settled position is `128 knob / 127`. The `kFltType` link and the stage rate are measured there; the clip table of s3 is superseded by its s5 (settled resonance 2.17, uniform `2 F` 3.36 against 2.18).
+
 - **Checked:** 2026-11-15
 - **Sources (local, never committed):** ORG core 2 image with `sharc-org` (`tools/synth_filter_res_probe.py`, `tools/synth_cutoff_note_probe.py`); the bit-exact Python models of the four stages (`tools/synth_filter_model.py`, `tools/synth_filter_lp12.py`, equal to the oracle word for word, [synth-stage-equations](synth-stage-equations.md), [synth-stage-models-2](synth-stage-models-2.md)); derived tables [data/synth-filter-type-corners.csv](data/synth-filter-type-corners.csv) (`tools/synth_filter_type_corners.py`); Part A video clips (`tools/emu_vs_hw.py`).
 - **Question:** The fitted cutoff factors (LP12 / BP 1.4, LP24 / HP 1.0, Ladder24 0.8, SUPER LP24 4.4, `synth/p_type.rs`) sit on top of the verified cutoff law ([synth-cutoff-voice-law](synth-cutoff-voice-law.md)). Which part of them does the SHARC stage of each type explain?

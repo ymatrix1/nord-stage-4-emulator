@@ -136,7 +136,13 @@ impl Core {
     /// Records arithmetic exception bits in STKYx (`y` = false) or STKYy and latches the matching
     /// `FIXI`/`FLTOI`/`FLTUI`/`FLTII` interrupt (every event latches again, PRM A-21).
     pub fn note_arith_exception(&mut self, y: bool, sticky: u32) {
-        self.sys.stky[usize::from(y)] |= sticky & self.stky_writable(usize::from(y));
+        self.note_arith_exception_in(usize::from(y), usize::from(y), sticky);
+    }
+
+    /// [`Core::note_arith_exception`] writing STKY slot `slot` with the writable mask of
+    /// element `mask_of` (they differ when a PEy op runs in the swapped view).
+    pub(super) fn note_arith_exception_in(&mut self, slot: usize, mask_of: usize, sticky: u32) {
+        self.sys.stky[slot] |= sticky & self.stky_writable(mask_of);
         for (mask, vector) in EXCEPTIONS {
             if sticky & mask != 0 {
                 self.raise_interrupt(vector);

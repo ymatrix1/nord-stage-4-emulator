@@ -97,6 +97,12 @@ impl Core {
         }
     }
 
+    /// Whether a float or fixed-point exception interrupt (`FIXI`/`FLTOI`/`FLTUI`/`FLTII`,
+    /// vectors 33-36) is enabled, so that a compute operation could make the core take it.
+    pub(super) fn arith_irq_enabled(&self) -> bool {
+        self.mode1 & IRPTEN != 0 && (33..=36).any(|v| self.unmasked(v))
+    }
+
     fn unmasked(&self, v: u8) -> bool {
         match slot(v) {
             Slot::Irptl(b) => v <= 1 || self.imask >> b & 1 == 1,

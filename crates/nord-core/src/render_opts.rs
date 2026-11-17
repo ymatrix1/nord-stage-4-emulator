@@ -6,6 +6,10 @@ use crate::fx::FirmwareFx;
 use crate::organ::{OutputLevel, ToneWheelSource};
 use crate::synth::{FilterEngine, PSpec, PTableSpec, SynthChain};
 
+/// ASSUMED: the `2 F` stage unit `2 / 1.971` (`synth::fw_filter_law::UNIT_2F`) in thousandths, the value
+/// `--synth-fw-filter` gives `--synth-filter-law`.
+const SYNTH_FW_FILTER_UNIT_MILLI: u16 = 1015;
+
 /// Parses a `--tone-source` value: `default | legacy | firmware | vox | b3wheels`.
 pub fn parse_tone_source(v: &str) -> Result<ToneWheelSource, String> {
     match v.to_ascii_lowercase().as_str() {
@@ -345,6 +349,8 @@ pub struct FirmwareOptions {
     /// `--synth-super-lp24 <factor>`: `SynthLayer::super_lp24_scale` (opt-in grid of the SUPER wave 0
     /// / LP24 type factor, default 4.4, D113). Stored in thousandths.
     pub synth_super_lp24_milli: Option<u16>,
+    /// `--synth-fw-filter` sets `synth_filter_law_milli` to [`SYNTH_FW_FILTER_UNIT_MILLI`] and keeps
+    /// leaves the strip stages at their default (see `from_args`); it is a shortcut, not a separate field.
     /// `--synth-fw-resonance`: `SynthLayer::fw_resonance` (the firmware resonance table position only).
     pub synth_fw_resonance: bool,
     /// `--synth-knob-laws` / `--no-synth-knob-laws`: `SynthLayer::knob_laws` (the strip chain takes
@@ -571,6 +577,13 @@ impl FirmwareOptions {
                 return Err(format!("--synth-filter-law {u} outside 0.05..20"));
             }
             o.synth_filter_law_milli = Some((u * 1000.0).round() as u16);
+        }
+        if has("--synth-fw-filter") {
+            // The firmware filter chain as measured: one nominal cutoff for every type at the
+            // `2 F` stage unit, the settled resonance position, the modelled stages
+            // (`docs/research/synth-filter-links.md`). An explicit `--synth-filter-law` wins.
+            o.synth_filter_law_milli
+                .get_or_insert(SYNTH_FW_FILTER_UNIT_MILLI);
         }
         if let Some(v) = value("--synth-super-lp24") {
             let u: f32 = v
@@ -1265,6 +1278,25 @@ mod tests {
         assert!(e.synth_b.fw_resonance && e.synth_b.fw_filter_law.is_none());
         assert!(FirmwareOptions::from_args(&["--synth-filter-law".into(), "x".into()]).is_err());
         assert!(FirmwareOptions::from_args(&["--synth-filter-law".into(), "99".into()]).is_err());
+    }
+
+    #[test]
+    fn synth_fw_filter_is_a_shortcut_for_the_measured_chain() {
+        let o = FirmwareOptions::from_args(&["--synth-fw-filter".into()]).unwrap();
+        assert_eq!(o.synth_filter_law_milli, Some(SYNTH_FW_FILTER_UNIT_MILLI));
+        assert!(o.synth_stages && o.summary().contains("synth-filter-law=1.015"));
+        let mut e = Stage4Engine::new(48_000.0);
+        o.apply_to(&mut e);
+        assert_eq!(e.synth_b.fw_filter_law, Some(1.015));
+        // an explicit unit wins, the default stays off
+        let o2 = FirmwareOptions::from_args(&[
+            "--synth-fw-filter".into(),
+            "--synth-filter-law".into(),
+            "0.5074".into(),
+        ])
+        .unwrap();
+        assert_eq!(o2.synth_filter_law_milli, Some(507));
+        assert_eq!(FirmwareOptions::default().synth_filter_law_milli, None);
     }
 
     #[test]

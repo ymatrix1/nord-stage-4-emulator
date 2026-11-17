@@ -1,8 +1,9 @@
 //! Wiring of the peripheral models into [`Core`]: the [`Bus`] onto its data memory and the
 //! enable, feed and access hooks used by `memory.rs`, `interrupts.rs` and `sharc-run`.
+use super::epdma::EpDma;
 use super::sc57x::Sc57x;
 use super::spi_boot::{self, SpiBoot};
-use super::Bus;
+use super::{AccessLog, Bus};
 use crate::core::Core;
 
 /// [`Bus`] onto the data memory of a core (SRAM, device store).
@@ -79,42 +80,108 @@ impl Core {
         }
     }
 
+    /// Switches on the ORG Core2 range-transfer registers at `DM(0x3E000..0x3E03F)`.
+    pub fn enable_epdma(&mut self) {
+        self.periph.get_or_insert_with(Default::default).epdma = Some(EpDma::default());
+    }
+
+    /// Switches on the census of every data access outside SRAM (IOP window and system range).
+    pub fn enable_access_log(&mut self) {
+        self.periph.get_or_insert_with(Default::default).log = Some(AccessLog::default());
+    }
+
+    /// Value a read of `addr` returns when no model serves it (the IOP array or the device store).
+    fn device_peek(&self, addr: u32) -> u32 {
+        if (addr as usize) < crate::core::IOP_WORDS {
+            self.iop[addr as usize]
+        } else {
+            self.device.get(&addr).copied().unwrap_or(0)
+        }
+    }
+
+    /// The census, if enabled.
+    pub fn access_log(&mut self) -> Option<&mut AccessLog> {
+        self.periph.as_mut()?.log.as_mut()
+    }
+
+    /// The range-transfer model, if enabled.
+    pub fn epdma(&mut self) -> Option<&mut EpDma> {
+        self.periph.as_mut()?.epdma.as_mut()
+    }
+
     #[inline]
     fn periph_range(addr: u32) -> bool {
         (0x2000_0000..0x3200_0000).contains(&addr)
             || (spi_boot::IISPI..=spi_boot::SPIDMAC).contains(&addr)
     }
 
+    /// Whether a model or the census looks at `addr`: the system range, plus the IOP window when
+    /// the range-transfer model or the census is on.
+    #[inline]
+    fn periph_claims(&self, addr: u32) -> bool {
+        Self::periph_range(addr)
+            || (addr < 0x4_0000
+                && self
+                    .periph
+                    .as_ref()
+                    .is_some_and(|p| p.epdma.is_some() || p.log.is_some()))
+    }
+
     /// Register read through the models (`None` = not modelled or scripted by `--dev`).
     pub(in crate::core) fn periph_read(&mut self, addr: u32) -> Option<u32> {
-        if !Self::periph_range(addr) || self.preset.contains_key(&addr) {
+        if !self.periph_claims(addr) {
+            return None;
+        }
+        if self.preset.contains_key(&addr) {
+            if self.periph.as_ref()?.log.is_some() {
+                let v = self.preset[&addr];
+                let pc = self.pc;
+                self.periph.as_mut()?.log.as_mut()?.read(addr, v, pc);
+            }
             return None;
         }
         if addr == spi_boot::SPIDMAC && self.periph.as_ref()?.boot.is_some() {
             self.periph_boot_wait(); // a poll of SPIDMAC waits for the transfer
         }
+        let pc = self.pc;
         let p = self.periph.as_mut()?;
-        let v = match (&mut p.sc57x, &p.boot) {
+        let mut v = match (&mut p.sc57x, &p.boot) {
             (_, Some(b)) if SpiBoot::contains(addr) => Some(b.read(addr)),
             (Some(s), _) => s.read(addr),
             _ => None,
         };
+        if let Some(e) = p.epdma.as_mut().filter(|_| EpDma::contains(addr)) {
+            v = Some(e.read(addr));
+        }
         if v.is_some() {
             self.device_reads += 1;
+        }
+        if p.log.is_some() {
+            // a register nothing models reads as the device store or the IOP array does
+            let seen = v.unwrap_or_else(|| self.device_peek(addr));
+            if let Some(l) = self.periph.as_mut()?.log.as_mut() {
+                l.read(addr, seen, pc);
+            }
         }
         v
     }
 
     /// Register write through the models; returns whether a model took it.
     pub(in crate::core) fn periph_write(&mut self, addr: u32, v: u32) -> bool {
-        if !Self::periph_range(addr) || self.periph.is_none() {
+        if !self.periph_claims(addr) || self.periph.is_none() {
             return false;
         }
         let Some(mut p) = self.periph.take() else {
             return false;
         };
+        if let Some(l) = p.log.as_mut() {
+            l.write(addr, v, self.pc);
+        }
         let mut irqs = Vec::new();
-        let taken = if let Some(b) = p.boot.as_mut().filter(|_| SpiBoot::contains(addr)) {
+        let taken = if let Some(e) = p.epdma.as_mut().filter(|_| EpDma::contains(addr)) {
+            e.write(addr, v);
+            true
+        } else if let Some(b) = p.boot.as_mut().filter(|_| SpiBoot::contains(addr)) {
             b.write(addr, v);
             true
         } else if let Some(s) = p.sc57x.as_mut() {
@@ -271,5 +338,59 @@ mod tests {
         let mut plain = Core::new(&[]);
         plain.dm_write(spi_boot::CSPI, 3).unwrap();
         assert_eq!(plain.dm_read(spi_boot::CSPI), Ok(3));
+    }
+
+    #[test]
+    fn epdma_serves_the_count_register_and_is_off_by_default() {
+        use crate::core::periph::epdma::{COUNT, CTL, RANGE_END, RANGE_START};
+        // off: the IOP window is plain storage (the `--pre 0x3E021=1` stub keeps working)
+        let mut plain = Core::new(&[]);
+        plain.dm_write(COUNT, 1).unwrap();
+        assert_eq!(plain.dm_read(COUNT), Ok(1));
+        assert!(plain.epdma().is_none() && plain.access_log().is_none());
+        let mut c = Core::new(&[]);
+        c.enable_epdma();
+        c.dm_write(0x3_E018, 0x2000_0000).unwrap();
+        assert_eq!(c.dm_read(0x3_E018), Ok(0x2000_0000), "registers read back");
+        c.dm_write(CTL, 0xBF03).unwrap();
+        c.dm_write(RANGE_START, 0x200C_0000).unwrap();
+        c.dm_write(RANGE_END, 0x200C_9C44).unwrap();
+        assert_eq!((c.dm_read(COUNT), c.dm_read(COUNT)), (Ok(1), Ok(0)));
+        assert_eq!(c.epdma().unwrap().started, vec![(0x200C_0000, 0x200C_9C44)]);
+        // other IOP words stay plain storage
+        c.dm_write(0x3_0024, 4).unwrap();
+        assert_eq!(c.dm_read(0x3_0024), Ok(4));
+    }
+
+    #[test]
+    fn the_census_counts_iop_and_system_accesses_but_not_sram() {
+        let mut c = Core::new(&[]);
+        c.enable_access_log();
+        c.preset_device(0x282C_0380, 1);
+        c.pc = 0x12_5DA1;
+        assert_eq!(c.dm_read(0x282C_0380), Ok(1), "a preset still wins");
+        c.dm_write(0x3_1400, 7).unwrap();
+        assert_eq!(c.dm_read(0x3_1400), Ok(7), "plain storage under the census");
+        c.dm_write(0xB_00E2, 1).unwrap();
+        c.dm_write(0x3108_900C, 5).unwrap();
+        let rows: Vec<(u32, u64, u64)> = c
+            .access_log()
+            .unwrap()
+            .entries()
+            .map(|(a, x)| (a, x.reads, x.writes))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![(0x3_1400, 1, 1), (0x282C_0380, 1, 0), (0x3108_900C, 0, 1)]
+        );
+        let last = c
+            .access_log()
+            .unwrap()
+            .entries()
+            .last()
+            .unwrap()
+            .1
+            .last_write;
+        assert_eq!(last, Some(5));
     }
 }

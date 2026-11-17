@@ -2,10 +2,16 @@
 //! processing pass started by a mailbox write or by the P4I receive interrupt ([`pass`]), ARM
 //! style `(word 1, word 2)` message injection ([`msg`]) and audio buffer capture with WAV output
 //! ([`audio`]). Moved out of `bin/sharc_org/` so that several binaries use one implementation.
+pub mod aot_audio;
+pub mod aot_hot;
+pub mod aot_rank;
 pub mod audio;
 pub mod jit_diff;
 pub mod msg;
 pub mod pass;
+pub mod periph_run;
+pub mod system;
+pub mod system_diff;
 
 /// Parses `0x` hex or decimal.
 pub fn parse_number(s: &str) -> Option<u32> {

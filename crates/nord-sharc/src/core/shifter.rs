@@ -149,20 +149,26 @@ fn immediate_to_register_op(op6: u64) -> Option<u64> {
     })
 }
 
+/// Register-form `(opcode, Rn, Rx, Ry value)` of the `0x02` shift-immediate word `w` (see
+/// [`Core::exec_shift_imm`]); `None` for an operation code that is not modelled.
+pub(super) fn shift_imm_params(w: u64) -> Option<(u64, usize, usize, u32)> {
+    let data = ((bits(w, 30, 27) << 8) | bits(w, 15, 8)) as u32;
+    let (n, x) = (bits(w, 7, 4) as usize, bits(w, 3, 0) as usize);
+    let op = immediate_to_register_op(bits(w, 21, 16))?;
+    let ry = if matches!(op, 0x00 | 0x04 | 0x08 | 0x20 | 0x24) {
+        sign_extend(data, 12)
+    } else {
+        data
+    };
+    Some((op, n, x, ry))
+}
+
 impl Core {
     /// Opcode `0x02`: `[IF cond] Rn = <shifter op> Rx BY <immediate>`. The 12-bit immediate is the
     /// signed shift amount, the bit position, or `len6:bit6` packed exactly like the register form.
     pub(super) fn exec_shift_imm(&mut self, d: &Decoded) -> Result<(), Fault> {
-        let w = d.w;
-        let data = ((bits(w, 30, 27) << 8) | bits(w, 15, 8)) as u32;
-        let (n, x) = (bits(w, 7, 4) as usize, bits(w, 3, 0) as usize);
-        let Some(op) = immediate_to_register_op(bits(w, 21, 16)) else {
+        let Some((op, n, x, ry)) = shift_imm_params(d.w) else {
             return self.unmodelled(d.pc, &d.insn);
-        };
-        let ry = if matches!(op, 0x00 | 0x04 | 0x08 | 0x20 | 0x24) {
-            sign_extend(data, 12)
-        } else {
-            data
         };
         self.on_each_pe(d, d.cond_ok, d.cond_y, |core| {
             core.shifter_op(op, n, core.r[x], ry)
@@ -206,7 +212,7 @@ impl Core {
     ///
     /// VERIFIED (census diff, 600+ cases of ASHIFT, LSHIFT, FEXT, FDEP, BTGL, BCLR, FPACK, FUNPACK,
     /// EXP ...): every shifter operation clears SF (ASTAT bit 14).
-    fn shifter_op(&mut self, op: u64, n: usize, rx: u32, ry: u32) -> bool {
+    pub(super) fn shifter_op(&mut self, op: u64, n: usize, rx: u32, ry: u32) -> bool {
         let ok = self.shifter_unit(op, n, rx, ry);
         if ok {
             self.sys.astat_extra[0] &= !(1 << 14);

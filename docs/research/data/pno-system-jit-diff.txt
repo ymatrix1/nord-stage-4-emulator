@@ -1,0 +1,19 @@
+sharc-sys --pno --jit-diff --strict --chunk 1000 --passes 300 --warmup 16 (numbers only)
+
+## load
+jit-diff: 316 of 316 passes matched (chunk 1000, strict true), 7340 messages
+steps per pass: min 7880 max 7891 mean 7889.7
+coverage: 2233 distinct pcs, extents (gaps <= 0x40 merged): 1200b7-1200bd 121063-121b41 121bbe-122295 122a71-122d85 122e0a-122ef5 1233a4-1233b5 12637b-12637c
+no divergence
+
+## key1
+jit-diff: 316 of 316 passes matched (chunk 1000, strict true), 7466 messages
+steps per pass: min 7880 max 7891 mean 7889.7
+coverage: 2233 distinct pcs, extents (gaps <= 0x40 merged): 1200b7-1200bd 121063-121b41 121bbe-122295 122a71-122d85 122e0a-122ef5 1233a4-1233b5 12637b-12637c
+no divergence
+
+## key8
+jit-diff: 316 of 316 passes matched (chunk 1000, strict true), 8247 messages
+steps per pass: min 7880 max 7891 mean 7889.7
+coverage: 2233 distinct pcs, extents (gaps <= 0x40 merged): 1200b7-1200bd 121063-121b41 121bbe-122295 122a71-122d85 122e0a-122ef5 1233a4-1233b5 12637b-12637c
+no divergence

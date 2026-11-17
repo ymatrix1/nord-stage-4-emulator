@@ -3,10 +3,8 @@
 //! first divergence.
 
 use super::pass::SRAM_WORDS;
-#[cfg(feature = "jit")]
 use super::pass::{pc_ranges, PassConfig, SEC_CSID};
-use crate::core::Core;
-#[cfg(feature = "jit")]
+use crate::core::{Core, Fault};
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -101,6 +99,59 @@ pub fn compare_full_state(interp: &mut Core, jit: &mut Core) -> Option<DiffMisma
     None
 }
 
+/// [`compare_full_state`], plus with `strict` everything [`Core::state_mismatch`] checks (PEy
+/// flags, float extensions, ASTAT extras, STKY, interrupt latches).
+pub fn compare_state(interp: &mut Core, other: &mut Core, strict: bool) -> Option<DiffMismatch> {
+    if let Some(m) = compare_full_state(interp, other) {
+        return Some(m);
+    }
+    if strict {
+        if let Some(detail) = interp.state_mismatch(other) {
+            return Some(DiffMismatch {
+                step: interp.steps,
+                pc: interp.pc,
+                detail,
+            });
+        }
+    }
+    None
+}
+
+/// Runs `interp` via [`Core::run`] and `other` via `run_other` for `steps` in lockstep
+/// `chunk`-step increments, comparing state after every chunk (see [`compare_state`]) and
+/// stopping at the first divergence.
+pub fn diff_run_with(
+    interp: &mut Core,
+    other: &mut Core,
+    steps: u64,
+    chunk: u64,
+    strict: bool,
+    run_other: &mut dyn FnMut(&mut Core, u64) -> Option<Fault>,
+) -> Result<(), DiffMismatch> {
+    let chunk = chunk.max(1);
+    let mut done = 0u64;
+    while done < steps {
+        let n = chunk.min(steps - done);
+        let fi = interp.run(n);
+        let fj = run_other(other, n);
+        if fi != fj {
+            return Err(DiffMismatch {
+                step: interp.steps,
+                pc: interp.pc,
+                detail: format!("fault mismatch: interp={fi:?} other={fj:?}"),
+            });
+        }
+        if let Some(m) = compare_state(interp, other, strict) {
+            return Err(m);
+        }
+        if fi.is_some() {
+            break;
+        }
+        done += n;
+    }
+    Ok(())
+}
+
 /// Runs `interp` via [`Core::run`] and `jit` via [`Core::run_jit`] for `steps` in lockstep
 /// `chunk`-step increments, comparing full state after every chunk and stopping at the first
 /// divergence.
@@ -111,28 +162,7 @@ pub fn diff_run(
     steps: u64,
     chunk: u64,
 ) -> Result<(), DiffMismatch> {
-    let chunk = chunk.max(1);
-    let mut done = 0u64;
-    while done < steps {
-        let n = chunk.min(steps - done);
-        let fi = interp.run(n);
-        let fj = jit.run_jit(n);
-        if fi != fj {
-            return Err(DiffMismatch {
-                step: interp.steps,
-                pc: interp.pc,
-                detail: format!("fault mismatch: interp={fi:?} jit={fj:?}"),
-            });
-        }
-        if let Some(m) = compare_full_state(interp, jit) {
-            return Err(m);
-        }
-        if fi.is_some() {
-            break;
-        }
-        done += n;
-    }
-    Ok(())
+    diff_run_with(interp, jit, steps, chunk, false, &mut |c, n| c.run_jit(n))
 }
 
 /// Summary of one lockstep differential audio pass.
@@ -147,13 +177,14 @@ pub struct PassDiffReport {
 /// then advances both in lockstep `chunk`-step increments until `cfg.idle_pc` is reached with
 /// `cfg.trigger == 0` (or `cfg.max_steps` is hit), comparing full state + SRAM after every chunk
 /// and stopping at the first divergence.
-#[cfg(feature = "jit")]
-pub fn diff_pass(
+pub fn diff_pass_with(
     interp: &mut Core,
     jit: &mut Core,
     cfg: &PassConfig,
     chunk: u64,
     track_coverage: bool,
+    strict: bool,
+    run_other: &mut dyn FnMut(&mut Core, u64) -> Option<Fault>,
 ) -> Result<PassDiffReport, DiffMismatch> {
     for c in [&mut *interp, &mut *jit] {
         match cfg.irq {
@@ -202,14 +233,14 @@ pub fn diff_pass(
                 break;
             }
         }
-        if let Some(f) = jit.run_jit(chunk_steps) {
+        if let Some(f) = run_other(jit, chunk_steps) {
             return Err(DiffMismatch {
                 step: jit.steps,
                 pc: jit.pc,
-                detail: format!("jit faulted: {f:?}"),
+                detail: format!("other core faulted: {f:?}"),
             });
         }
-        if let Some(m) = compare_full_state(interp, jit) {
+        if let Some(m) = compare_state(interp, jit, strict) {
             return Err(m);
         }
         if left_idle && interp.pc == cfg.idle_pc && interp.dm_read(cfg.trigger).unwrap_or(1) == 0 {
@@ -222,6 +253,26 @@ pub fn diff_pass(
         final_pc: interp.pc,
         coverage: pc_ranges(&visited),
     })
+}
+
+/// [`diff_pass_with`] for the Cranelift JIT.
+#[cfg(feature = "jit")]
+pub fn diff_pass(
+    interp: &mut Core,
+    jit: &mut Core,
+    cfg: &PassConfig,
+    chunk: u64,
+    track_coverage: bool,
+) -> Result<PassDiffReport, DiffMismatch> {
+    diff_pass_with(
+        interp,
+        jit,
+        cfg,
+        chunk,
+        track_coverage,
+        false,
+        &mut |c, n| c.run_jit(n),
+    )
 }
 
 #[cfg(test)]

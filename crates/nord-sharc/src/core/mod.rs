@@ -18,6 +18,14 @@
 
 mod alu;
 mod aot;
+mod aot_emit;
+mod aot_fast;
+mod aot_glue;
+pub(crate) mod aot_hot;
+mod aot_lower;
+mod aot_native;
+mod aot_pe;
+mod aot_state;
 mod arith_loop;
 mod banks;
 mod bitfifo;
@@ -55,7 +63,7 @@ mod isa;
 #[cfg(feature = "jit")]
 mod jit;
 #[cfg(feature = "jit")]
-pub use jit::JitProfile;
+pub use jit::{JitProfile, PassTraceReport};
 #[cfg(all(test, feature = "jit"))]
 mod jit_diff;
 mod longword;
@@ -82,6 +90,8 @@ mod vectors;
 
 use crate::visa::Insn;
 pub use aot::AotOptions;
+pub use aot_hot::AotHotStats;
+pub use aot_lower::{AotTier, InsnClass};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 pub use vectors::{vector_by_name, VECTOR_COUNT};
@@ -275,6 +285,13 @@ pub struct Core {
     /// back to `dm_write` so `invalidate_sram_cache` stays exact across all cached blocks.
     sram_code_nw_lo: u32,
     sram_code_nw_hi: u32,
+    /// Optional hot-block AOT hook ([`aot_hot`]); `None` keeps the plain interpreter.
+    aot_hot: Option<Box<aot_hot::AotHot>>,
+    /// Entry bitmap of the enabled blocks: bit `pc - aot_lo` is set at each block start;
+    /// `aot_span` is 0 while none is enabled, so the per-step test is one compare.
+    aot_lo: u32,
+    aot_span: u32,
+    aot_bits: Box<[u64]>,
     /// Optional Level-2 Cranelift JIT engine (allocated lazily on first `run_jit`).
     #[cfg(feature = "jit")]
     jit: Option<Box<jit::JitEngine>>,
@@ -349,6 +366,10 @@ impl Core {
             code_gen: 1,
             sram_code_nw_lo: u32::MAX,
             sram_code_nw_hi: 0,
+            aot_hot: None,
+            aot_lo: 0,
+            aot_span: 0,
+            aot_bits: Box::default(),
             #[cfg(feature = "jit")]
             jit: None,
         }

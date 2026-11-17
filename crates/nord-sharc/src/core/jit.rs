@@ -4,7 +4,7 @@
 //! Enabled via the optional `jit` Cargo feature (`Core::run_jit`). Any instruction or dynamic
 //! condition not yet lowered to Cranelift IR either calls an `extern "C"` helper on `Core` or
 //! hands control back to [`Core::step`], preserving 100% oracle fidelity.
-use super::decode_cache::{ComputeOp, DecodedOp, DualMoveOp, MoveOp};
+use super::decode_cache::{ComputeOp, DecodedOp, DualMoveOp, FlowOp, MoveOp};
 use super::exec::Decoded;
 use super::float::{MODE1_RND32, MODE1_TRUNC};
 use super::{Core, Fault, Flags};
@@ -41,6 +41,22 @@ pub struct JitProfile {
     pub compile_ns: u64,
     pub jit_exec_ns: u64,
     pub fallback_step_ns: u64,
+}
+
+/// Summary of one settled pass's instruction & basic-block classification for JIT/AOT feasibility.
+#[derive(Debug, Clone)]
+pub struct PassTraceReport {
+    pub total_steps: u64,
+    pub jit_eligible_today: u64,
+    pub inelig_simd_only: u64,
+    pub inelig_other: u64,
+    pub other_reasons: Vec<(&'static str, u64)>,
+    pub top_pcs: Vec<(u32, u64, bool, &'static str)>,
+    pub distinct_pcs: usize,
+    pub distinct_blocks: usize,
+    pub blocks_for_90pct: usize,
+    pub blocks_for_99pct: usize,
+    pub top_blocks: Vec<(u32, u32, u32, bool, &'static str, u64, u64)>,
 }
 
 /// Compiled native function for a SHARC basic block or self-looping `DO ... UNTIL LCE` body.
@@ -2088,6 +2104,211 @@ impl Core {
         prof.invalidate_calls += inv_after.saturating_sub(inv_before);
         prof.blocks_evicted += ev_after.saturating_sub(ev_before);
         res
+    }
+
+    /// Runs one pass in the interpreter (no behavior change) and classifies every executed step
+    /// and dynamic basic block for SIMD JIT / AOT feasibility.
+    pub fn classify_pass_for_jit(
+        &mut self,
+        trigger: u32,
+        idle_pc: u32,
+        max_steps: u64,
+    ) -> Result<PassTraceReport, String> {
+        use std::collections::BTreeMap;
+
+        fn reason_of(op: DecodedOp) -> &'static str {
+            match op {
+                DecodedOp::ComputeCond { cond, op } => {
+                    if cond != 31 {
+                        "ComputeCond(cond!=31)"
+                    } else {
+                        match op {
+                            ComputeOp::Multifunction { .. } => "Compute(Multifunction)",
+                            ComputeOp::DualAddSub { .. } => "Compute(DualAddSub)",
+                            _ => "Compute(Invalid)",
+                        }
+                    }
+                }
+                DecodedOp::ComputeBoth { op } => match op {
+                    ComputeOp::Multifunction { .. } => "Compute(Multifunction)",
+                    ComputeOp::DualAddSub { .. } => "Compute(DualAddSub)",
+                    _ => "Compute(Invalid)",
+                },
+                DecodedOp::Move(MoveOp::RegMove { cond, compute, .. }) => {
+                    if cond != 31 {
+                        "RegMove(cond!=31)"
+                    } else if compute.is_some() {
+                        "RegMove(with_compute)"
+                    } else {
+                        "Move(Other)"
+                    }
+                }
+                DecodedOp::Move(MoveOp::DagMem { .. }) => "DagMem(cond!=31)",
+                DecodedOp::Move(MoveOp::DirectMem { .. }) => "Move(DirectMem)",
+                DecodedOp::Move(MoveOp::RegSwap { .. }) => "Move(RegSwap)",
+                DecodedOp::Move(MoveOp::Other) => "Move(Other)",
+                DecodedOp::Flow(FlowOp::JumpDirect { call, .. }) => {
+                    if call {
+                        "Flow(CallDirect)"
+                    } else {
+                        "Flow(JumpDirect)"
+                    }
+                }
+                DecodedOp::Flow(FlowOp::JumpIndirect { call, .. }) => {
+                    if call {
+                        "Flow(CallIndirect)"
+                    } else {
+                        "Flow(JumpIndirect)"
+                    }
+                }
+                DecodedOp::Flow(FlowOp::Return { .. }) => "Flow(Return)",
+                DecodedOp::Flow(FlowOp::DoUntilCounter { .. }) => "Flow(DoUntilCounter)",
+                DecodedOp::ModifyImm => "ModifyImm",
+                DecodedOp::StackOp => "StackOp",
+                DecodedOp::DoUntil => "DoUntil",
+                DecodedOp::ShiftImm => "ShiftImm",
+                DecodedOp::ShiftMove => "ShiftMove",
+                DecodedOp::Type25 => "Type25",
+                DecodedOp::Idle => "Idle",
+                DecodedOp::Unimplemented => "Unimplemented",
+                DecodedOp::Nop
+                | DecodedOp::Move(MoveOp::LoadImm { .. })
+                | DecodedOp::DualMove(_) => "Eligible",
+            }
+        }
+
+        self.dm_write(trigger, 1)
+            .map_err(|a| format!("bad trigger 0x{a:x}"))?;
+
+        let mut total_steps = 0u64;
+        let mut jit_eligible_today = 0u64;
+        let mut inelig_simd_only = 0u64;
+        let mut inelig_other = 0u64;
+        let mut reasons: BTreeMap<&'static str, u64> = BTreeMap::new();
+        let mut pc_counts: BTreeMap<(u32, bool, &'static str), u64> = BTreeMap::new();
+        type BlockKey = (u32, u32, u32, bool, &'static str);
+        type BlockMap = BTreeMap<BlockKey, (u64, u64)>;
+        // Dynamic basic blocks: (start_pc, end_pc, len, simd, class) -> (calls, steps)
+        let mut block_counts: BlockMap = BTreeMap::new();
+        let mut cur_blk: Option<(u32, u32, u32, bool, &'static str, u32)> = None;
+        let mut left_idle = false;
+
+        let flush_blk = |cur: &mut Option<(u32, u32, u32, bool, &'static str, u32)>,
+                         map: &mut BlockMap| {
+            if let Some((s, e, len, simd, cls, _)) = cur.take() {
+                let entry = map.entry((s, e, len, simd, cls)).or_insert((0, 0));
+                entry.0 += 1;
+                entry.1 += u64::from(len);
+            }
+        };
+
+        while total_steps < max_steps {
+            let pc = self.pc;
+            let simd = self.simd();
+            let isa = self.isa_at(pc);
+            let cached = if let Some(hit) = self
+                .decode_cache
+                .as_deref()
+                .and_then(|c| c.get(pc, self.code_gen, isa))
+                .copied()
+            {
+                hit
+            } else {
+                self.fetch_and_cache(pc, isa)
+            };
+            let op = cached.op;
+            let no_simd_ok = can_jit_op(op, false);
+            let cls = if !simd && no_simd_ok {
+                jit_eligible_today += 1;
+                "jit_today"
+            } else if simd && no_simd_ok {
+                inelig_simd_only += 1;
+                "simd_only"
+            } else {
+                inelig_other += 1;
+                let r = reason_of(op);
+                *reasons.entry(r).or_insert(0) += 1;
+                r
+            };
+            *pc_counts.entry((pc, simd, cls)).or_insert(0) += 1;
+
+            let is_boundary = matches!(op, DecodedOp::Flow(_) | DecodedOp::DoUntil);
+            match cur_blk {
+                Some((s, _, len, b_simd, b_cls, exp_next))
+                    if exp_next == pc
+                        && b_simd == simd
+                        && b_cls == cls
+                        && !is_boundary
+                        && len < 64 =>
+                {
+                    cur_blk = Some((s, pc, len + 1, b_simd, b_cls, cached.next_pc));
+                }
+                _ => {
+                    flush_blk(&mut cur_blk, &mut block_counts);
+                    cur_blk = Some((pc, pc, 1, simd, cls, cached.next_pc));
+                    if is_boundary {
+                        flush_blk(&mut cur_blk, &mut block_counts);
+                    }
+                }
+            }
+
+            self.step().map_err(|f| format!("step fault: {f:?}"))?;
+            total_steps += 1;
+            if self.pc != idle_pc {
+                left_idle = true;
+            }
+            if left_idle && self.pc == idle_pc && self.dm_read(trigger).unwrap_or(1) == 0 {
+                break;
+            }
+        }
+        flush_blk(&mut cur_blk, &mut block_counts);
+
+        let mut other_reasons: Vec<_> = reasons.into_iter().collect();
+        other_reasons.sort_by_key(|x| std::cmp::Reverse(x.1));
+
+        let distinct_pcs = pc_counts.len();
+        let mut top_pcs: Vec<_> = pc_counts
+            .into_iter()
+            .map(|((pc, simd, cls), cnt)| (pc, cnt, simd, cls))
+            .collect();
+        top_pcs.sort_by_key(|x| std::cmp::Reverse(x.1));
+        top_pcs.truncate(20);
+
+        let distinct_blocks = block_counts.len();
+        let mut blocks_sorted: Vec<_> = block_counts
+            .into_iter()
+            .map(|((s, e, len, simd, cls), (calls, steps))| (s, e, len, simd, cls, calls, steps))
+            .collect();
+        blocks_sorted.sort_by_key(|x| std::cmp::Reverse(x.6));
+
+        let mut acc = 0u64;
+        let mut blocks_for_90pct = 0usize;
+        let mut blocks_for_99pct = 0usize;
+        for (idx, b) in blocks_sorted.iter().enumerate() {
+            acc += b.6;
+            if blocks_for_90pct == 0 && acc * 100 >= total_steps * 90 {
+                blocks_for_90pct = idx + 1;
+            }
+            if blocks_for_99pct == 0 && acc * 100 >= total_steps * 99 {
+                blocks_for_99pct = idx + 1;
+                break;
+            }
+        }
+        blocks_sorted.truncate(20);
+
+        Ok(PassTraceReport {
+            total_steps,
+            jit_eligible_today,
+            inelig_simd_only,
+            inelig_other,
+            other_reasons,
+            top_pcs,
+            distinct_pcs,
+            distinct_blocks,
+            blocks_for_90pct,
+            blocks_for_99pct,
+            top_blocks: blocks_sorted,
+        })
     }
 }
 

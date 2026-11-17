@@ -1,5 +1,7 @@
 # Synth cutoff with a sounding voice: exponential, 12 knobs per octave, key tracking in semitones
 
+> **Update 2026-11-16 (D121, [synth-filter-links](synth-filter-links.md)):** stage calls per pass are 16 for every stage (4 samples each), supporting the `2 F` stage rate (display / natural 1.971, engine factor 1.0147); the pass = 2 frames reading stays ASSUMED. The cutoff factors per type are not in any ARM word.
+
 - **Checked:** 2026-11-15
 - **Sources (local, never committed):** ORG core 2 image (`tools/ns4_dsp_ldr.py target/DSP/dsp_image_2_ORG.bin --sram DIR`) in `sharc-org`; `tools/synth_adr_oracle.py`; new `tools/synth_cutoff_note_probe.py` (test `tools/tests/test_synth_cutoff_note_probe.py`); ARM words of [synth-knob-laws](synth-knob-laws.md) s3 and [keydown-zones](keydown-zones.md) s7; derived table [data/synth-cutoff-voice-law.csv](data/synth-cutoff-voice-law.csv). Builds on [synth-adr-and-strip-law](synth-adr-and-strip-law.md) s4, [synth-knob-laws](synth-knob-laws.md) s6.
 - **Question:** The ARM word for `kFltFreq` is `(knob - 52) << 24` and the idle pass maps it to `R` linearly (4.8 kHz at knob 52, display 277 Hz). What does the pass do with a sounding voice, and what is left of the fitted per-type cutoff factors (LP12 / BP 1.4, Ladder24 0.8, SUPER LP24 4.4)?

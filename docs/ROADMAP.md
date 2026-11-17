@@ -229,6 +229,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 - [x] ARM-side maps: organ weights and key to wheel map ([organ-weights](research/organ-weights.md)), model to slot table ([organ-model-paths](research/organ-model-paths.md), [b3-tone-source](research/b3-tone-source.md)), PNO module chain ([pno-module-chain](research/pno-module-chain.md)), FX chain install, type map and contexts ([fx-chain-install](research/fx-chain-install.md), [fx-type-map](research/fx-type-map.md), [fx-contexts](research/fx-contexts.md)), piano path ([piano-dsp-path](research/piano-dsp-path.md))
 - [ ] Key-down capture: the keybed link (UART2 ring consumer) is not emulated, so no key event reaches the DSP messages (piano velocity law and organ key-down remain open; [piano-dsp-path](research/piano-dsp-path.md) follow-up 1)
 - [x] Boot message log: every ARM to DSP store from reset (80,815 boot messages, real EMIFA ports) kept, fingerprinted and replayed into `sharc-pass` / `sharc-org` (PNO core 1 8,300 / 8,306 words, ORG 12,102 / 12,102); census of the stubbed SPI routines ([arm-bulk-tables](research/arm-bulk-tables.md), `tools/arm_bulk_tables.py`)
+- [x] DSP peripherals for the system run (D120, proposed): `--epdma` range registers, `--census`, `--sec-id`, PNO `--lane` / `--wav`, hardware lane comparison `tools/dsp_lane_vs_hw.py` ([dsp-peripherals-audio](research/dsp-peripherals-audio.md)); next: minimal boot words, ORG Core2 stage slots, FX hand-over
 - [x] Boot state equality: PNO core 1 / 2, ORG core 1 / 2 and FX core 1 / 2 read back identical ([arm-boot-state](research/arm-boot-state.md)); the L2 table is delivered but not read by the ORG pass
 - [x] `0xB2ECF` / `0xB2FF0` identified as layer-level gain sentinels; B3 tail re-derived on the full boot state ([arm-boot-rederive](research/arm-boot-rederive.md))
 - [x] Corrected B3 tail ported with regenerated chord tests, oracle chords within 0.54 dB and video mid -1.1 dB ([b3-tail-bootstate](research/b3-tail-bootstate.md)); `B3Wheels` stays opt-in (RMS +8.0 dB)
@@ -375,6 +376,7 @@ The ticks below mean the model exists and is tested. Which parts match the firmw
 
 ---
 - [ ] Proposed 2026-11-15: synth envelope pass (2 SY frames ASSUMED) and ARM tick 1 or 24 kHz (OQ22); arpeggiator gate 2/3 or 1/2 of a step (OQ32); Wavetable default flip (`--synth-wave-bank`); FM level against a hardware clip
+- [x] Synth filter chain links measured (D121, [synth-filter-links](research/synth-filter-links.md)): `kFltType` identity stage table, settled resonance position `128 knob / 127`, 16 stage calls per pass; opt-in `--synth-fw-filter` scores 3.36 against 2.18 so the fitted factors stay; `[ ]` model stage `0x1257B2` (raw type 3)
 
 ## Parallel Lanes & Bean Dependency Graph
 
