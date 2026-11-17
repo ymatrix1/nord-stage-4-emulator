@@ -1395,7 +1395,6 @@ Opt-in `mod2` ENS audio follows knob words; opt-in `mod1` RM A-WAH rate follow o
 - **Alternatives:** Auto-discover `.reference/` or `target/fw_unpacked/` (rejected: makes renders depend on local files, breaks determinism); flip `FirmwareOptions::default()` (rejected: the tables are not available to tests and CI); embed the tables (rejected: firmware data, D22 and AGENTS.md rule 6).
 - **Impact:** `crates/nord-core/src/render_opts.rs`, new `render_opts_wave.rs` (+ tests), [synth-engine](specs/synth-engine.md) s4.4, audio-remaining row 20. No `render_hash` or golden change.
 
-<<<<<<< HEAD
 ### D132. The synth voice runs in the ORG core 2 oracle on the real ARM stream; the first end-to-end diff shows oscillator and filter both differ from native (neither dominates), the envelope is not comparable yet
 
 - **Status:** proposed 2026-11-17
@@ -1405,7 +1404,7 @@ Opt-in `mod2` ENS audio follows knob words; opt-in `mod1` RM A-WAH rate follow o
 - **Why:** It gives the first stage-by-stage numbers for D122's open "gap is upstream of the stage" and shows level and shape both differ at the oscillator and the filter output, with a repeatable filter gain offset. Reporting the envelope and voice count as confounds is honest: the identical traces prove the stream lacks those words, and the tap reads one channel.
 - **Alternatives:** Compare the oracle only with a fitted native chain (rejected: hides the per-stage offsets); read an output lane (rejected: silent, section 4 of the note); wait for the edit-message envelope path before landing the harness (rejected: the harness, the rate check and the level numbers are reusable).
 - **Impact:** `crates/nord-sharc` (`runner/tap_run.rs`, `runner/mod.rs`, `bin/sharc_sys.rs`), `crates/nord-tools/src/bin/synth_e2e_native.rs`, `tools/synth_e2e_oracle.py`, `tools/synth_e2e_metrics.py` (+ tests), `docs/research/synth-e2e-oracle-vs-native.md`, `docs/research/data/synth-e2e-oracle-vs-native.csv`, audio-remaining row 3, OQ22.
-=======
+
 ### D129. The OS update file is the user's input: the app reads the WAVE tables from the official `.exe` / `.zip` / `.dmg` at run time and remembers only its path
 
 - **Status:** proposed 2026-11-17
@@ -1415,4 +1414,3 @@ Opt-in `mod2` ENS audio follows knob words; opt-in `mod1` RM A-WAH rate follow o
 - **Why:** One file from the vendor site is all a layperson can be asked for. The container is found by its own header and size sum instead of PE resource parsing, so no PE or filesystem library is needed and the USB driver resource (ID 105) is skipped by construction. The `.dmg` is a UDIF image with zlib chunks; decoding the chunks and scanning the flat image finds the container contiguous (HFS+ file extent), so no HFS reader is needed (VERIFIED on v1.66: [os-update-input](research/os-update-input.md)). Only a path is stored, so nothing firmware-derived is ever written (D22).
 - **Alternatives:** Parse the PE resource directory (rejected: more code for the same bytes, breaks on a repacked updater); write an HFS+/APFS reader (not needed); ship `rfd` for a native file dialog (rejected for now: a large dependency tree; drag-and-drop plus a path field cover the one-time setup); cache the extracted tables on disk (rejected: firmware data on disk, D22).
 - **Impact:** new `crates/nord-core/src/os_update/`, `user_config.rs`, `firmware_setting.rs`, `crates/nord-gui/src/os_update_panel.rs`; dependency `miniz_oxide` 0.8 (MIT / Zlib / Apache-2.0, already in the lock file through `image`); [synth-engine](specs/synth-engine.md) s4.4, [guide](guides/nord-os-update.md), ROADMAP. The container is read at every start. The WAVE tables install once per process, so a file chosen in the GUI applies after a restart. The v1.44 to v1.64 updaters unpack, but their registry address differs: "unsupported Nord OS version".
->>>>>>> origin/main
