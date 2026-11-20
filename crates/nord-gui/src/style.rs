@@ -95,6 +95,15 @@ pub fn load_panel_texture(ctx: &egui::Context) -> egui::TextureHandle {
 /// Red of the Program / Master blocks behind legends (`bay_program`, `panel::frames`).
 pub const PROGRAM_RED: Color32 = Color32::from_rgb(115, 18, 22);
 
+/// Refined tokens from the 1:1 `nd matrix 1` HTML/CSS prototype (`prototypes/panel-mock/styles.css`).
+pub const PROTOTYPE_CHASSIS_RED: Color32 = Color32::from_rgb(0x8F, 0x19, 0x22);
+pub const PROTOTYPE_SLATE_BG: Color32 = Color32::from_rgb(0x32, 0x3C, 0x47);
+pub const PROTOTYPE_HEADER_BAR: Color32 = Color32::from_rgb(0xAA, 0xB5, 0xC1);
+pub const PROTOTYPE_ENCODER_RING: Color32 = Color32::from_rgb(0xA8, 0xB6, 0xC4);
+pub const PROTOTYPE_CRIMSON_COLLAR: Color32 = Color32::from_rgb(0x98, 0x1C, 0x25);
+pub const PROTOTYPE_OLED_BG: Color32 = Color32::from_rgb(0x07, 0x09, 0x0D);
+pub const PROTOTYPE_OLED_FG: Color32 = Color32::from_rgb(0xD9, 0xEC, 0xFF);
+
 /// Smallest contrast ratio (WCAG 2, 4.5:1 for small text) a printed legend keeps against the panel,
 /// dimmed or not.
 pub const LEGEND_MIN_CONTRAST: f32 = 4.5;

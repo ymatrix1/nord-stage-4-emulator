@@ -3,6 +3,7 @@
 //! Spec: `docs/specs/visual-style-and-panel.md`
 
 pub mod audio;
+pub mod baked;
 pub mod firmware_panel;
 pub mod headless_load;
 pub mod library;
