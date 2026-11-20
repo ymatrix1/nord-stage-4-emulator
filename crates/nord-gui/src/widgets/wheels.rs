@@ -75,15 +75,27 @@ pub fn pitch_and_mod_wheels(
         Stroke::new(1.0_f32, Color32::from_rgb(30, 34, 38)),
     );
     // The paddle travels along the slot: +1 is the right (upper) end.
+    let assets = crate::baked::BakedPanelAssets::get_or_load(ui.ctx());
     let travel = (PITCH_SLOT_MM.0 - PITCH_PADDLE_MM.0) * 0.5 * s;
-    fill_rotated(
+    let paddle_center = c + axis * (*pitch * travel);
+    let paddle_size = vec2(PITCH_PADDLE_MM.0, PITCH_PADDLE_MM.1) * s;
+    if !assets.paint_sprite_rotated(
         p,
-        c + axis * (*pitch * travel),
-        vec2(PITCH_PADDLE_MM.0, PITCH_PADDLE_MM.1) * s,
+        "pitch_stick",
+        paddle_center,
+        paddle_size,
         PITCH_TILT,
-        Color32::from_rgb(196, 140, 84), // wood
-        Stroke::new(1.0_f32, Color32::from_rgb(120, 80, 44)),
-    );
+        Color32::WHITE,
+    ) {
+        fill_rotated(
+            p,
+            paddle_center,
+            vec2(PITCH_PADDLE_MM.0, PITCH_PADDLE_MM.1) * s,
+            PITCH_TILT,
+            Color32::from_rgb(196, 140, 84),
+            Stroke::new(1.0_f32, Color32::from_rgb(120, 80, 44)),
+        );
+    }
 
     // 2. Mod wheel (grooved metal cylinder)
     let resp_mod = ui.interact(rect_mod, ui.id().with("mod_wheel"), Sense::click_and_drag());
@@ -107,22 +119,31 @@ pub fn pitch_and_mod_wheels(
         Color32::from_rgb(10, 11, 13),
         Stroke::new(1.0_f32, Color32::from_rgb(30, 34, 38)),
     );
-    fill_rotated(
+    if !assets.paint_sprite_rotated(
         p,
+        "mod_wheel_drum",
         c,
-        vec2(w_slot * 0.78, h_slot * 0.97),
+        vec2(w_slot * 0.92, h_slot * 1.02),
         MOD_TILT,
-        Color32::from_gray(176),
-        Stroke::new(1.0_f32, Color32::from_gray(225)),
-    );
-    let along = (0.5 - *mod_wheel) * h_slot * 0.8;
+        Color32::WHITE,
+    ) {
+        fill_rotated(
+            p,
+            c,
+            vec2(w_slot * 0.78, h_slot * 0.97),
+            MOD_TILT,
+            Color32::from_gray(176),
+            Stroke::new(1.0_f32, Color32::from_gray(225)),
+        );
+    }
+    let along = (0.5 - *mod_wheel) * h_slot * 0.68;
     fill_rotated(
         p,
         c + axis * along,
-        vec2(w_slot * 0.78, 3.0),
+        vec2(w_slot * 0.62, 5.0),
         MOD_TILT,
-        Color32::from_gray(92),
-        Stroke::NONE,
+        Color32::from_black_alpha(130),
+        Stroke::new(0.8_f32, Color32::from_white_alpha(110)),
     );
 
     changed

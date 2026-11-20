@@ -11,12 +11,12 @@
       "sha256": "f20f277ad949cc5bedb86c6a25ea7c919fc0b0a8212618dcc725052e6961157c"
     },
     "panel_sprites.json": {
-      "bytes": 2855,
-      "sha256": "927050c377429569d92473b23735aa01d7be13883df6f4cbbc782d0b140cbd9a"
+      "bytes": 2958,
+      "sha256": "7715595ea3e6a749eb40c60cb7e6fc908bb739c8edeb3e5fffba5dbc578f8aa0"
     },
     "panel_sprites_2x.png": {
-      "bytes": 62847,
-      "sha256": "cdb9ba92242afb6508d34df1aefabd722c5eb3c238b217424c183699c430b59c"
+      "bytes": 67619,
+      "sha256": "6999ce8509dbc4a5b587160064f219a8c02570b39a2ab40804ebac0a546d06a3"
     }
   }
 }

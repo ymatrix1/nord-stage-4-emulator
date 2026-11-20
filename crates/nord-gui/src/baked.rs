@@ -214,6 +214,47 @@ impl BakedPanelAssets {
         painter.image(self.sprites.id(), rect, entry.uv_rect(), tint);
         true
     }
+
+    /// Paint a named sprite rotated clockwise by `angle_rad` around `center` at `size`.
+    pub fn paint_sprite_rotated(
+        &self,
+        painter: &Painter,
+        name: &str,
+        center: egui::Pos2,
+        size: Vec2,
+        angle_rad: f32,
+        tint: Color32,
+    ) -> bool {
+        let Some(entry) = self.manifest.sprites.get(name) else {
+            return false;
+        };
+        let uv = entry.uv_rect();
+        let (sin, cos) = angle_rad.sin_cos();
+        let hw = size.x * 0.5;
+        let hh = size.y * 0.5;
+        let corners = [
+            ((-hw, -hh), pos2(uv.left(), uv.top())),
+            ((hw, -hh), pos2(uv.right(), uv.top())),
+            ((hw, hh), pos2(uv.right(), uv.bottom())),
+            ((-hw, hh), pos2(uv.left(), uv.bottom())),
+        ];
+        let mut mesh = egui::Mesh::with_texture(self.sprites.id());
+        for ((lx, ly), t_uv) in corners {
+            let p = pos2(
+                center.x + lx * cos - ly * sin,
+                center.y + lx * sin + ly * cos,
+            );
+            mesh.vertices.push(egui::epaint::Vertex {
+                pos: p,
+                uv: t_uv,
+                color: tint,
+            });
+        }
+        mesh.add_triangle(0, 1, 2);
+        mesh.add_triangle(0, 2, 3);
+        painter.add(egui::Shape::mesh(mesh));
+        true
+    }
 }
 
 fn load_plate_tiles(ctx: &Context, bytes: &[u8], max_side: usize) -> Vec<BakedPlateTile> {
@@ -303,6 +344,14 @@ mod tests {
                 &painter,
                 "btn_black_up",
                 Rect::from_min_size(pos2(10.0, 10.0), vec2(34.0, 17.0)),
+                Color32::WHITE,
+            ));
+            assert!(assets.paint_sprite_rotated(
+                &painter,
+                "knob_pot_cap",
+                pos2(40.0, 40.0),
+                vec2(28.0, 28.0),
+                0.75,
                 Color32::WHITE,
             ));
             assert!(!assets.paint_sprite(&painter, "nonexistent", plate_rect, Color32::WHITE,));

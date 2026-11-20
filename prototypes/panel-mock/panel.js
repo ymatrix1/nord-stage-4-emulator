@@ -1923,7 +1923,13 @@
     stage.innerHTML = templates[name] || "";
     const target = stage.firstElementChild;
     const r = target.getBoundingClientRect();
-    return { x: Math.floor(r.left) - 4, y: Math.floor(r.top) - 4, width: Math.ceil(r.width) + 8, height: Math.ceil(r.height) + 8 };
+    const pad = 14;
+    return {
+      x: Math.floor(r.left) - pad,
+      y: Math.floor(r.top) - pad,
+      width: Math.ceil(r.width) + pad * 2,
+      height: Math.ceil(r.height) + pad * 2
+    };
   };
 
   init();

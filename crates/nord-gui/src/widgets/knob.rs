@@ -65,52 +65,19 @@ pub fn knob(
 
     super::scale::paint(p, center, radius, id);
 
-    // 1. Drop shadow
-    p.circle_filled(
-        center + vec2(0.0, 2.0),
-        radius + 1.5,
-        Color32::from_black_alpha(100),
-    );
-
-    // 2. Outer knurled bezel ring
-    p.circle_filled(center, radius + 0.8, Color32::from_rgb(18, 20, 24));
-    p.circle_stroke(
-        center,
-        radius + 0.8,
-        Stroke::new(1.0_f32, Color32::from_rgb(52, 56, 64)),
-    );
-
-    // 3. Dial face body
-    p.circle_filled(center, radius, Color32::from_rgb(32, 35, 40));
-    // Ambient specular sheen (top-left)
-    p.circle_filled(
-        center - vec2(0.6, 0.8),
-        radius * 0.80,
-        Color32::from_rgb(46, 50, 56),
-    );
-    // Center indented cap
-    p.circle_filled(center, radius * 0.68, Color32::from_rgb(24, 26, 30));
-
-    // 4. Pointer notch (beveled white indicator line)
+    // Baked 12-flute Nord knob sprite rotated to match `norm` (-135° .. +135°, 0 = 12 o'clock).
     let a = a0 + sweep * norm;
-    let p_start = pos2(
-        center.x + a.cos() * (radius * 0.22),
-        center.y + a.sin() * (radius * 0.22),
-    );
-    let p_end = pos2(
-        center.x + a.cos() * (radius * 0.88),
-        center.y + a.sin() * (radius * 0.88),
-    );
-    // Subtle shadow behind pointer
-    p.line_segment(
-        [p_start + vec2(0.5, 0.5), p_end + vec2(0.5, 0.5)],
-        Stroke::new(2.8_f32, Color32::from_black_alpha(120)),
-    );
-    // Crisp white pointer
-    p.line_segment(
-        [p_start, p_end],
-        Stroke::new(2.4_f32, Color32::from_rgb(245, 248, 252)),
-    );
+    let rot_rad = a + std::f32::consts::FRAC_PI_2;
+    let assets = crate::baked::BakedPanelAssets::get_or_load(ui.ctx());
+    let sprite_size = vec2(radius * 3.8, radius * 3.8);
+    let tint = if resp.hovered() || resp.dragged() {
+        Color32::WHITE
+    } else {
+        Color32::from_gray(244)
+    };
+    if !assets.paint_sprite_rotated(p, "knob_pot_cap", center, sprite_size, rot_rad, tint) {
+        p.circle_filled(center, radius, Color32::from_rgb(32, 35, 40));
+    }
 
     if !name.is_empty() {
         label(

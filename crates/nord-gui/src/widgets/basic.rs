@@ -118,37 +118,29 @@ pub fn group_frame(p: &Painter, rect: Rect, title: &str) {
     );
 }
 
-/// Recessed 3D pill button with tactile bevel and depression. Returns `true` when clicked.
+/// Recessed 3D pill button with baked stadium-pill sprite & tactile depression. Returns `true` when clicked.
 pub fn nord_button(ui: &mut Ui, rect: Rect, id: &str, grey: bool) -> bool {
     let resp = ui.interact(rect, ui.id().with(id), Sense::click());
-    let p = ui.painter();
-    p.rect_filled(rect.expand(2.0), 3.5, BUTTON_BEZEL);
     let is_down = resp.is_pointer_button_down_on();
-    let base = if grey { BUTTON_GREY } else { BUTTON_BLACK };
-    let body = if is_down {
-        base.gamma_multiply(0.7)
-    } else {
-        base
+    let sprite_name = match (grey, is_down) {
+        (true, true) => "btn_grey_down",
+        (true, false) => "btn_grey_up",
+        (false, true) => "btn_black_down",
+        (false, false) => "btn_black_up",
     };
-    let btn_rect = if is_down {
-        rect.translate(vec2(0.0, 1.0))
+    let tint = if resp.hovered() && !is_down {
+        Color32::from_rgb(255, 255, 255)
     } else {
-        rect
+        Color32::from_gray(242)
     };
-    p.rect_filled(btn_rect, 3.0, body);
-    let pill = btn_rect.shrink2(vec2(btn_rect.width() * 0.16, btn_rect.height() * 0.22));
-    let hi = if grey {
-        Color32::from_gray(190)
-    } else {
-        Color32::from_gray(58)
-    };
-    p.rect_filled(pill, pill.height() * 0.5, body.gamma_multiply(0.85));
-    p.rect_stroke(
-        pill,
-        pill.height() * 0.5,
-        Stroke::new(1.2_f32, hi),
-        StrokeKind::Inside,
-    );
+    let assets = crate::baked::BakedPanelAssets::get_or_load(ui.ctx());
+    let p = ui.painter();
+    // Expand to include the baked 14px soft drop-shadow padding around the housing.
+    if !assets.paint_sprite(p, sprite_name, rect.expand(6.0), tint) {
+        p.rect_filled(rect.expand(2.0), 3.5, BUTTON_BEZEL);
+        let base = if grey { BUTTON_GREY } else { BUTTON_BLACK };
+        p.rect_filled(rect, 3.0, base);
+    }
     resp.clicked()
 }
 

@@ -75,43 +75,13 @@ pub fn layer_strip(ui: &mut Ui, rect: Rect, id: &str, level: &mut f32, active: &
         }
     }
 
-    // 3D Metallic Fader Cap
+    // Baked Pyramidal Fader Cap
     let cy = fader.bottom() - 8.0 - level.clamp(0.0, 1.0) * (fader.height() - 16.0);
-    let cap = Rect::from_center_size(pos2(fader.center().x, cy), vec2(24.0, 16.0));
-    // Soft drop shadow
-    p.rect_filled(
-        cap.translate(vec2(0.0, 2.5)),
-        3.0,
-        Color32::from_black_alpha(100),
-    );
-    // Cap metallic body
-    p.rect_filled(cap, 3.0, Color32::from_gray(160));
-    // Top bevel highlight
-    p.rect_filled(
-        Rect::from_min_size(cap.min, vec2(cap.width(), 3.5)),
-        3.0,
-        Color32::from_gray(220),
-    );
-    // Bottom bevel shadow
-    p.rect_filled(
-        Rect::from_min_size(pos2(cap.left(), cap.bottom() - 3.5), vec2(cap.width(), 3.5)),
-        3.0,
-        Color32::from_gray(115),
-    );
-    // Center grip line
-    p.line_segment(
-        [
-            pos2(cap.left() + 2.0, cap.center().y),
-            pos2(cap.right() - 2.0, cap.center().y),
-        ],
-        Stroke::new(2.0_f32, Color32::from_rgb(25, 28, 32)),
-    );
-    p.rect_stroke(
-        cap,
-        3.0,
-        Stroke::new(1.0_f32, Color32::from_gray(60)),
-        StrokeKind::Inside,
-    );
+    let cap = Rect::from_center_size(pos2(fader.center().x, cy), vec2(26.0, 20.0));
+    let assets = crate::baked::BakedPanelAssets::get_or_load(ui.ctx());
+    if !assets.paint_sprite(p, "fader_cap", cap, Color32::WHITE) {
+        p.rect_filled(cap, 3.0, Color32::from_gray(160));
+    }
 
     // ON LED centered above button
     led(
@@ -163,35 +133,19 @@ pub fn drawbar(ui: &mut Ui, rect: Rect, id: &str, value: &mut u8, white: bool) -
         StrokeKind::Inside,
     );
 
-    // Cap (3D molded handle)
+    // Cap (baked stepped L-profile Hammond drawbar handle)
     let cy = top + 8.0 + (*value as f32 / 8.0) * travel;
-    let cap = Rect::from_center_size(pos2(sx - 2.0, cy), vec2(26.0, 26.0));
-    // Soft cast shadow
-    p.rect_filled(
-        cap.translate(vec2(0.0, 3.0)),
-        3.0,
-        Color32::from_black_alpha(100),
-    );
-    let (c, edge, hi) = if white {
-        (DRAWBAR_WHITE, Color32::from_gray(140), Color32::WHITE)
+    let cap = Rect::from_center_size(pos2(sx - 2.0, cy), vec2(24.0, 56.0));
+    let sprite_name = if white {
+        "drawbar_white"
     } else {
-        (
-            DRAWBAR_BLACK,
-            Color32::from_gray(55),
-            Color32::from_gray(75),
-        )
+        "drawbar_black"
     };
-    p.rect_filled(cap, 3.0, c);
-    // Upper bevel highlight
-    p.rect_filled(
-        Rect::from_min_size(cap.min, vec2(cap.width(), 6.0)),
-        3.0,
-        hi,
-    );
-    // Center ergonomic finger grip notch
-    let grip = Rect::from_center_size(cap.center(), vec2(cap.width() - 4.0, 3.0));
-    p.rect_filled(grip, 1.0, c.gamma_multiply(if white { 0.85 } else { 0.6 }));
-    p.rect_stroke(cap, 3.0, Stroke::new(1.0_f32, edge), StrokeKind::Inside);
+    let assets = crate::baked::BakedPanelAssets::get_or_load(ui.ctx());
+    if !assets.paint_sprite(p, sprite_name, cap, Color32::WHITE) {
+        let c = if white { DRAWBAR_WHITE } else { DRAWBAR_BLACK };
+        p.rect_filled(cap, 3.0, c);
+    }
     changed
 }
 
