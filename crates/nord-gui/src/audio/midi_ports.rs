@@ -129,6 +129,7 @@ pub fn show(ui: &mut egui::Ui, ports: &MidiPorts) {
                 let mut pick = None;
                 if ui
                     .selectable_label(v.choice == MidiChoice::First, "First available")
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
                     .clicked()
                 {
                     pick = Some(MidiChoice::First);
@@ -136,6 +137,7 @@ pub fn show(ui: &mut egui::Ui, ports: &MidiPorts) {
                 for n in &v.names {
                     if ui
                         .selectable_label(v.choice == MidiChoice::Port(n.clone()), n)
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
                         .clicked()
                     {
                         pick = Some(MidiChoice::Port(n.clone()));
@@ -143,6 +145,7 @@ pub fn show(ui: &mut egui::Ui, ports: &MidiPorts) {
                 }
                 if ui
                     .selectable_label(v.choice == MidiChoice::Off, "Off")
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
                     .clicked()
                 {
                     pick = Some(MidiChoice::Off);
@@ -150,7 +153,9 @@ pub fn show(ui: &mut egui::Ui, ports: &MidiPorts) {
                 if let Some(c) = pick {
                     ports.select(c);
                 }
-            });
+            })
+            .response
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
         if ui
             .button("Rescan")
             .on_hover_text("Look for MIDI keyboards plugged in after the start")

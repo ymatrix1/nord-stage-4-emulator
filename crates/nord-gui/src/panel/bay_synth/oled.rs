@@ -29,6 +29,116 @@ pub(super) fn paint_oled(
 ) {
     sui.mark("synth.oled");
     let disp = glass_rect(o);
+    let dial_xs = [
+        rect_or_empty(DIAL_IDS[0], o).center().x,
+        rect_or_empty(DIAL_IDS[1], o).center().x,
+        rect_or_empty(DIAL_IDS[2], o).center().x,
+    ];
+    paint_oled_inner(p, disp, dial_xs, sui, sample, hint);
+}
+
+/// Draw the ARM-verified Synth OLED directly inside an arbitrary `disp` rect (used by `baked_view`),
+/// scaling typography and row heights proportionally so header, graphic, and soft tabs never overlap.
+pub(crate) fn paint_oled_in_rect(
+    p: &Painter,
+    disp: Rect,
+    sui: &mut SynthUi,
+    sample: Option<&str>,
+    hint: Option<&str>,
+) {
+    let dial_xs = [
+        disp.left() + disp.width() * 0.17,
+        disp.left() + disp.width() * 0.50,
+        disp.left() + disp.width() * 0.83,
+    ];
+    p.rect_filled(disp.expand(1.5), 2.5, Color32::from_rgb(10, 11, 13));
+    p.rect_filled(disp, 2.0, OLED_BG);
+    let p = p.with_clip_rect(disp);
+    let v = view_of(sui, sample);
+    let font_px = (disp.height() * 0.14).clamp(5.5, 8.5);
+    let tab_font_px = (font_px * 0.92).max(5.0);
+    let header_h = font_px + 2.5;
+    let soft_h = (font_px * 2.35 + 4.0).min(disp.height() * 0.42);
+
+    let title_clip = Rect::from_min_max(
+        disp.min,
+        pos2(disp.right() - font_px * 1.4, disp.top() + header_h),
+    );
+    p.with_clip_rect(title_clip.intersect(disp)).text(
+        disp.left_top() + vec2(3.0, 1.5),
+        Align2::LEFT_TOP,
+        hint.unwrap_or(v.title),
+        FontId::monospace(font_px),
+        FG,
+    );
+    p.text(
+        pos2(disp.right() - 3.0, disp.top() + 1.5),
+        Align2::RIGHT_TOP,
+        v.layer.to_string(),
+        FontId::monospace(font_px),
+        FG,
+    );
+    let sep_y = disp.top() + header_h;
+    p.line_segment(
+        [
+            pos2(disp.left() + 2.0, sep_y),
+            pos2(disp.right() - 2.0, sep_y),
+        ],
+        Stroke::new(0.8_f32, FG.gamma_multiply(0.6)),
+    );
+    let area = Rect::from_min_max(
+        pos2(disp.left() + 2.0, sep_y + 1.5),
+        pos2(
+            disp.right() - 2.0,
+            (disp.bottom() - soft_h).max(sep_y + 4.0),
+        ),
+    );
+    paint_graphic(&p.with_clip_rect(area), area, &v.graphic);
+
+    let val_y = disp.bottom() - soft_h + 1.0;
+    let tab_h = (tab_font_px + 2.5).max(7.5);
+    let tab_cy = disp.bottom() - tab_h * 0.5 - 1.5;
+    for (i, s) in v.soft.iter().enumerate() {
+        let Some(s) = s else { continue };
+        let x = dial_xs[i];
+        let col = if s.dim { FG.gamma_multiply(0.4) } else { FG };
+        let val_w = p
+            .layout_no_wrap(s.value.clone(), FontId::monospace(tab_font_px), col)
+            .rect
+            .width();
+        p.text(
+            pos2(soft_x(disp, x, val_w), val_y),
+            Align2::CENTER_TOP,
+            &s.value,
+            FontId::monospace(tab_font_px),
+            col,
+        );
+        let tab_col = col.gamma_multiply(0.85);
+        let w = p
+            .layout_no_wrap(s.label.to_string(), FontId::monospace(tab_font_px), tab_col)
+            .rect
+            .width();
+        let cx = soft_x(disp, x, w);
+        let tab = Rect::from_center_size(pos2(cx, tab_cy), vec2(w + 3.5, tab_h));
+        p.rect_filled(tab, 1.0, tab_col);
+        p.text(
+            tab.center(),
+            Align2::CENTER_CENTER,
+            s.label,
+            FontId::monospace(tab_font_px),
+            OLED_BG,
+        );
+    }
+}
+
+fn paint_oled_inner(
+    p: &Painter,
+    disp: Rect,
+    dial_xs: [f32; 3],
+    sui: &mut SynthUi,
+    sample: Option<&str>,
+    hint: Option<&str>,
+) {
     p.rect_filled(disp.expand(2.5), 3.0, Color32::from_rgb(10, 11, 13));
     p.rect_filled(disp, 2.0, OLED_BG);
     let p = p.with_clip_rect(disp);
@@ -65,7 +175,7 @@ pub(super) fn paint_oled(
     paint_graphic(&p, area, &v.graphic);
     for (i, s) in v.soft.iter().enumerate() {
         let Some(s) = s else { continue };
-        let x = rect_or_empty(DIAL_IDS[i], o).center().x;
+        let x = dial_xs[i];
         let col = if s.dim { FG.gamma_multiply(0.4) } else { FG };
         soft_text(&p, disp, x, disp.bottom() - 21.5, &s.value, col);
         // VERIFIED (research note s16.4): the labels are small inverted tabs, not outlined boxes.

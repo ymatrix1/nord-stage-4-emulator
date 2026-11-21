@@ -57,11 +57,17 @@ pub struct BakedSize {
 pub struct BakedKnob {
     pub index: usize,
     pub encoder: bool,
+    #[serde(default = "default_half")]
+    pub default_value: f32,
     pub x: f32,
     pub y: f32,
     pub w: f32,
     pub h: f32,
     pub px: [i32; 4],
+}
+
+fn default_half() -> f32 {
+    0.5
 }
 
 /// Pill button metadata from `panel_layout.json`.
@@ -70,6 +76,24 @@ pub struct BakedButton {
     pub index: usize,
     pub variant: String,
     pub vertical: bool,
+    #[serde(default)]
+    pub toggle_led: Option<String>,
+    #[serde(default)]
+    pub toggle_pair: Option<String>,
+    #[serde(default)]
+    pub cycle_leds: Option<String>,
+    #[serde(default)]
+    pub allow_off: bool,
+    #[serde(default)]
+    pub cycle_3: Option<String>,
+    #[serde(default)]
+    pub prog_btn: Option<usize>,
+    #[serde(default)]
+    pub split_btn: bool,
+    #[serde(default)]
+    pub fx_focus: Option<String>,
+    #[serde(default)]
+    pub cycle_btn: Option<String>,
     pub x: f32,
     pub y: f32,
     pub w: f32,
@@ -82,7 +106,33 @@ pub struct BakedButton {
 pub struct BakedLed {
     pub index: usize,
     pub id: Option<String>,
+    #[serde(default)]
+    pub on: bool,
+    #[serde(default = "default_led_color")]
+    pub color: String,
+    #[serde(default)]
+    pub prog_led: Option<usize>,
     pub split: bool,
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub px: [i32; 4],
+}
+
+fn default_led_color() -> String {
+    "red".to_string()
+}
+
+/// Triangular selector LED metadata from `panel_layout.json`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct BakedTri {
+    pub index: usize,
+    pub group: String,
+    pub tri_idx: usize,
+    pub count: usize,
+    pub dir: String,
+    pub on: bool,
     pub x: f32,
     pub y: f32,
     pub w: f32,
@@ -110,8 +160,14 @@ pub struct BakedPanelLayout {
     pub knobs: Vec<BakedKnob>,
     pub buttons: Vec<BakedButton>,
     pub faders: Vec<BakedRect>,
+    #[serde(default)]
+    pub fader_ladders: Vec<Vec<BakedRect>>,
     pub drawbars: Vec<BakedRect>,
+    #[serde(default)]
+    pub drawbar_ladders: Vec<Vec<BakedRect>>,
     pub leds: Vec<BakedLed>,
+    #[serde(default)]
+    pub tris: Vec<BakedTri>,
     pub oleds: BTreeMap<String, BakedRect>,
     pub wheels: BTreeMap<String, BakedRect>,
     pub keys: Vec<BakedKey>,
@@ -203,6 +259,46 @@ impl BakedPanelAssets {
                 pos2(rect.left() + tile.u_end * rect.width(), rect.bottom()),
             );
             painter.image(tile.texture.id(), tile_rect, full_uv, Color32::WHITE);
+        }
+    }
+
+    /// Re-paint a normalized `[0..1]` sub-region of the static plate (e.g. an unpressed black key
+    /// on top of an adjacent pressed white key).
+    pub fn paint_plate_region(
+        &self,
+        painter: &Painter,
+        plate_rect: Rect,
+        nx: f32,
+        ny: f32,
+        nw: f32,
+        nh: f32,
+    ) {
+        let nx0 = nx.clamp(0.0, 1.0);
+        let nx1 = (nx + nw).clamp(0.0, 1.0);
+        let ny0 = ny.clamp(0.0, 1.0);
+        let ny1 = (ny + nh).clamp(0.0, 1.0);
+        for tile in &self.plate_tiles {
+            let ix0 = nx0.max(tile.u_start);
+            let ix1 = nx1.min(tile.u_end);
+            if ix1 <= ix0 {
+                continue;
+            }
+            let span = (tile.u_end - tile.u_start).max(1e-6);
+            let uv = Rect::from_min_max(
+                pos2((ix0 - tile.u_start) / span, ny0),
+                pos2((ix1 - tile.u_start) / span, ny1),
+            );
+            let dst = Rect::from_min_max(
+                pos2(
+                    plate_rect.left() + ix0 * plate_rect.width(),
+                    plate_rect.top() + ny0 * plate_rect.height(),
+                ),
+                pos2(
+                    plate_rect.left() + ix1 * plate_rect.width(),
+                    plate_rect.top() + ny1 * plate_rect.height(),
+                ),
+            );
+            painter.image(tile.texture.id(), dst, uv, Color32::WHITE);
         }
     }
 

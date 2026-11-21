@@ -35,10 +35,13 @@ fn dropdown<T: PartialEq + Copy>(
         .selected_text(shown)
         .show_ui(ui, |ui| {
             for (v, name, hint) in choices {
-                ui.selectable_value(value, *v, *name).on_hover_text(*hint);
+                ui.selectable_value(value, *v, *name)
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .on_hover_text(*hint);
             }
         })
         .response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text(sw.tooltip());
 }
 
@@ -150,8 +153,9 @@ pub fn show(ui: &mut egui::Ui, o: &mut FirmwareOptions) {
                     f.size = 12.5;
                 }
             }
-            style.spacing.item_spacing.y = 3.0;
-            style.spacing.interact_size.y = 18.0;
+            style.spacing.item_spacing.y = 4.0;
+            style.spacing.interact_size.y = 21.0;
+            style.spacing.button_padding = egui::vec2(7.0, 2.0);
             ui.horizontal(|ui| presets_and_status(ui, o));
             organ_row(ui, o);
             piano_row(ui, o);

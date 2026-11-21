@@ -16,6 +16,7 @@ use nord_core::render_opts::FirmwareOptions;
 use std::path::{Path, PathBuf};
 
 pub mod bar;
+pub mod cards;
 pub mod choices;
 pub mod info;
 pub mod presets;
@@ -130,6 +131,18 @@ impl FirmwarePanelState {
     pub fn show_bar(&mut self, ui: &mut egui::Ui, audio: &AudioHandle) -> bool {
         let before = self.opts;
         bar::show(ui, &mut self.opts);
+        let changed = before != self.opts;
+        if changed {
+            self.push(audio);
+        }
+        changed
+    }
+
+    /// Organized per-engine card layout for the Studio Settings dialog (no horizontal scrolling).
+    /// Changes are pushed to the audio thread immediately.
+    pub fn show_organized(&mut self, ui: &mut egui::Ui, audio: &AudioHandle) -> bool {
+        let before = self.opts;
+        cards::show(ui, &mut self.opts);
         let changed = before != self.opts;
         if changed {
             self.push(audio);

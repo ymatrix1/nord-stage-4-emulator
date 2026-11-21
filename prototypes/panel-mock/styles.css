@@ -310,14 +310,14 @@ html, body {
    Left Pitch Stick & Mod Wheel Zone
    ========================================================================== */
 .zone-pitch-mod {
-  width: 295px;
+  width: 124px;
   flex-shrink: 0;
   position: relative;
 }
 
 .pitch-stick-well {
   position: absolute;
-  left: 145px;
+  left: 16px;
   top: 76px;
   width: 58px;
   height: 30px;
@@ -358,7 +358,7 @@ html, body {
 
 .mod-wheel-well {
   position: absolute;
-  left: 224px;
+  left: 78px;
   top: 132px;
   width: 24px;
   height: 98px;
@@ -412,24 +412,24 @@ html, body {
    Right Brand Zone ("nord stage 4")
    ========================================================================== */
 .zone-brand {
-  flex: 1;
-  min-width: 250px;
+  flex: 0 0 18px;
+  min-width: 18px;
   position: relative;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 34px;
 }
 
 .brand-lockup {
-  text-align: center;
+  position: absolute;
+  top: -15px;
+  right: 16px;
+  white-space: nowrap;
+  text-align: right;
   color: rgba(247, 245, 245, 0.94);
   text-shadow: 0 1px 1px rgba(45, 4, 8, 0.55);
 }
 
 .nord-wordmark {
   font-family: "Century Gothic", "Trebuchet MS", "Segoe UI", sans-serif;
-  font-size: 38px;
+  font-size: 16px;
   line-height: 1;
   letter-spacing: -0.02em;
 }
@@ -2133,4 +2133,20 @@ body.bake-sprite-stage .sprite-stage {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Strip outer drop-shadows from rotating knob sprites so the shadow stays fixed at runtime. */
+body.bake-sprite-stage .knob-body {
+  box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.18) !important;
+}
+
+body.bake-sprite-stage .knob-body.encoder {
+  box-shadow:
+    0 0 0 3.5px #a8b6c4,
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Strip static dimple from mod_wheel_drum sprite so baked_view.rs animates the dimple cleanly. */
+body.bake-sprite-stage .mod-wheel-drum::after {
+  display: none !important;
 }

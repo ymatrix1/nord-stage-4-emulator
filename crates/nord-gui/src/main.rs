@@ -93,6 +93,7 @@ struct Stage4App {
     headless_load: nord_gui::headless_load::HeadlessLoad,
     firmware: FirmwarePanelState,
     os_update: nord_gui::os_update_panel::OsUpdatePanel,
+    debug_dialog: nord_gui::debug_dialog::DebugDialogState,
 }
 
 impl Stage4App {
@@ -102,8 +103,13 @@ impl Stage4App {
         let active_keys = Arc::new(std::array::from_fn(|_| AtomicBool::new(false)));
         let audio_handle = start_audio_and_midi(Arc::clone(&active_keys));
 
+        let state = Stage4PanelState {
+            use_baked_plate: true,
+            ..Default::default()
+        };
+
         let mut app = Self {
-            state: Stage4PanelState::default(),
+            state,
             library: BackupLibraryState::new(),
             audio_handle,
             active_keys,
@@ -119,6 +125,7 @@ impl Stage4App {
                 nord_core::user_config::default_config_path(),
                 std::env::var("NS4_WAVE_TABLES").ok().as_deref(),
             ),
+            debug_dialog: nord_gui::debug_dialog::DebugDialogState::default(),
         };
         app.firmware.push(&app.audio_handle);
         if let Some(plan) = &app.shot {
@@ -182,6 +189,14 @@ impl Stage4App {
 }
 
 impl eframe::App for Stage4App {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        if self.state.use_baked_plate && self.shot.is_none() {
+            egui::Rgba::TRANSPARENT.to_array()
+        } else {
+            egui::Rgba::from(nord_gui::style::CHASSIS_RED).to_array()
+        }
+    }
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         eprintln!("[Audio] {}", self.audio_handle.meter().snapshot().summary());
     }
@@ -240,53 +255,247 @@ impl eframe::App for Stage4App {
         }
 
         if self.shot.is_none() {
-            egui::TopBottomPanel::top("ns4_library_bar")
-                .frame(
-                    egui::Frame::NONE
-                        .fill(egui::Color32::from_rgb(36, 12, 14))
-                        .inner_margin(egui::Margin::symmetric(10, 4)),
-                )
-                .show(ctx, |ui| {
-                    self.library.render_top_bar(ui, &mut self.state);
-                });
-
             let before = self.firmware.opts;
-            egui::TopBottomPanel::top("ns4_firmware_bar").show(ctx, |ui| {
-                self.firmware.show_bar(ui, &self.audio_handle);
-            });
-            egui::TopBottomPanel::top("ns4_os_update_bar").show(ctx, |ui| {
-                self.os_update.show_bar(ui);
-            });
-            self.os_update.show_window(ctx);
+            nord_gui::debug_dialog::show_debug_dialog(
+                ctx,
+                &mut self.debug_dialog,
+                &mut self.state,
+                &mut self.library,
+                &mut self.firmware,
+                &mut self.os_update,
+                &self.audio_handle,
+            );
             if before != self.firmware.opts {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Title(firmware_panel::window_title(
                     &self.firmware.opts,
                 )));
             }
-
-            egui::TopBottomPanel::bottom("ns4_computer_kb_bar").show(ctx, |ui| {
-                nord_gui::panel::computer_kb_bar::show_bar(ui, &mut self.state.computer_kb);
-                if let Some(ports) = self.audio_handle.midi_ports() {
-                    nord_gui::audio::midi_ports::show(ui, ports);
-                }
-                nord_gui::audio::meter_ui::show(ui, self.audio_handle.meter());
-            });
-
             self.library.handle_keys(ctx);
             self.library
                 .render_drawer(ctx, &mut self.state, &self.audio_handle);
         }
 
-        self.library.sync_piano_ui(&mut self.state);
-        egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(nord_gui::style::CHASSIS_RED))
-            .show(ctx, |ui| {
-                egui::ScrollArea::both()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        render_stage4_panel(ui, &mut self.state, &self.audio_handle);
+        // Transparent floating top bar ABOVE the keyboard, aligned to the keyboard's left/right edges
+        if self.shot.is_none() {
+            let screen = ctx.screen_rect();
+            let plate_rect = ctx
+                .data(|d| d.get_temp::<egui::Rect>(egui::Id::new("ns4_baked_plate_rect")))
+                .filter(|r| r.is_positive() && r.width() > 100.0)
+                .unwrap_or(screen);
+            let left_pad = (plate_rect.left() - screen.left()).max(0.0);
+            let bar_w = plate_rect.width().min(screen.width() - left_pad).max(200.0);
+
+            egui::TopBottomPanel::top("ns4_floating_bar")
+                .exact_height(22.0)
+                .show_separator_line(false)
+                .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
+                .show(ctx, |ui| {
+                    ui.horizontal_centered(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        if left_pad > 0.0 {
+                            ui.add_space(left_pad);
+                        }
+                        ui.allocate_ui(egui::vec2(bar_w, 18.0), |ui| {
+                            ui.spacing_mut().item_spacing.x = 5.0;
+                            ui.spacing_mut().button_padding = egui::vec2(7.0, 1.5);
+                            ui.horizontal(|ui| {
+                                let hw_pill = |ui: &mut egui::Ui, label: &str| {
+                                    let rt = egui::RichText::new(label)
+                                        .size(9.0)
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(236, 240, 244));
+                                    ui.add(
+                                        egui::Button::new(rt)
+                                            .fill(egui::Color32::from_rgba_unmultiplied(
+                                                20, 22, 26, 200,
+                                            ))
+                                            .stroke(egui::Stroke::new(
+                                                0.8,
+                                                egui::Color32::from_rgba_unmultiplied(
+                                                    255, 255, 255, 45,
+                                                ),
+                                            ))
+                                            .corner_radius(4.0),
+                                    )
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                };
+                                if hw_pill(ui, "OPEN .NS4B").clicked() {
+                                    self.debug_dialog
+                                        .open_tab(nord_gui::debug_dialog::DebugTab::Library);
+                                }
+                                let dbg_label = if self.debug_dialog.open {
+                                    "HIDE DEBUG"
+                                } else {
+                                    "DEBUG"
+                                };
+                                if hw_pill(ui, dbg_label).clicked() {
+                                    if self.debug_dialog.open {
+                                        self.debug_dialog.open = false;
+                                    } else {
+                                        let tab = self.debug_dialog.tab;
+                                        self.debug_dialog.open_tab(tab);
+                                    }
+                                }
+                                if hw_pill(ui, "? HELP").clicked() {
+                                    self.debug_dialog
+                                        .open_tab(nord_gui::debug_dialog::DebugTab::Guide);
+                                }
+
+                                // Draggable empty space between left pills and right window icons
+                                let drag_w = (ui.available_width() - 52.0).max(12.0);
+                                let (_, drag_resp) = ui.allocate_exact_size(
+                                    egui::vec2(drag_w, 16.0),
+                                    egui::Sense::click_and_drag(),
+                                );
+                                if drag_resp.hovered() {
+                                    ctx.set_cursor_icon(egui::CursorIcon::Grab);
+                                }
+                                if drag_resp.is_pointer_button_down_on() && drag_resp.dragged() {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                                }
+
+                                // Vector Minimize button
+                                let (min_rect, min_resp) = ui.allocate_exact_size(
+                                    egui::vec2(22.0, 16.0),
+                                    egui::Sense::click(),
+                                );
+                                let min_resp =
+                                    min_resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+                                let min_bg = if min_resp.hovered() {
+                                    egui::Color32::from_rgba_unmultiplied(46, 50, 58, 230)
+                                } else {
+                                    egui::Color32::from_rgba_unmultiplied(20, 22, 26, 200)
+                                };
+                                ui.painter().rect_filled(min_rect, 4.0, min_bg);
+                                ui.painter().rect_stroke(
+                                    min_rect,
+                                    4.0,
+                                    egui::Stroke::new(
+                                        0.8,
+                                        egui::Color32::from_rgba_unmultiplied(255, 255, 255, 45),
+                                    ),
+                                    egui::StrokeKind::Inside,
+                                );
+                                ui.painter().line_segment(
+                                    [
+                                        egui::pos2(
+                                            min_rect.center().x - 4.5,
+                                            min_rect.center().y + 1.5,
+                                        ),
+                                        egui::pos2(
+                                            min_rect.center().x + 4.5,
+                                            min_rect.center().y + 1.5,
+                                        ),
+                                    ],
+                                    egui::Stroke::new(1.5, egui::Color32::from_rgb(236, 240, 244)),
+                                );
+                                if min_resp.clicked() {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                                }
+
+                                // Vector Close button
+                                let (cls_rect, cls_resp) = ui.allocate_exact_size(
+                                    egui::vec2(22.0, 16.0),
+                                    egui::Sense::click(),
+                                );
+                                let cls_resp =
+                                    cls_resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+                                let cls_bg = if cls_resp.hovered() {
+                                    egui::Color32::from_rgb(184, 37, 42)
+                                } else {
+                                    egui::Color32::from_rgba_unmultiplied(20, 22, 26, 200)
+                                };
+                                ui.painter().rect_filled(cls_rect, 4.0, cls_bg);
+                                ui.painter().rect_stroke(
+                                    cls_rect,
+                                    4.0,
+                                    egui::Stroke::new(
+                                        0.8,
+                                        egui::Color32::from_rgba_unmultiplied(255, 255, 255, 45),
+                                    ),
+                                    egui::StrokeKind::Inside,
+                                );
+                                let c = cls_rect.center();
+                                let d = 3.8;
+                                let stroke =
+                                    egui::Stroke::new(1.5, egui::Color32::from_rgb(236, 240, 244));
+                                ui.painter().line_segment(
+                                    [c + egui::vec2(-d, -d), c + egui::vec2(d, d)],
+                                    stroke,
+                                );
+                                ui.painter().line_segment(
+                                    [c + egui::vec2(d, -d), c + egui::vec2(-d, d)],
+                                    stroke,
+                                );
+                                if cls_resp.clicked() {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                }
+                            });
+                        });
                     });
+                });
+        }
+
+        self.library.sync_piano_ui(&mut self.state);
+        let bg_fill = if self.state.use_baked_plate {
+            egui::Color32::TRANSPARENT
+        } else {
+            nord_gui::style::CHASSIS_RED
+        };
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(bg_fill))
+            .show(ctx, |ui| {
+                render_stage4_panel(ui, &mut self.state, &self.audio_handle);
             });
+
+        // Borderless window resize handles (right edge, bottom edge, bottom-right corner)
+        if self.shot.is_none() {
+            let screen = ctx.screen_rect();
+
+            // Borderless window resize handles (right edge, bottom edge, bottom-right corner)
+            let edge = 8.0;
+            let corner_rect = egui::Rect::from_min_max(
+                egui::pos2(screen.right() - 14.0, screen.bottom() - 14.0),
+                screen.right_bottom(),
+            );
+            let right_rect = egui::Rect::from_min_max(
+                egui::pos2(screen.right() - edge, screen.top() + 18.0),
+                egui::pos2(screen.right(), screen.bottom() - 14.0),
+            );
+            let bottom_rect = egui::Rect::from_min_max(
+                egui::pos2(screen.left() + 14.0, screen.bottom() - edge),
+                egui::pos2(screen.right() - 14.0, screen.bottom()),
+            );
+            let handle_resize =
+                |r: egui::Rect, icon: egui::CursorIcon, dir: egui::ResizeDirection| {
+                    let (hovered, pressed) = ctx.input(|i| {
+                        let h = i.pointer.hover_pos().is_some_and(|p| r.contains(p));
+                        let p = h && i.pointer.primary_pressed();
+                        (h, p)
+                    });
+                    if hovered {
+                        ctx.set_cursor_icon(icon);
+                    }
+                    if pressed {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
+                    }
+                };
+            handle_resize(
+                corner_rect,
+                egui::CursorIcon::ResizeNwSe,
+                egui::ResizeDirection::SouthEast,
+            );
+            handle_resize(
+                right_rect,
+                egui::CursorIcon::ResizeHorizontal,
+                egui::ResizeDirection::East,
+            );
+            handle_resize(
+                bottom_rect,
+                egui::CursorIcon::ResizeVertical,
+                egui::ResizeDirection::South,
+            );
+        }
 
         // Screenshot capture: F12 (whole window) or the CLI plan (section crop at a fixed zoom).
         if let Some(plan) = &self.shot {
@@ -349,6 +558,89 @@ impl eframe::App for Stage4App {
     }
 }
 
+fn build_app_icon() -> egui::IconData {
+    let size = 64usize;
+    let mut rgba = vec![0u8; size * size * 4];
+    for y in 0..size {
+        for x in 0..size {
+            let idx = (y * size + x) * 4;
+            // Rounded square mask (radius = 12 px)
+            let dx = if x < 12 {
+                12.0 - x as f32
+            } else if x >= size - 12 {
+                x as f32 - (size - 13) as f32
+            } else {
+                0.0
+            };
+            let dy = if y < 12 {
+                12.0 - y as f32
+            } else if y >= size - 12 {
+                y as f32 - (size - 13) as f32
+            } else {
+                0.0
+            };
+            let dist = (dx * dx + dy * dy).sqrt();
+            if dist > 12.2 {
+                continue;
+            }
+            let alpha = ((12.2 - dist).clamp(0.0, 1.0) * 255.0) as u8;
+            // Crimson chassis gradient
+            let t = y as f32 / size as f32;
+            let mut r = (182.0 - t * 42.0) as u8;
+            let mut g = (30.0 - t * 10.0) as u8;
+            let mut b = (36.0 - t * 10.0) as u8;
+
+            // Top slate control strip (y 14..32, x 10..54)
+            if (14..32).contains(&y) && (10..54).contains(&x) {
+                r = 48;
+                g = 58;
+                b = 68;
+                // Glowing red LED dots at y 19..22
+                if (19..23).contains(&y) && ((15..19).contains(&x) || (30..34).contains(&x)) {
+                    r = 255;
+                    g = 52;
+                    b = 52;
+                }
+                // Glowing green LED dot at x 45..49
+                if (19..23).contains(&y) && (45..49).contains(&x) {
+                    r = 92;
+                    g = 230;
+                    b = 46;
+                }
+            }
+            // Piano keybed along bottom (y 36..56, x 8..56)
+            if (36..56).contains(&y) && (8..56).contains(&x) {
+                let kx = x - 8;
+                let key_slot = kx % 8;
+                let is_black =
+                    y < 48 && (5..8).contains(&key_slot) && (kx / 8) != 2 && (kx / 8) != 5;
+                if is_black {
+                    r = 20;
+                    g = 22;
+                    b = 26;
+                } else if key_slot == 0 {
+                    r = 165;
+                    g = 162;
+                    b = 155;
+                } else {
+                    r = 246;
+                    g = 244;
+                    b = 238;
+                }
+            }
+            rgba[idx] = r;
+            rgba[idx + 1] = g;
+            rgba[idx + 2] = b;
+            rgba[idx + 3] = alpha;
+        }
+    }
+    egui::IconData {
+        rgba,
+        width: size as u32,
+        height: size as u32,
+    }
+}
+
 fn main() -> eframe::Result<()> {
     let argv: Vec<String> = std::env::args().collect();
     // the saved Nord OS update file fills NS4_WAVE_TABLES (env and flags still win), before any thread
@@ -393,8 +685,11 @@ wrote {}",
     let cli = parse_cli_args(argv);
 
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([1900.0, 680.0])
-        .with_min_inner_size([960.0, 360.0])
+        .with_decorations(false)
+        .with_transparent(true)
+        .with_icon(build_app_icon())
+        .with_inner_size([1760.0, 436.0])
+        .with_min_inner_size([960.0, 250.0])
         .with_title(firmware_panel::window_title(&cli.firmware));
     if cli.screenshot_target.is_some() {
         // Non-intrusive: off-screen, no focus, no taskbar entry, and a hard timeout.
@@ -424,6 +719,17 @@ wrote {}",
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_app_icon_is_valid_64x64_rgba() {
+        let icon = build_app_icon();
+        assert_eq!(icon.width, 64);
+        assert_eq!(icon.height, 64);
+        assert_eq!(icon.rgba.len(), 64 * 64 * 4);
+        // Center pixel is opaque crimson/slate, corner pixel is transparent.
+        assert_eq!(icon.rgba[3], 0);
+        assert_eq!(icon.rgba[(32 * 64 + 32) * 4 + 3], 255);
+    }
 
     #[test]
     fn test_screenshot_command_exists() {

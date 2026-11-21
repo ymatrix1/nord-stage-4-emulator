@@ -3,6 +3,7 @@
 //! Spec: `docs/specs/visual-style-and-panel.md`. One file per bay (Phase 6b B4).
 
 mod aux_flag;
+pub mod baked_view;
 mod bay_effects;
 mod bay_master;
 mod bay_organ;
@@ -120,6 +121,10 @@ pub fn render_stage4_panel(ui: &mut Ui, state: &mut Stage4PanelState, audio_hand
     let ctx = ui.ctx().clone();
     // Before the shortcut handlers: it publishes whether the playing keys are claimed.
     computer_kb::drive(&ctx, state, audio_handle);
+    if state.use_baked_plate {
+        baked_view::render_baked_panel(ui, state, audio_handle);
+        return;
+    }
     let cursor = ui.cursor().min;
     state.view.handle_keys(&ctx, state.view.origin(cursor));
     view::apply_zoom(&ctx, &state.view);

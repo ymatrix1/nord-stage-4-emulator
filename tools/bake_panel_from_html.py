@@ -301,7 +301,11 @@ def _wait_cdp_ws_url(port: int, timeout_s: float = 15.0) -> str:
             with urllib.request.urlopen(url, timeout=1.0) as resp:
                 targets = json.loads(resp.read().decode("utf-8"))
                 for t in targets:
-                    if t.get("type") == "page" and "webSocketDebuggerUrl" in t:
+                    if (
+                        t.get("type") == "page"
+                        and "127.0.0.1" in t.get("url", "")
+                        and "webSocketDebuggerUrl" in t
+                    ):
                         return str(t["webSocketDebuggerUrl"])
         except OSError:
             pass
@@ -338,6 +342,8 @@ def bake_from_html(
                 "--headless=new",
                 "--disable-gpu",
                 "--no-sandbox",
+                "--no-first-run",
+                "--no-default-browser-check",
                 f"--remote-debugging-port={cdp_port}",
                 f"--user-data-dir={profile_dir}",
                 "--window-size=2800,900",

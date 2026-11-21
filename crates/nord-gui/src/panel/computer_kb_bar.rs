@@ -12,7 +12,7 @@ fn octave_label(octave: i8) -> String {
 
 /// The "Computer keyboard" control group (enable, base octave, velocity, pedal, key legend).
 pub fn show_bar(ui: &mut Ui, kb: &mut ComputerKeyboard) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.checkbox(&mut kb.enabled, "Computer keyboard")
             .on_hover_text(
             "Play with the PC keys: A S D F G H J K L ; ' white, W E T Y U O P black (physical \
@@ -20,8 +20,9 @@ pub fn show_bar(ui: &mut Ui, kb: &mut ComputerKeyboard) {
                  the P / Z / L shortcuts need Shift.",
         );
         ui.add_enabled_ui(kb.enabled, |ui| {
+            let step_sz = egui::vec2(26.0, ui.spacing().interact_size.y);
             if ui
-                .small_button("-")
+                .add(egui::Button::new("-").min_size(step_sz))
                 .on_hover_text("Octave down (Z)")
                 .clicked()
             {
@@ -29,7 +30,7 @@ pub fn show_bar(ui: &mut Ui, kb: &mut ComputerKeyboard) {
             }
             ui.label(format!("Octave {}", octave_label(kb.octave)));
             if ui
-                .small_button("+")
+                .add(egui::Button::new("+").min_size(step_sz))
                 .on_hover_text("Octave up (X)")
                 .clicked()
             {

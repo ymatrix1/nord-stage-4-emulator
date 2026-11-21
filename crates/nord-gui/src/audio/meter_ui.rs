@@ -62,7 +62,7 @@ pub fn show(ui: &mut egui::Ui, meter: &AudioMeter) {
                 s.worst_drain_ms,
                 s.worst_publish_ms
             ));
-        if ui.small_button("Reset").clicked() {
+        if ui.button("Reset").clicked() {
             meter.request_reset();
         }
     });

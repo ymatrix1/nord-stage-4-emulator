@@ -99,6 +99,170 @@ impl BackupLibraryState {
         l
     }
 
+    /// Renders the `.ns4b` archive browser controls and scrollable preset list inline
+    /// (shared by the docked drawer and the separate Studio Settings dialog).
+    pub fn render_browser_inline(
+        &mut self,
+        ui: &mut egui::Ui,
+        panel: &mut Stage4PanelState,
+        audio: &AudioHandle,
+    ) {
+        ui.horizontal(|ui| {
+            ui.label("Backup (.ns4b):");
+            let input_w = (ui.available_width() - 72.0).max(160.0);
+            let field_h = ui.spacing().interact_size.y;
+            let edit = ui.add(
+                egui::TextEdit::singleline(&mut self.path_input)
+                    .desired_width(input_w)
+                    .min_size(egui::vec2(input_w, field_h))
+                    .margin(egui::Margin::symmetric(8, 5))
+                    .vertical_align(egui::Align::Center)
+                    .hint_text("Path to .ns4b backup (or drag-and-drop file)"),
+            );
+            let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if ui
+                .button("Open")
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .clicked()
+                || enter
+            {
+                let p = PathBuf::from(self.path_input.trim().trim_matches('"'));
+                if let Err(err) = self.open_backup_path(&p) {
+                    self.error_message = Some(err);
+                }
+            }
+        });
+
+        if let Some(err) = &self.error_message {
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(err)
+                    .small()
+                    .color(Color32::from_rgb(248, 113, 113)),
+            );
+        }
+
+        if let Some(ver) = &self.manifest_summary {
+            ui.add_space(4.0);
+            ui.small(format!(
+                "Archive OS: {ver}  •  Programs: {}  •  Pianos: {}  •  Samples: {}",
+                self.programs.len(),
+                self.pianos.len(),
+                self.samples.len()
+            ));
+        }
+
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(
+                &mut self.active_tab,
+                BackupTab::Programs,
+                format!("Programs ({})", self.programs.len()),
+            )
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+            ui.selectable_value(
+                &mut self.active_tab,
+                BackupTab::Pianos,
+                format!("Pianos ({})", self.pianos.len()),
+            )
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+            ui.selectable_value(
+                &mut self.active_tab,
+                BackupTab::Samples,
+                format!("Samples ({})", self.samples.len()),
+            )
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+            ui.separator();
+            ui.checkbox(
+                &mut panel.sync_knobs_on_program_load,
+                "Sync Knobs on Preset",
+            );
+        });
+
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Filter:");
+            let field_h = ui.spacing().interact_size.y;
+            ui.add(
+                egui::TextEdit::singleline(&mut self.filter)
+                    .desired_width(280.0)
+                    .min_size(egui::vec2(280.0, field_h))
+                    .margin(egui::Margin::symmetric(8, 5))
+                    .vertical_align(egui::Align::Center)
+                    .hint_text("Search preset, piano, or sample..."),
+            );
+            if !self.filter.is_empty() && ui.button("Clear").clicked() {
+                self.filter.clear();
+            }
+            if self.active_tab == BackupTab::Pianos {
+                ui.label("Target:");
+                ui.selectable_value(&mut self.piano_slot_b, false, "Piano A");
+                ui.selectable_value(&mut self.piano_slot_b, true, "Piano B");
+            } else if self.active_tab == BackupTab::Samples {
+                ui.label("Target:");
+                ui.selectable_value(&mut self.synth_layer_idx, 0, "Synth A");
+                ui.selectable_value(&mut self.synth_layer_idx, 1, "Synth B");
+                ui.selectable_value(&mut self.synth_layer_idx, 2, "Synth C");
+            }
+            if self.active_tab != BackupTab::Programs {
+                ui.checkbox(&mut self.merge_into_program, "Merge into current program")
+                    .on_hover_text(
+                        "Off: the sound loads into a fresh Init Program (other sections, effects and levels reset). On: only this layer's sound changes.",
+                    );
+            }
+        });
+
+        ui.add_space(6.0);
+        ui.separator();
+        let query = self.filter.trim().to_ascii_lowercase();
+        let mut selected_program: Option<String> = None;
+        let mut selected_piano: Option<String> = None;
+        let mut selected_sample: Option<String> = None;
+
+        egui::ScrollArea::vertical()
+            .max_height(240.0)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                let items: &[String] = match self.active_tab {
+                    BackupTab::Programs => &self.programs,
+                    BackupTab::Pianos => &self.pianos,
+                    BackupTab::Samples => &self.samples,
+                };
+                if items.is_empty() {
+                    ui.weak("No entries loaded. Open a .ns4b backup above or drag-and-drop .ns4b / .ns4p / .npno / .nsmp4 onto the window.");
+                    return;
+                }
+                for entry in items {
+                    if !query.is_empty() && !entry.to_ascii_lowercase().contains(&query) {
+                        continue;
+                    }
+                    if ui
+                        .selectable_label(false, entry)
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .clicked()
+                    {
+                        match self.active_tab {
+                            BackupTab::Programs => selected_program = Some(entry.clone()),
+                            BackupTab::Pianos => selected_piano = Some(entry.clone()),
+                            BackupTab::Samples => selected_sample = Some(entry.clone()),
+                        }
+                    }
+                }
+            });
+
+        if let Some(p) = selected_program {
+            self.load_program_entry(&p, panel, audio);
+        }
+        if let Some(p) = selected_piano {
+            self.init_before_load(InitTarget::Piano(self.piano_slot_b), panel, audio);
+            self.request_piano_entry(&p);
+        }
+        if let Some(s) = selected_sample {
+            self.init_before_load(InitTarget::Synth(self.synth_layer_idx.min(2)), panel, audio);
+            self.request_sample_entry(&s);
+        }
+    }
+
     /// Renders the docked `.ns4b` archive browser side panel, sliding in and out with
     /// `drawer_open` (egui's animated side panel; it takes no space once fully closed).
     pub fn render_drawer(
@@ -120,138 +284,24 @@ impl BackupLibraryState {
             .show_animated(ctx, self.drawer_open, |ui| {
                 ui.horizontal(|ui| {
                     ui.strong(
-                        RichText::new("Nord Stage 4 Backup & Sample Library")
-                            .color(Color32::WHITE),
+                        RichText::new("Nord Stage 4 Backup & Sample Library").color(Color32::WHITE),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("X").on_hover_text("Close Library").clicked() {
+                        if ui
+                            .small_button("X")
+                            .on_hover_text("Close Library")
+                            .clicked()
+                        {
                             self.drawer_open = false;
                         }
                         ui.checkbox(&mut self.auto_close_on_load, "Auto-close")
-                            .on_hover_text("Close library panel after selecting a preset or sample");
-                    });
-                });
-                ui.separator();
-
-                ui.horizontal(|ui| {
-                    ui.label("Backup (.ns4b):");
-                    let input_w = (ui.available_width() - 56.0).max(110.0);
-                    let edit = ui.add(
-                        egui::TextEdit::singleline(&mut self.path_input)
-                            .desired_width(input_w)
-                            .hint_text("Path to .ns4b backup (or drag-and-drop file)"),
-                    );
-                    let enter =
-                        edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    if ui.button("Open").clicked() || enter {
-                        let p = PathBuf::from(self.path_input.trim());
-                        if let Err(err) = self.open_backup_path(&p) {
-                            self.error_message = Some(err);
-                        }
-                    }
-                });
-
-                if let Some(ver) = &self.manifest_summary {
-                    ui.small(format!(
-                        "Archive OS: {ver} | Programs: {} | Pianos: {} | Samples: {}",
-                        self.programs.len(),
-                        self.pianos.len(),
-                        self.samples.len()
-                    ));
-                }
-
-                ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    ui.selectable_value(
-                        &mut self.active_tab,
-                        BackupTab::Programs,
-                        format!("Programs ({})", self.programs.len()),
-                    );
-                    ui.selectable_value(
-                        &mut self.active_tab,
-                        BackupTab::Pianos,
-                        format!("Pianos ({})", self.pianos.len()),
-                    );
-                    ui.selectable_value(
-                        &mut self.active_tab,
-                        BackupTab::Samples,
-                        format!("Samples ({})", self.samples.len()),
-                    );
-                });
-
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Filter:");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.filter)
-                            .desired_width(150.0)
-                            .hint_text("Search name..."),
-                    );
-                    if self.active_tab == BackupTab::Pianos {
-                        ui.label("Target:");
-                        ui.selectable_value(&mut self.piano_slot_b, false, "Piano A");
-                        ui.selectable_value(&mut self.piano_slot_b, true, "Piano B");
-                    } else if self.active_tab == BackupTab::Samples {
-                        ui.label("Target:");
-                        ui.selectable_value(&mut self.synth_layer_idx, 0, "Synth A");
-                        ui.selectable_value(&mut self.synth_layer_idx, 1, "Synth B");
-                        ui.selectable_value(&mut self.synth_layer_idx, 2, "Synth C");
-                    }
-                    if self.active_tab != BackupTab::Programs {
-                        ui.checkbox(&mut self.merge_into_program, "Merge into current program")
                             .on_hover_text(
-                                "Off: the sound loads into a fresh Init Program (other sections,                                  effects and levels reset). On: only this layer's sound changes.",
+                                "Close library panel after selecting a preset or sample",
                             );
-                        ui.weak(if self.merge_into_program {
-                            "Loads change only this layer's sound"
-                        } else {
-                            "Loads start from an Init Program"
-                        });
-                    }
-                });
-
-                ui.separator();
-                let query = self.filter.trim().to_ascii_lowercase();
-                let mut selected_program: Option<String> = None;
-                let mut selected_piano: Option<String> = None;
-                let mut selected_sample: Option<String> = None;
-
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        let items: &[String] = match self.active_tab {
-                            BackupTab::Programs => &self.programs,
-                            BackupTab::Pianos => &self.pianos,
-                            BackupTab::Samples => &self.samples,
-                        };
-                        if items.is_empty() {
-                            ui.weak("No entries loaded. Open a .ns4b backup or drag-and-drop .ns4p / .npno / .nsmp4 onto the window.");
-                            return;
-                        }
-                        for entry in items {
-                            if !query.is_empty() && !entry.to_ascii_lowercase().contains(&query) {
-                                continue;
-                            }
-                            if ui.selectable_label(false, entry).clicked() {
-                                match self.active_tab {
-                                    BackupTab::Programs => selected_program = Some(entry.clone()),
-                                    BackupTab::Pianos => selected_piano = Some(entry.clone()),
-                                    BackupTab::Samples => selected_sample = Some(entry.clone()),
-                                }
-                            }
-                        }
                     });
-
-                if let Some(p) = selected_program {
-                    self.load_program_entry(&p, panel, audio);
-                }
-                if let Some(p) = selected_piano {
-                    self.init_before_load(InitTarget::Piano(self.piano_slot_b), panel, audio);
-                    self.request_piano_entry(&p);
-                }
-                if let Some(s) = selected_sample {
-                    self.init_before_load(InitTarget::Synth(self.synth_layer_idx.min(2)), panel, audio);
-                    self.request_sample_entry(&s);
-                }
+                });
+                ui.separator();
+                self.render_browser_inline(ui, panel, audio);
             });
     }
 }

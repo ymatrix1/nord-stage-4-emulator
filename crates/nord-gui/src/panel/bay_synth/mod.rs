@@ -12,7 +12,7 @@ mod graphics;
 #[cfg(test)]
 mod hint_tests;
 mod names;
-mod oled;
+pub(crate) mod oled;
 mod oled_arp;
 mod oled_types;
 mod oled_view;

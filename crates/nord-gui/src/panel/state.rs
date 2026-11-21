@@ -13,6 +13,8 @@ pub struct Stage4PanelState {
     pub program_ui: super::ui_state::ProgramUi,
     /// Focus / zoom view (B12).
     pub view: super::view::ViewState,
+    /// Render the 1:1 offline-baked HTML/CSS panel plate (`panel_plate_2x.png`).
+    pub use_baked_plate: bool,
 
     // Master & Controllers (Bay 1)
     pub master_volume: f32,
@@ -120,6 +122,7 @@ impl Default for Stage4PanelState {
             fx_ui: Default::default(),
             program_ui: Default::default(),
             view: Default::default(),
+            use_baked_plate: false,
             master_volume: 0.85,
             pitch_stick: 0.0,
             mod_wheel: 0.0,

@@ -333,3 +333,18 @@ Still unlabelled: the layer focus LEDs above the A/B/C pads (hardware: amber ON/
 ## Section headers (GUI styling, 2026-11-19)
 
 Status: accepted (owner request: production-ready look, compared with the Nord editor skin; no art copied). Organ, Piano, Synth, Layer Effects and Program headers use a graphite rim and tab (`style::HEADER_DARK`, edge `HEADER_EDGE`, ink `HEADER_INK`, 13:1) instead of the photographed silver strip, which gave the FX FOCUS and LAYER FX captions about 1.5:1. Synth gets a tab (`SYNTH_TAB_MM`) so ON, its LED and SOLO sit on a plate; the hardware prints them on the red panel (not photo parity). The ON LED sits left of its button inside the tab. The Rotary Speaker tab keeps the verified silver plate.
+
+---
+
+## 9. Offline HTML/CSS-to-`egui` Baked Panel Pipeline (D15 Amendment, `ns4-op1w`)
+
+To achieve 1:1 visual parity with the approved `nd matrix 1` HTML/CSS reference (`prototypes/panel-mock/`) inside OpenGL `egui` hosts without embedding a WebView:
+
+- **Offline Baker (`tools/bake_panel_from_html.py`):** Launches headless Chromium (Playwright) at `2x` device scale, hides dynamic moving elements via `.bake-static`, and exports deterministic assets to `crates/nord-gui/assets/baked/`:
+  - `panel_plate_2x.png`: static red chassis, wooden cheeks, S-curve section headers, silkscreen, scales, and `nd matrix 1` wordmark.
+  - `panel_sprites_2x.png` + `panel_sprites.json`: stadium-pill buttons (`up`/`down`), 12-flute knob caps with 14 px shadow padding, fader cap, white/black stepped drawbars, pebbled mod wheel drum, pitch stick, and key sprites.
+  - `panel_layout.json`: normalized `(x, y, w, h)` bounding boxes for all annotated `data-control-id` controls, LEDs, OLEDs, and 88 keys.
+- **Runtime Loader & 1:1 View (`crates/nord-gui/src/baked.rs`, `crates/nord-gui/src/panel/baked_view.rs`):**
+  - `BakedPanelAssets::get_or_load` uploads the baked atlas and splits `panel_plate_2x.png` into `<= 2048px` horizontal GPU texture tiles so OpenGL contexts with `max_texture_side = 2048` never fail.
+  - `render_baked_panel` renders the tiled plate, interactive `pitch_stick`, `mod_wheel`, rotated knobs, buttons, faders, 9 drawbars, live LEDs, live `main` and `synth` OLEDs, and the 88-key keybed wired to `AudioHandle::send_keyboard_midi`.
+  - Controlled by `Stage4PanelState::use_baked_plate` (enabled in the standalone `nord-stage4` binary; `false` by default in `Stage4PanelState::default()` so existing procedural layout and legibility tests remain valid).
