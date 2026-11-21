@@ -12,7 +12,7 @@ use crate::visa::{Insn, Kind};
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::{types, AbiParam, InstBuilder, MemFlags, UserFuncName};
 use cranelift_codegen::settings::{self, Configurable};
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
 use std::collections::HashMap;
@@ -844,6 +844,7 @@ fn emit_fixed_mult(
     x: u8,
     y: u8,
     fn_mov_ref: cranelift_codegen::ir::FuncRef,
+    ssa: Option<&LoopSsaVars>,
 ) {
     const _: () = assert!(std::mem::size_of::<i128>() == 16);
     const _: () = assert!(cfg!(target_endian = "little"));
@@ -889,8 +890,14 @@ fn emit_fixed_mult(
     let (v_lo, v_hi_raw) = match cls {
         1 => (p_lo, p_hi),
         2 => {
-            let mr_lo = b.ins().load(types::I64, mem, core_ptr, off_mr);
-            let mr_hi = b.ins().load(types::I64, mem, core_ptr, off_mr + 8);
+            let (mr_lo, mr_hi) = if let Some((vlo, vhi)) = ssa.and_then(|s| s.mr[reg as usize]) {
+                (b.use_var(vlo), b.use_var(vhi))
+            } else {
+                (
+                    b.ins().load(types::I64, mem, core_ptr, off_mr),
+                    b.ins().load(types::I64, mem, core_ptr, off_mr + 8),
+                )
+            };
             let sum_lo = b.ins().iadd(mr_lo, p_lo);
             let carry = b.ins().icmp(IntCC::UnsignedLessThan, sum_lo, mr_lo);
             let carry64 = b.ins().uextend(types::I64, carry);
@@ -898,8 +905,14 @@ fn emit_fixed_mult(
             (sum_lo, b.ins().iadd(sum_hi, carry64))
         }
         _ => {
-            let mr_lo = b.ins().load(types::I64, mem, core_ptr, off_mr);
-            let mr_hi = b.ins().load(types::I64, mem, core_ptr, off_mr + 8);
+            let (mr_lo, mr_hi) = if let Some((vlo, vhi)) = ssa.and_then(|s| s.mr[reg as usize]) {
+                (b.use_var(vlo), b.use_var(vhi))
+            } else {
+                (
+                    b.ins().load(types::I64, mem, core_ptr, off_mr),
+                    b.ins().load(types::I64, mem, core_ptr, off_mr + 8),
+                )
+            };
             let borrow = b.ins().icmp(IntCC::UnsignedLessThan, mr_lo, p_lo);
             let borrow64 = b.ins().uextend(types::I64, borrow);
             let diff_lo = b.ins().isub(mr_lo, p_lo);
@@ -984,6 +997,9 @@ fn emit_fixed_mult(
         let zero8 = b.ins().iconst(types::I8, 0);
         b.ins()
             .store(mem, zero8, core_ptr, off_fx_lo + i32::from(n));
+    } else if let Some((vlo, vhi)) = ssa.and_then(|s| s.mr[reg as usize]) {
+        b.def_var(vlo, v_lo);
+        b.def_var(vhi, v_hi);
     } else {
         b.ins().store(mem, v_lo, core_ptr, off_mr);
         b.ins().store(mem, v_hi, core_ptr, off_mr + 8);
@@ -1002,6 +1018,7 @@ fn emit_jit_compute_op(
     fn_mov_ref: cranelift_codegen::ir::FuncRef,
     fn_av_ref: cranelift_codegen::ir::FuncRef,
     fn_comp_ref: cranelift_codegen::ir::FuncRef,
+    ssa: Option<&LoopSsaVars>,
 ) {
     match cop {
         ComputeOp::Nop => {}
@@ -1040,7 +1057,7 @@ fn emit_jit_compute_op(
         ComputeOp::FixedMult { op: mop, n, x, y }
             if (mop >> 6) != 0 && !((mop & 1 == 1) && ((mop >> 3) & 1 == 1)) =>
         {
-            emit_fixed_mult(b, core_ptr, mop, n, x, y, fn_mov_ref);
+            emit_fixed_mult(b, core_ptr, mop, n, x, y, fn_mov_ref, ssa);
         }
         ComputeOp::FixedMult { op: mop, n, x, y } => {
             let op_v = b.ins().iconst(types::I32, i64::from(mop));
@@ -1097,6 +1114,165 @@ fn emit_dag_next_ir(
     let neg_res = fb.ins().select(wrap_neg, next_plus_l, next);
     let circ_res = fb.ins().select(m_nonneg, pos_res, neg_res);
     fb.ins().select(l_zero, next, circ_res)
+}
+
+/// Loop-carried `i[ii]` and `mr[reg]` registers promoted to Cranelift SSA [`Variable`]s
+/// across eligible `DO ... UNTIL LCE` loops.
+struct LoopSsaVars {
+    i: [Option<Variable>; 16],
+    mr: [Option<(Variable, Variable)>; 2],
+}
+
+impl LoopSsaVars {
+    fn flush(&self, b: &mut FunctionBuilder, core_ptr: cranelift_codegen::ir::Value) {
+        let mem = MemFlags::trusted();
+        let off_i = offset_of!(Core, i) as i32;
+        let off_mr = offset_of!(Core, mr) as i32;
+        for (idx, var) in self.i.iter().enumerate() {
+            if let Some(v) = *var {
+                let val = b.use_var(v);
+                b.ins().store(mem, val, core_ptr, off_i + 4 * idx as i32);
+            }
+        }
+        for (reg, pair) in self.mr.iter().enumerate() {
+            if let Some((vlo, vhi)) = *pair {
+                let lo = b.use_var(vlo);
+                let hi = b.use_var(vhi);
+                b.ins().store(mem, lo, core_ptr, off_mr + 16 * reg as i32);
+                b.ins()
+                    .store(mem, hi, core_ptr, off_mr + 16 * reg as i32 + 8);
+            }
+        }
+    }
+
+    fn reload(&self, b: &mut FunctionBuilder, core_ptr: cranelift_codegen::ir::Value) {
+        let mem = MemFlags::trusted();
+        let off_i = offset_of!(Core, i) as i32;
+        let off_mr = offset_of!(Core, mr) as i32;
+        for (idx, var) in self.i.iter().enumerate() {
+            if let Some(v) = *var {
+                let val = b
+                    .ins()
+                    .load(types::I32, mem, core_ptr, off_i + 4 * idx as i32);
+                b.def_var(v, val);
+            }
+        }
+        for (reg, pair) in self.mr.iter().enumerate() {
+            if let Some((vlo, vhi)) = *pair {
+                let lo = b
+                    .ins()
+                    .load(types::I64, mem, core_ptr, off_mr + 16 * reg as i32);
+                let hi = b
+                    .ins()
+                    .load(types::I64, mem, core_ptr, off_mr + 16 * reg as i32 + 8);
+                b.def_var(vlo, lo);
+                b.def_var(vhi, hi);
+            }
+        }
+    }
+}
+
+fn is_inline_compute_for_ssa(cop: ComputeOp) -> bool {
+    match cop {
+        ComputeOp::Nop => true,
+        ComputeOp::FixedAlu {
+            op: 0x01 | 0x02 | 0x21 | 0x40 | 0x41 | 0x42,
+            ..
+        } => true,
+        ComputeOp::FloatMul { .. }
+        | ComputeOp::FloatAlu {
+            op: 0x81 | 0x82, ..
+        } => true,
+        ComputeOp::FixedMult { op: mop, .. } => {
+            (mop >> 6) != 0 && !((mop & 1 == 1) && ((mop >> 3) & 1 == 1))
+        }
+        _ => false,
+    }
+}
+
+fn can_promote_loop_ssa(insns: &[(u32, u32, Kind, u64, DecodedOp)], sram_fast: bool) -> bool {
+    if !sram_fast {
+        return false;
+    }
+    insns.iter().all(|&(_, _, kind, w, op)| match op {
+        DecodedOp::Nop => true,
+        DecodedOp::ComputeCond { cond: 31, op: cop } | DecodedOp::ComputeBoth { op: cop } => {
+            is_inline_compute_for_ssa(cop)
+        }
+        DecodedOp::Move(MoveOp::LoadImm { ureg, .. }) => ureg < 16,
+        DecodedOp::Move(MoveOp::RegMove { src, dst, .. }) => src < 16 && dst < 16,
+        DecodedOp::Move(MoveOp::DagMem {
+            ii,
+            ureg,
+            cond: 31,
+            compute: None,
+            ..
+        }) => ureg < 16 && !matches!(ii, 0 | 1 | 8 | 9) && !Core::lw_flag(kind, w),
+        DecodedOp::DualMove(dm) => {
+            !dm.dm_write
+                && !dm.pm_write
+                && dm.dm_reg < 16
+                && dm.pm_reg < 16
+                && !matches!(dm.dmi, 0 | 1 | 8 | 9)
+                && !matches!(dm.pmi, 0 | 1 | 8 | 9)
+                && (dm.compute_raw >> 22) & 1 == 0
+                && dm.compute.is_none_or(is_inline_compute_for_ssa)
+        }
+        _ => false,
+    })
+}
+
+fn preload_loop_ssa(
+    b: &mut FunctionBuilder,
+    core_ptr: cranelift_codegen::ir::Value,
+    insns: &[(u32, u32, Kind, u64, DecodedOp)],
+) -> LoopSsaVars {
+    let mut need_i = [false; 16];
+    let mut need_mr = [false; 2];
+    let mut mark_cop = |cop: ComputeOp| {
+        if let ComputeOp::FixedMult { op: mop, .. } = cop {
+            let sel = (mop >> 1) & 3;
+            need_mr[usize::from(sel == 1 || sel == 3)] = true;
+        }
+    };
+    for &(_, _, _, _, op) in insns {
+        match op {
+            DecodedOp::ComputeCond { cond: 31, op: cop } | DecodedOp::ComputeBoth { op: cop } => {
+                mark_cop(cop);
+            }
+            DecodedOp::Move(MoveOp::DagMem { ii, .. }) => need_i[usize::from(ii)] = true,
+            DecodedOp::DualMove(dm) => {
+                need_i[usize::from(dm.dmi)] = true;
+                need_i[usize::from(dm.pmi)] = true;
+                if let Some(cop) = dm.compute {
+                    mark_cop(cop);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut vars = LoopSsaVars {
+        i: [None; 16],
+        mr: [None; 2],
+    };
+    for (idx, needed) in need_i.iter().enumerate() {
+        if *needed {
+            let v = Variable::from_u32(idx as u32);
+            b.declare_var(v, types::I32);
+            vars.i[idx] = Some(v);
+        }
+    }
+    for (reg, needed) in need_mr.iter().enumerate() {
+        if *needed {
+            let vlo = Variable::from_u32((16 + 2 * reg) as u32);
+            let vhi = Variable::from_u32((17 + 2 * reg) as u32);
+            b.declare_var(vlo, types::I64);
+            b.declare_var(vhi, types::I64);
+            vars.mr[reg] = Some((vlo, vhi));
+        }
+    }
+    vars.reload(b, core_ptr);
+    vars
 }
 
 /// Loop-invariant DAG configuration values (`MODE1.CBUFEN` and `M`/`L`/`B` registers)
@@ -1190,6 +1366,7 @@ fn emit_inline_sram_dag_transfer(
     write: bool,
     post_modify: bool,
     hoisted: Option<&HoistedDagCfg>,
+    ssa: Option<&LoopSsaVars>,
     insn_pc: u32,
     insn_w: u64,
     arg_kind: i64,
@@ -1204,9 +1381,12 @@ fn emit_inline_sram_dag_transfer(
     let off_r = offset_of!(Core, r) as i32;
     let off_fx_lo = (offset_of!(Core, fx) + offset_of!(super::float_ops::ExtFile, lo)) as i32;
 
-    let i_val = b
-        .ins()
-        .load(types::I32, mem, core_ptr, off_i + 4 * i32::from(ii));
+    let i_val = if let Some(v) = ssa.and_then(|s| s.i[usize::from(ii)]) {
+        b.use_var(v)
+    } else {
+        b.ins()
+            .load(types::I32, mem, core_ptr, off_i + 4 * i32::from(ii))
+    };
     let m_val = hoisted
         .and_then(|h| h.m[usize::from(mi)])
         .unwrap_or_else(|| {
@@ -1298,18 +1478,28 @@ fn emit_inline_sram_dag_transfer(
         let zero32 = b.ins().iconst(types::I32, 0);
         let eff_l = b.ins().select(has_cbuf, l_val, zero32);
         let next_i = emit_dag_next_ir(b, i_val, m_val, eff_l, b_val);
-        b.ins()
-            .store(mem, next_i, core_ptr, off_i + 4 * i32::from(ii));
+        if let Some(v) = ssa.and_then(|s| s.i[usize::from(ii)]) {
+            b.def_var(v, next_i);
+        } else {
+            b.ins()
+                .store(mem, next_i, core_ptr, off_i + 4 * i32::from(ii));
+        }
     }
     b.ins().jump(done_blk, &[]);
 
     b.switch_to_block(slow_blk);
     b.seal_block(slow_blk);
+    if let Some(s) = ssa {
+        s.flush(b, core_ptr);
+    }
     let pc_v = b.ins().iconst(types::I32, i64::from(insn_pc));
     let w_v = b.ins().iconst(types::I64, insn_w as i64);
     let k_v = b.ins().iconst(types::I8, arg_kind);
     let call = b.ins().call(fn_dagmem_ref, &[core_ptr, pc_v, w_v, k_v]);
     let status = b.inst_results(call)[0];
+    if let Some(s) = ssa {
+        s.reload(b, core_ptr);
+    }
     let ok = b.ins().icmp_imm(IntCC::Equal, status, 0);
     b.ins().brif(ok, done_blk, &[], on_fault_blk, &[status]);
 
@@ -1328,6 +1518,7 @@ fn emit_inline_dual_sram_load(
     dm: DualMoveOp,
     fast_float: bool,
     hoisted: Option<&HoistedDagCfg>,
+    ssa: Option<&LoopSsaVars>,
     insn_pc: u32,
     insn_w: u64,
     arg_kind: i64,
@@ -1352,7 +1543,11 @@ fn emit_inline_dual_sram_load(
     let pmi = i32::from(dm.pmi);
     let pmm = i32::from(dm.pmm);
 
-    let dm_i = b.ins().load(types::I32, mem, core_ptr, off_i + 4 * dmi);
+    let dm_i = if let Some(v) = ssa.and_then(|s| s.i[dmi as usize]) {
+        b.use_var(v)
+    } else {
+        b.ins().load(types::I32, mem, core_ptr, off_i + 4 * dmi)
+    };
     let dm_m = hoisted
         .and_then(|h| h.m[dmi as usize])
         .unwrap_or_else(|| b.ins().load(types::I32, mem, core_ptr, off_m + 4 * dmm));
@@ -1362,7 +1557,11 @@ fn emit_inline_dual_sram_load(
     let dm_b = hoisted
         .and_then(|h| h.b[dmi as usize])
         .unwrap_or_else(|| b.ins().load(types::I32, mem, core_ptr, off_b + 4 * dmi));
-    let pm_i = b.ins().load(types::I32, mem, core_ptr, off_i + 4 * pmi);
+    let pm_i = if let Some(v) = ssa.and_then(|s| s.i[pmi as usize]) {
+        b.use_var(v)
+    } else {
+        b.ins().load(types::I32, mem, core_ptr, off_i + 4 * pmi)
+    };
     let pm_m = hoisted
         .and_then(|h| h.m[pmi as usize])
         .unwrap_or_else(|| b.ins().load(types::I32, mem, core_ptr, off_m + 4 * pmm));
@@ -1415,6 +1614,7 @@ fn emit_inline_dual_sram_load(
             fn_mov_ref,
             fn_av_ref,
             fn_comp_ref,
+            ssa,
         );
     }
 
@@ -1442,17 +1642,31 @@ fn emit_inline_dual_sram_load(
     let eff_pm_l = b.ins().select(has_cbuf, pm_l, zero32);
     let dm_next = emit_dag_next_ir(b, dm_i, dm_m, eff_dm_l, dm_b);
     let pm_next = emit_dag_next_ir(b, pm_i, pm_m, eff_pm_l, pm_b);
-    b.ins().store(mem, dm_next, core_ptr, off_i + 4 * dmi);
-    b.ins().store(mem, pm_next, core_ptr, off_i + 4 * pmi);
+    if let Some(v) = ssa.and_then(|s| s.i[dmi as usize]) {
+        b.def_var(v, dm_next);
+    } else {
+        b.ins().store(mem, dm_next, core_ptr, off_i + 4 * dmi);
+    }
+    if let Some(v) = ssa.and_then(|s| s.i[pmi as usize]) {
+        b.def_var(v, pm_next);
+    } else {
+        b.ins().store(mem, pm_next, core_ptr, off_i + 4 * pmi);
+    }
     b.ins().jump(done_blk, &[]);
 
     b.switch_to_block(slow_blk);
     b.seal_block(slow_blk);
+    if let Some(s) = ssa {
+        s.flush(b, core_ptr);
+    }
     let pc_v = b.ins().iconst(types::I32, i64::from(insn_pc));
     let w_v = b.ins().iconst(types::I64, insn_w as i64);
     let k_v = b.ins().iconst(types::I8, arg_kind);
     let call = b.ins().call(fn_dual_ref, &[core_ptr, pc_v, w_v, k_v]);
     let status = b.inst_results(call)[0];
+    if let Some(s) = ssa {
+        s.reload(b, core_ptr);
+    }
     let ok = b.ins().icmp_imm(IntCC::Equal, status, 0);
     b.ins().brif(ok, done_blk, &[], on_fault_blk, &[status]);
 
@@ -1603,6 +1817,8 @@ impl Core {
 
             let hoisted = (is_loop && is_dag_cfg_invariant(&insns))
                 .then(|| preload_dag_cfg(&mut b, core_ptr, &insns));
+            let ssa = (is_loop && can_promote_loop_ssa(&insns, sram_fast))
+                .then(|| preload_loop_ssa(&mut b, core_ptr, &insns));
 
             let loop_hdr = b.create_block();
             b.append_block_param(loop_hdr, types::I64); // iters_done
@@ -1626,6 +1842,7 @@ impl Core {
                             fn_mov_ref,
                             fn_av_ref,
                             fn_comp_ref,
+                            ssa.as_ref(),
                         );
                     }
                     DecodedOp::Move(MoveOp::LoadImm { ureg, value }) => {
@@ -1732,6 +1949,7 @@ impl Core {
                             write,
                             post_modify,
                             hoisted.as_ref(),
+                            ssa.as_ref(),
                             insn_pc,
                             insn_w,
                             arg_kind,
@@ -1789,6 +2007,7 @@ impl Core {
                             dm,
                             fast_float,
                             hoisted.as_ref(),
+                            ssa.as_ref(),
                             insn_pc,
                             insn_w,
                             arg_kind,
@@ -1900,6 +2119,9 @@ impl Core {
                 b.seal_block(loop_hdr);
                 b.switch_to_block(exit_blk);
                 b.seal_block(exit_blk);
+                if let Some(s) = &ssa {
+                    s.flush(&mut b, core_ptr);
+                }
 
                 let rem_old = b.ins().load(types::I32, mem, rem_ptr, 0);
                 let dec32 = b.ins().ireduce(types::I32, next_iters);
@@ -1920,6 +2142,9 @@ impl Core {
 
             b.switch_to_block(early_exit);
             b.seal_block(early_exit);
+            if let Some(s) = &ssa {
+                s.flush(&mut b, core_ptr);
+            }
             let e_steps = b.block_params(early_exit)[0];
             let e_iters = b.block_params(early_exit)[1];
             let e_pc = b.block_params(early_exit)[2];
