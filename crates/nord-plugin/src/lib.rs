@@ -102,7 +102,7 @@ impl NordStage4Plugin {
 }
 
 impl Plugin for NordStage4Plugin {
-    const NAME: &'static str = "Nord Stage 4";
+    const NAME: &'static str = "nd matrix 1";
     const VENDOR: &'static str = "OpenNord";
     const URL: &'static str = "https://github.com/ymatrix1/nord-stage-4-emulator";
     const EMAIL: &'static str = "yuri@github.com";
@@ -219,7 +219,7 @@ impl Plugin for NordStage4Plugin {
 impl ClapPlugin for NordStage4Plugin {
     const CLAP_ID: &'static str = "org.opennord.nord-stage-4";
     const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Open-source Nord Stage 4 7-Layer Multitimbral Emulator");
+        Some("Open-source 7-layer multitimbral keyboard emulator");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

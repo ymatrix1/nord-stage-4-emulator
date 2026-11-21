@@ -48,6 +48,8 @@ pub struct ViewState {
     pub fixed_zoom: Option<f32>,
     /// Panorama mode: the visible rectangle in logical panel px (`None` = mode off).
     pub panorama: Option<Rect>,
+    /// The host (plugin editor) scales the panel itself: `apply_zoom` leaves egui's zoom alone.
+    pub host_scaled: bool,
 }
 
 impl ViewState {
@@ -209,6 +211,9 @@ pub fn fit_zoom_view(view: &ViewState, window_phys: Vec2, native_ppp: f32) -> f3
 
 /// Apply the zoom of `view` to `ctx` (takes effect on the next frame).
 pub fn apply_zoom(ctx: &Context, view: &ViewState) {
+    if view.host_scaled {
+        return;
+    }
     let native = ctx.native_pixels_per_point().unwrap_or(1.0);
     let z = match view.fixed_zoom {
         Some(px_per_logical) => px_per_logical / native,
@@ -232,6 +237,19 @@ pub fn panel_origin(focus: Option<Section>, top_left: Pos2) -> Pos2 {
 mod tests {
     use super::*;
     use egui::pos2;
+
+    #[test]
+    fn host_scaled_view_leaves_the_egui_zoom_alone() {
+        let ctx = Context::default();
+        let v = ViewState {
+            host_scaled: true,
+            fixed_zoom: Some(2.0),
+            ..Default::default()
+        };
+        apply_zoom(&ctx, &v);
+        let _ = ctx.run(Default::default(), |_| {});
+        assert_eq!(ctx.zoom_factor(), 1.0);
+    }
 
     #[test]
     fn toggle_enters_and_leaves_and_remembers() {

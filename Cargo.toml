@@ -16,3 +16,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ymatrix1/nord-stage-4-emulator"
 authors = ["Yuri Olive <yuri@github.com>"]
+
+# nih_plug_egui with the HiDPI plugin-resize fix (see vendor/nih_plug_egui/README-VENDORED.md).
+[patch."https://github.com/robbert-vdh/nih-plug.git"]
+nih_plug_egui = { path = "vendor/nih_plug_egui" }

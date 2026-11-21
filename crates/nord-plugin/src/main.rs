@@ -11,6 +11,6 @@ mod tests {
 
     #[test]
     fn test_standalone_target_symbols() {
-        assert_eq!(NordStage4Plugin::NAME, "Nord Stage 4");
+        assert_eq!(NordStage4Plugin::NAME, "nd matrix 1");
     }
 }
