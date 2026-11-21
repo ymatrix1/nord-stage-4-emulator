@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import subprocess
 import sys
@@ -26,6 +25,7 @@ PROOF_DIR = ROOT / "assets" / "panel" / "proof"
 RAW_DIR = PROOF_DIR / "_raw"  # git-ignored scratch frames
 MANIFEST = PROOF_DIR / "manifest.json"
 SCENE_SCRIPT = ROOT / "assets" / "blender" / "build_proof.py"
+THEME_SAMPLES = ROOT / "assets" / "panel" / "theme_samples.json"  # measured colours, numbers only
 
 # EMPIRICAL: 1 Blender unit = 64 px at 1x. Chosen so a 96 px frame covers 1.5 units; measured
 # proportions (cap diameter vs fader-cap width about 1:1) come from the owner's reference photo,
@@ -39,6 +39,11 @@ KNOB_FRAME_PX = 96  # 1x frame edge; 2x doubles it
 # a 270 degree sweep; frame 0 = -135 deg, frame 63 = +135 deg (clockwise positive).
 KNOB_SWEEP_DEG = 270.0
 FADER_FRAME_PX = 96
+FADER_COLORS = ("black", "white", "grey")  # drawbar black / white, layer-fader grey
+# ASSUMED: the reference renders are a near top-down perspective view (the arc ring reads
+# almost circular, ratio 0.93 = cos 22 deg). One orthographic camera tilted 24 deg for every
+# sprite keeps layers aligned while still showing cap sides and fronts.
+CAM_TILT_DEG = 30.0
 PLATE_PX = {"plate_red": (128, 128), "plate_slate_slot": (128, 256)}
 
 # ASSUMED: control counts until B2 (ns4-3n0d) verifies them against the manual; chosen from a
@@ -47,7 +52,6 @@ PANEL_ESTIMATE = {"knobs": 45, "faders": 30, "buttons": 150}
 # ASSUMED: distinct sprite styles (each needs its own filmstrip / cap sprite pair): knob styles =
 # small, medium, large, endless encoder; fader styles = grey layer cap, black and white drawbar.
 KNOB_STYLES = 4
-FADER_STYLES = 3
 # ASSUMED: one shared PNG per button state, 3 sprites (up, down, lit-overlay) at 64 px square.
 BUTTON_SPRITE_BYTES_FACTOR = 3
 
@@ -93,7 +97,8 @@ def stitch_filmstrip(raw: Path, scale: int, out: Path) -> None:
 def asset_names() -> list[str]:
     names = []
     for s in SCALES:
-        names += [f"knob_filmstrip_{s}x.png", f"fader_cap_{s}x.png", f"fader_shadow_{s}x.png"]
+        names += [f"knob_filmstrip_{s}x.png", f"knob_ring_{s}x.png", f"fader_shadow_{s}x.png"]
+        names += [f"fader_cap_{c}_{s}x.png" for c in FADER_COLORS]
         names += [f"{p}_{s}x.png" for p in PLATE_PX]
     return names
 
@@ -125,99 +130,82 @@ def verify_manifest(manifest: dict, proof: Path = PROOF_DIR) -> list[str]:
 
 
 def size_report(manifest: dict, estimate: dict | None = None) -> dict:
-    """Per-asset bytes plus a full-panel estimate per scale (PNG on disk and RGBA in VRAM)."""
+    """Per-asset bytes plus a full-panel estimate per scale (PNG on disk and RGBA in GPU memory)."""
     estimate = estimate or PANEL_ESTIMATE
     f = manifest["files"]
     out = {"estimate_counts": dict(estimate), "per_scale": {}}
+
+    def px(name: str) -> int:
+        return f[name]["width"] * f[name]["height"]
+
     for s in SCALES:
-        knob = f[f"knob_filmstrip_{s}x.png"]
-        fader = f[f"fader_cap_{s}x.png"]["bytes"] + f[f"fader_shadow_{s}x.png"]["bytes"]
-        fader_px = sum(
-            f[n]["width"] * f[n]["height"]
-            for n in (f"fader_cap_{s}x.png", f"fader_shadow_{s}x.png")
-        )
-        # buttons reuse the fader-cap-sized sprite class at 64 px square (ASSUMED above)
-        btn_px = (64 * s) ** 2 * BUTTON_SPRITE_BYTES_FACTOR
-        # one knob filmstrip is shared by every knob of that cap style
-        png = knob["bytes"] + fader + sum(f[f"{p}_{s}x.png"]["bytes"] for p in PLATE_PX)
-        vram = 4 * (
-            knob["width"] * knob["height"]
-            + fader_px
-            + sum(f[f"{p}_{s}x.png"]["width"] * f[f"{p}_{s}x.png"]["height"] for p in PLATE_PX)
-            + btn_px
-        )
-        plates = sum(f[f"{p}_{s}x.png"]["bytes"] for p in PLATE_PX)
+        knob, ring = f"knob_filmstrip_{s}x.png", f"knob_ring_{s}x.png"
+        shadow = f"fader_shadow_{s}x.png"
+        caps = [f"fader_cap_{c}_{s}x.png" for c in FADER_COLORS]
+        plates = [f"{p}_{s}x.png" for p in PLATE_PX]
+        shared = [knob, ring, shadow, *caps, *plates]  # one knob style, all cap colours
+        btn_px = (64 * s) ** 2 * BUTTON_SPRITE_BYTES_FACTOR  # buttons not rendered yet (ASSUMED)
+        extra_knobs = KNOB_STYLES - 1  # further knob styles cost one more filmstrip + ring each
         out["per_scale"][f"{s}x"] = {
-            "full_panel_png_bytes_excl_buttons": KNOB_STYLES * knob["bytes"]
-            + FADER_STYLES * fader
-            + plates,
+            "knob_filmstrip_png_bytes": f[knob]["bytes"],
+            "knob_ring_png_bytes": f[ring]["bytes"],
+            "fader_cap_plus_shadow_png_bytes": f[caps[0]]["bytes"] + f[shadow]["bytes"],
+            "shared_sprite_set_png_bytes": sum(f[n]["bytes"] for n in shared),
+            "shared_sprite_set_rgba_bytes": 4 * sum(px(n) for n in shared),
+            "full_panel_png_bytes_excl_buttons": sum(f[n]["bytes"] for n in shared)
+            + extra_knobs * (f[knob]["bytes"] + f[ring]["bytes"]),
             "full_panel_rgba_bytes_incl_buttons": 4
-            * (KNOB_STYLES * knob["width"] * knob["height"] + (FADER_STYLES - 1) * fader_px)
-            + vram,
-            "knob_filmstrip_png_bytes": knob["bytes"],
-            "fader_cap_plus_shadow_png_bytes": fader,
-            "shared_sprite_set_png_bytes": png,
-            "shared_sprite_set_rgba_bytes": vram,
+            * (sum(px(n) for n in shared) + extra_knobs * (px(knob) + px(ring)) + btn_px),
         }
     return out
 
 
-def compose_preview(proof: Path = PROOF_DIR, scale: int = 2) -> object:
-    """Side-by-side proof sheet: rendered knob (3 frames) and fader, then a flat-painter version.
+PREVIEW_FRAMES = (0, 16, 32, 47, 63)
 
-    The flat column is a PIL stand-in for the egui painter (the real egui comparison needs the
-    B4 `nord-panel` skeleton); it only shows what flat fills lack.
-    """
-    from PIL import Image, ImageDraw
+
+def _frame(strip, frame: int, edge: int):
+    col, row = frame % KNOB_GRID, frame // KNOB_GRID
+    return strip.crop((col * edge, row * edge, (col + 1) * edge, (row + 1) * edge))
+
+
+def composed_knob(proof: Path, frame: int, scale: int = 2):
+    """Plate, arc ring layer, then the knob frame (shadow baked in): the draw order in the app."""
+    from PIL import Image
 
     e = KNOB_FRAME_PX * scale
     plate = Image.open(proof / f"plate_red_{scale}x.png").convert("RGBA")
-    slate = Image.open(proof / f"plate_slate_slot_{scale}x.png").convert("RGBA")
-    sheet = Image.new("RGBA", (e * 5 + 4 * 8, e * 2 + 8), (24, 24, 26, 255))
-    strip = Image.open(proof / f"knob_filmstrip_{scale}x.png").convert("RGBA")
     c = plate.size[0] // 2
-    for i, frame in enumerate((0, 21, 42, 63)):
-        bg = plate.crop((c - e // 2, c - e // 2, c + e // 2, c + e // 2))
-        cell = strip.crop(
-            (
-                (frame % KNOB_GRID) * e,
-                (frame // KNOB_GRID) * e,
-                (frame % KNOB_GRID + 1) * e,
-                (frame // KNOB_GRID + 1) * e,
-            )
-        )
-        bg.alpha_composite(cell)
-        sheet.paste(bg, (i * (e + 8), 0))
+    bg = plate.crop((c - e // 2, c - e // 2, c + e // 2, c + e // 2))
+    bg.alpha_composite(Image.open(proof / f"knob_ring_{scale}x.png").convert("RGBA"))
+    strip = Image.open(proof / f"knob_filmstrip_{scale}x.png").convert("RGBA")
+    bg.alpha_composite(_frame(strip, frame, e))
+    return bg
+
+
+def composed_fader(proof: Path, color: str, scale: int = 2):
+    """Slate plate with slot, then the shared shadow layer, then the cap sprite."""
+    from PIL import Image
+
+    e = FADER_FRAME_PX * scale
+    slate = Image.open(proof / f"plate_slate_slot_{scale}x.png").convert("RGBA")
     cx, cy = slate.size[0] // 2, slate.size[1] // 2
     bg = slate.crop((cx - e // 2, cy - e // 2, cx + e // 2, cy + e // 2))
-    for n in ("fader_shadow", "fader_cap"):
-        bg.alpha_composite(Image.open(proof / f"{n}_{scale}x.png").convert("RGBA"))
-    sheet.paste(bg, (4 * (e + 8), 0))
-    flat = Image.new("RGBA", (e * 5 + 4 * 8, e), (142, 27, 31, 255))
-    d = ImageDraw.Draw(flat)
-    r = int(e * 0.24)
-    for i, frame in enumerate((0, 21, 42, 63)):
-        ox, oy = i * (e + 8) + e // 2, e // 2
-        d.ellipse((ox - r, oy - r, ox + r, oy + r), fill=(28, 31, 34, 255))
-        a = math.radians(knob_angle_deg(frame))
-        d.line(
-            (ox, oy, ox + r * 0.8 * math.sin(a), oy - r * 0.8 * math.cos(a)),
-            fill=(236, 235, 230, 255),
-            width=max(2, scale * 2),
-        )
-    fx = 4 * (e + 8)
-    d.rectangle((fx, 0, fx + e, e), fill=(50, 61, 71, 255))
-    d.rectangle((fx + e // 2 - 7 * scale, 0, fx + e // 2 + 7 * scale, e), fill=(7, 9, 11, 255))
-    d.rectangle(
-        (
-            fx + e // 2 - 30 * scale,
-            e // 2 - 22 * scale,
-            fx + e // 2 + 30 * scale,
-            e // 2 + 22 * scale,
-        ),
-        fill=(140, 145, 150, 255),
-    )
-    sheet.alpha_composite(flat, (0, e + 8))
+    for n in (f"fader_shadow_{scale}x", f"fader_cap_{color}_{scale}x"):
+        bg.alpha_composite(Image.open(proof / f"{n}.png").convert("RGBA"))
+    return bg
+
+
+def compose_preview(proof: Path = PROOF_DIR, scale: int = 2):
+    """Proof sheet: five knob frames (top) and the three fader caps (bottom), composed from the
+    committed layers exactly as the app would draw them."""
+    from PIL import Image
+
+    e, gap = KNOB_FRAME_PX * scale, 8
+    sheet = Image.new("RGBA", (e * 5 + gap * 4, e * 2 + gap), (24, 24, 26, 255))
+    for i, frame in enumerate(PREVIEW_FRAMES):
+        sheet.paste(composed_knob(proof, frame, scale), (i * (e + gap), 0))
+    for i, color in enumerate(FADER_COLORS):
+        sheet.paste(composed_fader(proof, color, scale), (i * (e + gap), e + gap))
     return sheet
 
 
@@ -248,7 +236,12 @@ def render(raw: Path = RAW_DIR) -> None:
 def pack(raw: Path = RAW_DIR, proof: Path = PROOF_DIR) -> dict:
     for s in SCALES:
         stitch_filmstrip(raw, s, proof / f"knob_filmstrip_{s}x.png")
-        for name in ("fader_cap", "fader_shadow", *PLATE_PX):
+        for name in (
+            "knob_ring",
+            "fader_shadow",
+            *PLATE_PX,
+            *(f"fader_cap_{c}" for c in FADER_COLORS),
+        ):
             src = raw / f"{name}_{s}x.png"
             (proof / src.name).write_bytes(src.read_bytes())
     manifest = build_manifest(proof)
