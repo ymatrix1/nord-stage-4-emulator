@@ -2053,3 +2053,84 @@ html, body {
 .mt-4 { margin-top: 4px; }
 .text-right { text-align: right; }
 .text-left { text-align: left; }
+
+/* ==========================================================================
+   Offline Baker Modes (.bake-static / .bake-sprite-stage)
+   ========================================================================== */
+html:has(body.bake-static),
+html:has(body.bake-sprite-stage),
+body.bake-static,
+body.bake-sprite-stage {
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+body.bake-static .proto-toolbar,
+body.bake-sprite-stage .proto-toolbar {
+  display: none !important;
+}
+
+body.bake-static .viewport {
+  padding: 0 !important;
+  background: transparent !important;
+  overflow: visible !important;
+  display: block !important;
+}
+
+body.bake-static .stage-scaler {
+  transform: none !important;
+  transition: none !important;
+}
+
+body.bake-static .ns4-chassis {
+  box-shadow: none !important;
+}
+
+/* Hide dynamic moving parts & active glows when baking the static 2x plate */
+body.bake-static [data-knob],
+body.bake-static .fader-cap,
+body.bake-static .drawbar-cap,
+body.bake-static .pitch-stick-wood,
+body.bake-static .mod-wheel-drum,
+body.bake-static .oled-main > *,
+body.bake-static .oled-synth > * {
+  visibility: hidden !important;
+}
+
+body.bake-static .led,
+body.bake-static .split-led {
+  background: radial-gradient(circle at 35% 35%, #5b616a 0%, #32363c 65%, #1d2024 100%) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.16) !important;
+  border-color: #16181b !important;
+}
+
+body.bake-static .led-seg {
+  background: #31373e !important;
+  box-shadow: none !important;
+}
+
+body.bake-static .tri {
+  opacity: 0.25 !important;
+  filter: none !important;
+}
+
+body.bake-static .tri.left { border-color: transparent #7e858e transparent transparent !important; }
+body.bake-static .tri.right { border-color: transparent transparent transparent #7e858e !important; }
+body.bake-static .tri.up { border-color: transparent transparent #7e858e transparent !important; }
+body.bake-static .tri.down { border-color: #7e858e transparent transparent transparent !important; }
+
+body.bake-sprite-stage .viewport {
+  display: none !important;
+}
+
+.sprite-stage {
+  display: none;
+  padding: 16px;
+  background: transparent;
+}
+
+body.bake-sprite-stage .sprite-stage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

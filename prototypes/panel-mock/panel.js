@@ -1811,5 +1811,120 @@
     fitToViewport();
   }
 
+  // ------------------------------------------------------------------------
+  // Baker Hooks (called by tools/bake_panel_from_html.py)
+  // ------------------------------------------------------------------------
+  window.__ns4ExtractLayout = function () {
+    const chassis = document.getElementById("ns4-chassis");
+    const cRect = chassis.getBoundingClientRect();
+    const norm = (el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        x: Number(((r.left - cRect.left) / cRect.width).toFixed(6)),
+        y: Number(((r.top - cRect.top) / cRect.height).toFixed(6)),
+        w: Number((r.width / cRect.width).toFixed(6)),
+        h: Number((r.height / cRect.height).toFixed(6)),
+        px: [
+          Math.round(r.left - cRect.left),
+          Math.round(r.top - cRect.top),
+          Math.round(r.width),
+          Math.round(r.height)
+        ]
+      };
+    };
+
+    const bays = {};
+    document.querySelectorAll("#panel-bays > section").forEach((b) => {
+      bays[b.id] = norm(b);
+    });
+
+    const knobs = Array.from(document.querySelectorAll("[data-knob]")).map((el, i) => ({
+      index: i,
+      encoder: el.getAttribute("data-encoder") === "1",
+      ...norm(el)
+    }));
+    const buttons = Array.from(document.querySelectorAll(".pill-btn")).map((el, i) => ({
+      index: i,
+      variant: el.classList.contains("grey")
+        ? "grey"
+        : el.classList.contains("red")
+          ? "red"
+          : "black",
+      vertical: el.classList.contains("vert"),
+      ...norm(el)
+    }));
+    const faders = Array.from(document.querySelectorAll("[data-fader-track]")).map((el, i) => ({
+      index: i,
+      ...norm(el)
+    }));
+    const drawbars = Array.from(document.querySelectorAll("[data-drawbar-slot]")).map((el, i) => ({
+      index: i,
+      ...norm(el)
+    }));
+    const leds = Array.from(document.querySelectorAll(".led, .split-led")).map((el, i) => ({
+      index: i,
+      id: el.getAttribute("data-led") || null,
+      split: el.classList.contains("split-led"),
+      ...norm(el)
+    }));
+    const oleds = {
+      main: norm(document.getElementById("main-oled")),
+      synth: norm(document.querySelector(".oled-synth"))
+    };
+    const wheels = {
+      pitch_stick: norm(document.getElementById("pitch-stick")),
+      mod_wheel: norm(document.getElementById("mod-wheel"))
+    };
+    const keys = Array.from(document.querySelectorAll("#keybed-keys [data-midi]")).map((el) => ({
+      midi: Number(el.getAttribute("data-midi")),
+      black: el.classList.contains("key-black"),
+      ...norm(el)
+    }));
+
+    return {
+      chassis_px: { width: Math.round(cRect.width), height: Math.round(cRect.height) },
+      bays,
+      knobs,
+      buttons,
+      faders,
+      drawbars,
+      leds,
+      oleds,
+      wheels,
+      keys
+    };
+  };
+
+  window.__ns4StageSprite = function (name) {
+    document.body.classList.remove("bake-static");
+    document.body.classList.add("bake-sprite-stage");
+    let stage = document.getElementById("sprite-stage");
+    if (!stage) {
+      stage = document.createElement("div");
+      stage.id = "sprite-stage";
+      stage.className = "sprite-stage";
+      document.body.appendChild(stage);
+    }
+    const templates = {
+      btn_black_up: `<button class="pill-btn"></button>`,
+      btn_black_down: `<button class="pill-btn pressed"></button>`,
+      btn_grey_up: `<button class="pill-btn grey"></button>`,
+      btn_grey_down: `<button class="pill-btn grey pressed"></button>`,
+      btn_red_up: `<button class="pill-btn red"></button>`,
+      btn_red_down: `<button class="pill-btn red pressed"></button>`,
+      knob_pot_cap: `<div class="knob-body" style="transform:rotate(0deg);"><div class="knob-pointer"></div></div>`,
+      knob_encoder_cap: `<div class="knob-body encoder"></div>`,
+      fader_cap: `<div style="position:relative;width:30px;height:24px;"><div class="fader-cap" style="top:50%;"></div></div>`,
+      drawbar_white: `<div style="position:relative;width:28px;height:70px;"><div class="drawbar-cap white" style="top:4px;"></div></div>`,
+      drawbar_black: `<div style="position:relative;width:28px;height:70px;"><div class="drawbar-cap black" style="top:4px;"></div></div>`,
+      pitch_stick: `<div class="pitch-stick-wood"></div>`,
+      mod_wheel_drum: `<div class="mod-wheel-drum"></div>`
+    };
+    stage.innerHTML = templates[name] || "";
+    const target = stage.firstElementChild;
+    const r = target.getBoundingClientRect();
+    return { x: Math.floor(r.left) - 4, y: Math.floor(r.top) - 4, width: Math.ceil(r.width) + 8, height: Math.ceil(r.height) + 8 };
+  };
+
   init();
 })();
