@@ -29,6 +29,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 | **TD-21** | `crates/nord-plugin/` (`program_overrides.rs`, `lib.rs`, `editor/readback.rs`) | Medium | Loader and per-group hold exist (D218); the loaded program is not mirrored into host parameters or persisted, and a touched group collapses to host values | Phase 7 | Partly resolved |
 | **TD-22** | `crates/nord-arm` (`cpu/predecode.rs` 440 lines, `mem.rs` 453, `machine/fastrun.rs` 407), `crates/nord-tools/src/bin/arm_lle_bench.rs` (453) | Low | Four files are over the 400-line rule ([code-structure](../.agents/rules/code-structure.md)); most of the excess is unit tests and the benchmark's report code | `ns4-lle3` (split with the next change to these files) | Open |
 | **TD-23** | `crates/nord-gui/src/main.rs` (1 029 lines), `crates/nord-plugin/src/editor/draw.rs` (731), `crates/nord-plugin/src/lib.rs` (507), `loader.rs` (421) | Low | Four plugin / app files are over the 400-line rule | next change that touches them | Open |
+| **TD-24** | `crates/nord-tools/src/bin/lle_engine_run.rs` (476 lines), `crates/nord-lle/src/engine_tests.rs` (441) | Low | Two `ns4-lle5` files are over the 400-line rule ([code-structure](../.agents/rules/code-structure.md)); the excess is the CLI report and the engine's fake-chip and real-core tests | next change to the LLE engine or its CLI | Open |
 
 ---
 
@@ -190,6 +191,12 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 
 - **What:** `nord-gui/src/main.rs` (1 029: command line, startup backups, `app.log`, window loop), `nord-plugin/src/editor/draw.rs` (731: editor state, library open, dialogs, drawing), `nord-plugin/src/lib.rs` (507, of which about 180 are the in-file tests with their host mocks) and `loader.rs` (421). The library PR split off `load_queue.rs` and `library_host.rs` from the last two and left the rest, because the files it touches are mostly moves of code it does not change.
 - **Plan:** `main.rs` into `startup/{backups,slot,log}.rs` plus the window loop; `draw.rs` into `state.rs` (`EditorState`, `plugin_library`) and the drawing; the `lib.rs` tests into a `#[cfg(test)]` module file with the host mocks shared by `library_off_tests.rs`. Each submodule keeps its own tests (`tools/check_tests.py`).
+- **Risk:** none for behaviour; review cost only.
+
+### TD-24: LLE engine CLI and test file over the 400-line rule
+
+- **What:** `lle_engine_run.rs` (476 lines: argument parsing, per-stage report, message dump, determinism loop, 9 tests) and `nord-lle/src/engine_tests.rs` (441 lines: fake-chip routing, bus, refill, return-path and real-`CoreNode` tests) exceed about 400 lines. The tests stay in the same file because `tools/check_tests.py` counts a source file as covered only by tests in it or in a module it declares.
+- **Plan:** move the report and message-dump code of the bin into a `lle_engine_run/` module split (`args.rs`, `report.rs`) with their own tests, and split `engine_tests.rs` into `engine_tests/{routing,refill,real_cores}.rs` sharing a `support` module, in the next change to the engine.
 - **Risk:** none for behaviour; review cost only.
 
 ---

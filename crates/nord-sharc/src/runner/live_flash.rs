@@ -12,6 +12,10 @@ use crate::core::Core;
 /// Largest image accepted (the biggest factory `.npno` is 218 MB). ASSUMED cap, only a guard.
 pub const MAX_BYTES: u64 = 512 << 20;
 
+/// Largest directory index `F` accepts (exclusive end). ASSUMED: a guard against a corrupt
+/// descriptor; the directory of a real file spans a few hundred entries (`smp-page-refill.md` s2).
+pub const MAX_DIR_INDEX: u32 = 0x10_0000;
+
 /// `L PATH`: loads the image and enables the chain model; returns the reply line.
 pub fn load(core: &mut Core, path: &str) -> Result<String, String> {
     let len = std::fs::metadata(path)
@@ -33,6 +37,9 @@ pub fn load(core: &mut Core, path: &str) -> Result<String, String> {
 
 /// `F REC11`: places the loaded file for directory index `rec11` and writes the directory.
 pub fn place(core: &mut Core, rec11: u32) -> Result<String, String> {
+    if rec11 >= MAX_DIR_INDEX {
+        return Err(format!("F: directory index {rec11:#x} out of range"));
+    }
     let words = {
         let f = core
             .epchain()
@@ -42,7 +49,11 @@ pub fn place(core: &mut Core, rec11: u32) -> Result<String, String> {
         f.words()
     };
     let groups = (words + 74).div_ceil(u64::from(GROUP_WORDS)) as u32 + 2;
-    for i in rec11..rec11.saturating_add(groups) {
+    let end = rec11
+        .checked_add(groups)
+        .filter(|e| DIR_BASE.checked_add(*e).is_some() && *e <= MAX_DIR_INDEX)
+        .ok_or_else(|| format!("F: directory index {rec11:#x} out of range"))?;
+    for i in rec11..end {
         core.dm_write(DIR_BASE + i, SmpFlash::dir_value(i))
             .map_err(|e| format!("F: directory write {e:#x}"))?;
     }
@@ -50,7 +61,7 @@ pub fn place(core: &mut Core, rec11: u32) -> Result<String, String> {
         "F base={} dir={}..{}",
         SmpFlash::base_for(rec11),
         rec11,
-        rec11 + groups
+        end
     ))
 }
 
@@ -80,6 +91,21 @@ mod tests {
         assert_eq!(c.dm_read(DIR_BASE + 3), Ok(3 * GROUP_WORDS));
         assert_eq!(c.dm_read(DIR_BASE + 4), Ok(4 * GROUP_WORDS));
         assert_eq!(c.epchain().unwrap().flash.as_ref().unwrap().base(), 196_298);
+    }
+
+    #[test]
+    fn a_firmware_controlled_index_cannot_overflow_the_directory_write() {
+        let path = temp_file("b.bin", &[0u8; 64]);
+        let mut c = core();
+        load(&mut c, &path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        for bad in [0xFFFF_FFFEu32, 0xFFFF_0000, u32::MAX, MAX_DIR_INDEX] {
+            assert!(
+                place(&mut c, bad).unwrap_err().contains("out of range"),
+                "{bad:#x}"
+            );
+        }
+        assert!(place(&mut c, 7).is_ok());
     }
 
     #[test]

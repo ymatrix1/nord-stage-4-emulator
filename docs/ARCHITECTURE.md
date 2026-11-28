@@ -90,6 +90,7 @@ nord-stage-4-emulator/
 │   │       │   └── periph/     # SEC0, SPI2 peek port, descriptor DMA, TRU, LP1, L2, 2148x SPI-slave boot
 │   │       ├── runner/, harness.rs # Shared pass, message and audio helpers for the binaries
 │   │       └── bin/            # sharc-run, sharc-org, sharc-bank, sharc-organ, sharc-chain, sharc-pass, sharc-fx, sharc-ref, sharc-census-run, sharc-disasm
+│   ├── nord-lle/               # Unified offline LLE engine: ARM0 (nord-arm) + the SHARC cores on one virtual clock, routing, return path, SMP refill (specs/lle-engine.md, D253)
 │   ├── nord-tools/             # Evaluation harness binaries (publish = false): render_hash, program_sweep, ag_synth, synth_strip_e2e, organ_ref, farfisa_ref, sinc_ref, smp_voice_ref, sample_dump (D57)
 │   ├── nord-gui/               # Standalone egui app (Phase 6)
 │   ├── nord-plugin/            # nih-plug CLAP / VST3 / Standalone wrapper

@@ -6,7 +6,7 @@
 //!
 //! | Preset | Node | Frames per pass | Runs |
 //! |---|---|---|---|
-//! | `org`, `pno` | [`CoreNode`], output pointer set 0 pair 0 (`OutTap::Lane`) | 2 out | every tick |
+//! | `org`, `pno` | [`CoreNode`], output pointer set 2 pair 0 (`OutTap::Lane`, VERIFIED `pno-full-pass.md` s1) | 2 out | every tick |
 //! | `sy`, `smp` | [`SyNode`] (2 audio interrupts per pass) | 2 out | every tick |
 //! | `fx1`, `fx2` | [`CoreNode`], input at `FxCore::input_base`, master words out | 4 in, 4 out | every 2nd tick |
 //!
@@ -118,13 +118,15 @@ pub fn wrap_node(
             OutTap::of_fx(&fx),
             FX_EVERY,
         )),
-        None => Box::new(CoreNode::new(
-            job,
-            None,
-            OutTap::Lane { set: 0, pair: 0 },
-            1,
-        )),
+        None => Box::new(CoreNode::new(job, None, tone_tap(), 1)),
     })
+}
+
+/// The output tap of a tone chip (org, pno, sy, smp presets): lane set 2 pair 0, `DM(0xB015B)`
+/// (VERIFIED, `pno-full-pass.md` s1). The first version tapped set 0 and read silence; this shared
+/// path also serves `lle_sharc_bus`.
+pub fn tone_tap() -> OutTap {
+    OutTap::Lane { set: 2, pair: 0 }
 }
 
 /// A bus over `nodes` with the `routes` of `route_specs`.
@@ -182,6 +184,10 @@ mod tests {
             let n = wrap_node("n", Core::new(&data), &preset, vec![], Engine::Interp).unwrap();
             (n.in_frames(), n.every())
         };
+        assert!(
+            matches!(tone_tap(), OutTap::Lane { set: 2, pair: 0 }),
+            "tone chips tap output lane set 2 pair 0"
+        );
         assert_eq!(kind("org"), (0, 1));
         assert_eq!(kind("pno"), (0, 1));
         assert_eq!(kind("sy"), (0, 1));

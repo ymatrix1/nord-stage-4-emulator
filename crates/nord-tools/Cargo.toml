@@ -11,6 +11,7 @@ publish = false
 nord-core = { path = "../nord-core" }
 nord-sharc = { path = "../nord-sharc" }
 nord-arm = { path = "../nord-arm" }
+nord-lle = { path = "../nord-lle" }
 serde_json = "1.0"
 
 [[bin]]

@@ -1,0 +1,13 @@
+[package]
+name = "nord-lle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "Unified multi-chip LLE engine: ARM0 + the five SHARC DSP images on a virtual-time scheduler (ns4-lle5). Offline, deterministic, slower than real time."
+
+[dependencies]
+nord-arm = { path = "../nord-arm" }
+nord-core = { path = "../nord-core" }
+nord-sharc = { path = "../nord-sharc" }

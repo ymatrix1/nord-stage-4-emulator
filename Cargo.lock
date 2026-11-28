@@ -2784,6 +2784,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nord-lle"
+version = "0.1.6"
+dependencies = [
+ "nord-arm",
+ "nord-core",
+ "nord-sharc",
+]
+
+[[package]]
 name = "nord-panel"
 version = "0.1.6"
 
@@ -2818,6 +2827,7 @@ version = "0.1.6"
 dependencies = [
  "nord-arm",
  "nord-core",
+ "nord-lle",
  "nord-sharc",
  "serde_json",
 ]

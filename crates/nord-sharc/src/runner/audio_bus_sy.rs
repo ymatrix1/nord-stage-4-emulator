@@ -72,6 +72,11 @@ impl BusNode for SyNode {
             .map(|f| [f32::from_bits(f[0]), f32::from_bits(f[1])])
             .collect())
     }
+
+    fn post(&mut self, word1: u32, word2: u32) -> bool {
+        self.model.send(word1, word2);
+        true
+    }
 }
 
 #[cfg(test)]
@@ -129,5 +134,12 @@ mod tests {
             "FIFO cap 0: the queue is kept, both messages in"
         );
         assert!(n.core_mut().is_some());
+    }
+
+    #[test]
+    fn a_posted_message_goes_straight_into_the_model_queue() {
+        let mut n = SyNode::new("sy", core_with_rti_vectors(), SyModel::new(2), vec![], 1);
+        assert!(n.post(0x92196, 3));
+        assert_eq!(n.model.queued(), 1);
     }
 }

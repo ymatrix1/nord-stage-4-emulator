@@ -9,6 +9,7 @@
 //! destination was never captured), so the wiring is data of the caller, not hard-coded here.
 use super::audio_bus::{BusNode, Frame};
 use super::fx_run::{FxCore, OutLoc};
+use super::msg::Msg;
 use super::pass_sched::PassJob;
 use super::periph_run::OUT_POINTERS;
 use crate::core::Core;
@@ -132,6 +133,16 @@ impl BusNode for CoreNode {
         self.pass += 1;
         Ok(self.out.read(&mut self.job.core))
     }
+
+    fn post(&mut self, word1: u32, word2: u32) -> bool {
+        if self.next_msg == self.job.msgs.len() {
+            self.job.msgs.clear();
+            self.next_msg = 0;
+        }
+        let pass = self.pass;
+        self.job.msgs.push(Msg { pass, word1, word2 });
+        true
+    }
 }
 
 #[cfg(test)]
@@ -166,6 +177,23 @@ mod tests {
             fx: None,
             engine: Engine::Interp,
         }
+    }
+
+    #[test]
+    fn a_posted_message_is_delivered_before_the_next_pass_and_the_queue_is_recycled() {
+        let mut n = CoreNode::new(
+            job("n", 0xB_00E1),
+            None,
+            OutTap::Lane { set: 0, pair: 0 },
+            1,
+        );
+        assert!(n.post(0x100, 7));
+        n.run_pass(&[]).unwrap();
+        assert_eq!(n.core_mut().unwrap().dm_read(0x100), Ok(7));
+        assert!(n.post(0x101, 8));
+        assert_eq!(n.job.msgs.len(), 1, "the delivered message was dropped");
+        n.run_pass(&[]).unwrap();
+        assert_eq!(n.core_mut().unwrap().dm_read(0x101), Ok(8));
     }
 
     #[test]

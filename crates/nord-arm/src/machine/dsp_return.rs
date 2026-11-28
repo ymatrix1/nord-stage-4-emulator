@@ -2,7 +2,9 @@
 //! (`tools/arm_dsp_return.py`).
 //!
 //! Layers, first hit wins: SY idle voice mask, the DM shadow of every word the ARM itself sent,
-//! then 0. The live-chip and initial-image layers of the Python module belong to `ns4-lle5`.
+//! then 0. The live-chip and initial-image layers of the Python module are NOT ported: `nord-lle`
+//! (`ns4-lle5`) installs this source as is, and a live read needs a synchronous call into a DSP
+//! node that its tick order (ARM first, DSP after) cannot give (`docs/specs/lle-engine.md`).
 
 use super::boot::COMM_TABLE;
 use super::grouper::Message;
