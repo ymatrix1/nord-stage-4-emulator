@@ -22,9 +22,9 @@ use nord_arm::machine::metrics::{
 };
 use nord_arm::machine::paced::{consume, produce, Flight};
 use nord_arm::machine::system::Message;
-use nord_arm::machine::uart::{note_off, note_on};
 use nord_arm::machine::{Machine, Stop};
 use nord_sharc::cpu_clock::ThreadClock;
+use nord_tools::arm_bench::{plan, RESERVE_PAGES};
 use std::time::Instant;
 
 /// ASSUMED: ARM instructions per 1 ms tick (`tools/arm_steady.py` INSNS_PER_TICK); the
@@ -37,9 +37,6 @@ fn tick_insns() -> u64 {
         .and_then(|v| v.parse().ok())
         .unwrap_or(TICK_DEFAULT)
 }
-const KEYS8: [u8; 8] = [60, 62, 64, 65, 67, 69, 71, 72];
-/// Arena pages reserved before the timed run (64 MB) so on-demand mapping never reallocates.
-const RESERVE_PAGES: usize = 16_384;
 
 /// Per-tick measurements of one phase.
 struct Row {
@@ -133,35 +130,6 @@ fn run_phase_full(
         row.msgs.extend_from_slice(&buf);
     }
     row
-}
-
-fn act_none(_: &mut Machine) {}
-fn act_on1(m: &mut Machine) {
-    m.send_midi(&note_on(KEYS8[0], 100, 0));
-}
-fn act_off1(m: &mut Machine) {
-    m.send_midi(&note_off(KEYS8[0], 0));
-}
-fn act_on8(m: &mut Machine) {
-    KEYS8.iter().for_each(|k| m.send_midi(&note_on(*k, 100, 0)));
-}
-fn act_off8(m: &mut Machine) {
-    KEYS8.iter().for_each(|k| m.send_midi(&note_off(*k, 0)));
-}
-
-type Action = fn(&mut Machine);
-
-/// The six phases (ticks scaled by `scale` percent) with the MIDI action sent at each phase start.
-fn plan(scale: usize) -> [(&'static str, usize, Action); 6] {
-    let n = |x: usize| (x * scale / 100).max(1);
-    [
-        ("load", n(800), act_none),
-        ("idle", n(300), act_none),
-        ("key1 on", n(200), act_on1),
-        ("key1 off", n(200), act_off1),
-        ("key8 on", n(200), act_on8),
-        ("key8 off", n(200), act_off8),
-    ]
 }
 
 /// `PACED=1`: the six phases on a producer thread at one tick per wall-clock ms, messages through

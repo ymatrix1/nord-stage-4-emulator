@@ -27,7 +27,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 | **TD-19** | `crates/nord-gui/src/panel` (`organ_strip.rs`, `bay_synth/strip.rs`) | Low | Organ and Synth SOLO (ON held) only flip a panel flag and its LED; no engine command. Piano SOLO works (scene mask) | Phase 6b | Open |
 | **TD-20** | `crates/nord-gui/src/panel/ui_state/fx` | Low | `StateEcho` / `ChainUi` do not mirror `mod2_variation` (and the firmware Mod 2 words), so after a program load the Mod 2 VAR legend shows off and the first Shift+click on the type selector writes `true`/`false` from a stale view | Phase 6b | Open |
 | **TD-21** | `crates/nord-plugin/` (`program_overrides.rs`, `lib.rs`, `editor/readback.rs`) | Medium | Loader and per-group hold exist (D218); the loaded program is not mirrored into host parameters or persisted, and a touched group collapses to host values | Phase 7 | Partly resolved |
-| **TD-22** | `crates/nord-arm` (`cpu/predecode.rs` 440 lines, `mem.rs` 453, `machine/fastrun.rs` 407), `crates/nord-tools/src/bin/arm_lle_bench.rs` (453) | Low | Four files are over the 400-line rule ([code-structure](../.agents/rules/code-structure.md)); most of the excess is unit tests and the benchmark's report code | `ns4-lle3` (split with the next change to these files) | Open |
+| **TD-22** | `crates/nord-arm` (`cpu/predecode.rs` 440 lines, `mem.rs` 453, `machine/fastrun.rs` 415), `crates/nord-tools/src/bin/arm_lle_bench.rs` (437, was 453 before the shared helpers moved to `arm_bench.rs`) | Low | Four files are over the 400-line rule ([code-structure](../.agents/rules/code-structure.md)); most of the excess is unit tests and the benchmark's report code | `ns4-lle3` (split with the next change to these files) | Open |
 | **TD-23** | `crates/nord-gui/src/main.rs` (1 029 lines), `crates/nord-plugin/src/editor/draw.rs` (731), `crates/nord-plugin/src/lib.rs` (507), `loader.rs` (421) | Low | Four plugin / app files are over the 400-line rule | next change that touches them | Open |
 | **TD-24** | `crates/nord-tools/src/bin/fast_vs_exact.rs` (554 lines) | Low | Over the 400-line rule ([code-structure](../.agents/rules/code-structure.md)); about 150 lines are unit tests, the rest is the comparison, the report text and the argument parser in one binary | `ns4-lle3` (split with the next change to this tool) | Open |
 
@@ -183,7 +183,7 @@ This document tracks deliberate trade-offs, structural compromises, temporary wo
 
 ### TD-22: Four ARM0 files are over the 400-line rule
 
-- **What:** `cpu/predecode.rs` (440), `mem.rs` (453), `machine/fastrun.rs` (407) and the benchmark `arm_lle_bench.rs` (453) exceed about 400 lines of code plus tests. The tests stay in the same file because `tools/check_tests.py` counts a source file as covered only when it holds a `#[test]`.
+- **What:** `cpu/predecode.rs` (440), `mem.rs` (453), `machine/fastrun.rs` (415, +8 for the run counters) and the benchmark `arm_lle_bench.rs` (437) exceed about 400 lines of code plus tests. The tests stay in the same file because `tools/check_tests.py` counts a source file as covered only when it holds a `#[test]`.
 - **Plan:** move the benchmark's report and percentile printing into `machine/metrics.rs` (which has its own tests), split `mem.rs` into `mem/{pages,flags}.rs` and `predecode.rs` into decode and block-length submodules, each with its own tests, in the next change that touches them (a split in this PR would hide the review of the cache itself).
 - **Risk:** none for behaviour; review cost only.
 

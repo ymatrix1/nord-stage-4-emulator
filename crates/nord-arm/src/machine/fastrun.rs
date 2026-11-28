@@ -104,8 +104,10 @@ impl Machine {
         let mut left = limit - start;
         let mut table = self.code.pages[page_no as usize].as_deref().unwrap();
         let mut guard = until >> 12 == page_no || stop >> 12 == page_no;
-        let (cpu, bus) = (&mut self.cpu, &mut self.bus);
+        let (cpu, bus, stats) = (&mut self.cpu, &mut self.bus, &mut self.stats);
+        stats.cached_entries += 1;
         let fault = loop {
+            stats.blocks += 1;
             let pc = cpu.r[15];
             let i = (pc >> 2) as usize & (ENTRIES - 1);
             // straight-line stretch: nothing in it jumps, faults or leaves the page
@@ -134,6 +136,7 @@ impl Machine {
             // a store that made decoded code stale ends the run even when it was the last
             // instruction before the ender: the ender must come from the fresh page, not `table`
             if done < n || left == 0 || !bus.mem.stale_code.is_empty() {
+                stats.stale_exits += u64::from(!bus.mem.stale_code.is_empty());
                 break None;
             }
             if done == table[i].run as u64 {
@@ -145,6 +148,7 @@ impl Machine {
                 bus.pc = p;
                 left -= 1;
                 if matches!(e.op, op::B | op::BL) {
+                    stats.enders_branch += 1;
                     // the common enders, inline: the target is a constant of the word
                     if e.mask == MASK_ALWAYS || e.mask >> cpu.nzcv() & 1 != 0 {
                         if e.op == op::BL {
@@ -155,8 +159,11 @@ impl Machine {
                     } else {
                         cpu.r[15] = p.wrapping_add(4);
                     }
-                } else if cpu.exec_decoded(bus, e, p) {
-                    break cpu.fault.take();
+                } else {
+                    stats.enders_full += 1;
+                    if cpu.exec_decoded(bus, e, p) {
+                        break cpu.fault.take();
+                    }
                 }
             }
             let next = cpu.r[15];
@@ -168,6 +175,7 @@ impl Machine {
                 let target = next >> 12;
                 match self.code.pages[target as usize].as_deref() {
                     Some(t) => {
+                        stats.page_follows += 1;
                         table = t;
                         page_no = target;
                         guard = until >> 12 == page_no || stop >> 12 == page_no;

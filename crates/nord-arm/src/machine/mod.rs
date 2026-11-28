@@ -4,6 +4,7 @@
 //! `inject_irq`) with zero Python callbacks: every hook is a native enum arm.
 
 pub mod boot;
+pub mod consumer;
 pub mod dsp_return;
 mod fastrun;
 pub mod grouper;
@@ -16,6 +17,8 @@ pub mod micro;
 pub mod paced;
 pub mod panel;
 mod probe;
+pub mod producer;
+mod runstats;
 pub mod sb;
 pub mod sysbus;
 pub mod system;
@@ -23,6 +26,7 @@ pub mod uart;
 
 pub use fastrun::CodeCache;
 pub use hooks::Hook;
+pub use runstats::RunStats;
 use std::collections::HashMap;
 pub use sysbus::SysBus;
 
@@ -80,6 +84,8 @@ pub struct Machine {
     /// Run ARM-state code from the predecode cache (default on); `false` keeps the plain
     /// fetch-decode-execute path for comparison runs.
     pub predecode: bool,
+    /// Work counters of the run loops (executed instructions are derived from `cpu.insns`).
+    pub stats: RunStats,
     /// Firmware addresses of the loaded OS version (`load_firmware` picks it from the image).
     pub layout: layout::Layout,
     /// Whether `load_firmware` recognised the image length (`false`: the default layout is a guess).
@@ -110,6 +116,7 @@ impl Machine {
             heap_top: 0,
             code: CodeCache::default(),
             predecode: true,
+            stats: RunStats::default(),
             layout: layout::Layout::V166,
             layout_known: false,
         }
@@ -175,6 +182,7 @@ impl Machine {
                 hooked = self.bus.mem.flags(pc) & HOOK_X != 0;
             }
             if hooked && self.run_hook(pc) {
+                self.stats.hook_runs += 1;
                 page = u32::MAX;
                 spin += 1;
                 if spin >= HOOK_SPIN {
@@ -190,6 +198,7 @@ impl Machine {
                 continue;
             }
             self.bus.pc = pc;
+            self.stats.plain_steps += 1;
             if let Err(f) = self.cpu.step(&mut self.bus) {
                 break Stop::Fault(f);
             }
@@ -294,6 +303,32 @@ mod tests {
             (m.reg(5), m.reg(13), m.reg(15)),
             (77, 0x7000_8000, 0xC000_1000)
         );
+    }
+
+    #[test]
+    fn device_store_records_the_instruction_pc_with_and_without_the_cache() {
+        // pure instructions first, so a per-block pc would differ from the store's own pc
+        let code = [
+            0xE3A0_0012, // mov r0,#0x12
+            0xE3A0_2001, // mov r2,#1
+            0xE282_2001, // add r2,r2,#1
+            0xE588_0030, // str r0,[r8,#0x30]   (first word of comm 3, path 1)
+            0xE282_2001, // add r2,r2,#1
+            0xE282_2001, // add r2,r2,#1
+            0xE5C8_0031, // strb r0,[r8,#0x31]  (second word completes the message)
+            0xEAFF_FFFE, // b .
+        ];
+        let run = |predecode: bool| {
+            let mut m = machine_with(&code);
+            m.predecode = predecode;
+            m.cpu.r[8] = sysbus::PORT1_BASE;
+            m.run(7, 0, None);
+            m.bus.messages.clone()
+        };
+        let (plain, cached) = (run(false), run(true));
+        assert_eq!(plain.len(), 1);
+        assert_eq!(plain, cached);
+        assert_eq!(cached[0].pc, 0xC000_0018, "pc of the storing instruction");
     }
 
     #[test]

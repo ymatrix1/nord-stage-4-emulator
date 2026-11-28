@@ -1,6 +1,6 @@
 # ARM0 runtime (`crates/nord-arm`)
 
-Status: v0.2 (2026-11-24), bean `ns4-lle2`, decisions [D245](../DECISIONS.md), [D250](../DECISIONS.md). Measurements: [arm0-rust-runtime](../research/arm0-rust-runtime.md).
+Status: v0.3 (2026-11-28), bean `ns4-lle2`, decisions [D245](../DECISIONS.md), [D250](../DECISIONS.md), [D254](../DECISIONS.md). Measurements: [arm0-rust-runtime](../research/arm0-rust-runtime.md).
 
 Native Rust ARM926EJ-S (ARMv5TE) interpreter that boots the user's OS v1.66 or v1.68 ARM0 image with the hardware the Python harness stubbed. Opt-in crate (no dependencies, not linked by the audio engine). Firmware bytes are never committed: the tests use synthetic in-memory code.
 
@@ -22,7 +22,9 @@ Native Rust ARM926EJ-S (ARMv5TE) interpreter that boots the user's OS v1.66 or v
 | `machine/idle.rs` | Idle skipping (probe on the cached path through `SysBus` probe mode). |
 | `machine/fastrun.rs` | `CodeCache` (decoded pages), `run_cached` (block loop), `step_cached`, `drop_stale_code`. |
 | `machine/probe.rs` | `SysBus::probe_read/probe_write/probe_watch`: record whether a probe touched anything impure. |
-| `machine/{metrics,paced,micro}.rs` | Benchmark support: percentiles, backlog and queue simulation, message digest; producer/consumer threads; dispatch micro-benchmark. |
+| `machine/{runstats,producer}.rs` | Run-loop counters; decoupled ARM0 producer thread, bounded queue, deterministic and real-time consumers. |
+| `machine/{metrics,paced,micro}.rs` | Benchmark support: percentiles, backlog and queue simulation, message digest; `paced.rs` is the older wall-clock-paced producer/consumer (kept, overlaps `producer.rs`); dispatch micro-benchmark. |
+| `machine/{producer,consumer}.rs` | Decoupled producer thread (queue, back-pressure, script and live input, fault reporting) and its deterministic and real-time consumers. |
 
 ## OS versions
 
@@ -54,6 +56,22 @@ From state `S0`, a probe runs up to `MAX_PERIOD = 4096` instructions on an instr
 
 Capped: `null_calls` (4096, `null_call_count` counts all), `Mem::auto_mapped` (4096, `auto_mapped_count`), `I2cBus::log` (4096), bus messages (`MESSAGE_CAP` 262,144, `dropped_messages`). `run` stops with `Stop::HookLoop` after 64 hook runs without a CPU step. The arena can be reserved with `Mem::reserve_pages` so on-demand mapping does not reallocate while timed. `BumpNew` never frees: heap and arena grow with each `operator new` (not observed to grow during the benchmark phases, 37 MB after boot).
 
+## Run counters
+
+`Machine::stats` (`machine/runstats.rs`, `RunStats`): `cached_entries`, `blocks`, `enders_branch` (B/BL inline), `enders_full` (`exec_decoded`), `stale_exits`, `page_follows`, `plain_steps` (`Cpu::step` path), `hook_runs`. Block-granular `u64` increments, always on, never per instruction and never timed, so they are deterministic for a program and budget; executed instructions come from `cpu.insns` / `IdleStats`. `arm-tail-bench` asserts them equal across runs.
+
+## Decoupled producer thread (`machine/producer.rs`, D254)
+
+| Item | Behaviour |
+|---|---|
+| Thread | `Producer::spawn(machine, Config { budget, queue_ticks, ticks, script })` moves the machine to its own thread; one `TickMsgs { tick, msgs }` per tick through `sync_channel(queue_ticks)`; `finish()` returns the machine and a `Report` |
+| Back-pressure | `try_send` first; a full queue counts `full_events`, then a blocking `send` (time in `blocked`). The producer is at most `queue_ticks` (+1 blocked in `send`) ahead of the consumer |
+| Input | script `(tick, bytes)` applied at the start of `tick` (deterministic); `Producer::input(bytes)` applied at the next tick start; both logged in `Report::applied` with the tick they landed on (a live session replays as a script) |
+| Deterministic mode | `collect_blocking`: blocking `recv`, no clock read anywhere; the stream and the final state hash depend only on machine, budget, tick count and script, not on queue size or thread timing (tests; real image at 4 budgets) |
+| Real-time mode | `consume_realtime(p, t0, ticks)`: at each deadline `t0 + k ms` take every ready tick; a tick not ready counts an underrun and its lateness; drained buffers go back through `Producer::recycle` |
+| Queue size | `queue_ticks_for(cost_ms)` = `ceil(1.5 x worst backlog) + 2`, from the deterministic series `exec_i / rate`; ASSUMED margin, rate 110 M insns/s (lowest seen) |
+| Allocation | NOT allocation-free: `mpsc` sends allocate and the producer and consumer helpers push into `Vec`s (buffers are recycled, but the path is not proven allocation-free); fine for the offline harness, a DSP integration needs a preallocated SPSC ring |
+
 ## Acceptance (`ns4-lle2`)
 
 | Item | Status |
@@ -61,8 +79,8 @@ Capped: `null_calls` (4096, `null_call_count` counts all), `Mem::auto_mapped` (4
 | Opt-in native core, choice recorded | done, D245 |
 | Stubs ported, no Python callbacks | done (timer, ports, SPI read return partial: `ns4-lle5` for live layers) |
 | Idle / WFI / poll fast-forward | done; state and message content equal to full execution on the 6 benchmark phases |
-| Mean below 1.0 ms/tick on real boot + load + keys | done: 0.06 to 0.11 ms (0.20 to 0.34 before the predecode cache) |
-| Every tick below 1.0 ms | NOT met: 4 to 9 of 1,900 ticks (0.2 to 0.5 %) over 1 ms, max 1.5 ms, at most 3 in a row, worst backlog up to 0.55 ms (was 4.8 % of load ticks, 32 in a row, backlog 61 ms) |
-| Message latency through a decoupled queue | done (simulation) at the ASSUMED 200 k instructions per tick: max 1 ms with a drain per ms, at most 2 ticks / 1,855 messages per drain (at 300 k: 21 slow ticks in a row, backlog 9.4 ms; at 456 k: 14 in a row, 17 ms, so the queue size depends on the true budget); the real-thread run is too noisy on the shared machine to quote |
+| Mean below 1.0 ms/tick on real boot + load + keys | done: 0.09 to 0.13 ms (tail follow-up 2 table) (0.20 to 0.34 before the predecode cache) |
+| Every tick below 1.0 ms | NOT met at any of the four budgets (7 interleaved runs, host load 76 to 84 %): 150 k: 41 [7 .. 46] ticks of 1,900 over 1 ms, max 1.80 [1.30 .. 2.07] ms, backlog 5.4 [0.3 .. 7.3] ms; 200 k: 37 [10 .. 38], max 2.20, backlog 16.6; 300 k: 26, 2.81, 27.3; 456 k: 20, 3.86, 32.8. Cause: every over-budget tick executes the whole budget (one non-idle stretch of about 6.5 M instructions), so the tick cost is budget / rate and the criterion needs a rate of at least 150, 200, 300, 456 M insns/s against 185 to 198 M at best. Unticked ([D254](../DECISIONS.md)) |
+| Message latency through a decoupled queue | done on the real image with a producer thread ([D254](../DECISIONS.md), `arm-rt-bench`): queue 25, 42, 57, 69 ticks at 150 k, 200 k, 300 k, 456 k gives 0 to 2 underruns of 1,900 ticks per run in 5 cold-start real-time runs each (one tick per deadline; 11 in 38,000 ticks over 20 runs; with a 50 ms prefill 0 in 5 runs at 200 k); a 1-tick queue underran 0.05 to 2.7 % (up to 27 ms late). The first version (consumer took every ready tick, hidden 50 ms prefill) reported 0 underruns; that claim is withdrawn Live MIDI is applied up to the queue length late while it is full |
 | Instruction budget per ms | bounded, not measured: <= clock x IPC (300 k to 456 k); 200 k stays ASSUMED; sensitivity measured at 100 k, 200 k, 300 k, 456 k |
 | Synthetic tests only | done |

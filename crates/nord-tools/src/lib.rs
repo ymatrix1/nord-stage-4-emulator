@@ -1,5 +1,6 @@
 //! Shared helpers of the `nord-tools` evaluation binaries.
 
+pub mod arm_bench;
 pub mod band_response;
 pub mod csv_cols;
 pub mod fx_cases;
